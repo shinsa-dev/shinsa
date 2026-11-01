@@ -3,11 +3,12 @@ import type {
   AccountsSnapshot,
   ChatEntry,
   RemoteSnapshot,
+  TeamFeedSnapshot,
   TerminalsSnapshot,
   UserCommand,
   WireState,
 } from '@shinsa/core';
-import { createState } from '@shinsa/core';
+import { createState, NO_TEAM_FEED } from '@shinsa/core';
 import type { ShinsaConnection, Snapshot } from '@/lib/connection/socket.ts';
 import {
   Fleet,
@@ -34,6 +35,7 @@ class FakeConnection implements ShinsaConnection {
   accounts: AccountsSnapshot | null = null;
   terminals: TerminalsSnapshot | null = null;
   remote: RemoteSnapshot | null = null;
+  teams: TeamFeedSnapshot = NO_TEAM_FEED;
   desktop = false;
   transcript: ChatEntry[] = [];
   readonly signal = createSignal();
@@ -71,6 +73,8 @@ class FakeConnection implements ShinsaConnection {
   replaceRemote = (remote: RemoteSnapshot) => {
     this.remote = remote;
   };
+  subscribeTeams = (listener: () => void) => this.signal.subscribe(listener);
+  selectTeams = () => this.teams;
   selectMachine = () => null;
   listMachines = () => [];
   listUnreachableMachines = () => [];
@@ -355,5 +359,38 @@ describe('sending to the machine that owns it', () => {
     fleet.replaceAccounts(null);
     fleet.replaceTerminals({ terminals: [] } as unknown as TerminalsSnapshot);
     fleet.watchTranscript('run')();
+  });
+
+  it('merges every machine’s teammates’ tasks with the browser’s own, kept until one of them changes', () => {
+    const studio = createMember('m1', 'Studio');
+    const laptop = createMember('m2', 'Laptop');
+    const hosted = { feed: NO_TEAM_FEED as TeamFeedSnapshot, signal: createSignal() };
+    const fleet = new Fleet([studio.member, laptop.member], [], {
+      subscribe: (listener) => hosted.signal.subscribe(listener),
+      snapshot: () => hosted.feed,
+    });
+    let published = 0;
+    fleet.subscribeTeams(() => {
+      published += 1;
+    });
+    expect(fleet.selectTeams()).toBe(NO_TEAM_FEED);
+    const machine = {
+      teamId: 'team1',
+      instanceId: 'p7m2',
+      name: 'Kai’s Mac',
+      userId: '7',
+      status: 'live' as const,
+      reason: null,
+    };
+    studio.connection.teams = { machines: [machine], tasks: [] };
+    studio.connection.signal.publish();
+    const merged = fleet.selectTeams();
+    expect(merged.machines).toEqual([machine]);
+    expect(fleet.selectTeams()).toBe(merged);
+    hosted.feed = { machines: [{ ...machine, instanceId: 'q1' }], tasks: [] };
+    hosted.signal.publish();
+    expect(fleet.selectTeams().machines.map((entry) => entry.instanceId)).toEqual(['p7m2', 'q1']);
+    expect(published).toBe(2);
+    expect(new Fleet([laptop.member]).selectTeams()).toBe(NO_TEAM_FEED);
   });
 });

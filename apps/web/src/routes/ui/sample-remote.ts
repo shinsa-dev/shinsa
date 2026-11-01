@@ -1,4 +1,10 @@
-import type { RemoteInstance, RemoteSnapshot, ShinsaState, WireState } from '@shinsa/core';
+import {
+  NO_TEAM_FEED,
+  type RemoteInstance,
+  type RemoteSnapshot,
+  type ShinsaState,
+  type WireState,
+} from '@shinsa/core';
 import type { RemoteAccessActions } from '@/lib/connection/remote-access.ts';
 import {
   NO_ENTRIES,
@@ -196,6 +202,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
       removeInstance: refuse,
       leaveInstance: refuse,
       acceptInvite: refuse,
+      listTeams: () => Promise.resolve([]),
       joinTeam: refuse,
       readPair: refuse,
       approvePair: refuse,
@@ -239,6 +246,8 @@ export function createStaticConnection(state: ShinsaState): ShinsaConnection {
     subscribeRemote: quiet,
     selectRemote: none,
     replaceRemote: () => undefined,
+    subscribeTeams: quiet,
+    selectTeams: () => NO_TEAM_FEED,
     selectMachine: none,
     listMachines: () => NO_MACHINES,
     listUnreachableMachines: () => NO_UNREACHABLE_MACHINES,

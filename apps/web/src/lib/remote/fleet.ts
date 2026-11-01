@@ -1,4 +1,10 @@
-import type { RemoteSnapshot, UserCommand, WireState } from '@shinsa/core';
+import {
+  NO_TEAM_FEED,
+  type RemoteSnapshot,
+  type TeamFeedSnapshot,
+  type UserCommand,
+  type WireState,
+} from '@shinsa/core';
 import {
   type ConnectionStatus,
   type MachineAccess,
@@ -13,6 +19,7 @@ import {
   type UnreachableMachine,
 } from '@/lib/connection/socket.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { mergeTeamFeeds, type TeamFeedSource } from '@/lib/teams/feeds.ts';
 import { replaceSharedHandles } from '@/router.ts';
 
 export interface FleetMember {
@@ -150,10 +157,20 @@ export class Fleet implements ShinsaConnection {
   readonly #surfaces = createSignal();
   readonly #terminals = createSignal();
   readonly #remote = createSignal();
+  readonly #teams = createSignal();
+  readonly #hostedTeams: TeamFeedSource | null;
+  #teamInputs: TeamFeedSnapshot[] = [];
+  #teamFeed: TeamFeedSnapshot = NO_TEAM_FEED;
 
-  constructor(members: FleetMember[], unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES) {
+  constructor(
+    members: FleetMember[],
+    unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES,
+    hostedTeams: TeamFeedSource | null = null
+  ) {
     for (const member of members) this.#add(member);
     this.#unreachable = unreachable;
+    this.#hostedTeams = hostedTeams;
+    hostedTeams?.subscribe(() => this.#teams.publish());
   }
 
   get members() {
@@ -172,6 +189,7 @@ export class Fleet implements ShinsaConnection {
         connection.subscribeSurfaces(() => this.#surfaces.publish()),
         connection.subscribeTerminals(() => this.#terminals.publish()),
         connection.subscribeRemote(() => this.#remote.publish()),
+        connection.subscribeTeams(() => this.#teams.publish()),
       ],
     });
   }
@@ -264,6 +282,22 @@ export class Fleet implements ShinsaConnection {
 
   replaceRemote = (remote: Parameters<ShinsaConnection['replaceRemote']>[0]) =>
     this.#home?.replaceRemote(remote);
+
+  subscribeTeams = (listener: () => void) => this.#teams.subscribe(listener);
+
+  selectTeams = () => {
+    const inputs = [
+      ...this.#entries.map((entry) => entry.member.connection.selectTeams()),
+      ...(this.#hostedTeams ? [this.#hostedTeams.snapshot()] : []),
+    ];
+    const same =
+      inputs.length === this.#teamInputs.length &&
+      inputs.every((input, index) => input === this.#teamInputs[index]);
+    if (same) return this.#teamFeed;
+    this.#teamInputs = inputs;
+    this.#teamFeed = mergeTeamFeeds(inputs);
+    return this.#teamFeed;
+  };
 
   selectMachine = (id: string) => {
     if (this.#entries.length + this.#unreachable.length < 2) return null;

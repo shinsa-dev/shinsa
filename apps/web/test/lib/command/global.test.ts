@@ -72,16 +72,16 @@ describe('listGlobalSections', () => {
 });
 
 describe('the focus choice', () => {
-  it('lists all work and every project by name with its dot, on all work by default', () => {
+  it('lists your work and every project by name with its dot, on your work by default', () => {
     const focus = find(
       listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards'),
       'focus.switch'
     );
     if (focus.kind !== 'choice') throw new Error('Expected a choice');
-    expect(focus.hint).toBe('All work');
+    expect(focus.hint).toBe('Your work');
     expect(focus.value).toBe('all');
     expect(focus.options.map((option) => [option.value, option.label, option.dot])).toEqual([
-      ['all', 'All work', 'gray'],
+      ['all', 'Your work', 'gray'],
       ['api', 'API', 'green'],
       ['web', 'Web', 'blue'],
     ]);
@@ -97,7 +97,7 @@ describe('the focus choice', () => {
     pick(focus, 'removed');
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'focus.change', projectId: 'web', until: null }, 'Focused on Web.'],
-      [{ type: 'focus.change', projectId: null, until: null }, 'Focused on all work.'],
+      [{ type: 'focus.change', projectId: null, until: null }, 'Focused on your work.'],
       [{ type: 'focus.change', projectId: 'removed', until: null }, 'Focused on the project.'],
     ] as never);
   });
@@ -128,7 +128,7 @@ describe('the focus choice', () => {
     ] as never);
   });
 
-  it('offers no timed focus while on all work, or when the focus has expired', () => {
+  it('offers no timed focus while on your work, or when the focus has expired', () => {
     const expired = createShinsaState({
       projects: PROJECTS,
       patch: { focus: { projectId: 'web', teamId: null, until: NOW - 1 } },

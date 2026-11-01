@@ -148,6 +148,8 @@ export interface TeamFeedSnapshot {
   tasks: TeamFeedTask[];
 }
 
+export const NO_TEAM_FEED: TeamFeedSnapshot = { machines: [], tasks: [] };
+
 export interface TeamViewTarget {
   teamId: string;
   instanceId: string;

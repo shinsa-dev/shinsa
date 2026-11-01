@@ -7,6 +7,7 @@ import {
   type ServerMessage,
   type ShinsaState,
   serializeState,
+  type TeamFeedSnapshot,
   type UserCommand,
 } from '@shinsa/core';
 import { act } from '@testing-library/react';
@@ -133,6 +134,12 @@ export function pushTranscript(runId: string, entries: ChatEntry[], reset = true
       entries,
       start: reset ? 0 : connection.selectTranscript(runId).length,
     });
+  });
+}
+
+export function pushTeams(teams: TeamFeedSnapshot) {
+  act(() => {
+    push({ type: 'teams', teams });
   });
 }
 

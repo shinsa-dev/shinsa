@@ -176,7 +176,8 @@ export function startServer(context: HttpContext) {
     context.accounts,
     context.classify ?? null,
     terminals,
-    context.remote
+    context.remote,
+    context.teamFeeds
   );
   const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
   const { remote } = context;

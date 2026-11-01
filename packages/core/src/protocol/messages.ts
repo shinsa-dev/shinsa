@@ -1,6 +1,7 @@
 import type { ChatEntry } from '../chat/protocol.ts';
 import type { UserCommand } from '../commands/index.ts';
 import type { RemoteSnapshot } from '../remote/status.ts';
+import type { TeamFeedSnapshot } from '../remote/teams.ts';
 import type { AccountsSnapshot } from './accounts.ts';
 import type { StatePatch } from './patch.ts';
 import type { WireState } from './runs.ts';
@@ -25,7 +26,8 @@ export type ServerMessage =
   | { type: 'accounts'; accounts: AccountsSnapshot }
   | { type: 'surfaces'; desktop: boolean }
   | { type: 'terminals'; terminals: TerminalsSnapshot }
-  | { type: 'remote'; remote: RemoteSnapshot };
+  | { type: 'remote'; remote: RemoteSnapshot }
+  | { type: 'teams'; teams: TeamFeedSnapshot };
 
 export function isSurface(value: unknown): value is Surface {
   return SURFACES.some((surface) => surface === value);

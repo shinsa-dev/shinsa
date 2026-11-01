@@ -421,6 +421,7 @@ describe('the tunnel entry point', () => {
       },
       listTasks: () => [{ task: { id: 'task-9' } }],
       snapshot: () => ({ machines: [{ instanceId: 'inst9' }], tasks: [] }),
+      subscribe: () => () => undefined,
     } as unknown as TeamFeeds;
     const { local, tunnel, port, base } = await start({ teamFeeds: feeds });
     expect((await local('/api/teams/view?team=t1')).status).toBe(404);

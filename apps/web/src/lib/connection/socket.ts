@@ -3,11 +3,13 @@ import {
   applyStatePatch,
   type ChatEntry,
   type ClientMessage,
+  NO_TEAM_FEED,
   type PlacementMachine,
   type RemoteSnapshot,
   type ServerMessage,
   type StatePatch,
   type Surface,
+  type TeamFeedSnapshot,
   type TerminalsSnapshot,
   type UserCommand,
   type WireState,
@@ -78,6 +80,8 @@ export interface ShinsaConnection {
   subscribeRemote: (listener: () => void) => () => void;
   selectRemote: () => RemoteSnapshot | null;
   replaceRemote: (remote: RemoteSnapshot) => void;
+  subscribeTeams: (listener: () => void) => () => void;
+  selectTeams: () => TeamFeedSnapshot;
   selectMachine: (id: string) => MachineView | null;
   listMachines: () => MachineChoice[];
   listUnreachableMachines: () => UnreachableMachine[];
@@ -154,6 +158,7 @@ export class Connection implements ShinsaConnection {
   #accounts: AccountsSnapshot | null = null;
   #terminals: TerminalsSnapshot | null = null;
   #remote: RemoteSnapshot | null = null;
+  #teams: TeamFeedSnapshot = NO_TEAM_FEED;
   #desktopConnected = false;
   readonly #options: ConnectionOptions;
   readonly #state = createSignal();
@@ -162,6 +167,7 @@ export class Connection implements ShinsaConnection {
   readonly #surfacesSignal = createSignal();
   readonly #terminalsSignal = createSignal();
   readonly #remoteSignal = createSignal();
+  readonly #teamsSignal = createSignal();
   readonly #pending = new Map<string, Pending>();
   readonly #optimistic = new Map<string, UserCommand>();
   readonly #transcripts = new Map<string, ChatEntry[]>();
@@ -229,6 +235,10 @@ export class Connection implements ShinsaConnection {
     this.#remoteSignal.publish();
   }
 
+  subscribeTeams = (listener: () => void) => this.#teamsSignal.subscribe(listener);
+
+  selectTeams = () => this.#teams;
+
   isDesktopConnected = () => this.#desktopConnected;
 
   selectMachine = (_id: string): MachineView | null => null;
@@ -294,6 +304,7 @@ export class Connection implements ShinsaConnection {
     this.#accounts = null;
     this.#terminals = null;
     this.#remote = null;
+    this.#teams = NO_TEAM_FEED;
     this.#desktopConnected = false;
     this.#pending.clear();
     this.#optimistic.clear();
@@ -305,6 +316,7 @@ export class Connection implements ShinsaConnection {
     this.#surfacesSignal.publish();
     this.#terminalsSignal.publish();
     this.#remoteSignal.publish();
+    this.#teamsSignal.publish();
   }
 
   flush() {
@@ -463,6 +475,10 @@ export class Connection implements ShinsaConnection {
       case 'remote':
         this.replaceRemote(message.remote);
         return;
+      case 'teams':
+        this.#teams = message.teams;
+        this.#teamsSignal.publish();
+        return;
     }
   }
 }
@@ -509,6 +525,14 @@ export function sendCommand(command: UserCommand, machineId?: string | null) {
   const refusal = selectReadOnlyRefusal();
   if (refusal) return Promise.reject(refusal);
   return connection.command(command, machineId);
+}
+
+export function useRemoteSnapshot() {
+  return useSyncExternalStore(connection.subscribeRemote, connection.selectRemote);
+}
+
+export function useTeamFeed() {
+  return useSyncExternalStore(connection.subscribeTeams, connection.selectTeams);
 }
 
 export function useMachineAccess() {

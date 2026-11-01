@@ -236,7 +236,7 @@ describe('pages', () => {
           option.querySelector('[data-project-dot]')?.getAttribute('data-project-dot'),
         ])
     ).toEqual([
-      ['All work', 'gray'],
+      ['Your work', 'gray'],
       ['Basket', 'green'],
       ['Superwall', 'blue'],
     ]);

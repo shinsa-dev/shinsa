@@ -1,7 +1,7 @@
 import type { ShinsaState } from '@shinsa/core';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { resolveFocusUntil, selectFocus } from '@/lib/focus.ts';
+import { resolveFocusUntil, selectFocus, YOUR_WORK } from '@/lib/focus.ts';
 import {
   LAYOUT_NAMES,
   LAYOUT_ORDER,
@@ -30,13 +30,13 @@ function createFocusSwitch(state: ShinsaState): Command {
     kind: 'choice',
     id: 'focus.switch',
     label: 'Switch focus project',
-    hint: focus ? focus.name : 'All work',
+    hint: focus ? focus.name : YOUR_WORK,
     icon: FOCUS_ICON,
     keywords: ['focus', 'project', 'filter', 'scope'],
     heading: 'Focus on',
     value: focus?.id ?? 'all',
     options: [
-      { value: 'all', label: 'All work', keywords: ['focus', 'everything'], dot: 'gray' },
+      { value: 'all', label: YOUR_WORK, keywords: ['focus', 'everything', 'your work'], dot: 'gray' },
       ...listProjects(state).map((project) => ({
         value: project.id,
         label: project.name,
@@ -46,7 +46,7 @@ function createFocusSwitch(state: ShinsaState): Command {
     ],
     pick: (value) => {
       if (value === 'all') {
-        changeFocus(null, null, 'Focused on all work.');
+        changeFocus(null, null, 'Focused on your work.');
         return;
       }
       changeFocus(value, null, `Focused on ${state.projects[value]?.name ?? 'the project'}.`);

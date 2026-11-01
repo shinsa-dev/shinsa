@@ -14,23 +14,32 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { ProjectDot, ProjectOption } from '@/components/status/project-dot.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { resolveFocusUntil, selectFocus } from '@/lib/focus.ts';
+import { useRemoteSnapshot } from '@/lib/connection/socket.ts';
+import { listFocusTeams, resolveFocusUntil, selectFocus, selectFocusTeam, YOUR_WORK } from '@/lib/focus.ts';
 import { listProjects } from '@/lib/projects.ts';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
+import { TEAMS_SECTION } from '@/lib/teams/settings.ts';
 import { navigate } from '@/router.ts';
 
-const ALL_WORK = 'all';
+const YOUR_WORK_VALUE = 'all';
+
+const TEAM_VALUE_PREFIX = 'team:';
+
+export const TEAM_ICON = 'IconUserDuo';
 
 export function ProjectMenuTrigger({
   color,
   prefix,
   value,
   compact = false,
+  team = false,
 }: {
   color: string;
   prefix?: string;
   value: string;
   compact?: boolean;
+  team?: boolean;
 }) {
   return (
     <DropdownMenuTrigger
@@ -47,7 +56,7 @@ export function ProjectMenuTrigger({
       }
     >
       <span className={cn('grid shrink-0 place-items-center', compact ? 'size-4' : 'size-5')}>
-        <ProjectDot color={color} />
+        {team ? <Icon size='sm' name={TEAM_ICON} className='text-fg-3' /> : <ProjectDot color={color} />}
       </span>
       {prefix && <span className='text-fg-2'>{prefix}</span>}
       <span className={cn('truncate text-fg-4', !compact && 'flex-1')}>{value}</span>
@@ -70,45 +79,77 @@ export function ProjectRadioItems({
   ));
 }
 
+function resolveRadioValue(projectId: string | null, teamId: string | null) {
+  if (teamId) return `${TEAM_VALUE_PREFIX}${teamId}`;
+  return projectId ?? YOUR_WORK_VALUE;
+}
+
+function parseRadioValue(value: string) {
+  if (value === YOUR_WORK_VALUE) return { projectId: null, teamId: null };
+  if (value.startsWith(TEAM_VALUE_PREFIX))
+    return { projectId: null, teamId: value.slice(TEAM_VALUE_PREFIX.length) };
+  return { projectId: value, teamId: null };
+}
+
 export function FocusMenu({ state, compact = false }: { state: ShinsaState; compact?: boolean }) {
   const projects = listProjects(state);
+  const teams = listFocusTeams(useRemoteSnapshot());
   const focus = selectFocus(state);
+  const focusTeam = selectFocusTeam(state, teams);
+  const kept = focusTeam ?? focus;
 
-  function changeFocus(projectId: string | null, until: number | null) {
-    void sendCommandWithToast({ type: 'focus.change', projectId, until });
+  function changeFocus(target: { projectId: string | null; teamId: string | null }, until: number | null) {
+    void sendCommandWithToast({ type: 'focus.change', ...target, until });
   }
+
+  const keptTarget = { projectId: focus?.id ?? null, teamId: focusTeam?.id ?? null };
 
   return (
     <DropdownMenu>
       <ProjectMenuTrigger
         color={focus ? focus.color : 'gray'}
         prefix='Focus'
-        value={focus ? focus.name : 'All work'}
+        value={kept ? kept.name : YOUR_WORK}
         compact={compact}
+        team={focusTeam !== null}
       />
       <DropdownMenuContent align={compact ? 'end' : 'start'} className='min-w-52'>
         <DropdownMenuRadioGroup
-          value={focus?.id ?? ALL_WORK}
-          onValueChange={(value) => changeFocus(value === ALL_WORK ? null : String(value), null)}
+          value={resolveRadioValue(focus?.id ?? null, focusTeam?.id ?? null)}
+          onValueChange={(value) => changeFocus(parseRadioValue(String(value)), null)}
         >
           <DropdownMenuLabel>Focus on</DropdownMenuLabel>
-          <DropdownMenuRadioItem value={ALL_WORK}>
-            <ProjectOption color='gray' name='All work' />
+          <DropdownMenuRadioItem value={YOUR_WORK_VALUE}>
+            <ProjectOption color='gray' name={YOUR_WORK} />
           </DropdownMenuRadioItem>
           <ProjectRadioItems projects={projects} />
+          {teams.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Teams</DropdownMenuLabel>
+              {teams.map((team) => (
+                <DropdownMenuRadioItem key={team.id} value={`${TEAM_VALUE_PREFIX}${team.id}`}>
+                  <span className='flex min-w-0 items-center gap-2'>
+                    <Icon size='sm' name={TEAM_ICON} className='text-fg-3' />
+                    <span className='truncate'>{team.name}</span>
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </>
+          )}
         </DropdownMenuRadioGroup>
-        {focus && (
+        {kept && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Keep {focus.name} in focus</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => changeFocus(focus.id, resolveFocusUntil('hours'))}>
+              <DropdownMenuLabel>Keep {kept.name} in focus</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => changeFocus(keptTarget, resolveFocusUntil('hours'))}>
                 For 2 hours
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => changeFocus(focus.id, resolveFocusUntil('tonight'))}>
+              <DropdownMenuItem onClick={() => changeFocus(keptTarget, resolveFocusUntil('tonight'))}>
                 Until tonight
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => changeFocus(focus.id, null)}>
+              <DropdownMenuItem onClick={() => changeFocus(keptTarget, null)}>
                 Until I change it
               </DropdownMenuItem>
             </DropdownMenuGroup>
@@ -118,6 +159,11 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
         <DropdownMenuItem onClick={() => navigate(resolveSettingsPath('projects'))}>
           {projects.length === 0 ? 'Create a project…' : 'Edit projects…'}
         </DropdownMenuItem>
+        {!isRemoteBuild() && (
+          <DropdownMenuItem onClick={() => navigate(resolveSettingsPath('general', TEAMS_SECTION))}>
+            {teams.length === 0 ? 'Create or join a team…' : 'Edit teams…'}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

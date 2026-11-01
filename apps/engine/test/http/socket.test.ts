@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import type { RemoteSnapshot, ServerMessage } from '@shinsa/core';
+import type { RemoteSnapshot, ServerMessage, TeamFeedSnapshot } from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
 import { createSocketHub, type SocketData } from '../../src/http/socket.ts';
 import type { Remote } from '../../src/remote/index.ts';
@@ -125,6 +125,51 @@ describe('the socket hub', () => {
     expect(sent.filter((message) => message.type === 'remote')).toEqual([
       { type: 'remote', remote: { paired: true, devices: [] } as unknown as RemoteSnapshot },
       { type: 'remote', remote: snapshot },
+    ]);
+    hub.close(socket);
+    hub.stop();
+    expect(listeners.size).toBe(0);
+    engine.stop();
+    log.close();
+  });
+
+  test('teammates’ task lists reach a socket on connect and again on every change', () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const listeners = new Set<() => void>();
+    let teams: TeamFeedSnapshot = { machines: [], tasks: [] };
+    const feeds = {
+      snapshot: () => teams,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const hub = createSocketHub(
+      engine,
+      new Transcripts(join(dir, 'transcripts')),
+      undefined,
+      null,
+      undefined,
+      undefined,
+      feeds
+    );
+    const { socket, sent } = createSocket();
+    hub.open(socket);
+    const machine = {
+      teamId: 'team-1',
+      instanceId: 'inst-2',
+      name: 'Studio',
+      userId: '7',
+      status: 'live' as const,
+      reason: null,
+    };
+    teams = { machines: [machine], tasks: [] };
+    for (const listener of listeners) listener();
+    expect(sent.filter((message) => message.type === 'teams')).toEqual([
+      { type: 'teams', teams: { machines: [], tasks: [] } },
+      { type: 'teams', teams: { machines: [machine], tasks: [] } },
     ]);
     hub.close(socket);
     hub.stop();

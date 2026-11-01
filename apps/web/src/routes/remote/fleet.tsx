@@ -7,6 +7,7 @@ import { createFleetMember, listMachineRows, type MachineRow } from '@/lib/remot
 import { MACHINE_ICON, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
+import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
 import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteSteps } from './shell.tsx';
 
 type FleetState =
@@ -137,12 +138,19 @@ export function FleetApp({
           })
         );
         release.push(...members.map((entry) => entry.close));
+        const hostedTeams = new HostedTeamFeeds({
+          listTeams: services.dashboard.listTeams,
+          selectTeamKey: services.teamKeys.selectTeamKey,
+        });
+        release.push(() => hostedTeams.stop());
         fleet = new Fleet(
           members.map((entry) => entry.member),
           rows.flatMap((row) =>
             row.device && !row.device.waiting ? [] : [{ id: row.instance.id, name: row.instance.name }]
-          )
+          ),
+          hostedTeams
         );
+        void hostedTeams.start();
         release.push(() => fleet?.close());
         await startServiceWorker(services.worker, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE);
         if (!live) return;

@@ -30,6 +30,17 @@ describe('parseRoute', () => {
     expect(parseRoute('/terminal')).toEqual({ name: 'terminal' });
     expect(parseRoute('/onboarding')).toEqual({ name: 'onboarding' });
     expect(parseRoute('/ui')).toEqual({ name: 'ui' });
+    expect(parseRoute('/teams/team%201/p7m2/t1')).toEqual({
+      name: 'team-task',
+      teamId: 'team 1',
+      instanceId: 'p7m2',
+      taskId: 't1',
+    });
+  });
+
+  it('sends a team task with a malformed part home', () => {
+    expect(parseRoute('/teams/%E0%A4%A/p7m2/t1')).toEqual({ name: 'home' });
+    expect(parseRoute('/teams/team1/p7m2')).toEqual({ name: 'home' });
   });
 
   it('decodes an encoded task reference', () => {

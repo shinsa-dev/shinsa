@@ -42,6 +42,7 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
     requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
     removeInstance: () => Promise.resolve({ ok: true }),
     leaveInstance: () => Promise.resolve({ ok: true }),
+    listTeams: () => Promise.resolve([]),
     acceptInvite: () =>
       Promise.resolve({
         instanceId: 'k3x9',
