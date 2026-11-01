@@ -718,6 +718,22 @@ describe('worktrees', () => {
     await shell.exited;
   });
 
+  test('removing a worktree prunes the shared build caches, and a failure there is only logged', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const { runner, config } = setup(withTask({ worktreePath: worktree }, repo));
+    mkdirSync(join(config.dataDir, 'caches', 'removed-repo'), { recursive: true });
+    await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(existsSync(join(config.dataDir, 'caches', 'removed-repo'))).toBe(false);
+    const broken = setup(withTask({ worktreePath: createTempDir() }, repo));
+    writeFileSync(join(broken.config.dataDir, 'caches'), '');
+    const warn = spyOn(log, 'warn');
+    await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(warn).toHaveBeenCalledWith('[Effects] Could not prune the shared build caches', {
+      error: expect.stringContaining('ENOTDIR'),
+    });
+    warn.mockRestore();
+  });
+
   test('removing a worktree reports it gone even when git cannot remove it', async () => {
     const { repo, worktree } = await createShippingRepo();
     const closed: string[] = [];

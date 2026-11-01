@@ -7,9 +7,12 @@ const STOP_GRACE_MS = 3_000;
 const STOP_POLL_MS = 50;
 const LIST_TIMEOUT_MS = 10_000;
 
+const ORPHAN_PARENT = 1;
+
 export interface StopOptions {
   spare?: number[];
   graceMs?: number;
+  owner?: number;
 }
 
 function isInside(path: string, root: string) {
@@ -33,13 +36,20 @@ export async function listProcessesIn(path: string) {
   return listWorkingFolderPids(listed.stdout, root);
 }
 
-async function resolveSpared(spare: number[]) {
-  const spared = new Set([process.pid, ...spare]);
-  if (spare.length === 0) return spared;
-  const table = await runCommand(['ps', '-A', '-o', 'pid=,ppid='], sep, { timeoutMs: LIST_TIMEOUT_MS });
-  if (!table.ok) return spared;
-  for (const root of spare) for (const child of listDescendants(table.stdout, root)) spared.add(child);
-  return spared;
+export function listParents(table: string) {
+  const parents = new Map<number, number>();
+  for (const line of table.split('\n')) {
+    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
+    if (pid && ppid !== undefined && !Number.isNaN(ppid)) parents.set(pid, ppid);
+  }
+  return parents;
+}
+
+export function resolveStopTargets(found: number[], table: string, owner: number, spare: number[]) {
+  const parents = listParents(table);
+  const owned = new Set(listDescendants(table, owner));
+  const spared = new Set([owner, ...spare, ...spare.flatMap((root) => listDescendants(table, root))]);
+  return found.filter((pid) => !spared.has(pid) && (owned.has(pid) || parents.get(pid) === ORPHAN_PARENT));
 }
 
 function signalProcess(pid: number, name: NodeJS.Signals | 0) {
@@ -64,8 +74,9 @@ async function waitForExit(pids: number[], graceMs: number) {
 export async function stopProcessesIn(path: string, options: StopOptions = {}) {
   const found = await listProcessesIn(path);
   if (found.length === 0) return [];
-  const spared = await resolveSpared(options.spare ?? []);
-  const targets = found.filter((pid) => !spared.has(pid));
+  const table = await runCommand(['ps', '-A', '-o', 'pid=,ppid='], sep, { timeoutMs: LIST_TIMEOUT_MS });
+  if (!table.ok) return [];
+  const targets = resolveStopTargets(found, table.stdout, options.owner ?? process.pid, options.spare ?? []);
   if (targets.length === 0) return [];
   for (const pid of targets) signalProcess(pid, 'SIGTERM');
   const stubborn = await waitForExit(targets, options.graceMs ?? STOP_GRACE_MS);

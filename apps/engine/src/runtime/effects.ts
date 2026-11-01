@@ -29,7 +29,7 @@ import {
 import type { RunSupervisor } from '../agents/supervisor.ts';
 import type { Briefings } from '../briefing/index.ts';
 import { BaseCheckouts } from '../checks/base.ts';
-import { resolveSharedCacheEnv } from '../checks/caches.ts';
+import { pruneSharedCaches, resolveSharedCacheEnv } from '../checks/caches.ts';
 import { serializeCheckOutput } from '../checks/evidence.ts';
 import { listCheckFailures } from '../checks/failures.ts';
 import { type BaseComparison, CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../checks/index.ts';
@@ -875,6 +875,11 @@ export class EffectRunner {
       await workspace.remove(repo, task);
     } catch (error) {
       log.warn('[Effects] Could not remove a worktree', { taskId, error: describeError(error) });
+    }
+    try {
+      pruneSharedCaches(this.#config.dataDir, Object.keys(this.#engine.state.repos), Date.now());
+    } catch (error) {
+      log.warn('[Effects] Could not prune the shared build caches', { error: describeError(error) });
     }
     await this.#engine.dispatch({ type: 'worktree.gone', taskId }, { id: `${context.key}:worktree.gone` });
   }

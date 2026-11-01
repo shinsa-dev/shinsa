@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { realpathSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { listProcessesIn, listWorkingFolderPids, stopProcessesIn } from '../../src/git/processes.ts';
+import {
+  listProcessesIn,
+  listWorkingFolderPids,
+  resolveStopTargets,
+  stopProcessesIn,
+} from '../../src/git/processes.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 function spawnIn(cwd: string, script: string) {
@@ -38,6 +43,36 @@ describe('processes left in a worktree', () => {
     expect(shell.exitCode).toBeNull();
     shell.kill('SIGKILL');
     await shell.exited;
+  });
+
+  test('a shell you opened yourself in the worktree, outside Shinsa, keeps running', async () => {
+    const worktree = createTempDir();
+    const yours = spawnIn(worktree, 'sleep 30; true');
+    const stranger = spawnIn(createTempDir(), 'sleep 30; true');
+    expect(await stopProcessesIn(worktree, { owner: stranger.pid })).toEqual([]);
+    expect(yours.exitCode).toBeNull();
+    for (const child of [yours, stranger]) {
+      child.kill('SIGKILL');
+      await child.exited;
+    }
+  });
+
+  test('a server left behind by a finished agent is stopped though nothing of Shinsa started it any more', async () => {
+    const worktree = createTempDir();
+    const pidFile = join(createTempDir(), 'pid');
+    await spawnIn(worktree, `sleep 30 & echo $! > '${pidFile}'`).exited;
+    const orphan = Number(readFileSync(pidFile, 'utf8').trim());
+    const stranger = spawnIn(createTempDir(), 'sleep 30; true');
+    expect(await stopProcessesIn(worktree, { owner: stranger.pid, graceMs: 1000 })).toEqual([orphan]);
+    expect(() => process.kill(orphan, 0)).toThrow();
+    stranger.kill('SIGKILL');
+    await stranger.exited;
+  });
+
+  test('only what Shinsa started, or what lost its parent, is a target', () => {
+    const table = ['10 1', '20 5', '21 20', '22 21', '30 20', '31 30', '40 99', '41 1'].join('\n');
+    expect(resolveStopTargets([10, 21, 22, 31, 40, 41], table, 20, [30])).toEqual([10, 21, 22, 41]);
+    expect(resolveStopTargets([20, 40], table, 20, [])).toEqual([]);
   });
 
   test('a folder that is gone has no processes', async () => {

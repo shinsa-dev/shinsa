@@ -534,8 +534,11 @@ modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behi
   every process still working inside the worktree (`stopProcessesIn` in `git/processes.ts`: `lsof -d cwd` finds each
   process whose working folder is the worktree or inside it; SIGTERM, then SIGKILL for any still alive after 3 s).
   That catches a dev server an agent started from its shell, which outlives the agent's run and would otherwise keep
-  writing into the deleted folder. The engine and your own Shinsa terminals, with every process they started, are
-  spared (`Terminals.listTerminalPids`). Then `removeWorktree` runs `git worktree remove --force`, deletes whatever
+  writing into the deleted folder. Only a process the engine started (its descendants) or one that lost its parent
+  (now a child of launchd, as such a server is once the agent's run ends) is stopped (`resolveStopTargets`), so what
+  you opened yourself, a shell from Open in Terminal or an editor and the language servers it started, keeps running.
+  The engine and your own Shinsa terminals, with every process they started, are spared too
+  (`Terminals.listTerminalPids`). Then `removeWorktree` runs `git worktree remove --force`, deletes whatever
   is left of the folder and prunes, so a folder git could not remove never stays behind. A main checkout is never
   reaped: it is your repository.
 - **Turbo's cache is shared per repository.** In a repository with a `turbo.json`, checks (and their run on the base
@@ -543,7 +546,9 @@ modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behi
   (`resolveSharedCacheEnv` in `checks/caches.ts`), so a task reuses what another task's checkout already built
   instead of filling a cache inside its own worktree. Turbo keys its cache by a hash of each task's inputs, so sharing
   it changes no result. A service's own `TURBO_CACHE_DIR` wins, and your own runs and agents' shells keep Turbo's
-  default.
+  default. A worktree's own `.turbo` went with it; the shared one is pruned instead, each time a worktree is removed
+  (`pruneSharedCaches`): an entry not written for 14 days goes (Turbo does not touch an entry it reads, so a build
+  used for longer is made once more), and so does the cache of a repository Shinsa no longer knows.
 - **Conflicts go to the agent in every mode.** A pull request that conflicts with its base is merged with the fetched
   base by the Agent in its own session (The pull request watch → Conflicts), and an update onto the base that
   conflicts before a push is resolved the same way (Pushing the branch).
@@ -2368,8 +2373,8 @@ beside your run (Runs for a task, below).
   (`docs/design.md`, 37). The preview runs while the task waits for review and the merge, and stops when the task settles:
   `settleTask` removes the worktree, and `worktree.remove` closes the task's runs (below).
 - **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
-  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), then stops every other process still
-  working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
+  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), then stops every other process Shinsa or a
+  finished agent left working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
   worktree takes its processes with it), so no dev server keeps running in a deleted folder; your own shells opened
   in that worktree, and what runs in them, are left as they are.
 - **A task run's own variables.** `resolveServiceRunIn` gives a task's run the shared Turbo cache in a Turbo
@@ -4795,7 +4800,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   every cloned file in full. `prepareDataDir` marks each with `.metadata_never_index` for Spotlight and with Time
   Machine's exclusion, the `com.apple.metadata:com_apple_backup_excludeItem` attribute `tmutil addexclusion` writes,
   set with `xattr` directly because `tmutil` takes seconds per folder. The marker says the folder is done, so a later
-  start does nothing; one Time Machine could not exclude is logged, and deleting its marker tries again. The event
+  start does nothing (clearing out `check-bases/` leaves the markers, as every dot entry, in place); one Time Machine could not exclude is logged, and deleting its marker tries again. The event
   log, evidence, transcripts and settings are backed up as before.
 
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:

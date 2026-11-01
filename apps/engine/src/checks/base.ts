@@ -133,7 +133,7 @@ export class BaseCheckouts {
     const kept = new Set([...this.#checkouts.values()].map((checkout) => checkout.path));
     for (const name of existsSync(this.#dir) ? readdirSync(this.#dir) : []) {
       const path = join(this.#dir, name);
-      if (!kept.has(path)) rmSync(path, { recursive: true, force: true });
+      if (!(kept.has(path) || name.startsWith('.'))) rmSync(path, { recursive: true, force: true });
     }
     const idle = [...this.#checkouts.values()].filter((checkout) => checkout.users === 0);
     const extra = this.#checkouts.size - this.#keep;
