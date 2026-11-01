@@ -2821,9 +2821,13 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
 - **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page names the team
   and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing), keeps the key in the browser
   and, on Ask to join, sends `POST /__remote/teams/join { invite }`, which records that the account asked
-  (`team_requesters`) and makes it no member. Once the owner accepts, the team shows in Settings → Teams on each of
-  your machines; one without the key asks for the link right in the team's card (or `shinsa teams join <url>`), which
-  stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
+  (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads their
+  projects over the sealed channel (`lib/teams/join-machines.ts`) and asks which to share, one or more being required;
+  Ask to join then sends each machine with a pick `POST /api/remote/teams/join { url }` (the one team route the
+  dashboard may call, since it only stores a key you already hold) and `project.add_to_team` for each pick, so the key
+  and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
+  on each of your machines; one without the key asks for the link right in the team's card, with the projects to
+  share beside it (or `shinsa teams join <url>`), which stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
   `requests/decline`; `shinsa teams accept|decline <team> --login`). A member may leave (`leave`, which also takes
   your projects out of the team) and the owner may remove a member (`members/remove`) or the team (`remove`); either
   way the next heartbeat drops it from every machine and their open views close (below). Making a team asks which of
@@ -2911,10 +2915,10 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`), keeping the freshest
   copy of each task.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
-  change to it is refused from off the machine like the rest of remote access): one card per team with its name and
+  change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
   New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
-  that starts closed from six people on, with a search by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
+  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
   which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
   member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
   local routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`

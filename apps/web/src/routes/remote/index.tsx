@@ -11,6 +11,7 @@ import {
 } from '@/lib/remote/mode.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
 import { createTeamKeyStore, selectTeamJoinFragment, stashTeamJoinFragment } from '@/lib/teams/join.ts';
+import { createJoinMachinesSource } from '@/lib/teams/join-machines.ts';
 import { EnrollPage } from './enroll.tsx';
 import { FleetApp } from './fleet.tsx';
 import { PairPage } from './pair.tsx';
@@ -51,6 +52,7 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
     }
     return resolved;
   });
+  const joinMachines = React.useMemo(() => createJoinMachinesSource(services), [services]);
   const [session, setSession] = React.useState<RemoteSession | null>(null);
   const [failure, setFailure] = React.useState<string | null>(null);
   React.useEffect(() => {
@@ -86,6 +88,7 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
             link={selectTeamJoinFragment(sessionStorage)}
             dashboard={services.dashboard}
             teamKeys={services.teamKeys}
+            openMachines={joinMachines}
           />
         );
       case 'slack':

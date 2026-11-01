@@ -11,8 +11,10 @@ import {
   listTeamProjectCommands,
   needsTeamLink,
   resolveProjectPick,
+  TEAM_PROJECTS_REQUIRED,
   validateTeamDraft,
   validateTeamLink,
+  validateTeamLinkProjects,
 } from '@/lib/teams/settings.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
@@ -86,6 +88,14 @@ describe('Settings → Teams', () => {
     expect(validateTeamLink('team1', 'https://example.com')).toContain('not a team link');
     expect(validateTeamLink('team2', TEAM_URL)).toBe('That link is for another team.');
     expect(validateTeamLink('team1', ` ${TEAM_URL} `)).toBeNull();
+  });
+
+  it('asks for a project to share when a machine has any', () => {
+    const projects = [{ id: 'web', name: 'Web', color: 'blue' }];
+    expect(validateTeamLinkProjects([], [])).toBeNull();
+    expect(validateTeamLinkProjects(projects, [])).toBe(TEAM_PROJECTS_REQUIRED);
+    expect(validateTeamLinkProjects(projects, ['gone'])).toBe(TEAM_PROJECTS_REQUIRED);
+    expect(validateTeamLinkProjects(projects, ['web'])).toBeNull();
   });
 
   it('says who in a team can reach this machine', () => {

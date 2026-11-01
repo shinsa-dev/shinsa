@@ -50,7 +50,7 @@ export function needsTeamLink(entry: RemoteTeamEntry) {
   return entry.team !== null && !entry.onMachine;
 }
 
-export function listProjectChoices(state: ShinsaState): ProjectChoice[] {
+export function listProjectChoices(state: Pick<ShinsaState, 'projects'>): ProjectChoice[] {
   return Object.values(state.projects)
     .map((project) => ({ id: project.id, name: project.name, color: project.color }))
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -92,6 +92,13 @@ export function validateTeamLink(teamId: string, url: string): string | null {
   if (!link) return 'That is not a team link. Copy the whole link, with everything after the #.';
   if (link.teamId !== teamId) return 'That link is for another team.';
   return null;
+}
+
+export const TEAM_PROJECTS_REQUIRED = 'Pick at least one project to share with the team.';
+
+export function validateTeamLinkProjects(projects: readonly ProjectChoice[], chosen: readonly string[]) {
+  if (projects.length === 0) return null;
+  return chosen.some((id) => projects.some((project) => project.id === id)) ? null : TEAM_PROJECTS_REQUIRED;
 }
 
 export function hasMachineAccess(snapshot: RemoteSnapshot, userId: string) {

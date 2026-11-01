@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { type DialogControl, useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
@@ -49,6 +50,7 @@ import {
   TEAMS_DESCRIPTION,
   TEAMS_SECTION,
   validateTeamLink,
+  validateTeamLinkProjects,
 } from '@/lib/teams/settings.ts';
 import {
   FoldingBlock,
@@ -180,15 +182,20 @@ function TeamLinkRow({
   actions: TeamActions;
 }) {
   const [url, setUrl] = React.useState('');
+  const [projectIds, setProjectIds] = React.useState<string[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const projects = listProjectChoices(state);
 
   async function add() {
-    const problem = validateTeamLink(entry.id, url);
+    const problem = validateTeamLink(entry.id, url) ?? validateTeamLinkProjects(projects, projectIds);
     setError(problem);
     if (problem) return;
     setBusy(true);
-    await requestWithToast(() => actions.join(state, url.trim(), []), `${entry.name}’s tasks show here now.`);
+    await requestWithToast(
+      () => actions.join(state, url.trim(), projectIds),
+      `${entry.name}’s tasks show here now.`
+    );
     setBusy(false);
   }
 
@@ -201,8 +208,7 @@ function TeamLinkRow({
       }}
     >
       <span className='text-fg-2 text-xs'>
-        This machine has no key for the team yet. Paste the team’s link to see your teammates’ tasks here and
-        share yours.
+        This machine has no key for the team yet. Paste the team’s link and pick the projects to share.
       </span>
       <div className='flex items-center gap-1.5'>
         <Input
@@ -212,6 +218,16 @@ function TeamLinkRow({
           placeholder='https://app.shinsa.dev/share/team#…'
           onChange={(event) => {
             setUrl(event.target.value);
+            setError(null);
+          }}
+        />
+        <ProjectsSelect
+          label='Projects to share'
+          projects={projects}
+          chosen={projectIds}
+          variant='default'
+          onChange={(chosen) => {
+            setProjectIds(chosen);
             setError(null);
           }}
         />
@@ -324,16 +340,17 @@ function TeamPeople({
       startsOpen={!searchable}
     >
       {searchable && (
-        <div className='p-1.5'>
-          <Input
+        <label className='flex h-8 items-center gap-2 border-bg-3 border-b px-2.5'>
+          <Icon name='IconMagnifyingGlass' size='sm' className='text-fg-2' />
+          <input
             type='search'
-            size='sm'
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={PEOPLE_SEARCH_LABEL}
             aria-label={PEOPLE_SEARCH_LABEL}
+            className='min-w-0 flex-1 bg-transparent font-medium text-fg-4 text-xs outline-none placeholder:font-normal placeholder:text-fg-2'
           />
-        </div>
+        </label>
       )}
       {people.length === 0 && <SettingsEmpty>No one matches.</SettingsEmpty>}
       {people.map(({ user, member }) => {

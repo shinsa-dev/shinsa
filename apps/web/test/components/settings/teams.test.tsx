@@ -198,7 +198,7 @@ describe('Settings → Teams', () => {
     await waitFor(() => expect(actions.leave).toHaveBeenCalledWith('team1'));
   });
 
-  it('asks for the team’s link right in the card on a machine without its key, and checks it', async () => {
+  it('asks for the team’s link and the projects to share right in the card on a machine without its key', async () => {
     const actions = renderTeams(
       createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ onMachine: false })] })
     );
@@ -210,7 +210,12 @@ describe('Settings → Teams', () => {
     fireEvent.change(input, { target: { value: TEAM_URL } });
     expect(screen.queryByText(/not a team link/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
-    await waitFor(() => expect(actions.join).toHaveBeenCalledWith(STATE, TEAM_URL, []));
+    expect(await screen.findByText('Pick at least one project to share with the team.')).toBeTruthy();
+    expect(actions.join).not.toHaveBeenCalled();
+    await toggleProject('Projects to share', 'Api');
+    expect(screen.queryByText('Pick at least one project to share with the team.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
+    await waitFor(() => expect(actions.join).toHaveBeenCalledWith(STATE, TEAM_URL, ['api']));
     expect(toasts.success).toHaveBeenCalledWith('Platform’s tasks show here now.');
   });
 

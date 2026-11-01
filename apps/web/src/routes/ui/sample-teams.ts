@@ -8,6 +8,7 @@ import {
 } from '@shinsa/core';
 import type { TeamActions } from '@/lib/connection/teams.ts';
 import type { TeamJoinResult } from '@/lib/teams/join.ts';
+import type { JoinMachines } from '@/lib/teams/join-machines.ts';
 
 const HOUR_MS = 3_600_000;
 
@@ -142,3 +143,20 @@ export const SAMPLE_TEAM_JOIN_DASHBOARD = {
   joinTeam: () => Promise.reject(new Error('This is a sample.')),
   previewTeam: () => Promise.resolve({ name: 'Platform', owner: MONA }),
 };
+
+export function openSampleJoinMachines(): Promise<JoinMachines> {
+  return Promise.resolve({
+    machines: [
+      {
+        id: 'k3x9',
+        name: 'Studio',
+        projects: [
+          { id: 'paywalls', name: 'Paywalls', color: 'blue' },
+          { id: 'web', name: 'Web', color: 'green' },
+        ],
+        share: () => Promise.resolve(),
+      },
+    ],
+    close: () => undefined,
+  });
+}

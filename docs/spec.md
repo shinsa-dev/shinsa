@@ -1121,9 +1121,10 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   evidence, gates without your answers, runs without their prompts, and activity without messages. Never a chat, a
   transcript, live agent output, a message to an agent, a gate answer, a verdict note, an attachment, the worktree
   or a path on your disk, and they can change nothing.
-- **Joining works like a machine invite.** The owner's join link sends a request; the owner accepts or declines it
-  in Settings → Teams, and a member leaves or is removed there, which ends their access at once. Which projects a
-  team sees is yours alone: no agent can add one.
+- **Joining works like a machine invite.** The owner's join link names the team and sends a request; the owner
+  accepts or declines it in Settings → Teams, and a member leaves or is removed there, which ends their access at
+  once. Asking to join asks which of your projects to share first, from every machine the browser reaches, so none
+  is forgotten. Which projects a team sees is yours alone: no agent can add one.
 - **A teammate is one click from your machine.** Give machine access beside a teammate makes them a member of this
   machine, with full control, without an invite or a request; their browser adds itself with the team's key the next
   time they open Shinsa Cloud. You take it back under Remote access, like any member.

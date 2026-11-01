@@ -151,7 +151,8 @@ src/
     ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
     │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
     │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the
-    │                    browser's team keys in IndexedDB), channel.ts (a team channel from the browser with its own
+    │                    browser's team keys in IndexedDB), join-machines.ts (the join page's projects from your own
+    │                    machines, and joining and sharing them there), channel.ts (a team channel from the browser with its own
     │                    key, and the engine relay of one task), feeds.ts (teammates' tasks for the focused team,
     │                    merged from the machines and the browser, without machines the dashboard reaches);
     │                    components/teams/ (the new team dialog, the shared projects dropdown, the team rows on All tasks and Home),

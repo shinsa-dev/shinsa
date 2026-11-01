@@ -52,6 +52,7 @@ import { createSampleSlack } from './sample-slack.ts';
 import {
   createSampleTeamActions,
   createSampleTeams,
+  openSampleJoinMachines,
   requestSampleTeamJoin,
   SAMPLE_TEAM_JOIN_DASHBOARD,
   SAMPLE_TEAM_LINK,
@@ -443,6 +444,7 @@ export function SettingsSpecimens() {
             link={SAMPLE_TEAM_LINK}
             dashboard={SAMPLE_TEAM_JOIN_DASHBOARD}
             teamKeys={{ selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() }}
+            openMachines={openSampleJoinMachines}
             request={requestSampleTeamJoin}
           />
         </div>
