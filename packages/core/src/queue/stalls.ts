@@ -3,7 +3,7 @@ import {
   type Gate,
   isDecisionGate,
   isPausingGate,
-  isRoundResting,
+  isRoundFinished,
   type Task,
 } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -24,7 +24,7 @@ export function selectLeadGate(state: ShinsaState, task: Task) {
   const current = gates.filter((gate) => gate.type !== 'post_merge');
   const lead = current.find((gate) => !isDecisionGate(gate)) ?? current[0];
   if (lead) return lead;
-  return isRoundResting(task) ? (gates[0] ?? null) : null;
+  return isRoundFinished(task) ? (gates[0] ?? null) : null;
 }
 
 function resolveStall(state: ShinsaState, task: Task): Omit<WaitLeaf, 'path' | 'task'> | null {

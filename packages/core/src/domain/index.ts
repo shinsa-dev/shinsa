@@ -219,7 +219,7 @@ export {
   compareTasks,
   hasArmedWait,
   isAskTask,
-  isRoundResting,
+  isRoundFinished,
   isTaskComplete,
   isTaskSettled,
   PRIORITY_RANK,

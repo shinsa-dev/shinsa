@@ -1549,7 +1549,7 @@ steps takes its step out again.
   round that shipped onto the pull request the next round ships on too (it still blocks that merge). The post-merge
   gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
   steps while the later round works. Steps ticked before a round starts are dropped. While the later round works the
-  gate never leads the task (`selectLeadGate` picks `post_merge` only once the round rests, `isRoundResting`): the task
+  gate never leads the task (`selectLeadGate` picks `post_merge` only once the round is finished (answered, merged, done or watching, `isRoundFinished`; unlike `isTaskResting` it ignores `closedAt`)): the task
   shows twice on Home, its gate row in Needs you reading "Post-merge · 1 step left" (`RowSummary` given the row's gate)
   and its row in In progress with the round's stage and the agent's latest action, and All tasks, its glyph and its page
   follow the round. The later round's last phase is told the carried steps, so its walkthrough never lists them again.
