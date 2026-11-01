@@ -3092,8 +3092,9 @@ projection and channel serve teams, always at Standard (Teams, below).
   "on Kai’s behalf", "Kai closed this as a duplicate.", "Kai cancelled the task", "Kai’s request" and "What Kai sent"
   on Overview, "Asked Kai" and "Kai’s answer" in Chat, and "The owner" when the share carries no login. Wherever a
   person's name stands alone (an activity line's actor, the Shared by line, a teammate's task row, a team's owner in
-  Settings → Teams) it is a user tag (`components/people/user-tag.tsx`): hovering it opens the one user card, their
-  photo, full name, login (no `@`) and View on GitHub, and clicking it opens their GitHub profile. Read-only takes away
+  Settings → Teams) it is a user tag (`components/people/user-tag.tsx`): a small photo before the name, as a task link has its tile;
+  hovering it opens the one user card, their photo beside "Kai Tanaka kai" on one line (no `@`) over View on GitHub, and
+  clicking it opens their GitHub profile. Read-only takes away
   only what acts: the task menu, the ⌘K commands, every card's buttons and links (`NowFrame`'s action, `QuietLink`),
   answer boxes, the composer, verdicts, merge-step boxes, suggestion and watchdog buttons, a delegation's Stop, the
   priority menu, services and every way into a chat. Its tabs are the owner's, Chat read-only (each run's streamed

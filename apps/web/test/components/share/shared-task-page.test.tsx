@@ -49,8 +49,8 @@ describe('the owner on a shared task page', () => {
     expect(readAskedLine()).not.toContain('@');
     expect(readAskedLine()).not.toContain('You');
     expect(document.body.textContent).toContain('Shared by Kai from Studio');
-    const tags = screen.getAllByText('Kai', { selector: 'a' });
-    expect(tags.map((tag) => tag.getAttribute('href'))).toEqual([
+    const tags = screen.getAllByText('Kai').map((name) => name.closest('a'));
+    expect(tags.map((tag) => tag?.getAttribute('href'))).toEqual([
       'https://github.com/kai',
       'https://github.com/kai',
     ]);
@@ -65,7 +65,7 @@ describe('the owner on a shared task page', () => {
 
   it('gives the owner no card when they look at their own share or the share has no login', () => {
     const own = renderShared('kai', 'kai');
-    expect(screen.queryAllByText('Kai', { selector: 'a' })).toEqual([]);
+    expect(screen.queryAllByText('Kai').filter((name) => name.closest('a'))).toEqual([]);
     own.unmount();
     const { unmount } = renderShared(null, 'mona');
     expect(screen.queryAllByRole('link', { name: 'The owner' })).toEqual([]);

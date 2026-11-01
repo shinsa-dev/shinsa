@@ -54,9 +54,9 @@ function openTeamTask(entry: TeamFeedTask) {
   navigate(resolveTeamTaskPath(resolveTeamTaskTarget(entry)));
 }
 
-function OwnerName({ entry, detail }: { entry: TeamFeedTask; detail?: string }) {
+function OwnerName({ entry }: { entry: TeamFeedTask }) {
   if (!entry.owner) return describeTeamTaskOwner(entry);
-  return <UserTag user={resolveSharedProfile(entry.owner, entry.ownerProfile)} detail={detail} />;
+  return <UserTag user={resolveSharedProfile(entry.owner, entry.ownerProfile)} />;
 }
 
 function OwnerMark({ entry }: { entry: TeamFeedTask }) {
@@ -64,9 +64,9 @@ function OwnerMark({ entry }: { entry: TeamFeedTask }) {
   if (entry.owner)
     return (
       <span className='inline-flex min-w-0 items-center gap-1.5 text-fg-2'>
-        {mark}
+        <Hint label={describeTeamTaskPlace(entry)}>{mark}</Hint>
         <Truncate>
-          <OwnerName entry={entry} detail={describeTeamTaskPlace(entry)} />
+          <OwnerName entry={entry} />
         </Truncate>
       </span>
     );

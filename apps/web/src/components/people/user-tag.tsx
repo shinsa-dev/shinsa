@@ -1,6 +1,9 @@
+import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
-import { InfoAction, InfoPopover } from '@/components/overlays/info-popover.tsx';
+import type * as React from 'react';
+import { GlyphLabel } from '@/components/links/link.tsx';
+import { InfoPopover } from '@/components/overlays/info-popover.tsx';
 import {
   describeUserHandle,
   describeUserName,
@@ -10,26 +13,21 @@ import {
   type UserProfile,
 } from '@/lib/remote/users.ts';
 
-const USER_TAG = 'cursor-pointer text-inherit no-underline outline-none hover:text-fg-4 active:text-fg-4';
+const USER_TAG =
+  'group/link cursor-pointer text-inherit no-underline outline-none hover:text-fg-4 active:text-fg-4';
 
-function UserAvatar({ user, className }: { user: UserProfile; className?: string }) {
+const USER_AVATAR = {
+  row: 'size-6.5 text-2xs',
+  inline: 'relative -top-px me-1 inline-block size-3.5 align-middle',
+} as const;
+
+function UserAvatar({ user, size }: { user: UserProfile; size: keyof typeof USER_AVATAR }) {
+  const className = cn('shrink-0 rounded-full bg-bg-a2', USER_AVATAR[size]);
   if (user.avatarUrl)
-    return (
-      <img
-        src={user.avatarUrl}
-        alt=''
-        referrerPolicy='no-referrer'
-        className={cn('size-6.5 shrink-0 rounded-full bg-bg-a2', className)}
-      />
-    );
+    return <img src={user.avatarUrl} alt='' referrerPolicy='no-referrer' className={className} />;
+  if (size === 'inline') return <span aria-hidden className={className} />;
   return (
-    <span
-      aria-hidden
-      className={cn(
-        'grid size-6.5 shrink-0 place-items-center rounded-full bg-bg-a2 text-2xs text-fg-2',
-        className
-      )}
-    >
+    <span aria-hidden className={cn('grid place-items-center text-fg-2', className)}>
       {resolveUserInitial(user)}
     </span>
   );
@@ -45,49 +43,56 @@ export function UserIdentity({
   user: UserProfile;
   title?: string;
   handle?: string | null;
-  detail?: string | null;
+  detail?: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn('flex min-w-0 items-center gap-2', className)}>
-      <UserAvatar user={user} />
+      <UserAvatar user={user} size='row' />
       <div className='flex min-w-0 flex-col gap-px'>
-        <Truncate className='font-medium text-fg-4 text-xs'>{title}</Truncate>
-        {(handle || detail) && (
-          <Truncate className='text-2xs text-fg-2'>
-            {handle && <span>{handle}</span>}
-            {handle && detail && ' · '}
-            {detail && <span>{detail}</span>}
-          </Truncate>
-        )}
+        <Truncate className='text-xs'>
+          <span className='font-medium text-fg-4'>{title}</span>
+          {handle && <span className='ms-1 text-fg-2'>{handle}</span>}
+        </Truncate>
+        {detail && <Truncate className='text-2xs text-fg-2'>{detail}</Truncate>}
       </div>
     </div>
   );
 }
 
-function UserCard({ user, detail }: { user: UserProfile; detail?: string }) {
+function UserCard({ user }: { user: UserProfile }) {
   return (
-    <>
-      <UserIdentity user={user} detail={detail} className='px-3 py-2.5' />
-      <InfoAction label='View on GitHub' href={resolveGitHubProfileUrl(user)} />
-    </>
+    <UserIdentity
+      user={user}
+      className='px-3 py-2.5'
+      detail={
+        <a
+          href={resolveGitHubProfileUrl(user)}
+          target='_blank'
+          rel='noreferrer'
+          onClick={(event) => event.stopPropagation()}
+          className='inline-flex cursor-pointer items-center gap-1 text-primary-text no-underline outline-none hover:opacity-80 active:opacity-80'
+        >
+          View on GitHub
+          <Icon size='sm' name='IconArrowUpRight' />
+        </a>
+      }
+    />
   );
 }
 
 export function UserTag({
   user,
   label = resolveFirstName(user),
-  detail,
   className,
 }: {
   user: UserProfile;
   label?: string;
-  detail?: string;
   className?: string;
 }) {
   return (
     <InfoPopover
-      className='w-60'
+      className='w-max max-w-64'
       render={
         <a
           href={resolveGitHubProfileUrl(user)}
@@ -97,9 +102,9 @@ export function UserTag({
           className={cn(USER_TAG, className)}
         />
       }
-      trigger={label}
+      trigger={<GlyphLabel glyph={<UserAvatar user={user} size='inline' />} text={label} />}
     >
-      <UserCard user={user} detail={detail} />
+      <UserCard user={user} />
     </InfoPopover>
   );
 }
