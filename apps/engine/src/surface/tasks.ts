@@ -497,6 +497,31 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'No longer shared.',
   }),
   defineCommand({
+    path: ['tasks', 'hand-off'],
+    summary:
+      'Hand a task to someone by a link. The first GitHub account to open it works on this one task from Shinsa Cloud.',
+    command: 'task.hand_off',
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.hand_off',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Handed off. Its link shows on the task in a moment.',
+  }),
+  defineCommand({
+    path: ['tasks', 'hand-off-remove'],
+    summary: 'Take a handed-off task back. Its link stops working and whoever took it loses access at once.',
+    command: 'handoff.remove',
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'handoff.remove',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Taken back.',
+  }),
+  defineCommand({
     path: ['tasks', 'duplicate'],
     summary: 'Close a task as a duplicate of another. It is cancelled and links the task it duplicates.',
     command: 'task.mark_duplicate',

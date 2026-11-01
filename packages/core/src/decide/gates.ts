@@ -30,6 +30,7 @@ interface AnswerOptions {
   planVersion?: number;
   verdicts?: FindingVerdict[];
   comments?: ReviewComment[];
+  thenApprove?: boolean;
 }
 
 function describePlanChange(decider: Decider, gate: Gate) {
@@ -123,6 +124,16 @@ function describeCommentProblem(comment: ReviewComment) {
   return comment.text.trim() ? null : 'A line comment has no words.';
 }
 
+function assertThenApprove(gate: Gate, decision: GateDecision, thenApprove?: boolean) {
+  if (!thenApprove) return;
+  if (gate.type !== 'review') {
+    throw new DomainError('then_approve_invalid', 'Only a review approves itself after a fix.');
+  }
+  if (decision !== 'revise') {
+    throw new DomainError('then_approve_conflict', 'Ask for changes to approve after the fix.');
+  }
+}
+
 function assertComments(gate: Gate, decision: GateDecision, comments?: ReviewComment[]) {
   if (!comments || comments.length === 0) return;
   if (gate.type !== 'review' && gate.type !== 'merge') {
@@ -161,6 +172,12 @@ function approveReview(decider: Decider, taskId: string) {
     return;
   }
   shipReviewedWork(decider, taskId);
+}
+
+export function approveReviewAhead(decider: Decider, gate: Gate) {
+  decider.emit({ type: 'gate.answered', gateId: gate.id, decision: 'approve', response: null, ahead: true });
+  decider.requestBriefing(gate.taskId);
+  approveReview(decider, gate.taskId);
 }
 
 function approveMerge(decider: Decider, gate: Gate) {
@@ -232,10 +249,20 @@ export function answerGate(
   assertCurrentPlan(decider, gate, decision, options.planVersion);
   assertVerdicts(decider, gate, decision, options.verdicts);
   assertComments(gate, decision, options.comments);
+  assertThenApprove(gate, decision, options.thenApprove);
   assertMergeStepsDone(decider, gate, decision);
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
   const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};
-  decider.emit({ type: 'gate.answered', gateId, decision, response, ...verdicts, ...comments });
+  const thenApprove = options.thenApprove ? { thenApprove: true } : {};
+  decider.emit({
+    type: 'gate.answered',
+    gateId,
+    decision,
+    response,
+    ...verdicts,
+    ...comments,
+    ...thenApprove,
+  });
   decider.requestBriefing(gate.taskId);
   switch (gate.type) {
     case 'question':

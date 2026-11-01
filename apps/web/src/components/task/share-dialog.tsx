@@ -13,9 +13,14 @@ import * as React from 'react';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { UserIdentity } from '@/components/people/user-tag.tsx';
+import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
+import { useEngineCommand } from '@/lib/connection/socket.ts';
+import { formatSince } from '@/lib/format/time.ts';
+import { describeUserName } from '@/lib/remote/users.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
   changeShareLimit,
@@ -23,16 +28,18 @@ import {
   closeShareDialog,
   closeUnshareConfirm,
   listShareLimitItems,
+  listShareModeItems,
   openUnshareConfirm,
   resolveShareLimitChoice,
+  resolveShareModeChoice,
   resolveSharePresetChoice,
   resolveShareView,
   SHARE_DESCRIPTION,
   SHARE_LIMIT_TITLE,
   SHARE_NEEDS_REMOTE,
-  SHARE_PRESET_ITEMS,
   SHARE_PRESET_TITLE,
   SHARE_TITLE,
+  type ShareMode,
   type ShareView,
   selectLiveShare,
   shareTask,
@@ -40,8 +47,27 @@ import {
   UNSHARE_TITLE,
   unshareTask,
   useShareDialog,
+  useShareDialogFocus,
   useUnshareConfirm,
 } from '@/lib/share/dialog.ts';
+import {
+  closeHandoffRemoveConfirm,
+  describeHandoffClaim,
+  HANDOFF_COPY,
+  HANDOFF_DESCRIPTION,
+  HANDOFF_HELD_DESCRIPTION,
+  HANDOFF_JOINED,
+  HANDOFF_REMOVE,
+  HANDOFF_REMOVE_DESCRIPTION,
+  HANDOFF_TITLE,
+  HANDOFF_TURN_OFF,
+  type HandoffView,
+  handOffTask,
+  openHandoffRemoveConfirm,
+  removeHandoff,
+  resolveHandoffView,
+  useHandoffRemoveConfirm,
+} from '@/lib/share/handoff.ts';
 import { navigate } from '@/router.ts';
 
 function ShareBody({ view }: { view: ShareView }) {
@@ -85,12 +111,14 @@ function ShareLimitRow({
   );
 }
 
-function SharePresetRow({
-  preset,
+function ShareModeRow({
+  items,
+  mode,
   onChange,
 }: {
-  preset: SharePreset;
-  onChange: (preset: SharePreset) => void;
+  items: ReturnType<typeof listShareModeItems>;
+  mode: ShareMode;
+  onChange: (mode: ShareMode) => void;
 }) {
   return (
     <Field className='w-full'>
@@ -99,8 +127,8 @@ function SharePresetRow({
         label={SHARE_PRESET_TITLE}
         align='start'
         className='w-full'
-        items={SHARE_PRESET_ITEMS}
-        value={preset}
+        items={items}
+        value={mode}
         onValueChange={onChange}
       />
     </Field>
@@ -166,13 +194,87 @@ function ShareActions({
   );
 }
 
-function CopyLinkButton({ url }: { url: string }) {
+function CopyLinkButton({ url, label = 'Copy link' }: { url: string; label?: string }) {
   const { copied, copy } = useCopyText(url);
   return (
     <Button variant='secondary' onClick={copy}>
-      {copied ? 'Copied' : 'Copy link'}
+      {copied ? 'Copied' : label}
     </Button>
   );
+}
+
+function HandoffGuest({ view }: { view: Extract<HandoffView, { kind: 'claimed' }> }) {
+  return (
+    <UserIdentity
+      user={view.guest}
+      className='w-full'
+      detail={<TimeAgo at={view.at} text={(now) => formatSince(HANDOFF_JOINED, view.at, now)} />}
+    />
+  );
+}
+
+function HandoffBody({ view }: { view: HandoffView }) {
+  if (view.kind === 'failed')
+    return (
+      <p role='alert' className='selectable text-destructive text-xs'>
+        {view.message}
+      </p>
+    );
+  if (view.kind === 'claimed') return <HandoffGuest view={view} />;
+  return null;
+}
+
+function HandoffActions({ task, view }: { task: Task; view: HandoffView }) {
+  const [busy, setBusy] = React.useState(false);
+  const handOff = async () => {
+    setBusy(true);
+    await handOffTask(task);
+    setBusy(false);
+  };
+  switch (view.kind) {
+    case 'off':
+    case 'linking':
+      return (
+        <Button loading={busy || view.kind === 'linking'} onClick={() => void handOff()}>
+          {HANDOFF_TITLE}
+        </Button>
+      );
+    case 'failed':
+      return (
+        <>
+          <Button variant='secondary' onClick={() => void removeHandoff(task)}>
+            {HANDOFF_REMOVE}
+          </Button>
+          <Button loading={busy} onClick={() => void handOff()}>
+            Try again
+          </Button>
+        </>
+      );
+    case 'ready':
+      return (
+        <>
+          <Button variant='secondary' onClick={() => void removeHandoff(task)}>
+            {HANDOFF_TURN_OFF}
+          </Button>
+          <CopyLinkButton url={view.url} label={HANDOFF_COPY} />
+          <Button onClick={closeShareDialog}>Done</Button>
+        </>
+      );
+    case 'claimed':
+      return (
+        <>
+          <Button variant='secondary' onClick={() => openHandoffRemoveConfirm(task.id)}>
+            {HANDOFF_REMOVE}
+          </Button>
+          <Button onClick={closeShareDialog}>Done</Button>
+        </>
+      );
+  }
+}
+
+function describeHandoffView(view: HandoffView) {
+  if (view.kind === 'claimed') return `${describeHandoffClaim(view.guest)}. ${HANDOFF_HELD_DESCRIPTION}`;
+  return HANDOFF_DESCRIPTION;
 }
 
 function ShareContent({ task }: { task: Task }) {
@@ -188,31 +290,49 @@ function ShareContent({ task }: { task: Task }) {
   }, [shared]);
   const [picked, setPicked] = React.useState<ShareLimit | null>(null);
   const limit = picked ?? live?.limit ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
-  const [pickedPreset, setPickedPreset] = React.useState<SharePreset | null>(null);
-  const preset = pickedPreset ?? resolveSharePresetChoice(task, settings);
+  const handoffSupported = useEngineCommand('task.hand_off', task.id);
+  const [pickedMode, setPickedMode] = React.useState<ShareMode | null>(null);
+  const focus = useShareDialogFocus();
+  const mode = pickedMode ?? resolveShareModeChoice(task, settings, handoffSupported, focus);
+  const preset = mode === 'handoff' ? resolveSharePresetChoice(task, settings) : mode;
+  const handing = mode === 'handoff' && view.kind !== 'unpaired';
+  const handoff = resolveHandoffView(task);
   const pickLimit = (next: ShareLimit) => {
     if (shared) void changeShareLimit(task, next);
     else setPicked(next);
   };
-  const pickPreset = (next: SharePreset) => {
-    if (shared) void changeSharePreset(task, next);
-    else setPickedPreset(next);
+  const pickMode = (next: ShareMode) => {
+    setPickedMode(next);
+    if (next !== 'handoff' && live && shared && next !== live.preset) void changeSharePreset(task, next);
   };
+  const shownMode = mode === 'handoff' || !(shared && live) ? mode : live.preset;
   return (
     <>
       <DialogHeader>
         <DialogTitle>{SHARE_TITLE}</DialogTitle>
-        <DialogDescription>{SHARE_DESCRIPTION}</DialogDescription>
+        <DialogDescription>{handing ? describeHandoffView(handoff) : SHARE_DESCRIPTION}</DialogDescription>
       </DialogHeader>
-      <ShareBody view={view} />
+      {!handing && <ShareBody view={view} />}
       {view.kind !== 'unpaired' && (
         <>
-          <SharePresetRow preset={shared && live ? live.preset : preset} onChange={pickPreset} />
-          <ShareLimitRow task={task} limit={shared && live ? live.limit : limit} onChange={pickLimit} />
+          <ShareModeRow
+            items={listShareModeItems(task, handoffSupported)}
+            mode={shownMode}
+            onChange={pickMode}
+          />
+          {handing ? (
+            <HandoffBody view={handoff} />
+          ) : (
+            <ShareLimitRow task={task} limit={shared && live ? live.limit : limit} onChange={pickLimit} />
+          )}
         </>
       )}
       <DialogFooter>
-        <ShareActions task={task} view={view} limit={limit} preset={preset} />
+        {handing ? (
+          <HandoffActions task={task} view={handoff} />
+        ) : (
+          <ShareActions task={task} view={view} limit={limit} preset={preset} />
+        )}
       </DialogFooter>
     </>
   );
@@ -251,6 +371,30 @@ export function UnshareConfirm() {
       action={UNSHARE_TITLE}
       onConfirm={() => {
         if (confirming.current) void unshareTask(confirming.current);
+      }}
+    />
+  );
+}
+
+export function HandoffRemoveConfirm() {
+  const task = useTask(useHandoffRemoveConfirm());
+  const confirming = React.useRef<Task | null>(null);
+  if (task) confirming.current = task;
+  const guest = confirming.current?.handoff?.guest;
+  return (
+    <ConfirmDialog
+      control={{
+        open: Boolean(task),
+        onOpenChange: (open) => {
+          if (!open) closeHandoffRemoveConfirm();
+        },
+        onOpenChangeComplete: () => undefined,
+      }}
+      title={guest ? `Remove ${describeUserName(guest)}?` : `${HANDOFF_REMOVE}?`}
+      body={HANDOFF_REMOVE_DESCRIPTION}
+      action={HANDOFF_REMOVE}
+      onConfirm={() => {
+        if (confirming.current) void removeHandoff(confirming.current);
       }}
     />
   );

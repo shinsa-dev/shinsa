@@ -16,6 +16,7 @@ export const REMOTE_PATHS = {
   pairPoll: '/__remote/pair/poll',
   pairPage: '/pair',
   enrollPage: '/enroll',
+  claimPage: '/claim',
   heartbeat: '/__remote/machine/heartbeat',
   offline: '/__remote/machine/offline',
   machineRemove: '/__remote/machine/remove',
@@ -35,6 +36,11 @@ export const REMOTE_PATHS = {
   machineMemberAdd: '/__remote/machine/members/add',
   machineMemberRemove: '/__remote/machine/members/remove',
   inviteAccept: '/__remote/invites/accept',
+  machineHandoffs: '/__remote/machine/handoffs',
+  machineHandoffRemove: '/__remote/machine/handoffs/remove',
+  machineGuestAdd: '/__remote/machine/guests/add',
+  machineGuestRemove: '/__remote/machine/guests/remove',
+  handoffAccept: '/__remote/handoffs/accept',
   previewOpen: '/__remote/previews/open',
   teams: '/__remote/teams',
   teamJoin: '/__remote/teams/join',
@@ -45,6 +51,8 @@ export const REMOTE_PATHS = {
 } as const;
 
 export const MAX_INSTANCE_MEMBERS = 20;
+
+export const MAX_INSTANCE_GUESTS = 20;
 
 export const REMOTE_NATIVE_CLIENT = 'native';
 
@@ -106,10 +114,11 @@ export interface RemoteAccess {
 
 export interface HeartbeatResponse extends RemoteAccess {
   ok: true;
+  guests: RemoteMember[];
   teams: RemoteTeam[];
 }
 
-export type RemoteRole = 'owner' | 'member';
+export type RemoteRole = 'owner' | 'member' | 'guest';
 
 export interface RemoteInstance {
   id: string;
@@ -144,6 +153,10 @@ export interface InviteAcceptResponse {
 
 export interface MemberRequest {
   userId: string;
+}
+
+export interface HandoffRemoveRequest {
+  token: string;
 }
 
 export interface NativeSignInTokenRequest {
@@ -239,4 +252,8 @@ export function parseEnrollFragment(fragment: string): EnrollFragment | null {
 
 export function resolveEnrollUrl(fragment: EnrollFragment, origin: string = REMOTE_APP_ORIGIN) {
   return `${origin}${REMOTE_PATHS.enrollPage}#${serializeEnrollFragment(fragment)}`;
+}
+
+export function resolveClaimUrl(fragment: EnrollFragment, origin: string = REMOTE_APP_ORIGIN) {
+  return `${origin}${REMOTE_PATHS.claimPage}#${serializeEnrollFragment(fragment)}`;
 }

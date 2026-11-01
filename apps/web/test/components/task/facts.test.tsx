@@ -13,6 +13,7 @@ import { findTooltipText } from '../../support/hover.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
 import { createMachineResources, createTaskResources } from '../../support/resources.ts';
 import { createRound } from '../../support/rounds.ts';
+import { createSchedule } from '../../support/schedules.ts';
 import {
   listSentCommands,
   pushAccounts,
@@ -595,5 +596,56 @@ describe('a duplicate', () => {
     renderFacts(original, [copy]);
     fireEvent.click(screen.getByRole('button', { name: 'Kept over Dark theme please' }));
     expect(window.location.pathname).toBe('/tasks/SW-3');
+  });
+});
+
+describe('a task handed off', () => {
+  it('names who it was handed to beside its other facts', () => {
+    const guest = { id: 'u7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    renderFacts(createTask({ id: 't', handle: 'SW-7', handoff: { at: 1, url: null, guest, claimedAt: 2 } }));
+    expect(screen.getByText('Handed to')).toBeTruthy();
+    expect(screen.getByText('Kai Lane')).toBeTruthy();
+  });
+});
+
+describe('who filed the task', () => {
+  const filer = createTask({ id: 'filer', handle: 'LOC-122', title: 'Retry the export' });
+
+  it('links the task whose agent filed it, says so on hover, and shows no separate Forked from', async () => {
+    const task = createTask({
+      id: 't',
+      handle: 'LOC-127',
+      forkOf: 'filer',
+      createdBy: { kind: 'courier', taskId: 'filer', runId: 'r', requestKey: 'k' },
+    });
+    const view = renderFacts(task, [filer]);
+    const link = screen.getByRole('button', { name: 'Filed by LOC-122 Retry the export' });
+    expect(await findTooltipText(link)).toBe('The agent of LOC-122 filed this task.');
+    expect(view.getAllByRole('button').map((button) => button.textContent)).not.toContain(
+      'Forked from Retry the export'
+    );
+    fireEvent.click(link);
+    expect(window.location.pathname).toBe('/tasks/LOC-122');
+  });
+
+  it('opens the automation that filed it', () => {
+    const task = createTask({ id: 't', scheduleId: 's-read' });
+    const state = createShinsaState({
+      tasks: [task],
+      patch: { schedules: { 's-read': createSchedule({ id: 's-read', name: 'Support reports' }) } },
+    });
+    pushState(state);
+    render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={task} />
+      </TooltipProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Started by “Support reports”' }));
+    expect(window.location.pathname).toBe('/automations/s-read');
+  });
+
+  it('adds nothing to a task you filed yourself', () => {
+    const view = renderFacts(createTask({ id: 't', handle: 'SW-7' }));
+    expect(view.queryByText(/Filed by|Started by|Split from/)).toBeNull();
   });
 });

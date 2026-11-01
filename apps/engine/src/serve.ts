@@ -36,6 +36,7 @@ import {
 import { describeError, log } from './log/index.ts';
 import { type AccountSource, type CommandRunner, Onboarding } from './onboarding/index.ts';
 import { createProjectChanges } from './projects/routes.ts';
+import { Handoffs } from './remote/handoffs.ts';
 import {
   ControlClient,
   createInstalledConnector,
@@ -171,6 +172,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
   const shares = new Shares({ engine, remote, evidence, transcripts });
+  const handoffs = new Handoffs({ engine, remote });
   const teamFeeds = new TeamFeeds({ remote });
   const teams = new Teams({ engine, remote, shares, transcripts, held: teamFeeds });
   const slack = new Slack({ engine, remote, ask: quick.classify });
@@ -260,6 +262,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       workspaces: runs.workspaces,
       shares,
       previews,
+      handoffs,
       triage:
         options.triage ??
         ((state, task, local) =>

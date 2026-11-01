@@ -12,6 +12,7 @@ import {
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
 import { createTeamKeyStore, selectTeamJoinFragment, stashTeamJoinFragment } from '@/lib/teams/join.ts';
 import { createJoinMachinesSource } from '@/lib/teams/join-machines.ts';
+import { ClaimPage } from './claim.tsx';
 import { EnrollPage } from './enroll.tsx';
 import { FleetApp } from './fleet.tsx';
 import { PairPage } from './pair.tsx';
@@ -32,6 +33,7 @@ export function createRemoteServices(): RemoteServices {
 
 function resolveReturnPath(view: RemoteView) {
   if (view.kind === 'enroll') return REMOTE_PATHS.enrollPage;
+  if (view.kind === 'claim') return REMOTE_PATHS.claimPage;
   if (view.kind === 'team-join') return REMOTE_PATHS.teamJoinPage;
   const search = new URLSearchParams(location.search);
   search.delete('sign_in_error');
@@ -42,9 +44,9 @@ function resolveReturnPath(view: RemoteView) {
 export function RemoteRoot({ services, app }: { services: RemoteServices; app: React.ReactNode }) {
   const [view] = React.useState(() => {
     const resolved = resolveRemoteView(location);
-    if (resolved.kind === 'enroll' && location.hash) {
+    if ((resolved.kind === 'enroll' || resolved.kind === 'claim') && location.hash) {
       stashEnrollFragment(sessionStorage, location.hash, location.search);
-      history.replaceState(null, '', REMOTE_PATHS.enrollPage);
+      history.replaceState(null, '', location.pathname);
     }
     if (resolved.kind === 'team-join' && location.hash) {
       stashTeamJoinFragment(sessionStorage, location.hash);
@@ -69,13 +71,29 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
         </p>
       );
     if (!session) return <RemoteLoading label='Checking your sign-in' />;
-    if (!session.user) return <SignInPrompt returnPath={resolveReturnPath(view)} error={signInError} />;
+    if (!session.user)
+      return (
+        <SignInPrompt
+          returnPath={resolveReturnPath(view)}
+          error={signInError}
+          handoff={view.kind === 'claim'}
+        />
+      );
     switch (view.kind) {
       case 'pair':
         return <PairPage claimCode={view.claimCode} dashboard={services.dashboard} />;
       case 'enroll':
         return (
           <EnrollPage
+            link={selectEnrollFragment(sessionStorage, '')}
+            user={session.user}
+            dashboard={services.dashboard}
+            devices={services.devices}
+          />
+        );
+      case 'claim':
+        return (
+          <ClaimPage
             link={selectEnrollFragment(sessionStorage, '')}
             user={session.user}
             dashboard={services.dashboard}

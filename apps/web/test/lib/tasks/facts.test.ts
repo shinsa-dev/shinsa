@@ -7,8 +7,10 @@ import {
   describeStarted,
   listDuplicates,
   listForkSources,
+  listForkSourcesBesides,
   listForks,
   listTeammateDuplicates,
+  resolveFiledByFact,
   resolveReportFact,
   selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
@@ -306,72 +308,164 @@ describe('resolveReportFact', () => {
   };
 
   it('is absent on a task no automation filed', () => {
-    expect(resolveReportFact(createShinsaState({}), createTask({ id: 't' }))).toBeNull();
+    expect(resolveReportFact(createTask({ id: 't' }))).toBeNull();
   });
 
-  it('names the source, who wrote it and when, and the watch that filed it, which opens its own page', () => {
-    const reader = createTask({ id: 'reader', title: 'Read #support' });
-    const task = createTask({
-      id: 't',
-      sourceReport: report,
-      createdBy: { kind: 'intake', taskId: 'reader', runId: 'r', requestKey: report.link },
-    });
-    const state = createShinsaState({
-      tasks: [reader, task],
-      patch: { schedules: { 's-read': createSchedule({ id: 's-read', name: 'Support reports' }) } },
-    });
-    expect(resolveReportFact(state, task, NOW)).toEqual({
+  it('names the source, who wrote it and when', () => {
+    const task = createTask({ id: 't', sourceReport: report });
+    expect(resolveReportFact(task, NOW)).toEqual({
       label: 'Reported in composio-slack',
       byline: `Ana Ruiz · ${formatMoment(NOW - 2 * 60 * 60_000, NOW)}`,
       text: report.text,
       link: report.link,
-      filedBy: {
-        label: 'Filed by the automation',
-        value: 'Support reports',
-        watchId: 's-read',
-        watchedTaskId: null,
-      },
     });
   });
 
-  it('keeps a time it cannot read as written, opens only web links, and survives a deleted automation', () => {
+  it('keeps a time it cannot read as written and opens only web links', () => {
     const task = createTask({
       id: 't',
       sourceReport: { ...report, author: null, postedAt: 'yesterday', link: 'slack://channel?id=C1' },
     });
-    expect(resolveReportFact(createShinsaState({ tasks: [task] }), task, NOW)).toMatchObject({
-      byline: 'yesterday',
-      link: null,
-      filedBy: null,
-    });
+    expect(resolveReportFact(task, NOW)).toMatchObject({ byline: 'yesterday', link: null });
     const bare = { ...task, sourceReport: { ...report, author: null, postedAt: null, link: null } };
-    expect(resolveReportFact(createShinsaState({ tasks: [bare] }), bare, NOW)).toMatchObject({
-      byline: null,
-      link: null,
+    expect(resolveReportFact(bare, NOW)).toMatchObject({ byline: null, link: null });
+  });
+});
+
+describe('resolveFiledByFact', () => {
+  const filer = createTask({ id: 'filer', handle: 'LOC-122', title: 'Retry the export' });
+  const report = {
+    scheduleId: null as string | null,
+    watchdogId: null as string | null,
+    server: 'maple',
+    reportId: 'err-7f3a',
+    link: null,
+    author: null,
+    postedAt: null,
+    text: 'TypeError on /docs/framework',
+  };
+
+  it('shows nothing for a task you filed yourself', () => {
+    const task = createTask({ id: 't' });
+    expect(resolveFiledByFact(createShinsaState({ tasks: [task] }), task)).toBeNull();
+  });
+
+  it('names the task whose agent filed it and opens that task', () => {
+    const task = createTask({
+      id: 't',
+      createdBy: { kind: 'courier', taskId: 'filer', runId: 'r', requestKey: 'k' },
+    });
+    expect(resolveFiledByFact(createShinsaState({ tasks: [filer, task] }), task)).toEqual({
+      icon: 'IconAgents',
+      verb: 'Filed by',
+      handle: 'LOC-122',
+      name: 'Retry the export',
+      hint: 'The agent of LOC-122 filed this task.',
+      target: { kind: 'task', taskId: 'filer' },
     });
   });
 
-  it('names the watchdog that filed it and opens the shipped task, and survives a stopped or missing one', () => {
+  it('names the task whose plan it was split from, quoting its title when it has no handle', () => {
+    const unnamed = { ...filer, handle: undefined };
+    const task = createTask({
+      id: 't',
+      createdBy: { kind: 'split', taskId: 'filer', runId: 'r', requestKey: 'plan:1' },
+    });
+    expect(resolveFiledByFact(createShinsaState({ tasks: [unnamed, task] }), task)).toEqual({
+      icon: 'IconSplit',
+      verb: 'Split from',
+      handle: null,
+      name: 'Retry the export',
+      hint: 'The agent of “Retry the export” split its plan into this task.',
+      target: { kind: 'task', taskId: 'filer' },
+    });
+  });
+
+  it('names the watchdog that filed it and opens the task it watches', () => {
     const shipped = createTask({
       id: 'shipped',
       handle: 'SW-2',
       watchdogs: [{ id: 'w1', title: 'Docs errors in Safari' } as Watchdog],
     });
-    const fromWatchdog = { ...report, scheduleId: null, watchdogId: 'w1', server: 'maple' };
-    const task = createTask({ id: 't', forkOf: 'shipped', sourceReport: fromWatchdog });
-    const state = createShinsaState({ tasks: [shipped, task] });
-    expect(resolveReportFact(state, task, NOW)).toMatchObject({
-      label: 'Reported in maple',
-      filedBy: {
-        label: 'Filed by the watchdog',
-        value: 'Docs errors in Safari',
-        watchId: null,
-        watchedTaskId: 'shipped',
-      },
+    const task = createTask({
+      id: 't',
+      forkOf: 'shipped',
+      sourceReport: { ...report, watchdogId: 'w1' },
+      createdBy: { kind: 'watchdog', taskId: 'shipped', runId: 'r', requestKey: 'err-7f3a' },
     });
-    const gone = { ...task, sourceReport: { ...fromWatchdog, watchdogId: 'w2' } };
-    expect(resolveReportFact(state, gone, NOW)?.filedBy).toBeNull();
-    const orphan = { ...task, forkOf: null };
-    expect(resolveReportFact(state, orphan, NOW)?.filedBy).toBeNull();
+    const state = createShinsaState({ tasks: [shipped, task] });
+    expect(resolveFiledByFact(state, task)).toEqual({
+      icon: 'IconRadar',
+      verb: 'Filed by',
+      handle: null,
+      name: '“Docs errors in Safari”',
+      hint: 'The watchdog “Docs errors in Safari” on SW-2 filed this from a report in maple.',
+      target: { kind: 'task', taskId: 'shipped' },
+    });
+    const stopped = { ...task, sourceReport: { ...report, watchdogId: 'w2' } };
+    expect(resolveFiledByFact(state, stopped)).toBeNull();
+    const unreported = { ...task, sourceReport: null };
+    expect(resolveFiledByFact(state, unreported)).toBeNull();
+  });
+
+  it('names the automation that filed it from a report, or started it, and opens the automation', () => {
+    const reader = createTask({ id: 'reader', title: 'Read #support' });
+    const filed = createTask({
+      id: 't',
+      scheduleId: 's-read',
+      sourceReport: { ...report, scheduleId: 's-read', server: 'composio-slack' },
+      createdBy: { kind: 'intake', taskId: 'reader', runId: 'r', requestKey: 'k' },
+    });
+    const started = createTask({ id: 'u', scheduleId: 's-read' });
+    const state = createShinsaState({
+      tasks: [reader, filed, started],
+      patch: { schedules: { 's-read': createSchedule({ id: 's-read', name: 'Support reports' }) } },
+    });
+    expect(resolveFiledByFact(state, filed)).toEqual({
+      icon: 'IconCalendarClock',
+      verb: 'Filed by',
+      handle: null,
+      name: '“Support reports”',
+      hint: 'The automation “Support reports” filed this from a report in composio-slack.',
+      target: { kind: 'automation', scheduleId: 's-read' },
+    });
+    expect(resolveFiledByFact(state, started)).toMatchObject({
+      verb: 'Started by',
+      hint: 'The automation “Support reports” started this task.',
+    });
+  });
+
+  it('shows nothing once the task or the automation that filed it is gone', () => {
+    const orphan = createTask({
+      id: 't',
+      createdBy: { kind: 'courier', taskId: 'gone', runId: 'r', requestKey: 'k' },
+    });
+    expect(resolveFiledByFact(createShinsaState({ tasks: [orphan] }), orphan)).toBeNull();
+    const reader = createTask({ id: 'reader' });
+    const unscheduled = createTask({
+      id: 'u',
+      scheduleId: 's-gone',
+      sourceReport: { ...report, scheduleId: 's-gone' },
+      createdBy: { kind: 'intake', taskId: 'reader', runId: 'r', requestKey: 'k' },
+    });
+    expect(resolveFiledByFact(createShinsaState({ tasks: [reader, unscheduled] }), unscheduled)).toBeNull();
+  });
+});
+
+describe('listForkSourcesBesides', () => {
+  it('leaves out the task it was forked from when that task also filed it', () => {
+    const source = createTask({ id: 'source' });
+    const task = createTask({ id: 't', forkOf: 'source' });
+    const state = createShinsaState({ tasks: [source, task] });
+    expect(listForkSourcesBesides(state, task, null)).toEqual([source]);
+    const fromSource = { kind: 'task' as const, taskId: 'source' };
+    const filedBy = { icon: 'IconAgents' as const, verb: 'Filed by', handle: null, name: '', hint: '' };
+    expect(listForkSourcesBesides(state, task, { ...filedBy, target: fromSource })).toEqual([]);
+    expect(
+      listForkSourcesBesides(state, task, { ...filedBy, target: { kind: 'task', taskId: 'other' } })
+    ).toEqual([source]);
+    expect(
+      listForkSourcesBesides(state, task, { ...filedBy, target: { kind: 'automation', scheduleId: 's' } })
+    ).toEqual([source]);
   });
 });

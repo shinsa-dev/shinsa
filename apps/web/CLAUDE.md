@@ -33,7 +33,8 @@ src/
 │   │                    in the remote build, a note that terminals stay on the machine)
 │   ├── remote/          The remote build's own pages on app.shinsa.dev (docs/engine.md → Remote access): index.tsx
 │   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
-│   │                    pair.tsx, enroll.tsx, slack.tsx (SlackLinkedPage: /slack/linked after connecting Slack,
+│   │                    pair.tsx, enroll.tsx, claim.tsx (/claim#…: work on a task handed to you, docs/engine.md →
+│   │                    Handing off a task), slack.tsx (SlackLinkedPage: /slack/linked after connecting Slack,
 │   │                    the workspace and what happens next, or why it failed), fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
 │   │                    device, the benefits card and Check again), share.tsx (/share/t/<token>#<key>: a
@@ -149,7 +150,8 @@ src/
     │                    the header shows above the title; useReadOnlyOwner: the owner's name for activity, fact hints,
     │                    the now card, the requests and the hand-over card, null on your own page), and
     │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
-    │                    components/task/share-dialog.tsx is Share task and Stop sharing's confirmation,
+    │                    components/task/share-dialog.tsx is Share task (Hand off is its last Share as choice, lib/share/handoff.ts)
+    │                    and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows
     ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
     │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this

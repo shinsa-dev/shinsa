@@ -150,6 +150,49 @@ describe('gate commands', () => {
     );
   });
 
+  function fixChoices(thenApprove?: boolean, verdicts: Record<number, 'fix' | 'dismiss'> = {}) {
+    const task = createTask({
+      id: 't',
+      stage: 'awaiting_review',
+      findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
+    });
+    const gate = createGate({ id: 'g', taskId: 't', type: 'review' });
+    const context = { ...CONTEXT, verdicts, ...(thenApprove === undefined ? {} : { thenApprove }) };
+    return listOpenGateCommands(createShinsaState({ tasks: [task], gates: [gate] }), task, context);
+  }
+
+  it('offers fixing then approving beside the fix you chose, when the engine can', () => {
+    const plain = fixChoices(false);
+    expect(plain.slice(0, 2).map((command) => [command.id, command.label])).toEqual([
+      ['task.t.gate.g.approve', 'Fix 1 finding'],
+      ['task.t.gate.g.fix_choice', 'Fix 1 finding and approve'],
+    ]);
+    run(plain[1]);
+    expect(spies.sent).toHaveBeenLastCalledWith(
+      {
+        type: 'gate.answer',
+        gateId: 'g',
+        decision: 'revise',
+        response: null,
+        verdicts: [{ index: 0, verdict: 'fix', note: null }],
+        thenApprove: true,
+      },
+      'Sent. Approving once the fix passes.'
+    );
+    const chosen = fixChoices(true);
+    expect(chosen.slice(0, 2).map((command) => [command.label, command.icon])).toEqual([
+      ['Fix 1 finding and approve', 'IconCheckmark1'],
+      ['Fix 1 finding', 'IconPencil'],
+    ]);
+  });
+
+  it('offers no second fix when the engine cannot approve after a fix or nothing is kept to fix', () => {
+    expect(fixChoices().map((command) => command.id)).not.toContain('task.t.gate.g.fix_choice');
+    expect(fixChoices(false, { 0: 'dismiss' }).map((command) => command.id)).not.toContain(
+      'task.t.gate.g.fix_choice'
+    );
+  });
+
   it('Fix 1 finding from the menu sends the drafted line comments too and clears them once sent', async () => {
     const task = createTask({
       id: 't',

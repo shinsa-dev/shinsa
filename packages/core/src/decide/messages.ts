@@ -174,11 +174,11 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
       return;
     case 'steer':
       if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, text, 0);
-      decider.run({ kind: 'run.steer', runId: delivery.run.id, text });
+      decider.run({ kind: 'run.steer', runId: delivery.run.id, text: resolveGuestText(decider, text) });
       return;
     case 'wake':
       if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, text, 0);
-      queueMessageForWake(decider, delivery.run, text);
+      queueMessageForWake(decider, delivery.run, resolveGuestText(decider, text));
       return;
     case 'retry':
       answerGate(decider, delivery.gate.id, 'reply', text);
@@ -328,6 +328,11 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
   }
   recordMessages(decider, task.id, texts, scheduled);
   deliverMessage(decider, decider.task(task.id), delivery, text);
+}
+
+function resolveGuestText(decider: Decider, text: string) {
+  const guest = decider.context.guest;
+  return guest ? `From @${guest.login}, who the human handed this task to:\n\n${text}` : text;
 }
 
 export function messageTask(

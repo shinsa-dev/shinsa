@@ -1,11 +1,5 @@
-import type {
-  ShinsaState,
-  SourceReport,
-  Task,
-  TeamFeedSnapshot,
-  TeamFeedTask,
-  TeammateOwner,
-} from '@shinsa/core';
+import type { ShinsaState, Task, TeamFeedSnapshot, TeamFeedTask, TeammateOwner } from '@shinsa/core';
+import type { IconName } from '@shinsa/ui/components/icon';
 import { formatCount } from '@/lib/format/count.ts';
 import { formatMoment, formatSince } from '@/lib/format/time.ts';
 import { resolveSourceTaskId } from '@/lib/share/view.ts';
@@ -132,22 +126,7 @@ function isWebLink(link: string | null): link is string {
   return link !== null && /^https?:\/\//i.test(link);
 }
 
-function resolveFiledBy(state: ShinsaState, task: Task, report: SourceReport) {
-  const schedule = report.scheduleId ? state.schedules[report.scheduleId] : undefined;
-  if (schedule)
-    return {
-      label: 'Filed by the automation',
-      value: schedule.name,
-      watchId: schedule.id,
-      watchedTaskId: null,
-    };
-  const watched = report.watchdogId && task.forkOf ? state.tasks[task.forkOf] : undefined;
-  const watchdog = watched?.watchdogs?.find((candidate) => candidate.id === report.watchdogId);
-  if (!watched || !watchdog) return null;
-  return { label: 'Filed by the watchdog', value: watchdog.title, watchId: null, watchedTaskId: watched.id };
-}
-
-export function resolveReportFact(state: ShinsaState, task: Task, now = Date.now()) {
+export function resolveReportFact(task: Task, now = Date.now()) {
   const report = task.sourceReport;
   if (!report) return null;
   const byline = [report.author, describePostedAt(report.postedAt, now)].filter(Boolean).join(' · ');
@@ -156,6 +135,90 @@ export function resolveReportFact(state: ShinsaState, task: Task, now = Date.now
     byline: byline || null,
     text: report.text,
     link: isWebLink(report.link) ? report.link : null,
-    filedBy: resolveFiledBy(state, task, report),
   };
+}
+
+type FiledByTarget = { kind: 'task'; taskId: string } | { kind: 'automation'; scheduleId: string };
+
+export interface FiledByFact {
+  icon: IconName;
+  verb: string;
+  handle: string | null;
+  name: string;
+  hint: string;
+  target: FiledByTarget;
+}
+
+function describeTaskName(task: Task) {
+  return task.handle ?? `“${task.title}”`;
+}
+
+function resolveAutomationFiler(state: ShinsaState, task: Task): FiledByFact | null {
+  const report = task.sourceReport;
+  const scheduleId = report?.scheduleId ?? task.scheduleId;
+  const schedule = scheduleId ? state.schedules[scheduleId] : undefined;
+  if (!schedule) return null;
+  return {
+    icon: 'IconCalendarClock',
+    verb: report ? 'Filed by' : 'Started by',
+    handle: null,
+    name: `“${schedule.name}”`,
+    hint: report
+      ? `The automation “${schedule.name}” filed this from a report in ${report.server}.`
+      : `The automation “${schedule.name}” started this task.`,
+    target: { kind: 'automation', scheduleId: schedule.id },
+  };
+}
+
+function resolveWatchdogFiler(watched: Task, task: Task): FiledByFact | null {
+  const report = task.sourceReport;
+  const watchdog = watched.watchdogs?.find((candidate) => candidate.id === report?.watchdogId);
+  if (!report || !watchdog) return null;
+  return {
+    icon: 'IconRadar',
+    verb: 'Filed by',
+    handle: null,
+    name: `“${watchdog.title}”`,
+    hint: `The watchdog “${watchdog.title}” on ${describeTaskName(watched)} filed this from a report in ${report.server}.`,
+    target: { kind: 'task', taskId: watched.id },
+  };
+}
+
+export function resolveFiledByFact(state: ShinsaState, task: Task): FiledByFact | null {
+  const automation = resolveAutomationFiler(state, task);
+  if (automation) return automation;
+  const creator = task.createdBy;
+  const filer = creator ? state.tasks[creator.taskId] : undefined;
+  if (!creator || !filer) return null;
+  const target: FiledByTarget = { kind: 'task', taskId: filer.id };
+  const label = describeTaskName(filer);
+  if (creator.kind === 'watchdog') return resolveWatchdogFiler(filer, task);
+  if (creator.kind === 'split') {
+    return {
+      icon: 'IconSplit',
+      verb: 'Split from',
+      handle: filer.handle ?? null,
+      name: filer.title,
+      hint: `The agent of ${label} split its plan into this task.`,
+      target,
+    };
+  }
+  if (creator.kind === 'courier') {
+    return {
+      icon: 'IconAgents',
+      verb: 'Filed by',
+      handle: filer.handle ?? null,
+      name: filer.title,
+      hint: `The agent of ${label} filed this task.`,
+      target,
+    };
+  }
+  return null;
+}
+
+export function listForkSourcesBesides(state: ShinsaState, task: Task, filedBy: FiledByFact | null) {
+  const target = filedBy?.target;
+  return listForkSources(state, task).filter(
+    (source) => target?.kind !== 'task' || source.id !== target.taskId
+  );
 }

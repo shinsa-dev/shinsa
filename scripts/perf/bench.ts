@@ -77,7 +77,13 @@ async function measureServer(engine: Engine, transcripts: Transcripts, taskId: s
   const sent: number[] = [];
   const payloads: string[] = [];
   const socket = {
-    data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' } satisfies SocketData,
+    data: {
+      kind: 'hub',
+      transcripts: new Map(),
+      surface: null,
+      origin: 'local',
+      guest: null,
+    } satisfies SocketData,
     send: (payload: string) => {
       sent.push(payload.length);
       payloads.push(payload);
@@ -116,7 +122,7 @@ function startSocketServer(engine: Engine, transcripts: Transcripts) {
     fetch(request, bunServer) {
       if (
         bunServer.upgrade(request, {
-          data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' },
+          data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local', guest: null },
         })
       )
         return undefined;

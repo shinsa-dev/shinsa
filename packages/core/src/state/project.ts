@@ -53,6 +53,7 @@ import { removeEntry, writeEntry } from './draft.ts';
 import { applyFeedbackEvent } from './feedback.ts';
 import { recordFork } from './forks.ts';
 import { applyGateEvent } from './gates.ts';
+import { applyHandoffEvent } from './handoffs.ts';
 import { applyInboxEvent } from './inbox.ts';
 import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
@@ -69,7 +70,7 @@ import { applySuggested, applySuggestionSettled } from './suggestions.ts';
 import { applyWaitEvent } from './waits.ts';
 import { applyWatchSuggestionEvent } from './watch-suggestions.ts';
 import { applyWatchdogEvent } from './watchdogs.ts';
-import { applyOnBehalf, record, updateTask } from './write.ts';
+import { applyStamped, record, updateTask } from './write.ts';
 
 export interface ShinsaState {
   seq: number;
@@ -783,8 +784,17 @@ function applyTaskCreated(state: ShinsaState, event: EventOf<'task.created'>) {
 }
 
 export function applyEvent(state: ShinsaState, event: ShinsaEvent): ShinsaState {
-  if (event.onBehalf) return applyOnBehalf(state, event.byTask ?? null, () => applyEventBody(state, event));
+  const stamp = resolveActorStamp(event);
+  if (stamp) return applyStamped(state, stamp, () => applyEventBody(state, event));
   return applyEventBody(state, event);
+}
+
+function resolveActorStamp(event: ShinsaEvent) {
+  if (!event.onBehalf && !event.byGuest) return null;
+  return {
+    ...(event.onBehalf ? { onBehalf: true, ...(event.byTask ? { byTask: event.byTask } : {}) } : {}),
+    ...(event.byGuest ? { byGuest: event.byGuest } : {}),
+  };
 }
 
 function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
@@ -1076,6 +1086,14 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'preview.recorded':
     case 'preview.failed':
       applyShareEvent(state, event);
+      break;
+    case 'task.handed_off':
+    case 'handoff.recorded':
+    case 'handoff.failed':
+    case 'handoff.claimed':
+    case 'handoff.removed':
+    case 'handoff.left':
+      applyHandoffEvent(state, event);
       break;
     case 'slack.thread_linked':
     case 'slack.status_posted':
