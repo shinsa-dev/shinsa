@@ -222,6 +222,7 @@ export {
   resolveTeamLeavePath,
   resolveTeamPath,
   resolveTeamViewPath,
+  selectTeamSnapshotSigner,
   serializeTeamJoinFragment,
   signTeamSnapshot,
   TEAM_CHANNEL_PATH,

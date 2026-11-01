@@ -170,8 +170,8 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
   const shares = new Shares({ engine, remote, evidence, transcripts });
-  const teams = new Teams({ engine, remote, shares, transcripts });
   const teamFeeds = new TeamFeeds({ remote });
+  const teams = new Teams({ engine, remote, shares, transcripts, held: teamFeeds });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,

@@ -19,6 +19,7 @@ import {
   resolveTeamJoinUrl,
   resolveTeamLeavePath,
   resolveTeamViewPath,
+  selectTeamSnapshotSigner,
   serializeTeamJoinFragment,
   signTeamSnapshot,
   type TeamSnapshotBody,
@@ -170,6 +171,13 @@ describe('a signed team snapshot', () => {
       const snapshot = await signTeamSnapshot(signer.privateKey, body as unknown as TeamSnapshotBody);
       expect(await verifyTeamSnapshot(signer.signingKey, snapshot)).toBeNull();
     }
+  });
+
+  test('names the machine a snapshot says signed it, before it is verified', async () => {
+    const signer = await createSigner();
+    expect(selectTeamSnapshotSigner(await signTeamSnapshot(signer.privateKey, BODY))).toBe(BODY.instanceId);
+    expect(selectTeamSnapshotSigner({ body: '{"instanceId":3}', signature: 'x' })).toBeNull();
+    expect(selectTeamSnapshotSigner({ body: 'not json', signature: 'x' })).toBeNull();
   });
 
   test('reads a snapshot only with a text body and signature', () => {

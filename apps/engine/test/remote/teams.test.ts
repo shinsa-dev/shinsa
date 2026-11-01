@@ -17,13 +17,14 @@ import {
   type ShinsaState,
   serializeBase64Url,
   type TeamListView,
+  type TeamSnapshot,
   type TeamView,
   verifyTeamSnapshot,
 } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
 import { ControlClient } from '../../src/remote/control.ts';
 import { Remote } from '../../src/remote/index.ts';
-import { TEAM_GONE_REASON, TEAM_REMOTE_CHANGED, Teams } from '../../src/remote/teams.ts';
+import { TEAM_GONE_REASON, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
 import { createKeyPair, startHandshake } from './client.ts';
@@ -80,6 +81,7 @@ interface SetUp {
   file?: Record<string, unknown>;
   patch?: (state: ShinsaState) => void;
   resolveLive?: () => Promise<never>;
+  held?: TeamsOptions['held'];
 }
 
 function setUp(options: SetUp = {}) {
@@ -135,6 +137,7 @@ function setUp(options: SetUp = {}) {
         return () => undefined;
       },
     },
+    ...(options.held ? { held: options.held } : {}),
     now: () => 50,
     random: (bytes) => new Uint8Array(bytes).fill(6),
   });
@@ -235,6 +238,29 @@ describe('a team view of this machine', () => {
     const [view] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
     expect(view?.tasks.length).toBe(1);
     expect(view?.snapshot).toBeUndefined();
+  });
+
+  test('passes on the lists it keeps of the team’s offline machines, and pushes the list when they change', async () => {
+    const kept = { body: '{"instanceId":"inst3"}', signature: 'sig' };
+    let held: TeamSnapshot[] = [];
+    const heldListeners: (() => void)[] = [];
+    const { teams } = setUp({
+      held: {
+        listHeld: (teamId) => (teamId === 'team1' ? held : []),
+        subscribeHeld: (listener) => {
+          heldListeners.push(listener);
+          return () => true;
+        },
+      },
+    });
+    const list = await openViewer(teams, KAI.id, LIST);
+    const task = await openViewer(teams, KAI.id, TASK_VIEW);
+    expect((list.views()[0] as TeamListView).held).toBeUndefined();
+    held = [kept];
+    for (const listener of heldListeners) listener();
+    await until('the list is pushed again', () => list.views().length === 2);
+    expect((list.views().at(-1) as TeamListView).held).toEqual([kept]);
+    expect(task.views()).toHaveLength(1);
   });
 
   test('sends a grant’s secret only to the teammate it was given to, in that team', async () => {

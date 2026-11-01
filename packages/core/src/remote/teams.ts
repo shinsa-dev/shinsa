@@ -150,6 +150,7 @@ export interface TeamListView {
   grant?: string;
   updatedAt: number;
   snapshot?: TeamSnapshot;
+  held?: TeamSnapshot[];
 }
 
 export type TeamFeedStatus = 'connecting' | 'live' | 'offline' | 'refused';
@@ -161,6 +162,7 @@ export interface TeamFeedMachine {
   userId: string;
   status: TeamFeedStatus;
   reason: string | null;
+  updatedAt?: number;
 }
 
 export interface TeamFeedTask extends TeamTask {
@@ -341,6 +343,11 @@ function readSnapshotBody(text: string): TeamSnapshotBody | null {
   if (!(typeof teamId === 'string' && typeof instanceId === 'string' && typeof updatedAt === 'number'))
     return null;
   return Array.isArray(tasks) ? { teamId, instanceId, tasks: tasks as TeamTask[], updatedAt } : null;
+}
+
+export function selectTeamSnapshotSigner(snapshot: TeamSnapshot) {
+  const instanceId = readChannelFields(snapshot.body)?.instanceId;
+  return typeof instanceId === 'string' ? instanceId : null;
 }
 
 export async function verifyTeamSnapshot(signingKey: string, snapshot: TeamSnapshot) {
