@@ -184,7 +184,8 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   run this time keeps its last result.
 - **Who runs them.** Shinsa, in the task's checkout, each command through `sh -c` at low priority (`nice -n 10`
   where the machine has `nice`) with `CHECK_ENV` (`CI=1`, no colour), and stops one after 15 minutes
-  (`CHECK_TIMEOUT_MS`). The checks of one run run in parallel, and a command that appears twice runs once. There is
+  (`CHECK_TIMEOUT_MS`), with the shared Turbo cache in a Turbo repository (Where agents work → Turbo's cache is
+  shared per repository). The checks of one run run in parallel, and a command that appears twice runs once. There is
   no machine-wide limit or queue: tasks check at once, as they build at once (Scheduling, below).
 - **Load is not a failure.** When a failing check's output names its failing test files (Bun, Vitest or Jest), those
   files run again alone, once (`checks/reruns.ts`). When each of them passes, so does the check, with the note
@@ -524,6 +525,30 @@ modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behi
 - **Agents work where the strategy puts them.** For the main checkout a task's `worktreePath` is the repository
   itself, so every role works in your checkout; a read-only agent's edits are never set aside there, as in any shared
   checkout. Checks run in the same checkout.
+- **A new worktree comes with its dependencies.** `prepareWorktree` runs the install its lockfile names
+  (`resolveInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
+  agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
+  linker can fail on files it is still writing (`ERR_PNPM_EEXIST`) and pass the second time; only when that run fails
+  too is it logged, and the agent sets the dependencies up itself. Base checkouts for checks are prepared the same way.
+- **A removed worktree takes its processes with it.** `worktree.remove` closes the task's service runs, then stops
+  every process still working inside the worktree (`stopProcessesIn` in `git/processes.ts`: `lsof -d cwd` finds each
+  process whose working folder is the worktree or inside it; SIGTERM, then SIGKILL for any still alive after 3 s).
+  That catches a dev server an agent started from its shell, which outlives the agent's run and would otherwise keep
+  writing into the deleted folder. Only a process the engine started (its descendants) or one that lost its parent
+  (now a child of launchd, as such a server is once the agent's run ends) is stopped (`resolveStopTargets`), so what
+  you opened yourself, a shell from Open in Terminal or an editor and the language servers it started, keeps running.
+  The engine and your own Shinsa terminals, with every process they started, are spared too
+  (`Terminals.listTerminalPids`). Then `removeWorktree` runs `git worktree remove --force`, deletes whatever
+  is left of the folder and prunes, so a folder git could not remove never stays behind. A main checkout is never
+  reaped: it is your repository.
+- **Turbo's cache is shared per repository.** In a repository with a `turbo.json`, checks (and their run on the base
+  commit) and a task's service runs get `TURBO_CACHE_DIR` set to `data/caches/<repo id>/turbo`
+  (`resolveSharedCacheEnv` in `checks/caches.ts`), so a task reuses what another task's checkout already built
+  instead of filling a cache inside its own worktree. Turbo keys its cache by a hash of each task's inputs, so sharing
+  it changes no result. A service's own `TURBO_CACHE_DIR` wins, and your own runs and agents' shells keep Turbo's
+  default. A worktree's own `.turbo` went with it; the shared one is pruned instead, each time a worktree is removed
+  (`pruneSharedCaches`): an entry not written for 14 days goes (Turbo does not touch an entry it reads, so a build
+  used for longer is made once more), and so does the cache of a repository Shinsa no longer knows.
 - **Conflicts go to the agent in every mode.** A pull request that conflicts with its base is merged with the fetched
   base by the Agent in its own session (The pull request watch → Conflicts), and an update onto the base that
   conflicts before a push is resolved the same way (Pushing the branch).
@@ -2351,8 +2376,13 @@ beside your run (Runs for a task, below).
   (`docs/design.md`, 37). The preview runs while the task waits for review and the merge, and stops when the task settles:
   `settleTask` removes the worktree, and `worktree.remove` closes the task's runs (below).
 - **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
-  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), so no dev server keeps running in a
-  deleted folder; your own shells opened in that worktree are left as they are.
+  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), then stops every other process Shinsa or a
+  finished agent left working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
+  worktree takes its processes with it), so no dev server keeps running in a deleted folder; your own shells opened
+  in that worktree, and what runs in them, are left as they are.
+- **A task run's own variables.** `resolveServiceRunIn` gives a task's run the shared Turbo cache in a Turbo
+  repository (`ServiceRun.env`, Where agents work → Turbo's cache is shared per repository), kept for the run's
+  restarts and under the service's own variables and its port.
 - **Across a restart of the engine.** `Terminals.stop()` saves a service that was running as running, and the next
   engine starts it again (`resumeServices`, from `serve.ts`), where its folder is still one of its project's; a
   task's run starts again only while the task is open and still holds the folder. Plain
@@ -2661,6 +2691,143 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.
 
+## Sharing a task
+
+A task you share can be read by anyone with its link, `https://app.shinsa.dev/share/t/<token>#<key>`, without signing
+in and without a device key. A link is
+read-only remote access to that one task, live: the browser opens a channel through the machine's tunnel, as remote
+access does, and the machine pushes the task down it the moment it changes. It shows everything its owner sees on its
+Overview, Review and Code, for a public or a private repository alike, but its chat; chats and the agent sessions never
+leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page where the machine's tunnel is. The same
+projection and channel will serve teams.
+
+- **The link.** The share id is 16 random bytes and the key 32 (base64url), both made by the engine
+  (`share.link`, `crypto.getRandomValues`) and kept only in the task's `TaskShare.url` on the machine. The path is
+  one opaque token, the share id followed by the machine's instance id, as base64url (`resolveSharePagePath`,
+  `parseShareLocation`), so the address names neither the machine nor the task. The key sits in
+  the URL's fragment, which a browser never sends to a server, so neither app.shinsa.dev nor Cloudflare ever sees it.
+  The channel is sealed with it end to end: Cloudflare carries ciphertext, and a stand-in for the machine cannot
+  answer the handshake. The page and the connect answer carry `X-Robots-Tag: noindex, nofollow, noarchive` and every
+  page `Referrer-Policy: no-referrer`, so no search engine keeps it and no page it links to learns it. Stop sharing
+  ends every open link at once, and that link never works again: sharing the task again makes a new link with a new
+  id and key.
+- **How long it is shared.** `TaskShare.limit` is `until_done` (the default), `hour`, `day`, `week` or `none` (until you
+  stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → General → Sharing, human-only,
+  so an agent cannot widen it); `endsAt` is when a time limit runs out. A shared task that settles (done, merged or
+  cancelled) with `until_done` stops sharing in the same decision (`syncShares`, `task.unshared` with `reason: 'done'`);
+  a time limit is ended by `ShareClock` (`apps/engine/src/remote/share-clock.ts`, a `StateClock`) with `share.expire`
+  (`reason: 'expired'`), and the engine refuses a link whose time has passed even before the clock fires. The page
+  treats such a share as ended too (`selectLiveShare` in `apps/web/src/lib/share/dialog.ts`): the banner, Stop sharing
+  and the dialog's link go the moment `endsAt` passes, and sharing it again ends the old share first, so it makes a new
+  link rather than bringing the old one back (`shareTask` in core). A finished
+  task cannot be shared `until_done` (`share_refused`), so Share task offers only the time limits for one. The dialog
+  picks the limit before the link is made (or before Try again); on a running share only `shinsa tasks share --until`
+  changes it, keeping its link (`task.share` with another `limit`).
+- **Sharing is yours alone.** `task.share` and `task.unshare` (Share task and Stop sharing in a task's menu and in
+  the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
+  core refuses them on your behalf (`human_only`), since they open a task to people outside the machine. An automation's home is
+  refused (`share_refused`). The remote dashboard may share, as it may close a gate.
+- **The projection** (core's `share/`, `resolveSharedTask(state, task, { owner, machine, repository })`) builds a
+  `SharedTask`: a redacted `Task`, its gates and runs, its current evidence, its repository and project records
+  (without their paths, folders or description), the owner's GitHub login and the machine's name from `remote.json`,
+  the repository's name and whether it shares code, which is everything the owner's task page reads, so the shared
+  page renders that same page. It copies fields by name: a field added to `Task` later stays empty until it is added here
+  on purpose. What it keeps and drops, the same for every repository:
+
+  | Part | Shared |
+  | --- | --- |
+  | Title, handle, status and its reason, priority, kind of task, request text, summary, result, proposal | kept |
+  | Request attachments (pasted images, files) | dropped |
+  | The plan whole: goal, phases, behaviour, approach, files, checks, its changes and approval | kept |
+  | Phase reports, walkthrough (watchdogs and steps with their commands), review report, findings, decisions, with their files and lines | kept |
+  | Checks, their commands, results, output and coverage | kept |
+  | Branches, base, the pull request whole: address, head, merge commit, checks and check runs, changes | kept |
+  | Merge steps and which are ticked | kept |
+  | Evidence | stored files by id, public `https://` addresses and GitHub uploads; titles and details with links scrubbed |
+  | The diff (Code) | the pull request's, from GitHub, once one is open or merged |
+  | Gates | kept with their title, body, choices and decision; never your answer, verdicts, notes, a secret or an account |
+  | Runs (who worked, when, which model, delegations, cost) | kept; never their prompt, session, final message, feedback or account |
+  | Suggestions, watchdogs, a monitor, a usage wait (without its account) | kept |
+  | Activity | kept, without messages, gate questions and answers, and account changes; a decision keeps its line, never your answer or review comments |
+  | Notes | kept |
+  | Chats, transcripts, tool calls, live agent output, a delegated agent's brief and the question it asked and its answer (its title, depth and state stay) | never |
+  | Messages to agents (a chat reply that stood in for a gate answer included), gate answers, plan answers, the notes you write with a finding's verdict, the inbox | never |
+  | Worktree, waits on other tasks, the task's origin, the repository's path and the project's folders | never |
+  | Links to other tasks (`shinsa://task/…`) | their label as plain text |
+
+  A task without a repository has no Code. Check output and text an agent wrote (a summary, a finding, a testing
+  step) are kept as written; open the link yourself to read what it shows.
+- **Making the link.** `task.share` emits `task.shared` and queues `share.link` (`replay_safe`, lane `share:<task>`).
+  The engine (`apps/engine/src/remote/shares.ts`, `Shares.link`) makes a share id and a key for this machine's
+  instance and records the URL with `share.record`; a link already made for this instance is kept (`share.record`
+  with `url: null` only clears a failure). `task.unshare` cancels a queued `share.link` and emits `task.unshared`.
+  Nothing is queued when the task changes: an open link reads it live.
+- **The live channel** (`SHARE_CHANNEL_PATH`, `/share?id=<share id>` on the tunnel; core's `remote/share-channel.ts`,
+  the engine's `remote/share-channel.ts`). The page asks app.shinsa.dev where the machine is
+  (`POST /__remote/shares/<machine>/connect`, no session, answering `{ url, online }`), then opens
+  `wss://t-<machine>.shinsa.dev/share?id=<share id>`. The engine upgrades it only from app.shinsa.dev's origin, while
+  remote access is on and the id is well formed (404 otherwise), so a stopped or unknown link learns it is gone from
+  the handshake rather than looking offline. The page's first and only message is a hello: a fresh P-256 key and an HMAC over it with the link's key. The machine checks it against the
+  task's key in constant time (else `refused`, "This task is no longer shared, or the link is wrong."), answers with
+  its own fresh key and an HMAC over both, which the page checks, and both derive one AES-GCM key from the ECDH of
+  the two fresh keys and the link's key (HKDF over the transcript), so only a holder of the link reads the stream,
+  and a recorded stream cannot be read later from the link alone. Frames are sealed in order (core's `frames.ts`).
+- **What the machine pushes.** A `ShareLiveView` (the projection below, the version and type of each file it shows,
+  when it was read) the moment the channel opens and again on every state change that alters it (compared as text,
+  so a message to an agent sends nothing), then each file the page does not have at that version: evidence stored
+  on the machine (`/api/evidence/…`) when it is a PNG, JPEG, WebP, GIF, MP4, WebM, text or Markdown of 50 MB at most,
+  versioned by its hash (each hashed once per size and modification time), and for a task with an open or merged
+  pull request the diff, `gh pr diff <n>` (with the owner's own GitHub access, so a private repository's diff too),
+  and the `code` file holding every modified or renamed file of that diff whole at the pushed head
+  (`gh api repos/<owner>/<name>/contents/<path>?ref=<head>`, 300 files and 50 MB at most), both versioned by the pull
+  request and its head and read from GitHub once per head. Code opens each change in the editor as its owner sees it:
+  an added or removed file comes whole from the diff, and a changed file's base is rebuilt from its head and its hunks
+  (`resolveBaseContent`). Anything else is left out of the view rather than shown broken. The page keeps each file
+  as a `blob:` address while it is open.
+- **The channel only listens.** After the hello the machine reads nothing from a link: any message closes the
+  channel (1008, "A share link only listens."). It carries no HTTP requests, no app socket and no commands, and it is
+  never connected to the hub, the API or the dispatcher, so no write can travel from a link to the engine, whatever
+  the page sends. Stop sharing sends `closed` and ends it; pausing or removing remote access ends every link
+  ("Remote access on the machine that shares this task was turned off."). A machine that is offline, asleep or
+  paused shows nothing new: the page says the machine is offline and opens the channel again on its own (1, 2, 5,
+  then every 10 seconds), keeping what it already showed.
+- **Failures.** Not paired fails `share.link` at once with "Turn on remote access in Settings → General to share this
+  task…" (`SHARE_NOT_PAIRED`) and `share.fail` keeps it on `TaskShare.failure` for Share task to show with Try again
+  (`task.share` again asks for a link); it opens no failure gate, since nothing in the task waits on it. Once the
+  machine is paired as another instance, each shared task's link is marked failed with "This machine was paired with
+  remote access again…" (`SHARE_LINK_LOST`), and Try again makes a new link.
+- **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`): one short dialog over the task's
+  `TaskShare` and the remote snapshot, in four views: remote access needed (Open Settings), ready (Share, with Share
+  for), making the link (Share loading) and failed (the reason, Stop sharing and Try again). It closes by itself the
+  moment the link is made: the banner holds the link from then on. While a task is shared its menu shows Stop sharing
+  instead of Share task (both while a link failed, to try again); Stop sharing asks first (`UnshareConfirm`) and is the
+  only way a share ends early.
+- **While it is shared** (`components/task/sharing-banner.tsx`): the task's page shows a banner under its header that
+  cannot be dismissed, saying anyone with the link can watch the task and when sharing ends, with Copy link and Stop
+  sharing, until the share ends. Everywhere else the task appears (the task list, Home's lists and the Needs you
+  queue) its title carries a share mark, "Shared by link" on hover (`components/share/shared-mark.tsx`,
+  `isTaskShared`), while its link works.
+- **The shared page** (`routes/remote/share.tsx`, `lib/share/live.ts`, `components/share/shared-task-page.tsx`):
+  the remote build's `/share/t/<token>` reads the key from the fragment (a link without one says the task
+  is not shared), opens the live channel (`openShareStream`), builds a state from each view it receives
+  (`lib/share/view.ts`) and renders the owner's own task page (`TaskFrame`: the same header, facts, Overview, Review
+  and Code components, the same layout) inside `ReadOnlyProvider`, whose note sits in the header above the title, one
+  header gap from it: read-only, who shared it from which machine ("you" when the GitHub login signed in to
+  app.shinsa.dev is its owner) and when the machine last read it. Read-only takes away
+  only what acts: the task menu, the ⌘K commands, every card's buttons and links (`NowFrame`'s action, `QuietLink`),
+  answer boxes, the composer, verdicts, merge-step boxes, suggestion and watchdog buttons, a delegation's Stop, the
+  priority menu, services and every way into a chat; the live agent output is never shown. Its tabs are the owner's
+  without Chat, Code only once a pull request is open or merged, in its Changes view, from the streamed `diff` and
+  `code` files, never from a worktree. A link that stopped working says so at once.
+- **Nothing writes through a link.** The channel above only listens, and hiding controls is a second layer. On the
+  page itself, `SharedTaskPage` holds `enterReadOnly` (`lib/connection/read-only.ts`) while it is open: `sendCommand`
+  rejects every command and `requestJson`/`requestLines` every `POST` with "This shared task is read-only. Nothing on it
+  can be changed from here." before anything is sent, so a control added later without a `useReadOnly` check still
+  changes nothing.
+- **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
+  the link is missing; an agent has no tool to share or stop sharing.
+
+
 ## Slack
 
 Mention the Shinsa bot in Slack and the machine of the person who mentioned it does the work. There is one Slack app
@@ -2855,9 +3022,9 @@ plainly what protects what.
     a failure, setup or Sign in gate, in any way (`plans *`, `reviews *`, `merges *`, `operations *`, `questions
     answer`, `gates answer`, `command`, which can send any gate answer);
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
-  - the settings that spend money, merge or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
+  - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`,
-    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`) and a repository's own check commands,
+    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
@@ -4739,6 +4906,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  delegations (`delegations/<task>/<run>`)
     ├── scratch/       The working folder of each task with no repository (`<task id>`), where its answerer runs;
     │                  removed when the task settles (`scratch.remove`)
+    ├── check-bases/   The detached checkouts of base commits that checks compare with (Checks, above)
+    ├── caches/        Build caches a repository's checkouts share (`<repo id>/turbo`; Where agents work, above)
     ├── transcripts/   One JSONL chat transcript per run
     ├── evidence/      What agents attached as evidence, per task and round (`<task id>/round-<n>/`), and the
     │                  chat's tool images at the top (Evidence, above)
@@ -4765,6 +4934,14 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
 
 One folder instead of XDG's config and data split on purpose: it is one thing to back up, move or delete, a seeded or
 scratch copy is one directory, and the event log, worktrees and config.json only make sense together.
+
+- **What is not backed up.** `worktrees/`, `check-bases/`, `scratch/` and `caches/` hold what can be made again
+  (checkouts, installed dependencies, build output): on APFS they cost a fraction of their size, but a backup copies
+  every cloned file in full. `prepareDataDir` marks each with `.metadata_never_index` for Spotlight and with Time
+  Machine's exclusion, the `com.apple.metadata:com_apple_backup_excludeItem` attribute `tmutil addexclusion` writes,
+  set with `xattr` directly because `tmutil` takes seconds per folder. The marker says the folder is done, so a later
+  start does nothing (clearing out `check-bases/` leaves the markers, as every dot entry, in place); one Time Machine could not exclude is logged, and deleting its marker tries again. The event
+  log, evidence, transcripts and settings are backed up as before.
 
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch

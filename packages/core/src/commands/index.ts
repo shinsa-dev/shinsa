@@ -57,6 +57,7 @@ import type {
 import type { MemoryAgentCommand, MemoryUserCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
+import type { ShareSystemCommand, ShareUserCommand } from './shares.ts';
 import type { SlackSystemCommand } from './slack.ts';
 import type { WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
 
@@ -149,7 +150,8 @@ export type UserCommand =
   | DelegationUserCommand
   | ScheduleUserCommand
   | WatchdogUserCommand
-  | MemoryUserCommand;
+  | MemoryUserCommand
+  | ShareUserCommand;
 
 type AgentCommand =
   | { type: 'agent.propose_plan'; runId: string; document: PlanDocument; changeSummary?: string | null }
@@ -366,7 +368,8 @@ type SystemCommand =
   | DelegationSystemCommand
   | ScheduleSystemCommand
   | SlackSystemCommand
-  | WatchdogSystemCommand;
+  | WatchdogSystemCommand
+  | ShareSystemCommand;
 
 type ScopedAgentCommand = AgentCommand & { attemptId?: string | null };
 

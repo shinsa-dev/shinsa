@@ -6,6 +6,12 @@
   "words": [
     "shellcheck",
     "cfargotunnel",
+    "addexclusion",
+    "APFS",
+    "EEXIST",
+    "isexcluded",
+    "tmutil",
+    "xattr",
     "ECDH",
     "HKDF",
     "gtimeout",

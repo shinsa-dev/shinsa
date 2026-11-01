@@ -190,7 +190,9 @@ and never run out.
   update already handed to macOS's installer (Squirrel.Mac stages it for the next quit) is removed, its ShipIt job
   (`launchctl remove <bundle id>.ShipIt`) and its folder (`~/Library/Caches/<bundle id>.ShipIt`), before the new
   channel's check runs.
-- The update files: electron-builder writes `latest-mac.yml` only, so the workflow derives the channel's own: a
+- The update files: electron-builder writes `latest-mac.yml` only (`detectUpdateChannel: false` in
+  `electron-builder.shared.yml`; with the `generic` provider it would otherwise name the file after the version's
+  pre-release word, `canary-mac.yml` for a canary, and the workflow would not find it), so the workflow derives the channel's own: a
   stable release uploads `latest-mac.yml` and a copy as `beta-mac.yml`, a beta uploads it as `beta-mac.yml` only and
   a canary as `canary-mac.yml` only, each naming the zip by its plain name (`Shinsa-mac-arm64.zip`). A build from
   before the move to shinsa.dev still reads them from GitHub; `scripts/release-upload.ts` copies them to R2 with the

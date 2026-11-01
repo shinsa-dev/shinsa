@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { APP_IDENTITY } from '@shinsa/core';
@@ -152,6 +152,56 @@ describe('prepareDataDir', () => {
     prepareDataDir(config);
     for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir])
       expect(existsSync(dir)).toBe(true);
+  });
+
+  test('keeps the worktree, check-base, scratch and cache folders out of indexing and Time Machine', () => {
+    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    prepareDataDir(config);
+    const folders = [config.worktreesDir, config.checkBasesDir, config.scratchDir, config.cachesDir];
+    for (const dir of folders) expect(existsSync(join(dir, '.metadata_never_index'))).toBe(true);
+    expect(existsSync(join(config.evidenceDir, '.metadata_never_index'))).toBe(false);
+    if (process.platform !== 'darwin' || !Bun.which('tmutil')) return;
+    for (const dir of folders) {
+      const checked = Bun.spawnSync(['tmutil', 'isexcluded', dir]).stdout.toString();
+      expect(checked).toContain('[Excluded]');
+    }
+  });
+
+  test('a folder Time Machine could not exclude is only logged, and not tried again', () => {
+    const bin = createTempDir();
+    const calls = join(bin, 'calls');
+    const fake = join(bin, 'xattr');
+    writeFileSync(fake, `#!/bin/sh\necho run >> '${calls}'\necho denied >&2\nexit 1\n`);
+    chmodSync(fake, 0o755);
+    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      prepareDataDir(config, 'darwin');
+      prepareDataDir(config, 'darwin');
+    } finally {
+      process.env.PATH = path;
+    }
+    expect(readFileSync(calls, 'utf8').trim().split('\n')).toHaveLength(4);
+    expect(existsSync(join(config.scratchDir, '.metadata_never_index'))).toBe(true);
+  });
+
+  test('off macOS the folders get only the marker, and Time Machine is never asked', () => {
+    const bin = createTempDir();
+    const calls = join(bin, 'calls');
+    const fake = join(bin, 'xattr');
+    writeFileSync(fake, `#!/bin/sh\necho run >> '${calls}'\n`);
+    chmodSync(fake, 0o755);
+    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      prepareDataDir(config, 'linux');
+    } finally {
+      process.env.PATH = path;
+    }
+    expect(existsSync(calls)).toBe(false);
+    expect(existsSync(join(config.worktreesDir, '.metadata_never_index'))).toBe(true);
   });
 });
 

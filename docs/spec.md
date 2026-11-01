@@ -386,7 +386,15 @@ Remote access: Settings → General → Remote access pairs this machine with ap
 the devices (browsers and phones) that may reach it; app.shinsa.dev is one dashboard over every machine a device was added to, each
 task showing its machine, and with several machines New task places each task automatically (its project's machine, a
 where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
-`docs/plans/remote-plan.md`).
+`docs/plans/remote-plan.md`). Share task (a task's menu) makes a link,
+`app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
+access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
+owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
+Review and Code (a private repository's too) but its chat, and it changes the moment the task does; the machine reads
+nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
+a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
+cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
+(`docs/engine.md` → Sharing a task).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
 that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
@@ -428,8 +436,8 @@ own machine in Settings → General → Slack (`docs/engine.md` → Slack).
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
 - **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access
   opens your machines as one dashboard at one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
-  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state
-  (`docs/plans/remote-plan.md`).
+  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state but the
+  tasks you share by link, as a read-only projection without their chat (`docs/plans/remote-plan.md`).
 
 ## 7. Codebase
 

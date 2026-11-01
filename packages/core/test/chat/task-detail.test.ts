@@ -36,6 +36,24 @@ function createAskTask(harness: Harness, answer: string) {
 }
 
 describe('a task described for an agent', () => {
+  test('says whether the task is shared by link, and why its link is missing', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(serializeTaskDetail(harness.state, taskId)).not.toContain('Shared by link');
+    harness.send({ type: 'task.share', taskId });
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(
+      'Shared by link, waiting for app.shinsa.dev to make the link'
+    );
+    harness.send({ type: 'share.record', taskId, url: 'https://app.shinsa.dev/share/t/abc' });
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(
+      'Shared by link: https://app.shinsa.dev/share/t/abc'
+    );
+    harness.send({ type: 'share.fail', taskId, detail: 'Turn on remote access.' });
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(
+      'Shared by link, but it could not be published: Turn on remote access.'
+    );
+  });
+
   test('says when there is no such task', () => {
     expect(serializeTaskDetail(createHarness().state, 'nope')).toBe(
       'No task nope. `find_tasks` lists the tasks.'

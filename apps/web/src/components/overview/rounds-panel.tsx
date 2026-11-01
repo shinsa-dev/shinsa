@@ -3,6 +3,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { RoundHeader } from '@/components/overview/round-header.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { listTaskRuns } from '@/lib/chat/runs.ts';
 import {
@@ -33,10 +34,11 @@ function RoundDetail({
   run: Run | null;
   onOpen: (runId: string) => void;
 }) {
+  const readOnly = useReadOnly();
   return (
     <div className='flex flex-col gap-1.5 ps-7 pt-1.5'>
       <InlineMarkdown text={resolveRoundSummary(state, task, round)} className='text-fg-3 text-xs' />
-      {run && (
+      {run && !readOnly && (
         <button
           type='button'
           onClick={() => onOpen(run.id)}

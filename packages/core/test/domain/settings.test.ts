@@ -61,6 +61,7 @@ describe('the settings a command may change', () => {
       watchdogMaxGapHours: 6,
       taskCapacity: null,
       placementPolicies: [],
+      shareLimit: 'until_done',
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
   });

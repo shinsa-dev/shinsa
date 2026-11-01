@@ -8,6 +8,7 @@ import {
   type RemoteInstance,
   type RemoteRole,
   resolveTunnelHost,
+  type ShareConnectResponse,
 } from '@shinsa/core';
 import { createCloudflare } from './cloudflare.ts';
 import { resolveTokenHash } from './crypto.ts';
@@ -18,6 +19,8 @@ import { findPageUser, findSessionUser } from './session.ts';
 import type { CloudWorld } from './world.ts';
 
 export const ONLINE_WINDOW_MS = 5 * 60_000;
+
+export const NOINDEX = 'noindex, nofollow, noarchive';
 
 export function isInstanceOnline(row: InstanceRow, now: number) {
   return row.online === 1 && row.last_seen_at !== null && row.last_seen_at > now - ONLINE_WINDOW_MS;
@@ -81,6 +84,16 @@ export async function respondConnect(request: Request, instanceId: string, world
   const user = await findPageUser(request, world);
   const { row } = await findInstanceAccess(user, instanceId, world);
   return respondJson(await createConnectAnswer(row, user.id, world));
+}
+
+export async function respondShareConnect(instanceId: string, world: CloudWorld) {
+  const row = await world.store.selectInstance(instanceId);
+  if (!row) throw new CloudError('not_found', 'This task is no longer shared, or the link is wrong.', 404);
+  const answer: ShareConnectResponse = {
+    url: `wss://${resolveTunnelHost(row.id)}`,
+    online: isInstanceOnline(row, world.now()),
+  };
+  return respondJson(answer, 200, { 'x-robots-tag': NOINDEX });
 }
 
 export async function respondInstanceRemove(request: Request, instanceId: string, world: CloudWorld) {

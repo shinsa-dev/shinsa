@@ -21,6 +21,8 @@ import {
   PLAN_APPROVALS,
   SETTINGS_KEYS,
   type Settings,
+  SHARE_LIMITS,
+  type ShareLimit,
 } from '../domain/settings.ts';
 import { TASK_SHAPES, type TaskShape } from '../domain/shapes.ts';
 import { TASK_PRIORITIES } from '../domain/stages.ts';
@@ -77,6 +79,8 @@ const WORKSPACES: ReadonlySet<WorkspaceMode> = new Set(WORKSPACE_MODES);
 const COVERAGE_MODE_SET: ReadonlySet<CoverageMode> = new Set(COVERAGE_MODES);
 
 const COVERAGE_FORMAT_SET: ReadonlySet<CoverageFormat> = new Set(COVERAGE_FORMATS);
+
+const SHARE_LIMIT_SET: ReadonlySet<ShareLimit> = new Set(SHARE_LIMITS);
 
 const MAX_VERDICTS = 50;
 
@@ -336,6 +340,7 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   if ('maxFixRounds' in fields) patch.maxFixRounds = readNullableInteger(fields, 'maxFixRounds');
   if ('delegationLimit' in fields) patch.delegationLimit = readNullableInteger(fields, 'delegationLimit');
   if ('mergeMethod' in fields) patch.mergeMethod = readChoice(fields, 'mergeMethod', MERGE_METHODS);
+  if ('shareLimit' in fields) patch.shareLimit = readChoice(fields, 'shareLimit', SHARE_LIMIT_SET);
   if ('attentionLimit' in fields) patch.attentionLimit = readInteger(fields, 'attentionLimit');
   Object.assign(patch, readPlacementPatch(fields));
   if ('approvePlans' in fields) patch.approvePlans = readChoice(fields, 'approvePlans', PLAN_APPROVALS);
@@ -717,6 +722,12 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'memory.write': readMemoryWrite,
   'memory.accept': (fields) => ({ type: 'memory.accept', memoryId: readId(fields, 'memoryId') }),
   'memory.remove': (fields) => ({ type: 'memory.remove', memoryId: readId(fields, 'memoryId') }),
+  'task.share': (fields) => ({
+    type: 'task.share',
+    taskId: readId(fields, 'taskId'),
+    ...('limit' in fields ? { limit: readChoice(fields, 'limit', SHARE_LIMIT_SET) } : {}),
+  }),
+  'task.unshare': (fields) => ({ type: 'task.unshare', taskId: readId(fields, 'taskId') }),
 };
 
 export const USER_COMMAND_TYPES = Object.keys(READERS) as UserCommand['type'][];

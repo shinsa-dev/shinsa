@@ -26,7 +26,7 @@ describe('listTaskActions', () => {
     expect(listTaskActions(FULL)).toEqual([
       ['pullRequest', 'branch'],
       ['editor', 'terminal', 'finder'],
-      ['fork'],
+      ['fork', 'share'],
       ['snooze'],
       ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
@@ -35,27 +35,29 @@ describe('listTaskActions', () => {
   it('drops groups that do not apply, and lifecycle actions once the task is settled', () => {
     expect(listTaskActions(createTask({ id: 't', branch: 'fix/tabs' }))).toEqual([
       ['branch'],
-      ['fork'],
+      ['fork', 'share'],
       ['snooze'],
       ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
-    expect(listTaskActions(createTask({ id: 't', stage: 'merged' }))).toEqual([['fork']]);
-    expect(listTaskActions(createTask({ id: 't', stage: 'cancelled' }))).toEqual([]);
+    expect(listTaskActions(createTask({ id: 't', stage: 'merged' }))).toEqual([['fork', 'share']]);
+    expect(listTaskActions(createTask({ id: 't', stage: 'cancelled' }))).toEqual([['share']]);
+    expect(listTaskActions(createTask({ id: 't', stage: 'cancelled', watchHome: true }))).toEqual([]);
     const closed = createTask({
       id: 't',
       stage: 'cancelled',
       duplicate: { of: 'o', by: 'shinsa', why: null },
     });
-    expect(listTaskActions(closed)).toEqual([['notDuplicate']]);
+    expect(listTaskActions(closed)).toEqual([['share'], ['notDuplicate']]);
     expect(listTaskActions({ ...closed, duplicate: { of: 'o', by: 'you', why: null } })).toEqual([
+      ['share'],
       ['notDuplicate'],
     ]);
-    expect(listTaskActions({ ...closed, duplicate: null })).toEqual([]);
+    expect(listTaskActions({ ...closed, duplicate: null })).toEqual([['share']]);
   });
 
   it('offers Move to the backlog before building starts, and Remove from the backlog once it is there', () => {
     expect(listTaskActions(createTask({ id: 't', stage: 'planning' }))).toEqual([
-      ['fork'],
+      ['fork', 'share'],
       ['moveToBacklog', 'snooze'],
       ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
@@ -65,9 +67,27 @@ describe('listTaskActions', () => {
     ]);
   });
 
+  it('offers only Stop sharing while a task is shared, and Share task again to retry a link that failed', () => {
+    const share = { at: 1, limit: 'until_done', endsAt: null } as const;
+    const shared = createTask({
+      id: 't',
+      stage: 'merged',
+      share: { ...share, url: 'https://app.shinsa.dev/share/t/a' },
+    });
+    expect(listTaskActions(shared)).toEqual([['fork', 'unshare']]);
+    const failed = createTask({
+      id: 't',
+      stage: 'merged',
+      share: { ...share, url: null, failure: 'Refused.' },
+    });
+    expect(listTaskActions(failed)).toEqual([['fork', 'share', 'unshare']]);
+  });
+
   it('offers Unsnooze on a snoozed task, and neither once it is settled', () => {
     expect(listTaskActions(createTask({ id: 't', snoozed: { at: 1 } }))[1]).toEqual(['unsnooze']);
-    expect(listTaskActions(createTask({ id: 't', stage: 'merged', snoozed: { at: 1 } }))).toEqual([['fork']]);
+    expect(listTaskActions(createTask({ id: 't', stage: 'merged', snoozed: { at: 1 } }))).toEqual([
+      ['fork', 'share'],
+    ]);
   });
 
   it('labels every action with its icon', () => {
