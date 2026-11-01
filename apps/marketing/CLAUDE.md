@@ -69,7 +69,7 @@ src/
                             Hero, Closing, the open page) links canaryUrl (`/download/canary`), labelled Canary, while
                             there is no stable release and the beta is held back; betaUrl is the small link under the
                             Closing CTA and llms.txt's second download. Nothing links `/download` itself.
-                            cloudUrl (app.shinsa.dev, which starts GitHub sign-in) is the Header's secondary Sign in;
+                            cloudUrl (app.shinsa.dev, which starts GitHub sign-in) is the Header's outline Sign in;
                             the Header's GitHub button is icon only, and every GitHub glyph on the site draws at 16px
   lib/scene.ts              The sample project (Northwind) and the Home and All tasks state
   lib/*-scene.ts            One file of sample state per demo. onboarding-code.ts is the Northwind change the gates and
