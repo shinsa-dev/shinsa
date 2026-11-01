@@ -6,20 +6,30 @@ import * as React from 'react';
 
 type Orientation = 'vertical' | 'horizontal' | 'both';
 
+const FIELD_TOLERANCE = 8;
+
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? React.useEffect : React.useLayoutEffect;
 
 type ScrollFadeProps = Omit<React.ComponentProps<'div'>, 'ref'> & {
   orientation?: Orientation;
-  /** Fade size in px (or any CSS length). */
+  /** Fade size in px (or any CSS length): 24 by default, 16 on a `field`. */
   size?: number | string;
   /**
-   * Ref of an existing scroll container to decorate. The fade is applied to
-   * that element directly, so it needs no wrapper and nothing renders here.
-   * Render this after the target, so its ref is attached when the fade is
-   * applied. Omit it to have this component render its own scroll container
-   * from `children`.
+   * Ref of an existing scroll container to decorate, such as a `textarea`.
+   * The fade is applied to that element directly, so it needs no wrapper and
+   * nothing renders here. Render this after the target, so its ref is
+   * attached when the fade is applied. Omit it to have this component render
+   * its own scroll container from `children`.
    */
   targetRef?: React.RefObject<HTMLElement | null>;
+  /**
+   * The `targetRef` is a text field, such as a composer's `textarea`: its
+   * fades follow only the measured edges (`data-fade-static`, no scroll
+   * timeline), they update on `input`, and an edge hiding no more than
+   * `FIELD_TOLERANCE` px (the field's own padding, which a caret scroll leaves
+   * out of view) does not fade.
+   */
+  field?: boolean;
 };
 
 /**
@@ -34,8 +44,9 @@ type ScrollFadeProps = Omit<React.ComponentProps<'div'>, 'ref'> & {
  */
 function ScrollFade({
   orientation = 'vertical',
-  size = 24,
+  size,
   targetRef,
+  field = false,
   className,
   children,
   ...props
@@ -45,7 +56,9 @@ function ScrollFade({
   const id = React.useId();
   const timelines = React.useMemo(() => resolveFadeTimelines(id), [id]);
   const ref = (targetRef ?? internalRef) as React.RefObject<HTMLElement | null>;
-  const dim = typeof size === 'number' ? `${size}px` : size;
+  const isField = Boolean(targetRef) && field;
+  const resolved = size ?? (isField ? 16 : 24);
+  const dim = typeof resolved === 'number' ? `${resolved}px` : resolved;
 
   // A layout effect, so the fades are set before the first paint. React
   // attaches refs in tree order during the same pass, which is why a caller's
@@ -59,14 +72,18 @@ function ScrollFade({
     const vertical = orientation === 'vertical' || orientation === 'both';
     const horizontal = orientation === 'horizontal' || orientation === 'both';
     // A caller-supplied target doesn't get our className, so opt it in here:
-    // it is both the mask and the scroller it reads.
+    // it is both the mask and the scroller it reads. A scroll timeline on a
+    // field itself keeps its last fade once the text stops overflowing, so a
+    // field's fades come from the measured edges alone.
     if (targetRef) el.classList.add('scroll-fade');
+    if (isField) el.setAttribute('data-fade-static', '');
     masked.setAttribute('data-fade-orientation', orientation);
     masked.style.setProperty('--fade-size', dim);
+    const tolerance = isField ? FIELD_TOLERANCE : 0;
 
     const update = () => {
-      const y = resolveOverflowEdges(el.scrollTop, el.clientHeight, el.scrollHeight);
-      const x = resolveOverflowEdges(el.scrollLeft, el.clientWidth, el.scrollWidth);
+      const y = resolveOverflowEdges(el.scrollTop, el.clientHeight, el.scrollHeight, tolerance);
+      const x = resolveOverflowEdges(el.scrollLeft, el.clientWidth, el.scrollWidth, tolerance);
       masked.toggleAttribute('data-overflow-y-start', vertical && y.start);
       masked.toggleAttribute('data-overflow-y-end', vertical && y.end);
       masked.toggleAttribute('data-overflow-x-start', horizontal && x.start);
@@ -75,6 +92,8 @@ function ScrollFade({
 
     update();
     el.addEventListener('scroll', update, { passive: true });
+    // A field's value changes without a DOM mutation or always a resize.
+    el.addEventListener('input', update);
     const observer = new ResizeObserver(update);
     observer.observe(el);
     const observed = new WeakSet<Element>();
@@ -93,16 +112,18 @@ function ScrollFade({
     mutations.observe(el, { childList: true, subtree: true });
     return () => {
       el.removeEventListener('scroll', update);
+      el.removeEventListener('input', update);
       mutations.disconnect();
       observer.disconnect();
       if (targetRef) el.classList.remove('scroll-fade');
+      if (isField) el.removeAttribute('data-fade-static');
       masked.removeAttribute('data-fade-orientation');
       masked.style.removeProperty('--fade-size');
       for (const attr of ['y-start', 'y-end', 'x-start', 'x-end']) {
         masked.removeAttribute(`data-overflow-${attr}`);
       }
     };
-  }, [ref, targetRef, orientation, dim]);
+  }, [ref, targetRef, isField, orientation, dim]);
 
   if (targetRef) return null;
 
