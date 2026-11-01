@@ -1,5 +1,6 @@
 import type { CommandOf, TriageReasons } from '../commands/index.ts';
 import {
+  copyUnreachedTeammate,
   DomainError,
   isTaskResting,
   isTaskSettled,
@@ -33,7 +34,7 @@ import {
 } from './backlog.ts';
 import { type Decider, describeWaiting } from './decider.ts';
 import { changeDependencies, changeStack, resolveDependencies, resolveStackParent } from './dependencies.ts';
-import { closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
+import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { retryTask } from './retry.ts';
@@ -132,6 +133,7 @@ function resolveDecisions(
     priority: task.auto.priority
       ? { value: command.priority ?? task.priority, why: reasons.priority ?? '' }
       : null,
+    ...(command.unreached ? { duplicate: { unreached: command.unreached.map(copyUnreachedTeammate) } } : {}),
   };
 }
 
@@ -161,9 +163,14 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   if (inferred.length > 0) {
     decider.emit({ type: 'task.waits_on_changed', taskId: task.id, waitsOn: inferred, by: 'shinsa' });
   }
+  const why = command.reasons?.duplicate ?? null;
   const original = selectTriageDuplicate(decider, task, command.duplicateOf);
   if (original) {
-    closeTriageDuplicate(decider, decider.task(task.id), original, command.reasons?.duplicate ?? null);
+    closeTriageDuplicate(decider, decider.task(task.id), original, why);
+    return;
+  }
+  if (command.duplicateOfTeammate) {
+    closeTeammateDuplicate(decider, decider.task(task.id), command.duplicateOfTeammate, why);
     return;
   }
   releaseInquiryFromBacklog(decider, task.id);

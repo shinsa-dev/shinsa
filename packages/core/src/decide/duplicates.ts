@@ -1,30 +1,33 @@
 import type { CommandOf } from '../commands/index.ts';
-import { DomainError, type DuplicateActor, isTaskSettled, type Task } from '../domain/index.ts';
+import {
+  copyTeammateOriginal,
+  DomainError,
+  type DuplicateActor,
+  isTaskSettled,
+  quoteDuplicateOriginal,
+  type Task,
+  type TaskDuplicate,
+  type TeammateOriginal,
+} from '../domain/index.ts';
 import { releaseInquiryFromBacklog } from './backlog.ts';
 import type { Decider } from './decider.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { restartInNewRound } from './rounds.ts';
 import { stopAllWatchdogs } from './watchdogs.ts';
 
-function quoteOriginal(task: Task) {
-  return `${task.handle ? `${task.handle} ` : ''}“${task.title}”`;
+function closeAsDuplicate(decider: Decider, task: Task, duplicate: TaskDuplicate, quoted: string) {
+  decider.emit({ type: 'task.duplicated', taskId: task.id, duplicate });
+  settleTask(decider, task.id, 'cancelled', `duplicate of ${quoted}`, duplicate.by === 'you' ? 'you' : null);
 }
 
-function closeAsDuplicate(
+function closeAsLocalDuplicate(
   decider: Decider,
   task: Task,
   original: Task,
   by: DuplicateActor,
   why: string | null
 ) {
-  decider.emit({ type: 'task.duplicated', taskId: task.id, duplicate: { of: original.id, by, why } });
-  settleTask(
-    decider,
-    task.id,
-    'cancelled',
-    `duplicate of ${quoteOriginal(original)}`,
-    by === 'you' ? 'you' : null
-  );
+  closeAsDuplicate(decider, task, { of: original.id, by, why }, quoteDuplicateOriginal(original));
 }
 
 function assertCanDuplicate(task: Task, original: Task) {
@@ -41,7 +44,7 @@ export function markDuplicate(decider: Decider, command: CommandOf<'task.mark_du
   const task = decider.task(command.taskId);
   const original = decider.task(command.duplicateOf);
   assertCanDuplicate(task, original);
-  closeAsDuplicate(decider, task, original, 'you', null);
+  closeAsLocalDuplicate(decider, task, original, 'you', null);
   stopAllWatchdogs(decider, task.id);
 }
 
@@ -52,7 +55,22 @@ export function selectTriageDuplicate(decider: Decider, task: Task, duplicateOf:
 }
 
 export function closeTriageDuplicate(decider: Decider, task: Task, original: Task, why: string | null) {
-  closeAsDuplicate(decider, task, original, 'shinsa', why);
+  closeAsLocalDuplicate(decider, task, original, 'shinsa', why);
+}
+
+export function closeTeammateDuplicate(
+  decider: Decider,
+  task: Task,
+  teammate: TeammateOriginal,
+  why: string | null
+) {
+  const duplicate = {
+    of: teammate.taskId,
+    by: 'shinsa' as const,
+    why,
+    teammate: copyTeammateOriginal(teammate),
+  };
+  closeAsDuplicate(decider, task, duplicate, quoteDuplicateOriginal(teammate));
 }
 
 function hasStartedWork(decider: Decider, task: Task) {

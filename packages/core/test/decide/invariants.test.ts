@@ -1061,6 +1061,33 @@ function selectDuplicateCommand(state: ShinsaState, random: Random): ShinsaComma
         waitsOn: [],
         duplicateOf: other(task.id),
       })),
+    ...open
+      .filter((task) => task.stage === 'triage' && task.branch === null)
+      .map((task) => ({
+        type: 'task.triage' as const,
+        taskId: task.id,
+        title: `Task ${task.id}`,
+        repoId: 'repo',
+        size: 'small' as const,
+        branch: `b-${task.id}`,
+        waitsOn: [],
+        duplicateOfTeammate: {
+          teamId: 'team',
+          machineId: 'teammate',
+          taskId: `teammate-${task.id}`,
+          handle: null,
+          title: 'Their task',
+          owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: null },
+        },
+        unreached: [
+          {
+            teamId: 'team',
+            machineId: 'offline',
+            name: 'Laptop',
+            owner: { login: 'lee', name: null, avatarUrl: null },
+          },
+        ],
+      })),
     ...open.map((task) => ({
       type: 'task.mark_duplicate' as const,
       taskId: task.id,
@@ -1076,6 +1103,7 @@ function selectDuplicateCommand(state: ShinsaState, random: Random): ShinsaComma
 function listDuplicateMarks(state: ShinsaState) {
   return Object.values(state.tasks).flatMap((task) => [
     task.duplicate ? `closed by ${task.duplicate.by}` : null,
+    task.duplicate?.teammate ? "closed as a teammate's" : null,
     task.activity.some((entry) => entry.text === 'Not a duplicate after all') ? 'started again' : null,
   ]);
 }
@@ -1694,7 +1722,12 @@ describe('decide under random command sequences', () => {
         for (const mark of listDuplicateMarks(state)) if (mark) reached.add(mark);
       };
       for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'duplicates', collect);
-      expect([...reached].sort()).toEqual(['closed by shinsa', 'closed by you', 'started again']);
+      expect([...reached].sort()).toEqual([
+        "closed as a teammate's",
+        'closed by shinsa',
+        'closed by you',
+        'started again',
+      ]);
     },
     SEEDS * 2_000
   );

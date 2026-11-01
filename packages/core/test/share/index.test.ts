@@ -526,6 +526,49 @@ describe('what a shared task shows', () => {
     expect(sharedRun?.delegation).toMatchObject({ title: 'Review the cache', brief: '', question: null });
   });
 
+  test("a duplicate of a teammate's task keeps the task it repeats, so its owner can see what was kept over", () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness);
+    harness.send({ type: 'task.create', request: 'Dark theme please', repoId });
+    const task = Object.values(harness.state.tasks)[0] as Task;
+    const teammate = {
+      teamId: 'team-1',
+      machineId: 'machine-kai',
+      taskId: 'kai-task',
+      handle: 'KAI-12',
+      title: 'Add dark mode',
+      owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: null },
+    };
+    harness.send({
+      type: 'task.triage',
+      taskId: task.id,
+      title: 'Dark theme',
+      repoId,
+      size: 'small',
+      branch: 'feat/dark',
+      waitsOn: [],
+      duplicateOfTeammate: teammate,
+      reasons: { duplicate: 'Kai is adding it.' },
+    });
+    const closed = harness.task(task.id);
+
+    expect(resolveSharedTask(harness.state, closed, CONTEXT).task.duplicate).toEqual({
+      of: 'kai-task',
+      by: 'shinsa',
+      why: 'Kai is adding it.',
+      teammate,
+    });
+    expect(
+      resolveSharedTask(harness.state, closed, { ...CONTEXT, preset: 'status' }).task.duplicate
+    ).toBeUndefined();
+  });
+
+  test('a task that is no duplicate shares none', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { request: 'Fix the clamp' });
+    expect(resolveSharedTask(harness.state, harness.task(taskId), CONTEXT).task.duplicate).toBeNull();
+  });
+
   test('a task with no project names none', () => {
     const harness = createHarness();
     harness.send({ type: 'task.create', request: 'What is the clamp?', repoId: null });

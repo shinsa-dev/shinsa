@@ -1,5 +1,6 @@
 import { splitMessageAttachments } from '../chat/attachments.ts';
 import type { RunDelegation } from '../domain/delegations.ts';
+import { copyTeammateOriginal } from '../domain/duplicates.ts';
 import { isCurrentEvidence } from '../domain/evidence.ts';
 import type { Round } from '../domain/rounds.ts';
 import type { SharePreset } from '../domain/settings.ts';
@@ -16,6 +17,7 @@ import type {
   Repo,
   Run,
   Task,
+  TaskDuplicate,
 } from '../domain/types.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
 import type { PlanDocument, ReviewFinding, WorkReport } from '../report/types.ts';
@@ -284,6 +286,15 @@ function createBlankTask(task: Task, grants: Grants): Task {
   };
 }
 
+function redactDuplicate(duplicate: TaskDuplicate): TaskDuplicate {
+  return {
+    of: duplicate.of,
+    by: duplicate.by,
+    why: duplicate.why,
+    ...(duplicate.teammate ? { teammate: copyTeammateOriginal(duplicate.teammate) } : {}),
+  };
+}
+
 const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants) => Partial<Task>>> = {
   identity: (task) => ({ handle: task.handle ?? null, title: task.title, size: task.size }),
   requests: (task) => ({ request: splitMessageAttachments(task.request).text }),
@@ -298,6 +309,7 @@ const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants)
     repoId: task.repoId,
     branch: task.branch,
     stageReason: task.stageReason,
+    duplicate: task.duplicate ? redactDuplicate(task.duplicate) : null,
   }),
   plan: (task) => ({ triageDecisions: task.triageDecisions ?? null }),
   reports: (task) => ({ phaseReports: task.phaseReports.map(redactPhaseReport), fixRounds: task.fixRounds }),

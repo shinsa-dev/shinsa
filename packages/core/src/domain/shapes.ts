@@ -1,6 +1,6 @@
 import { DomainError } from './errors.ts';
 import { isComposableStep, listComposedSteps, type PipelineStep, validatePipeline } from './steps.ts';
-import type { Task } from './types.ts';
+import type { Task, TeammateOwner } from './types.ts';
 import { validateVerification } from './verification.ts';
 
 export type TaskShape = 'answer' | 'investigate' | 'research' | 'change' | 'fix' | 'operation';
@@ -53,6 +53,18 @@ export interface TriageDecisions {
   shape: AutoChoice<TaskShape> | null;
   start: AutoChoice<string[]> | null;
   priority: AutoChoice<Task['priority']> | null;
+  duplicate?: TriageDuplicateCheck | null;
+}
+
+export interface UnreachedTeammate {
+  teamId: string;
+  machineId: string;
+  name: string;
+  owner: TeammateOwner | null;
+}
+
+export interface TriageDuplicateCheck {
+  unreached: UnreachedTeammate[];
 }
 
 export const TASK_SHAPES: readonly TaskShape[] = [

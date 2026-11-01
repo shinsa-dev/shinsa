@@ -5423,6 +5423,36 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       ],
     },
     {
+      id: 'task-duplicate-teammate',
+      request: 'let people pick a dark theme for the paywall editor',
+      title: 'Add a dark theme to the paywall editor',
+      repo: paywall,
+      size: 'small',
+      stage: 'cancelled',
+      reason: 'duplicate of Kai’s KAI-12 “Add dark mode to the paywall editor”',
+      branch: 'feat/editor-dark-theme',
+      ageHours: 3,
+      extra: [
+        {
+          type: 'task.duplicated',
+          taskId: 'task-duplicate-teammate',
+          duplicate: {
+            of: 'kai-dark-mode',
+            by: 'shinsa',
+            why: 'Both add a dark theme to the paywall editor.',
+            teammate: {
+              teamId: 'core',
+              machineId: 'kai',
+              taskId: 'kai-dark-mode',
+              handle: 'KAI-12',
+              title: 'Add dark mode to the paywall editor',
+              owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: null },
+            },
+          },
+        },
+      ],
+    },
+    {
       id: 'task-closed-spinner',
       request: 'let paywalls hide the native purchase spinner',
       title: 'Hide the native purchase spinner',

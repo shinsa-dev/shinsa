@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { listActiveRuns, listOpenGates, parseUserCommand } from '../../src/index.ts';
+import {
+  type CommandOf,
+  listActiveRuns,
+  listOpenGates,
+  parseUserCommand,
+  type TeammateOriginal,
+} from '../../src/index.ts';
 import {
   createHarness,
   createTask,
@@ -207,5 +213,142 @@ describe('duplicates', () => {
       taskId: 'a',
     });
     expect(() => parseUserCommand({ type: 'task.mark_duplicate', taskId: 'a' })).toThrow();
+  });
+});
+
+const KAI_TASK: TeammateOriginal = {
+  teamId: 'team-1',
+  machineId: 'machine-kai',
+  taskId: 'kai-task',
+  handle: 'KAI-12',
+  title: 'Add dark mode',
+  owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: 'https://avatars.example/kai.png' },
+};
+
+function triageWith(harness: Harness, request: string, extra: Partial<CommandOf<'task.triage'>>) {
+  const { taskId, repoId } = createUntriaged(harness, request);
+  harness.send({
+    type: 'task.triage',
+    taskId,
+    title: request,
+    repoId,
+    size: 'small',
+    branch: `fix/${taskId}`,
+    waitsOn: [],
+    ...extra,
+  });
+  return taskId;
+}
+
+describe('teammate duplicates', () => {
+  test("triage closes a request that repeats a teammate's open task and records that task", () => {
+    const harness = createHarness();
+    const copy = triageWith(harness, 'Dark theme please', {
+      duplicateOfTeammate: KAI_TASK,
+      reasons: { duplicate: 'Kai is already adding dark mode.' },
+    });
+
+    const task = harness.task(copy);
+    expect(task.stage).toBe('cancelled');
+    expect(task.stageReason).toBe('duplicate of Kai’s KAI-12 “Add dark mode”');
+    expect(task.duplicate).toEqual({
+      of: 'kai-task',
+      by: 'shinsa',
+      why: 'Kai is already adding dark mode.',
+      teammate: KAI_TASK,
+    });
+    expect(task.activity.map((entry) => entry.text)).toContain(
+      'Closed as a duplicate of Kai’s KAI-12 “Add dark mode”'
+    );
+    expect(harness.effectsOf('config.verify').map((effect) => effect.taskId)).not.toContain(copy);
+    expect(listActiveRuns(harness.state, copy)).toHaveLength(0);
+  });
+
+  test("the recorded teammate's task is a copy, never the command's own object", () => {
+    const harness = createHarness();
+    const owner = { login: 'kai', name: 'Kai Tanaka', avatarUrl: null };
+    const copy = triageWith(harness, 'Dark theme please', { duplicateOfTeammate: { ...KAI_TASK, owner } });
+    owner.name = 'Someone else';
+
+    expect(harness.task(copy).duplicate?.teammate?.owner?.name).toBe('Kai Tanaka');
+  });
+
+  test('a teammate is named by the first word of their name, or by their login when they have none', () => {
+    const harness = createHarness();
+    const blank = triageWith(harness, 'Dark theme please', {
+      duplicateOfTeammate: { ...KAI_TASK, owner: { login: 'kai', name: '  ', avatarUrl: null } },
+    });
+
+    expect(harness.task(blank).stageReason).toBe('duplicate of kai’s KAI-12 “Add dark mode”');
+  });
+
+  test("a teammate's task without a handle or an owner is quoted by its title", () => {
+    const harness = createHarness();
+    const copy = triageWith(harness, 'Dark theme please', {
+      duplicateOfTeammate: { ...KAI_TASK, handle: null, owner: null },
+    });
+
+    expect(harness.task(copy).stageReason).toBe('duplicate of “Add dark mode”');
+    expect(harness.task(copy).duplicate?.why).toBeNull();
+  });
+
+  test("a local original wins over a teammate's task", () => {
+    const harness = createHarness();
+    const original = createTask(harness, { request: 'Add dark mode here' });
+    const copy = triageWith(harness, 'Dark theme please', {
+      duplicateOf: original,
+      duplicateOfTeammate: KAI_TASK,
+    });
+
+    expect(harness.task(copy).duplicate).toEqual({ of: original, by: 'shinsa', why: null });
+  });
+
+  test("not a duplicate starts a teammate's duplicate as if triage had not flagged it", () => {
+    const harness = createHarness();
+    const copy = triageWith(harness, 'Dark theme for the editor only', { duplicateOfTeammate: KAI_TASK });
+    harness.send({ type: 'task.clear_duplicate', taskId: copy });
+
+    const task = harness.task(copy);
+    expect(task.duplicate).toBeNull();
+    expect(task.closedAt).toBeNull();
+    expect(task.stage).toBe('triage');
+    expect(harness.lastEffect('config.verify').taskId).toBe(copy);
+    readyWorktree(harness, copy);
+    expect(harness.task(copy).stage).toBe('planning');
+  });
+
+  test('triage records the team machines it could not compare with and says whose', () => {
+    const harness = createHarness();
+    const unreached = [
+      {
+        teamId: 'team-1',
+        machineId: 'machine-kai',
+        name: 'Studio',
+        owner: { login: 'kai', name: null, avatarUrl: null },
+      },
+      { teamId: 'team-1', machineId: 'machine-box', name: 'Build box', owner: null },
+    ];
+    const taskId = triageWith(harness, 'Add a settings page', { unreached });
+
+    const task = harness.task(taskId);
+    expect(task.triageDecisions?.duplicate).toEqual({ unreached });
+    expect(task.activity.map((entry) => entry.text)).toContain(
+      'Could not check kai’s Studio and Build box for duplicates'
+    );
+    expect(task.stage).toBe('triage');
+  });
+
+  test('triage that reached every team machine, or had none to check, adds no line', () => {
+    const harness = createHarness();
+    const reached = triageWith(harness, 'Add a settings page', { unreached: [] });
+    const local = triageWith(harness, 'Add an about page', {});
+
+    expect(harness.task(reached).triageDecisions?.duplicate).toEqual({ unreached: [] });
+    expect(harness.task(local).triageDecisions).not.toHaveProperty('duplicate');
+    for (const taskId of [reached, local]) {
+      expect(harness.task(taskId).activity.some((entry) => entry.text.includes('for duplicates'))).toBe(
+        false
+      );
+    }
   });
 });

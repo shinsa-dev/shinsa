@@ -263,7 +263,14 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       shares,
       previews,
       handoffs,
-      triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
+      triage:
+        options.triage ??
+        ((state, task, local) =>
+          resolveTriage(state, task, local, quick.classify, () => ({
+            feed: teamFeeds.snapshot(),
+            teams: remote.store.file.teams,
+            self: remote.store.file.credentials?.instanceId ?? null,
+          }))),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
       describeShare: createShareDescriber(quick.write),
