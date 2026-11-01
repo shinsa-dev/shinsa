@@ -8,6 +8,7 @@ import { useTaskView } from '@/hooks/use-task-view.ts';
 import { type Command, useRegisteredSections } from '@/lib/command/registry.ts';
 import { navigate } from '@/router.ts';
 import { spyOnCommands } from '../support/commands.ts';
+import { spyOnEngine } from '../support/engine.ts';
 import { createGate, createShinsaState, createTask } from '../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
@@ -33,11 +34,22 @@ function Draft({ children }: { children: React.ReactNode }) {
   );
 }
 
-function usePage() {
-  const task = STATE.tasks.t1;
+const FINDINGS_STATE = createShinsaState({
+  tasks: [
+    createTask({
+      id: 't1',
+      worktreePath: '/tmp/t1',
+      findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
+    }),
+  ],
+  gates: [createGate({ id: 'g1', taskId: 't1', type: 'review' })],
+});
+
+function usePage(state = STATE) {
+  const task = state.tasks.t1;
   if (!task) throw new Error('Missing task');
-  const view = useTaskView(STATE, task.id);
-  useTaskPageCommands(STATE, task, view);
+  const view = useTaskView(state, task.id);
+  useTaskPageCommands(state, task, view);
   return { draft: useReviewDraft(), sections: useRegisteredSections() };
 }
 
@@ -84,6 +96,16 @@ describe('useTaskPageCommands', () => {
     });
     expect(result.current.draft.comments).toEqual([]);
     expect(find(result.current.sections, 'task.t1.gate.g1.approve').disabled).toBeUndefined();
+  });
+
+  it('follows your choice to fix and approve when the engine can approve after a fix', () => {
+    const engine = spyOnEngine();
+    const { result } = renderHook(() => usePage(FINDINGS_STATE), { wrapper: Draft });
+    expect(find(result.current.sections, 'task.t1.gate.g1.approve').label).toBe('Fix 1 finding');
+    act(() => result.current.draft.chooseThenApprove(true));
+    expect(find(result.current.sections, 'task.t1.gate.g1.approve').label).toBe('Fix 1 finding and approve');
+    expect(find(result.current.sections, 'task.t1.gate.g1.fix_choice').label).toBe('Fix 1 finding');
+    engine.mockRestore();
   });
 
   it('drops the sections when the page unmounts', () => {

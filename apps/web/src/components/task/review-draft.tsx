@@ -9,6 +9,13 @@ import {
   writeStoredComments,
 } from '@/lib/review/draft.ts';
 
+interface ReviewChoice {
+  verdicts: Record<number, FindingVerdictKind>;
+  thenApprove: boolean;
+}
+
+const NO_CHOICE: ReviewChoice = { verdicts: {}, thenApprove: false };
+
 export function ReviewDraftProvider({
   enabled,
   draftKey,
@@ -22,11 +29,12 @@ export function ReviewDraftProvider({
     key: draftKey,
     comments: readStoredComments(draftKey),
   }));
-  const [chosen, setChosen] = React.useState<{ key: string; verdicts: Record<number, FindingVerdictKind> }>(
-    () => ({ key: draftKey, verdicts: {} })
-  );
+  const [chosen, setChosen] = React.useState<ReviewChoice & { key: string }>(() => ({
+    key: draftKey,
+    ...NO_CHOICE,
+  }));
   const comments = draft.key === draftKey ? draft.comments : readStoredComments(draftKey);
-  const verdicts = chosen.key === draftKey ? chosen.verdicts : {};
+  const { verdicts, thenApprove } = chosen.key === draftKey ? chosen : NO_CHOICE;
   const value = React.useMemo<ReviewDraft>(() => {
     const update = (change: (current: LineComment[]) => LineComment[]) =>
       setDraft((current) => {
@@ -43,11 +51,18 @@ export function ReviewDraftProvider({
       clearComments: () => update(() => []),
       verdicts,
       setVerdict: (index, verdict) =>
-        setChosen((current) => ({
+        setChosen((previous) => {
+          const kept = previous.key === draftKey ? previous : NO_CHOICE;
+          return { ...kept, key: draftKey, verdicts: { ...kept.verdicts, [index]: verdict } };
+        }),
+      thenApprove,
+      chooseThenApprove: (next) =>
+        setChosen((previous) => ({
+          ...(previous.key === draftKey ? previous : NO_CHOICE),
           key: draftKey,
-          verdicts: { ...(current.key === draftKey ? current.verdicts : {}), [index]: verdict },
+          thenApprove: next,
         })),
     };
-  }, [enabled, comments, verdicts, draftKey]);
+  }, [enabled, comments, verdicts, thenApprove, draftKey]);
   return <ReviewDraftContext.Provider value={value}>{children}</ReviewDraftContext.Provider>;
 }

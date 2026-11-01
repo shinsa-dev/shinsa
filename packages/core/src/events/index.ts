@@ -240,6 +240,8 @@ type EventBody =
       response: string | null;
       verdicts?: FindingVerdict[];
       comments?: ReviewComment[];
+      thenApprove?: boolean;
+      ahead?: boolean;
     }
   | { type: 'gate.withdrawn'; gateId: string }
   | { type: 'gate.noted'; gateId: string; notes: string | null }

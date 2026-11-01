@@ -338,7 +338,8 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
 - **Forking from the web.** Fork into a new task (the task menu, an All tasks row's menu and ⌘K, on every task but a
   cancelled one, a finished one included) opens a dialog for the new task's request (`ForkDialog`, `lib/tasks/fork.ts`),
   sent as `task.create` with the source's repository and project. The Overview's facts show Forked from and Forked
-  into, and a watchdog that finds an issue forks the task it watches (Watchdogs, below).
+  into (and Filed by, Split from or Started by when an agent, a split or an automation made the task), and a
+  watchdog that finds an issue forks the task it watches (Watchdogs, below).
 
 ### Who is who
 
@@ -1640,7 +1641,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   task (`fork_from` naming any other is refused, `fork_watchdog`), so the fix starts from this conversation and goes
   through every gate; it takes the task's repository unless one is named, and its priority. The filed task keeps
   `Task.sourceReport` with `scheduleId: null` and the `watchdogId`, `createdBy {kind: 'watchdog'}`, and its request
-  quotes the report ("Reported in <server> …"); its Reported in fact names the watchdog and opens the shipped task.
+  quotes the report ("Reported in <server> …"); its Filed by fact names the watchdog and opens the shipped task, and its Reported in card holds the report.
   The check ends with `report_read {summary}` (`PURPOSE_HAND_OVERS.watch`). One that filed nothing is healthy and
   kept (`watchdog.checked`, the last 20), and the next one is due an interval later; when that would fall past the
   window, the watchdog passes. One that filed or linked a report trips it (`tripped`, `forkTaskIds` the forks it
@@ -1776,6 +1777,17 @@ checks it ran.
   Code tab (Where agents work → Your edits). Fix N findings at an escalated review sends the drafted comments with the verdicts the same way. The
   comments are stored on `gate.answered` and on the decision's activity entry, so the task's activity lists each
   with its place. Comments with any other decision or at any other gate are refused.
+- Fix N findings and approve, from the Fix button's chevron, is the same `revise` with `thenApprove: true`
+  (refused at any other gate or with any other decision, `then_approve_invalid`, `then_approve_conflict`). The
+  `gate.answered` fold sets `task.approveAfterFix`; the fix then runs as any other: checks, the agent review and its
+  own fix rounds. While the flag is on, `reactToFindings` sends the agent review's `should_fix` findings to the Agent
+  as well as its blocking ones, the verdicts your review would have defaulted to, so the approval never passes a
+  finding you would have fixed; `optional` ones do not hold it. When the review gate would open again without an escalation, `openReviewGate` opens it and answers
+  it `approve` at once (`approveReviewAhead`, `gate.answered` with `ahead: true`), then approves as your click would:
+  the pull request opens, or every check runs first when you have uncommitted edits. The activity says "Approved after
+  the fix, as you asked". An escalated review, or a failure gate when checks run out of fixes, still stops for you.
+  Every later answer at a review gate writes the flag again (on only for another Fix N findings and approve), and a
+  new round clears it. The web shows the chevron only on an engine with `review.approve_after_fix`.
 - Dismissed findings are kept on the task (`dismissedFindings`, the last 30) and every later
   reviewer is told not to report them again unless the code around them changed. Your decision
   resets the round count.
@@ -2184,8 +2196,8 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
   (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog
   check. The home never shows as a task page: `/tasks/<home>` replaces itself with the watch's page,
-  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the
-  automation, a link to the report (an http or https link only, since an agent wrote it) and Open the watch.
+  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Filed by “<automation>”", which opens the watch, and "Reported in <server>", whose card
+  has the report, its author and time and a link to the report (an http or https link only, since an agent wrote it).
 - **Agents set automations up.** Settings → Automations has no form: you ask for a schedule, a trigger or a watch
   in the home chat or any task, and its agent writes it (`set_schedule`, `schedules_write`); the page lists them,
   pauses, resumes and deletes them. A new watch an agent writes is a suggested watch for you to accept (below).
@@ -2884,8 +2896,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   machine for `feedback.write`. A command sent anyway is refused before it leaves the page, with "Update
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
-  `feedback` for `GET /api/feedback`, and `teams` for the team routes and `GET /api/teams/tasks`, today; Settings →
-  Teams shows only on an engine that has it). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, today; Settings → Teams and the review's Fix and approve
+  choice show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -4063,7 +4076,10 @@ truth, and a snapshot only saves replaying it.
   `preset`, which become Standard shares (`preset: 'standard'`).
   Logs from before teams (log version 14, `TEAM_FOCUS_LOG_VERSION`) have `focus.changed` events without `teamId`,
   which gain `teamId: null`.
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 14) marks the log so
+  Logs from before agent-chosen checks (log version 15, `PLAN_CHECKS_LOG_VERSION`) can have `plan.proposed` events
+  whose `document.verification` is a list of prose strings; they carry no command, so they are dropped and only
+  `PlanCheck` records stay (the prose remains in the plan's `body`).
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 15) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,

@@ -240,6 +240,7 @@ function readGateAnswer(fields: Fields): UserCommand {
     ...(fields.planVersion === undefined ? {} : { planVersion: readCount(fields, 'planVersion') }),
     ...(fields.verdicts === undefined ? {} : { verdicts: readVerdicts(fields.verdicts) }),
     ...(fields.comments === undefined ? {} : { comments: readComments(fields.comments) }),
+    ...(fields.thenApprove === undefined ? {} : { thenApprove: readBoolean(fields, 'thenApprove') }),
   };
 }
 
