@@ -126,7 +126,7 @@ export function selectStackRefusal(
   return null;
 }
 
-export function isReadyToStackOn(state: ShinsaState, task: Task) {
+function isReadyToStackOn(state: ShinsaState, task: Task) {
   if (task.pullRequest?.state !== 'open') return false;
   if (task.bundleReady) return true;
   return listOpenGates(state, task.id).some((gate) => gate.type === 'merge');
