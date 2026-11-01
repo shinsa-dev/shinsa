@@ -204,7 +204,7 @@ describe('the socket hub', () => {
     expect(sent.filter((message) => message.type === 'engine')).toEqual([
       { type: 'engine', engine: resolveEngineInfo('1.4.0') },
     ]);
-    expect(sent.at(-1)?.type).toBe('engine');
+    expect(sent.map((message) => message.type)).toEqual(['surfaces', 'engine', 'state']);
     hub.close(socket);
     hub.stop();
     engine.stop();
@@ -266,6 +266,33 @@ describe('the socket hub', () => {
     ]);
     hub.stop();
     expect(listeners.size).toBe(0);
+    engine.stop();
+    log.close();
+  });
+
+  test('closes a socket whose message was dropped, and keeps the others', async () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    let closed = 0;
+    const full = {
+      data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' } satisfies SocketData,
+      send: () => 0,
+      close: () => {
+        closed += 1;
+      },
+    };
+    const healthy = createSocket();
+    hub.open(full);
+    expect(closed).toBe(3);
+    hub.open(healthy.socket);
+    await startPlanning(engine);
+    expect(closed).toBeGreaterThan(3);
+    expect(healthy.sent.some((message) => message.type === 'state.patch')).toBe(true);
+    hub.close(full);
+    hub.close(healthy.socket);
+    hub.stop();
     engine.stop();
     log.close();
   });
