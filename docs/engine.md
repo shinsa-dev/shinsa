@@ -1157,12 +1157,13 @@ piece of a bundle with `create_task`'s `stack_on_this` (`stacksOn` on `task.crea
 - **Release on ready.** A stacked task waits in `waiting_on_tasks` ("waiting for ‹A› to be ready to merge") until
   the task below is ready or has its merge gate open, or is merged or done (`isStackPending`). It then records the
   branch below as its base (`Task.stackBase`, `task.stack_based`), which `resolveRoundBase` returns when no round of
-  its own is stacked: its worktree branches off that branch and its pull request targets it, so GitHub shows the
-  stack. Its prompts say where it sits in the bundle, from the bottom, with each pull request.
+  its own is stacked: its worktree branches off that branch (a worktree left from before, of a task stacked while it
+  planned, is reset onto it, `refreshWorktree`) and its pull request targets it, so GitHub shows the stack. Its prompts say where it sits in the bundle, from the bottom, with each pull request.
 - **One merge gate, on the top.** The top task's merge gate opens only once every task below is ready; until then it
   waits ("waiting for ‹A› to be ready to merge"), and a task below that stops being ready withdraws the gate. The gate
   says it merges the whole bundle top down with each pull request, its card lists every task below as a Bundle row
-  that ticks itself when ready, and its button says how many pull requests it merges. Approving it puts every task
+  that ticks itself when ready and its own pre-merge steps are ticked, and its button says how many pull requests it
+  merges. Approving it is refused while any task of the bundle has a pre-merge step open (`assertMergeStepsDone`). Approving it puts every task
   below into `awaiting_merge` ("merging with its bundle") and queues one `pull_request.merge` with the bundle's pull
   requests (`bundle`, top down after the top); the engine merges the top into its base, then each one below, the last
   into the default branch, the way a round stack merges (each read first and merged only when still open), and reads

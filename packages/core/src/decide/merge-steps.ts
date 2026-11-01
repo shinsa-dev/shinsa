@@ -19,7 +19,7 @@ import {
   type MergeStepView,
 } from '../report/merge-steps.ts';
 import { listChangedIds } from '../state/draft.ts';
-import { listOpenGates } from '../state/queries.ts';
+import { listBundleBelow, listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 
 function describeEarly(task: Task, step: MergeStepView) {
@@ -61,12 +61,22 @@ export function tickMergeStep(decider: Decider, command: CommandOf<'merge_step.t
 
 export function assertMergeStepsDone(decider: Decider, gate: Gate, decision: GateDecision) {
   if (gate.type !== 'merge' || decision !== 'approve') return;
-  const open = listOpenMergeSteps(decider.task(gate.taskId), 'pre_merge');
-  if (open.length === 0) return;
-  throw new DomainError(
-    'merge_steps_open',
-    `Tick the ${describeCount(open.length, 'pre-merge step')} first.`
-  );
+  const task = decider.task(gate.taskId);
+  const open = listOpenMergeSteps(task, 'pre_merge');
+  if (open.length > 0) {
+    throw new DomainError(
+      'merge_steps_open',
+      `Tick the ${describeCount(open.length, 'pre-merge step')} first.`
+    );
+  }
+  for (const below of listBundleBelow(decider.state, task)) {
+    const steps = listOpenMergeSteps(below, 'pre_merge');
+    if (steps.length === 0) continue;
+    throw new DomainError(
+      'merge_steps_open',
+      `Tick the ${describeCount(steps.length, 'pre-merge step')} of “${below.title}” first: it merges with this bundle.`
+    );
+  }
 }
 
 export function assertNoMergeStepsLeft(task: Task) {

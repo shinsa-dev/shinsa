@@ -11,6 +11,7 @@ import {
   type Run,
   resolveRepoWorkspace,
   type Task,
+  type TaskStage,
   type WorkspaceMode,
 } from '../domain/index.ts';
 import { listLiveChildRuns } from './delegations.ts';
@@ -84,6 +85,45 @@ export function selectStackedOnThis(state: ShinsaState, taskId: string) {
       (task) => task.stacksOn === taskId && !isTaskSettled(task) && hasStep(task, 'pull_request')
     ) ?? null
   );
+}
+
+const STACKABLE_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
+  'triage',
+  'waiting_on_tasks',
+  'planning',
+  'awaiting_plan',
+]);
+
+export function canChangeStack(task: Task) {
+  return !isTaskSettled(task) && STACKABLE_STAGES.has(task.stage);
+}
+
+export function selectStackRefusal(
+  state: ShinsaState,
+  task: Task | null,
+  parent: Task,
+  repoId = task?.repoId ?? null
+) {
+  if (parent.id === task?.id) return new DomainError('stack_self', 'A task cannot stack on itself.');
+  if (parent.stage === 'cancelled')
+    return new DomainError('dependency_cancelled', 'That task was cancelled.');
+  if (isTaskSettled(parent)) {
+    return new DomainError('stack_parent_settled', 'That task is finished, so there is nothing to stack on.');
+  }
+  if (!hasStep(parent, 'pull_request')) {
+    return new DomainError('stack_no_pull_request', 'That task opens no pull request to stack on.');
+  }
+  if (repoId && parent.repoId && repoId !== parent.repoId) {
+    return new DomainError('stack_repository', 'The tasks of a bundle work in one repository.');
+  }
+  const taken = selectStackedOnThis(state, parent.id);
+  if (taken && taken.id !== task?.id) {
+    return new DomainError('stack_taken', `“${taken.title}” is already stacked on that task.`);
+  }
+  if (task && isDependencyOf(state, task.id, parent.id)) {
+    return new DomainError('dependency_cycle', 'That task already waits on this one.');
+  }
+  return null;
 }
 
 export function isReadyToStackOn(state: ShinsaState, task: Task) {

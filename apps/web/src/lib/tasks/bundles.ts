@@ -1,7 +1,6 @@
 import {
+  canChangeStack,
   compareTasks,
-  hasStep,
-  isDependencyOf,
   isTaskComplete,
   isTaskSettled,
   isWatchHome,
@@ -9,6 +8,7 @@ import {
   resolveBundle,
   type ShinsaState,
   selectStackedOnThis,
+  selectStackRefusal,
   type Task,
   type TaskStage,
 } from '@shinsa/core';
@@ -34,13 +34,6 @@ export const BUNDLE_MEMBER: Record<BundleMemberState, { label: string; tone: Ton
 export const BUNDLE_READY_STATUS = { label: 'Ready, merges with its bundle', tone: 'green' } as const;
 
 export const BUNDLE_MERGING_STATUS = { label: 'Merging with its bundle', tone: 'green' } as const;
-
-const STACKABLE: ReadonlySet<TaskStage> = new Set<TaskStage>([
-  'triage',
-  'waiting_on_tasks',
-  'planning',
-  'awaiting_plan',
-]);
 
 const NOT_STARTED: ReadonlySet<TaskStage> = new Set<TaskStage>(['triage', 'waiting_on_tasks']);
 
@@ -89,22 +82,11 @@ export function selectBundleTop(state: ShinsaState, task: Task) {
   return open.at(-1) ?? null;
 }
 
-export function canChangeStack(task: Task) {
-  return !isTaskSettled(task) && STACKABLE.has(task.stage);
-}
-
 export function listStackChoices(state: ShinsaState, task: Task | null) {
   if (task && !canChangeStack(task)) return [];
   return Object.values(state.tasks)
-    .filter((candidate) => candidate.id !== task?.id)
-    .filter((candidate) => !isTaskSettled(candidate) && !isWatchHome(candidate))
-    .filter((candidate) => hasStep(candidate, 'pull_request'))
-    .filter((candidate) => !task?.repoId || !candidate.repoId || candidate.repoId === task.repoId)
-    .filter((candidate) => !task || !isDependencyOf(state, task.id, candidate.id))
-    .filter((candidate) => {
-      const taken = selectStackedOnThis(state, candidate.id);
-      return !taken || taken.id === task?.id;
-    })
+    .filter((candidate) => candidate.id !== task?.id && !isWatchHome(candidate))
+    .filter((candidate) => selectStackRefusal(state, task, candidate) === null)
     .sort((a, b) => Number(a.id !== task?.stacksOn) - Number(b.id !== task?.stacksOn) || compareTasks(a, b));
 }
 

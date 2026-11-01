@@ -22,6 +22,7 @@ export {
   type ShinsaState,
 } from './project.ts';
 export {
+  canChangeStack,
   findTask,
   isDependencyOf,
   isHeldInBacklog,
@@ -43,6 +44,7 @@ export {
   selectCheckoutHolder,
   selectStackedOnThis,
   selectStackParent,
+  selectStackRefusal,
   selectTaskByHandle,
   selectTaskByReference,
 } from './queries.ts';

@@ -97,15 +97,18 @@ function linkTask(task: Task) {
 }
 
 function listBundleWaits(state: Pick<ShinsaState, 'tasks'>, task: Task): MergeWaitView[] {
-  return listBundleBelow(state, task).map((below) => ({
-    key: `bundle:${below.id}`,
-    taskId: below.id,
-    kind: 'bundle',
-    title: `${linkTask(below)} merges with this one`,
-    detail: null,
-    command: null,
-    done: Boolean(below.bundleReady) || isTaskComplete(below),
-  }));
+  return listBundleBelow(state, task).map((below) => {
+    const open = countOpenSteps(below, 'pre_merge');
+    return {
+      key: `bundle:${below.id}`,
+      taskId: below.id,
+      kind: 'bundle',
+      title: `${linkTask(below)} merges with this one`,
+      detail: open === 0 ? null : `Tick its ${formatSteps(open)} before the merge on that task first.`,
+      command: null,
+      done: (Boolean(below.bundleReady) || isTaskComplete(below)) && open === 0,
+    };
+  });
 }
 
 export function listMergeWaits(state: Pick<ShinsaState, 'tasks'>, task: Task): MergeWaitView[] {
@@ -133,7 +136,9 @@ export function listMergeWaits(state: Pick<ShinsaState, 'tasks'>, task: Task): M
 
 export function resolveWaitBlock(wait: MergeWaitView) {
   if (wait.kind === 'bundle') {
-    return wait.done ? 'That task is ready to merge' : 'Ticks itself once that task is ready to merge';
+    return wait.done
+      ? 'That task is ready to merge'
+      : 'Ticks itself once that task is ready and its steps before the merge are ticked';
   }
   return wait.done ? 'That task finished' : 'Ticks itself once that task finishes';
 }

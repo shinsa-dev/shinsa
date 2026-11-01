@@ -136,9 +136,21 @@ describe('worktrees', () => {
     const { repo } = await createGitRepo();
     const worktree = await createWorktree(repo, createTempDir(), 'task-bbbbbb', 'fix/refresh', null);
     writeFiles(worktree.path, { 'stray.txt': 'x', 'README.md': 'changed' });
-    await refreshWorktree(repo, worktree.path);
+    await refreshWorktree(repo, worktree.path, null);
     expect(existsSync(join(worktree.path, 'stray.txt'))).toBe(false);
     expect(await git(worktree.path, 'status', '--porcelain')).toBe('');
+  });
+
+  test('refreshing a stacked task’s worktree resets it onto the branch below', async () => {
+    const { repo } = await createGitRepo({ remote: false });
+    const worktrees = createTempDir();
+    const below = await createWorktree(repo, worktrees, 'task-below', 'feat/below', null);
+    writeFiles(below.path, { 'below.ts': 'export const below = true;\n' });
+    await commitWorktree(below.path, 'feat: below');
+    const stacked = await createWorktree(repo, worktrees, 'task-stacked', 'feat/stacked', null);
+    expect(existsSync(join(stacked.path, 'below.ts'))).toBe(false);
+    await refreshWorktree(repo, stacked.path, below.branch);
+    expect(existsSync(join(stacked.path, 'below.ts'))).toBe(true);
   });
 
   test('dependencies are installed with the lockfile the repository uses', async () => {

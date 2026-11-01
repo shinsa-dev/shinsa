@@ -1,5 +1,6 @@
 import {
   type AccountsSnapshot,
+  canChangeStack,
   isTaskSettled,
   listDecisionOrder,
   listPendingDependencies,
@@ -18,14 +19,7 @@ import { listProcessCommands } from '@/lib/command/process.ts';
 import { type Command, type CommandSection, type MenuPage, RANK } from '@/lib/command/registry.ts';
 import { listTaskActionCommands } from '@/lib/command/task-actions.ts';
 import type { LineComment } from '@/lib/review/draft.ts';
-import {
-  BUNDLE_ICON,
-  canChangeStack,
-  listStackChoices,
-  STACK_LABEL,
-  toggleStack,
-  unstackTask,
-} from '@/lib/tasks/bundles.ts';
+import { BUNDLE_ICON, listStackChoices, STACK_LABEL, toggleStack, unstackTask } from '@/lib/tasks/bundles.ts';
 import {
   clearDependencies,
   listDependencyChoices,

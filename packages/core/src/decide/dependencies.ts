@@ -2,21 +2,20 @@ import type { CommandOf } from '../commands/index.ts';
 import {
   compareTasks,
   DomainError,
-  hasStep,
   isTaskComplete,
   isTaskSettled,
   resolveCurrentRound,
   type Task,
-  type TaskStage,
 } from '../domain/index.ts';
 import {
+  canChangeStack,
   isDependencyOf,
   isStackPending,
   isTriaged,
   listOpenGates,
   listPendingDependencies,
-  selectStackedOnThis,
   selectStackParent,
+  selectStackRefusal,
 } from '../state/queries.ts';
 import { type Decider, describeWaiting, quoteTitles } from './decider.ts';
 import { startWork } from './lifecycle.ts';
@@ -90,13 +89,6 @@ export function changeDependencies(
   }
 }
 
-const STACKABLE_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
-  'triage',
-  'waiting_on_tasks',
-  'planning',
-  'awaiting_plan',
-]);
-
 export function resolveStackParent(
   decider: Decider,
   task: Task | null,
@@ -104,24 +96,8 @@ export function resolveStackParent(
   repoId = task?.repoId ?? null
 ) {
   if (id === task?.id) throw new DomainError('stack_self', 'A task cannot stack on itself.');
-  const parent = decider.task(id);
-  if (parent.stage === 'cancelled') throw new DomainError('dependency_cancelled', 'That task was cancelled.');
-  if (isTaskSettled(parent)) {
-    throw new DomainError('stack_parent_settled', 'That task is finished, so there is nothing to stack on.');
-  }
-  if (!hasStep(parent, 'pull_request')) {
-    throw new DomainError('stack_no_pull_request', 'That task opens no pull request to stack on.');
-  }
-  if (repoId && parent.repoId && repoId !== parent.repoId) {
-    throw new DomainError('stack_repository', 'The tasks of a bundle work in one repository.');
-  }
-  const taken = selectStackedOnThis(decider.state, id);
-  if (taken && taken.id !== task?.id) {
-    throw new DomainError('stack_taken', `“${taken.title}” is already stacked on that task.`);
-  }
-  if (task && isDependencyOf(decider.state, task.id, id)) {
-    throw new DomainError('dependency_cycle', 'That task already waits on this one.');
-  }
+  const refusal = selectStackRefusal(decider.state, task, decider.task(id), repoId);
+  if (refusal) throw refusal;
   return id;
 }
 
@@ -174,7 +150,7 @@ export function stackOnTask(decider: Decider, command: CommandOf<'task.stack_on'
   if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
   const stacksOn = command.stacksOn === null ? null : resolveStackParent(decider, task, command.stacksOn);
   if ((task.stacksOn ?? null) === stacksOn) return;
-  if (!STACKABLE_STAGES.has(task.stage)) {
+  if (!canChangeStack(task)) {
     throw new DomainError(
       'stack_started',
       'This task has started building, so its bundle can no longer change.'

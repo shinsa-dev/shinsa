@@ -1,4 +1,4 @@
-import { isTaskSettled, type ShinsaState, type Task } from '@shinsa/core';
+import { canChangeStack, isTaskSettled, type ShinsaState, type Task } from '@shinsa/core';
 import {
   DropdownMenuCheckboxItem,
   DropdownMenuGroup,
@@ -11,14 +11,7 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
-import {
-  BUNDLE_ICON,
-  canChangeStack,
-  listStackChoices,
-  STACK_LABEL,
-  toggleStack,
-  unstackTask,
-} from '@/lib/tasks/bundles.ts';
+import { BUNDLE_ICON, listStackChoices, STACK_LABEL, toggleStack, unstackTask } from '@/lib/tasks/bundles.ts';
 import {
   clearDependencies,
   describeWaitsOnHeading,

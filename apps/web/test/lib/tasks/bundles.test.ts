@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { canChangeStack } from '@shinsa/core';
 import {
-  canChangeStack,
   describeBundleNote,
   describeBundleProgress,
   describeBundleWait,

@@ -23,6 +23,8 @@ import {
   pullRequest,
   pushed,
   REPLY,
+  reachShipping,
+  readyWorktree,
 } from '../harness.ts';
 
 const SECRET: MergeStep = {
@@ -140,6 +142,23 @@ describe('the steps around the merge', () => {
     expect(harness.task(taskId).activity.at(-1)?.text).toBe('Ticked the step “Set STRIPE_WEBHOOK_SECRET”');
     approve(harness, taskId);
     expect(harness.task(taskId).stageReason).toBe('merging');
+  });
+
+  test('the bundle merges only once every task below has ticked its steps before the merge', () => {
+    const { harness, taskId: root } = reachMergeGate([SECRET]);
+    const top = createTask(harness, { request: 'Top', stacksOn: root });
+    expect(harness.task(root).bundleReady).toBeTruthy();
+    readyWorktree(harness, top);
+    reachShipping(harness, top);
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 43 }) });
+    expect(harness.openGate(top).type).toBe('merge');
+    expect(refusal(() => approve(harness, top))).toEqual({
+      code: 'merge_steps_open',
+      message: `Tick the 1 pre-merge step of “${harness.task(root).title}” first: it merges with this bundle.`,
+    });
+    tick(harness, root, SECRET);
+    approve(harness, top);
+    expect(harness.task(top).stage).toBe('awaiting_merge');
   });
 
   test('a step ticks and unticks, and ticking it again changes nothing', () => {
