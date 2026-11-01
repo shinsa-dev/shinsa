@@ -22,7 +22,6 @@ const PREVIEW_COOKIE_SECONDS = 30 * 24 * 60 * 60;
 
 const DROPPED_HEADERS = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'cdn-loop']);
 
-const PREVIEW_ROBOTS_PATH = '/robots.txt';
 
 const DROPPED_PREFIXES = ['cf-', 'x-forwarded-', 'x-real-ip'];
 
@@ -138,7 +137,7 @@ async function forward(request: Request, url: URL, address: PreviewAddress, key:
 }
 
 export async function respondPreview(request: Request, url: URL, world: CloudWorld) {
-  if (url.pathname === PREVIEW_ROBOTS_PATH) return respondRobots();
+  if (url.pathname === '/robots.txt') return respondRobots();
   const address = parsePreviewHost(url.host, world.config.previewOrigin);
   if (!address) return respondPage('gone', 404);
   const query = url.searchParams.get(PREVIEW_KEY_PARAM);
