@@ -63,6 +63,11 @@ describe('resolveEffectLane', () => {
     expect(resolveEffectKey({ kind: 'preview.link', taskId: 't', serviceId: 'web' }, 4)).toBe(
       'preview.link:t:web:4'
     );
+    expect(resolveEffectLane({ kind: 'handoff.link', taskId: 't' })).toBe('handoff:t');
+    expect(resolveEffectLane({ kind: 'handoff.revoke', taskId: 't', guestId: 'u2' })).toBe('handoff:t');
+    expect(resolveEffectKey({ kind: 'handoff.revoke', taskId: 't', guestId: null }, 4)).toBe(
+      'handoff.revoke:t:4'
+    );
   });
 
   test('everything else about a task runs in order in the task lane, except the cheap watch in its side lane', () => {

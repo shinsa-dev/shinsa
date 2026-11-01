@@ -1,6 +1,7 @@
-import type { RemoteInstance } from '@shinsa/core';
-import { Connection, retryLater } from '@/lib/connection/socket.ts';
+import { type RemoteInstance, resolveMachineLoad, type Task } from '@shinsa/core';
+import { Connection, type MachineChoice, retryLater } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
+import { describeMachineLoad } from '@/lib/new-task.ts';
 import type { ChannelError } from './channel.ts';
 import type { DashboardClient } from './dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from './devices.ts';
@@ -22,6 +23,10 @@ function resolveDeviceAccess(device: EnrolledDevice | null) {
   return device.waiting ? 'Waiting for an answer' : 'In this dashboard';
 }
 
+function describeSharer(instance: RemoteInstance) {
+  return instance.role === 'guest' ? 'A task handed to you by' : 'Shared by';
+}
+
 export function describeMachine(
   instance: RemoteInstance,
   device: EnrolledDevice | null,
@@ -32,7 +37,9 @@ export function describeMachine(
   const current = device?.onMachine === true;
   const added = resolveDeviceAccess(device);
   const access =
-    instance.role === 'member' ? `Shared by ${resolveFirstName(instance.owner)} · ${added}` : added;
+    instance.role === 'owner'
+      ? added
+      : `${describeSharer(instance)} ${resolveFirstName(instance.owner)} · ${added}`;
   return {
     instance,
     device,
@@ -40,6 +47,21 @@ export function describeMachine(
     status: instance.online ? 'Online' : seen,
     access: current ? `${instance.name} · ${access}` : access,
   };
+}
+
+export function resolveMachineDetail(
+  row: MachineRow,
+  machine: MachineChoice | undefined,
+  handed: MachineChoice | undefined,
+  tasks: Readonly<Record<string, Pick<Task, 'title'>>> = {}
+) {
+  if (machine) return `${row.access} · ${describeMachineLoad(resolveMachineLoad(machine))}`;
+  if (row.instance.role !== 'guest') return row.access;
+  const titles = Object.keys(handed?.state.tasks ?? {}).flatMap((id) => {
+    const title = tasks[id]?.title;
+    return title ? [title] : [];
+  });
+  return titles.length > 0 ? `${row.access} · ${titles.join(', ')}` : row.access;
 }
 
 export async function listMachineRows(
@@ -80,6 +102,7 @@ export function createFleetMember(
     name: instance.name,
     current: device.onMachine === true,
     online: instance.online,
+    ...(instance.role === 'guest' ? { guest: true as const, handedBy: instance.owner } : {}),
     connection,
     fetch: (request) => link.fetch(request),
   };

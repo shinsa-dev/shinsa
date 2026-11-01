@@ -15,6 +15,7 @@ import { ConfigStore, resolveConfig } from '../apps/engine/src/config/index.ts';
 import { normalizeRemote } from '../apps/engine/src/git/repo.ts';
 import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
+import { Handoffs } from '../apps/engine/src/remote/handoffs.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
 import { Previews } from '../apps/engine/src/remote/previews.ts';
@@ -50,6 +51,7 @@ import {
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   type RemoteInstance,
+  type RemoteMember,
   type RemoteTeam,
   type RemoteUser,
   type Repo,
@@ -81,6 +83,9 @@ const SANDBOX_DIR = Bun.env.SHINSA_SANDBOX_DIR ?? join('/tmp', `shinsa-sandbox-$
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
 const USER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+const GUEST: RemoteUser = { id: 'preview-guest', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+const AS_COOKIE = 'shinsa_preview_as';
+const GUEST_MACHINES = new Set<string>();
 const QUICK = createQuickCalls(new ProviderRegistry(), createSettings);
 
 const PLACE = createPlacementAsker(QUICK.classify);
@@ -437,6 +442,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     services: terminals,
     origin: config.previewOrigin,
   });
+  const handoffs = new Handoffs({ engine, remote });
   terminals.applyRemoteUrls(previews);
   const http = startServer({
     engine,
@@ -469,6 +475,8 @@ async function startMachine(id: string, name: string, dataDir: string) {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
     if (effect.kind === 'share.describe') await describePreviewShare(engine, effect.taskId, context.key);
     if (effect.kind === 'preview.link') await previews.link(effect.taskId, effect.serviceId, context);
+    if (effect.kind === 'handoff.link') await handoffs.link(effect.taskId, context);
+    if (effect.kind === 'handoff.revoke') await handoffs.revoke(effect.taskId, effect.guestId);
   });
   engine.start();
   new ShareClock(engine).start();
@@ -540,10 +548,12 @@ function selectBusiestProject(engine: Engine) {
   return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
 }
 
-function listInstances(machines: Machine[]): Promise<RemoteInstance[]> {
+function listInstances(machines: Machine[], user: RemoteUser): Promise<RemoteInstance[]> {
   const now = Date.now();
+  const guest = user.id === GUEST.id;
+  const listed = guest ? machines.filter((machine) => GUEST_MACHINES.has(machine.id)) : machines;
   return Promise.all(
-    machines.map(async (machine) => ({
+    listed.map(async (machine) => ({
       id: machine.id,
       name: machine.name,
       fingerprint: await resolveKeyFingerprint(machine.publicKey),
@@ -551,7 +561,7 @@ function listInstances(machines: Machine[]): Promise<RemoteInstance[]> {
       lastSeenAt: now,
       createdAt: now - 7 * 24 * 60 * 60 * 1000,
       owner: USER,
-      role: 'owner',
+      role: guest ? 'guest' : 'owner',
     }))
   );
 }
@@ -696,6 +706,79 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
   return shares.filter((share): share is PreviewShare => Boolean(share));
 }
 
+function waitForHandoffLink(engine: Engine, taskId: string) {
+  return new Promise<string>((done) => {
+    const read = () =>
+      engine.state.tasks[taskId]?.handoff?.url ?? engine.state.tasks[taskId]?.handoff?.failure;
+    const now = read();
+    if (now) return done(now);
+    const stop = engine.subscribe(() => {
+      const url = read();
+      if (!url) return;
+      stop();
+      done(url);
+    });
+  });
+}
+
+function resolveClaimAs(claim: string) {
+  if (!claim.startsWith('http')) return claim;
+  const link = new URL(claim);
+  const back = `${link.pathname}${link.hash}`;
+  return `${ORIGIN}${SANDBOX_PATH}/as/${GUEST.login}?return=${encodeURIComponent(back)}`;
+}
+
+async function respondFreshHandoff(engine: Engine, handle: string) {
+  const task = Object.values(engine.state.tasks).find((entry) => entry.handle === handle);
+  if (!task) return new Response(`No task ${handle} on Studio.`, { status: 404 });
+  if (task.handoff) await engine.dispatch({ type: 'handoff.remove', taskId: task.id });
+  await engine.dispatch({ type: 'task.hand_off', taskId: task.id });
+  const link = await waitForHandoffLink(engine, task.id);
+  if (!link.startsWith('http')) return new Response(link, { status: 503 });
+  return respondSignInAs(GUEST.login, new URL(resolveClaimAs(link)));
+}
+
+function respondSandboxSignIn(url: URL, engine: Engine) {
+  const fresh = HANDOFF_FRESH.exec(url.pathname);
+  if (fresh) return respondFreshHandoff(engine, fresh[1] ?? '');
+  const as = SIGN_IN_AS.exec(url.pathname);
+  return as ? respondSignInAs(as[1] ?? '', url) : null;
+}
+
+async function createPreviewHandoffs(studio: Awaited<ReturnType<typeof startMachine>>) {
+  const { engine } = studio;
+  const [claimed, waiting] = Object.values(engine.state.tasks).filter(
+    (task) =>
+      task.handle && task.repoId && !task.share && !task.backlog && !task.watchHome && !isTaskSettled(task)
+  );
+  if (!(claimed && waiting)) return [];
+  await engine.dispatch({ type: 'task.hand_off', taskId: claimed.id });
+  await engine.dispatch({ type: 'handoff.claim', taskId: claimed.id, guest: GUEST });
+  await engine.dispatch(
+    { type: 'task.message', taskId: claimed.id, text: 'I have this from here. Keep going with the plan.' },
+    { guest: { taskId: claimed.id, login: GUEST.login } }
+  );
+  await engine.dispatch({ type: 'task.hand_off', taskId: waiting.id });
+  const claim = await waitForHandoffLink(engine, waiting.id);
+  const at = (task: Task) => `http://${HOST}:${studio.machine.port}/tasks/${task.handle}`;
+  return [
+    {
+      label: `${claimed.handle}, handed off to @${GUEST.login}: its banner, its facts and Activity with their message`,
+      url: at(claimed),
+    },
+    { label: `${waiting.handle}, with a hand-off link no one opened yet`, url: at(waiting) },
+    {
+      label: `${waiting.handle}'s hand-off link, signed in as @${GUEST.login} (open it in a private window)`,
+      url: resolveClaimAs(claim),
+    },
+    {
+      label: `A fresh hand-off link for ${waiting.handle} each time, signed in as @${GUEST.login} (takes it back from whoever holds it first)`,
+      url: `${ORIGIN}${SANDBOX_PATH}/handoff/${waiting.handle}`,
+    },
+    { label: `Sign in as @${USER.login} again`, url: `${ORIGIN}${SANDBOX_PATH}/as/${USER.login}` },
+  ];
+}
+
 async function createServicePreview(
   studio: Awaited<ReturnType<typeof startMachine>>
 ): Promise<{ preview: ServicePreview; shared: SharedService }> {
@@ -806,6 +889,10 @@ const SANDBOX_PATH = '/sandbox';
 const SERVICE_TOGGLE = new RegExp(`^${SANDBOX_PATH}/service/(start|stop)$`);
 
 const ENROLL = new RegExp(`^${SANDBOX_PATH}/enroll/([a-z]+)$`);
+
+const HANDOFF_FRESH = new RegExp(`^${SANDBOX_PATH}/handoff/([A-Z]+-\\d+)$`);
+
+const SIGN_IN_AS = new RegExp(`^${SANDBOX_PATH}/as/([a-z]+)$`);
 
 const TUNNEL = new RegExp(`^${SANDBOX_PATH}/tunnel/([a-z]+)(/share|/team)?$`);
 
@@ -1022,11 +1109,11 @@ function listSandboxSections(
   ];
 }
 
-async function createConnect(machine: Machine): Promise<ConnectResponse> {
+async function createConnect(machine: Machine, user: RemoteUser = USER): Promise<ConnectResponse> {
   const expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS;
   const token = await createConnectToken(machine.connectKey, {
     instanceId: machine.id,
-    userId: USER.id,
+    userId: user.id,
     expiresAt,
   });
   return {
@@ -1035,8 +1122,8 @@ async function createConnect(machine: Machine): Promise<ConnectResponse> {
   };
 }
 
-async function respondConnect(machine: Machine) {
-  return Response.json(await createConnect(machine));
+async function respondConnect(machine: Machine, user: RemoteUser) {
+  return Response.json(await createConnect(machine, user));
 }
 
 function respondNativeSignIn(url: URL) {
@@ -1054,37 +1141,73 @@ function respondNativeSignIn(url: URL) {
 
 const INVITES = new Map<string, string>();
 
-function respondInviteCreate(request: Request, machines: Machine[]) {
+const HANDOFFS = new Map<string, string>();
+
+function respondInviteCreate(request: Request, machines: Machine[], tokens: Map<string, string>) {
   const bearer = (request.headers.get('authorization') ?? '').replace(/^Bearer preview-/, '');
   const machine = machines.find((entry) => entry.id === bearer);
   if (!machine) return Response.json({ error: { code: 'revoked', message: 'Not paired.' } }, { status: 401 });
   const token = crypto.randomUUID().replaceAll('-', '');
-  INVITES.set(token, machine.id);
+  tokens.set(token, machine.id);
   const answer: InviteCreateResponse = { token };
   return Response.json(answer);
 }
 
-async function respondInviteAccept(request: Request, machines: Machine[]) {
+async function respondInviteAccept(
+  request: Request,
+  machines: Machine[],
+  user: RemoteUser,
+  tokens: Map<string, string>,
+  code: string
+) {
   const { token } = (await request.json()) as { token?: string };
-  const machine = machines.find((entry) => entry.id === INVITES.get(token ?? ''));
+  const machine = machines.find((entry) => entry.id === tokens.get(token ?? ''));
   if (!machine)
     return Response.json(
-      {
-        error: {
-          code: 'invite_invalid',
-          message: 'This invite link was turned off. Ask the machine’s owner for a new one.',
-        },
-      },
+      { error: { code, message: 'This link was turned off. Ask the machine’s owner for a new one.' } },
       { status: 404 }
     );
   const answer: InviteAcceptResponse = {
     instanceId: machine.id,
     name: machine.name,
     owner: USER,
-    user: USER,
-    connect: await createConnect(machine),
+    user,
+    connect: await createConnect(machine, user),
   };
   return Response.json(answer);
+}
+
+async function respondGuestChange(request: Request, add: boolean) {
+  const bearer = (request.headers.get('authorization') ?? '').replace(/^Bearer preview-/, '');
+  const { userId } = (await request.json()) as { userId?: string };
+  if (userId !== GUEST.id) return Response.json({ ok: true });
+  if (!add) {
+    GUEST_MACHINES.delete(bearer);
+    return Response.json({ ok: true });
+  }
+  GUEST_MACHINES.add(bearer);
+  const member: RemoteMember = { user: GUEST, addedAt: Date.now() };
+  return Response.json(member);
+}
+
+async function respondRequester(request: Request) {
+  const { userId } = (await request.json()) as { userId?: string };
+  return Response.json(userId === GUEST.id ? GUEST : USER);
+}
+
+function readPreviewUser(request: Request) {
+  const cookie = request.headers.get('cookie') ?? '';
+  return cookie.includes(`${AS_COOKIE}=${GUEST.login}`) ? GUEST : USER;
+}
+
+function respondSignInAs(login: string, url: URL) {
+  const user = login === GUEST.login ? GUEST : USER;
+  const back = url.searchParams.get('return') ?? '';
+  const location = back.startsWith('/') && !back.startsWith('//') ? back : REMOTE_PATHS.app;
+  return new Response(null, {
+    status: 302,
+    headers: { location, 'set-cookie': `${AS_COOKIE}=${user.login}; Path=/; SameSite=Lax` },
+  });
 }
 
 async function respondTeamConnect(request: Request, viewer: RemoteUser, teammates: Machine[]) {
@@ -1140,7 +1263,8 @@ function respondTeams(request: Request, url: URL, teammates: Machine[]) {
 
 function respondSession(request: Request, url: URL) {
   const { pathname } = url;
-  if (pathname === REMOTE_PATHS.session) return Response.json({ user: USER });
+  const user = readPreviewUser(request);
+  if (pathname === REMOTE_PATHS.session) return Response.json({ user });
   if (pathname === REMOTE_PATHS.signIn && url.searchParams.get('client') === REMOTE_NATIVE_CLIENT)
     return respondNativeSignIn(url);
   if (pathname === REMOTE_PATHS.signInToken && request.method === 'POST') {
@@ -1155,12 +1279,13 @@ function respondSession(request: Request, url: URL) {
 
 async function respondDashboard(request: Request, url: URL, machines: Machine[], teammates: Machine[]) {
   const { pathname } = url;
+  const user = readPreviewUser(request);
   const team = respondTeams(request, url, teammates);
   if (team) return team;
   const session = respondSession(request, url);
   if (session) return session;
   if (pathname === REMOTE_PATHS.previewOpen) return respondPreviewOpen(url, machines);
-  if (pathname === REMOTE_PATHS.instances) return Response.json(await listInstances(machines));
+  if (pathname === REMOTE_PATHS.instances) return Response.json(await listInstances(machines, user));
   if (pathname.startsWith(`${REMOTE_PATHS.pairs}/`)) {
     const [studio] = machines;
     if (pathname.endsWith('/approve')) return Response.json({ instanceId: studio?.id, name: studio?.name });
@@ -1173,12 +1298,27 @@ async function respondDashboard(request: Request, url: URL, machines: Machine[],
     });
   }
   const machine = machines.find((entry) => pathname.startsWith(`${REMOTE_PATHS.instances}/${entry.id}/`));
-  if (machine && pathname.endsWith('/connect') && request.method === 'POST') return respondConnect(machine);
+  if (machine && pathname.endsWith('/connect') && request.method === 'POST')
+    return respondConnect(machine, user);
   if (machine && (pathname.endsWith('/remove') || pathname.endsWith('/leave'))) return Response.json({});
-  if (pathname === REMOTE_PATHS.machineInvites) return respondInviteCreate(request, machines);
-  if (pathname === REMOTE_PATHS.inviteAccept) return respondInviteAccept(request, machines);
-  if (pathname === REMOTE_PATHS.machineRequester) return Response.json(USER);
-  if (pathname === REMOTE_PATHS.machineInviteRemove || pathname === REMOTE_PATHS.machineMemberRemove)
+  return respondAccess(request, pathname, machines, user);
+}
+
+function respondAccess(request: Request, pathname: string, machines: Machine[], user: RemoteUser) {
+  if (pathname === REMOTE_PATHS.machineInvites) return respondInviteCreate(request, machines, INVITES);
+  if (pathname === REMOTE_PATHS.inviteAccept)
+    return respondInviteAccept(request, machines, user, INVITES, 'invite_invalid');
+  if (pathname === REMOTE_PATHS.machineHandoffs) return respondInviteCreate(request, machines, HANDOFFS);
+  if (pathname === REMOTE_PATHS.handoffAccept)
+    return respondInviteAccept(request, machines, user, HANDOFFS, 'handoff_invalid');
+  if (pathname === REMOTE_PATHS.machineGuestAdd) return respondGuestChange(request, true);
+  if (pathname === REMOTE_PATHS.machineGuestRemove) return respondGuestChange(request, false);
+  if (pathname === REMOTE_PATHS.machineRequester) return respondRequester(request);
+  if (
+    pathname === REMOTE_PATHS.machineInviteRemove ||
+    pathname === REMOTE_PATHS.machineMemberRemove ||
+    pathname === REMOTE_PATHS.machineHandoffRemove
+  )
     return Response.json({ ok: true });
   return Response.json({ error: { code: 'not_found', message: 'No such endpoint.' } }, { status: 404 });
 }
@@ -1238,10 +1378,8 @@ async function main() {
   const { serializeSandboxPage }: SandboxPageModule = await import(
     join(ROOT, 'apps/web/src/components/sandbox/sandbox-page.tsx')
   );
-  const page = serializeSandboxPage(
-    listSandboxSections(machines, teammate.machine, shares, teamTaskPath, preview),
-    findRemoteStylesheet()
-  );
+  const sections = listSandboxSections(machines, teammate.machine, shares, teamTaskPath, preview);
+  let page = serializeSandboxPage(sections, findRemoteStylesheet());
   const world = createPreviewWorld(machines);
   Bun.serve<TunnelData>({
     port: PORT,
@@ -1256,6 +1394,8 @@ async function main() {
       if (toggled) return toggled;
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
+      const signIn = respondSandboxSignIn(url, studio.engine);
+      if (signIn) return signIn;
       const enroll = ENROLL.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) return respondEnroll(enrolling, url);
@@ -1290,6 +1430,11 @@ async function main() {
       },
     },
   });
+  const handoffs = await createPreviewHandoffs(studio);
+  page = serializeSandboxPage(
+    [...sections, { title: 'Handing off a task', links: handoffs }],
+    findRemoteStylesheet()
+  );
   console.info(`The sandbox: ${ORIGIN}${SANDBOX_PATH}`);
 }
 

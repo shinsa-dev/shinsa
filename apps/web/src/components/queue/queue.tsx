@@ -23,7 +23,7 @@ import {
   resolveSectionDefault,
   resolveSectionId,
 } from '@/lib/queue.ts';
-import { isTaskShared } from '@/lib/share/dialog.ts';
+import { hasShareMark } from '@/lib/share/dialog.ts';
 import { listBundleRows } from '@/lib/tasks/bundles.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
@@ -32,7 +32,7 @@ type Variant = 'wide' | 'compact';
 const FIRST_ROWS = 24;
 
 function renderMarks(state: ShinsaState, task: Task) {
-  const shared = isTaskShared(task);
+  const shared = hasShareMark(task);
   const bundled = listBundleRows(state, task).length > 0;
   if (!shared && !bundled) return undefined;
   return (

@@ -5,6 +5,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { SLACK_ACTIONS, type SlackActions, useSlack } from '@/lib/connection/slack.ts';
+import { useGuestMachines, useMachines } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import {
@@ -104,7 +105,13 @@ export function SlackGroup({
   );
 }
 
-export function SlackSettings() {
+function SlackReader() {
   const { snapshot, failure } = useSlack();
   return <SlackGroup snapshot={snapshot} failure={failure} onMachine={!isRemoteBuild()} />;
+}
+
+export function SlackSettings() {
+  const machines = useMachines();
+  const handed = useGuestMachines();
+  return machines.length === 0 && handed.length > 0 ? null : <SlackReader />;
 }

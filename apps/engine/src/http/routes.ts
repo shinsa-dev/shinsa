@@ -3,12 +3,15 @@ import {
   type AgentProviderInfo,
   DomainError,
   type EngineRestartWhen,
+  type GuestActor,
   KNOWN_AGENT_PROVIDERS,
   LOCAL_ONLY_CODE,
   parseUserCommand,
   type RequestOrigin,
   resolveLocalOnlyRefusal,
   resolveQueueSummary,
+  resolveScopedRefusal,
+  SCOPE_REFUSAL_CODE,
   type ShinsaEvent,
   selectTaskByReference,
 } from '@shinsa/core';
@@ -130,14 +133,23 @@ export async function dispatchUserCommand(
   body: unknown,
   clientId: string | null = null,
   classify: Classifier | null = null,
-  origin: RequestOrigin = 'local'
+  origin: RequestOrigin = 'local',
+  guest: GuestActor | null = null
 ) {
   if (engine.readOnly) throw createReadOnlyError();
   const command = parseUserCommand(body);
   const refusal = resolveLocalOnlyRefusal(origin, command);
   if (refusal) throw new DomainError(LOCAL_ONLY_CODE, refusal);
+  const outside = guest ? resolveScopedRefusal(engine.state, guest.taskId, command) : null;
+  if (outside) throw new DomainError(SCOPE_REFUSAL_CODE, outside);
   return selectCreatedTaskId(
-    await routeUserCommand(engine, command, clientId ? `client:${clientId}` : null, classify)
+    await routeUserCommand(
+      engine,
+      command,
+      clientId ? `client:${clientId}` : null,
+      classify,
+      guest ? { guest } : {}
+    )
   );
 }
 

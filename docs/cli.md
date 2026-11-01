@@ -413,6 +413,34 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa tasks hand-off
+
+Hand a task to someone by a link. The first GitHub account to open it works on this one task from Shinsa Cloud.
+
+```
+shinsa tasks hand-off <task> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.hand_off`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks hand-off-remove
+
+Take a handed-off task back. Its link stops working and whoever took it loses access at once.
+
+```
+shinsa tasks hand-off-remove <task> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `handoff.remove`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks duplicate
 
 Close a task as a duplicate of another. It is cancelled and links the task it duplicates.

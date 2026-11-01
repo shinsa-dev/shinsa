@@ -21,7 +21,8 @@ src/
 │                  or bearer
 ├── pairing.ts     Pair start and poll (the machine), the pair view and approval (you, signed in)
 ├── instances.ts   Your machines, connect tokens, removal; the machine's heartbeat, offline and removal
-├── members.ts     A machine's members: its invite, who asked through it, adding and removing members, Leave
+├── members.ts     A machine's members and guests: its invite and hand-off links, who asked through them, adding
+│                  and removing members and guests, Leave
 ├── teams.ts       Teams: made by a machine for its owner, one reusable invite, requests, members, Leave, team
 │                  connect tokens to a teammate's /team channel, and the teams in the heartbeat
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
@@ -85,8 +86,9 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   address changed, moves the tunnel's ingress there; any address but loopback is refused. Online means a heartbeat in
   the last 5 minutes and no offline call since. An unknown machine token is 401, which the machine reads as revoked.
   Removing an instance, from its owner's dashboard or by the machine, deletes its DNS record and tunnel, then the row
-  with its members and invites. The heartbeat answers `{ ok, owner, members }` (`HeartbeatResponse`), the machine's
-  owner and its members as users, so the machine keeps its own copy and forgets the devices of anyone no longer listed.
+  with its members, guests, invites and hand-off links. The heartbeat answers `{ ok, owner, members, guests, teams }`
+  (`HeartbeatResponse`), the machine's owner, its members and its guests as users, so the machine keeps its own copy
+  and forgets the devices of anyone no longer listed.
 - **Members.** A machine has one owner, the account that paired it, and up to 20 members (`MAX_INSTANCE_MEMBERS`,
   `instance_members`), who reach it exactly as its owner does. Only the machine invites, and only it lets someone
   in. `POST /__remote/machine/invites` (machine token) answers the machine's one reusable invite token, replacing the
@@ -104,6 +106,18 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   it and can `POST /__remote/instances/<id>/leave`; only the owner removes it (403 `not_owner`), and the owner cannot
   leave (409). The machine removes a member with `POST /__remote/machine/members/remove { userId }`. Shared machines
   do not count toward the 5 machines a member may pair.
+- **Guests.** A guest is someone a task was handed to (`docs/engine.md` → Handing off a task): they reach the machine
+  only for that task, which the machine enforces; here they are only an account allowed connect tokens, up to 20 a
+  machine (`MAX_INSTANCE_GUESTS`, `instance_guests`). `POST /__remote/machine/handoffs` (machine token) answers a new
+  hand-off token, one per hand-off and many at once, of which D1 keeps only the SHA-256 (`instance_handoffs`) and
+  never the task it is for; `/__remote/machine/handoffs/remove { token }` turns that one off. Whoever opens the
+  hand-off link signs in and the page sends `POST /__remote/handoffs/accept { token }`, which records that this
+  account asked and answers as an invite does (an unknown or removed token is 404 `handoff_invalid`). An invite token
+  is never a hand-off token, nor the other way round. Once the machine checked the claim it sends
+  `/__remote/machine/guests/add { userId }`: only an account that asked or is a guest already, so a retry succeeds; 409
+  `guests_full` past the limit; an owner or member stays what they are. A guest sees the machine with
+  `role: 'guest'`, gets connect tokens for it and can leave it; the machine removes one with
+  `/__remote/machine/guests/remove { userId }`.
 - **Teams** (`teams.ts`, `0005_teams.sql`; `docs/engine.md` → Teams). Who is in which team, and nothing else: no task,
   project, title or key is ever sent here. A team (`teams`) has one owner, the account whose machine made it with
   `POST /__remote/machine/teams { name }` (machine token; at most 10 owned, 409 `teams_full`), a name of 60 characters
@@ -128,7 +142,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   the stored key), and the team listing returns it on each machine (`TeamMachine.signingKey`). Teammates verify a
   machine's signed task list with it when another teammate passes it on while the machine is offline
   (`docs/engine.md` → Teams → Offline teammates). The Worker stores the public half only and never sees a list.
-- **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, for the owner or a member, answers
+- **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, for the owner, a member or a guest, answers
   `wss://t-<id>.shinsa.dev/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
   seconds), signed for the account that asked. It only keeps random traffic off the machine's endpoint; the machine
   still needs an enrolled device key.

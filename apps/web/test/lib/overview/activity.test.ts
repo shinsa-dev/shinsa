@@ -121,6 +121,19 @@ describe('activity marks', () => {
     });
   });
 
+  it('names the person a task was handed to by their GitHub login', () => {
+    const entry = {
+      at: 1,
+      actor: 'you' as const,
+      kind: 'decision' as const,
+      text: 'Approved the plan',
+      detail: null,
+      evidenceId: null,
+      byGuest: 'kai',
+    };
+    expect(resolveActivityActor(createShinsaState({}), entry)).toEqual({ label: '@kai', taskId: null });
+  });
+
   it('names the task whose agent acted on your behalf, and links to it', () => {
     const state = createShinsaState({
       tasks: [

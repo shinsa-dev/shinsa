@@ -56,6 +56,7 @@ export function resolveActivityActor(
   entry: Activity,
   owner: string | null = null
 ): ActivityActor {
+  if (entry.byGuest) return { label: `@${entry.byGuest}`, taskId: null };
   if (!entry.onBehalf) {
     return { label: entry.actor === 'you' && owner ? owner : ACTOR_LABEL[entry.actor], taskId: null };
   }

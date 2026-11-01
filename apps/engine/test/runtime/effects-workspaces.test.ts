@@ -8,6 +8,7 @@ import {
   createTempDir,
   createTestConfig,
   git,
+  NO_HANDOFFS,
   NO_PREVIEWS,
   NO_SHARES,
   writeFiles,
@@ -34,6 +35,7 @@ function setup(task: Partial<Task>, repo: Partial<ReturnType<typeof createRepo>>
   const runner = new EffectRunner(stub.engine, config, RUNS, BRIEFINGS, {
     shares: NO_SHARES,
     previews: NO_PREVIEWS,
+    handoffs: NO_HANDOFFS,
     resolveLogin: () => Promise.resolve(null),
     triage: () => Promise.resolve(null),
   });

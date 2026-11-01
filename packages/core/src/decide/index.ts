@@ -1,4 +1,6 @@
-import { isAgentCommand, type ShinsaCommand } from '../commands/index.ts';
+import { isAgentCommand, isUserCommand, type ShinsaCommand } from '../commands/index.ts';
+import { DomainError } from '../domain/index.ts';
+import { resolveScopedRefusal, SCOPE_MESSAGES, SCOPE_REFUSAL_CODE } from '../remote/scope.ts';
 import { sealDraft } from '../state/draft.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
@@ -45,6 +47,14 @@ import {
   writeFeedback,
 } from './feedback.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
+import {
+  claimHandoff,
+  failHandoff,
+  handOffTask,
+  leaveHandoff,
+  recordHandoff,
+  removeHandoff,
+} from './handoffs.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -155,7 +165,7 @@ import {
   writeWatchSource,
 } from './watchdogs.ts';
 
-export type { DecideContext, Decision } from './decider.ts';
+export type { DecideContext, Decision, GuestActor } from './decider.ts';
 export { describeFeedbackLeaks } from './feedback.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
@@ -297,6 +307,18 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return reportFeedback(decider, command);
     case 'task.share':
       return shareTask(decider, command);
+    case 'task.hand_off':
+      return handOffTask(decider, command);
+    case 'handoff.remove':
+      return removeHandoff(decider, command);
+    case 'handoff.record':
+      return recordHandoff(decider, command);
+    case 'handoff.fail':
+      return failHandoff(decider, command);
+    case 'handoff.claim':
+      return claimHandoff(decider, command);
+    case 'handoff.leave':
+      return leaveHandoff(decider, command);
     case 'task.unshare':
       return unshareTask(decider, command);
     case 'share.record':
@@ -468,7 +490,15 @@ function apply(decider: Decider, command: ShinsaCommand) {
   }
 }
 
+function assertGuestScope(state: ShinsaState, command: ShinsaCommand, taskId: string) {
+  const refusal = isUserCommand(command)
+    ? resolveScopedRefusal(state, taskId, command)
+    : SCOPE_MESSAGES.command;
+  if (refusal) throw new DomainError(SCOPE_REFUSAL_CODE, refusal);
+}
+
 export function decide(state: ShinsaState, command: ShinsaCommand, context: DecideContext): Decision {
+  if (context.guest) assertGuestScope(state, command, context.guest.taskId);
   const decider = new Decider(state, context);
   if (isAgentCommand(command)) {
     assertCurrentAttempt(decider, command.runId, command.attemptId);

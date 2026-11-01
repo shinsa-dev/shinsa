@@ -19,6 +19,7 @@ describe('the dashboard client', () => {
     await client.removeInstance('k3x9');
     await client.leaveInstance('k3x9');
     await client.acceptInvite('invite-1');
+    await client.acceptHandoff('handoff-1');
     await client.listTeams();
     await client.joinTeam('team-invite');
     await client.previewTeam('team-invite');
@@ -32,6 +33,7 @@ describe('the dashboard client', () => {
       { path: '/__remote/instances/k3x9/remove', method: 'POST', body: '{}' },
       { path: '/__remote/instances/k3x9/leave', method: 'POST', body: '{}' },
       { path: '/__remote/invites/accept', method: 'POST', body: '{"token":"invite-1"}' },
+      { path: '/__remote/handoffs/accept', method: 'POST', body: '{"token":"handoff-1"}' },
       { path: '/__remote/teams', method: 'GET', body: undefined },
       { path: '/__remote/teams/join', method: 'POST', body: '{"invite":"team-invite"}' },
       { path: '/__remote/teams/preview', method: 'POST', body: '{"invite":"team-invite"}' },
