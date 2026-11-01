@@ -4,7 +4,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { navigate, useRoute } from '@/router.ts';
 
-export const NAV_ICON_NUDGE = '-translate-y-px';
+export const NAV_ICON_NUDGE = '-translate-y-[0.5px]';
 
 type PageName = 'home' | 'tasks' | 'settings';
 
