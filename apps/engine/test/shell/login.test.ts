@@ -179,7 +179,7 @@ describe('the login shell environment', () => {
     expect(env).toMatchObject({ FAKE_FISH_VAR: 'from fish' });
   });
 
-  test('defaults to zsh in the home folder of this machine', async () => {
+  test('defaults to the platform’s shell in the home folder of this machine', async () => {
     const runs: { command: string[]; cwd: string }[] = [];
     const reader = createLoginEnvReader(
       {},
@@ -191,7 +191,9 @@ describe('the login shell environment', () => {
       }
     );
     expect(await reader.read()).toEqual({ A: '1' });
-    expect(runs).toEqual([{ command: expect.arrayContaining(['/bin/zsh', '-lic']), cwd: homedir() }]);
+    expect(runs).toEqual([
+      { command: expect.arrayContaining([resolveDefaultShell(), '-lic']), cwd: homedir() },
+    ]);
   });
 
   test('falls back to zsh on the Mac and sh elsewhere', () => {
