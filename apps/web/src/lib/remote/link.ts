@@ -62,10 +62,8 @@ export interface RemoteLinkOptions {
   onRemoved?: () => void;
 }
 
-const REMOVED_STATUSES = new Set([403, 404]);
-
 function isRemoved(error: unknown) {
-  return error instanceof DashboardError && REMOVED_STATUSES.has(error.status);
+  return error instanceof DashboardError && error.status === 404;
 }
 
 function listRequestHeaders(headers: Headers): ChannelHeaders {

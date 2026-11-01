@@ -2849,7 +2849,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `Fleet.removeMachine`): its tasks leave Home, All tasks and the queue at once, its connection stops
   (`Connection.stop`) and its channel closes, so nothing calls its connect endpoint again, and it is not listed as
   unreachable. A machine removed elsewhere, by its owner or by you on another device, or one whose owner removed you,
-  leaves the same way and its key is forgotten here once its connect call answers 404 or 403 (`RemoteLink`'s
+  leaves the same way and its key is forgotten here once its connect call answers 404 (`RemoteLink`'s
   `onRemoved`). A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
   the remote build without one of its own (signed out, no machine, no key, a failure, a pairing or link that cannot
   work) shows the same card of what remote access gives, with a button to check again or open Shinsa.

@@ -125,12 +125,12 @@ describe('the link to a remote machine', () => {
     expect(refusals).toEqual([]);
   });
 
-  it('reports the machine removed when its connect call answers not found or forbidden, and nothing else', async () => {
+  it('reports the machine removed when its connect call answers not found, and nothing else', async () => {
     const keys = await createKeyPair();
     const device: EnrolledDevice = { instanceId: 'k3x9', machineKey: 'key', keys, enrolledAt: 1 };
     const failures = [
       new DashboardError('not_found', 'No such machine.', 404),
-      new DashboardError('forbidden', 'Not yours.', 403),
+      new DashboardError('forbidden', 'This request needs an Origin.', 403),
       new DashboardError('failed', 'Shinsa Cloud is down.', 503),
       new Error('Offline.'),
     ];
@@ -144,6 +144,6 @@ describe('the link to a remote machine', () => {
       });
       await expect(link.resolveChannel()).rejects.toBe(failure);
     }
-    expect(removed).toEqual(['No such machine.', 'Not yours.']);
+    expect(removed).toEqual(['No such machine.']);
   });
 });
