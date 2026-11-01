@@ -254,4 +254,28 @@ describe('share presets', () => {
     const shared = resolveSharedTask(harness.state, task, context('everything')).task.activity;
     expect(shared[0]?.detail).toBe('Try the left pane.');
   });
+
+  test('the message that started a round keeps its text, never its attachment paths, in every preset', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const task = {
+      ...harness.task(taskId),
+      activity: [
+        {
+          at: 1,
+          actor: 'you' as const,
+          kind: 'round' as const,
+          text: 'Started round 2',
+          detail:
+            'Fix the pane.\n\n<attachments>\n<attachment kind="image" display_name="a.png" path="/Users/me/secret/a.png" url="/api/attachments/01d/a.png" />\n</attachments>',
+          evidenceId: null,
+        },
+      ],
+    };
+    for (const preset of ['default', 'everything'] as const) {
+      const shared = resolveSharedTask(harness.state, task, context(preset)).task.activity;
+      expect(shared[0]?.detail).toBe('Fix the pane.');
+      expect(JSON.stringify(shared)).not.toContain('/Users/me/secret');
+    }
+  });
 });

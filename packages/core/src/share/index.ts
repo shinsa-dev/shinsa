@@ -202,7 +202,7 @@ function isSharedActivity(entry: Activity, grants: Grants) {
 
 function resolveSharedDetail(entry: Activity) {
   if (entry.kind === 'decision' || entry.detail === null) return null;
-  return entry.kind === 'message' ? splitMessageAttachments(entry.detail).text : entry.detail;
+  return splitMessageAttachments(entry.detail).text;
 }
 
 function redactActivity(activity: readonly Activity[], grants: Grants): Activity[] {
