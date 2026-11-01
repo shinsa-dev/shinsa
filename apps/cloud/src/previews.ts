@@ -22,7 +22,6 @@ const PREVIEW_COOKIE_SECONDS = 30 * 24 * 60 * 60;
 
 const DROPPED_HEADERS = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'cdn-loop']);
 
-
 const DROPPED_PREFIXES = ['cf-', 'x-forwarded-', 'x-real-ip'];
 
 export function isPreviewHost(host: string, previewOrigin: string) {
