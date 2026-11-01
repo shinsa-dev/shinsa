@@ -248,6 +248,18 @@ export class EffectRunner {
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
       case 'share.link':
         return this.#shares.link(effect.taskId, context);
+      case 'preview.link':
+        return this.#engine
+          .dispatch(
+            {
+              type: 'preview.fail',
+              taskId: effect.taskId,
+              serviceId: effect.serviceId,
+              detail: 'This version of Shinsa cannot share previews yet.',
+            },
+            { id: `${context.key}:preview.fail` }
+          )
+          .then(() => undefined);
       case 'slack.evaluate':
         return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':

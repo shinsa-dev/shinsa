@@ -277,6 +277,21 @@ describe('routing effects', () => {
     expect(dispatched).toEqual([{ type: 'share.fail', taskId: 't1', detail: 'Turn on remote access.' }]);
     expect(commandIds).toEqual(['share-key:share.fail']);
   });
+
+  test('a preview link is refused until previews can be served', async () => {
+    const { runner, dispatched, commandIds } = setup();
+    const context = createContext();
+    await runner.apply({ kind: 'preview.link', taskId: 't1', serviceId: 'web' }, context);
+    expect(dispatched).toEqual([
+      {
+        type: 'preview.fail',
+        taskId: 't1',
+        serviceId: 'web',
+        detail: 'This version of Shinsa cannot share previews yet.',
+      },
+    ]);
+    expect(commandIds).toEqual([`${context.key}:preview.fail`]);
+  });
 });
 
 describe('the Slack effects', () => {

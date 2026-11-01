@@ -95,7 +95,19 @@ import {
   writeProject,
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
-import { expireShare, failShare, recordShare, shareTask, syncShares, unshareTask } from './shares.ts';
+import {
+  expirePreview,
+  expireShare,
+  failPreview,
+  failShare,
+  recordPreview,
+  recordShare,
+  sharePreview,
+  shareTask,
+  syncShares,
+  unsharePreview,
+  unshareTask,
+} from './shares.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import {
   answerSlackQuestion,
@@ -252,6 +264,16 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return failShare(decider, command);
     case 'share.expire':
       return expireShare(decider, command);
+    case 'preview.share':
+      return sharePreview(decider, command);
+    case 'preview.unshare':
+      return unsharePreview(decider, command);
+    case 'preview.record':
+      return recordPreview(decider, command);
+    case 'preview.fail':
+      return failPreview(decider, command);
+    case 'preview.expire':
+      return expirePreview(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':
