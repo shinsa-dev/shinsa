@@ -11,12 +11,16 @@ const DECIDED: TriageDecisions = {
 
 const FACTS: TriageFact[] = ['start', 'priority'];
 
-function whyOf(overrides: Partial<Task>, decisions: TriageDecisions | null = DECIDED) {
+function whyOf(
+  overrides: Partial<Task>,
+  decisions: TriageDecisions | null = DECIDED,
+  owner: string | null = null
+) {
   const base = createTask({ id: 'base', title: 'Fix the schema' });
   const other = createTask({ id: 'other', title: 'Add the column' });
   const task = createTask({ id: 't', pipeline: ['answer'], triageDecisions: decisions, ...overrides });
   const state = createShinsaState({ tasks: [task, base, other] });
-  return FACTS.map((fact) => resolveTriageWhy(state, task, fact));
+  return FACTS.map((fact) => resolveTriageWhy(state, task, fact, owner));
 }
 
 describe('resolveTriageWhy', () => {
@@ -62,5 +66,16 @@ describe('resolveTriageWhy', () => {
     expect(single).toBe(
       'You changed this. Shinsa chose “starts after “Fix the schema””: It needs the schema.'
     );
+  });
+
+  it('names the owner who changed a fact to anyone else looking', () => {
+    expect(whyOf({ waitsOn: ['base'], priority: 'urgent' }, DECIDED, '@kai')).toEqual([
+      '@kai changed this. Shinsa chose “starts now”: Nothing it touches is in flight.',
+      '@kai changed this. Shinsa chose “normal priority”: Nothing is waiting on it.',
+    ]);
+    expect(whyOf({}, DECIDED, '@kai')).toEqual([
+      'Shinsa chose this: Nothing it touches is in flight.',
+      'Shinsa chose this: Nothing is waiting on it.',
+    ]);
   });
 });

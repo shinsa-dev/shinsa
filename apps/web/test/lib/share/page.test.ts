@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import type { Task } from '@shinsa/core';
-import { describeSharedBy, listSharedTabs } from '@/lib/share/page.ts';
+import {
+  describeOwnerPossessive,
+  describeSharedBy,
+  listSharedTabs,
+  resolveOwnerName,
+} from '@/lib/share/page.ts';
 import { createTask } from '../../support/state.ts';
 import { createSharedTask } from './fixtures.ts';
 
@@ -43,5 +48,22 @@ describe('the shared page', () => {
   it('says you shared it when the one looking is its owner, without the @', () => {
     expect(describeSharedBy(createSharedTask(), 'mona')).toBe('Shared by you from Studio');
     expect(describeSharedBy(createSharedTask({ machine: null }), 'Mona')).toBe('Shared by you');
+  });
+
+  it('names the owner by their login to anyone else, and as the owner when the share has no login', () => {
+    expect(resolveOwnerName(createSharedTask(), null)).toBe('@mona');
+    expect(resolveOwnerName(createSharedTask(), 'octocat')).toBe('@mona');
+    expect(resolveOwnerName(createSharedTask({ owner: null }), 'mona')).toBe('The owner');
+  });
+
+  it('leaves the owner unnamed when the one looking is the owner, in any case', () => {
+    expect(resolveOwnerName(createSharedTask(), 'mona')).toBeNull();
+    expect(resolveOwnerName(createSharedTask(), 'MONA')).toBeNull();
+  });
+
+  it('makes the owner’s name possessive, and says your for the owner themselves', () => {
+    expect(describeOwnerPossessive(null)).toBe('your');
+    expect(describeOwnerPossessive('@mona')).toBe('@mona’s');
+    expect(describeOwnerPossessive('The owner')).toBe('the owner’s');
   });
 });
