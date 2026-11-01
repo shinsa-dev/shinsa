@@ -15,7 +15,6 @@ import {
 } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeMachineLoad } from '@/lib/new-task.ts';
-import { resolveOutdatedMessage } from '@/lib/remote/fleet.ts';
 import {
   listMachineRows,
   listTaskCapacityItems,
@@ -24,7 +23,7 @@ import {
   resolveTaskCapacityValue,
   TASK_CAPACITY_TITLE,
 } from '@/lib/remote/machines.ts';
-import { MACHINES_SECTION } from '@/lib/remote/mode.ts';
+import { describeOutdatedMachine, MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
@@ -145,7 +144,7 @@ function MachineItem({
           </span>
         </div>
         <Truncate className={cn('text-2xs', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
-          {outdated ? resolveOutdatedMessage(row.instance.name) : detail}
+          {outdated ? describeOutdatedMachine(row.instance.name) : detail}
         </Truncate>
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>

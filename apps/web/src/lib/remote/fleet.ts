@@ -20,6 +20,7 @@ import {
   selectEngineCommands,
   type UnreachableMachine,
 } from '@/lib/connection/socket.ts';
+import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { replaceSharedHandles } from '@/router.ts';
 
@@ -142,10 +143,6 @@ interface FleetEntry {
 const EMPTY_OWNERS: ReadonlyMap<string, string> = new Map();
 
 const NO_SHARED_HANDLES: ReadonlySet<string> = new Set();
-
-export function resolveOutdatedMessage(machineName: string) {
-  return `Update Shinsa on ${machineName} to reach it from here.`;
-}
 
 function isReachable(entry: FleetEntry) {
   return isEngineProtocolMatch(entry.member.connection.selectEngine());
@@ -316,6 +313,11 @@ export class Fleet implements ShinsaConnection {
     return this.#listedUnreachable;
   };
 
+  isEveryMachineOutdated() {
+    this.snapshot();
+    return this.#entries.length > 0 && !this.#entries.some(isReachable);
+  }
+
   selectEngine = (id?: string | null) => {
     const member = this.#memberOf(id ? this.#ownerOf(id) : null);
     return member?.connection.selectEngine() ?? null;
@@ -339,7 +341,7 @@ export class Fleet implements ShinsaConnection {
   command = (command: UserCommand, machineId?: string | null) => {
     this.snapshot();
     const outdated = this.#outdatedMember(machineId);
-    if (outdated) return Promise.reject(new Error(resolveOutdatedMessage(outdated.name)));
+    if (outdated) return Promise.reject(new Error(describeOutdatedMachine(outdated.name)));
     const member = this.#memberOf(machineId ?? resolveCommandOwner(command, this.#owners));
     if (!member) return Promise.reject(new Error('No machine is connected.'));
     if (!selectEngineCommands(member.connection.selectEngine()).has(command.type))

@@ -2679,7 +2679,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`
   today). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
-  here." in its row. Two tests keep it strict: core's `test/protocol/engine.test.ts` fails on a command in neither the
+  here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
+  machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
+  (`Fleet.isEveryMachineOutdated`, `routes/remote/fleet.tsx`). Two tests keep it strict: core's `test/protocol/engine.test.ts` fails on a command in neither the
   baseline nor `GATED_COMMANDS`, and the engine's `test/http/engine-features.test.ts` builds every `/api` route and
   fails on one in neither its frozen `BASELINE_ROUTES` nor a feature's routes (`ENGINE_FEATURE_ROUTES`,
   `src/http/features.ts`), and on a listed route the engine no longer serves. The schedule and Slack routes are built

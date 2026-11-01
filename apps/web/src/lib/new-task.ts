@@ -306,7 +306,7 @@ export function listNewTaskMachines(
         value: machine.id,
         label: machine.name,
         icon: MACHINE_ICON,
-        disabled: describeUnreachableMachine(machine.name),
+        disabled: describeUnreachableMachine(machine),
       })),
   ];
 }

@@ -17,9 +17,9 @@ import {
   mergeFleetStates,
   resolveCommandOwner,
   resolveFleetStatus,
-  resolveOutdatedMessage,
   resolveRequestOwner,
 } from '@/lib/remote/fleet.ts';
+import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveCanonicalTaskPath, resolveTaskPath } from '@/router.ts';
 import { createTask } from '../../support/state.ts';
@@ -155,18 +155,24 @@ describe('what each machine’s engine speaks', () => {
     expect(fleet.snapshot()).not.toBe(before);
     expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-laptop']);
     expect(fleet.snapshot().status).toBe('open');
+    expect(fleet.isEveryMachineOutdated()).toBe(false);
     expect(fleet.listMachines().map((machine) => machine.id)).toEqual(['m2']);
     const unreachable = fleet.listUnreachableMachines();
     expect(unreachable).toEqual([{ id: 'm1', name: 'Studio', outdated: true }]);
     expect(fleet.listUnreachableMachines()).toBe(unreachable);
     expect(fleet.command({ type: 'settings.change', patch: {} }, 'm1')).rejects.toThrow(
-      resolveOutdatedMessage('Studio')
+      describeOutdatedMachine('Studio')
     );
     await fleet.command({ type: 'settings.change', patch: {} });
     expect(studio.connection.commands).toEqual([]);
     expect(laptop.connection.commands.map((command) => command.type)).toEqual(['settings.change']);
     laptop.connection.remote = { requests: [] } as unknown as RemoteSnapshot;
     expect(fleet.selectRemote()).toBe(laptop.connection.remote);
+    laptop.connection.engine = { ...resolveEngineInfo('0.9.0'), protocol: ENGINE_PROTOCOL + 1 };
+    laptop.connection.push({ ...laptop.connection.current });
+    expect(fleet.isEveryMachineOutdated()).toBe(true);
+    expect(fleet.snapshot().state).toBeNull();
+    expect(new Fleet([]).isEveryMachineOutdated()).toBe(false);
   });
 });
 
