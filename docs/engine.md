@@ -2531,7 +2531,8 @@ projection and channel will serve teams.
   The channel is sealed with it end to end: Cloudflare carries ciphertext, and a stand-in for the machine cannot
   answer the handshake. The page and the connect answer carry `X-Robots-Tag: noindex, nofollow, noarchive` and every
   page `Referrer-Policy: no-referrer`, so no search engine keeps it and no page it links to learns it. Stop sharing
-  ends every open link at once; sharing again later keeps the same link until the machine is paired again.
+  ends every open link at once, and that link never works again: sharing the task again makes a new link with a new
+  id and key.
 - **How long it is shared.** `TaskShare.limit` is `until_done` (the default), `hour`, `day`, `week` or `none` (until you
   stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → General → Sharing, human-only,
   so an agent cannot widen it); `endsAt` is when a time limit runs out. A shared task that settles (done, merged or
