@@ -2529,7 +2529,7 @@ Only these, and they win over anything below:
         the proposed fix; the body's markdown has inline code and smart links to tasks, pull
       requests, files and branches through the shared reference components. The card you jump to has a 2px
       `primary-a3` outline 2px outside it and scrolls into view; on the Review tab the outline (and a risk row's
-      `primary-a1` wash) holds 1.5s and fades over 500ms (`useSpotlight`, `hooks/use-spotlight.ts`, the hold the chat's
+      `primary-a1` wash) holds 1.5s and fades over 500ms (the selection's `light`, `lib/review/selection.ts`, the hold the chat's
       jumped-to run uses), while `?spot=` keeps the place. In the Code tab the same card is compact: no snippet and no
       place (32). The chat's review card and the Overview's finding verdicts (`FindingText`) show a finding on the same
       `FindingNote`. There is one finding layout with Fix / Dismiss, never a

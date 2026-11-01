@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useOnHide } from '@/hooks/use-on-hide.ts';
-import { SPOTLIGHT_FADE_MS, SPOTLIGHT_HOLD_MS } from '@/hooks/use-spotlight.ts';
+import { SPOTLIGHT_FADE_MS, SPOTLIGHT_HOLD_MS } from '@/lib/review/selection.ts';
 
 const NEAR_BOTTOM = 80;
 

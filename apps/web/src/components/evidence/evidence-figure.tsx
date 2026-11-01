@@ -3,11 +3,52 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { INSET } from '@/components/layout/surface/card.ts';
 import type { useImageViewer } from '@/hooks/use-image-viewer.ts';
+import { useNearViewport } from '@/hooks/use-near-viewport.ts';
 import { describeEvidenceCaption, describeEvidencePart, type EvidenceView } from '@/lib/evidence/layout.ts';
 
 const FRAME = `${INSET} block aspect-[16/10] w-full overflow-hidden bg-bg-2`;
 
 type Viewer = ReturnType<typeof useImageViewer>;
+
+function VideoThumbnail({
+  src,
+  label,
+  index,
+  viewer,
+}: {
+  src: string;
+  label: string;
+  index: number;
+  viewer: Viewer;
+}) {
+  const { near, ref } = useNearViewport<HTMLButtonElement>();
+  return (
+    <button
+      ref={ref}
+      type='button'
+      onClick={() => viewer.show(index)}
+      aria-label={`Play ${label}`}
+      className={cn(FRAME, 'group/video relative cursor-pointer')}
+    >
+      {near && (
+        <video
+          ref={viewer.recordOrigin(index)}
+          src={src}
+          muted
+          playsInline
+          preload='metadata'
+          aria-hidden
+          className='size-full object-contain'
+        />
+      )}
+      <span className='absolute inset-0 grid place-items-center'>
+        <span className='grid size-10 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm group-hover/video:bg-black/70 group-active/video:bg-black/70'>
+          <Icon size='lg' name='IconPlay' />
+        </span>
+      </span>
+    </button>
+  );
+}
 
 function EvidenceMedia({ view, viewer }: { view: EvidenceView; viewer: Viewer }) {
   const { evidence } = view;
@@ -19,29 +60,7 @@ function EvidenceMedia({ view, viewer }: { view: EvidenceView; viewer: Viewer })
     .filter(Boolean)
     .join(' · ');
   if (view.media === 'video') {
-    return (
-      <button
-        type='button'
-        onClick={() => viewer.show(index)}
-        aria-label={`Play ${label}`}
-        className={cn(FRAME, 'group/video relative cursor-pointer')}
-      >
-        <video
-          ref={viewer.recordOrigin(index)}
-          src={evidence.uri}
-          muted
-          playsInline
-          preload='metadata'
-          aria-hidden
-          className='size-full object-contain'
-        />
-        <span className='absolute inset-0 grid place-items-center'>
-          <span className='grid size-10 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm group-hover/video:bg-black/70 group-active/video:bg-black/70'>
-            <Icon size='lg' name='IconPlay' />
-          </span>
-        </span>
-      </button>
-    );
+    return <VideoThumbnail src={evidence.uri} label={label} index={index} viewer={viewer} />;
   }
   return (
     <button
@@ -55,6 +74,7 @@ function EvidenceMedia({ view, viewer }: { view: EvidenceView; viewer: Viewer })
         src={evidence.uri}
         alt={evidence.title}
         decoding='async'
+        loading='lazy'
         className='size-full object-contain'
       />
     </button>

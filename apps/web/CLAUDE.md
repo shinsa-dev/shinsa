@@ -124,7 +124,7 @@ src/
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,
 │                        sound and notification, a menu item's answer (use-menu-answer), review draft, the Code
-│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys), the fading mark on a place you jump to (use-spotlight),
+│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys),
 │                        the Terminal page's ⌘T and ⌘W (use-terminal-keys),
 │                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
@@ -246,7 +246,8 @@ src/
     ├── review/          The Review tab (report.ts: the report read as chapters in reading order (how it's built with
     │                    how to test and the steps around the merge, key code, judgement calls with the reviewer's
     │                    disagreements, read carefully with the risks, the agent review), the stops of the index and the one in view, the point count,
-    │                    the other changed files, the review card's items; merge-steps.ts: the steps around the merge, the
+    │                    the other changed files, the review card's items; selection.ts: the stop in view and the fading mark on a place you jump to, a store each
+    │                    point and the index read their own part of, so scrolling and J and K render only what changes; merge-steps.ts: the steps around the merge, the
     │                    merge they hold, "Post-merge · 2 steps left", when a step can be ticked; testing.ts: what a step to try points at
     │                    (a link, a file in Code, a command or plain text); keys.ts: J and K; places.ts:
     │                    the paths into Code and into the Review tab), the Code tab's spot targets (spots, judgement calls, risks, findings), the fallback
