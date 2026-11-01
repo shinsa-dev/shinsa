@@ -215,6 +215,7 @@ export function PlanCard({
   const { busy, run } = useBusy<GateReply>();
   const approve = resolvePlanReply(task);
   const copy = describePlanCard(task);
+  const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={describePlanEyebrow(task)} />}
@@ -236,6 +237,7 @@ export function PlanCard({
         </FooterNote>
       }
     >
+      {reply && <ReplyReport task={task} iteration={reply} />}
       <PlanList task={task} />
     </NowFrame>
   );
@@ -255,6 +257,7 @@ export function ChangeCard({
   const { busy, run } = useBusy<'makeChange' | 'planOperation' | 'keepAsIs'>();
   const change = describeChangeGate(task, gate);
   const goOn = change.goOn;
+  const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={change.eyebrow} />}
@@ -276,6 +279,7 @@ export function ChangeCard({
         </FooterNote>
       }
     >
+      {reply && <ReplyReport task={task} iteration={reply} />}
       {task.result && <Markdown text={task.result.body} className='text-fg-4 text-xs' />}
       {change.why && <Markdown text={change.why} className='text-fg-3 text-xs' />}
       {change.request && <InsetNote label={change.requestLabel} text={change.request} />}
@@ -328,7 +332,7 @@ function ReviewCard({
   const merge = gate.type === 'merge';
   const findings = merge ? [] : task.findings;
   const checks = resolveChecksView(state, task);
-  const reply = selectShownReply(task, gate);
+  const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -483,6 +487,7 @@ export function ResultCard({
   const result = task.result;
   if (!result) return null;
   const run = result.runId ? state.runs[result.runId] : undefined;
+  const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={result.at} />} />}
@@ -494,6 +499,7 @@ export function ResultCard({
         </FooterNote>
       }
     >
+      {reply && <ReplyReport task={task} iteration={reply} />}
       <Markdown text={result.body} className='text-fg-4 text-xs' />
     </NowFrame>
   );

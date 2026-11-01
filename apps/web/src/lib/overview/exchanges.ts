@@ -4,6 +4,7 @@ import {
   type Iteration,
   type ReplyOutcome,
   resolveCurrentRound,
+  type ShinsaState,
   selectOpenIteration,
   type Task,
 } from '@shinsa/core';
@@ -32,11 +33,37 @@ function isAnswered(iteration: Iteration): iteration is AnsweredIteration {
   return iteration.reply !== null && iteration.repliedAt !== null;
 }
 
-export function selectShownReply(task: Task, gate: Gate | undefined): AnsweredIteration | null {
-  if (gate?.type !== 'review' && gate?.type !== 'merge') return null;
+type ReplyMatch = (iteration: AnsweredIteration, state: ShinsaState, task: Task) => boolean;
+
+function isPlanReply(iteration: AnsweredIteration, state: ShinsaState) {
+  return iteration.runId !== null && state.runs[iteration.runId]?.purpose === 'plan';
+}
+
+function isResultReply(iteration: AnsweredIteration, _state: ShinsaState, task: Task) {
+  return iteration.runId !== null && iteration.runId === task.result?.runId;
+}
+
+function isWorkReply(iteration: AnsweredIteration, state: ShinsaState) {
+  return !isPlanReply(iteration, state);
+}
+
+const REPLY_SHOWN_AT: Partial<Record<Gate['type'], ReplyMatch>> = {
+  plan: isPlanReply,
+  review: isWorkReply,
+  merge: isWorkReply,
+  proposal: isResultReply,
+  result: isResultReply,
+};
+
+export function selectShownReply(
+  state: ShinsaState,
+  task: Task,
+  gate: Gate | undefined
+): AnsweredIteration | null {
   const last = task.iterations?.at(-1);
-  if (!last || !isAnswered(last)) return null;
-  return last.round === resolveCurrentRound(task).number ? last : null;
+  if (!last || !isAnswered(last) || last.round !== resolveCurrentRound(task).number) return null;
+  const shows = gate ? REPLY_SHOWN_AT[gate.type] : isResultReply;
+  return shows?.(last, state, task) ? last : null;
 }
 
 export function selectWorkingRequest(task: Task): Iteration | null {
