@@ -1,4 +1,5 @@
 import { type Bytes, concatBytes, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
+import { CHANNEL_COMPRESSION, type ChannelCompression } from './frames.ts';
 import { parsePublicKey, serializePublicKey } from './keys.ts';
 
 export const REMOTE_PROTOCOL_VERSION = 1;
@@ -16,12 +17,13 @@ export interface ClientHello {
   ephemeral: string;
   enroll: string | null;
   name: string | null;
+  compression: ChannelCompression[];
 }
 
 export const DEVICE_NAME_LIMIT = 60;
 
 export type ServerHello =
-  | { type: 'welcome'; ephemeral: string }
+  | { type: 'welcome'; ephemeral: string; compression: ChannelCompression | null }
   | { type: 'pending' }
   | { type: 'refused'; reason: string };
 
@@ -74,13 +76,25 @@ export function parseClientHello(text: string): ClientHello | null {
     ephemeral: fields.ephemeral,
     enroll: fields.enroll,
     name: name || null,
+    compression:
+      Array.isArray(fields.compression) && fields.compression.includes(CHANNEL_COMPRESSION)
+        ? [CHANNEL_COMPRESSION]
+        : [],
   };
+}
+
+export function resolveCompression(hello: ClientHello): ChannelCompression | null {
+  return hello.compression.includes(CHANNEL_COMPRESSION) ? CHANNEL_COMPRESSION : null;
 }
 
 export function parseServerHello(text: string): ServerHello | null {
   const fields = readFields(text);
   if (fields?.type === 'welcome' && typeof fields.ephemeral === 'string')
-    return { type: 'welcome', ephemeral: fields.ephemeral };
+    return {
+      type: 'welcome',
+      ephemeral: fields.ephemeral,
+      compression: fields.compression === CHANNEL_COMPRESSION ? CHANNEL_COMPRESSION : null,
+    };
   if (fields?.type === 'pending') return { type: 'pending' };
   if (fields?.type === 'refused' && typeof fields.reason === 'string')
     return { type: 'refused', reason: fields.reason };
@@ -178,7 +192,8 @@ export async function createClientHello(
   device: CryptoKey,
   ephemeral: CryptoKey,
   enroll: string | null,
-  name: string | null = null
+  name: string | null = null,
+  compression: ChannelCompression[] = []
 ): Promise<ClientHello> {
   return {
     type: 'hello',
@@ -187,5 +202,6 @@ export async function createClientHello(
     ephemeral: await serializePublicKey(ephemeral),
     enroll,
     name,
+    compression,
   };
 }
