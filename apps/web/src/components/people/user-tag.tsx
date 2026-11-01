@@ -19,14 +19,14 @@ export function UserAvatar({ user, className }: { user: UserProfile; className?:
         src={user.avatarUrl}
         alt=''
         referrerPolicy='no-referrer'
-        className={cn('size-6 shrink-0 rounded-full bg-bg-a2', className)}
+        className={cn('size-6.5 shrink-0 rounded-full bg-bg-a2', className)}
       />
     );
   return (
     <span
       aria-hidden
       className={cn(
-        'grid size-6 shrink-0 place-items-center rounded-full bg-bg-a2 text-2xs text-fg-2',
+        'grid size-6.5 shrink-0 place-items-center rounded-full bg-bg-a2 text-2xs text-fg-2',
         className
       )}
     >
@@ -35,18 +35,40 @@ export function UserAvatar({ user, className }: { user: UserProfile; className?:
   );
 }
 
+export function UserIdentity({
+  user,
+  title = describeUserName(user),
+  handle = describeUserHandle(user),
+  detail,
+  className,
+}: {
+  user: UserProfile;
+  title?: string;
+  handle?: string | null;
+  detail?: string | null;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex min-w-0 items-center gap-2', className)}>
+      <UserAvatar user={user} />
+      <div className='flex min-w-0 flex-col gap-px'>
+        <Truncate className='font-medium text-fg-4 text-xs'>{title}</Truncate>
+        {(handle || detail) && (
+          <Truncate className='text-2xs text-fg-2'>
+            {handle && <span>{handle}</span>}
+            {handle && detail && ' · '}
+            {detail && <span>{detail}</span>}
+          </Truncate>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function UserCard({ user, detail }: { user: UserProfile; detail?: string }) {
-  const handle = describeUserHandle(user);
   return (
     <>
-      <div className='flex items-center gap-2 px-3 py-2.5'>
-        <UserAvatar user={user} />
-        <div className='flex min-w-0 flex-col gap-px'>
-          <Truncate className='font-medium text-fg-4 text-xs'>{describeUserName(user)}</Truncate>
-          {handle && <Truncate className='text-2xs text-fg-2'>{handle}</Truncate>}
-          {detail && <Truncate className='text-2xs text-fg-2'>{detail}</Truncate>}
-        </div>
-      </div>
+      <UserIdentity user={user} detail={detail} className='px-3 py-2.5' />
       <InfoAction label='View on GitHub' href={resolveGitHubProfileUrl(user)} />
     </>
   );
