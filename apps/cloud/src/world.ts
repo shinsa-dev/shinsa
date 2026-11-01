@@ -1,4 +1,4 @@
-import { REMOTE_APP_ORIGIN } from '@shinsa/core';
+import { PREVIEW_ORIGIN, REMOTE_APP_ORIGIN } from '@shinsa/core';
 import type { CloudStore } from './database.ts';
 
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -12,6 +12,7 @@ export interface CloudConfig {
   cloudflareAccountId: string;
   cloudflareApiToken: string;
   tunnelZone: string;
+  previewOrigin: string;
   maxInstances: number;
   slackClientId: string;
   slackClientSecret: string;
@@ -34,6 +35,7 @@ export interface CloudEnv {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
   TUNNEL_ZONE?: string;
+  PREVIEW_ZONE?: string;
   APP_ORIGIN?: string;
   MAX_INSTANCES?: string;
   SLACK_CLIENT_ID?: string;
@@ -50,6 +52,7 @@ export function resolveCloudConfig(env: CloudEnv): CloudConfig {
     cloudflareAccountId: env.CLOUDFLARE_ACCOUNT_ID ?? '',
     cloudflareApiToken: env.CLOUDFLARE_API_TOKEN ?? '',
     tunnelZone: env.TUNNEL_ZONE || 'shinsa.dev',
+    previewOrigin: env.PREVIEW_ZONE ? `https://${env.PREVIEW_ZONE}` : PREVIEW_ORIGIN,
     maxInstances: Number(env.MAX_INSTANCES) || DEFAULT_MAX_INSTANCES,
     slackClientId: env.SLACK_CLIENT_ID ?? '',
     slackClientSecret: env.SLACK_CLIENT_SECRET ?? '',

@@ -75,6 +75,7 @@ export const TEST_CONFIG: CloudConfig = {
   cloudflareAccountId: 'account-1',
   cloudflareApiToken: 'api-token',
   tunnelZone: 'shinsa.dev',
+  previewOrigin: 'https://shinsa.page',
   maxInstances: 50,
   slackClientId: 'slack-client',
   slackClientSecret: 'slack-secret',
