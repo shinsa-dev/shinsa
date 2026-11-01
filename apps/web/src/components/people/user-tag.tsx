@@ -17,17 +17,22 @@ const USER_TAG =
   'group/link cursor-pointer text-inherit no-underline outline-none hover:text-fg-4 active:text-fg-4';
 
 const USER_AVATAR = {
-  row: 'size-6.5 text-2xs',
-  inline: 'relative -top-px ms-0.5 me-1 inline-grid size-3.5 align-middle text-2xs leading-none',
+  row: 'size-6.5',
+  inline: 'relative -top-px ms-0.5 me-1 inline-grid size-4 align-middle',
 } as const;
+
+const USER_INITIAL = { row: undefined, inline: 'scale-75' } as const;
 
 function UserAvatar({ user, size }: { user: UserProfile; size: keyof typeof USER_AVATAR }) {
   const className = cn('shrink-0 rounded-full bg-bg-a2', USER_AVATAR[size]);
   if (user.avatarUrl)
     return <img src={user.avatarUrl} alt='' referrerPolicy='no-referrer' className={className} />;
   return (
-    <span aria-hidden className={cn('grid place-items-center font-medium text-fg-2', className)}>
-      {resolveUserInitial(user)}
+    <span
+      aria-hidden
+      className={cn('grid place-items-center font-medium text-2xs text-fg-2 leading-none', className)}
+    >
+      <span className={USER_INITIAL[size]}>{resolveUserInitial(user)}</span>
     </span>
   );
 }
