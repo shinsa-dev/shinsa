@@ -1,5 +1,6 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
+  type BundleConflict,
   hasStep,
   isTaskSettled,
   type MergeQueueEntry,
@@ -22,6 +23,14 @@ import {
 } from '../prompts/index.ts';
 import { describeRetryDelay } from '../state/activity.ts';
 import { listActiveRuns, listOpenBlockers, listOpenGates } from '../state/queries.ts';
+import {
+  clearBundleReady,
+  describeBundleMerge,
+  holdInBundle,
+  keepsBundleReady,
+  startBundleMerge,
+  startBundleUpdate,
+} from './bundles.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { applyEditsApproval } from './edits.ts';
 import { resetFixBudget, startFix } from './fixes.ts';
@@ -121,6 +130,7 @@ function isMerging(decider: Decider, task: Task) {
 function holdForBlockers(decider: Decider, task: Task) {
   const blockers = listOpenBlockers(decider.state, task);
   if (blockers.length === 0) return false;
+  clearBundleReady(decider, task.id);
   decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
   decider.stage(task.id, 'shipping', `waiting for ${quoteTitles(blockers)} to merge`);
   return true;
@@ -139,10 +149,15 @@ function describeQueueRemoval(previous: MergeQueueEntry, pullRequest: PullReques
 }
 
 function openMergeGate(decider: Decider, task: Task, pullRequest: PullRequest, removal: string | null) {
-  if (holdForBlockers(decider, task) || hasMergeGate(decider, task.id)) return;
+  const headSha = pullRequest.headSha ?? null;
+  if (
+    holdForBlockers(decider, task) ||
+    holdInBundle(decider, task, headSha) ||
+    hasMergeGate(decider, task.id)
+  )
+    return;
   decider.progressed(task.id);
   decider.withdrawGates(task.id, (gate) => gate.type === 'failure');
-  const headSha = pullRequest.headSha ?? null;
   if (applyEditsApproval(decider, task.id, 'merge')) {
     startMerge(decider, task.id, headSha);
     return;
@@ -152,7 +167,7 @@ function openMergeGate(decider: Decider, task: Task, pullRequest: PullRequest, r
     'awaiting_merge',
     removal ? 'removed from the merge queue' : 'pull request is clean'
   );
-  const body = [removal, task.summary].filter(Boolean).join('\n\n');
+  const body = [removal, describeBundleMerge(decider.state, task), task.summary].filter(Boolean).join('\n\n');
   decider.openGate(task.id, 'merge', task.title, body, { details: { commit: headSha } });
 }
 
@@ -193,8 +208,9 @@ export function shipReviewedWork(decider: Decider, taskId: string) {
 }
 
 export function startMerge(decider: Decider, taskId: string, headSha: string | null) {
+  const bundle = startBundleMerge(decider, taskId);
   decider.stage(taskId, 'awaiting_merge', 'merging');
-  decider.run({ kind: 'pull_request.merge', taskId, headSha });
+  decider.run({ kind: 'pull_request.merge', taskId, headSha, ...(bundle.length > 0 ? { bundle } : {}) });
 }
 
 export function recheckPullRequest(decider: Decider, taskId: string) {
@@ -287,10 +303,16 @@ function reactToWatch(
     openMergeGate(decider, decider.task(task.id), pullRequest, removal);
     return;
   }
+  const clean = !hasFixableChange(report.changes) && !needsPullRequestFix(pullRequest);
+  if (!fresh && keepsBundleReady(task, pullRequest.headSha ?? null, clean)) {
+    recordWatch(decider, task.id, report.next, report.changes);
+    return;
+  }
   if (!fresh && keepsMergeGate(decider, task, pullRequest, report)) {
     recordWatch(decider, task.id, report.next, report.changes);
     return;
   }
+  clearBundleReady(decider, task.id);
   if (watch.stopped) {
     if (pullRequest.mergeable === false && task.stage === 'shipping')
       decider.stage(task.id, 'shipping', `conflicts with ${pullRequest.base ?? 'the base branch'}`);
@@ -307,7 +329,7 @@ function reactToWatch(
     return;
   }
   recordWatch(decider, task.id, report.next, report.changes);
-  if (!hasFixableChange(report.changes) && !needsPullRequestFix(pullRequest)) {
+  if (clean) {
     decider.stage(task.id, 'shipping', 'waiting for CI');
     return;
   }
@@ -429,6 +451,36 @@ export function recordPushRetry(decider: Decider, command: CommandOf<'pull_reque
     'shipping',
     `${RETRYING_STEP[step]} again in ${delay}, attempt ${attempt + 1} of ${attempts}: ${detail}`
   );
+}
+
+function isSameBundleConflict(a: BundleConflict | null, b: BundleConflict | null) {
+  return a?.taskId === b?.taskId && a?.behindTaskId === b?.behindTaskId && a?.base === b?.base;
+}
+
+export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.record_check'>) {
+  const task = decider.task(command.taskId);
+  if (isTaskSettled(task) || !isShipping(task) || isMerging(decider, task)) return;
+  const { conflict } = command;
+  const changed = !isSameBundleConflict(task.bundleConflict ?? null, conflict);
+  if (changed) decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });
+  if (!conflict) {
+    if (changed) recheckPullRequest(decider, task.id);
+    return;
+  }
+  if (!conflict.behindTaskId) {
+    if (!changed) return;
+    decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
+    const conflicting = decider.state.tasks[conflict.taskId]?.title ?? 'A task';
+    decider.fail(
+      task.id,
+      `The bundle conflicts with ${conflict.base}`,
+      `“${conflicting}” conflicts with ${conflict.base} once the bundle merges, and every branch in the bundle already has the one below it. Resolve the conflict in that task or on GitHub, then retry.`
+    );
+    return;
+  }
+  holdInBundle(decider, decider.task(task.id), task.pullRequest?.headSha ?? null);
+  const behind = startBundleUpdate(decider, conflict);
+  if (behind) requestPush(decider, behind);
 }
 
 export function recordUpdateConflict(

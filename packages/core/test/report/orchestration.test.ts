@@ -108,6 +108,7 @@ describe('the other orchestration tools', () => {
         forkFrom: null,
         thisTaskWaits: true,
         afterThis: false,
+        stackOnThis: false,
         backlog: false,
       },
     });
@@ -120,12 +121,17 @@ describe('the other orchestration tools', () => {
         forkFrom: 'LOC-3',
         thisTaskWaits: false,
         afterThis: false,
+        stackOnThis: false,
         backlog: false,
       },
     });
     expect(validateCourierTask({ request: 'Use the new endpoint.', after_this: true })).toMatchObject({
       ok: true,
       value: { thisTaskWaits: false, afterThis: true },
+    });
+    expect(validateCourierTask({ request: 'Show it.', stack_on_this: true })).toMatchObject({
+      ok: true,
+      value: { stackOnThis: true, afterThis: false },
     });
     expect(validateCourierTask({ request: 'Later.', backlog: true })).toMatchObject({
       ok: true,

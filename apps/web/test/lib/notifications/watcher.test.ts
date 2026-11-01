@@ -109,7 +109,7 @@ describe('chiming and notifying on new decisions', () => {
 
   it('stays quiet about decisions outside the focus project, and when the focus lifts', () => {
     const { watcher, plays } = setUp({ sound: 'always' });
-    const focus = { focus: { projectId: 'a-1', until: NOW + 60_000 } };
+    const focus = { focus: { projectId: 'a-1', teamId: null, until: NOW + 60_000 } };
     watcher.observe(state([], focus));
     watcher.observe(state(['far-1'], focus));
     expect(plays).toEqual([]);

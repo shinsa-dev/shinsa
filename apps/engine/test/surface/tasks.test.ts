@@ -359,6 +359,11 @@ describe('the task commands', () => {
       { type: 'task.share', taskId: 'task-123', limit: 'day' },
       'Shared. Its link shows on the task in a moment.',
     ],
+    [
+      ['tasks', 'share', 'fix', '--preset', 'status'],
+      { type: 'task.share', taskId: 'task-123', preset: 'status' },
+      'Shared. Its link shows on the task in a moment.',
+    ],
     [['tasks', 'unshare', 'fix'], { type: 'task.unshare', taskId: 'task-123' }, 'No longer shared.'],
     [
       ['tasks', 'prioritize', 'fix', 'urgent'],
@@ -374,6 +379,16 @@ describe('the task commands', () => {
       ['tasks', 'stop-waiting', 'fix'],
       { type: 'task.wait_on', taskId: 'task-123', waitsOn: [] },
       'It no longer waits on other tasks.',
+    ],
+    [
+      ['tasks', 'stack-on', 'fix', 'search'],
+      { type: 'task.stack_on', taskId: 'task-123', stacksOn: 'task-456' },
+      'Stacked. It starts once the task below is ready to merge.',
+    ],
+    [
+      ['tasks', 'unstack', 'fix'],
+      { type: 'task.stack_on', taskId: 'task-123', stacksOn: null },
+      'It is no longer in a bundle.',
     ],
     [
       ['tasks', 'move-to-backlog', 'fix'],

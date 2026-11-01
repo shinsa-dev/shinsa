@@ -107,11 +107,11 @@ describe('Home within the focus project', () => {
         }),
       ],
       repos: [createRepo({ id: 'api', projectId: 'work' }), createRepo({ id: 'garden', projectId: 'home' })],
-      patch: { focus: { projectId: 'work', until: null } },
+      patch: { focus: { projectId: 'work', teamId: null, until: null } },
     });
     expect(listRecentlyFinished(state, NOW, NONE).map((task) => task.id)).toEqual(['work']);
     expect(listRecentConversations(state, NOW, NONE).map(({ task }) => task.id)).toEqual(['work']);
-    const everything = { ...state, focus: { projectId: null, until: null } };
+    const everything = { ...state, focus: { projectId: null, teamId: null, until: null } };
     expect(listRecentlyFinished(everything, NOW, NONE)).toHaveLength(2);
     expect(listRecentConversations(everything, NOW, NONE)).toHaveLength(2);
   });

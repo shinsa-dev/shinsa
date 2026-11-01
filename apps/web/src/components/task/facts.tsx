@@ -33,6 +33,7 @@ import { TaskServicesFact } from '@/components/services/task-menu.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { PriorityChoices } from '@/components/task/action-items.tsx';
+import { BundleFact } from '@/components/task/bundle.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { useReadOnly } from '@/components/task/read-only.tsx';
@@ -577,6 +578,7 @@ export function TaskFacts({
       <RepoFact state={state} task={task} />
       <BranchFact state={state} task={task} />
       <PullRequestFact state={state} task={task} />
+      <BundleFact state={state} task={task} />
       {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
       <MachineFact task={task} />

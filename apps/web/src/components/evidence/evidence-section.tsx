@@ -10,10 +10,17 @@ import { EvidenceText } from '@/components/evidence/evidence-text.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
+import { SKIPPED_OFFSCREEN } from '@/components/layout/surface/offscreen.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
-import { TaskPreviewLinks, useTaskPreviews } from '@/components/services/task-previews.tsx';
+import {
+  PREVIEW_LINK,
+  PreviewLinkRow,
+  TaskPreviewLinks,
+  useTaskPreviews,
+} from '@/components/services/task-previews.tsx';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
+import { useStructuralValue } from '@/hooks/use-structural-value.ts';
 import { useServerHealth } from '@/lib/connection/health.ts';
 import {
   describeEvidenceKind,
@@ -35,7 +42,7 @@ import {
   useDisclosure,
 } from '@/lib/preferences/disclosure.ts';
 import { type ChecksView, resolveChecksView, resolveEvidenceCheckRow } from '@/lib/tasks/checks.ts';
-import { listUnattachedPreviews } from '@/lib/terminal/services.ts';
+import { listUnattachedPreviews, resolveServiceLink, selectPreviewView } from '@/lib/terminal/services.ts';
 
 type Viewer = ReturnType<typeof useImageViewer>;
 
@@ -64,7 +71,7 @@ function listAttachedUris(layout: EvidenceLayout) {
 
 function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer }) {
   return (
-    <section className='flex min-w-0 flex-col gap-1.5'>
+    <section className={cn('flex min-w-0 flex-col gap-1.5', SKIPPED_OFFSCREEN)}>
       <div className='flex min-w-0 flex-col gap-px'>
         <h3 className='flex min-w-0 items-center gap-1.5 text-xs'>
           <span className='min-w-0 font-medium text-fg-4'>{entry.title}</span>
@@ -91,19 +98,21 @@ function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer })
   );
 }
 
-function LinkRow({ view }: { view: EvidenceView }) {
+function LinkRow({ view, previews }: { view: EvidenceView; previews: ServiceView[] }) {
+  const share = view.evidence.kind === 'preview' ? selectPreviewView(previews, view.evidence.uri) : null;
+  const link = (share && resolveServiceLink(share, view.evidence.uri)) ?? {
+    href: view.evidence.uri,
+    text: view.evidence.uri,
+  };
   return (
-    <a
-      href={view.evidence.uri}
-      target='_blank'
-      rel='noreferrer'
-      className='corner-superellipse/1.125 flex h-8 min-w-0 items-center gap-2 rounded-control bg-bg-2 px-2.5 text-xs hover:bg-bg-3 active:bg-bg-3'
-    >
-      <Icon size='sm' name='IconArrowUpRight' className='shrink-0 text-fg-2' />
-      <span className='shrink-0 font-medium text-fg-4'>{view.evidence.title}</span>
-      <Truncate className='min-w-0 text-2xs text-fg-2'>{view.evidence.uri}</Truncate>
-      {view.updated && <UpdatedMark text={view.updated} />}
-    </a>
+    <PreviewLinkRow share={share}>
+      <a href={link.href} target='_blank' rel='noreferrer' className={PREVIEW_LINK}>
+        <Icon size='sm' name='IconArrowUpRight' className='shrink-0 text-fg-2' />
+        <span className='shrink-0 font-medium text-fg-4'>{view.evidence.title}</span>
+        <Truncate className='min-w-0 text-2xs text-fg-2'>{link.text}</Truncate>
+        {view.updated && <UpdatedMark text={view.updated} />}
+      </a>
+    </PreviewLinkRow>
   );
 }
 
@@ -118,7 +127,15 @@ function Folder({ path }: { path: string }) {
   );
 }
 
-function Pieces({ group, viewer }: { group: EvidenceGroup; viewer: Viewer }) {
+function Pieces({
+  group,
+  viewer,
+  previews = [],
+}: {
+  group: EvidenceGroup;
+  viewer: Viewer;
+  previews?: ServiceView[];
+}) {
   const parts = group.entries.flatMap((entry) => entry.parts);
   const visuals = parts.filter(isVisualEvidence);
   const links = parts.filter((view) => view.media === 'file' || view.media === 'link');
@@ -139,7 +156,7 @@ function Pieces({ group, viewer }: { group: EvidenceGroup; viewer: Viewer }) {
       {links.length > 0 && (
         <div className='flex flex-col gap-1'>
           {links.map((view) => (
-            <LinkRow key={view.evidence.id} view={view} />
+            <LinkRow key={view.evidence.id} view={view} previews={previews} />
           ))}
         </div>
       )}
@@ -184,16 +201,18 @@ function Group({
   viewer,
   checks,
   local = [],
+  previews = [],
 }: {
   group: EvidenceGroup;
   viewer: Viewer;
   checks: ChecksView | null;
   local?: ServiceView[];
+  previews?: ServiceView[];
 }) {
   const count = group.entries.length + local.length;
   const linked = group.entries.filter((entry) => entry.check);
   return (
-    <section className='flex min-w-0 flex-col gap-1'>
+    <section className={cn('flex min-w-0 flex-col gap-1', SKIPPED_OFFSCREEN)}>
       <SectionLabel count={count > 1 ? count : undefined}>
         {local.length > 0 ? describeEvidenceKind(group.kind, count) : group.label}
       </SectionLabel>
@@ -209,6 +228,7 @@ function Group({
         <Pieces
           group={{ ...group, entries: group.entries.filter((entry) => !entry.check) }}
           viewer={viewer}
+          previews={previews}
         />
       )}
       {local.length > 0 && <TaskPreviewLinks views={local} />}
@@ -286,6 +306,7 @@ function EvidenceBody({
           viewer={viewer}
           checks={checks}
           local={group.kind === 'preview' ? local : []}
+          previews={previews}
         />
       ))}
       {!attached && <LocalPreviews views={local} />}
@@ -298,11 +319,13 @@ function EvidenceBody({
   );
 }
 
-export function EvidencePanel({
+const NO_PREVIEWS: ServiceView[] = [];
+
+export const EvidencePanel = React.memo(function EvidencePanelView({
   layout,
   persistId,
   checks = null,
-  previews = [],
+  previews = NO_PREVIEWS,
 }: {
   layout: EvidenceLayout;
   persistId: DisclosureId;
@@ -314,7 +337,7 @@ export function EvidencePanel({
       <EvidenceBody layout={layout} checks={checks} persistId={persistId} previews={previews} />
     </Panel>
   );
-}
+});
 
 export function EvidenceSection({
   state,
@@ -327,12 +350,16 @@ export function EvidenceSection({
 }) {
   const dataDir = useServerHealth()?.dataDir ?? null;
   const { evidence, runs, repos } = state;
-  const layout = React.useMemo(
-    () => resolveEvidenceLayout({ evidence, runs }, task, dataDir),
-    [evidence, runs, task, dataDir]
+  const layout = useStructuralValue(
+    React.useMemo(
+      () => resolveEvidenceLayout({ evidence, runs }, task, dataDir),
+      [evidence, runs, task, dataDir]
+    )
   );
-  const checks = React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task]);
-  const previews = useTaskPreviews(state, task);
+  const checks = useStructuralValue(
+    React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task])
+  );
+  const previews = useStructuralValue(useTaskPreviews(state, task));
   const persistId = resolveTaskDisclosureId(task.id, 'evidence', 'panel');
   if (layout.count === 0 && layout.earlier.length === 0) {
     if (!(showEmpty || previews.length > 0)) return null;

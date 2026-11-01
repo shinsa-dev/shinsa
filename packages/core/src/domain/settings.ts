@@ -37,6 +37,16 @@ export function resolveShareLimit(settings: Settings): ShareLimit {
   return settings.shareLimit ?? DEFAULT_SHARE_LIMIT;
 }
 
+export type SharePreset = 'status' | 'standard' | 'full';
+
+export const SHARE_PRESETS: readonly SharePreset[] = ['status', 'standard', 'full'];
+
+const DEFAULT_SHARE_PRESET: SharePreset = 'standard';
+
+export function resolveSharePreset(settings: Settings): SharePreset {
+  return settings.sharePreset ?? DEFAULT_SHARE_PRESET;
+}
+
 export function resolveShareEnd(limit: ShareLimit, now: number) {
   const span = SHARE_LIMIT_MS[limit];
   return span === undefined ? null : now + span;
@@ -68,6 +78,7 @@ export interface Settings {
   taskCapacity?: number | null;
   placementPolicies?: string[];
   shareLimit?: ShareLimit;
+  sharePreset?: SharePreset;
 }
 
 export const SETTINGS_KEYS = [
@@ -96,6 +107,7 @@ export const SETTINGS_KEYS = [
   'taskCapacity',
   'placementPolicies',
   'shareLimit',
+  'sharePreset',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -110,6 +122,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'agentFastModes',
   'delegationLimit',
   'shareLimit',
+  'sharePreset',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -161,6 +174,7 @@ const DEFAULT_SETTINGS: Settings = {
   taskCapacity: null,
   placementPolicies: [],
   shareLimit: DEFAULT_SHARE_LIMIT,
+  sharePreset: DEFAULT_SHARE_PRESET,
 };
 
 export function createSettings(): Settings {

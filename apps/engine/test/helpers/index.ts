@@ -4,6 +4,7 @@ import type { Repo, ShinsaEffect, ShinsaEventInput } from '@shinsa/core';
 import { ConfigStore, type ServerConfig } from '../../src/config/index.ts';
 import type { CommandRunner } from '../../src/onboarding/index.ts';
 import { Onboarding } from '../../src/onboarding/index.ts';
+import type { PreviewEffects } from '../../src/remote/previews.ts';
 import type { ShareEffects } from '../../src/remote/shares.ts';
 import { Roots } from '../../src/repos/index.ts';
 import type { Engine } from '../../src/runtime/index.ts';
@@ -165,4 +166,8 @@ export function createTestTerminal(
 
 export const NO_SHARES: ShareEffects = {
   link: () => Promise.reject(new Error('This test shares no task.')),
+};
+
+export const NO_PREVIEWS: PreviewEffects = {
+  link: () => Promise.reject(new Error('This test shares no preview.')),
 };

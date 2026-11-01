@@ -18,7 +18,7 @@ import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } f
 import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
-import type { ShareLimit } from './settings.ts';
+import type { ShareLimit, SharePreset } from './settings.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
 import type { SlackThreadLink } from './slack.ts';
 import type { PipelineStep } from './steps.ts';
@@ -229,10 +229,12 @@ export interface Project {
   description: string;
   folders: string[];
   watchSources?: WatchSource[];
+  teamIds?: string[];
 }
 
 export interface Focus {
   projectId: string | null;
+  teamId: string | null;
   until: number | null;
 }
 
@@ -398,6 +400,21 @@ export interface TaskOverlap {
   untold: string[];
 }
 
+export interface BundleReady {
+  commit: string | null;
+}
+
+export interface BundleConflict {
+  taskId: string;
+  behindTaskId: string | null;
+  base: string;
+}
+
+export interface BundlePullRequest {
+  taskId: string;
+  number: number;
+}
+
 export interface Task {
   id: string;
   handle?: string | null;
@@ -440,6 +457,10 @@ export interface Task {
   pullRequestWatch?: PullRequestWatch | null;
   pullRequestReadFailures?: number;
   waitsOn: string[];
+  stacksOn?: string | null;
+  stackBase?: string | null;
+  bundleReady?: BundleReady | null;
+  bundleConflict?: BundleConflict | null;
   note: string | null;
   origin: string | null;
   createdAt: number;
@@ -489,6 +510,7 @@ export interface Task {
   slack?: SlackThreadLink | null;
   backlog?: TaskBacklog | null;
   share?: TaskShare | null;
+  previews?: PreviewShare[];
   snoozed?: TaskSnooze | null;
   duplicate?: TaskDuplicate | null;
   iterations?: Iteration[];
@@ -518,6 +540,17 @@ export interface Iteration {
 }
 
 export interface TaskShare {
+  at: number;
+  url: string | null;
+  limit: ShareLimit;
+  preset: SharePreset;
+  endsAt: number | null;
+  failure?: string | null;
+  description?: string | null;
+}
+
+export interface PreviewShare {
+  serviceId: string;
   at: number;
   url: string | null;
   limit: ShareLimit;

@@ -2,6 +2,7 @@ import type { ChatEntry } from '../chat/protocol.ts';
 import type { UserCommand } from '../commands/index.ts';
 import type { MachineResources } from '../remote/resources.ts';
 import type { RemoteSnapshot } from '../remote/status.ts';
+import type { TeamFeedSnapshot } from '../remote/teams.ts';
 import type { AccountsSnapshot } from './accounts.ts';
 import type { EngineInfo } from './engine.ts';
 import type { StatePatch } from './patch.ts';
@@ -29,7 +30,8 @@ export type ServerMessage =
   | { type: 'engine'; engine: EngineInfo }
   | { type: 'terminals'; terminals: TerminalsSnapshot }
   | { type: 'resources'; resources: MachineResources }
-  | { type: 'remote'; remote: RemoteSnapshot };
+  | { type: 'remote'; remote: RemoteSnapshot }
+  | { type: 'teams'; teams: TeamFeedSnapshot };
 
 export function isSurface(value: unknown): value is Surface {
   return SURFACES.some((surface) => surface === value);

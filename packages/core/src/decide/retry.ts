@@ -3,12 +3,19 @@ import { resolveAgentPrompt } from '../prompts/index.ts';
 import { isTriaged } from '../state/queries.ts';
 import { retryChecks } from './checks.ts';
 import type { Decider } from './decider.ts';
+import { changeStack } from './dependencies.ts';
 import { resetFixBudget } from './fixes.ts';
 import { restartIntakeRead } from './intake.ts';
 import { resolveCurrentPhase, startPhase, startPlanning, startReview, startWork } from './lifecycle.ts';
 import { recheckPullRequest, requestPush } from './pull-requests.ts';
 import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
 import { restartWatchCheck } from './watchdogs.ts';
+
+function dropCancelledStack(decider: Decider, taskId: string) {
+  const { stacksOn } = decider.task(taskId);
+  if (stacksOn && decider.state.tasks[stacksOn]?.stage === 'cancelled')
+    changeStack(decider, taskId, null, 'you');
+}
 
 function dropCancelledDependencies(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
@@ -21,6 +28,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
   decider.withdrawGates(taskId, isPausingGate);
   decider.clearWaits(taskId);
   resetFixBudget(decider, taskId);
+  dropCancelledStack(decider, taskId);
   const hint = guidance ? `\n\nGuidance from the human: ${guidance}` : '';
   const task = decider.task(taskId);
   switch (task.stage) {

@@ -3,6 +3,13 @@ import type { Task, TaskPriority, TaskStage } from './types.ts';
 
 const TERMINAL_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>(['merged', 'done', 'cancelled']);
 
+const ROUND_FINISHED_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
+  'answered',
+  'merged',
+  'done',
+  'watching',
+]);
+
 export const RUN_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'planning',
   'building',
@@ -26,6 +33,10 @@ export const PRIORITY_RANK: Record<TaskPriority, number> = { urgent: 0, high: 1,
 
 export function isTaskSettled(task: Pick<Task, 'stage'>) {
   return TERMINAL_STAGES.has(task.stage);
+}
+
+export function isRoundFinished(task: Pick<Task, 'stage'>) {
+  return ROUND_FINISHED_STAGES.has(task.stage);
 }
 
 export function isTaskComplete(task: Task) {

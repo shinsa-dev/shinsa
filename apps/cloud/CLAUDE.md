@@ -2,8 +2,8 @@
 
 The Worker on `https://app.shinsa.dev` that remote access runs through (`docs/engine.md` → Remote access, the design in
 `docs/plans/remote-plan.md`). It signs you in with GitHub, pairs a machine, makes that machine's Cloudflare tunnel,
-lists your machines and the ones shared with you, keeps who belongs to each machine, mints the short connect token a browser opens a machine's channel with, forwards webhooks, and
-serves the web app's remote build. It never sees what a browser and a machine say to each other: the channel is
+lists your machines and the ones shared with you, keeps who belongs to each machine, mints the short connect token a browser opens a machine's channel with, forwards webhooks, passes a
+shared preview on `*.shinsa.page` through to its machine, and serves the web app's remote build. It never sees what a browser and a machine say to each other: the channel is
 sealed end to end (core's `remote/`), and the Worker holds no key that opens it. Everything it stores is in D1, and
 none of it is task data: a shared task is read live from its machine, never stored here.
 
@@ -22,8 +22,13 @@ src/
 ├── pairing.ts     Pair start and poll (the machine), the pair view and approval (you, signed in)
 ├── instances.ts   Your machines, connect tokens, removal; the machine's heartbeat, offline and removal
 ├── members.ts     A machine's members: its invite, who asked through it, adding and removing members, Leave
+├── teams.ts       Teams: made by a machine for its owner, one reusable invite, requests, members, Leave, team
+│                  connect tokens to a teammate's /team channel, and the teams in the heartbeat
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
 ├── hooks.ts       /hooks/<instance>/<schedule>/<token> forwarded to the machine's tunnel
+├── previews.ts    *.shinsa.page: the link's key or the open route's access token into a per-host cookie, then HTTP
+│                  and WebSockets forwarded to the machine's /__preview/<id> route; the open route
+│                  for a private address
 ├── slack-link.ts  Connecting Slack: Sign in with Slack, adding the app to a workspace, the link to a machine
 ├── slack.ts       Slack's events (signature, dedupe, uninstall), a mention forwarded to its author's machine with
 │                  the thread, a question's choice clicked, and the machine's links, unlink and posts
@@ -91,13 +96,33 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   that this account asked (`instance_requesters`), makes it no member, and answers the machine's id, name and owner,
   the account's user and a connect token for that account alone, so the browser can ask the machine over the sealed
   channel (an unknown or turned-off token is 404 `invite_invalid`). The machine checks who asked with `POST
-  /__remote/machine/requesters/find { userId }`, which answers the user only for an account that asked, a member or
-  the owner, and when you accept the request it sends `/__remote/machine/members/add { userId }`, which makes that
-  account a member (only one that asked; 409 `members_full` past the limit; the owner is never one) and drops its
+  /__remote/machine/requesters/find { userId }`, which answers the user only for an account that asked, a member,
+  the owner or someone who shares a team with the owner (`sharesTeam`), and when you accept the request, or give a
+  teammate the machine from Settings → Teams, it sends `/__remote/machine/members/add { userId }`, which makes that
+  account a member (only one of those; 409 `members_full` past the limit; the owner is never one) and drops its
   request row. A member sees the machine in their list with `role: 'member'` and its `owner`, gets connect tokens for
   it and can `POST /__remote/instances/<id>/leave`; only the owner removes it (403 `not_owner`), and the owner cannot
   leave (409). The machine removes a member with `POST /__remote/machine/members/remove { userId }`. Shared machines
   do not count toward the 5 machines a member may pair.
+- **Teams** (`teams.ts`, `0005_teams.sql`; `docs/engine.md` → Teams). Who is in which team, and nothing else: no task,
+  project, title or key is ever sent here. A team (`teams`) has one owner, the account whose machine made it with
+  `POST /__remote/machine/teams { name }` (machine token; at most 10 owned, 409 `teams_full`), a name of 60 characters
+  at most and up to 20 members (`team_members`, 409 `members_full`). It mirrors a machine's members: one reusable
+  invite kept as its SHA-256 (`team_invites`; `…/<team>/invite` replaces it, `…/invite/remove` turns it off), and
+  whoever opens the join link and signs in sees the team's name and owner (`POST /__remote/teams/preview { invite }`,
+  which records nothing), then sends `POST /__remote/teams/join { invite }` (or the engine
+  `/__remote/machine/teams/join`), which records that the account asked (`team_requesters`) and makes it no member
+  (404 `invite_invalid` for a link turned off). Only the owner's machine answers a request (`members/add` and
+  `requests/decline` with `{ userId }`, only of an account that asked), removes a member (`members/remove`) or the
+  team (`remove`), each 403 `not_owner` for anyone else; a member leaves with `…/leave` from the engine or
+  `/__remote/teams/<team>/leave` from a page, and the owner cannot (409). The team key lives in the join link's
+  fragment, so it never reaches the Worker. `GET /__remote/teams` lists your teams for a page; every heartbeat's
+  answer carries them as `teams` (`RemoteTeam`), with every member's machines and whether each is online, and the
+  owner's requests. A team connect token (`/__remote/teams/<team>/connect` from a page,
+  `/__remote/machine/teams/<team>/connect` from the engine, `{ instanceId }`) is minted only for the owner or a member
+  and a machine of one of them, as `wss://t-<instance>.shinsa.dev/team?token=…`, signed with that machine's connect
+  key for the account that asked; the machine then checks the account against its own copy of the members and the
+  team key's proof. Removing a user, a team or a machine cascades its rows.
 - **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, for the owner or a member, answers
   `wss://t-<id>.shinsa.dev/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
   seconds), signed for the account that asked. It only keeps random traffic off the machine's endpoint; the machine
@@ -107,6 +132,39 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   exist. The page then opens the machine's `/share?id=…` channel itself, sealed with the key in the link's fragment,
   which never reaches the Worker (`docs/engine.md` → Sharing a task). That answer and every `/share/t/…` page carry
   `X-Robots-Tag: noindex, nofollow, noarchive`.
+- **Previews on `shinsa.page`.** A shared preview (`docs/engine.md` → Sharing a preview) lives at
+  `https://<label>.shinsa.page/`, a domain apart from `shinsa.dev` so the dev server's cookies and scripts cannot reach
+  app.shinsa.dev. Until `shinsa.page` is on the Public Suffix List previews are each other's same site, so the Worker
+  drops the `Domain` attribute from every `Set-Cookie` a dev server sends (a page's script can still set one).
+  `respond` matches a preview host (`isPreviewHost`, the zone from
+  `PREVIEW_ZONE`) before any other route, so nothing of the app is ever served there, and skips the app's security
+  headers, which would break most dev servers. Listing `shinsa.page` makes each label a site of its own, which stops
+  that; until then the gap is a page's own script, never a dev server's header. `respondPreview` answers
+  `/robots.txt` on every host, the bare zone and unknown labels included, with `User-agent: *` and `Disallow: /` before
+  any key or machine is checked, so a dev server's own robots file is never served there. It then reads the instance
+  and the preview id from the label (`parsePreviewHost`); a `?key=` on any path is set as `__Host-shinsa_preview` (HttpOnly, Secure, SameSite=Lax, 30
+  days, that host only) and answered with a 303 to the same address without it, written in full so a path starting `//` stays on the host. With the cookie, a request to an
+  instance that is online is forwarded to `https://t-<instance>.shinsa.dev/__preview/<id><path>` with its method,
+  query, body and headers, minus the preview cookie, Cloudflare's and proxies' own, and with the key in
+  `x-shinsa-preview-key`; a WebSocket upgrade passes through as Cloudflare's 101. The machine checks the key. No
+  cookie, a malformed key or an unknown instance is "This preview is not shared" (404); an instance offline or
+  a tunnel that does not answer (a network error, 502, 503, 504, 530 without the machine's
+  `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`), and a tunnel
+  that fails for an online instance is logged as `[Preview] Could not reach the tunnel` or `[Preview] The tunnel did
+  not answer`; the machine's own
+  pages, such as a stopped service's, pass through with the mark removed. Every answer carries `X-Robots-Tag: noindex, nofollow, noarchive`, the Worker's own error page included.
+  Traffic is plain to the Worker: unlike a task's share, a preview is not sealed end to end, and nothing of it is kept.
+- **Private service addresses.** Every running service of a machine with remote access has a private address on
+  `shinsa.page` too (`docs/engine.md` → Private service addresses). `GET /__remote/previews/open?url=<address>`
+  (`respondPreviewOpen`, `REMOTE_PATHS.previewOpen`) takes only a `shinsa.page` preview address, sends a signed-out
+  browser to sign in and back, answers 404 to anyone but the machine's owner or a member, and otherwise redirects
+  (303) to the address with `?access=` a token from `createPreviewAccessToken` signed with the instance's connect key,
+  valid 60 seconds. On the preview host the Worker checks that token against the instance's connect key and sets a
+  new one, valid 12 hours, as `__Host-shinsa_preview_access` (HttpOnly, Secure, SameSite=Lax, that host only),
+  redirecting without it; that cookie is forwarded as `x-shinsa-preview-access`, the same way as the link key, and
+  the machine checks the token, the run and the member list on every request. Any `x-shinsa-preview-key` or
+  `x-shinsa-preview-access` a browser sends is dropped before forwarding, and the preview cookies never reach the dev
+  server. An expired or forged token is the not-shared page.
 - **Webhooks.** `/hooks/<instance>/<schedule>/<token>` is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with
@@ -156,5 +214,9 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (the app's Basic Information) and `SLACK_TOKEN_KEY`
   (32 random bytes in base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Changing `SLACK_TOKEN_KEY`
   later makes every stored bot token unreadable, so each workspace has to add the app again.
+- Previews need the `shinsa.page` zone on the same Cloudflare account, with a proxied wildcard DNS record `*` (an
+  `AAAA` to `100::` is enough, the Worker answers) so every label resolves; the `*.shinsa.page/*` route in
+  `wrangler.jsonc` sends them to the Worker, and `wrangler deploy` fails while the zone is missing. `PREVIEW_ZONE`
+  (`shinsa.page`) names it; an engine reads the same origin from `SHINSA_PREVIEW_ORIGIN`.
 - The custom domain `app.shinsa.dev` is created by `wrangler deploy` (it needs the `shinsa.dev` zone on the same
   account). The GitHub OAuth app's callback URL must be exactly `https://app.shinsa.dev/__remote/sign-in/callback`.

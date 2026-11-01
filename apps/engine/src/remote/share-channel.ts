@@ -2,19 +2,15 @@ import {
   type Bytes,
   CHANNEL_BODY_CHUNK_BYTES,
   createFrameSealer,
-  createShareWelcome,
-  deriveShareSessionKey,
   encodeText,
-  parseShareHello,
   REMOTE_KEY_ALGORITHM,
   type ShareFileType,
   type ShareLiveView,
   type ShareMessage,
   type ShareWelcome,
   serializeBase64Url,
-  serializePublicKey,
   serializeShareMessage,
-  verifyShareHello,
+  type TeamListView,
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { ChannelPeer } from './channel.ts';
@@ -32,44 +28,55 @@ export interface LiveFile {
   read: () => Promise<Bytes>;
 }
 
-export interface LiveShare {
-  view: ShareLiveView;
+export interface LiveShare<View = ShareLiveView | TeamListView> {
+  view: View;
   files: LiveFile[];
 }
 
-export interface ShareChannelHost {
-  resolveShare: (shareId: string) => { taskId: string; key: string } | null;
-  resolveLive: (taskId: string) => Promise<LiveShare>;
+interface ChannelGrant<Subject> {
+  subject: Subject;
+  welcome: ShareWelcome;
+  session: CryptoKey;
 }
 
-type ChannelState =
+export type HelloAnswer<Subject> = ChannelGrant<Subject> | { refused: string } | null;
+
+export interface ShareChannelHost<Subject> {
+  name: string;
+  authorize: (hello: string) => Promise<HelloAnswer<Subject>>;
+  resolveLive: (subject: Subject) => Promise<LiveShare>;
+}
+
+type ChannelState<Subject> =
   | { kind: 'hello' }
-  | { kind: 'open'; taskId: string; seal: (plain: Bytes) => Promise<Bytes> }
+  | { kind: 'open'; subject: Subject; seal: (plain: Bytes) => Promise<Bytes> }
   | { kind: 'closed' };
 
-function serializeViewKey(view: ShareLiveView) {
+function serializeViewKey(view: LiveShare['view']) {
   return JSON.stringify({ ...view, updatedAt: 0 });
 }
 
-export class ShareChannel {
-  readonly shareId: string;
+export async function createChannelEphemeral() {
+  return (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
+}
+
+export class ShareChannel<Subject = string> {
   readonly #peer: ChannelPeer;
-  readonly #host: ShareChannelHost;
+  readonly #host: ShareChannelHost<Subject>;
   readonly #sent = new Map<string, string>();
-  #state: ChannelState = { kind: 'hello' };
+  #state: ChannelState<Subject> = { kind: 'hello' };
   #lastView: string | null = null;
   #queue: Promise<void> = Promise.resolve();
   #pushing = false;
   #dirty = false;
 
-  constructor(peer: ChannelPeer, shareId: string, host: ShareChannelHost) {
+  constructor(peer: ChannelPeer, host: ShareChannelHost<Subject>) {
     this.#peer = peer;
-    this.shareId = shareId;
     this.#host = host;
   }
 
-  get taskId() {
-    return this.#state.kind === 'open' ? this.#state.taskId : null;
+  get subject() {
+    return this.#state.kind === 'open' ? this.#state.subject : null;
   }
 
   receive(raw: string | Bytes | ArrayBuffer | Uint8Array) {
@@ -77,7 +84,7 @@ export class ShareChannel {
       try {
         await this.#receive(raw);
       } catch (error) {
-        this.fail('The share link broke.', error);
+        this.fail(`The ${this.#host.name} broke.`, error);
       }
     });
     return this.#queue;
@@ -86,32 +93,21 @@ export class ShareChannel {
   async #receive(raw: string | Bytes | ArrayBuffer | Uint8Array) {
     if (this.#state.kind === 'closed') return;
     if (this.#state.kind === 'open') {
-      this.fail('A share link only listens.');
+      this.fail(`A ${this.#host.name} only listens.`);
       return;
     }
-    const hello = typeof raw === 'string' ? parseShareHello(raw) : null;
-    if (!hello || hello.share !== this.shareId) {
-      this.fail('The share link expects a hello first.');
+    const answer = typeof raw === 'string' && (await this.#host.authorize(raw));
+    if (!answer) {
+      this.fail(`The ${this.#host.name} expects a hello first.`);
       return;
     }
-    const share = this.#host.resolveShare(hello.share);
-    if (!(share && (await verifyShareHello(share.key, hello)))) {
-      this.#refuse(SHARE_GONE_REASON);
+    if ('refused' in answer) {
+      this.#refuse(answer.refused);
       return;
     }
-    const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
-      'deriveBits',
-    ])) as CryptoKeyPair;
-    const keys = {
-      share: hello.share,
-      clientEphemeral: hello.ephemeral,
-      serverEphemeral: await serializePublicKey(ephemeral.publicKey),
-    };
-    const session = await deriveShareSessionKey(share.key, keys, ephemeral.privateKey, hello.ephemeral);
-    const welcome = await createShareWelcome(share.key, keys);
     if (this.#state.kind !== 'hello') return;
-    this.#state = { kind: 'open', taskId: share.taskId, seal: createFrameSealer(session) };
-    this.#peer.send(JSON.stringify(welcome));
+    this.#state = { kind: 'open', subject: answer.subject, seal: createFrameSealer(answer.session) };
+    this.#peer.send(JSON.stringify(answer.welcome));
     await this.push();
   }
 
@@ -134,17 +130,17 @@ export class ShareChannel {
     try {
       while (this.#dirty && this.#state.kind === 'open') {
         this.#dirty = false;
-        await this.#pushOnce(this.#state.taskId);
+        await this.#pushOnce(this.#state.subject);
       }
     } catch (error) {
-      this.fail('The share link broke.', error);
+      this.fail(`The ${this.#host.name} broke.`, error);
     } finally {
       this.#pushing = false;
     }
   }
 
-  async #pushOnce(taskId: string) {
-    const live = await this.#host.resolveLive(taskId);
+  async #pushOnce(subject: Subject) {
+    const live = await this.#host.resolveLive(subject);
     const key = serializeViewKey(live.view);
     if (key !== this.#lastView) {
       this.#lastView = key;
@@ -176,7 +172,7 @@ export class ShareChannel {
 
   fail(reason: string, error?: unknown) {
     if (this.#state.kind === 'closed') return;
-    if (error) log.warn('[Share] Closing a share link', { reason, error: describeError(error) });
+    if (error) log.warn('[Share] Closing a live view', { reason, error: describeError(error) });
     this.#peer.close(POLICY_VIOLATION, reason);
     this.close();
   }

@@ -15,7 +15,7 @@ describe('the tunnel guard', () => {
     expect(isTunnelRequest(request('/'), null)).toBe(false);
   });
 
-  test('lets through only health, webhooks, the channel and a share link', () => {
+  test('lets through only health, webhooks, the channel, a share link and a preview', () => {
     const route = (path: string, method = 'GET') =>
       resolveTunnelRoute(request(path, { method }), new URL(`http://x${path}`));
     expect(route('/health')).toBe('health');
@@ -23,6 +23,8 @@ describe('the tunnel guard', () => {
     expect(route('/remote')).toBe('channel');
     expect(route('/remote', 'POST')).toBeNull();
     expect(route('/share')).toBe('share');
+    expect(route('/__preview/AAAAAAAAAAAAAA/assets/app.js')).toBe('preview');
+    expect(route('/__preview/AAAAAAAAAAAAAA/api', 'POST')).toBe('preview');
     expect(route('/share', 'POST')).toBeNull();
     expect(route('/api/slack/events', 'POST')).toBe('slack');
     expect(route('/api/slack/events')).toBeNull();

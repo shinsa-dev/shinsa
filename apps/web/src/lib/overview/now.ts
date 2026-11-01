@@ -60,9 +60,11 @@ export function resolveNowTitle(
   task: Task,
   waitsOn: Task[],
   current: DisplayPhase | null,
-  run: Run | undefined
+  run: Run | undefined,
+  bundle: string | null = null
 ) {
   if (waitsOn.length > 0) return describeWaitsOn(waitsOn);
+  if (bundle && !run) return bundle;
   if (task.stage === 'checking') return capitalise(task.stageReason);
   if (current?.planned) return current.title;
   if (!run && isWatchedTask(task)) return WATCHED_TITLE;

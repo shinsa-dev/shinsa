@@ -2,14 +2,17 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { createSettings, HOUR_MS, USER_COMMAND_TYPES } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import {
+  changeSharePreset,
   closeShareDialog,
   closeUnshareConfirm,
   describeShareEnd,
+  describeSharePreset,
   isTaskShared,
   listShareLimitItems,
   openShareDialog,
   openUnshareConfirm,
   resolveShareLimitChoice,
+  resolveSharePresetChoice,
   resolveShareView,
   selectLiveShare,
   shareTask,
@@ -31,7 +34,7 @@ afterEach(() => {
 
 const PAIRED = createRemoteSnapshot({ paired: true });
 
-const SHARING = { at: 1, limit: 'until_done', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'until_done', preset: 'standard', endsAt: null } as const;
 
 describe('the share dialog', () => {
   it('opens for one task from its action and closes again', () => {
@@ -67,13 +70,33 @@ describe('the share dialog', () => {
   it('shares and stops sharing with the human’s commands', async () => {
     const spies = spyOnCommands();
     const task = createTask({ id: 't' });
-    await shareTask(task, 'day');
+    await shareTask(task, 'day', 'status');
+    await changeSharePreset(task, 'standard');
     await unshareTask(task);
     expect(spies.sent.mock.calls).toEqual([
-      [{ type: 'task.share', taskId: 't', limit: 'day' }],
+      [{ type: 'task.share', taskId: 't', limit: 'day', preset: 'status' }],
+      [{ type: 'task.share', taskId: 't', preset: 'standard' }, 'Sharing as standard.'],
       [{ type: 'task.unshare', taskId: 't' }, 'Stopped sharing.'],
     ]);
     spies.restore();
+  });
+});
+
+describe('what a shared task shows', () => {
+  it('names each preset, and an unknown one by its value', () => {
+    expect(describeSharePreset('standard')).toBe('Standard');
+    expect(describeSharePreset('status')).toBe('Status');
+    expect(describeSharePreset('other' as never)).toBe('other');
+  });
+
+  it('defaults to the setting, keeps a shared task’s own, and is Default before settings load', () => {
+    const settings = { ...createSettings(), sharePreset: 'status' as const };
+    const task = createTask({ id: 't' });
+    expect(resolveSharePresetChoice(task, settings)).toBe('status');
+    expect(resolveSharePresetChoice(task, null)).toBe('standard');
+    expect(
+      resolveSharePresetChoice({ ...task, share: { ...SHARING, url: null, preset: 'standard' } }, settings)
+    ).toBe('standard');
   });
 });
 

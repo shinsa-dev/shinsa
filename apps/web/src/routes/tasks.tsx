@@ -10,19 +10,25 @@ import { CARD } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { TaskGroupSection } from '@/components/tasks/group.tsx';
 import { TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
+import { TeamTasksGroup, useFocusedTeamTasks } from '@/components/teams/tasks.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeTaskCounts, listTaskGroupSections, selectTaskGroup } from '@/lib/tasks/groups.ts';
+import { matchesTeamTaskSearch } from '@/lib/teams/feeds.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
 export function TasksPage({ state }: { state: ShinsaState }) {
   const search = useSearchParam('q') ?? '';
   const status = selectTaskGroup(useSearchParam('status'));
   const sections = listTaskGroupSections(state, search, status?.key ?? null);
+  const team = useFocusedTeamTasks(state);
+  const teammates = status === null ? team : null;
   const filtered = search.trim() !== '' || status !== null;
-  const empty = sections.every((section) => section.entries.length === 0);
+  const empty =
+    sections.every((section) => section.entries.length === 0) &&
+    !teammates?.tasks.some((entry) => matchesTeamTaskSearch(entry, search));
   useRegisterCommands(listTaskListSections(search, status?.key ?? null));
 
   return (
@@ -92,6 +98,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
               />
             ))
           )}
+          {!empty && teammates && <TeamTasksGroup focused={teammates} search={search} />}
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { createDisclosureId, readDisclosure, writeDisclosure } from '@/lib/preferences/disclosure.ts';
 import { createAgentEntry, createCallEntry } from '../../support/chat.ts';
+import { createRound } from '../../support/rounds.ts';
 import { pushTranscript, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import {
   createGate,
@@ -37,7 +38,7 @@ const FULL = createShinsaState({
     createGate({ id: 'g-merge', taskId: 'merge', type: 'merge', title: 'Merge #12' }),
     createGate({ id: 'g-garden', taskId: 'garden', type: 'review' }),
   ],
-  patch: { focus: { projectId: 'work', until: null } },
+  patch: { focus: { projectId: 'work', teamId: null, until: null } },
 });
 
 function renderQueue(props: Partial<React.ComponentProps<typeof TaskQueue>> & { state?: ShinsaState } = {}) {
@@ -150,6 +151,26 @@ describe('compact queue', () => {
       }),
     });
     expect(rowTitles()).toEqual(['Build the export', 'Ship the export docs', 'Plan the garden beds']);
+  });
+
+  it('shows a bundle’s count beside the task’s name, not in its summary line', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'root', title: 'Add the schema', stage: 'shipping', bundleReady: { commit: 'a' } }),
+        createTask({ id: 'top', title: 'Add the screen', stage: 'reviewing', stacksOn: 'root' }),
+      ],
+      gates: [createGate({ id: 'g-top', taskId: 'top', type: 'review' })],
+    });
+    renderQueue({ state });
+    const row = screen.getByRole('button', { name: /Add the screen/ });
+    const count = within(row).getByText('1/2');
+    expect(count.parentElement?.textContent).toBe('Add the screen1/2');
+  });
+
+  it('keeps a row outside a bundle on its plain title, with no mark beside it', () => {
+    renderQueue();
+    const row = screen.getByRole('button', { name: /Review the login fix/ });
+    expect(row.querySelector('.contain-inline-size')?.textContent).toBe('Review the login fix');
   });
 
   it('opens the task from a row', () => {
@@ -318,6 +339,41 @@ describe('a row’s summary line', () => {
     pushTranscript('run-ask', [createAgentEntry('Which export format?', 'interim')]);
     expect(row(/Build the export/).textContent).not.toContain('Which export format?');
     expect(row(/Build the export/).textContent).toContain('Build 1/2');
+  });
+
+  it('shows a later round at work apart from the steps an earlier round left for you', () => {
+    const fixing = createTask({
+      id: 'fix',
+      title: 'Fix the previews',
+      stage: 'fixing',
+      fixFor: 'review',
+      rounds: [createRound({ number: 1 }), createRound({ number: 2, status: 'active', endedAt: null })],
+      carriedMergeSteps: [
+        {
+          when: 'post_merge',
+          kind: 'other',
+          title: 'Submit the domain',
+          detail: 'd',
+          command: null,
+          round: 1,
+          done: false,
+        },
+      ],
+    });
+    renderQueue({
+      variant: 'wide',
+      state: createShinsaState({
+        tasks: [fixing],
+        runs: [createRun({ id: 'run-fix', taskId: 'fix', purpose: 'fix', status: 'running' })],
+        gates: [createGate({ id: 'g-after', taskId: 'fix', type: 'post_merge' })],
+      }),
+    });
+    pushTranscript('run-fix', [createAgentEntry('Reading the review findings', 'interim')]);
+    const [steps, work] = screen.getAllByRole('button', { name: /Fix the previews/ });
+    expect(steps?.textContent).toContain('Post-merge · 1 step left');
+    expect(steps?.textContent).not.toContain('Reading the review findings');
+    expect(work?.textContent).not.toContain('Post-merge');
+    expect(work?.textContent).toContain('Reading the review findings');
   });
 
   it('keeps a waiting agent’s action still', () => {

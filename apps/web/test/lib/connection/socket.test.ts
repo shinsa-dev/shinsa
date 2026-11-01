@@ -4,6 +4,7 @@ import {
   type ClientMessage,
   decide,
   ENGINE_BASELINE_COMMANDS,
+  NO_TEAM_FEED,
   resolveEngineInfo,
   resolveStatePatch,
   type ServerMessage,
@@ -14,6 +15,7 @@ import { act, renderHook } from '@testing-library/react';
 import {
   Connection,
   connection,
+  hasEngineCommand,
   replaceConnection,
   resolveUpdateMessage,
   selectEngineCommands,
@@ -538,6 +540,8 @@ describe('Connection engine', () => {
     expect(renderHook(() => useEngineCommand('task.share', 'task-1')).result.current).toBe(true);
     expect(renderHook(() => useEngineCommand('task.share', 'task-2')).result.current).toBe(false);
     expect(renderHook(() => useEngineCommand('task.retry')).result.current).toBe(true);
+    expect(hasEngineCommand('task.share', 'task-1')).toBe(true);
+    expect(hasEngineCommand('task.share', 'task-2')).toBe(false);
     expect(renderHook(() => useEngineFeature('task.share', 'task-1')).result.current).toBe(true);
     expect(renderHook(() => useEngineFeature('task.share')).result.current).toBe(false);
     expect(renderHook(() => useEngineCommands('task-1')).result.current).toBe(selectEngineCommands(engine));
@@ -594,6 +598,24 @@ describe('Connection remote access', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     subject.reset();
     expect(subject.selectRemote()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Connection team feeds', () => {
+  it('keeps the teammates’ task lists the engine pushes, tells its listeners and forgets them on reset', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => undefined);
+    subject.subscribeTeams(listener);
+    subject.start();
+    latest().open();
+    expect(subject.selectTeams()).toBe(NO_TEAM_FEED);
+    const teams = { machines: [], tasks: [] };
+    latest().receive({ type: 'teams', teams });
+    expect(subject.selectTeams()).toEqual(teams);
+    expect(listener).toHaveBeenCalledTimes(1);
+    subject.reset();
+    expect(subject.selectTeams()).toBe(NO_TEAM_FEED);
     expect(listener).toHaveBeenCalledTimes(2);
   });
 });

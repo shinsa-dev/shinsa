@@ -70,6 +70,22 @@ describe('worktrees', () => {
     expect(existsSync(join(checkout.path, 'kept.txt'))).toBe(true);
   });
 
+  test('an untouched worktree of a task stacked later is reset onto the branch below', async () => {
+    const { repo, strategy, checkout, task } = await startTask();
+    const below = await strategy.prepare(
+      repo,
+      createTask({ id: 'below', branch: 'feat/below', worktreePath: null })
+    );
+    writeFiles(below.path, { 'below.txt': 'below\n' });
+    await strategy.commit(
+      repo,
+      createTask({ id: 'below', branch: below.branch, worktreePath: below.path }),
+      'feat: below'
+    );
+    await strategy.prepare(repo, { ...task, stackBase: below.branch });
+    expect(existsSync(join(checkout.path, 'below.txt'))).toBe(true);
+  });
+
   test('a finished task’s worktree is removed; a task without a branch cannot have one', async () => {
     const { repo, strategy, checkout, task } = await startTask();
     await strategy.remove(repo, task);

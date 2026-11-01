@@ -8,6 +8,7 @@ import {
   describeMachineLoad,
   describeNewTask,
   describePlacementDone,
+  describeStackLabel,
   hasMachineChoice,
   isProjectOnMachine,
   listNewTaskMachines,
@@ -22,6 +23,7 @@ import {
   resolveShownProject,
   resolveStartChoice,
   toggleAfterTask,
+  toggleStackTask,
   useNewTaskRequest,
 } from '@/lib/new-task.ts';
 import { createMachineResources, createTaskResources } from '../support/resources.ts';
@@ -145,15 +147,20 @@ describe('the composer’s choices', () => {
     ]);
   });
 
-  it('offer four ways to start, each with its hint, and name the tasks it waits for', () => {
+  it('offer five ways to start, each with its hint, and name the tasks it waits for', () => {
     const base = createTask({ id: 'base', title: 'Fix the schema' });
     const starts = listNewTaskStarts([base], []);
     expect(starts.map((item) => [item.value, item.label, item.hint])).toEqual([
       ['auto', 'Auto start', 'Now, or after work it builds on'],
       ['now', 'Start now', 'Now, even if related work is open'],
       ['after', 'After another task…', 'When the tasks you pick finish'],
+      ['stack', 'Stack on another task…', 'When it is ready to merge, as one bundle'],
       ['backlog', 'Backlog', 'Plans now, builds when you start it'],
     ]);
+    expect(starts[3]?.disabled).toBe('No open task with a pull request to stack on');
+    const stacked = listNewTaskStarts([base], ['base'], [base])[3];
+    expect(stacked?.label).toBe('Stacked on Fix the schema');
+    expect(stacked?.disabled).toBeUndefined();
     expect(starts[2]?.disabled).toBeUndefined();
     expect(listNewTaskStarts([base], ['base'])[2]?.label).toBe('After Fix the schema');
     expect(listNewTaskStarts([], [])[2]?.disabled).toBe('No open task to wait for');
@@ -178,6 +185,37 @@ describe('the composer’s choices', () => {
     expect(resolveStartChoice({ start: 'backlog', after: [] }, open)).toEqual({
       start: 'backlog',
       after: [],
+    });
+  });
+
+  it('stack on one task at a time, and keep it only while it can still be stacked on', () => {
+    const open = [createTask({ id: 'a' }), createTask({ id: 'b' })];
+    const stackable = [createTask({ id: 'a' })];
+    expect(toggleStackTask([], 'a')).toEqual({ start: 'stack', after: ['a'] });
+    expect(toggleStackTask(['b'], 'a')).toEqual({ start: 'stack', after: ['a'] });
+    expect(toggleStackTask(['a'], 'a')).toEqual({ start: 'auto', after: [] });
+    expect(resolveStartChoice({ start: 'stack', after: ['a'] }, open, stackable)).toEqual({
+      start: 'stack',
+      after: ['a'],
+    });
+    expect(resolveStartChoice({ start: 'stack', after: ['b'] }, open, stackable)).toEqual({
+      start: 'auto',
+      after: [],
+    });
+    expect(describeStackLabel(undefined)).toBe('Stack on another task…');
+    expect(describeNewTask('stack').submit).toBe('Add');
+    expect(createNewTaskCommand('Add the screen', { ...AUTO_CHOICES, start: 'stack', after: ['a'] })).toEqual(
+      {
+        type: 'task.create',
+        request: 'Add the screen',
+        repoId: null,
+        stacksOn: 'a',
+      }
+    );
+    expect(createNewTaskCommand('Add it', { ...AUTO_CHOICES, start: 'stack', after: [] })).toEqual({
+      type: 'task.create',
+      request: 'Add it',
+      repoId: null,
     });
   });
 
@@ -216,7 +254,7 @@ describe('the project choice', () => {
   });
 
   it('shows the focus project until you pick, and No project without a focus', () => {
-    const focused = { ...state, focus: { projectId: 'p1', until: null } };
+    const focused = { ...state, focus: { projectId: 'p1', teamId: null, until: null } };
     expect(resolveShownProject(focused, 'auto')).toBe('p1');
     expect(resolveShownProject(state, 'auto')).toBe(NO_PROJECT);
     expect(resolveShownProject(focused, NO_PROJECT)).toBe(NO_PROJECT);

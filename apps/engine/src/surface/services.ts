@@ -5,14 +5,16 @@ import {
   listServiceTaskRuns,
   type ServiceState,
   type ServiceView,
+  SHARE_LIMITS,
+  type ShareLimit,
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import { type Display, describeMark, describeTable, PLAIN_DISPLAY, type Tone } from '../terminal/index.ts';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
-import { type ProjectsRead, resolveOptionalTaskId, selectProject } from './resolve.ts';
-import { defineAction, encode, readValue, type SurfaceSpec } from './spec.ts';
+import { findTaskId, type ProjectsRead, resolveOptionalTaskId, selectProject } from './resolve.ts';
+import { defineAction, defineCommand, encode, readValue, type SurfaceSpec } from './spec.ts';
 
 const PROJECT_FIELD: FieldSpec = {
   name: 'project',
@@ -35,6 +37,13 @@ const TASK_RUN_FIELD: FieldSpec = {
   name: 'task',
   kind: 'text',
   description: 'Run it for this task, in its worktree: its handle (SW-142), id or exact title.',
+};
+
+const SHARED_TASK_FIELD: FieldSpec = {
+  name: 'task',
+  kind: 'text',
+  required: true,
+  description: 'The task whose run of the service it is: its handle (SW-142), id or exact title.',
 };
 
 const STATE_TONES: Record<ServiceState, Tone> = {
@@ -162,4 +171,48 @@ export const SERVICE_SPECS: SurfaceSpec[] = [
     'Stopped'
   ),
   defineServiceAction('restart', 'Stop a service and start it again.', 'Restarted'),
+  defineCommand({
+    path: ['services', 'share'],
+    summary: 'Share a task’s run of a service by a link that opens its preview from this machine.',
+    command: 'preview.share',
+    humanOnly: true,
+    fields: [
+      ...SERVICE_FIELDS,
+      SHARED_TASK_FIELD,
+      {
+        name: 'until',
+        kind: 'choice',
+        choices: SHARE_LIMITS,
+        description:
+          'How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it or the task finishes). Left out, the shareLimit setting.',
+      },
+    ],
+    build: async (values, client) => {
+      const { service } = await findServiceView(client, values);
+      const limit = readValue(values, 'until');
+      return {
+        type: 'preview.share',
+        taskId: await findTaskId(client, readValue(values, 'task')),
+        serviceId: service.id,
+        ...(limit ? { limit: limit as ShareLimit } : {}),
+      };
+    },
+    done: () => 'Shared. Its link shows on the task in a moment.',
+  }),
+  defineCommand({
+    path: ['services', 'unshare'],
+    summary: 'Stop sharing a task’s run of a service. Its link stops working.',
+    command: 'preview.unshare',
+    humanOnly: true,
+    fields: [...SERVICE_FIELDS, SHARED_TASK_FIELD],
+    build: async (values, client) => {
+      const { service } = await findServiceView(client, values);
+      return {
+        type: 'preview.unshare',
+        taskId: await findTaskId(client, readValue(values, 'task')),
+        serviceId: service.id,
+      };
+    },
+    done: () => 'No longer shared.',
+  }),
 ];

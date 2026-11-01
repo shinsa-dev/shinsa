@@ -120,12 +120,17 @@ describe('resolveEngineFit', () => {
 });
 
 const GATED_COMMANDS: EngineCommand[] = [
+  'task.stack_on',
   'feedback.write',
   'feedback.update',
   'feedback.file',
   'feedback.dismiss',
   'task.share',
   'task.unshare',
+  'project.add_to_team',
+  'project.remove_from_team',
+  'preview.share',
+  'preview.unshare',
 ];
 
 describe('ENGINE_BASELINE_COMMANDS', () => {

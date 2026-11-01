@@ -43,11 +43,14 @@ export interface ShareStreamHandlers {
   onError: (error: Error) => void;
 }
 
-export interface ShareStreamOptions {
-  fetch?: typeof fetch;
-  createSocket?: (url: string) => ShareSocket;
+export interface ShareReceiverOptions {
   createUrl?: (blob: Blob) => string;
   revokeUrl?: (url: string) => void;
+}
+
+export interface ShareStreamOptions extends ShareReceiverOptions {
+  fetch?: typeof fetch;
+  createSocket?: (url: string) => ShareSocket;
   wait?: (ms: number, run: () => void) => () => void;
 }
 
@@ -62,7 +65,7 @@ interface Stored {
   url: string;
 }
 
-function waitFor(ms: number, run: () => void) {
+export function waitFor(ms: number, run: () => void) {
   const timer = setTimeout(run, ms);
   return () => clearTimeout(timer);
 }
@@ -79,31 +82,24 @@ async function requestConnect(link: ShareLink, read: typeof fetch) {
   return (await response.json()) as ShareConnectResponse;
 }
 
-function toBytes(data: unknown): Bytes | null {
+export function toBytes(data: unknown): Bytes | null {
   return data instanceof ArrayBuffer ? new Uint8Array(data) : null;
 }
 
-export function openShareStream(
-  link: ShareLink,
-  handlers: ShareStreamHandlers,
-  options: ShareStreamOptions = {}
+export function createShareReceiver(
+  onSource: (source: SharedSource) => void,
+  options: ShareReceiverOptions = {}
 ) {
-  const read = options.fetch ?? fetch;
-  const createSocket = options.createSocket ?? ((url: string) => new WebSocket(url) as ShareSocket);
   const createUrl = options.createUrl ?? ((blob: Blob) => URL.createObjectURL(blob));
   const revokeUrl = options.revokeUrl ?? ((url: string) => URL.revokeObjectURL(url));
-  const wait = options.wait ?? waitFor;
   const stored = new Map<string, Stored>();
+  let receiving = new Map<string, Received>();
   let view: ShareLiveView | null = null;
-  let socket: ShareSocket | null = null;
-  let cancelWait: (() => void) | null = null;
-  let attempt = 0;
-  let stopped = false;
 
   function emit() {
     if (!view) return;
     const current = view;
-    handlers.onSource({
+    onSource({
       shared: current.shared,
       updatedAt: current.updatedAt,
       resolveFileUrl: (id) => {
@@ -111,20 +107,6 @@ export function openShareStream(
         return file && file.version === current.files[id]?.version ? file.url : null;
       },
     });
-  }
-
-  function fail(error: Error) {
-    socket?.close();
-    socket = null;
-    if (stopped) return;
-    handlers.onError(error);
-    if (error instanceof ShareGoneError) {
-      stopped = true;
-      return;
-    }
-    const delay = SHARE_RETRY_MS[Math.min(attempt, SHARE_RETRY_MS.length - 1)] ?? 0;
-    attempt += 1;
-    cancelWait = wait(delay, () => void connect());
   }
 
   function store(id: string, file: Received) {
@@ -136,15 +118,14 @@ export function openShareStream(
     });
   }
 
-  function createReader(open: (frame: Bytes) => Promise<Bytes>) {
-    const receiving = new Map<string, Received>();
-    return async (frame: Bytes) => {
-      const message: ShareMessage | null = parseShareMessage(decodeText(await open(frame)));
-      if (!message) throw new Error('The machine sent something this page cannot read. Reload the page.');
+  return {
+    restart() {
+      receiving = new Map();
+    },
+    receive(message: ShareMessage) {
       switch (message.t) {
         case 'view':
           view = JSON.parse(message.data) as ShareLiveView;
-          attempt = 0;
           emit();
           return;
         case 'file':
@@ -166,6 +147,53 @@ export function openShareStream(
         case 'closed':
           throw new ShareGoneError(message.reason);
       }
+    },
+    stop() {
+      for (const file of stored.values()) revokeUrl(file.url);
+      stored.clear();
+    },
+  };
+}
+
+export const UNREADABLE_MESSAGE = 'The machine sent something this page cannot read. Reload the page.';
+
+export function openShareStream(
+  link: ShareLink,
+  handlers: ShareStreamHandlers,
+  options: ShareStreamOptions = {}
+) {
+  const read = options.fetch ?? fetch;
+  const createSocket = options.createSocket ?? ((url: string) => new WebSocket(url) as ShareSocket);
+  const wait = options.wait ?? waitFor;
+  const receiver = createShareReceiver((source) => {
+    attempt = 0;
+    handlers.onSource(source);
+  }, options);
+  let socket: ShareSocket | null = null;
+  let cancelWait: (() => void) | null = null;
+  let attempt = 0;
+  let stopped = false;
+
+  function fail(error: Error) {
+    socket?.close();
+    socket = null;
+    if (stopped) return;
+    handlers.onError(error);
+    if (error instanceof ShareGoneError) {
+      stopped = true;
+      return;
+    }
+    const delay = SHARE_RETRY_MS[Math.min(attempt, SHARE_RETRY_MS.length - 1)] ?? 0;
+    attempt += 1;
+    cancelWait = wait(delay, () => void connect());
+  }
+
+  function createReader(open: (frame: Bytes) => Promise<Bytes>) {
+    receiver.restart();
+    return async (frame: Bytes) => {
+      const message: ShareMessage | null = parseShareMessage(decodeText(await open(frame)));
+      if (!message) throw new Error(UNREADABLE_MESSAGE);
+      receiver.receive(message);
     };
   }
 
@@ -235,7 +263,6 @@ export function openShareStream(
     cancelWait?.();
     socket?.close();
     socket = null;
-    for (const file of stored.values()) revokeUrl(file.url);
-    stored.clear();
+    receiver.stop();
   };
 }

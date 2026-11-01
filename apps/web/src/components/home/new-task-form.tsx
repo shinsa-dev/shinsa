@@ -55,8 +55,10 @@ import {
   resolveShownProject,
   resolveStartChoice,
   toggleAfterTask,
+  toggleStackTask,
   useNewTaskRequest,
 } from '@/lib/new-task.ts';
+import { listStackChoices } from '@/lib/tasks/bundles.ts';
 import { listOpenTaskChoices } from '@/lib/tasks/groups.ts';
 import { resolveTaskMenuIcon } from '@/lib/tasks/status.ts';
 
@@ -102,8 +104,9 @@ function resolveForm(state: ShinsaState | null, chosen: NewTaskChoices, machines
   const project = fits || picked === 'auto' ? picked : NO_PROJECT;
   const shownProject = fits ? shown : NO_PROJECT;
   const open = state ? listOpenTaskChoices(state, null) : [];
-  const choices: NewTaskChoices = { ...chosen, project, ...resolveStartChoice(chosen, open) };
-  return { choices, shownProject, open, placement };
+  const stackable = state ? listStackChoices(state, null) : [];
+  const choices: NewTaskChoices = { ...chosen, project, ...resolveStartChoice(chosen, open, stackable) };
+  return { choices, shownProject, open, stackable, placement };
 }
 
 function AfterTaskList({
@@ -145,16 +148,19 @@ function AfterTaskList({
 function StartField({
   state,
   open,
+  stackable,
   choices,
   onChoose,
 }: {
   state: ShinsaState | null;
   open: Task[];
+  stackable: Task[];
   choices: NewTaskChoices;
   onChoose: (part: Partial<NewTaskChoices>) => void;
 }) {
-  const [picking, setPicking] = React.useState(false);
+  const [picking, setPicking] = React.useState<'after' | 'stack' | null>(null);
   const anchor = React.useRef<HTMLSpanElement>(null);
+  const stacking = picking === 'stack';
   return (
     <span ref={anchor} className='flex min-w-0'>
       <SelectField
@@ -162,22 +168,29 @@ function StartField({
         size='sm'
         variant='ghost'
         align='start'
-        items={listNewTaskStarts(open, choices.after)}
+        items={listNewTaskStarts(open, choices.after, stackable)}
         value={choices.start}
         onValueChange={(start) => {
-          if (start === 'after') setPicking(true);
+          if (start === 'after' || start === 'stack') setPicking(start);
           else onChoose({ start, after: [] });
         }}
         className='min-w-0 max-w-64'
       />
       {state && (
-        <Popover open={picking} onOpenChange={setPicking}>
+        <Popover open={picking !== null} onOpenChange={(next) => setPicking(next ? picking : null)}>
           <PopoverContent anchor={anchor} align='start' className='w-80 overflow-hidden p-0'>
             <AfterTaskList
               state={state}
-              open={open}
-              after={choices.after}
-              onToggle={(taskId) => onChoose(toggleAfterTask(choices.after, taskId))}
+              open={stacking ? stackable : open}
+              after={stacking === (choices.start === 'stack') ? choices.after : []}
+              onToggle={(taskId) => {
+                if (!stacking) {
+                  onChoose(toggleAfterTask(choices.start === 'after' ? choices.after : [], taskId));
+                  return;
+                }
+                onChoose(toggleStackTask(choices.start === 'stack' ? choices.after : [], taskId));
+                setPicking(null);
+              }}
             />
           </PopoverContent>
         </Popover>
@@ -199,7 +212,7 @@ export function NewTaskFields({
   unreachable?: UnreachableMachine[];
   onChoose: (part: Partial<NewTaskChoices>) => void;
 }) {
-  const { choices, shownProject, open, placement } = resolveForm(state, chosen, machines);
+  const { choices, shownProject, open, stackable, placement } = resolveForm(state, chosen, machines);
   const pickedMachine = choices.machine === 'auto' ? null : choices.machine;
   const projects = state
     ? listNewTaskProjects(state, connection.selectMachine).filter((item) =>
@@ -227,7 +240,7 @@ export function NewTaskFields({
           onValueChange={(project) => onChoose({ project })}
         />
       )}
-      <StartField state={state} open={open} choices={choices} onChoose={onChoose} />
+      <StartField state={state} open={open} stackable={stackable} choices={choices} onChoose={onChoose} />
       <SelectField
         label='Priority'
         size='sm'

@@ -218,6 +218,7 @@ export const ICON_NAMES = [
   'IconPriorityLow',
   'IconPriorityMedium',
   'IconPriorityUrgent',
+  'IconProgress75',
   'IconPullRequest',
   'IconPython',
   'IconRadar',
@@ -932,6 +933,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconPriorityUrgent: {
     '3': '<path fill="currentColor" fill-rule="evenodd" d="M7 3.5h10A3.5 3.5 0 0 1 20.5 7v10a3.5 3.5 0 0 1-3.5 3.5H7A3.5 3.5 0 0 1 3.5 17V7A3.5 3.5 0 0 1 7 3.5ZM11 7.25h2l-.3 6.25h-1.4ZM12 14.75a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z"/>',
+  },
+  IconProgress75: {
+    '3': '<g><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 18.25C15.4518 18.25 18.25 15.4518 18.25 12C18.25 8.54822 15.4518 5.75 12 5.75V12H5.75C5.75 15.4518 8.54822 18.25 12 18.25Z" fill="currentColor"/></g>',
   },
   IconPullRequest: {
     '3': '<g><circle cx="6" cy="6" r="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="18" r="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 8V16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 6H15C16.6569 6 18 7.34315 18 9V16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 4L12 6L14 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',

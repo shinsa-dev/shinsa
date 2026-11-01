@@ -8,6 +8,7 @@ import { PAGE_TITLE } from '@/components/layout/page/heading.tsx';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TaskQueue, WideSections } from '@/components/queue/queue.tsx';
+import { TeamTasksSection, useFocusedTeamTasks } from '@/components/teams/tasks.tsx';
 import { listHomeSections } from '@/lib/command/home.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { resolveGreeting, resolveHomeSections } from '@/lib/home.ts';
@@ -23,6 +24,7 @@ export function HomePage({ state }: { state: ShinsaState }) {
     now
   );
   useRegisterCommands(listHomeSections(state));
+  const team = useFocusedTeamTasks(state);
 
   return (
     <PageScroll>
@@ -38,6 +40,7 @@ export function HomePage({ state }: { state: ShinsaState }) {
 
         <WideSections>
           <TaskQueue state={state} variant='wide' sections={first} />
+          {team && <TeamTasksSection focused={team} />}
           <RecentlyFinished state={state} finished={finished} />
           <RecentConversations conversations={conversations} />
           <TaskQueue state={state} variant='wide' sections={last} />

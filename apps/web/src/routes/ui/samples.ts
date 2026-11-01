@@ -316,3 +316,42 @@ export function createSampleRoundsTask(now: number): Task {
     ],
   });
 }
+
+export function createSampleBundle(now: number): Task[] {
+  return [
+    createSampleTask(now, {
+      id: 'sample-bundle-schema',
+      handle: 'SW-21',
+      title: 'Add the login schema',
+      stage: 'shipping',
+      stageReason: 'ready, merges with its bundle',
+      bundleReady: { commit: 'a1b2c3d' },
+      pullRequest: {
+        ...SAMPLE_PULL_REQUEST,
+        number: 41,
+        url: 'https://github.com/superwall/paywall-next/pull/41',
+      },
+    }),
+    createSampleTask(now, {
+      id: 'sample-bundle-api',
+      handle: 'SW-22',
+      title: 'Serve the login over the API',
+      stage: 'fixing',
+      stageReason: 'fixing a failing check',
+      stacksOn: 'sample-bundle-schema',
+      pullRequest: {
+        ...SAMPLE_PULL_REQUEST,
+        number: 42,
+        url: 'https://github.com/superwall/paywall-next/pull/42',
+      },
+    }),
+    createSampleTask(now, {
+      id: 'sample-bundle-screen',
+      handle: 'SW-23',
+      title: 'Add the login screen',
+      stage: 'waiting_on_tasks',
+      stageReason: 'waiting for “Serve the login over the API” to be ready to merge',
+      stacksOn: 'sample-bundle-api',
+    }),
+  ];
+}

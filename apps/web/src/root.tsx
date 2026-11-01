@@ -8,6 +8,7 @@ import { CommandMenu } from '@/components/command/menu.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { AppFrame } from '@/components/layout/frame.tsx';
 import { OnboardingShell } from '@/components/onboarding/shell.tsx';
+import { PreviewShareDialog } from '@/components/services/preview-share-dialog.tsx';
 import { EngineBanner } from '@/components/status/engine-banner.tsx';
 import { HealthBanner } from '@/components/status/health-banner.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
@@ -38,6 +39,7 @@ import { SettingsPage } from '@/routes/settings.tsx';
 import { TaskPage } from '@/routes/task/index.tsx';
 import { Prefetch } from '@/routes/task/prefetch.tsx';
 import { TasksPage } from '@/routes/tasks.tsx';
+import { TeamTaskPage } from '@/routes/team-task.tsx';
 import { TerminalPage } from '@/routes/terminal.tsx';
 
 const UiPage = React.lazy(async () => ({ default: (await import('@/routes/ui/index.tsx')).UiPage }));
@@ -61,6 +63,10 @@ const PageView = React.memo(function PageContent({ state, route }: { state: Shin
       return <TaskPage state={state} taskId={route.reference} />;
     case 'automation':
       return <AutomationPage state={state} scheduleId={route.scheduleId} />;
+    case 'team-task':
+      return (
+        <TeamTaskPage target={{ teamId: route.teamId, instanceId: route.instanceId, taskId: route.taskId }} />
+      );
     case 'settings':
       return <SettingsPage state={state} />;
     case 'terminal':
@@ -85,7 +91,7 @@ function Pages({ state, route }: { state: ShinsaState; route: PageRoute }) {
   const pages = [
     ...listHubViews(hubs.current, warm),
     ...tasks.current,
-    ...(route.name === 'automation' ? [{ key, view, shownAt: 0 }] : []),
+    ...(route.name === 'automation' || route.name === 'team-task' ? [{ key, view, shownAt: 0 }] : []),
   ];
   return (
     <>
@@ -185,6 +191,7 @@ function App({ route }: { route: PageRoute }) {
         <ForkDialog />
         <ShareDialog />
         <UnshareConfirm />
+        <PreviewShareDialog />
         <DuplicateDialog />
       </ErrorBoundary>
     </>

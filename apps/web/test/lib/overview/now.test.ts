@@ -21,6 +21,15 @@ function phase(overrides: Partial<DisplayPhase>): DisplayPhase {
 }
 
 describe('resolveNowTitle', () => {
+  it('says what a ready bundle task waits for, unless an agent works on it', () => {
+    const task = createTask({ id: 't', stage: 'shipping', stageReason: 'ready, merges with its bundle' });
+    const wait = 'Merges with its bundle once “Add the screen” is ready';
+    expect(resolveNowTitle(task, [], null, undefined, wait)).toBe(wait);
+    expect(resolveNowTitle(task, [], null, createRun({ id: 'r', taskId: 't' }), wait)).toBe(
+      'Ready, merges with its bundle'
+    );
+  });
+
   it('leaves a finished result to its own card and names the settled stage instead', () => {
     const task = createTask({
       id: 't',

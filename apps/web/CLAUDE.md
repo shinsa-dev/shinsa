@@ -37,7 +37,8 @@ src/
 │   │                    the workspace and what happens next, or why it failed), fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
 │   │                    device, the benefits card and Check again), share.tsx (/share/t/<token>#<key>: a
-│   │                    shared task, live, read-only and without sign-in, docs/engine.md → Sharing a task)
+│   │                    shared task, live, read-only and without sign-in, docs/engine.md → Sharing a task),
+│   │                    team-join.tsx (/share/team#…: the team key kept in this browser, then the request to join)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -58,7 +59,8 @@ src/
 │                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
 │                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares; the task's composer on
 │                        Overview, Review and Chat is one draft per task, lib/chat/task-drafts.ts), review draft, the
-│                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
+│                        handle, bundle.tsx: BundleFact, the toolbar's Bundle item and its popover of the bundle's
+│                        tasks, and BundleMark, its count beside a queue row's name, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
 │                        steps left after the merge), the plan's
@@ -124,7 +126,7 @@ src/
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,
 │                        sound and notification, a menu item's answer (use-menu-answer), review draft, the Code
-│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys), the fading mark on a place you jump to (use-spotlight),
+│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys),
 │                        the Terminal page's ⌘T and ⌘W (use-terminal-keys),
 │                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
@@ -147,6 +149,15 @@ src/
     │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
     │                    components/task/share-dialog.tsx is Share task and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows
+    ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
+    │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
+    │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the
+    │                    browser's team keys in IndexedDB), join-machines.ts (the join page's projects from your own
+    │                    machines, and joining and sharing them there), channel.ts (a team channel from the browser with its own
+    │                    key, and the engine relay of one task), feeds.ts (teammates' tasks for the focused team,
+    │                    merged from the machines and the browser, without machines the dashboard reaches);
+    │                    components/teams/ (the new team dialog, the shared projects dropdown, the team rows on All tasks and Home),
+    │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
     │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
@@ -247,7 +258,8 @@ src/
     ├── review/          The Review tab (report.ts: the report read as chapters in reading order (how it's built with
     │                    how to test and the steps around the merge, key code, judgement calls with the reviewer's
     │                    disagreements, read carefully with the risks, the agent review), the stops of the index and the one in view, the point count,
-    │                    the other changed files, the review card's items; merge-steps.ts: the steps around the merge, the
+    │                    the other changed files, the review card's items; selection.ts: the stop in view and the fading mark on a place you jump to, a store each
+    │                    point and the index read their own part of, so scrolling and J and K render only what changes; merge-steps.ts: the steps around the merge, the
     │                    merge they hold, "Post-merge · 2 steps left", when a step can be ticked; testing.ts: what a step to try points at
     │                    (a link, a file in Code, a command or plain text); keys.ts: J and K; places.ts:
     │                    the paths into Code and into the Review tab), the Code tab's spot targets (spots, judgement calls, risks, findings), the fallback
@@ -266,7 +278,9 @@ src/
     │                    summaries; the row a linked test or check renders as),
     │                    Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
     │                    rounds, a round's track and pull request, how a round ships), status and tone per task (Resolving conflicts on a conflict fix),
-    │                    task groups and chains, next action, the now line,
+    │                    task groups and chains, bundles (bundles.ts: a bundle's rows and their states, the Stack on another task
+    │                    choices core accepts, the now card's wait and note; groups.ts lists a ready task with its root),
+    │                    next action, the now line,
     │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
     │                    queued messages, when they send (describeQueue, describeRoundRelease: after you merge or

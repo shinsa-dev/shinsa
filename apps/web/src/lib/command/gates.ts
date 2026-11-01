@@ -21,7 +21,12 @@ import {
   type VerdictAction,
 } from '@/lib/overview/verdicts.ts';
 import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
-import { describeMergeBlock, listTimedSteps, MERGE_STEP_TITLE } from '@/lib/review/merge-steps.ts';
+import {
+  describeMergeBlock,
+  listTimedSteps,
+  MERGE_STEP_TITLE,
+  resolveMergeLabel,
+} from '@/lib/review/merge-steps.ts';
 import { declineSecret, resolveSecretLabel } from '@/lib/secrets.ts';
 import { describePlanCard } from '@/lib/tasks/backlog.ts';
 import {
@@ -303,12 +308,12 @@ function resolveMergeBlock(task: Task) {
   return blocked ? { disabled: blocked } : {};
 }
 
-function listMergeCommands(task: Task, gate: Gate, context: GateContext): Command[] {
+function listMergeCommands(state: ShinsaState, task: Task, gate: Gate, context: GateContext): Command[] {
   return [
     {
       kind: 'run',
       id: `${resolveGateId(gate)}.merge`,
-      label: task.pullRequest ? `Merge #${task.pullRequest.number}` : 'Merge the pull request',
+      label: resolveMergeLabel(state, task, 'Merge the pull request'),
       icon: 'IconMerged',
       keywords: ['merge', 'ship', 'land', 'approve', 'pull request'],
       run: () => void replyToGate(gate, resolveApprovalReply(task, gate, 'merge')),
@@ -444,7 +449,7 @@ function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: G
     case 'review':
       return listReviewCommands(task, gate, context);
     case 'merge':
-      return listMergeCommands(task, gate, context);
+      return listMergeCommands(state, task, gate, context);
     case 'post_merge':
       return listPostMergeCommands(task, gate);
     case 'result':

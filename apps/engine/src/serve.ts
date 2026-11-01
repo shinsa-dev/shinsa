@@ -46,8 +46,12 @@ import {
   type StartConnector,
 } from './remote/index.ts';
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
+import { Previews } from './remote/previews.ts';
 import { ShareClock } from './remote/share-clock.ts';
+import { createShareDescriber } from './remote/share-describe.ts';
 import { Shares } from './remote/shares.ts';
+import { TeamFeeds } from './remote/team-feeds.ts';
+import { Teams } from './remote/teams.ts';
 import {
   createDiscoverer,
   createLoginResolver,
@@ -166,7 +170,9 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     machineName: resolveMachineName(),
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
-  const shares = new Shares({ engine, remote, evidence });
+  const shares = new Shares({ engine, remote, evidence, transcripts });
+  const teams = new Teams({ engine, remote, shares, transcripts });
+  const teamFeeds = new TeamFeeds({ remote });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
@@ -181,6 +187,8 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     readOnly: config.inspect,
     ...options.terminals,
   });
+  const previews = new Previews({ engine, remote, services: terminals, origin: config.previewOrigin });
+  terminals.applyRemoteUrls(previews);
   const ledger = new ProcessLedger(() => terminals.listServiceProcesses());
   const resources = new ResourceMonitor({ ledger, state: () => engine.state, dataDir: config.dataDir });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
@@ -228,6 +236,9 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     resources,
     remote,
     shares,
+    teams,
+    teamFeeds,
+    previews,
     slack,
     inbox,
     quick,
@@ -248,9 +259,11 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     effects: new EffectRunner(engine, config, runs, briefings, {
       workspaces: runs.workspaces,
       shares,
+      previews,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
+      describeShare: createShareDescriber(quick.write),
       draftFeedback: createFeedbackDrafter(quick.write),
       instance,
       resolveLogin,
@@ -298,6 +311,9 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     workspaces: services.runs.workspaces,
     remote: services.remote,
     shares: services.shares,
+    teams: services.teams,
+    teamFeeds: services.teamFeeds,
+    previews: services.previews,
     slack: services.slack,
     restarter: createServiceRestarter(engine, {
       byService: options.byService ?? false,
@@ -324,6 +340,7 @@ async function startWork(services: Services) {
   await effects.recover();
   services.inbox.start();
   services.remote.start();
+  services.teamFeeds.start();
   services.briefings.schedule();
   services.extensions.syncSnapshot();
   void services.extensions.syncUsage();
@@ -366,6 +383,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
       services.schedules.stop();
       services.accounts.stop();
       services.versions.stop();
+      services.teamFeeds.stop();
       services.resources.stop();
       await services.remote.stop();
       await services.terminals.stop();

@@ -59,6 +59,10 @@ describe('resolveEffectLane', () => {
   test("making a share link runs in its own lane, so it never waits behind the task's work", () => {
     expect(resolveEffectLane({ kind: 'share.link', taskId: 't' })).toBe('share:t');
     expect(resolveEffectKey({ kind: 'share.link', taskId: 't' }, 4)).toBe('share.link:t:4');
+    expect(resolveEffectLane({ kind: 'preview.link', taskId: 't', serviceId: 'web' })).toBe('preview:t');
+    expect(resolveEffectKey({ kind: 'preview.link', taskId: 't', serviceId: 'web' }, 4)).toBe(
+      'preview.link:t:web:4'
+    );
   });
 
   test('everything else about a task runs in order in the task lane, except the cheap watch in its side lane', () => {

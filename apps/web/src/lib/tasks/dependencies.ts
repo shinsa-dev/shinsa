@@ -21,9 +21,11 @@ export function describeWaitsOnHeading(task: Task, waitsOn: Task[]) {
 }
 
 export function listDependencyChoices(state: ShinsaState, task: Task) {
-  const open = listOpenTaskChoices(state, task);
+  const open = listOpenTaskChoices(state, task).filter((choice) => choice.id !== task.stacksOn);
   const shown = new Set(open.map((choice) => choice.id));
-  const current = listPendingDependencies(state, task).filter((dependency) => !shown.has(dependency.id));
+  const current = listPendingDependencies(state, task).filter(
+    (dependency) => !shown.has(dependency.id) && dependency.id !== task.stacksOn
+  );
   const unchosen = (candidate: Task) => Number(!task.waitsOn.includes(candidate.id));
   return [...current, ...open].sort((a, b) => unchosen(a) - unchosen(b) || compareTasks(a, b));
 }

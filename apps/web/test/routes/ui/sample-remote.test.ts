@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createState } from '@shinsa/core';
+import { createState, DEVELOPMENT_VERSION, NO_TEAM_FEED } from '@shinsa/core';
 import {
   createSampleFleet,
   createSampleMachineServices,
@@ -34,7 +34,7 @@ describe('the /ui remote access samples', () => {
   });
 
   it('list four machines, one shared, two of them added in this browser, and refuse every change', async () => {
-    const { dashboard, devices } = createSampleMachineServices(NOW);
+    const { dashboard, devices, teamKeys } = createSampleMachineServices(NOW);
     const macs = await dashboard.listInstances();
     expect(macs.map((mac) => [mac.name, mac.online, mac.lastSeenAt])).toEqual([
       ['Studio', true, NOW],
@@ -46,6 +46,11 @@ describe('the /ui remote access samples', () => {
     expect(await devices.selectDevice('w4t8')).toBeNull();
     expect(await devices.listWaitingDevices()).toEqual([]);
     await expect(dashboard.readSession()).rejects.toThrow(REFUSED);
+    expect(await dashboard.listTeams()).toEqual([]);
+    await expect(dashboard.joinTeam('invite')).rejects.toThrow(REFUSED);
+    await expect(dashboard.previewTeam('invite')).rejects.toThrow(REFUSED);
+    expect(await teamKeys.selectTeamKey('tm')).toBeNull();
+    await expect(teamKeys.writeTeamKey({ teamId: 'tm', key: 'k' } as never)).rejects.toThrow(REFUSED);
   });
 
   it('give a sample machine its own id and what it uses', () => {
@@ -88,6 +93,9 @@ describe('the /ui remote access samples', () => {
     expect(single.listMachines()).toEqual([]);
     expect(single.listUnreachableMachines()).toEqual([]);
     expect(single.listMachineAccess()).toEqual([]);
+    single.subscribeTeams(() => undefined)();
+    expect(single.selectTeams()).toBe(NO_TEAM_FEED);
+    expect(single.selectEngine('task')).toMatchObject({ version: DEVELOPMENT_VERSION });
     await expect(fleet.command({ type: 'focus.change', projectId: null } as never)).rejects.toThrow(REFUSED);
     await expect(fleet.fetch(new Request('http://mac/api/tasks'))).rejects.toThrow('Nothing is sent.');
     fleet.close();

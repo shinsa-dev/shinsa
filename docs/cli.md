@@ -388,7 +388,7 @@ Every task agent's tool: `tasks_cancel`. Sends `task.cancel`.
 Share a task by a link that reads it live from this machine: read-only, without its chat.
 
 ```
-shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--json]
+shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--preset <status|standard|full>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.share`.
@@ -397,6 +397,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `--until` | choice, optional | How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it). Left out, the shareLimit setting. |
+| `--preset` | choice, optional | What the link shows: status (an anonymous status card), standard (the whole task with the agents' live output and tool calls, without your messages) or full (standard and your messages). Left out, the sharePreset setting. |
 
 #### shinsa tasks unshare
 
@@ -494,6 +495,35 @@ shinsa tasks stop-waiting <task> [--json]
 ```
 
 Every task agent's tool: `tasks_stop_waiting`. Sends `task.wait_on`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks stack-on
+
+Stack a task on another as a bundle: it starts once that task is ready to merge, builds on its branch, and the bundle merges as one.
+
+```
+shinsa tasks stack-on <task> <below> [--json]
+```
+
+Every task agent's tool: `tasks_stack_on`. Sends `task.stack_on`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<below>` | text, required | The task it stacks on. |
+
+#### shinsa tasks unstack
+
+Take a task out of its bundle before it starts: it no longer waits for the task below.
+
+```
+shinsa tasks unstack <task> [--json]
+```
+
+Every task agent's tool: `tasks_unstack`. Sends `task.stack_on`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
@@ -1364,7 +1394,7 @@ Every task agent's tool: `settings_get` (reads).
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit. |
+| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. |
 
 #### shinsa settings set
 
@@ -1378,7 +1408,7 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit. |
+| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset. |
 | `<value>` | text, required | The new value. |
 
 ### projects
@@ -1439,6 +1469,36 @@ Every task agent's tool: `projects_remove`. Sends `project.remove`.
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<project>` | text, required | The project: its key, name or id. |
+
+#### shinsa projects add-to-team
+
+Show every task of a project to a team, read-only and without its chat.
+
+```
+shinsa projects add-to-team <project> --team <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `project.add_to_team`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<project>` | text, required | The project: its key, name or id. |
+| `--team` | text, required | The team’s name or id, from `shinsa teams list`. |
+
+#### shinsa projects remove-from-team
+
+Stop showing a project’s tasks to a team.
+
+```
+shinsa projects remove-from-team <project> --team <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `project.remove_from_team`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<project>` | text, required | The project: its key, name or id. |
+| `--team` | text, required | The team’s name or id, from `shinsa teams list`. |
 
 #### shinsa projects add-repo
 
@@ -1891,6 +1951,39 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `--project` | text, optional | The project the service belongs to, when two have one by that name. |
 | `--task` | text, optional | Run it for this task, in its worktree: its handle (SW-142), id or exact title. |
 
+#### shinsa services share
+
+Share a task’s run of a service by a link that opens its preview from this machine.
+
+```
+shinsa services share <service> [--project <text>] --task <text> [--until <until_done|hour|day|week|none>] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `preview.share`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<service>` | text, required | The service, by its name. |
+| `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, required | The task whose run of the service it is: its handle (SW-142), id or exact title. |
+| `--until` | choice, optional | How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it or the task finishes). Left out, the shareLimit setting. |
+
+#### shinsa services unshare
+
+Stop sharing a task’s run of a service. Its link stops working.
+
+```
+shinsa services unshare <service> [--project <text>] --task <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `preview.unshare`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<service>` | text, required | The service, by its name. |
+| `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, required | The task whose run of the service it is: its handle (SW-142), id or exact title. |
+
 ### mcp
 
 #### shinsa mcp list
@@ -2293,6 +2386,162 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<device>` | text, required | The device’s key, from `shinsa remote status`. |
+
+### teams
+
+#### shinsa teams list
+
+List the teams this machine is in, with their members and who asks to join.
+
+```
+shinsa teams list [--json]
+```
+
+Every task agent's tool: `teams_list` (reads).
+
+#### shinsa teams create
+
+Make a team you own, and show the link that asks to join it.
+
+```
+shinsa teams create <name...> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<name>` | text, required | The team’s name, 60 characters at most. |
+
+#### shinsa teams join
+
+Ask to join a team with its link, or add a team you are in to this machine.
+
+```
+shinsa teams join <url> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<url>` | text, required | The team link, https://app.shinsa.dev/share/team#… |
+
+#### shinsa teams link
+
+Show the link that asks to join a team you own, making a new one if it is off.
+
+```
+shinsa teams link <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+
+#### shinsa teams link-off
+
+Turn a team’s link off, so nobody can ask to join with it any more.
+
+```
+shinsa teams link-off <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+
+#### shinsa teams accept
+
+Accept someone who asked to join a team you own.
+
+```
+shinsa teams accept <team> --login <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
+#### shinsa teams decline
+
+Decline someone who asked to join a team you own.
+
+```
+shinsa teams decline <team> --login <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
+#### shinsa teams remove-member
+
+Take someone out of a team you own. Their views of its tasks close at once.
+
+```
+shinsa teams remove-member <team> --login <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
+#### shinsa teams grant
+
+Give a teammate full remote access to this machine. Their browsers that hold the team’s key are added without asking.
+
+```
+shinsa teams grant <team> --login <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
+#### shinsa teams leave
+
+Leave a team. Your projects stop showing their tasks to it.
+
+```
+shinsa teams leave <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+
+#### shinsa teams remove
+
+Delete a team you own, for every member.
+
+```
+shinsa teams remove <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
 
 ### command
 

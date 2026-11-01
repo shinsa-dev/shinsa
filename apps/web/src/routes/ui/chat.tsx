@@ -14,6 +14,7 @@ import { CHAT_COLUMN, CHAT_INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
+import { BundleFact, BundleMark } from '@/components/task/bundle.tsx';
 import { Composer } from '@/components/task/composer.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { resolveContextMeter } from '@/lib/chat/context.ts';
@@ -30,6 +31,7 @@ import { createSampleDelegations } from './sample-delegations.ts';
 import { createOverviewScene } from './sample-overview.ts';
 import {
   acknowledgeSample,
+  createSampleBundle,
   createSampleMergeQueueState,
   createSampleQueueTask,
   createSampleRoundsTask,
@@ -124,6 +126,8 @@ function DelegatedConversation({ view }: { view: DelegationView }) {
 function RoundSpecimens({ now }: { now: number }) {
   const [task] = React.useState(() => createSampleRoundsTask(now));
   const [state] = React.useState(() => createSampleState({ tasks: [task] }));
+  const [bundle] = React.useState(() => createSampleState({ tasks: createSampleBundle(now) }));
+  const middle = bundle.tasks['sample-bundle-api'];
   return (
     <>
       <Specimen label='RoundDivider · where each round starts in the chat: earlier rounds on their pull request, the current round, a round waiting to start'>
@@ -143,6 +147,14 @@ function RoundSpecimens({ now }: { now: number }) {
           />
         </div>
       </Specimen>
+      {middle && (
+        <Specimen label='BundleFact and BundleMark · the task toolbar’s bundle, whose popover lists each task bottom first with its state and pull request, and the small mark a queue row carries'>
+          <div className='flex items-center gap-4'>
+            <BundleFact state={bundle} task={middle} />
+            <BundleMark state={bundle} task={middle} />
+          </div>
+        </Specimen>
+      )}
     </>
   );
 }

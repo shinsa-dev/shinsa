@@ -43,8 +43,12 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    reports, walkthrough, review, checks with their output, evidence, activity, notes, gates without their answers, who
    worked and when, the pull request whole, its diff and its changed files whole from GitHub, for a private repository
    too, on the owner's own task page with every control taken away. Chats, transcripts, tool calls, live agent output,
-   messages to agents, gate answers, attachments and accounts never leave the machine. The same projection and channel
-   will serve teams (`docs/engine.md` → Sharing a task).
+   messages to agents, gate answers, attachments and accounts never leave the machine (`docs/engine.md` → Sharing a
+   task). Teams use the same projection, channel and page for whole projects: you put your projects in a team, and
+   every member watches their tasks live and read-only, next to their own and marked with their owner. A team is
+   only who is in it on app.shinsa.dev; its views are sealed with a team key kept on members' machines and browsers,
+   carried in the join link's fragment, and a member must also be one in the machine's own copy of the team. Joining
+   is a request the owner accepts, as for a machine (`docs/engine.md` → Teams).
 6. **End to end encrypted, with each device enrolled at the machine.** Cloudflare terminates TLS at its edge, so TLS alone
    would let it read chat, gate answers and code. Every byte between an enrolled browser and the engine is sealed
    with keys only those two hold. A browser is trusted once: it asks for access through a link the machine shows, and

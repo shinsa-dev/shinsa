@@ -58,6 +58,13 @@ describe('listDependencyChoices', () => {
     ]);
   });
 
+  it('leaves out the task it stacks on, which the bundle already waits for', () => {
+    const subject = createTask({ id: 'self', stage: 'waiting_on_tasks', stacksOn: 'parent' });
+    const parent = createTask({ id: 'parent', stage: 'building' });
+    const state = createShinsaState({ tasks: [subject, parent, createTask({ id: 'other' })] });
+    expect(listDependencyChoices(state, subject).map((task) => task.id)).toEqual(['other']);
+  });
+
   it('offers every other open task when nothing is chosen yet', () => {
     const subject = createTask({ id: 'self' });
     const state = createShinsaState({ tasks: [subject, createTask({ id: 'other' })] });

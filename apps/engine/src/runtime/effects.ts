@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs';
 import {
+  type BundleConflict,
   type CheckEvidence,
   type Coverage,
   evaluatePullRequestWatch,
@@ -7,6 +8,8 @@ import {
   isSamePullRequest,
   isSamePullRequestWatch,
   isTaskSettled,
+  listBundleAbove,
+  listBundleBelow,
   listStackedPullRequests,
   listTaskChecks,
   needsRepository,
@@ -38,6 +41,8 @@ import type { FeedbackDrafter } from '../feedback/draft.ts';
 import { listFeedbackEnvironment, resolveFeedbackMachine } from '../feedback/environment.ts';
 import { FeedbackEffects } from '../feedback/index.ts';
 import {
+  type BundleBranch,
+  checkBundleMerge,
   hasPrePushHook,
   PushError,
   removeIsolatedWorktrees,
@@ -61,6 +66,8 @@ import {
 import { BUNDLE } from '../instance/bundle.ts';
 import { createServerInstance, type ServerInstance } from '../instance/install.ts';
 import { describeError, log } from '../log/index.ts';
+import type { PreviewEffects } from '../remote/previews.ts';
+import type { ShareDescriber } from '../remote/share-describe.ts';
 import type { ShareEffects } from '../remote/shares.ts';
 import {
   createLoginResolver,
@@ -85,6 +92,7 @@ import { resolveShippingError } from './failures.ts';
 export interface EffectRunnerOptions {
   triage: TriageResolver;
   wordWatch?: WatchWriter;
+  describeShare?: ShareDescriber;
   draftFeedback?: FeedbackDrafter;
   instance?: Pick<ServerInstance, 'version' | 'commit'>;
   timeZone?: string;
@@ -95,6 +103,7 @@ export interface EffectRunnerOptions {
   workspaces?: Workspaces;
   services?: TaskServices;
   shares: ShareEffects;
+  previews: PreviewEffects;
   slack?: Slack;
   trackProcess?: ProcessTracker;
 }
@@ -167,6 +176,7 @@ export class EffectRunner {
   readonly #briefings: Briefings;
   readonly #triageTask: TriageResolver;
   readonly #wordWatch: WatchWriter;
+  readonly #describeShare: ShareDescriber;
   readonly #timeZone: string;
   readonly #findRepository: RepositoryFinder;
   readonly #resolveLogin: LoginResolver;
@@ -175,6 +185,7 @@ export class EffectRunner {
   readonly #workspaces: Workspaces;
   readonly #services: TaskServices | null;
   readonly #shares: ShareEffects;
+  readonly #previews: PreviewEffects;
   readonly #slack: Slack | null;
   readonly #trackProcess: ProcessTracker | null;
   readonly #feedback: FeedbackEffects;
@@ -202,6 +213,7 @@ export class EffectRunner {
     this.#briefings = briefings;
     this.#triageTask = options.triage;
     this.#wordWatch = options.wordWatch ?? (() => Promise.resolve({ name: null, text: null }));
+    this.#describeShare = options.describeShare ?? (() => Promise.resolve(null));
     this.#timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     this.#findRepository = options.findRepository ?? (() => Promise.resolve(null));
     this.#resolveLogin = options.resolveLogin ?? createLoginResolver(config.userHome);
@@ -209,6 +221,7 @@ export class EffectRunner {
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
     this.#services = options.services ?? null;
     this.#shares = options.shares;
+    this.#previews = options.previews;
     this.#slack = options.slack ?? null;
     this.#trackProcess = options.trackProcess ?? null;
     this.#feedback = new FeedbackEffects(
@@ -274,6 +287,10 @@ export class EffectRunner {
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
       case 'share.link':
         return this.#shares.link(effect.taskId, context);
+      case 'share.describe':
+        return this.#writeShareDescription(effect.taskId, context);
+      case 'preview.link':
+        return this.#previews.link(effect.taskId, effect.serviceId, context);
       case 'slack.evaluate':
         return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':
@@ -304,6 +321,17 @@ export class EffectRunner {
         timeZone: this.#timeZone,
       },
       { id: `${context.key}:watch_suggestion.record` }
+    );
+  }
+
+  async #writeShareDescription(taskId: string, context: EffectContext) {
+    const task = this.#engine.state.tasks[taskId];
+    if (!task?.share) return;
+    const description = await this.#describeShare(task);
+    if (!description) return;
+    await this.#engine.dispatch(
+      { type: 'share.describe', taskId, description },
+      { id: `${context.key}:share.describe` }
     );
   }
 
@@ -354,6 +382,13 @@ export class EffectRunner {
       await this.#engine.dispatch(
         { type: 'share.fail', taskId: effect.taskId, detail: error },
         { id: `${key}:share.fail` }
+      );
+      return;
+    }
+    if (effect.kind === 'preview.link') {
+      await this.#engine.dispatch(
+        { type: 'preview.fail', taskId: effect.taskId, serviceId: effect.serviceId, detail: error },
+        { id: `${key}:preview.fail` }
       );
       return;
     }
@@ -418,12 +453,45 @@ export class EffectRunner {
       return null;
     }
     if (!read || signal.aborted) return null;
+    await this.#checkBundle(repo, task, read.pullRequest, signal);
     const ci = await this.#resolveCi(repo, read.pullRequest, signal);
     if (force || hasPullRequestNews(task, read, ci)) {
       await this.#syncConflictBase(repo, taskId, read.pullRequest, signal);
       await this.#recordRead(taskId, read, ci);
     }
     return read.pullRequest;
+  }
+
+  #listBundleBranches(repo: Repo, root: Task): BundleBranch[] {
+    const state = this.#engine.state;
+    const above = listBundleAbove(state, root);
+    if (listBundleBelow(state, root).length > 0 || above.length === 0 || !root.branch) return [];
+    if (!above.every((member) => member.bundleReady && member.branch)) return [];
+    return [
+      { taskId: root.id, branch: root.branch, base: repo.defaultBranch },
+      ...above.map((member) => ({
+        taskId: member.id,
+        branch: member.branch ?? '',
+        base: resolveRoundBase(member) ?? repo.defaultBranch,
+      })),
+    ];
+  }
+
+  async #checkBundle(repo: Repo, task: Task, pullRequest: PullRequest, signal: AbortSignal) {
+    const branches = this.#listBundleBranches(repo, task);
+    if (pullRequest.state !== 'open' || branches.length === 0) return;
+    let conflict: BundleConflict | null;
+    try {
+      conflict = await checkBundleMerge(repo, branches, signal);
+    } catch (error) {
+      log.warn('[Watch] Could not check that the bundle merges into the default branch', {
+        taskId: task.id,
+        error: describeError(error),
+      });
+      return;
+    }
+    if (!signal.aborted)
+      await this.#engine.dispatch({ type: 'bundle.record_check', taskId: task.id, conflict });
   }
 
   async #syncConflictBase(repo: Repo, taskId: string, pullRequest: PullRequest, signal: AbortSignal) {
@@ -858,26 +926,61 @@ export class EffectRunner {
   }
 
   async #merge(effect: MergeEffect, context: EffectContext) {
-    const { taskId, headSha } = effect;
-    const { task, repo } = this.#requireTask(taskId);
-    if (!task.pullRequest) throw new Error('There is no pull request to merge.');
-    if (context.signal.aborted) return;
-    const current = await readPullRequest(repo, task, context.signal);
-    if (context.signal.aborted) return;
-    if (current && needsMerge(current.pullRequest) && isHeadMoved(headSha, current.pullRequest)) {
-      await this.#recordFreshRead(repo, taskId, current, context.signal);
+    const bundle = effect.bundle ?? [];
+    if (bundle.length === 0) {
+      await this.#mergeTask(effect.taskId, effect.headSha, context.signal);
       return;
     }
+    if ((await this.#isRootMoved(effect.taskId, effect.headSha, context.signal)) || context.signal.aborted)
+      return;
+    await this.#assertBundleMerges(effect.taskId, context.signal);
+    for (const member of bundle) {
+      if (!(await this.#mergeTask(member.taskId, null, context.signal))) return;
+    }
+    await this.#mergeTask(effect.taskId, null, context.signal);
+  }
+
+  async #isRootMoved(taskId: string, headSha: string | null, signal: AbortSignal) {
+    const { task, repo } = this.#requireTask(taskId);
+    const current = await readPullRequest(repo, task, signal);
+    const moved = Boolean(
+      current && needsMerge(current.pullRequest) && isHeadMoved(headSha, current.pullRequest)
+    );
+    if (moved && current) await this.#recordFreshRead(repo, taskId, current, signal);
+    return moved;
+  }
+
+  async #assertBundleMerges(taskId: string, signal: AbortSignal) {
+    const { task, repo } = this.#requireTask(taskId);
+    const conflict = await checkBundleMerge(repo, this.#listBundleBranches(repo, task), signal);
+    if (!conflict) return;
+    const title = this.#engine.state.tasks[conflict.taskId]?.title ?? 'A task';
+    throw new Error(
+      `“${title}” conflicts with ${repo.defaultBranch} once the bundle merges, so nothing was merged. Retry to bring the bundle up to date first.`
+    );
+  }
+
+  async #mergeTask(taskId: string, headSha: string | null, signal: AbortSignal) {
+    const { task, repo } = this.#requireTask(taskId);
+    if (!task.pullRequest) throw new Error('There is no pull request to merge.');
+    if (signal.aborted) return false;
+    const current = await readPullRequest(repo, task, signal);
+    if (signal.aborted) return false;
+    if (current && needsMerge(current.pullRequest) && isHeadMoved(headSha, current.pullRequest)) {
+      await this.#recordFreshRead(repo, taskId, current, signal);
+      return false;
+    }
     if (needsMerge(current?.pullRequest)) {
-      const merged = await this.#mergeHead(repo, task, task.pullRequest.number, headSha, context.signal);
-      if (!merged) return;
+      const merged = await this.#mergeHead(repo, task, task.pullRequest.number, headSha, signal);
+      if (!merged) return false;
     }
     const stacked = listStackedPullRequests(task);
-    await this.#mergeStack(repo, stacked, context.signal);
-    const after = await readPullRequest(repo, task, context.signal);
-    if (after) await this.#recordFreshRead(repo, taskId, after, context.signal);
+    await this.#mergeStack(repo, stacked, signal);
+    const after = await readPullRequest(repo, task, signal);
+    if (after) await this.#recordFreshRead(repo, taskId, after, signal);
     if (after && isAwaitingMerge(after.pullRequest)) throw new Error(NOT_MERGED_YET);
-    await this.#assertStackMerged(repo, stacked, context.signal);
+    await this.#assertStackMerged(repo, stacked, signal);
+    return true;
   }
 
   async #closePullRequests(effect: CloseEffect, context: EffectContext) {

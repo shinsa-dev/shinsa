@@ -19,7 +19,7 @@ function createFakeEngine(shares: Record<string, TaskShare | null>, answer: 'eve
   return { engine: engine as unknown as Engine, sent };
 }
 
-const SHARE = { at: 0, url: null, limit: 'hour', endsAt: 1_000 } as const;
+const SHARE = { at: 0, url: null, limit: 'hour', preset: 'standard', endsAt: 1_000 } as const;
 
 describe('the share clock', () => {
   test('ends each share whose time ran out, and only those', async () => {
@@ -42,5 +42,21 @@ describe('the share clock', () => {
     await clock.fireDue();
     await clock.fireDue();
     expect(fake.sent).toHaveLength(1);
+  });
+
+  test('ends each preview whose time ran out, beside the task’s own share', async () => {
+    const fake = createFakeEngine({ due: SHARE }, 'events');
+    const task = fake.engine.state.tasks.due;
+    if (task)
+      task.previews = [
+        { serviceId: 'web', at: 0, url: null, limit: 'hour', endsAt: 2_000 },
+        { serviceId: 'api', at: 0, url: null, limit: 'none', endsAt: null },
+        { serviceId: 'docs', at: 0, url: null, limit: 'week', endsAt: 9_000 },
+      ];
+    await new ShareClock(fake.engine, { now: () => 5_000 }).fireDue();
+    expect(fake.sent).toEqual([
+      { command: { type: 'share.expire', taskId: 'due' }, id: 'share:due:1000' },
+      { command: { type: 'preview.expire', taskId: 'due', serviceId: 'web' }, id: 'preview:due:web:2000' },
+    ]);
   });
 });

@@ -34,7 +34,7 @@ interface ShareKeys {
   serverEphemeral: string;
 }
 
-function readFields(text: string): Record<string, unknown> | null {
+export function readChannelFields(text: string): Record<string, unknown> | null {
   try {
     const value: unknown = JSON.parse(text);
     return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -49,25 +49,51 @@ function isText(value: unknown): value is string {
   return typeof value === 'string';
 }
 
-function importShareKey(key: string) {
+function importChannelKey(key: string) {
   const raw = parseBase64Url(key);
   if (!raw || raw.length === 0) return null;
   return crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
 
-async function signShare(key: string, parts: string[]) {
-  const hmac = await importShareKey(key);
-  if (!hmac) throw new Error('The share key is not valid.');
+export async function signChannelProof(key: string, parts: string[]) {
+  const hmac = await importChannelKey(key);
+  if (!hmac) throw new Error('The channel key is not valid.');
   return serializeBase64Url(
     new Uint8Array(await crypto.subtle.sign('HMAC', hmac, encodeText(parts.join('\n'))))
   );
 }
 
-async function verifyShare(key: string, proof: string, parts: string[]) {
-  const hmac = await importShareKey(key);
+export async function verifyChannelProof(key: string, proof: string, parts: string[]) {
+  const hmac = await importChannelKey(key);
   const signature = parseBase64Url(proof);
   if (!hmac || !signature) return false;
   return crypto.subtle.verify('HMAC', hmac, signature, encodeText(parts.join('\n')));
+}
+
+export async function deriveChannelSessionKey(
+  label: string,
+  key: string,
+  parts: string[],
+  privateKey: CryptoKey,
+  peerEphemeral: string
+) {
+  const peer = await parsePublicKey(peerEphemeral);
+  const raw = parseBase64Url(key);
+  if (!(peer && raw)) throw new Error('A channel handshake key is not valid.');
+  const shared = new Uint8Array(
+    await crypto.subtle.deriveBits({ name: 'ECDH', public: peer }, privateKey, 256)
+  ) as Bytes;
+  const secret = await crypto.subtle.importKey('raw', concatBytes(shared, raw), 'HKDF', false, ['deriveKey']);
+  const salt = new Uint8Array(
+    await crypto.subtle.digest('SHA-256', encodeText([label, ...parts].join('\n')))
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt, info: encodeText(label) },
+    secret,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
 }
 
 function listWelcomeParts(keys: ShareKeys) {
@@ -85,12 +111,12 @@ export async function createShareHello(
     version: REMOTE_PROTOCOL_VERSION,
     share,
     ephemeral: serialized,
-    proof: await signShare(key, [HELLO_LABEL, share, serialized]),
+    proof: await signChannelProof(key, [HELLO_LABEL, share, serialized]),
   };
 }
 
 export function parseShareHello(text: string): ShareHello | null {
-  const fields = readFields(text);
+  const fields = readChannelFields(text);
   if (fields?.type !== 'share-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   if (!(isText(fields.share) && isText(fields.ephemeral) && isText(fields.proof))) return null;
   return {
@@ -103,19 +129,19 @@ export function parseShareHello(text: string): ShareHello | null {
 }
 
 export function verifyShareHello(key: string, hello: ShareHello) {
-  return verifyShare(key, hello.proof, [HELLO_LABEL, hello.share, hello.ephemeral]);
+  return verifyChannelProof(key, hello.proof, [HELLO_LABEL, hello.share, hello.ephemeral]);
 }
 
 export async function createShareWelcome(key: string, keys: ShareKeys): Promise<ShareWelcome> {
   return {
     type: 'welcome',
     ephemeral: keys.serverEphemeral,
-    proof: await signShare(key, listWelcomeParts(keys)),
+    proof: await signChannelProof(key, listWelcomeParts(keys)),
   };
 }
 
 export function parseShareWelcome(text: string): ShareWelcome | null {
-  const fields = readFields(text);
+  const fields = readChannelFields(text);
   if (fields?.type === 'welcome' && isText(fields.ephemeral) && isText(fields.proof))
     return { type: 'welcome', ephemeral: fields.ephemeral, proof: fields.proof };
   if (fields?.type === 'refused' && isText(fields.reason)) return { type: 'refused', reason: fields.reason };
@@ -123,35 +149,17 @@ export function parseShareWelcome(text: string): ShareWelcome | null {
 }
 
 export function verifyShareWelcome(key: string, keys: ShareKeys, proof: string) {
-  return verifyShare(key, proof, listWelcomeParts(keys));
+  return verifyChannelProof(key, proof, listWelcomeParts(keys));
 }
 
-export async function deriveShareSessionKey(
+export function deriveShareSessionKey(
   key: string,
   keys: ShareKeys,
   privateKey: CryptoKey,
   peerEphemeral: string
 ) {
-  const peer = await parsePublicKey(peerEphemeral);
-  const raw = parseBase64Url(key);
-  if (!(peer && raw)) throw new Error('A share handshake key is not valid.');
-  const shared = new Uint8Array(
-    await crypto.subtle.deriveBits({ name: 'ECDH', public: peer }, privateKey, 256)
-  ) as Bytes;
-  const secret = await crypto.subtle.importKey('raw', concatBytes(shared, raw), 'HKDF', false, ['deriveKey']);
-  const salt = new Uint8Array(
-    await crypto.subtle.digest(
-      'SHA-256',
-      encodeText([SESSION_LABEL, keys.share, keys.clientEphemeral, keys.serverEphemeral].join('\n'))
-    )
-  );
-  return crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt, info: encodeText(SESSION_LABEL) },
-    secret,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
+  const parts = [keys.share, keys.clientEphemeral, keys.serverEphemeral];
+  return deriveChannelSessionKey(SESSION_LABEL, key, parts, privateKey, peerEphemeral);
 }
 
 function readShareMessage(fields: Record<string, unknown>): ShareMessage | null {
@@ -175,7 +183,7 @@ function readShareMessage(fields: Record<string, unknown>): ShareMessage | null 
 }
 
 export function parseShareMessage(text: string): ShareMessage | null {
-  const fields = readFields(text);
+  const fields = readChannelFields(text);
   return fields ? readShareMessage(fields) : null;
 }
 

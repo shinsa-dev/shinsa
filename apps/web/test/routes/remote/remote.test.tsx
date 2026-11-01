@@ -7,6 +7,7 @@ import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
+import type { TeamKeyStore } from '@/lib/teams/join.ts';
 import { EnrollPage } from '@/routes/remote/enroll.tsx';
 import { RemoteRoot } from '@/routes/remote/index.tsx';
 import { PairPage } from '@/routes/remote/pair.tsx';
@@ -43,6 +44,7 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
     requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
     removeInstance: () => Promise.resolve({ ok: true }),
     leaveInstance: () => Promise.resolve({ ok: true }),
+    listTeams: () => Promise.resolve([]),
     acceptInvite: () =>
       Promise.resolve({
         instanceId: 'k3x9',
@@ -50,6 +52,14 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
         owner: USER.user as RemoteUser,
         user: USER.user as RemoteUser,
         connect: { url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 },
+      }),
+    previewTeam: () => Promise.resolve({ name: 'Platform', owner: USER.user as RemoteUser }),
+    joinTeam: () =>
+      Promise.resolve({
+        teamId: 'team1',
+        name: 'Platform',
+        owner: USER.user as RemoteUser,
+        status: 'requested',
       }),
     readPair: () => Promise.resolve(PAIR),
     approvePair: () => Promise.resolve({ instanceId: 'k3x9', name: 'Studio' }),
@@ -75,6 +85,10 @@ function createDevices(
   };
 }
 
+function createTeamKeys(): TeamKeyStore {
+  return { selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() };
+}
+
 function createWorker(controlled = true) {
   const target = new EventTarget();
   return {
@@ -93,6 +107,7 @@ function renderRoot(path: string, services: Partial<RemoteServices> = {}) {
       services={{
         dashboard: createDashboard(),
         devices: createDevices(),
+        teamKeys: createTeamKeys(),
         worker: createWorker(),
         ...services,
       }}
@@ -207,12 +222,26 @@ describe('the remote dashboard', () => {
     expect(location.pathname).toBe('/enroll');
   });
 
+  it('keeps a team link out of the address bar through sign-in, then shows the join page', async () => {
+    const fragment = `team1.invite-1.${'A'.repeat(43)}`;
+    const { unmount } = renderRoot(`/share/team#${fragment}`, {
+      dashboard: createDashboard({ readSession: () => Promise.resolve({ user: null }) }),
+    });
+    const link = (await screen.findByText('Sign in with GitHub')).closest('a') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe(`/__remote/sign-in?return=${encodeURIComponent('/share/team')}`);
+    expect(location.hash).toBe('');
+    unmount();
+    renderRoot('/share/team');
+    expect(await screen.findByText('Join a team')).toBeTruthy();
+    sessionStorage.clear();
+  });
+
   it('routes to the pair page and the enroll page', async () => {
     const { unmount } = renderRoot('/pair?code=K7PQ');
     expect(await screen.findByText('Pair Studio with your account')).toBeTruthy();
     unmount();
     renderRoot(`/enroll#k3x9.${MACHINE_KEY}.secret_1.tok`);
-    expect(await screen.findByText('Add this device to your machine')).toBeTruthy();
+    expect(await screen.findByText('Add this device')).toBeTruthy();
   });
 });
 
@@ -277,7 +306,7 @@ describe('the machines in Settings', () => {
     const devices = createDevices(DEVICE);
     render(
       <RemoteServicesContext.Provider
-        value={{ dashboard: createDashboard(), devices, worker: createWorker() }}
+        value={{ dashboard: createDashboard(), devices, teamKeys: createTeamKeys(), worker: createWorker() }}
       >
         <MachinesSettings />
       </RemoteServicesContext.Provider>
@@ -308,7 +337,9 @@ describe('the machines in Settings', () => {
       },
     });
     render(
-      <RemoteServicesContext.Provider value={{ dashboard, devices, worker: createWorker() }}>
+      <RemoteServicesContext.Provider
+        value={{ dashboard, devices, teamKeys: createTeamKeys(), worker: createWorker() }}
+      >
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
@@ -340,7 +371,12 @@ describe('the machines in Settings', () => {
     try {
       render(
         <RemoteServicesContext.Provider
-          value={{ dashboard: createDashboard(), devices: createDevices(DEVICE), worker: createWorker() }}
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
         >
           <MachinesSettings />
         </RemoteServicesContext.Provider>
@@ -368,7 +404,12 @@ describe('the machines in Settings', () => {
     try {
       const { unmount } = render(
         <RemoteServicesContext.Provider
-          value={{ dashboard: createDashboard(), devices: createDevices(DEVICE), worker: createWorker() }}
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
         >
           <MachinesSettings />
         </RemoteServicesContext.Provider>
@@ -378,7 +419,12 @@ describe('the machines in Settings', () => {
       machines = [idle];
       render(
         <RemoteServicesContext.Provider
-          value={{ dashboard: createDashboard(), devices: createDevices(DEVICE), worker: createWorker() }}
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
         >
           <MachinesSettings />
         </RemoteServicesContext.Provider>
@@ -398,6 +444,7 @@ describe('the machines in Settings', () => {
         value={{
           dashboard: createDashboard({ listInstances: () => Promise.reject(new Error('Signed out.')) }),
           devices: createDevices(),
+          teamKeys: createTeamKeys(),
           worker: createWorker(),
         }}
       >
@@ -411,6 +458,7 @@ describe('the machines in Settings', () => {
         value={{
           dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }),
           devices: createDevices(),
+          teamKeys: createTeamKeys(),
           worker: createWorker(),
         }}
       >
@@ -493,7 +541,7 @@ describe('the enroll page', () => {
     );
     const field = (await screen.findByLabelText('Device name')) as HTMLInputElement;
     expect(field.value).toBe('Chrome on Mac');
-    expect(screen.getByText('Add this device to your machine')).toBeTruthy();
+    expect(screen.getByText('Add this device')).toBeTruthy();
     fireEvent.change(field, { target: { value: ' Work Mac ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
     expect(await screen.findByText('Request sent. Accept it on the machine.')).toBeTruthy();

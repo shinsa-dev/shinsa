@@ -14,6 +14,7 @@ import {
   resolveWorkingGlyph,
 } from '@/lib/tasks/status.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
+import { createRound } from '../../support/rounds.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function gate(overrides: Partial<Gate> = {}) {
@@ -84,6 +85,41 @@ describe('a merged task with steps left', () => {
       label: 'Merged',
       tone: 'neutral',
     });
+  });
+});
+
+describe('a later round at work with steps left from an earlier one', () => {
+  const carried = {
+    when: 'post_merge' as const,
+    kind: 'other' as const,
+    title: 'Submit the domain',
+    detail: 'd',
+    command: null,
+    round: 1,
+    done: false,
+  };
+  const task = createTask({
+    id: 't',
+    stage: 'fixing',
+    fixFor: 'review',
+    rounds: [createRound({ number: 1 }), createRound({ number: 2, status: 'active', endedAt: null })],
+    carriedMergeSteps: [carried],
+  });
+  const postMerge = gate({ type: 'post_merge' });
+  const state = createShinsaState({
+    tasks: [task],
+    gates: [postMerge],
+    runs: [createRun({ id: 'r', taskId: 't', status: 'running' })],
+  });
+
+  it('reads as the round for the task and as the steps for its gate row', () => {
+    expect(resolveTaskStatus(state, task).label).not.toContain('Post-merge');
+    expect(resolveRowStatus(state, task)).toEqual(resolveTaskStatus(state, task));
+    expect(resolveRowStatus(state, task, postMerge)).toEqual({
+      label: 'Post-merge · 1 step left',
+      tone: 'amber',
+    });
+    expect(resolveTaskGlyph(state, task).icon).not.toBe('IconChecklist');
   });
 });
 
@@ -439,5 +475,18 @@ describe('a duplicate', () => {
     expect(resolveTaskStatus(state, task)).toEqual({ label: 'Duplicate', tone: 'neutral' });
     expect(resolveTaskStatusIcon(state, task)).toBe('IconSquareBehindSquare2');
     expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconSquareBehindSquare2', tone: 'neutral' });
+  });
+});
+
+describe('a task in a bundle', () => {
+  it('is ready in green, merging with its bundle, with no merge gate of its own', () => {
+    const ready = createTask({ id: 'r', stage: 'shipping', bundleReady: { commit: 'a' } });
+    const merging = createTask({ id: 'm', stage: 'awaiting_merge', stacksOn: 'r' });
+    const state = createShinsaState({ tasks: [ready, merging] });
+    expect(resolveTaskStatus(state, ready)).toEqual({
+      label: 'Ready, merges with its bundle',
+      tone: 'green',
+    });
+    expect(resolveTaskStatus(state, merging)).toEqual({ label: 'Merging with its bundle', tone: 'green' });
   });
 });

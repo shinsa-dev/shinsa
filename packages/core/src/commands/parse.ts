@@ -22,7 +22,9 @@ import {
   SETTINGS_KEYS,
   type Settings,
   SHARE_LIMITS,
+  SHARE_PRESETS,
   type ShareLimit,
+  type SharePreset,
 } from '../domain/settings.ts';
 import { TASK_SHAPES, type TaskShape } from '../domain/shapes.ts';
 import { TASK_PRIORITIES } from '../domain/stages.ts';
@@ -81,6 +83,8 @@ const COVERAGE_MODE_SET: ReadonlySet<CoverageMode> = new Set(COVERAGE_MODES);
 const COVERAGE_FORMAT_SET: ReadonlySet<CoverageFormat> = new Set(COVERAGE_FORMATS);
 
 const SHARE_LIMIT_SET: ReadonlySet<ShareLimit> = new Set(SHARE_LIMITS);
+
+const SHARE_PRESET_SET: ReadonlySet<SharePreset> = new Set(SHARE_PRESETS);
 
 const MAX_VERDICTS = 50;
 
@@ -333,6 +337,13 @@ function readPlacementPatch(fields: Record<string, unknown>): Partial<Settings> 
   return patch;
 }
 
+function readSharePatch(fields: Record<string, unknown>): Partial<Settings> {
+  const patch: Partial<Settings> = {};
+  if ('shareLimit' in fields) patch.shareLimit = readChoice(fields, 'shareLimit', SHARE_LIMIT_SET);
+  if ('sharePreset' in fields) patch.sharePreset = readChoice(fields, 'sharePreset', SHARE_PRESET_SET);
+  return patch;
+}
+
 function readSettingsPatch(value: unknown): Partial<Settings> {
   const fields = readObject(value, 'patch');
   readKnownKeys(fields, SETTINGS_KEYS, 'Settings');
@@ -342,9 +353,8 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   if ('maxFixRounds' in fields) patch.maxFixRounds = readNullableInteger(fields, 'maxFixRounds');
   if ('delegationLimit' in fields) patch.delegationLimit = readNullableInteger(fields, 'delegationLimit');
   if ('mergeMethod' in fields) patch.mergeMethod = readChoice(fields, 'mergeMethod', MERGE_METHODS);
-  if ('shareLimit' in fields) patch.shareLimit = readChoice(fields, 'shareLimit', SHARE_LIMIT_SET);
   if ('attentionLimit' in fields) patch.attentionLimit = readInteger(fields, 'attentionLimit');
-  Object.assign(patch, readPlacementPatch(fields));
+  Object.assign(patch, readPlacementPatch(fields), readSharePatch(fields));
   if ('approvePlans' in fields) patch.approvePlans = readChoice(fields, 'approvePlans', PLAN_APPROVALS);
   if ('agentModels' in fields) patch.agentModels = readRoleIds(fields.agentModels, 'agentModels');
   if ('agentProviders' in fields) {
@@ -382,6 +392,7 @@ function readTaskCreate(fields: Fields): UserCommand {
     ...(fields.planFirst === undefined ? {} : { planFirst: readBoolean(fields, 'planFirst') }),
     ...(fields.origin === undefined ? {} : { origin: readNullableText(fields, 'origin') }),
     ...(fields.waitsOn === undefined ? {} : { waitsOn: readList(fields, 'waitsOn', readId) }),
+    ...(fields.stacksOn === undefined ? {} : { stacksOn: readId(fields, 'stacksOn') }),
     ...(fields.mode === undefined ? {} : { mode: readChoice(fields, 'mode', MODES) }),
     ...(fields.account === undefined ? {} : { account: readAccount(fields, 'account') }),
     ...(fields.forkOf === undefined ? {} : { forkOf: readId(fields, 'forkOf') }),
@@ -409,6 +420,7 @@ function readFocusChange(fields: Fields): UserCommand {
   return {
     type: 'focus.change',
     projectId: readNullableId(fields, 'projectId'),
+    ...(fields.teamId === undefined ? {} : { teamId: readNullableId(fields, 'teamId') }),
     until: readTime(fields, 'until'),
   };
 }
@@ -418,6 +430,14 @@ function readTaskWaitOn(fields: Fields): UserCommand {
     type: 'task.wait_on',
     taskId: readId(fields, 'taskId'),
     waitsOn: readList(fields, 'waitsOn', readId),
+  };
+}
+
+function readTaskStackOn(fields: Fields): UserCommand {
+  return {
+    type: 'task.stack_on',
+    taskId: readId(fields, 'taskId'),
+    stacksOn: readNullableId(fields, 'stacksOn'),
   };
 }
 
@@ -674,6 +694,7 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'task.create': readTaskCreate,
   'task.prioritize': readTaskPrioritize,
   'task.wait_on': readTaskWaitOn,
+  'task.stack_on': readTaskStackOn,
   'task.move_to_backlog': (fields) => ({ type: 'task.move_to_backlog', taskId: readId(fields, 'taskId') }),
   'task.remove_from_backlog': (fields) => ({
     type: 'task.remove_from_backlog',
@@ -749,8 +770,30 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     type: 'task.share',
     taskId: readId(fields, 'taskId'),
     ...('limit' in fields ? { limit: readChoice(fields, 'limit', SHARE_LIMIT_SET) } : {}),
+    ...('preset' in fields ? { preset: readChoice(fields, 'preset', SHARE_PRESET_SET) } : {}),
   }),
   'task.unshare': (fields) => ({ type: 'task.unshare', taskId: readId(fields, 'taskId') }),
+  'project.add_to_team': (fields) => ({
+    type: 'project.add_to_team',
+    projectId: readId(fields, 'projectId'),
+    teamId: readId(fields, 'teamId'),
+  }),
+  'project.remove_from_team': (fields) => ({
+    type: 'project.remove_from_team',
+    projectId: readId(fields, 'projectId'),
+    teamId: readId(fields, 'teamId'),
+  }),
+  'preview.share': (fields) => ({
+    type: 'preview.share',
+    taskId: readId(fields, 'taskId'),
+    serviceId: readId(fields, 'serviceId'),
+    ...('limit' in fields ? { limit: readChoice(fields, 'limit', SHARE_LIMIT_SET) } : {}),
+  }),
+  'preview.unshare': (fields) => ({
+    type: 'preview.unshare',
+    taskId: readId(fields, 'taskId'),
+    serviceId: readId(fields, 'serviceId'),
+  }),
 };
 
 export const USER_COMMAND_TYPES = Object.keys(READERS) as UserCommand['type'][];

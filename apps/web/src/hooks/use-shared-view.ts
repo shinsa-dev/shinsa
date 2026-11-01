@@ -3,6 +3,7 @@ import { registerCodeSource } from '@/lib/connection/code.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { createSharedCodeSource, resolveSharedHead } from '@/lib/share/code.ts';
 import { requestSharedText, ShareGoneError } from '@/lib/share/sources.ts';
+import { resetSharedTranscripts, syncSharedTranscripts } from '@/lib/share/transcripts.ts';
 import { resolveSharedView, type SharedSource, type SharedView } from '@/lib/share/view.ts';
 
 export type SharedViewLoad =
@@ -49,6 +50,7 @@ export function useSharedView(
         const view = resolveSharedView(source);
         shownRef.current?.();
         shownRef.current = registerSharedCode(view);
+        void syncSharedTranscripts(view.transcripts);
         setLoad({ status: 'ready', view });
       },
       onError: (error) => {
@@ -58,6 +60,7 @@ export function useSharedView(
     return () => {
       alive = false;
       stop();
+      resetSharedTranscripts();
     };
   }, [key]);
 

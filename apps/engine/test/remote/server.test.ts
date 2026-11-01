@@ -7,11 +7,14 @@ import {
   type ChannelMessage,
   CONNECT_TOKEN_TTL_MS,
   createConnectToken,
+  createTeamHello,
   parseEnrollFragment,
   REMOTE_APP_ORIGIN,
   REMOTE_PATHS,
   type RemoteAccess,
+  type RemoteTeam,
   type RemoteUser,
+  resolveMachineTeamPath,
   serializeBase64Url,
 } from '@shinsa/core';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
@@ -28,8 +31,11 @@ import {
   resolveMachineName,
   resolveRequestOrigin,
 } from '../../src/remote/index.ts';
+import type { PreviewLinks, PreviewPeer } from '../../src/remote/previews.ts';
 import type { ShareChannel } from '../../src/remote/share-channel.ts';
 import type { ShareLinks } from '../../src/remote/shares.ts';
+import type { TeamFeeds } from '../../src/remote/team-feeds.ts';
+import { Teams } from '../../src/remote/teams.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Schedules } from '../../src/schedules/index.ts';
 import type { Slack } from '../../src/slack/index.ts';
@@ -59,6 +65,19 @@ const OWNER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl
 const KAI: RemoteUser = { id: '7', login: 'kai', name: null, avatarUrl: null };
 
 const ACCESS: RemoteAccess = { owner: OWNER, members: [] };
+
+const BOB: RemoteUser = { id: '9', login: 'bob', name: null, avatarUrl: null };
+
+const TEAM: RemoteTeam = {
+  id: 'team1',
+  name: 'Platform',
+  owner: OWNER,
+  role: 'owner',
+  members: [{ user: KAI, addedAt: 2 }],
+  requests: [{ user: BOB, addedAt: 3 }],
+  machines: [],
+  createdAt: 1,
+};
 
 const running: (() => Promise<void>)[] = [];
 
@@ -93,6 +112,9 @@ async function start(
     config?: Partial<ServerConfig>;
     openUrl?: (url: string) => Promise<void>;
     shares?: ShareLinks;
+    teams?: boolean;
+    teamFeeds?: TeamFeeds;
+    previews?: PreviewLinks;
   } = {}
 ) {
   const config = createTestConfig(createTempDir(), options.config);
@@ -136,6 +158,14 @@ async function start(
     pairPollMs: 1,
   });
   const engine = new Engine(new EventLog(config.databasePath));
+  const teams = options.teams
+    ? new Teams({
+        engine,
+        remote,
+        shares: { resolveLive: () => Promise.reject(new Error('no task')) },
+        transcripts: { subscribe: () => () => undefined },
+      })
+    : null;
   const http = startServer({
     engine,
     config,
@@ -146,6 +176,9 @@ async function start(
     schedules: createFakeSchedules(),
     remote,
     ...(options.shares ? { shares: options.shares } : {}),
+    ...(teams ? { teams } : {}),
+    ...(options.teamFeeds ? { teamFeeds: options.teamFeeds } : {}),
+    ...(options.previews ? { previews: options.previews } : {}),
     slack: createFakeSlack(),
   });
   running.push(async () => {
@@ -355,6 +388,183 @@ describe('the tunnel entry point', () => {
     expect(received).toEqual(['hi']);
   });
 
+  test('opens a team view only from app.shinsa.dev, with a connect token, for a member of the team', async () => {
+    const { tunnel, port, plane, remote } = await start({ teams: true });
+    const key = serializeBase64Url(new Uint8Array(32).fill(3));
+    remote.store.recordTeams([TEAM]);
+    remote.store.upsertTeamKey({ teamId: 'team1', name: 'Platform', key, invite: 'invite-1', addedAt: 1 });
+    expect((await tunnel('/team')).status).toBe(403);
+    expect((await tunnel('/team', { headers: { origin: plane.origin } })).status).toBe(401);
+    const token = encodeURIComponent(await createToken(undefined, KAI.id));
+    expect((await tunnel(`/team?token=${token}`, { headers: { origin: plane.origin } })).status).toBe(400);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/team?token=${token}`, {
+      headers: { origin: plane.origin, 'cf-connecting-ip': '203.0.113.9' },
+    } as unknown as string[]);
+    await new Promise((resolve) => socket.addEventListener('open', resolve, { once: true }));
+    const ephemeral = await createKeyPair();
+    const welcome = new Promise<string>((resolve) => {
+      socket.addEventListener('message', (event) => resolve(String(event.data)), { once: true });
+    });
+    socket.send(JSON.stringify(await createTeamHello('team1', key, { kind: 'list' }, ephemeral.publicKey)));
+    expect(JSON.parse(await welcome)).toMatchObject({ type: 'welcome' });
+    const ended = new Promise<CloseEvent>((resolve) => {
+      socket.addEventListener('close', resolve, { once: true });
+    });
+    socket.close();
+    await ended;
+  });
+
+  test('relays a teammate’s task to a page on this machine only, and closes when the page speaks', async () => {
+    const targets: unknown[] = [];
+    let relayClosed = 0;
+    const feeds = {
+      openRelay: (peer: { send: (data: string) => void }, target: unknown) => {
+        targets.push(target);
+        peer.send('{"t":"view","data":"{}"}');
+        return {
+          close: () => {
+            relayClosed += 1;
+          },
+        };
+      },
+      listTasks: () => [{ task: { id: 'task-9' } }],
+      snapshot: () => ({ machines: [{ instanceId: 'inst9' }], tasks: [] }),
+      subscribe: () => () => undefined,
+    } as unknown as TeamFeeds;
+    const { local, tunnel, port, base } = await start({ teamFeeds: feeds });
+    expect((await local('/api/teams/view?team=t1')).status).toBe(404);
+    expect((await tunnel('/api/teams/view?team=t1&machine=m1&task=x')).status).toBe(404);
+    const tasks = (await (await local('/api/teams/tasks?open=true')).json()) as unknown;
+    expect(tasks).toEqual({ machines: [{ instanceId: 'inst9' }], tasks: [{ task: { id: 'task-9' } }] });
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/api/teams/view?team=t1&machine=m1&task=x`, {
+      headers: { origin: base },
+    } as unknown as string[]);
+    const first = new Promise<string>((resolve) => {
+      socket.addEventListener('message', (event) => resolve(String(event.data)), { once: true });
+    });
+    const ended = new Promise<CloseEvent>((resolve) => {
+      socket.addEventListener('close', resolve, { once: true });
+    });
+    expect(await first).toBe('{"t":"view","data":"{}"}');
+    expect(targets).toEqual([{ teamId: 't1', instanceId: 'm1', taskId: 'x' }]);
+    socket.send('hello');
+    const close = await ended;
+    expect([close.code, close.reason]).toEqual([1008, 'A team view only listens.']);
+    await until('the relay is closed', () => relayClosed >= 1);
+  });
+
+  test('has no team view without teams, or while remote access is paused', async () => {
+    const { tunnel } = await start();
+    expect((await tunnel('/team', { headers: { origin: REMOTE_APP_ORIGIN } })).status).toBe(404);
+  });
+
+  test('changes teams only through their routes on this machine', async () => {
+    const { local, plane, remote } = await start({ teams: true });
+    plane.answers.set(REMOTE_PATHS.machineTeams, () => Response.json({ team: TEAM, invite: 'invite-1' }));
+    plane.answers.set(resolveMachineTeamPath('team1', 'invite'), () => Response.json({ invite: 'invite-2' }));
+    plane.answers.set(resolveMachineTeamPath('team1', 'members/add'), () =>
+      Response.json({ user: BOB, addedAt: 4 })
+    );
+    const created = (await (await local('/api/remote/teams/create', { name: 'Platform' })).json()) as {
+      teamId: string;
+      url: string;
+    };
+    expect(created.teamId).toBe('team1');
+    expect(created.url).toContain('/share/team#team1.invite-1.');
+    const link = (await (await local('/api/remote/teams/link', { teamId: 'team1' })).json()) as {
+      url: string;
+    };
+    expect(link.url).toBe(created.url);
+    const renewed = (await (await local('/api/remote/teams/link/renew', { teamId: 'team1' })).json()) as {
+      url: string;
+    };
+    expect(renewed.url).toContain('.invite-2.');
+    const turnedOff = (await (
+      await local('/api/remote/teams/link/remove', { teamId: 'team1' })
+    ).json()) as RemoteSnapshot;
+    expect(turnedOff.teams[0]?.invite).toBe(false);
+    await local('/api/remote/teams/requests/accept', { teamId: 'team1', userId: BOB.id });
+    await local('/api/remote/teams/requests/decline', { teamId: 'team1', userId: BOB.id });
+    await local('/api/remote/teams/members/remove', { teamId: 'team1', userId: KAI.id });
+    expect(remote.snapshot().teams[0]?.team?.members.map((member) => member.user.id)).toEqual([BOB.id]);
+    expect((await local('/api/remote/teams/leave', { teamId: 'team1' })).status).toBe(400);
+    expect((await local('/api/remote/teams/members/remove', { teamId: 'team1' })).status).toBe(400);
+    expect(
+      await readError(await local('/api/remote/members/grant', { teamId: 'team1', userId: 'nobody' }))
+    ).toBe('teammate_not_found');
+    expect(await readError(await local('/api/remote/members/grant', { teamId: 'team1' }))).toBe(
+      'userId_invalid'
+    );
+    await local('/api/remote/teams/remove', { teamId: 'team1' });
+    expect(remote.snapshot().teams).toEqual([]);
+    plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
+      Response.json({ teamId: 'team1', name: 'Platform', owner: KAI, status: 'requested' })
+    );
+    const joined = await local('/api/remote/teams/join', { url: created.url });
+    expect(await joined.json()).toEqual({ status: 'requested', teamId: 'team1' });
+  });
+
+  test('sends the preview route to the previews: a page they answer, and a socket relayed both ways', async () => {
+    const asked: string[] = [];
+    const relayed: string[] = [];
+    let peer: PreviewPeer | null = null;
+    const previews: PreviewLinks = {
+      answer: (request, url) => {
+        asked.push(`${request.method} ${url.pathname}`);
+        if (request.headers.get('upgrade') !== 'websocket')
+          return Promise.resolve({ kind: 'response', response: new Response('page', { status: 203 }) });
+        const upgrade = {
+          previewId: 'p1',
+          userId: null,
+          target: 'ws://localhost:1/',
+          headers: {},
+          protocols: ['vite-hmr'],
+        };
+        return Promise.resolve({ kind: 'upgrade', upgrade });
+      },
+      openSocket: (opened) => {
+        peer = opened;
+        opened.send('ready');
+        return {
+          send: (data) => {
+            relayed.push(typeof data === 'string' ? data : `bytes:${data.length}`);
+            if (data === 'bye') opened.close(4000, 'done');
+          },
+          close: () => relayed.push('closed'),
+        };
+      },
+    };
+    const { tunnel, port } = await start({ previews });
+    const page = await tunnel('/__preview/p1/index.html', { method: 'POST', body: 'x' });
+    expect(page.status).toBe(203);
+    expect(await page.text()).toBe('page');
+    expect((await tunnel('/__preview/p1/', { headers: { upgrade: 'websocket' } })).status).toBe(400);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/__preview/p1/`, {
+      headers: { 'cf-connecting-ip': '203.0.113.9' },
+      protocols: ['vite-hmr'],
+    } as unknown as string[]);
+    const first = await new Promise<string>((resolve) => {
+      socket.addEventListener('message', (event) => resolve(String(event.data)), { once: true });
+    });
+    expect(first).toBe('ready');
+    expect(socket.protocol).toBe('vite-hmr');
+    const ended = new Promise<CloseEvent>((resolve) => {
+      socket.addEventListener('close', resolve, { once: true });
+    });
+    socket.send(new Uint8Array([1, 2, 3]));
+    socket.send('bye');
+    expect((await ended).code).toBe(4000);
+    await until('the relay is closed', () => relayed.includes('closed'));
+    expect(relayed).toEqual(['bytes:3', 'bye', 'closed']);
+    expect(peer).not.toBeNull();
+    expect(asked).toEqual(['POST /__preview/p1/index.html', 'GET /__preview/p1/', 'GET /__preview/p1/']);
+  });
+
+  test('has no preview route without the previews', async () => {
+    const { tunnel } = await start();
+    expect((await tunnel('/__preview/p1/')).status).toBe(404);
+  });
+
   test('has no share link without the shares', async () => {
     const { tunnel } = await start();
     expect((await tunnel('/share?id=s1', { headers: { origin: REMOTE_APP_ORIGIN } })).status).toBe(404);
@@ -412,6 +622,32 @@ describe('the sealed channel over the tunnel', () => {
     const device = remote.snapshot().devices[0]?.publicKey ?? '';
     expect(remote.removeDevice(device)).toBe(true);
     expect(await channel.closed).toBe(1008);
+  });
+
+  test('lets only the machine’s owner join a team from it, never a member', async () => {
+    const { remote, port } = await start({ access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] } });
+    const machine = await remote.store.resolveMachineKey();
+    const statusFor = async (userId: string) => {
+      const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+        userId,
+        device: await addDevice(remote, userId),
+      });
+      expect(await channel.next()).toEqual({ t: 'ready' });
+      await channel.send({
+        t: 'request',
+        id: 'j',
+        method: 'POST',
+        path: '/api/remote/teams/join',
+        headers: [['content-type', 'application/json']],
+      });
+      await channel.send({ t: 'end', id: 'j' });
+      for (;;) {
+        const message = await channel.next();
+        if (message.t === 'response') return message.status;
+      }
+    };
+    expect(await statusFor(KAI.id)).toBe(403);
+    expect(await statusFor(OWNER.id)).not.toBe(403);
   });
 
   test('closes every channel when remote access stops', async () => {
@@ -824,6 +1060,30 @@ describe('links, access requests and members', () => {
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineMemberAdd)).toBe(false);
   });
 
+  test('a request accepted the moment it is announced still lets the browser in', async () => {
+    const { remote, local, port, plane } = await start({
+      access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },
+    });
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
+    remote.subscribe(() => {
+      const request = remote.snapshot().requests[0];
+      if (request) void remote.acceptRequest(request.id);
+    });
+    await local('/api/remote/link/create', {});
+    const machine = await remote.store.resolveMachineKey();
+    const channel = await openChannel(
+      remote.appOrigin,
+      port,
+      readLink(remote)?.secret ?? '',
+      machine.publicKey,
+      {
+        userId: KAI.id,
+      }
+    );
+    expect(channel.session).toBeTruthy();
+    expect(remote.snapshot().requests).toEqual([]);
+  });
+
   test('a request is refused when the machine cannot check who asked', async () => {
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const { remote, local, port, plane } = await start();
@@ -922,6 +1182,22 @@ describe('links, access requests and members', () => {
     expect(remote.snapshot().access).toEqual(ACCESS);
     expect(remote.snapshot().devices).toEqual([]);
     expect(await channel.closed).toBe(1008);
+    release();
+  });
+
+  test('a heartbeat with the account’s teams shows them at once, and a repeat changes nothing', async () => {
+    const { remote, plane } = await start();
+    const pushes: number[] = [];
+    const release = remote.subscribe(() => pushes.push(1));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, teams: [TEAM] }));
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    expect(remote.snapshot().teams).toEqual([
+      { id: 'team1', name: 'Platform', status: 'member', onMachine: false, invite: false, team: TEAM },
+    ]);
+    const settled = pushes.length;
+    await remote.supervisor.requestHeartbeat();
+    expect(pushes.length).toBe(settled);
     release();
   });
 

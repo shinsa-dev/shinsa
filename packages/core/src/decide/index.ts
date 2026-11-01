@@ -23,13 +23,14 @@ import {
   reportReview,
 } from './agents.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
+import { reviewBundles } from './bundles.ts';
 import { recordChecks } from './checks.ts';
 import { recordCompaction } from './compaction.ts';
 import { recordConfig } from './config.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
-import { releaseWaiting } from './dependencies.ts';
+import { releaseWaiting, stackOnTask } from './dependencies.ts';
 import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
 import {
@@ -62,6 +63,7 @@ import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import {
+  recordBundleCheck,
   recordClosedPullRequests,
   recordHookFailure,
   recordPullRequest,
@@ -106,7 +108,20 @@ import {
   writeProject,
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
-import { expireShare, failShare, recordShare, shareTask, syncShares, unshareTask } from './shares.ts';
+import {
+  describeShare,
+  expirePreview,
+  expireShare,
+  failPreview,
+  failShare,
+  recordPreview,
+  recordShare,
+  sharePreview,
+  shareTask,
+  syncShares,
+  unsharePreview,
+  unshareTask,
+} from './shares.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import {
   answerSlackQuestion,
@@ -129,6 +144,7 @@ import {
   triageTask,
   waitOnTasks,
 } from './tasks.ts';
+import { addProjectToTeam, removeProjectFromTeam } from './teams.ts';
 import { dismissWatchSuggestion, recordWatchSuggestion } from './watch-suggestions.ts';
 import {
   connectWatchdog,
@@ -165,6 +181,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return writeProject(decider, command);
     case 'project.remove':
       return removeProject(decider, command);
+    case 'project.add_to_team':
+      return addProjectToTeam(decider, command);
+    case 'project.remove_from_team':
+      return removeProjectFromTeam(decider, command);
     case 'focus.change':
       return changeFocus(decider, command);
     case 'settings.change':
@@ -177,6 +197,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return prioritizeTask(decider, command);
     case 'task.wait_on':
       return waitOnTasks(decider, command);
+    case 'task.stack_on':
+      return stackOnTask(decider, command);
     case 'task.move_to_backlog':
       return moveToBacklog(decider, command);
     case 'task.remove_from_backlog':
@@ -282,6 +304,18 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return failShare(decider, command);
     case 'share.expire':
       return expireShare(decider, command);
+    case 'share.describe':
+      return describeShare(decider, command);
+    case 'preview.share':
+      return sharePreview(decider, command);
+    case 'preview.unshare':
+      return unsharePreview(decider, command);
+    case 'preview.record':
+      return recordPreview(decider, command);
+    case 'preview.fail':
+      return failPreview(decider, command);
+    case 'preview.expire':
+      return expirePreview(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':
@@ -310,6 +344,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordPushRetry(decider, command);
     case 'pull_request.record_update_conflict':
       return recordUpdateConflict(decider, command);
+    case 'bundle.record_check':
+      return recordBundleCheck(decider, command);
     case 'pull_request.record_hook_failure':
       return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
@@ -443,6 +479,7 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   syncWatchdogs(decider);
   syncMergeSteps(decider);
   startQueuedRounds(decider);
+  reviewBundles(decider);
   syncMergeSteps(decider);
   enforceLiveness(decider);
   dispatchRuns(decider);

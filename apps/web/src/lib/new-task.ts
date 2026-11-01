@@ -58,7 +58,7 @@ type AutoChoice<Value extends string> = Value | 'auto';
 
 export const NO_PROJECT = 'none';
 
-export type NewTaskStart = AutoChoice<'now' | 'after' | 'backlog'>;
+export type NewTaskStart = AutoChoice<'now' | 'after' | 'stack' | 'backlog'>;
 
 export interface NewTaskChoices {
   project: AutoChoice<string>;
@@ -79,7 +79,7 @@ export const AUTO_CHOICES: NewTaskChoices = {
 const PLACEHOLDER = 'Describe the work or ask a question. Shinsa decides what kind of task it is.';
 
 export function describeNewTask(start: NewTaskStart): NewTaskCopy {
-  if (start === 'after') {
+  if (start === 'after' || start === 'stack') {
     return {
       placeholder: PLACEHOLDER,
       submit: 'Add',
@@ -107,6 +107,7 @@ function resolveProjectId(project: string) {
 function resolveStartFields(start: NewTaskStart, after: string[]) {
   if (start === 'now') return { waitsOn: [] };
   if (start === 'after') return { waitsOn: after };
+  if (start === 'stack') return after[0] ? { stacksOn: after[0] } : {};
   if (start === 'backlog') return { backlog: true };
   return {};
 }
@@ -174,7 +175,15 @@ export function describeAfterLabel(chosen: Pick<Task, 'title'>[]) {
   return `After ${first.title} and ${chosen.length - 1} more`;
 }
 
-export function listNewTaskStarts(open: Task[], after: string[]): NewTaskItem<NewTaskStart>[] {
+export function describeStackLabel(parent: Pick<Task, 'title'> | undefined) {
+  return parent ? `Stacked on ${parent.title}` : 'Stack on another task…';
+}
+
+export function listNewTaskStarts(
+  open: Task[],
+  after: string[],
+  stackable: Task[] = []
+): NewTaskItem<NewTaskStart>[] {
   const chosen = open.filter((task) => after.includes(task.id));
   return [
     {
@@ -197,6 +206,13 @@ export function listNewTaskStarts(open: Task[], after: string[]): NewTaskItem<Ne
       ...(open.length === 0 ? { disabled: 'No open task to wait for' } : {}),
     },
     {
+      value: 'stack',
+      label: describeStackLabel(stackable.find((task) => after.includes(task.id))),
+      icon: 'IconLayersThree',
+      hint: 'When it is ready to merge, as one bundle',
+      ...(stackable.length === 0 ? { disabled: 'No open task with a pull request to stack on' } : {}),
+    },
+    {
       value: 'backlog',
       label: 'Backlog',
       icon: 'IconArchive',
@@ -205,11 +221,21 @@ export function listNewTaskStarts(open: Task[], after: string[]): NewTaskItem<Ne
   ];
 }
 
-export function resolveStartChoice(choices: Pick<NewTaskChoices, 'start' | 'after'>, open: Task[]) {
-  const ids = new Set(open.map((task) => task.id));
+export function resolveStartChoice(
+  choices: Pick<NewTaskChoices, 'start' | 'after'>,
+  open: Task[],
+  stackable: Task[] = []
+) {
+  const ids = new Set((choices.start === 'stack' ? stackable : open).map((task) => task.id));
   const after = choices.after.filter((id) => ids.has(id));
-  if (choices.start === 'after' && after.length === 0) return { start: 'auto' as const, after };
+  if ((choices.start === 'after' || choices.start === 'stack') && after.length === 0) {
+    return { start: 'auto' as const, after };
+  }
   return { start: choices.start, after };
+}
+
+export function toggleStackTask(after: string[], taskId: string): Pick<NewTaskChoices, 'start' | 'after'> {
+  return after.includes(taskId) ? { start: 'auto', after: [] } : { start: 'stack', after: [taskId] };
 }
 
 export function toggleAfterTask(after: string[], taskId: string): Pick<NewTaskChoices, 'start' | 'after'> {

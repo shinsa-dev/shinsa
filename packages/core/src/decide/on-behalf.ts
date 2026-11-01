@@ -12,7 +12,11 @@ type HumanOnlyType =
   | 'feedback.file'
   | 'watch_suggestion.accept'
   | 'task.share'
-  | 'task.unshare';
+  | 'task.unshare'
+  | 'project.add_to_team'
+  | 'project.remove_from_team'
+  | 'preview.share'
+  | 'preview.unshare';
 
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'gate.answer',
@@ -24,6 +28,10 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'watch_suggestion.accept',
   'task.share',
   'task.unshare',
+  'project.add_to_team',
+  'project.remove_from_team',
+  'preview.share',
+  'preview.unshare',
 ]);
 
 type OnBehalfCommand = Exclude<UserCommand, { type: HumanOnlyType }>;
@@ -58,14 +66,18 @@ const DESCRIPTIONS: Descriptions = {
   'repo.remove': () => 'Removed a repository',
   'project.write': (_state, command) => `Saved the project “${command.project.name}”`,
   'project.remove': () => 'Removed a project',
-  'focus.change': (state, command) =>
-    command.projectId
-      ? `Focused on ${state.projects[command.projectId]?.name ?? 'a project'}`
-      : 'Cleared the focus',
+  'focus.change': (state, command) => {
+    if (command.projectId) return `Focused on ${state.projects[command.projectId]?.name ?? 'a project'}`;
+    return command.teamId ? 'Focused on a team' : 'Cleared the focus';
+  },
   'settings.change': (_state, command) => `Changed settings: ${Object.keys(command.patch).join(', ')}`,
   'task.prioritize': (state, command) =>
     `Set the priority of ${quoteTask(state, command.taskId)} to ${command.priority}`,
   'task.wait_on': (state, command) => `Changed what ${quoteTask(state, command.taskId)} waits on`,
+  'task.stack_on': (state, command) =>
+    command.stacksOn
+      ? `Stacked ${quoteTask(state, command.taskId)} on ${quoteTask(state, command.stacksOn)}`
+      : `Took ${quoteTask(state, command.taskId)} out of its bundle`,
   'task.move_to_backlog': (state, command) => `Moved ${quoteTask(state, command.taskId)} to the backlog`,
   'task.remove_from_backlog': (state, command) =>
     `Moved ${quoteTask(state, command.taskId)} out of the backlog`,

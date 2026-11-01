@@ -108,7 +108,12 @@ src/
 │   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key,
 │   │                whether no checks on a head means no CI (ciAbsent: the repository's RepoCi and CI_GRACE_MS
 │   │                from the push, resolvePullRequestCi)
-│   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks
+│   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on), releasing waiting
+│   │                tasks (a stacked one once the task below is ready) and recording a stacked task's base (stackBase)
+│   ├── bundles.ts   Bundles (reviewBundles, after every command): ready in place of a merge gate above the root
+│   │                (bundleReady), the root's one merge gate for the bundle, held while the bundle conflicts with
+│   │                the default branch (bundleConflict) and the branch behind is pushed, the merge from the top
+│   │                down, and a task below that merges, leaves or is cancelled
 │   ├── merge-steps.ts  The steps around the merge you tick (merge_step.tick, human-only), the merge gate's wait for
 │   │                the ones before it (assertMergeStepsDone), no done while one after it is open
 │   │                (assertNoMergeStepsLeft), and syncMergeSteps (after every command, for the tasks it changed:
@@ -274,15 +279,27 @@ src/
 │                    secrets are made by the caller, so core stays free of randomness
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
 │                    from the task, its current evidence and the project's name; everything its owner sees but
-│                    chats, runs' prompts, messages, gate answers, and attachments) and hasSharedCode
-│                    (decide/shares.ts: task.share and task.unshare, human-only, and the share.link effect;
-│                    how long, ShareLimit and the shareLimit setting, ended by syncShares when a task shared
+│                    chats, runs' prompts, messages, gate answers, and attachments) and hasSharedCode; presets.ts:
+│                    the share presets (SharePreset in domain/settings.ts: status, standard, full), each a
+│                    list of field groups (full adds `messages`: your chat turns and message activity,
+│                    their attachment blocks stripped) (SHARE_PRESET_GROUPS, hasShareGroup), and resolveSharedTask copies only the
+│                    fields of the groups its context's preset grants (TASK_GROUP_FIELDS);
+│                    update.ts: resolveShareUpdate, a Status card's customer update from the stage and watchdogs
+│                    (decide/shares.ts: task.share and task.unshare, human-only, the share.link effect and,
+│                    when sharing starts, share.describe, recorded by share.describe on TaskShare.description;
+│                    how long, ShareLimit and the shareLimit setting, as what, the preset and the sharePreset
+│                    setting, both changed in place on a running share, ended by syncShares when a task shared
 │                    until_done settles and by share.expire;
 │                    share.record, the link the engine made; share.fail, why it could not); the link and its
 │                    live channel are remote/shares.ts (ShareLink, serializeShareUrl, parseShareUrl,
 │                    ShareLiveView, SHARE_FILE_TYPES and the share paths) and
 │                    remote/share-channel.ts (the hello and welcome HMACs with the link's key,
-│                    deriveShareSessionKey, the ShareMessage the machine alone sends)
+│                    deriveShareSessionKey, the ShareMessage the machine alone sends); teams.ts lists a team's
+│                    tasks (listTeamTasks: every open task of its projects and the 50 last finished, each a
+│                    redacted listing with its owner and machine; isTeamTask), decide/teams.ts puts a project in a
+│                    team (project.add_to_team, project.remove_from_team, human-only), and remote/teams.ts is the
+│                    join link with the key in its fragment, the team hello and welcome with the view bound into
+│                    the session key, and the team feed types (docs/engine.md → Teams)
 ├── slack/           The Slack bot, shared by the engine and the hosted Worker: the forwarded mention and its parser
 │                    (contract.ts: SlackMention, parseSlackMention, SLACK_LIMITS, SLACK_ENGINE_EVENTS_PATH), the
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as

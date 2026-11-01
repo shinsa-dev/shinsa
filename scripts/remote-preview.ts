@@ -1,6 +1,13 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ServerWebSocket } from 'bun';
+import {
+  isPreviewHost,
+  PREVIEW_ACCESS_COOKIE,
+  PREVIEW_COOKIE,
+  respondPreview,
+} from '../apps/cloud/src/previews.ts';
+import type { CloudWorld } from '../apps/cloud/src/world.ts';
 import { Transcripts } from '../apps/engine/src/agents/index.ts';
 import { ProviderRegistry } from '../apps/engine/src/agents/providers/index.ts';
 import { createQuickCalls } from '../apps/engine/src/agents/quick/index.ts';
@@ -10,49 +17,74 @@ import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
+import { Previews } from '../apps/engine/src/remote/previews.ts';
 import { ShareClock } from '../apps/engine/src/remote/share-clock.ts';
+import { createShareDescriber } from '../apps/engine/src/remote/share-describe.ts';
 import { type ShareGitHub, Shares } from '../apps/engine/src/remote/shares.ts';
+import { TeamFeeds } from '../apps/engine/src/remote/team-feeds.ts';
+import { Teams } from '../apps/engine/src/remote/teams.ts';
 import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
+import { Terminals } from '../apps/engine/src/terminals/index.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,
   createConnectToken,
+  createPreviewAccessToken,
   createSettings,
   type InviteAcceptResponse,
   type InviteCreateResponse,
   isTaskSettled,
   type MachineResources,
   type NativeSignInTokenResponse,
+  PREVIEW_ACCESS_HEADER,
+  PREVIEW_ACCESS_PARAM,
+  PREVIEW_KEY_HEADER,
+  PREVIEW_OPEN_TTL_MS,
+  parsePreviewHost,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
   REMOTE_NATIVE_CLIENT,
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   type RemoteInstance,
+  type RemoteTeam,
   type RemoteUser,
   type Repo,
   resolveKeyFingerprint,
+  resolvePreviewTunnelPath,
+  resolveTaskProject,
+  resolveTeamChannelUrl,
+  resolveTeamJoinUrl,
   SHARE_CHANNEL_PATH,
   SHARE_ID_BYTES,
   SHARE_KEY_BYTES,
   type ShareConnectResponse,
   type ShareLink,
+  type SharePreset,
   serializeBase64Url,
   serializeShareUrl,
   type Task,
+  TEAM_CHANNEL_PATH,
+  type TeamJoinResponse,
+  type TeamPreviewResponse,
 } from '../packages/core/src/index.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PORT = Number(Bun.env.PORT ?? 5195);
 const HOST = '127.0.0.1';
 const ORIGIN = `http://${HOST}:${PORT}`;
+const PREVIEW_ZONE = `http://localhost:${PORT}`;
 const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-remote-preview-${PORT}`);
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
 const USER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
-const PLACE = createPlacementAsker(createQuickCalls(new ProviderRegistry(), createSettings).classify);
+const QUICK = createQuickCalls(new ProviderRegistry(), createSettings);
+
+const PLACE = createPlacementAsker(QUICK.classify);
+
+const DESCRIBE = createShareDescriber(QUICK.write);
 
 const LAPTOP_TASKS = [
   {
@@ -72,6 +104,130 @@ const LAPTOP_TASKS = [
   },
 ];
 
+const TEAMMATE: RemoteUser = { id: '2', login: 'kai', name: 'Kai Tanaka', avatarUrl: null };
+
+const TEAMMATE_TASKS = [
+  {
+    request: 'Let a paywall be duplicated from its menu, with its products and copy',
+    title: 'Duplicate a paywall from its menu',
+    branch: 'feat/duplicate-paywall',
+  },
+  {
+    request: 'Find why paywall previews flicker when the theme changes',
+    title: 'Find why previews flicker on theme change',
+    branch: 'fix/preview-flicker',
+  },
+  {
+    request: 'Move the paywall list to the new table component',
+    title: 'Move the paywall list to the new table',
+    branch: 'refactor/paywall-table',
+  },
+];
+
+const TEAM_INVITE = 'preview-team-invite';
+
+const TEAM_KEY = serializeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+
+const MACHINE_OWNERS: Record<string, RemoteUser> = { studio: USER, laptop: USER, kai: TEAMMATE };
+
+const TEAM: Omit<RemoteTeam, 'role'> = {
+  id: 'core',
+  name: 'Product team',
+  owner: USER,
+  members: [{ user: TEAMMATE, addedAt: Date.now() - 3 * 24 * 60 * 60 * 1000 }],
+  requests: [
+    {
+      user: { id: '3', login: 'ines', name: 'Inês Costa', avatarUrl: null },
+      addedAt: Date.now() - 60 * 60 * 1000,
+    },
+  ],
+  machines: [
+    { id: 'studio', name: 'Studio', userId: USER.id, online: true, lastSeenAt: Date.now() },
+    { id: 'laptop', name: 'Laptop', userId: USER.id, online: true, lastSeenAt: Date.now() },
+    { id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: true, lastSeenAt: Date.now() },
+  ],
+  createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const DESIGN_PEOPLE: RemoteUser[] = [
+  { id: '21', login: 'ines', name: 'Inês Costa', avatarUrl: null },
+  { id: '22', login: 'theo', name: 'Theo Park', avatarUrl: null },
+  { id: '23', login: 'amara', name: 'Amara Obi', avatarUrl: null },
+  { id: '24', login: 'jonas', name: 'Jonas Weber', avatarUrl: null },
+  { id: '25', login: 'lea', name: 'Léa Martin', avatarUrl: null },
+  { id: '26', login: 'sam', name: null, avatarUrl: null },
+  { id: '27', login: 'priya', name: 'Priya Nair', avatarUrl: null },
+];
+
+const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
+  {
+    id: 'design',
+    name: 'Design systems',
+    owner: TEAMMATE,
+    members: [USER, ...DESIGN_PEOPLE].map((user, index) => ({
+      user,
+      addedAt: Date.now() - (index + 1) * DAY_MS,
+    })),
+    requests: [],
+    machines: [{ id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: false, lastSeenAt: null }],
+    createdAt: Date.now() - 30 * DAY_MS,
+  },
+  {
+    id: 'platform',
+    name: 'Platform',
+    owner: USER,
+    members: [],
+    requests: [],
+    machines: TEAM.machines.filter((machine) => machine.userId === USER.id),
+    createdAt: Date.now() - DAY_MS,
+  },
+];
+
+const REQUESTED_TEAM = { id: 'growth', name: 'Growth' };
+
+const PREVIEW_TEAM_KEYS: Record<string, string> = Object.fromEntries(
+  [...OTHER_TEAMS, REQUESTED_TEAM].map((team) => [
+    team.id,
+    serializeBase64Url(crypto.getRandomValues(new Uint8Array(32))),
+  ])
+);
+
+function isInTeam(team: Omit<RemoteTeam, 'role'>, user: RemoteUser) {
+  return team.owner.id === user.id || team.members.some((member) => member.user.id === user.id);
+}
+
+function resolvePreviewTeams(owner: RemoteUser): RemoteTeam[] {
+  return [TEAM, ...OTHER_TEAMS]
+    .filter((team) => isInTeam(team, owner))
+    .map((team) => {
+      const role = owner.id === team.owner.id ? 'owner' : 'member';
+      return { ...team, role, requests: role === 'owner' ? team.requests : [] };
+    });
+}
+
+function listPreviewTeamKeys(owner: RemoteUser) {
+  const keys = resolvePreviewTeams(owner).map((team) => ({
+    teamId: team.id,
+    name: team.name,
+    key: PREVIEW_TEAM_KEYS[team.id] ?? TEAM_KEY,
+    invite: team.role !== 'owner' ? null : team.id === TEAM.id ? TEAM_INVITE : `${TEAM_INVITE}-${team.id}`,
+    addedAt: team.createdAt,
+  }));
+  if (owner.id !== USER.id) return keys;
+  return [
+    ...keys,
+    {
+      teamId: REQUESTED_TEAM.id,
+      name: REQUESTED_TEAM.name,
+      key: PREVIEW_TEAM_KEYS[REQUESTED_TEAM.id] ?? TEAM_KEY,
+      invite: null,
+      addedAt: Date.now() - 2 * 60 * 60 * 1000,
+    },
+  ];
+}
+
 interface Machine {
   id: string;
   name: string;
@@ -87,6 +243,21 @@ interface PreviewShare {
   handle: string;
   port: number;
 }
+
+interface ServicePreview {
+  url: string;
+  privateUrl: string | null;
+  handle: string;
+  port: number;
+}
+
+interface DemoService {
+  terminals: Terminals;
+  serviceId: string;
+  taskId: string;
+}
+
+const DEMO_COMMAND = `bun ${join(ROOT, 'scripts/remote-preview-demo.ts')}`;
 
 const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
 
@@ -106,8 +277,8 @@ function seedStudio() {
   return join(seedDir, 'data');
 }
 
-function prepareLaptop() {
-  const dataDir = join(PREVIEW_DIR, 'laptop', 'data');
+function prepareMachine(id: string) {
+  const dataDir = join(PREVIEW_DIR, id, 'data');
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(
     join(dataDir, 'config.json'),
@@ -117,6 +288,7 @@ function prepareLaptop() {
 }
 
 function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
+  const owner = MACHINE_OWNERS[id] ?? USER;
   const credentials = {
     instanceId: id,
     machineToken: `preview-${id}`,
@@ -130,9 +302,11 @@ function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
       version: 1,
       credentials,
       enabled: true,
-      owner: USER.login,
+      owner: owner.login,
       devices: [],
-      access: { owner: USER, members: [] },
+      access: { owner, members: [] },
+      teams: resolvePreviewTeams(owner),
+      teamKeys: listPreviewTeamKeys(owner),
     })
   );
 }
@@ -180,6 +354,19 @@ function createPreviewResources(engine: Engine, load: PreviewLoad) {
   return { snapshot, subscribe: () => () => undefined };
 }
 
+function acceptEveryRequest(remote: Remote) {
+  const accepting = new Set<string>();
+  remote.subscribe(() => {
+    for (const request of remote.snapshot().requests) {
+      if (accepting.has(request.id)) continue;
+      accepting.add(request.id);
+      void remote.acceptRequest(request.id).catch((error: unknown) => {
+        console.error(`Could not accept ${request.deviceName}: ${String(error)}`);
+      });
+    }
+  });
+}
+
 async function startMachine(id: string, name: string, dataDir: string) {
   const connectKey = serializeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   writeRemoteFile(dataDir, id, connectKey);
@@ -188,6 +375,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     SHINSA_DATA_DIR: dataDir,
     SHINSA_PORT: '0',
     SHINSA_REMOTE_ORIGIN: ORIGIN,
+    SHINSA_PREVIEW_ORIGIN: PREVIEW_ZONE,
     SHINSA_WEB_DIR: LOCAL_WEB,
   });
   for (const dir of [config.worktreesDir, config.evidenceDir, config.transcriptsDir])
@@ -207,17 +395,30 @@ async function startMachine(id: string, name: string, dataDir: string) {
     machineName: name,
     openUrl: () => Promise.resolve(),
   });
+  acceptEveryRequest(remote);
   const evidence = new EvidenceStore(config.evidenceDir);
+  const transcripts = new Transcripts(config.transcriptsDir);
+  const terminals = new Terminals({ dataDir, home: config.userHome, version: 'preview' });
   const shares = new Shares({
     engine,
     remote,
     evidence,
+    transcripts,
     github: createPreviewGitHub(engine),
   });
+  const teams = new Teams({ engine, remote, shares, transcripts });
+  const teamFeeds = new TeamFeeds({ remote });
+  const previews = new Previews({
+    engine,
+    remote,
+    services: terminals,
+    origin: config.previewOrigin,
+  });
+  terminals.applyRemoteUrls(previews);
   const http = startServer({
     engine,
     config,
-    transcripts: new Transcripts(config.transcriptsDir),
+    transcripts,
     evidence,
     models: { listModels: () => Promise.resolve([]) } as never,
     onboarding: new Onboarding({
@@ -236,18 +437,19 @@ async function startMachine(id: string, name: string, dataDir: string) {
     place: PLACE,
     shares,
     resources: PREVIEW_LOADS[id] ? createPreviewResources(engine, PREVIEW_LOADS[id]) : undefined,
+    teams,
+    teamFeeds,
+    previews,
+    terminals,
   });
   engine.onEffect(async (effect, context) => {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
-  });
-  remote.subscribe(() => {
-    setTimeout(() => {
-      for (const request of remote.snapshot().requests)
-        remote.acceptRequest(request.id).catch((error: unknown) => console.error(error));
-    });
+    if (effect.kind === 'share.describe') await describePreviewShare(engine, effect.taskId, context.key);
+    if (effect.kind === 'preview.link') await previews.link(effect.taskId, effect.serviceId, context);
   });
   engine.start();
   new ShareClock(engine).start();
+  teamFeeds.start();
   const key = await remote.store.resolveMachineKey();
   const machine: Machine = {
     id,
@@ -257,23 +459,37 @@ async function startMachine(id: string, name: string, dataDir: string) {
     connectKey,
     publicKey: key.publicKey,
   };
-  return { machine, engine, evidence };
+  return { machine, engine, evidence, transcripts, terminals };
 }
 
-async function seedLaptop(engine: Engine, dataDir: string) {
-  const path = join(dataDir, '..', 'website');
+async function describePreviewShare(engine: Engine, taskId: string, key: string) {
+  const task = engine.state.tasks[taskId];
+  if (!task?.share) return;
+  const description = await DESCRIBE(task);
+  if (!description) return;
+  await engine.dispatch({ type: 'share.describe', taskId, description }, { id: `${key}:share.describe` });
+}
+
+interface SeedProject {
+  repo: string;
+  project: string;
+  tasks: typeof LAPTOP_TASKS;
+}
+
+async function seedProject(engine: Engine, dataDir: string, seed: SeedProject) {
+  const path = join(dataDir, '..', seed.repo);
   mkdirSync(path, { recursive: true });
   await engine.dispatch({
     type: 'repo.register',
-    repo: { name: 'website', path, defaultBranch: 'main', remote: null, checkCommands: [] },
-    projectName: 'Website',
+    repo: { name: seed.repo, path, defaultBranch: 'main', remote: null, checkCommands: [] },
+    projectName: seed.project,
   });
-  const [repo] = Object.values(engine.state.repos);
-  if (!repo) throw new Error('Registering the Laptop repository failed.');
-  for (const task of LAPTOP_TASKS) {
+  const repo = Object.values(engine.state.repos).find((entry) => entry.name === seed.repo);
+  if (!repo) throw new Error(`Registering ${seed.repo} failed.`);
+  for (const task of seed.tasks) {
     await engine.dispatch({ type: 'task.create', request: task.request, repoId: repo.id });
     const created = Object.values(engine.state.tasks).find((entry) => entry.request === task.request);
-    if (!created) throw new Error('Creating a Laptop task failed.');
+    if (!created) throw new Error(`Creating a ${seed.project} task failed.`);
     await engine.dispatch({
       type: 'task.triage',
       taskId: created.id,
@@ -284,6 +500,21 @@ async function seedLaptop(engine: Engine, dataDir: string) {
       waitsOn: [],
     });
   }
+  return repo;
+}
+
+async function shareProjectWithTeam(engine: Engine, projectId: string | undefined) {
+  if (!projectId) throw new Error('No project to share with the preview team.');
+  await engine.dispatch({ type: 'project.add_to_team', projectId, teamId: TEAM.id });
+}
+
+function selectBusiestProject(engine: Engine) {
+  const counts = new Map<string, number>();
+  for (const task of Object.values(engine.state.tasks)) {
+    const projectId = resolveTaskProject(engine.state, task);
+    if (projectId && !task.watchHome) counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
 }
 
 function listInstances(machines: Machine[]): Promise<RemoteInstance[]> {
@@ -350,13 +581,15 @@ async function normalizeSeedRemote(engine: Engine, repo: Repo) {
 async function createPreviewShare(
   studio: Awaited<ReturnType<typeof startMachine>>,
   task: Task,
-  label: string
+  label: string,
+  preset: SharePreset = 'standard'
 ): Promise<PreviewShare | null> {
   const seeded = task.repoId ? studio.engine.state.repos[task.repoId] : undefined;
   if (!seeded) return null;
   await normalizeSeedRemote(studio.engine, seeded);
   const url = serializeShareUrl(ORIGIN, createShareLink(studio.machine.id));
-  if (!task.share) await studio.engine.dispatch({ type: 'task.share', taskId: task.id, limit: 'none' });
+  if (!task.share)
+    await studio.engine.dispatch({ type: 'task.share', taskId: task.id, limit: 'none', preset });
   await studio.engine.dispatch({ type: 'share.record', taskId: task.id, url });
   return { url, label, handle: task.handle ?? task.id, port: studio.machine.port };
 }
@@ -374,6 +607,24 @@ async function recordPushedHead(engine: Engine, task: Task) {
   return engine.state.tasks[task.id] ?? task;
 }
 
+const SEEDED_MESSAGES = [
+  'Can you keep the old export working for one more release?',
+  'Looks good so far. Please also cover the empty state.',
+];
+
+function seedMessages(studio: Awaited<ReturnType<typeof startMachine>>, task: Task) {
+  const [run] = Object.values(studio.engine.state.runs)
+    .filter((entry) => entry.taskId === task.id)
+    .sort((left, right) => right.startedAt - left.startedAt);
+  if (!run) return;
+  for (const text of SEEDED_MESSAGES)
+    studio.transcripts.record(run.id, { type: 'user', from: 'you', text, attachments: [] });
+}
+
+function countRuns(engine: Engine, taskId: string) {
+  return Object.values(engine.state.runs).filter((run) => run.taskId === taskId).length;
+}
+
 async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachine>>) {
   const { engine } = studio;
   const tasks = Object.values(engine.state.tasks).filter((entry) => entry.report && entry.repoId);
@@ -385,14 +636,179 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
     (left, right) => countStoredEvidence(engine, right.id) - countStoredEvidence(engine, left.id)
   );
   const pushed = coded && (await recordPushedHead(engine, coded));
+  const taken = new Set([pushed?.id, evidenced?.id]);
+  const [talked] = tasks
+    .filter((entry) => !taken.has(entry.id))
+    .sort((left, right) => countRuns(engine, right.id) - countRuns(engine, left.id));
+  const [, chatty] = tasks
+    .filter((entry) => !taken.has(entry.id))
+    .sort((left, right) => countRuns(engine, right.id) - countRuns(engine, left.id));
+  const status = tasks.find(
+    (entry) => !taken.has(entry.id) && entry.id !== talked?.id && entry.id !== chatty?.id
+  );
+  for (const task of [talked, chatty]) if (task) seedMessages(studio, task);
   const shares = [
     pushed &&
       (await createPreviewShare(studio, pushed, 'A shared task with an open pull request, with Code')),
     evidenced &&
       evidenced.id !== pushed?.id &&
       (await createPreviewShare(studio, evidenced, 'A shared task with its evidence')),
+    status &&
+      (await createPreviewShare(studio, status, 'A task shared as Status, the status card', 'status')),
+    talked &&
+      (await createPreviewShare(
+        studio,
+        talked,
+        'A task shared as Standard, with the agents’ live output in Chat',
+        'standard'
+      )),
+    chatty &&
+      (await createPreviewShare(
+        studio,
+        chatty,
+        'A task shared as Full access, with your messages in Chat too',
+        'full'
+      )),
   ];
   return shares.filter((share): share is PreviewShare => Boolean(share));
+}
+
+async function createServicePreview(
+  studio: Awaited<ReturnType<typeof startMachine>>
+): Promise<{ preview: ServicePreview; demo: DemoService } | null> {
+  const { engine, terminals } = studio;
+  const task = Object.values(engine.state.tasks).find(
+    (entry) => entry.repoId && entry.projectId && entry.worktreePath && !isTaskSettled(entry)
+  );
+  const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
+  if (!(task?.projectId && repo)) return null;
+  const service = terminals.addService(task.projectId, {
+    name: 'web',
+    cwd: repo.path,
+    command: DEMO_COMMAND,
+    env: {},
+    previewUrl: 'http://localhost:{port}/',
+    portVariable: 'PORT',
+  });
+  const demo: DemoService = { terminals, serviceId: service.id, taskId: task.id };
+  startDemoService(demo);
+  await engine.dispatch({ type: 'preview.share', taskId: task.id, serviceId: service.id, limit: 'none' });
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const preview = engine.state.tasks[task.id]?.previews?.find((entry) => entry.serviceId === service.id);
+    const run = terminals
+      .snapshot()
+      .terminals.find((entry) => entry.serviceId === service.id && entry.taskId === task.id);
+    if (preview?.url && run?.remoteUrl)
+      return {
+        preview: {
+          url: preview.url,
+          privateUrl: run.remoteUrl,
+          handle: task.handle ?? task.id,
+          port: studio.machine.port,
+        },
+        demo,
+      };
+    if (preview?.failure) throw new Error(`Sharing the demo preview failed: ${preview.failure}`);
+    await Bun.sleep(100);
+  }
+  throw new Error('Sharing the demo preview did not finish.');
+}
+
+function startDemoService(demo: DemoService) {
+  demo.terminals.startService(demo.serviceId, { cwd: ROOT, place: 'worktree', taskId: demo.taskId });
+}
+
+function createPreviewWorld(machines: Machine[]): CloudWorld {
+  return {
+    store: {
+      selectInstance: (id: string) => {
+        const machine = machines.find((entry) => entry.id === id);
+        return Promise.resolve(
+          machine ? { online: 1, last_seen_at: Date.now(), connect_key: machine.connectKey } : null
+        );
+      },
+    },
+    fetch: (target: string, init?: RequestInit) => {
+      const url = new URL(target);
+      const machine = machines.find((entry) => url.host === `t-${entry.id}.shinsa.dev`);
+      if (!machine) return Promise.reject(new Error('No such tunnel.'));
+      const headers = new Headers(init?.headers);
+      headers.set('cf-connecting-ip', '127.0.0.1');
+      return fetch(`http://127.0.0.1:${machine.port}${url.pathname}${url.search}`, { ...init, headers });
+    },
+    now: Date.now,
+    config: { previewOrigin: PREVIEW_ZONE },
+  } as unknown as CloudWorld;
+}
+
+function upgradePreview(request: Request, url: URL, machines: Machine[], server: Bun.Server<TunnelData>) {
+  const address = parsePreviewHost(url.host, PREVIEW_ZONE);
+  const machine = machines.find((entry) => entry.id === address?.instanceId);
+  const key = readCookie(request, PREVIEW_COOKIE);
+  const access = readCookie(request, PREVIEW_ACCESS_COOKIE);
+  if (!(address && machine && (key || access))) return new Response('Not shared', { status: 404 });
+  const path = `${resolvePreviewTunnelPath(address.previewId, url.pathname)}${url.search}`;
+  const data: TunnelData = {
+    machine,
+    path,
+    upstream: null,
+    pending: [],
+    headers: {
+      ...(key ? { [PREVIEW_KEY_HEADER]: key } : {}),
+      ...(access ? { [PREVIEW_ACCESS_HEADER]: access } : {}),
+    },
+  };
+  if (server.upgrade(request, { data })) return undefined;
+  return new Response('Upgrade failed', { status: 400 });
+}
+
+async function respondEnroll(machine: Machine, url: URL) {
+  await machine.remote.createLink();
+  const { link } = machine.remote.snapshot();
+  const target = link?.url ?? REMOTE_PATHS.app;
+  return Response.redirect(url.searchParams.has('on') ? target.replace('#', '?on=machine#') : target, 302);
+}
+
+const DEMO_TOGGLE = /^\/__preview\/demo\/(start|stop)$/;
+
+async function toggleDemoService(demo: DemoService | null, url: URL) {
+  if (demo && url.pathname.endsWith('/start')) startDemoService(demo);
+  if (demo && url.pathname.endsWith('/stop')) await demo.terminals.stopService(demo.serviceId, demo.taskId);
+  return new Response(`The web service ${url.pathname.endsWith('/stop') ? 'stopped' : 'started'}.`);
+}
+
+function respondPreviewHost(
+  request: Request,
+  url: URL,
+  machines: Machine[],
+  world: CloudWorld,
+  server: Bun.Server<TunnelData>
+) {
+  if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
+    return upgradePreview(request, url, machines, server);
+  return respondPreview(request, url, world);
+}
+
+function readCookie(request: Request, cookie: string) {
+  for (const part of (request.headers.get('cookie') ?? '').split(';')) {
+    const [name, ...rest] = part.trim().split('=');
+    if (name === cookie) return rest.join('=');
+  }
+  return null;
+}
+
+async function respondPreviewOpen(url: URL, machines: Machine[]) {
+  const target = new URL(url.searchParams.get('url') ?? '', PREVIEW_ZONE);
+  const address = parsePreviewHost(target.host, PREVIEW_ZONE);
+  const machine = machines.find((entry) => entry.id === address?.instanceId);
+  if (!(address && machine)) return new Response('Not a service of yours', { status: 404 });
+  const token = await createPreviewAccessToken(machine.connectKey, {
+    ...address,
+    userId: USER.id,
+    expiresAt: Date.now() + PREVIEW_OPEN_TTL_MS,
+  });
+  target.searchParams.set(PREVIEW_ACCESS_PARAM, token);
+  return Response.redirect(target.href, 303);
 }
 
 function respondShareConnect(match: RegExpExecArray, machines: Machine[]) {
@@ -419,43 +835,92 @@ function respondStatic(pathname: string) {
   });
 }
 
-function respondIndex(machines: Machine[], shares: PreviewShare[]) {
-  const links = [
-    ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
+function listPreviewLinks(
+  machines: Machine[],
+  teammate: Machine,
+  shares: PreviewShare[],
+  teamTask: string | null,
+  preview: ServicePreview | null
+) {
+  return [
+    ['The merged dashboard (always signed in)', `${ORIGIN}${REMOTE_PATHS.app}`],
+    ...(preview
+      ? [
+          [
+            `${preview.handle} on Studio's own app, no sign-in: its Services, Share preview and Stop sharing`,
+            `http://${HOST}:${preview.port}/tasks/${preview.handle}`,
+          ],
+          [
+            `The shared preview of ${preview.handle}'s web service, with live updates over a WebSocket`,
+            preview.url,
+          ],
+          ...(preview.privateUrl
+            ? [
+                [
+                  `${preview.handle} through remote access: Open on its web service goes to the private address`,
+                  `${ORIGIN}/tasks/${preview.handle}`,
+                ],
+                [
+                  `${preview.handle}'s web service at its private address, as Open goes there`,
+                  `${ORIGIN}${REMOTE_PATHS.previewOpen}?${new URLSearchParams({ url: preview.privateUrl })}`,
+                ],
+                ['The private address without signing in through Open (not shared)', preview.privateUrl],
+              ]
+            : []),
+          ['Stop the web service (the preview then says it is not running)', `${ORIGIN}/__preview/demo/stop`],
+          ['Start the web service again', `${ORIGIN}/__preview/demo/start`],
+          ['A preview link that no longer works', `http://${'a'.repeat(32)}.localhost:${PORT}/`],
+        ]
+      : []),
     [
       'Sign in as the iPhone app does (answers shinsa://signed-in?code=preview, which the token path takes)',
-      `${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
+      `${ORIGIN}${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
     ],
     ...machines.map((machine) => [
-      `Add this device to ${machine.name} (accepted at once, then the dashboard opens)`,
-      `/__preview/enroll/${machine.id}`,
+      `Add this device to ${machine.name} (it is let in at once: the stand-in accepts every request)`,
+      `${ORIGIN}/__preview/enroll/${machine.id}`,
     ]),
     ...machines.map((machine) => [
-      `Add this device to ${machine.name} as the machine it sits on (it shows as This machine)`,
-      `/__preview/enroll/${machine.id}?on=machine`,
+      `Add this device to ${machine.name} as the machine it sits on`,
+      `${ORIGIN}/__preview/enroll/${machine.id}?on=machine`,
     ]),
-    ['The merged dashboard of every machine this device was added to', REMOTE_PATHS.app],
-    ['All tasks, each with its machine', '/tasks'],
-    ['Settings, with Machines', '/settings'],
-    ['Approving a pairing (code K7PQ)', `${REMOTE_PATHS.pairPage}?code=K7PQ`],
+    ['All tasks, each with its machine', `${ORIGIN}/tasks`],
+    ['Settings, with Machines', `${ORIGIN}/settings`],
+    ['Approving a pairing (code K7PQ)', `${ORIGIN}${REMOTE_PATHS.pairPage}?code=K7PQ`],
     ...shares.flatMap((share) => [
       [`${share.label} (a live link, no sign-in)`, share.url],
-      [
-        `The same task, ${share.handle}, as you see it on Studio`,
-        `http://${HOST}:${share.port}/tasks/${share.handle}`,
-      ],
+      [`The same task, ${share.handle}, on Studio`, `http://${HOST}:${share.port}/tasks/${share.handle}`],
     ]),
     ['A share link that no longer works', serializeShareUrl(ORIGIN, createShareLink('studio'))],
+    [
+      `Studio's own app: the focus menu's Teams section, then ${TEAM.name}, shows Kai's tasks beside yours`,
+      `http://${HOST}:${machines[0]?.port}/tasks`,
+    ],
+    [
+      `Studio's own app: Settings, Teams, with Inês asking to join`,
+      `http://${HOST}:${machines[0]?.port}/settings`,
+    ],
+    ...(teamTask
+      ? [
+          [
+            `One of Kai's tasks on Studio's own app, read-only`,
+            `http://${HOST}:${machines[0]?.port}${teamTask}`,
+          ],
+        ]
+      : []),
+    [
+      `${teammate.name}'s own app: Settings, Teams. Take Paywalls out of ${TEAM.name}, and Kai's tasks leave Studio's list at once`,
+      `http://${HOST}:${teammate.port}/settings`,
+    ],
+    [
+      `The team's join link, which gives this browser the team key so the dashboard opens Kai's tasks too`,
+      resolveTeamJoinUrl({ teamId: TEAM.id, invite: TEAM_INVITE, key: TEAM_KEY }, ORIGIN),
+    ],
     ...machines.map((machine) => [
-      `${machine.name}'s own app on the machine: Settings, Remote access`,
+      `${machine.name}'s own app: Settings`,
       `http://${HOST}:${machine.port}/settings`,
     ]),
   ];
-  const items = links.map(([label, href]) => `<li><a href="${href}">${label}</a></li>`).join('');
-  return new Response(
-    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to Studio and Laptop first: each machine accepts it at once and the dashboard opens. Then open Settings.</p><ol>${items}</ol></body>`,
-    { headers: { 'content-type': 'text/html; charset=utf-8' } }
-  );
 }
 
 async function createConnect(machine: Machine): Promise<ConnectResponse> {
@@ -523,7 +988,58 @@ async function respondInviteAccept(request: Request, machines: Machine[]) {
   return Response.json(answer);
 }
 
-async function respondDashboard(request: Request, url: URL, machines: Machine[]) {
+async function respondTeamConnect(request: Request, viewer: RemoteUser, teammates: Machine[]) {
+  const { instanceId } = (await request.json()) as { instanceId?: string };
+  const target = teammates.find((entry) => entry.id === instanceId);
+  if (!target)
+    return Response.json(
+      { error: { code: 'not_found', message: 'That machine is not in this team.' } },
+      { status: 404 }
+    );
+  const expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS;
+  const token = await createConnectToken(target.connectKey, {
+    instanceId: target.id,
+    userId: viewer.id,
+    expiresAt,
+  });
+  const answer: ConnectResponse = {
+    url: resolveTeamChannelUrl(`ws://${HOST}:${PORT}/__preview/tunnel/${target.id}`, token),
+    expiresAt,
+  };
+  return Response.json(answer);
+}
+
+function selectCallerOwner(request: Request) {
+  const id = (request.headers.get('authorization') ?? '').replace(/^Bearer preview-/, '');
+  return MACHINE_OWNERS[id] ?? null;
+}
+
+function respondTeams(request: Request, url: URL, teammates: Machine[]) {
+  const { pathname } = url;
+  if (pathname === REMOTE_PATHS.teams) return Response.json(resolvePreviewTeams(USER));
+  if (pathname === REMOTE_PATHS.teamJoin) {
+    const answer: TeamJoinResponse = {
+      teamId: TEAM.id,
+      name: TEAM.name,
+      owner: TEAM.owner,
+      status: 'member',
+    };
+    return Response.json(answer);
+  }
+  if (pathname === REMOTE_PATHS.teamPreview) {
+    const answer: TeamPreviewResponse = { name: TEAM.name, owner: TEAM.owner };
+    return Response.json(answer);
+  }
+  if (pathname === `${REMOTE_PATHS.teams}/${TEAM.id}/connect`)
+    return respondTeamConnect(request, USER, teammates);
+  const owner = selectCallerOwner(request);
+  if (owner && pathname === `${REMOTE_PATHS.machineTeams}/${TEAM.id}/connect`)
+    return respondTeamConnect(request, owner, teammates);
+  if (owner && pathname.startsWith(`${REMOTE_PATHS.machineTeams}/`)) return Response.json({ ok: true });
+  return null;
+}
+
+function respondSession(request: Request, url: URL) {
   const { pathname } = url;
   if (pathname === REMOTE_PATHS.session) return Response.json({ user: USER });
   if (pathname === REMOTE_PATHS.signIn && url.searchParams.get('client') === REMOTE_NATIVE_CLIENT)
@@ -535,6 +1051,16 @@ async function respondDashboard(request: Request, url: URL, machines: Machine[])
   if (pathname === REMOTE_PATHS.signIn)
     return Response.redirect(`${ORIGIN}${url.searchParams.get('return') ?? REMOTE_PATHS.app}`, 302);
   if (pathname === REMOTE_PATHS.signOut) return Response.json({});
+  return null;
+}
+
+async function respondDashboard(request: Request, url: URL, machines: Machine[], teammates: Machine[]) {
+  const { pathname } = url;
+  const team = respondTeams(request, url, teammates);
+  if (team) return team;
+  const session = respondSession(request, url);
+  if (session) return session;
+  if (pathname === REMOTE_PATHS.previewOpen) return respondPreviewOpen(url, machines);
   if (pathname === REMOTE_PATHS.instances) return Response.json(await listInstances(machines));
   if (pathname.startsWith(`${REMOTE_PATHS.pairs}/`)) {
     const [studio] = machines;
@@ -563,12 +1089,13 @@ interface TunnelData {
   path: string;
   upstream: WebSocket | null;
   pending: (string | Uint8Array)[];
+  headers?: Record<string, string>;
 }
 
 function openUpstream(socket: ServerWebSocket<TunnelData>) {
   const { machine, path } = socket.data;
   const upstream = new WebSocket(`ws://127.0.0.1:${machine.port}${path}`, {
-    headers: { origin: ORIGIN, 'cf-connecting-ip': '127.0.0.1' },
+    headers: { origin: ORIGIN, 'cf-connecting-ip': '127.0.0.1', ...socket.data.headers },
   } as unknown as string[]);
   upstream.binaryType = 'arraybuffer';
   upstream.addEventListener('open', () => {
@@ -588,40 +1115,55 @@ async function main() {
     );
   rmSync(PREVIEW_DIR, { recursive: true, force: true });
   const studioData = seedStudio();
-  const laptopData = prepareLaptop();
+  const laptopData = prepareMachine('laptop');
   const studio = await startMachine('studio', 'Studio', studioData);
   const laptop = await startMachine('laptop', 'Laptop', laptopData);
-  await seedLaptop(laptop.engine, laptopData);
+  await seedProject(laptop.engine, laptopData, { repo: 'website', project: 'Website', tasks: LAPTOP_TASKS });
+  const teammateData = prepareMachine('kai');
+  const teammate = await startMachine('kai', 'Kai’s MacBook', teammateData);
+  const paywalls = await seedProject(teammate.engine, teammateData, {
+    repo: 'paywalls',
+    project: 'Paywalls',
+    tasks: TEAMMATE_TASKS,
+  });
+  await shareProjectWithTeam(teammate.engine, paywalls.projectId ?? undefined);
+  await shareProjectWithTeam(studio.engine, selectBusiestProject(studio.engine));
   const machines = [studio.machine, laptop.machine];
+  const teammates = [...machines, teammate.machine];
   const shares = await createPreviewShares(studio);
+  const [teamTask] = Object.values(teammate.engine.state.tasks);
+  const teamTaskPath = teamTask ? `/teams/${TEAM.id}/kai/${teamTask.id}` : null;
+  const shared = await createServicePreview(studio);
+  const preview = shared?.preview ?? null;
+  const demo = shared?.demo ?? null;
+  const world = createPreviewWorld(machines);
   Bun.serve<TunnelData>({
     port: PORT,
     hostname: HOST,
-    async fetch(request, server) {
+    fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname === '/__preview') return respondIndex(machines, shares);
+      if (isPreviewHost(url.host, PREVIEW_ZONE))
+        return respondPreviewHost(request, url, machines, world, server);
+      if (DEMO_TOGGLE.test(url.pathname)) return toggleDemoService(demo, url);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
-      if (enrolling) {
-        await enrolling.remote.createLink();
-        const { link } = enrolling.remote.snapshot();
-        const onMachine = url.searchParams.has('on');
-        const target = link?.url ?? REMOTE_PATHS.app;
-        return Response.redirect(onMachine ? target.replace('#', '?on=machine#') : target, 302);
-      }
-      const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share)?$/.exec(url.pathname);
-      const machine = machines.find((entry) => entry.id === tunnel?.[1]);
+      if (enrolling) return respondEnroll(enrolling, url);
+      const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share|\/team)?$/.exec(url.pathname);
+      const machine = teammates.find((entry) => entry.id === tunnel?.[1]);
       if (machine) {
-        const path = tunnel?.[2]
-          ? `${SHARE_CHANNEL_PATH}${url.search}`
-          : `${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '')}`;
+        const token = encodeURIComponent(url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '');
+        const channels: Record<string, string> = {
+          '/share': `${SHARE_CHANNEL_PATH}${url.search}`,
+          '/team': `${TEAM_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${token}`,
+        };
+        const path = channels[tunnel?.[2] ?? ''] ?? `${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${token}`;
         if (server.upgrade(request, { data: { machine, path, upstream: null, pending: [] } }))
           return undefined;
         return new Response('Upgrade failed', { status: 400 });
       }
-      if (url.pathname.startsWith('/__remote/')) return respondDashboard(request, url, machines);
+      if (url.pathname.startsWith('/__remote/')) return respondDashboard(request, url, machines, teammates);
       return respondStatic(url.pathname);
     },
     websocket: {
@@ -637,9 +1179,8 @@ async function main() {
       },
     },
   });
-  console.info(`Remote access preview: ${ORIGIN}/__preview`);
-  for (const machine of machines)
-    console.info(`${machine.name}'s own app: http://${HOST}:${machine.port}/settings`);
+  for (const [label, url] of listPreviewLinks(machines, teammate.machine, shares, teamTaskPath, preview))
+    console.info(`${label}: ${url}`);
 }
 
 await main();

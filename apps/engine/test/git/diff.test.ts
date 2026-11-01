@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIFF_PATCH_LIMITS } from '@shinsa/core';
+import { readWorkingPatch } from '../../src/git/diff.ts';
 import { createWorktree, resolveCommitDiff, resolveWorkingDiff } from '../../src/git/index.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 
@@ -37,6 +38,18 @@ describe('resolveWorkingDiff', () => {
     writeFiles(worktree.path, { 'docs/café notes.md': 'hi\n' });
     const files = await resolveWorkingDiff(worktree.path, await git(worktree.path, 'rev-parse', 'HEAD'));
     expect(files.map((entry) => entry.path)).toEqual(['docs/café notes.md']);
+  });
+});
+
+describe('readWorkingPatch', () => {
+  test('is the working copy’s patch, new files included, without touching the index', async () => {
+    const { repo } = await createGitRepo({ remote: false });
+    const worktree = await createWorktree(repo, createTempDir(), 'task-dddddd', 'fix/patch', null);
+    writeFiles(worktree.path, { 'new.ts': 'export {};\n', 'README.md': '# changed\n' });
+    const patch = await readWorkingPatch(worktree.path, await git(worktree.path, 'rev-parse', 'HEAD'));
+    expect(patch).toContain('diff --git a/new.ts b/new.ts');
+    expect(patch).toContain('+# changed');
+    expect(await git(worktree.path, 'status', '--porcelain')).toBe('M README.md\n?? new.ts');
   });
 });
 
