@@ -57,6 +57,35 @@ describe('the sealed channel to a machine', () => {
     channel.close();
   });
 
+  it('makes the hello while the connect URL is still coming, and opens only once it came', async () => {
+    const device = await createKeyPair();
+    const mac = await FakeMac.create({ enrolled: [await serializePublicKey(device.publicKey)] });
+    const url = Promise.withResolvers<string>();
+    const opening = openRemoteChannel({
+      url: url.promise,
+      machineKey: mac.machineKey,
+      device,
+      enrollSecret: null,
+      openSocket: mac.openSocket,
+    });
+    await Bun.sleep(5);
+    expect(mac.urls).toEqual([]);
+    url.resolve('wss://late/remote');
+    const channel = await opening;
+    expect(mac.urls).toEqual(['wss://late/remote']);
+    channel.close();
+    await expect(
+      openRemoteChannel({
+        url: Promise.reject(new Error('Shinsa Cloud is down.')),
+        machineKey: mac.machineKey,
+        device,
+        enrollSecret: null,
+        openSocket: mac.openSocket,
+      })
+    ).rejects.toThrow('Shinsa Cloud is down.');
+    expect(mac.urls).toHaveLength(1);
+  });
+
   it('opens for an enrolled device, carries the app socket and confirms the key both ways', async () => {
     const { mac, opening } = await connect();
     const channel = await opening;

@@ -6,7 +6,12 @@ import type { EnrolledDevice } from '@/lib/remote/devices.ts';
 import { ChannelSocket, RemoteLink } from '@/lib/remote/link.ts';
 import { createKeyPair, FakeMac, type FakeMacOptions } from './fake-mac.ts';
 
-async function createLink(options: FakeMacOptions = {}, enrolled = true) {
+interface LinkClock {
+  now: number;
+  lifetime: number;
+}
+
+async function createLink(options: FakeMacOptions = {}, enrolled = true, clock?: LinkClock) {
   const keys = await createKeyPair();
   const deviceKey = await serializePublicKey(keys.publicKey);
   const mac = await FakeMac.create({ enrolled: enrolled ? [deviceKey] : [], ...options });
@@ -21,12 +26,13 @@ async function createLink(options: FakeMacOptions = {}, enrolled = true) {
         connects.push(instanceId);
         return Promise.resolve({
           url: `wss://t-${instanceId}.shinsa.dev/remote?token=${connects.length}`,
-          expiresAt: 0,
+          expiresAt: clock ? clock.now + clock.lifetime : 0,
         });
       },
     },
     openChannel: (channel) => openRemoteChannel({ ...channel, openSocket: mac.openSocket }),
     onRefused: (error) => refusals.push(error.message),
+    ...(clock ? { now: () => clock.now } : {}),
   });
   return { mac, link, connects, refusals };
 }
@@ -122,5 +128,39 @@ describe('the link to a remote machine', () => {
     const { link, refusals } = await createLink({ refuseOpen: true });
     await expect(link.resolveChannel()).rejects.toBeInstanceOf(ChannelError);
     expect(refusals).toEqual([]);
+  });
+
+  it('reuses a connect token on reconnect until shortly before it expires', async () => {
+    const clock = { now: 1_000, lifetime: 60_000 };
+    const { mac, link, connects } = await createLink({}, true, clock);
+    await link.resolveChannel();
+    clock.now += 30_000;
+    await link.resolveChannel(true);
+    expect(connects).toHaveLength(1);
+    expect(mac.urls).toEqual([
+      'wss://t-k3x9.shinsa.dev/remote?token=1',
+      'wss://t-k3x9.shinsa.dev/remote?token=1',
+    ]);
+    clock.now += 15_000;
+    await link.resolveChannel(true);
+    expect(connects).toHaveLength(2);
+    expect(mac.urls.at(-1)).toBe('wss://t-k3x9.shinsa.dev/remote?token=2');
+  });
+
+  it('never holds a token that Shinsa Cloud gave too short a life', async () => {
+    const clock = { now: 1_000, lifetime: 10_000 };
+    const { link, connects } = await createLink({}, true, clock);
+    await link.resolveChannel();
+    await link.resolveChannel(true);
+    expect(connects).toHaveLength(2);
+  });
+
+  it('asks for a fresh token after a channel failed to open', async () => {
+    const clock = { now: 1_000, lifetime: 60_000 };
+    const { mac, link, connects } = await createLink({ refuseOpen: true }, true, clock);
+    await expect(link.resolveChannel()).rejects.toBeInstanceOf(ChannelError);
+    mac.options = { ...mac.options, refuseOpen: false };
+    await link.resolveChannel();
+    expect(connects).toHaveLength(2);
   });
 });

@@ -21,7 +21,7 @@ import {
 } from '@shinsa/core';
 
 export interface ChannelOptions {
-  url: string;
+  url: string | Promise<string>;
   machineKey: string;
   device: CryptoKeyPair;
   enrollSecret: string | null;
@@ -265,7 +265,7 @@ function awaitOpen(socket: WebSocket) {
   });
 }
 
-export async function openRemoteChannel(options: ChannelOptions): Promise<RemoteChannel> {
+async function prepareHello(options: ChannelOptions) {
   const machinePublicKey = await parsePublicKey(options.machineKey);
   if (!machinePublicKey) throw new ChannelError('The key this browser pinned for your machine is not valid.');
   const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
@@ -287,7 +287,15 @@ export async function openRemoteChannel(options: ChannelOptions): Promise<Remote
     options.name ?? null,
     [CHANNEL_COMPRESSION]
   );
-  const socket = (options.openSocket ?? openBrowserSocket)(options.url);
+  return { machinePublicKey, ephemeral, device, clientEphemeral, hello };
+}
+
+export async function openRemoteChannel(options: ChannelOptions): Promise<RemoteChannel> {
+  const [url, { machinePublicKey, ephemeral, device, clientEphemeral, hello }] = await Promise.all([
+    options.url,
+    prepareHello(options),
+  ]);
+  const socket = (options.openSocket ?? openBrowserSocket)(url);
   const channel = new RemoteChannel(socket, async (opened, text) => {
     const welcome = parseServerHello(text);
     if (welcome?.type === 'refused') throw new ChannelError(welcome.reason, true);

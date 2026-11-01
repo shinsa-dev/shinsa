@@ -179,7 +179,7 @@ describe('a device that left while it waited for an answer', () => {
 
   it('goes on waiting, closing the socket at once, while the request is open', async () => {
     const waiting = await createWaiting((options) => {
-      options.openSocket?.(options.url);
+      options.openSocket?.(options.url as string);
       options.onPending?.();
       return Promise.reject(new ChannelError('The connection to your machine closed.'));
     });
