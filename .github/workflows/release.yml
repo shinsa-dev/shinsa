@@ -320,41 +320,29 @@ jobs:
     needs: [trigger, mac, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - name: Check for an npm token
-        id: token
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -n "$NPM_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No NPM_TOKEN secret, so the engine was not published to npm."
-          fi
       - uses: actions/checkout@v4
-        if: steps.token.outputs.present == 'true'
         with:
           ref: ${{ needs.trigger.outputs.sha }}
       - uses: oven-sh/setup-bun@v2
-        if: steps.token.outputs.present == 'true'
         with:
           bun-version: 1.4.4
       - uses: actions/setup-node@v4
-        if: steps.token.outputs.present == 'true'
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
+      - name: Use an npm that publishes through trusted publishing
+        run: npm install -g npm@^11.5.1
       - name: Download the engines
-        if: steps.token.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.mac.outputs.tag }}
         run: gh release download "$TAG" --pattern 'shinsa-*.tar.gz' --pattern 'shinsa-*.tar.gz.sha256' --dir release-engine
       - name: Publish to npm
-        if: steps.token.outputs.present == 'true'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           SHINSA_VERSION: ${{ needs.mac.outputs.version }}
           RELEASE_CHANNEL: ${{ needs.mac.outputs.channel }}
         run: bun scripts/release-npm.ts release-engine npm-packages

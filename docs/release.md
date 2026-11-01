@@ -273,10 +273,14 @@ Two ways in, both reading those archives:
 Neither updates itself: run the script again, or `npm i -g shinsa@<tag>`. Then `shinsa start` sets the engine up as a
 background service, systemd on Linux and launchd on a Mac without the app (`docs/engine.md` → Run on a server).
 
-**Publishing to npm needs the `NPM_TOKEN` secret**: an npm automation (or granular) token allowed to publish
-`shinsa` and every package under the `@shinsa` scope, so the `shinsa` package and a `shinsa` npm organization owned
-by the same account. Without it the `npm` job adds a notice and skips its steps, and the release still counts as
-published, as an unsigned build does.
+**npm publishes through trusted publishing, with no token.** The `npm` job asks GitHub for an OIDC token
+(`id-token: write`) and npm 11.5.1 or later trades it for a short-lived publish right, so there is no secret to set
+or renew, and every version carries provenance. Each of the four packages (`shinsa`, `@shinsa/darwin-arm64`,
+`@shinsa/linux-x64`, `@shinsa/linux-arm64`) names this workflow as its trusted publisher on npm (the package page →
+Settings → Trusted publisher → GitHub Actions): organization `shinsa-dev`, repository `shinsa`, workflow
+`release.yml`, no environment. npm sets a trusted publisher only on a package that exists, so each `@shinsa/*`
+package was first published once by hand as a `0.0.0` placeholder, which no release depends on. A package without a
+trusted publisher fails the `npm` job, and the release's status says npm was not updated.
 
 ## Moving off GitHub's feed
 

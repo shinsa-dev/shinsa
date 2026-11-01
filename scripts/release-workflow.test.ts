@@ -11,6 +11,7 @@ interface WorkflowStep {
 
 interface WorkflowJob {
   needs?: string[];
+  permissions?: Record<string, string>;
   outputs?: Record<string, string>;
   'runs-on'?: string;
   strategy?: { matrix: { include: { target: string; runner: string }[] } };
@@ -139,22 +140,21 @@ describe('the engine archives', () => {
 
 describe('the npm packages', () => {
   const npm = workflow.jobs.npm;
-  const token = findStep('Check for an npm token', 'npm');
+  const npmCli = findStep('Use an npm that publishes through trusted publishing', 'npm');
   const download = findStep('Download the engines', 'npm');
   const publish = findStep('Publish to npm', 'npm');
 
   it('publishes once every engine is in the release', () => {
     expect(npm.needs).toEqual(['trigger', 'mac', 'linux']);
-    expect(token.index).toBe(0);
+    expect(npmCli.index).toBeLessThan(publish.index);
     expect(download.index).toBeLessThan(publish.index);
   });
 
-  it('skips every step with a notice when there is no NPM_TOKEN', () => {
-    expect(token.step.env?.NPM_TOKEN).toBe(expression('secrets.NPM_TOKEN'));
-    expect(token.step.run).toContain('::notice::No NPM_TOKEN secret');
-    for (const step of npm.steps.slice(1)) {
-      expect(step.if).toBe("steps.token.outputs.present == 'true'");
-    }
+  it('publishes through npm trusted publishing, with no token', () => {
+    expect(npm.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
+    expect(npmCli.step.run).toBe('npm install -g npm@^11.5.1');
+    expect(JSON.stringify(npm)).not.toContain('NPM_TOKEN');
+    for (const step of npm.steps) expect(step.if).toBeUndefined();
   });
 
   it('repacks the release’s own archives at its version and channel', () => {
@@ -164,7 +164,6 @@ describe('the npm packages', () => {
     expect(download.step.env?.TAG).toBe(expression('needs.mac.outputs.tag'));
     expect(publish.step.run).toBe('bun scripts/release-npm.ts release-engine npm-packages');
     expect(publish.step.env).toEqual({
-      NODE_AUTH_TOKEN: expression('secrets.NPM_TOKEN'),
       SHINSA_VERSION: expression('needs.mac.outputs.version'),
       RELEASE_CHANNEL: expression('needs.mac.outputs.channel'),
     });
