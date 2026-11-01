@@ -5,9 +5,13 @@ import {
   closeHandoffRemoveConfirm,
   describeHandoffBanner,
   describeHandoffClaim,
+  describeHandoffMark,
+  HANDOFF_ICON,
   handOffTask,
+  isTaskHandedOff,
   openHandoffRemoveConfirm,
   removeHandoff,
+  resolveHandoffFact,
   resolveHandoffView,
   useHandoffRemoveConfirm,
 } from '@/lib/share/handoff.ts';
@@ -66,6 +70,26 @@ describe('handing a task off', () => {
     expect(describeHandoffBanner({ kind: 'claimed', guest: KAI, at: 9 })).toBe(
       'Kai Lane is working on this task. It stays yours.'
     );
+  });
+
+  it('marks a task handed off or waiting on its link, and names who has it on each side', () => {
+    const LEE = { id: 'u1', login: 'lee', name: 'Lee Park', avatarUrl: null };
+    const claimed = createTask({ id: 't1', handoff: { ...HANDED, guest: KAI, claimedAt: 9 } });
+    const ready = createTask({ id: 't1', handoff: { ...HANDED, url: 'https://x' } });
+    expect(HANDOFF_ICON).toBe('IconHandshake');
+    expect(isTaskHandedOff(createTask({ id: 't1' }))).toBe(false);
+    expect(isTaskHandedOff(createTask({ id: 't1', handoff: HANDED }))).toBe(false);
+    expect(
+      isTaskHandedOff(createTask({ id: 't1', handoff: { ...HANDED, url: 'https://x', failure: 'No.' } }))
+    ).toBe(false);
+    expect(isTaskHandedOff(ready)).toBe(true);
+    expect(isTaskHandedOff(claimed)).toBe(true);
+    expect(describeHandoffMark(claimed, null)).toBe('Handed to Kai Lane');
+    expect(describeHandoffMark(ready, null)).toBe('Hand-off link not opened yet');
+    expect(describeHandoffMark(claimed, LEE)).toBe('Handed to you by Lee Park');
+    expect(resolveHandoffFact(ready, null)).toBeNull();
+    expect(resolveHandoffFact(claimed, null)).toMatchObject({ verb: 'Handed to', user: KAI });
+    expect(resolveHandoffFact(claimed, LEE)).toMatchObject({ verb: 'Handed to you by', user: LEE });
   });
 
   it('sends the hand-off and its removal, naming who loses the task', async () => {

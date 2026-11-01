@@ -256,6 +256,17 @@ describe('merging the state of several machines', () => {
     expect(fleet.selectMachine('t')).toBeNull();
   });
 
+  it('shows the machine of a task handed to you even when it is the only one, with who handed it', () => {
+    const studio = createMember('m1', 'Studio');
+    const lee = { id: 'u1', login: 'lee', name: 'Lee Park', avatarUrl: null };
+    const fleet = new Fleet([{ ...studio.member, guest: true, handedBy: lee }]);
+    studio.connection.push({
+      state: createWire(1, { tasks: { t: createTask({ id: 't' }) } }),
+      status: 'open',
+    });
+    expect(fleet.selectMachine('t')).toMatchObject({ id: 'm1', guest: true, handedBy: lee });
+  });
+
   it('shows a task’s machine once the account has another machine, even one this device cannot reach', () => {
     const studio = createMember('m1', 'Studio');
     const fleet = new Fleet([studio.member], [{ id: 'm2', name: 'Laptop' }]);
@@ -422,7 +433,8 @@ describe('a machine that handed you one task', () => {
   it('comes after your own machines, is marked as handed, and refuses what it does not let you send', async () => {
     const handed = createMember('m3', 'Mona’s Studio');
     const own = createMember('m1', 'Studio');
-    const fleet = new Fleet([{ ...handed.member, guest: true }, own.member]);
+    const LEE = { id: 'u1', login: 'lee', name: 'Lee Park', avatarUrl: null };
+    const fleet = new Fleet([{ ...handed.member, guest: true, handedBy: LEE }, own.member]);
     const handedTask = createTask({ id: 'task-handed', title: 'Handed over' });
     handed.connection.engine = resolveScopedEngineInfo('1.2.0');
     handed.connection.push({
@@ -435,7 +447,7 @@ describe('a machine that handed you one task', () => {
       ['m1', false],
       ['m3', true],
     ]);
-    expect(fleet.selectMachine('task-handed')).toMatchObject({ id: 'm3', guest: true });
+    expect(fleet.selectMachine('task-handed')).toMatchObject({ id: 'm3', guest: true, handedBy: LEE });
     expect(fleet.command({ type: 'task.share', taskId: 'task-handed', limit: 'day' })).rejects.toThrow(
       SCOPE_MESSAGES.command
     );

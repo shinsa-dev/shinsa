@@ -21,6 +21,13 @@ export interface RemotePoint {
   detail: string;
 }
 
+export const CLAIM_SIGN_IN_TITLE = 'Sign in to work on a task handed to you';
+
+export const CLAIM_SIGN_IN_BODY =
+  'Someone handed you a task they started in Shinsa. Sign in with GitHub to follow it, message its agent and answer what it asks. Any GitHub account works.';
+
+export const CLAIM_SIGN_IN_NOTE = 'Only the first account to open this link gets the task.';
+
 export const CLAIM_POINTS: RemotePoint[] = [
   {
     icon: 'IconLock',

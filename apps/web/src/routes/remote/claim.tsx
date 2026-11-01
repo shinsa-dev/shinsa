@@ -6,6 +6,7 @@ import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import type { DeviceStore } from '@/lib/remote/devices.ts';
 import { claimHandoff, type EnrollInput, resolveClaimStanding } from '@/lib/remote/enroll.ts';
 import { CLAIM_POINTS, clearEnrollFragment, MACHINE_ICON } from '@/lib/remote/mode.ts';
+import { HANDOFF_ICON } from '@/lib/share/handoff.ts';
 import { RemoteBenefits, RemoteHero, RemoteLoading } from './shell.tsx';
 
 type ClaimState = { kind: 'ready' } | { kind: 'claiming' } | { kind: 'failed'; message: string };
@@ -106,7 +107,7 @@ export function ClaimPage({
   };
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconArrowsRepeatRightLeft' title='Work on a task handed to you'>
+      <RemoteHero icon={HANDOFF_ICON} title='Work on a task handed to you'>
         Someone handed you a task they started in Shinsa. Follow it, message its agent and answer what it
         asks, from this browser. The task stays theirs: it runs on their machine, they see what you do, and
         they can take it back.

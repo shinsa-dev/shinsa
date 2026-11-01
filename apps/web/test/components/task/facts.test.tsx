@@ -433,3 +433,12 @@ describe('a duplicate', () => {
     expect(window.location.pathname).toBe('/tasks/SW-3');
   });
 });
+
+describe('a task handed off', () => {
+  it('names who it was handed to beside its other facts', () => {
+    const guest = { id: 'u7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    renderFacts(createTask({ id: 't', handle: 'SW-7', handoff: { at: 1, url: null, guest, claimedAt: 2 } }));
+    expect(screen.getByText('Handed to')).toBeTruthy();
+    expect(screen.getByText('Kai Lane')).toBeTruthy();
+  });
+});

@@ -3102,8 +3102,9 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   (`POST /__remote/machine/handoffs`, `apps/cloud/CLAUDE.md` → Guests), makes a secret, keeps both with the task's id in
   `remote.json` (`handoffs`), and records the URL with `handoff.record`. It is the enroll link's fragment with a
   hand-off token in place of the invite token; app.shinsa.dev never learns which task it is for. One link a task.
-- **The claim** (`routes/remote/claim.tsx`, `lib/remote/enroll.ts`). The page keeps the fragment through GitHub
-  sign-in, says what working on it gives and that the task stays its owner's, and claims only when Work on this task
+- **The claim** (`routes/remote/claim.tsx`, `lib/remote/enroll.ts`). Signed out, the link shows its own sign-in
+  ("Sign in to work on a task handed to you", the claim page's points, any GitHub account), not the dashboard's. The
+  page keeps the fragment through GitHub sign-in, says what working on it gives and that the task stays its owner's, and claims only when Work on this task
   is pressed, so opening the link by
   mistake spends nothing. It sends `POST /__remote/handoffs/accept`, which answers a connect token for that account,
   makes a new device key and opens the sealed channel with the link's proof, as enrolling does. The machine finds the
@@ -3157,6 +3158,14 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   Turn off link, Copy hand-off link and Done; a failure with its reason, Remove and Try again; once claimed, their
   avatar, name, `@login` and when they opened the link, "<name> is working on this task. It stays yours…", with
   Remove, which asks first and names who lost the task in its toast.
+- **Where it shows.** A hand-off has the handshake icon (`HANDOFF_ICON`, `IconHandshake`) everywhere. Its banner on
+  your task page (`HandoffBanner` in `components/task/sharing-banner.tsx`), apart from the sharing banner and below it
+  when the task is shared too, says who is working on it with Remove only, or that the first GitHub account to open the
+  link can, with Copy hand-off link and Turn off link; Manage stays on the sharing banner. The task's title in the task
+  list, Home and the Needs you queue carries the hand-off mark beside the share mark (`SharedMark`, `hasShareMark`:
+  "Handed to Kai Lane", "Hand-off link not opened yet"), and its facts row says "Handed to <name>"
+  (`resolveHandoffFact`). On the guest's side the same mark and fact say "Handed to you by <owner>", from the
+  machine's owner app.shinsa.dev lists (`MachineView.handedBy`).
 - **Taking it back.** `handoff.remove` emits `handoff.removed` and queues `handoff.revoke`, which turns the link off at
   app.shinsa.dev, forgets every device of that task and closes their channels at once, then removes the guest there
   (`/__remote/machine/guests/remove`) unless they still hold another task here, so app.shinsa.dev stops listing the

@@ -47,6 +47,8 @@ import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
+import { describeUserName } from '@/lib/remote/users.ts';
+import { HANDOFF_ICON, resolveHandoffFact } from '@/lib/share/handoff.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {
@@ -109,6 +111,23 @@ function MachineFact({ task }: { task: Task }) {
       <span className={FACT}>
         <Icon size='sm' name={MACHINE_ICON} />
         <span className='truncate'>{resolveMachineLabel(machine)}</span>
+      </span>
+    </Hint>
+  );
+}
+
+function HandoffFact({ task }: { task: Task }) {
+  const machine = useMachine(task.id);
+  const fact = resolveHandoffFact(task, machine?.handedBy ?? null);
+  if (!fact) return null;
+  return (
+    <Hint label={fact.hint}>
+      <span className={cn(FACT, 'max-w-80')}>
+        <Icon size='sm' name={HANDOFF_ICON} />
+        <span className='flex min-w-0'>
+          <span className='shrink-0 whitespace-pre'>{`${fact.verb} `}</span>
+          <Truncate>{describeUserName(fact.user)}</Truncate>
+        </span>
       </span>
     </Hint>
   );
@@ -565,6 +584,7 @@ export function TaskFacts({
       {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
       <MachineFact task={task} />
+      <HandoffFact task={task} />
       {!readOnly && <TaskServicesFact state={state} task={task} />}
       <PriorityFact state={state} task={task} />
       <StartedFact state={state} task={task} />

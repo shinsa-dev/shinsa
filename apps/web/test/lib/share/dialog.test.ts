@@ -7,6 +7,7 @@ import {
   closeUnshareConfirm,
   describeShareEnd,
   describeSharePreset,
+  hasShareMark,
   isTaskShared,
   listShareLimitItems,
   listShareModeItems,
@@ -180,6 +181,13 @@ describe('whether a task shows as shared', () => {
     const task = createTask({ id: 'a', share: { ...SHARING, url, limit: 'hour', endsAt: HOUR_MS } });
     expect(isTaskShared(task, HOUR_MS - 1)).toBe(true);
     expect(isTaskShared(task, HOUR_MS)).toBe(false);
+    expect(hasShareMark(task, HOUR_MS - 1)).toBe(true);
+    expect(hasShareMark(createTask({ id: 'a' }))).toBe(false);
+    expect(
+      hasShareMark(
+        createTask({ id: 'a', handoff: { at: 1, url: 'https://x', guest: null, claimedAt: null } })
+      )
+    ).toBe(true);
   });
 });
 

@@ -60,7 +60,14 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
         </p>
       );
     if (!session) return <RemoteLoading label='Checking your sign-in' />;
-    if (!session.user) return <SignInPrompt returnPath={resolveReturnPath(view)} error={signInError} />;
+    if (!session.user)
+      return (
+        <SignInPrompt
+          returnPath={resolveReturnPath(view)}
+          error={signInError}
+          handoff={view.kind === 'claim'}
+        />
+      );
     switch (view.kind) {
       case 'pair':
         return <PairPage claimCode={view.claimCode} dashboard={services.dashboard} />;

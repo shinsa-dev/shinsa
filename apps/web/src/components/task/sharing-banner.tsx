@@ -19,6 +19,7 @@ import {
 import {
   describeHandoffBanner,
   HANDOFF_COPY,
+  HANDOFF_ICON,
   HANDOFF_REMOVE,
   HANDOFF_TURN_OFF,
   openHandoffRemoveConfirm,
@@ -72,12 +73,9 @@ export function HandoffBanner({ task }: { task: Task }) {
   if (!(owner && note)) return null;
   return (
     <div role='status' className={BANNER}>
-      <Icon size='sm' name='IconArrowsRepeatRightLeft' className='text-primary-text' />
+      <Icon size='sm' name={HANDOFF_ICON} className='text-primary-text' />
       <span className='min-w-48 flex-1 text-fg-4'>{note}</span>
       <div className='ms-auto flex shrink-0 items-center gap-2'>
-        <Button variant='bare' size='sm' onClick={() => openShareDialog(task.id, 'handoff')}>
-          {SHARE_MANAGE_TITLE}
-        </Button>
         {view.kind === 'ready' && <CopyLinkButton url={view.url} label={HANDOFF_COPY} />}
         {view.kind === 'claimed' ? (
           <Button variant='secondary' size='sm' onClick={() => openHandoffRemoveConfirm(task.id)}>

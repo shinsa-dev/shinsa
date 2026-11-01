@@ -136,6 +136,7 @@ describe('a machine in the dashboard', () => {
         new Connection({ openSocket: () => new WebSocket('ws://x'), retry: () => undefined }),
     });
     expect(handed.member.guest).toBe(true);
+    expect(handed.member.handedBy).toEqual(STUDIO.owner);
     handed.close();
     const answer = await member.fetch(new Request('https://shinsa.dev/api/health'));
     expect(await answer.text()).toBe('from Studio');

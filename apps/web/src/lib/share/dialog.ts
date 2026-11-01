@@ -13,7 +13,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { formatUntil } from '@/lib/format/time.ts';
-import { canHandOff, HANDOFF_TITLE } from '@/lib/share/handoff.ts';
+import { canHandOff, HANDOFF_ICON, HANDOFF_TITLE, isTaskHandedOff } from '@/lib/share/handoff.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const SHARE_TITLE = 'Share task';
@@ -66,7 +66,7 @@ export const HANDOFF_MODE_ITEM: { value: ShareMode; label: string; hint: string;
   value: 'handoff',
   label: HANDOFF_TITLE,
   hint: 'One person works on it from their own Shinsa',
-  icon: 'IconArrowsRepeatRightLeft',
+  icon: HANDOFF_ICON,
 };
 
 export function listShareModeItems(task: Task, handoffSupported: boolean) {
@@ -163,6 +163,10 @@ export function selectLiveShare(task: Task, now = Date.now()) {
 export function isTaskShared(task: Task, now = Date.now()) {
   const share = selectLiveShare(task, now);
   return Boolean(share?.url && !share.failure);
+}
+
+export function hasShareMark(task: Task, now = Date.now()) {
+  return isTaskShared(task, now) || isTaskHandedOff(task);
 }
 
 export function resolveShareView(task: Task, remote: RemoteSnapshot | null, now = Date.now()): ShareView {

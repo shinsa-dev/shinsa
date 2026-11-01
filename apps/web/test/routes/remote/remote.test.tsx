@@ -242,6 +242,9 @@ describe('the remote dashboard', () => {
     });
     const link = (await screen.findByText('Sign in with GitHub')).closest('a') as HTMLAnchorElement;
     expect(link.getAttribute('href')).toBe('/__remote/sign-in?return=%2Fclaim');
+    expect(screen.getByText('Sign in to work on a task handed to you')).toBeTruthy();
+    expect(screen.getByText('Still its owner’s task')).toBeTruthy();
+    expect(screen.queryByText('Sign in to Shinsa')).toBeNull();
     expect(location.hash).toBe('');
     unmount();
     renderRoot('/claim', { dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }) });

@@ -10,7 +10,15 @@ import { SettingsCard } from '@/components/settings/group.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { TONE_SURFACE, type Tone } from '@/lib/format/tone.ts';
 import { type DashboardClient, describeSignInError, resolveSignInUrl } from '@/lib/remote/dashboard.ts';
-import { MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
+import {
+  CLAIM_POINTS,
+  CLAIM_SIGN_IN_BODY,
+  CLAIM_SIGN_IN_NOTE,
+  CLAIM_SIGN_IN_TITLE,
+  MACHINE_ICON,
+  type RemotePoint,
+} from '@/lib/remote/mode.ts';
+import { HANDOFF_ICON } from '@/lib/share/handoff.ts';
 
 export function RemoteShell({
   session,
@@ -124,14 +132,28 @@ export function RemoteCheckAgain({ label = 'Check again' }: { label?: string }) 
   );
 }
 
-export function SignInPrompt({ returnPath, error }: { returnPath: string; error: string | null }) {
+export function SignInPrompt({
+  returnPath,
+  error,
+  handoff = false,
+}: {
+  returnPath: string;
+  error: string | null;
+  handoff?: boolean;
+}) {
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconGithub' title='Sign in to Shinsa'>
-        Reach the Shinsa on your machine from any browser. Use the GitHub account you paired your machine
-        with, or the one you were invited with.
-      </RemoteHero>
-      <RemoteBenefits />
+      {handoff ? (
+        <RemoteHero icon={HANDOFF_ICON} title={CLAIM_SIGN_IN_TITLE}>
+          {CLAIM_SIGN_IN_BODY}
+        </RemoteHero>
+      ) : (
+        <RemoteHero icon='IconGithub' title='Sign in to Shinsa'>
+          Reach the Shinsa on your machine from any browser. Use the GitHub account you paired your machine
+          with, or the one you were invited with.
+        </RemoteHero>
+      )}
+      <RemoteBenefits {...(handoff ? { points: CLAIM_POINTS } : {})} />
       {error && (
         <p role='alert' className='w-full text-pretty text-destructive text-xs'>
           {describeSignInError(error)}
@@ -143,7 +165,9 @@ export function SignInPrompt({ returnPath, error }: { returnPath: string; error:
           Sign in with GitHub
         </Button>
         <p className='text-center text-2xs text-fg-2'>
-          No machine yet? Open Shinsa on your machine, then Settings, Remote access, and turn it on.
+          {handoff
+            ? CLAIM_SIGN_IN_NOTE
+            : 'No machine yet? Open Shinsa on your machine, then Settings, Remote access, and turn it on.'}
         </p>
       </div>
     </section>

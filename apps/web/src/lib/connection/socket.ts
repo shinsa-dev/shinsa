@@ -9,6 +9,7 @@ import {
   hasEngineFeature,
   type PlacementMachine,
   type RemoteSnapshot,
+  type RemoteUser,
   resolveEngineCommands,
   type ServerMessage,
   type StatePatch,
@@ -50,6 +51,7 @@ export interface MachineView {
   name: string;
   current: boolean;
   guest?: true;
+  handedBy?: RemoteUser;
 }
 
 export interface MachineChoice extends PlacementMachine {

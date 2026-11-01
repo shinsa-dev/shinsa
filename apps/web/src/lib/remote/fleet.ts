@@ -2,6 +2,7 @@ import {
   type EngineInfo,
   isEngineProtocolMatch,
   type RemoteSnapshot,
+  type RemoteUser,
   SCOPE_MESSAGES,
   type UserCommand,
   type WireState,
@@ -30,6 +31,7 @@ export interface FleetMember {
   name: string;
   current?: boolean;
   guest?: true;
+  handedBy?: RemoteUser;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
 }
@@ -188,6 +190,7 @@ export class Fleet implements ShinsaConnection {
         name: member.name,
         current: member.current === true,
         ...(member.guest ? { guest: true as const } : {}),
+        ...(member.handedBy ? { handedBy: member.handedBy } : {}),
       },
       release: [
         connection.subscribe(() => this.#state.publish()),
@@ -306,9 +309,10 @@ export class Fleet implements ShinsaConnection {
     this.#home?.replaceRemote(remote);
 
   selectMachine = (id: string) => {
-    if (this.#entries.length + this.#unreachable.length < 2) return null;
     const owner = this.#ownerOf(id);
-    return this.#entries.find((entry) => entry.member.id === owner)?.view ?? null;
+    const view = this.#entries.find((entry) => entry.member.id === owner)?.view ?? null;
+    if (view?.guest) return view;
+    return this.#entries.length + this.#unreachable.length < 2 ? null : view;
   };
 
   listMachines = () => {

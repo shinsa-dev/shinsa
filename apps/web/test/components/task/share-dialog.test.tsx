@@ -298,7 +298,7 @@ describe('the sharing banner', () => {
 describe('the hand-off banner', () => {
   const claimed = { ...HANDED, guest: KAI, claimedAt: Date.now() };
 
-  it('says who works on a shared task beside the sharing banner, and each Manage opens its own part', async () => {
+  it('says who works on a shared task beside the sharing banner, which alone has Manage', async () => {
     showTask({ share: { ...SHARING, preset: 'status', url: URL }, handoff: claimed });
     act(() => closeShareDialog());
     await waitForGone(() => screen.queryByRole('dialog'));
@@ -320,11 +320,7 @@ describe('the hand-off banner', () => {
     expect(within(shareDialog).getByRole('combobox', { name: 'Share as' }).textContent).toContain('Status');
     act(() => closeShareDialog());
     await waitForGone(() => screen.queryByRole('dialog'));
-    fireEvent.click(within(handing).getByRole('button', { name: 'Manage' }));
-    const handDialog = await screen.findByRole('dialog');
-    expect(within(handDialog).getByRole('combobox', { name: 'Share as' }).textContent).toContain('Hand off');
-    act(() => closeShareDialog());
-    await waitForGone(() => screen.queryByRole('dialog'));
+    expect(within(handing).queryByRole('button', { name: 'Manage' })).toBeNull();
     fireEvent.click(within(handing).getByRole('button', { name: 'Remove' }));
     expect((await screen.findByRole('alertdialog')).textContent).toContain('Remove Kai Lane?');
   });
@@ -337,6 +333,11 @@ describe('the hand-off banner', () => {
     render(<HandoffBanner task={createTask({ id: 'source', handoff: ready })} />);
     const banner = screen.getByRole('status');
     expect(banner.textContent).toContain('The first GitHub account to open the hand-off link');
+    expect(
+      within(banner)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Copy hand-off link', 'Turn off link']);
     fireEvent.click(within(banner).getByRole('button', { name: 'Copy hand-off link' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://app.shinsa.dev/claim#x'));
     fireEvent.click(within(banner).getByRole('button', { name: 'Turn off link' }));

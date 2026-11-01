@@ -1,10 +1,13 @@
-import { isTaskSettled, type Task, type TaskGuest } from '@shinsa/core';
+import { isTaskSettled, type RemoteUser, type Task, type TaskGuest } from '@shinsa/core';
+import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { describeUserName } from '@/lib/remote/users.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const HANDOFF_TITLE = 'Hand off';
+
+export const HANDOFF_ICON: IconName = 'IconHandshake';
 
 export const HANDOFF_DESCRIPTION =
   'The first GitHub account to open the link works on this task from their own Shinsa and reaches nothing else on this machine. It stays yours: it runs here, you see everything they do, and you can take it back at any time.';
@@ -60,6 +63,28 @@ export function resolveHandoffView(task: Task): HandoffView {
 
 export function describeHandoffClaim(guest: TaskGuest) {
   return `${describeUserName(guest)} is working on this task`;
+}
+
+export function isTaskHandedOff(task: Task) {
+  const handoff = task.handoff;
+  return Boolean(handoff && (handoff.guest || (handoff.url && !handoff.failure)));
+}
+
+export function describeHandoffMark(task: Task, handedBy: RemoteUser | null) {
+  if (handedBy) return `Handed to you by ${describeUserName(handedBy)}`;
+  const guest = task.handoff?.guest;
+  return guest ? `Handed to ${describeUserName(guest)}` : 'Hand-off link not opened yet';
+}
+
+export function resolveHandoffFact(task: Task, handedBy: RemoteUser | null) {
+  if (handedBy)
+    return {
+      verb: 'Handed to you by',
+      user: handedBy,
+      hint: 'The task stays theirs and runs on their machine',
+    };
+  const guest = task.handoff?.guest;
+  return guest ? { verb: 'Handed to', user: guest, hint: 'They work on it from their own Shinsa' } : null;
 }
 
 export const HANDOFF_JOINED = 'Joined';
