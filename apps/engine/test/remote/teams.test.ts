@@ -18,6 +18,7 @@ import {
   serializeBase64Url,
   type TeamListView,
   type TeamView,
+  verifyTeamSnapshot,
 } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
 import { ControlClient } from '../../src/remote/control.ts';
@@ -213,6 +214,27 @@ describe('a team view of this machine', () => {
     expect(view?.updatedAt).toBe(50);
     expect(view?.machineKey).toBe((await remote.store.resolveMachineKey()).publicKey);
     expect(view?.grant).toBeUndefined();
+  });
+
+  test('the list carries a snapshot this machine signed, which its signing key verifies', async () => {
+    const { teams, remote } = setUp();
+    const [view] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
+    const { publicKey } = await remote.store.resolveSigningKey();
+    if (!view?.snapshot) throw new Error('The list view carries no snapshot');
+    const body = await verifyTeamSnapshot(publicKey, view.snapshot);
+    expect(body).toEqual({
+      teamId: 'team1',
+      instanceId: CREDENTIALS.instanceId,
+      tasks: view.tasks,
+      updatedAt: 50,
+    });
+  });
+
+  test('a machine with no credentials signs nothing, since no teammate could tell which machine it is', async () => {
+    const { teams } = setUp({ file: { credentials: null } });
+    const [view] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
+    expect(view?.tasks.length).toBe(1);
+    expect(view?.snapshot).toBeUndefined();
   });
 
   test('sends a grant’s secret only to the teammate it was given to, in that team', async () => {

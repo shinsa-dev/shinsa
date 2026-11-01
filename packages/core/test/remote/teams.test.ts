@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { decodeText, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
 import { createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts';
 import { REMOTE_PROTOCOL_VERSION } from '../../src/remote/handshake.ts';
-import { serializePublicKey } from '../../src/remote/keys.ts';
+import { SIGNING_KEY_ALGORITHM, serializePublicKey } from '../../src/remote/keys.ts';
 import {
   createTeamHello,
   createTeamWelcome,
@@ -12,6 +12,7 @@ import {
   parseTeamJoinFragment,
   parseTeamJoinUrl,
   parseTeamViewTarget,
+  readTeamSnapshot,
   resolveMachineTeamPath,
   resolveTeamChannelUrl,
   resolveTeamConnectPath,
@@ -19,8 +20,11 @@ import {
   resolveTeamLeavePath,
   resolveTeamViewPath,
   serializeTeamJoinFragment,
+  signTeamSnapshot,
+  type TeamSnapshotBody,
   type TeamView,
   verifyTeamHello,
+  verifyTeamSnapshot,
   verifyTeamWelcome,
 } from '../../src/remote/teams.ts';
 import { createKeyPair } from './helpers.ts';
@@ -128,5 +132,49 @@ describe('the team handshake', () => {
     await expect(createTeamHello('team-1', '', LIST, client.publicKey)).rejects.toThrow(
       'The channel key is not valid.'
     );
+  });
+});
+
+describe('a signed team snapshot', () => {
+  const BODY: TeamSnapshotBody = { teamId: 'team-1', instanceId: 'studio', tasks: [], updatedAt: 1_000 };
+
+  async function createSigner() {
+    const pair = (await crypto.subtle.generateKey(SIGNING_KEY_ALGORITHM, true, [
+      'sign',
+      'verify',
+    ])) as CryptoKeyPair;
+    return { privateKey: pair.privateKey, signingKey: await serializePublicKey(pair.publicKey) };
+  }
+
+  test('verifies with the machine’s own key and gives back what it signed', async () => {
+    const signer = await createSigner();
+    const snapshot = await signTeamSnapshot(signer.privateKey, BODY);
+    expect(await verifyTeamSnapshot(signer.signingKey, snapshot)).toEqual(BODY);
+    expect(readTeamSnapshot(JSON.parse(JSON.stringify(snapshot)))).toEqual(snapshot);
+  });
+
+  test('refuses another machine’s key, a changed body, a bad signature or a bad key', async () => {
+    const signer = await createSigner();
+    const other = await createSigner();
+    const snapshot = await signTeamSnapshot(signer.privateKey, BODY);
+    expect(await verifyTeamSnapshot(other.signingKey, snapshot)).toBeNull();
+    const forged = { ...snapshot, body: JSON.stringify({ ...BODY, instanceId: 'laptop' }) };
+    expect(await verifyTeamSnapshot(signer.signingKey, forged)).toBeNull();
+    expect(await verifyTeamSnapshot(signer.signingKey, { ...snapshot, signature: '!' })).toBeNull();
+    expect(await verifyTeamSnapshot('nope', snapshot)).toBeNull();
+  });
+
+  test('refuses a signed body that is not a snapshot', async () => {
+    const signer = await createSigner();
+    for (const body of [{ ...BODY, tasks: 'none' }, { ...BODY, updatedAt: 'now' }, []]) {
+      const snapshot = await signTeamSnapshot(signer.privateKey, body as unknown as TeamSnapshotBody);
+      expect(await verifyTeamSnapshot(signer.signingKey, snapshot)).toBeNull();
+    }
+  });
+
+  test('reads a snapshot only with a text body and signature', () => {
+    expect(readTeamSnapshot(null)).toBeNull();
+    expect(readTeamSnapshot({ body: 1, signature: 'x' })).toBeNull();
+    expect(readTeamSnapshot({ body: '{}', signature: 'x' })).toEqual({ body: '{}', signature: 'x' });
   });
 });

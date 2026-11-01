@@ -86,10 +86,14 @@ export {
   verifyEnrollProof,
 } from './handshake.ts';
 export {
+  isSigningPublicKey,
   parsePrivateKey,
   parsePublicKey,
+  parseSigningPrivateKey,
+  parseSigningPublicKey,
   REMOTE_KEY_ALGORITHM,
   resolveKeyFingerprint,
+  SIGNING_KEY_ALGORITHM,
   serializePrivateKey,
   serializePublicKey,
 } from './keys.ts';
@@ -210,6 +214,7 @@ export {
   parseTeamJoinUrl,
   parseTeamViewTarget,
   type RemoteTeam,
+  readTeamSnapshot,
   resolveMachineTeamPath,
   resolveTeamChannelUrl,
   resolveTeamConnectPath,
@@ -218,6 +223,7 @@ export {
   resolveTeamPath,
   resolveTeamViewPath,
   serializeTeamJoinFragment,
+  signTeamSnapshot,
   TEAM_CHANNEL_PATH,
   TEAM_KEY_BYTES,
   TEAM_NAME_LIMIT,
@@ -241,8 +247,11 @@ export {
   type TeamListView,
   type TeamMachine,
   type TeamPreviewResponse,
+  type TeamSnapshot,
+  type TeamSnapshotBody,
   type TeamView,
   type TeamViewTarget,
   verifyTeamHello,
+  verifyTeamSnapshot,
   verifyTeamWelcome,
 } from './teams.ts';

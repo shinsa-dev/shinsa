@@ -13,11 +13,14 @@ import {
   resolveTeamJoinUrl,
   serializeBase64Url,
   serializePublicKey,
+  signTeamSnapshot,
   TEAM_KEY_BYTES,
   TEAM_SHARE_PRESET,
   type TeamAction,
   type TeamInviteResponse,
   type TeamJoinStatus,
+  type TeamListView,
+  type TeamTask,
   type TeamView,
   verifyTeamHello,
 } from '@shinsa/core';
@@ -347,13 +350,23 @@ export class Teams implements TeamLinks {
     });
     const { publicKey } = await this.#store.resolveMachineKey();
     const grant = this.#store.selectGrant(subject.userId);
-    const view = {
+    const updatedAt = this.#now();
+    const snapshot = await this.#signList(subject.teamId, tasks, updatedAt);
+    const view: TeamListView = {
       tasks,
       machineKey: publicKey,
       ...(grant?.teamId === subject.teamId ? { grant: grant.secret } : {}),
-      updatedAt: this.#now(),
+      updatedAt,
+      ...(snapshot ? { snapshot } : {}),
     };
     return { view, files: [] };
+  }
+
+  async #signList(teamId: string, tasks: TeamTask[], updatedAt: number) {
+    const instanceId = this.#store.file.credentials?.instanceId;
+    if (!instanceId) return null;
+    const { privateKey } = await this.#store.resolveSigningKey();
+    return signTeamSnapshot(privateKey, { teamId, instanceId, tasks, updatedAt });
   }
 
   #syncChannels() {

@@ -1,5 +1,5 @@
 import type { TeamTask } from '../share/teams.ts';
-import { parseBase64Url } from './bytes.ts';
+import { encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import {
   REMOTE_APP_ORIGIN,
   REMOTE_CONNECT_PARAM,
@@ -9,7 +9,7 @@ import {
   type RemoteUser,
 } from './contract.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
-import { serializePublicKey } from './keys.ts';
+import { parseSigningPublicKey, serializePublicKey } from './keys.ts';
 import {
   deriveChannelSessionKey,
   readChannelFields,
@@ -22,6 +22,10 @@ const HELLO_LABEL = 'shinsa-team-hello-v1';
 const WELCOME_LABEL = 'shinsa-team-welcome-v1';
 
 const SESSION_LABEL = 'shinsa-team-v1 server-to-client';
+
+const SNAPSHOT_LABEL = 'shinsa-team-snapshot-v1';
+
+const SNAPSHOT_SIGNATURE = { name: 'ECDSA', hash: 'SHA-256' } as const;
 
 const SEGMENT = /^[A-Za-z0-9_-]+$/;
 
@@ -55,6 +59,7 @@ export interface TeamMachine {
   userId: string;
   online: boolean;
   lastSeenAt: number | null;
+  signingKey?: string;
 }
 
 export interface RemoteTeam {
@@ -127,11 +132,24 @@ export interface TeamKeys {
   serverEphemeral: string;
 }
 
+export interface TeamSnapshotBody {
+  teamId: string;
+  instanceId: string;
+  tasks: TeamTask[];
+  updatedAt: number;
+}
+
+export interface TeamSnapshot {
+  body: string;
+  signature: string;
+}
+
 export interface TeamListView {
   tasks: TeamTask[];
   machineKey: string;
   grant?: string;
   updatedAt: number;
+  snapshot?: TeamSnapshot;
 }
 
 export type TeamFeedStatus = 'connecting' | 'live' | 'offline' | 'refused';
@@ -298,4 +316,42 @@ export function deriveTeamSessionKey(
 ) {
   const parts = [keys.team, serializeTeamView(keys.view), keys.clientEphemeral, keys.serverEphemeral];
   return deriveChannelSessionKey(SESSION_LABEL, key, parts, privateKey, peerEphemeral);
+}
+
+function listSnapshotBytes(body: string) {
+  return encodeText(`${SNAPSHOT_LABEL}\n${body}`);
+}
+
+export async function signTeamSnapshot(privateKey: CryptoKey, body: TeamSnapshotBody): Promise<TeamSnapshot> {
+  const text = JSON.stringify(body);
+  const signature = await crypto.subtle.sign(SNAPSHOT_SIGNATURE, privateKey, listSnapshotBytes(text));
+  return { body: text, signature: serializeBase64Url(new Uint8Array(signature)) };
+}
+
+export function readTeamSnapshot(value: unknown): TeamSnapshot | null {
+  if (value === null || typeof value !== 'object') return null;
+  const { body, signature } = value as Record<string, unknown>;
+  return typeof body === 'string' && typeof signature === 'string' ? { body, signature } : null;
+}
+
+function readSnapshotBody(text: string): TeamSnapshotBody | null {
+  const fields = readChannelFields(text);
+  if (!fields) return null;
+  const { teamId, instanceId, tasks, updatedAt } = fields;
+  if (!(typeof teamId === 'string' && typeof instanceId === 'string' && typeof updatedAt === 'number'))
+    return null;
+  return Array.isArray(tasks) ? { teamId, instanceId, tasks: tasks as TeamTask[], updatedAt } : null;
+}
+
+export async function verifyTeamSnapshot(signingKey: string, snapshot: TeamSnapshot) {
+  const key = await parseSigningPublicKey(signingKey);
+  const signature = parseBase64Url(snapshot.signature);
+  if (!(key && signature)) return null;
+  const valid = await crypto.subtle.verify(
+    SNAPSHOT_SIGNATURE,
+    key,
+    signature,
+    listSnapshotBytes(snapshot.body)
+  );
+  return valid ? readSnapshotBody(snapshot.body) : null;
 }
