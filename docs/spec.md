@@ -377,6 +377,9 @@ The Mac app (`apps/desktop`) is how you run Shinsa: the engine is compiled into 
 app registers, so it keeps working when the window is closed or the app quit, and the app adds the Dock badge,
 notifications, `shinsa://` links, the `shinsa` command and its own updates (`docs/plans/app-plan.md`,
 `docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
+On an always-on Linux server the same engine runs headless as a systemd user service that `shinsa start` sets up,
+set up over SSH and reached through remote access (`docs/engine.md` → Run on a server). Planned, not built: a
+published package and install script for it.
 Planned, not built: signing with a Developer ID, other providers (Cursor), and dev-server and
 simulator previews per worktree.
 Remote access: Settings → General → Remote access pairs this machine with app.shinsa.dev through GitHub sign-in and adds

@@ -343,8 +343,9 @@ describe('shinsa do', () => {
     expect(errors[0]).toBe(
       'Error: Say what should be done, such as `shinsa do "fix the scroll in tab groups"`.'
     );
-    expect(errors[1]).toBe(`Error: ${NOT_RUNNING}`);
-    expect(errors[2]).toContain('SHINSA_PORT must be a whole number');
+    expect(errors[1]).toBe('Error: Shinsa is not running.');
+    expect(errors[2]).toBe('Start it with `shinsa start`, or open the Shinsa app on a Mac.');
+    expect(errors[3]).toContain('SHINSA_PORT must be a whole number');
   });
 
   test('a server error and an answer without JSON are reported', async () => {
