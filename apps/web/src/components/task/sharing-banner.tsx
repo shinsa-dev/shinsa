@@ -31,7 +31,7 @@ export function SharingBanner({ task }: { task: Task }) {
       role='status'
       className={cn(CARD, 'flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 py-1.5 ps-3 pe-1.5 text-xs')}
     >
-      <Icon size='sm' name='IconShareOs' className='text-primary-text' />
+      <Icon size='sm' name='IconLiveFull' className='text-primary-text' />
       <span className='min-w-48 flex-1 text-fg-3'>
         <span className='text-fg-4'>{SHARING_NOTE}</span>{' '}
         {share.endsAt === null ? (

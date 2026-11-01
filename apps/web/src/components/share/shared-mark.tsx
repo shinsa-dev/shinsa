@@ -8,7 +8,7 @@ export function SharedMark({ task }: { task: Task }) {
   return (
     <Hint label={SHARED_MARK_LABEL}>
       <span role='img' aria-label={SHARED_MARK_LABEL} className='inline-flex shrink-0 text-primary-text'>
-        <Icon size='sm' name='IconShareOs' />
+        <Icon size='sm' name='IconLiveFull' />
       </span>
     </Hint>
   );
