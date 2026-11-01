@@ -1,11 +1,12 @@
 import {
   type InviteAcceptResponse,
   type InviteCreateResponse,
+  MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
   type RemoteMember,
 } from '@shinsa/core';
 import { createToken, resolveTokenHash } from './crypto.ts';
-import type { InstanceRow } from './database.ts';
+import type { InstanceRow, UserRow } from './database.ts';
 import { CloudError, readJsonFields, readText, respondJson } from './http.ts';
 import { createConnectAnswer, findInstanceAccess, findMachine } from './instances.ts';
 import { findPageUser, serializeUser } from './session.ts';
@@ -19,6 +20,13 @@ export async function listInstanceMembers(row: InstanceRow, world: CloudWorld) {
     addedAt: member.added_at,
   }));
   return { owner: serializeUser(owner), members };
+}
+
+export async function listInstanceGuests(row: InstanceRow, world: CloudWorld): Promise<RemoteMember[]> {
+  return (await world.store.listGuests(row.id)).map((guest) => ({
+    user: serializeUser(guest),
+    addedAt: guest.added_at,
+  }));
 }
 
 export async function respondInviteCreate(request: Request, world: CloudWorld) {
@@ -50,17 +58,13 @@ async function selectAskingUser(row: InstanceRow, userId: string, world: CloudWo
   return world.store.selectUser(userId);
 }
 
-export async function respondInviteAccept(request: Request, world: CloudWorld) {
-  const user = await findPageUser(request, world);
-  const fields = await readJsonFields(request);
-  const tokenHash = await resolveTokenHash(readText(fields, 'token', 100));
-  const row = await selectInviteMachine(tokenHash, world);
-  if (!row)
-    throw new CloudError(
-      'invite_invalid',
-      'This invite link was turned off. Ask the machine’s owner for a new one.',
-      404
-    );
+async function selectHandoffMachine(tokenHash: string, world: CloudWorld) {
+  const instanceId = await world.store.selectHandoffInstance(tokenHash);
+  if (!instanceId) return null;
+  return world.store.selectInstance(instanceId);
+}
+
+async function respondAccept(row: InstanceRow, user: UserRow, world: CloudWorld) {
   await world.store.recordRequester(row.id, user.id, world.now());
   const { owner } = await listInstanceMembers(row, world);
   const answer: InviteAcceptResponse = {
@@ -73,11 +77,57 @@ export async function respondInviteAccept(request: Request, world: CloudWorld) {
   return respondJson(answer);
 }
 
-async function findRequester(request: Request, world: CloudWorld) {
+export async function respondInviteAccept(request: Request, world: CloudWorld) {
+  const user = await findPageUser(request, world);
+  const fields = await readJsonFields(request);
+  const row = await selectInviteMachine(await resolveTokenHash(readText(fields, 'token', 100)), world);
+  if (!row)
+    throw new CloudError(
+      'invite_invalid',
+      'This invite link was turned off. Ask the machine’s owner for a new one.',
+      404
+    );
+  return respondAccept(row, user, world);
+}
+
+export async function respondHandoffCreate(request: Request, world: CloudWorld) {
+  const row = await findMachine(request, world);
+  const token = createToken();
+  await world.store.createHandoff(row.id, await resolveTokenHash(token), world.now());
+  const answer: InviteCreateResponse = { token };
+  return respondJson(answer);
+}
+
+export async function respondHandoffRemove(request: Request, world: CloudWorld) {
+  const row = await findMachine(request, world);
+  const fields = await readJsonFields(request);
+  await world.store.removeHandoff(row.id, await resolveTokenHash(readText(fields, 'token', 100)));
+  return respondJson({ ok: true });
+}
+
+export async function respondHandoffAccept(request: Request, world: CloudWorld) {
+  const user = await findPageUser(request, world);
+  const fields = await readJsonFields(request);
+  const row = await selectHandoffMachine(await resolveTokenHash(readText(fields, 'token', 100)), world);
+  if (!row)
+    throw new CloudError(
+      'handoff_invalid',
+      'This hand-off link was taken back or already used. Ask the task’s owner for a new one.',
+      404
+    );
+  return respondAccept(row, user, world);
+}
+
+async function selectGuestUser(row: InstanceRow, userId: string, world: CloudWorld) {
+  if (await world.store.isGuest(row.id, userId)) return world.store.selectUser(userId);
+  return selectAskingUser(row, userId, world);
+}
+
+async function findRequester(request: Request, world: CloudWorld, select = selectAskingUser) {
   const row = await findMachine(request, world);
   const fields = await readJsonFields(request);
   const userId = readText(fields, 'userId', 64);
-  const user = await selectAskingUser(row, userId, world);
+  const user = await select(row, userId, world);
   if (!user) throw new CloudError('not_found', 'No one with that account asked to reach this machine.', 404);
   return { row, user };
 }
@@ -104,12 +154,38 @@ export async function respondMachineMemberAdd(request: Request, world: CloudWorl
   return respondJson(member);
 }
 
+export async function respondMachineGuestAdd(request: Request, world: CloudWorld) {
+  const { row, user } = await findRequester(request, world, selectGuestUser);
+  const now = world.now();
+  const reaches = row.user_id === user.id || (await world.store.isMember(row.id, user.id));
+  if (!reaches && !(await world.store.isGuest(row.id, user.id))) {
+    if ((await world.store.countGuests(row.id)) >= MAX_INSTANCE_GUESTS)
+      throw new CloudError(
+        'guests_full',
+        `This machine already has ${MAX_INSTANCE_GUESTS} people working on its tasks. Remove one first.`,
+        409
+      );
+    await world.store.createGuest(row.id, user.id, now);
+  }
+  await world.store.removeRequester(row.id, user.id);
+  const guest: RemoteMember = { user: serializeUser(user), addedAt: now };
+  return respondJson(guest);
+}
+
+export async function respondMachineGuestRemove(request: Request, world: CloudWorld) {
+  const row = await findMachine(request, world);
+  const fields = await readJsonFields(request);
+  await world.store.removeGuest(row.id, readText(fields, 'userId', 64));
+  return respondJson({ ok: true });
+}
+
 export async function respondInstanceLeave(request: Request, instanceId: string, world: CloudWorld) {
   const user = await findPageUser(request, world);
   const { row, role } = await findInstanceAccess(user, instanceId, world);
   if (role === 'owner')
     throw new CloudError('owner_cannot_leave', 'You own this machine. Remove it instead.', 409);
-  await world.store.removeMember(row.id, user.id);
+  if (role === 'member') await world.store.removeMember(row.id, user.id);
+  else await world.store.removeGuest(row.id, user.id);
   return respondJson({ ok: true });
 }
 

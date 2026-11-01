@@ -34,9 +34,16 @@ export const REMOTE_PATHS = {
   machineMemberAdd: '/__remote/machine/members/add',
   machineMemberRemove: '/__remote/machine/members/remove',
   inviteAccept: '/__remote/invites/accept',
+  machineHandoffs: '/__remote/machine/handoffs',
+  machineHandoffRemove: '/__remote/machine/handoffs/remove',
+  machineGuestAdd: '/__remote/machine/guests/add',
+  machineGuestRemove: '/__remote/machine/guests/remove',
+  handoffAccept: '/__remote/handoffs/accept',
 } as const;
 
 export const MAX_INSTANCE_MEMBERS = 20;
+
+export const MAX_INSTANCE_GUESTS = 20;
 
 export const REMOTE_NATIVE_CLIENT = 'native';
 
@@ -97,6 +104,7 @@ export interface RemoteAccess {
 
 export interface HeartbeatResponse extends RemoteAccess {
   ok: true;
+  guests: RemoteMember[];
 }
 
 export type RemoteRole = 'owner' | 'member' | 'guest';
@@ -134,6 +142,10 @@ export interface InviteAcceptResponse {
 
 export interface MemberRequest {
   userId: string;
+}
+
+export interface HandoffRemoveRequest {
+  token: string;
 }
 
 export interface NativeSignInTokenRequest {

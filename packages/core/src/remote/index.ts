@@ -26,11 +26,13 @@ export {
 export {
   type ConnectResponse,
   type EnrollFragment,
+  type HandoffRemoveRequest,
   type HeartbeatRequest,
   type HeartbeatResponse,
   type InviteAcceptRequest,
   type InviteAcceptResponse,
   type InviteCreateResponse,
+  MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
   type MachineCredentials,
   type MemberRequest,
