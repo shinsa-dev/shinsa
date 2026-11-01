@@ -24,6 +24,7 @@ import {
   TASK_CAPACITY_TITLE,
 } from '@/lib/remote/machines.ts';
 import { describeOutdatedMachine, MACHINES_SECTION } from '@/lib/remote/mode.ts';
+import { describeMachineResources } from '@/lib/remote/resources.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
@@ -146,6 +147,11 @@ function MachineItem({
         <Truncate className={cn('text-2xs', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
           {outdated ? describeOutdatedMachine(row.instance.name) : detail}
         </Truncate>
+        {!outdated && machine?.resources && (
+          <Truncate className='text-2xs text-fg-2 tabular-nums'>
+            {describeMachineResources(machine.resources)}
+          </Truncate>
+        )}
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>
         {machine && <MachineCapacity machine={machine} />}

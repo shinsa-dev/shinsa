@@ -10,6 +10,7 @@ import { ChoiceButton, ChoiceButtons } from '@/components/controls/choice-button
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
+import { MachinesSection } from '@/components/home/machines.tsx';
 import { NewTaskFields } from '@/components/home/new-task-form.tsx';
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
@@ -174,6 +175,67 @@ function ComposerSpecimen() {
   );
 }
 
+const GIGABYTE = 1024 ** 3;
+
+function MachinesSpecimen() {
+  const [state] = React.useState(() =>
+    createSampleState({
+      tasks: [
+        createSampleTask(Date.now(), { id: 'export', title: 'Retry ClickHouse exports that time out' }),
+        createSampleTask(Date.now(), { id: 'scroll', title: 'Scroll tab groups horizontally' }),
+      ],
+    })
+  );
+  const idle = { cpuPercent: 0, memoryBytes: 0 };
+  const machines = [
+    {
+      id: 'studio',
+      name: 'Studio',
+      current: true,
+      state: { ...state, settings: { ...state.settings, taskCapacity: 8 } },
+      resources: {
+        sampledAt: 0,
+        cores: 12,
+        cpuPercent: 42,
+        memoryUsedBytes: 12 * GIGABYTE,
+        memoryTotalBytes: 32 * GIGABYTE,
+        diskFreeBytes: 120 * GIGABYTE,
+        diskTotalBytes: 1000 * GIGABYTE,
+        tasks: [
+          {
+            taskId: 'export',
+            agent: { cpuPercent: 6, memoryBytes: 0.6 * GIGABYTE },
+            services: idle,
+            checks: { cpuPercent: 31, memoryBytes: 1.4 * GIGABYTE },
+            processes: 9,
+            worktreeBytes: 2.3 * GIGABYTE,
+          },
+          {
+            taskId: 'scroll',
+            agent: { cpuPercent: 2, memoryBytes: 0.4 * GIGABYTE },
+            services: { cpuPercent: 4, memoryBytes: 0.8 * GIGABYTE },
+            checks: idle,
+            processes: 5,
+            worktreeBytes: 0.9 * GIGABYTE,
+          },
+        ],
+      },
+    },
+    {
+      id: 'build-box',
+      name: 'Build box',
+      current: false,
+      state: { tasks: {}, projects: {}, settings: { taskCapacity: null, placementPolicies: [] } },
+      resources: null,
+    },
+  ];
+  return (
+    <div className='w-full max-w-xl'>
+      <MachinesSection state={state} machines={machines} />
+    </div>
+  );
+}
+
 function ChoiceSpecimens() {
   const [picked, setPicked] = React.useState<string | null>(null);
   return (
@@ -200,6 +262,9 @@ function ChoiceSpecimens() {
       </Specimen>
       <Specimen label='Home composer · Project, When to start and Priority'>
         <ComposerSpecimen />
+      </Specimen>
+      <Specimen label='MachinesSection · in Shinsa Cloud: each machine’s CPU, memory and disk, and its open tasks’ use'>
+        <MachinesSpecimen />
       </Specimen>
     </>
   );

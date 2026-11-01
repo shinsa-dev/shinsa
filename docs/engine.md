@@ -2747,7 +2747,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
   Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
   browser's key for it; machines in the dashboard also show their open
-  tasks and their task capacity. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
+  tasks and their task capacity, and a third line with what the machine uses ("CPU 42% · Memory 12 of 32 GB · 120 GB
+  free", `describeMachineResources` in `lib/remote/resources.ts`) once its engine reports it (How busy each machine is, below). Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
   lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
   it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The
   machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
@@ -2792,14 +2793,34 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   "Your routing policies decide when you start it", and the toast says where the task went ("Task started. Runs on Studio."), without the reason, to stay one line; when every provider fails (no
   Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
   `placement_unreadable`, so a warning toast says "Your routing policies weren’t read." (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
-  focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
-  passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
+  focus project's machine; then the machine with the most room (`resolvePlacement`: a machine at its task capacity
+  passed over while another has room; among the rest, when every machine reports its resources, the most headroom first,
+  the smaller of its free CPU and free memory in steps of 5 % (`resolveResourceHeadroom`), so a busy machine is passed
+  over for a quiet one and two near-equal ones are not told apart by noise; then, or when any machine reports none (an older engine), open
+  tasks over its task capacity, ties to the one with fewer open tasks). The classifier also reads each machine's CPU, memory and free
+  disk beside its policies and open tasks (`describeResourceSummary`), so a policy such as "Heavy builds go to the
+  machine with the most memory free." can be followed. Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
   number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in
   the dashboard, which also shows each one's open tasks, or with `shinsa settings set taskCapacity 8` on it. It only
   steers placement: a machine still runs a task you send it when full. Routing policies are each machine's own setting
   too (`placementPolicies`, at most 20 of 1 to 240 characters, Memory's limit), kept in Settings → Routing policies. The fleet sends `task.create` to the chosen
   machine (`ShinsaConnection.command`'s machine).
+- **How busy each machine is** (`apps/engine/src/resources/`, core's `remote/resources.ts`). While a page has a socket
+  open, each engine samples its machine every 5 s and pushes `resources` (`docs/protocol.md` → The socket); with no
+  page, it samples nothing. One `ps` table gives each process's parent, group, memory and cumulative CPU time; CPU
+  is the change in that time between two samples (Linux's `%cpu` is a lifetime average), and the machine's CPU the
+  change in `os.cpus()` times, so the first reading comes about a second after a page connects. Memory used is total
+  minus available (`MemAvailable` on Linux, free, inactive and speculative pages from `vm_stat` on macOS,
+  since Node's free memory there leaves reclaimable pages out). A `ProcessLedger` counts processes toward their task:
+  each agent's process (the session reports it through `onProcess`), each check's (`runCommand`'s `onSpawn`) and
+  each service terminal's, with every process below it and every process in its group, so a child moved to
+  init still counts. Disk free (`df` on the data folder) and each open task's worktree size (`du`) are read every 10
+  minutes, being slow. The remote Home shows a Machines section (`components/home/machines.tsx`) above the queue:
+  each machine with its CPU, memory and free disk and its open tasks against its capacity, and, opened, its open tasks
+  by use, busiest first, each with its agent, services and checks and its worktree's size, opening the task on a
+  click. An engine that sends nothing shows "No reading yet.". A machine that runs out of memory is not marked full:
+  task capacity stays the only limit, and resources only order the machines with room.
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.

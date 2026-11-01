@@ -270,7 +270,7 @@ src/
 │                    counter nonce, in order, closed after one bad frame), the channel's messages (channel.ts: the app
 │                    socket and HTTP requests and responses in chunks), connect tokens (connect-token.ts) and what stays
 │                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), and which machine a new task
-│                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and the policies the classifier reads: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer). Key pairs and
+│                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and the policies the classifier reads: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer), and how busy a machine is (resources.ts: MachineResources, resolveResourceHeadroom, describeResourceSummary, parseResourceSummary). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
 │                    from the task, its current evidence and the project's name; everything its owner sees but

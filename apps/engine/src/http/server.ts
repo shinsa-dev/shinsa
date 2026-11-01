@@ -42,7 +42,7 @@ export interface HttpContext extends ApiContext {
   transcripts: Transcripts;
   terminals?: Terminals;
   refiner?: ServiceRefiner;
-  resources?: ResourceMonitor;
+  resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>;
 }
 
 interface RemoteSocketData {

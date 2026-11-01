@@ -22,6 +22,8 @@ import {
   createSettings,
   type InviteAcceptResponse,
   type InviteCreateResponse,
+  isTaskSettled,
+  type MachineResources,
   type NativeSignInTokenResponse,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
@@ -135,6 +137,49 @@ function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
   );
 }
 
+const GIGABYTE = 1024 ** 3;
+
+interface PreviewLoad {
+  cores: number;
+  cpuPercent: number;
+  memoryUsedGb: number;
+  memoryTotalGb: number;
+  diskFreeGb: number;
+}
+
+const PREVIEW_LOADS: Record<string, PreviewLoad> = {
+  studio: { cores: 12, cpuPercent: 46, memoryUsedGb: 21, memoryTotalGb: 32, diskFreeGb: 180 },
+  laptop: { cores: 8, cpuPercent: 12, memoryUsedGb: 6, memoryTotalGb: 16, diskFreeGb: 64 },
+};
+
+function createPreviewResources(engine: Engine, load: PreviewLoad) {
+  const snapshot = (): MachineResources => ({
+    sampledAt: Date.now(),
+    cores: load.cores,
+    cpuPercent: load.cpuPercent,
+    memoryUsedBytes: load.memoryUsedGb * GIGABYTE,
+    memoryTotalBytes: load.memoryTotalGb * GIGABYTE,
+    diskFreeBytes: load.diskFreeGb * GIGABYTE,
+    diskTotalBytes: 500 * GIGABYTE,
+    tasks: Object.values(engine.state.tasks)
+      .filter((task) => !isTaskSettled(task))
+      .slice(0, 6)
+      .map((task, index) => ({
+        taskId: task.id,
+        agent: { cpuPercent: 2 + index, memoryBytes: (0.3 + index / 10) * GIGABYTE },
+        services:
+          index % 3 === 1
+            ? { cpuPercent: 3, memoryBytes: 0.7 * GIGABYTE }
+            : { cpuPercent: 0, memoryBytes: 0 },
+        checks:
+          index === 0 ? { cpuPercent: 28, memoryBytes: 1.6 * GIGABYTE } : { cpuPercent: 0, memoryBytes: 0 },
+        processes: 3 + index,
+        worktreeBytes: (0.8 + index / 2) * GIGABYTE,
+      })),
+  });
+  return { snapshot, subscribe: () => () => undefined };
+}
+
 async function startMachine(id: string, name: string, dataDir: string) {
   const connectKey = serializeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   writeRemoteFile(dataDir, id, connectKey);
@@ -190,6 +235,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     remote,
     place: PLACE,
     shares,
+    resources: PREVIEW_LOADS[id] ? createPreviewResources(engine, PREVIEW_LOADS[id]) : undefined,
   });
   engine.onEffect(async (effect, context) => {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
