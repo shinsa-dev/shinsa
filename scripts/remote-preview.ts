@@ -12,6 +12,8 @@ import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/in
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
 import { ShareClock } from '../apps/engine/src/remote/share-clock.ts';
 import { type ShareGitHub, Shares } from '../apps/engine/src/remote/shares.ts';
+import { TeamFeeds } from '../apps/engine/src/remote/team-feeds.ts';
+import { Teams } from '../apps/engine/src/remote/teams.ts';
 import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
@@ -29,9 +31,13 @@ import {
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   type RemoteInstance,
+  type RemoteTeam,
   type RemoteUser,
   type Repo,
   resolveKeyFingerprint,
+  resolveTaskProject,
+  resolveTeamChannelUrl,
+  resolveTeamJoinUrl,
   SHARE_CHANNEL_PATH,
   SHARE_ID_BYTES,
   SHARE_KEY_BYTES,
@@ -40,6 +46,8 @@ import {
   serializeBase64Url,
   serializeShareUrl,
   type Task,
+  TEAM_CHANNEL_PATH,
+  type TeamJoinResponse,
 } from '../packages/core/src/index.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -69,6 +77,56 @@ const LAPTOP_TASKS = [
     branch: 'docs/charting-libraries',
   },
 ];
+
+const TEAMMATE: RemoteUser = { id: '2', login: 'kai', name: 'Kai Tanaka', avatarUrl: null };
+
+const TEAMMATE_TASKS = [
+  {
+    request: 'Let a paywall be duplicated from its menu, with its products and copy',
+    title: 'Duplicate a paywall from its menu',
+    branch: 'feat/duplicate-paywall',
+  },
+  {
+    request: 'Find why paywall previews flicker when the theme changes',
+    title: 'Find why previews flicker on theme change',
+    branch: 'fix/preview-flicker',
+  },
+  {
+    request: 'Move the paywall list to the new table component',
+    title: 'Move the paywall list to the new table',
+    branch: 'refactor/paywall-table',
+  },
+];
+
+const TEAM_INVITE = 'preview-team-invite';
+
+const TEAM_KEY = serializeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+
+const MACHINE_OWNERS: Record<string, RemoteUser> = { studio: USER, laptop: USER, kai: TEAMMATE };
+
+const TEAM: Omit<RemoteTeam, 'role'> = {
+  id: 'core',
+  name: 'Product team',
+  owner: USER,
+  members: [{ user: TEAMMATE, addedAt: Date.now() - 3 * 24 * 60 * 60 * 1000 }],
+  requests: [
+    {
+      user: { id: '3', login: 'ines', name: 'Inês Costa', avatarUrl: null },
+      addedAt: Date.now() - 60 * 60 * 1000,
+    },
+  ],
+  machines: [
+    { id: 'studio', name: 'Studio', userId: USER.id, online: true, lastSeenAt: Date.now() },
+    { id: 'laptop', name: 'Laptop', userId: USER.id, online: true, lastSeenAt: Date.now() },
+    { id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: true, lastSeenAt: Date.now() },
+  ],
+  createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
+};
+
+function resolvePreviewTeam(owner: RemoteUser): RemoteTeam {
+  const role = owner.id === TEAM.owner.id ? 'owner' : 'member';
+  return { ...TEAM, role, requests: role === 'owner' ? TEAM.requests : [] };
+}
 
 interface Machine {
   id: string;
@@ -104,8 +162,8 @@ function seedStudio() {
   return join(seedDir, 'data');
 }
 
-function prepareLaptop() {
-  const dataDir = join(PREVIEW_DIR, 'laptop', 'data');
+function prepareMachine(id: string) {
+  const dataDir = join(PREVIEW_DIR, id, 'data');
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(
     join(dataDir, 'config.json'),
@@ -115,6 +173,7 @@ function prepareLaptop() {
 }
 
 function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
+  const owner = MACHINE_OWNERS[id] ?? USER;
   const credentials = {
     instanceId: id,
     machineToken: `preview-${id}`,
@@ -128,9 +187,19 @@ function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
       version: 1,
       credentials,
       enabled: true,
-      owner: USER.login,
+      owner: owner.login,
       devices: [],
-      access: { owner: USER, members: [] },
+      access: { owner, members: [] },
+      teams: [resolvePreviewTeam(owner)],
+      teamKeys: [
+        {
+          teamId: TEAM.id,
+          name: TEAM.name,
+          key: TEAM_KEY,
+          invite: owner.id === TEAM.owner.id ? TEAM_INVITE : null,
+          addedAt: TEAM.createdAt,
+        },
+      ],
     })
   );
 }
@@ -169,6 +238,8 @@ async function startMachine(id: string, name: string, dataDir: string) {
     evidence,
     github: createPreviewGitHub(engine),
   });
+  const teams = new Teams({ engine, remote, shares });
+  const teamFeeds = new TeamFeeds({ remote });
   const http = startServer({
     engine,
     config,
@@ -190,12 +261,15 @@ async function startMachine(id: string, name: string, dataDir: string) {
     remote,
     place: PLACE,
     shares,
+    teams,
+    teamFeeds,
   });
   engine.onEffect(async (effect, context) => {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
   });
   engine.start();
   new ShareClock(engine).start();
+  teamFeeds.start();
   const key = await remote.store.resolveMachineKey();
   const machine: Machine = {
     id,
@@ -208,20 +282,26 @@ async function startMachine(id: string, name: string, dataDir: string) {
   return { machine, engine, evidence };
 }
 
-async function seedLaptop(engine: Engine, dataDir: string) {
-  const path = join(dataDir, '..', 'website');
+interface SeedProject {
+  repo: string;
+  project: string;
+  tasks: typeof LAPTOP_TASKS;
+}
+
+async function seedProject(engine: Engine, dataDir: string, seed: SeedProject) {
+  const path = join(dataDir, '..', seed.repo);
   mkdirSync(path, { recursive: true });
   await engine.dispatch({
     type: 'repo.register',
-    repo: { name: 'website', path, defaultBranch: 'main', remote: null, checkCommands: [] },
-    projectName: 'Website',
+    repo: { name: seed.repo, path, defaultBranch: 'main', remote: null, checkCommands: [] },
+    projectName: seed.project,
   });
-  const [repo] = Object.values(engine.state.repos);
-  if (!repo) throw new Error('Registering the Laptop repository failed.');
-  for (const task of LAPTOP_TASKS) {
+  const repo = Object.values(engine.state.repos).find((entry) => entry.name === seed.repo);
+  if (!repo) throw new Error(`Registering ${seed.repo} failed.`);
+  for (const task of seed.tasks) {
     await engine.dispatch({ type: 'task.create', request: task.request, repoId: repo.id });
     const created = Object.values(engine.state.tasks).find((entry) => entry.request === task.request);
-    if (!created) throw new Error('Creating a Laptop task failed.');
+    if (!created) throw new Error(`Creating a ${seed.project} task failed.`);
     await engine.dispatch({
       type: 'task.triage',
       taskId: created.id,
@@ -232,6 +312,21 @@ async function seedLaptop(engine: Engine, dataDir: string) {
       waitsOn: [],
     });
   }
+  return repo;
+}
+
+async function shareProjectWithTeam(engine: Engine, projectId: string | undefined) {
+  if (!projectId) throw new Error('No project to share with the preview team.');
+  await engine.dispatch({ type: 'project.add_to_team', projectId, teamId: TEAM.id });
+}
+
+function selectBusiestProject(engine: Engine) {
+  const counts = new Map<string, number>();
+  for (const task of Object.values(engine.state.tasks)) {
+    const projectId = resolveTaskProject(engine.state, task);
+    if (projectId && !task.watchHome) counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
 }
 
 function listInstances(machines: Machine[]): Promise<RemoteInstance[]> {
@@ -367,7 +462,7 @@ function respondStatic(pathname: string) {
   });
 }
 
-function respondIndex(machines: Machine[], shares: PreviewShare[]) {
+function respondIndex(machines: Machine[], shares: PreviewShare[], teamTask: string | null) {
   const links = [
     ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
     [
@@ -394,6 +489,26 @@ function respondIndex(machines: Machine[], shares: PreviewShare[]) {
       ],
     ]),
     ['A share link that no longer works', serializeShareUrl(ORIGIN, createShareLink('studio'))],
+    [
+      `Studio's own app: the focus menu's Teams section, then ${TEAM.name}, shows Kai's tasks beside yours`,
+      `http://${HOST}:${machines[0]?.port}/tasks`,
+    ],
+    [
+      `Studio's own app: Settings, Teams, with Inês asking to join`,
+      `http://${HOST}:${machines[0]?.port}/settings`,
+    ],
+    ...(teamTask
+      ? [
+          [
+            `One of Kai's tasks on Studio's own app, read-only`,
+            `http://${HOST}:${machines[0]?.port}${teamTask}`,
+          ],
+        ]
+      : []),
+    [
+      `The team's join link, which gives this browser the team key so the dashboard opens Kai's tasks too`,
+      resolveTeamJoinUrl({ teamId: TEAM.id, invite: TEAM_INVITE, key: TEAM_KEY }, ORIGIN),
+    ],
     ...machines.map((machine) => [
       `${machine.name}'s own app on the machine: Settings, Remote access`,
       `http://${HOST}:${machine.port}/settings`,
@@ -471,8 +586,57 @@ async function respondInviteAccept(request: Request, machines: Machine[]) {
   return Response.json(answer);
 }
 
-async function respondDashboard(request: Request, url: URL, machines: Machine[]) {
+async function respondTeamConnect(request: Request, viewer: RemoteUser, teammates: Machine[]) {
+  const { instanceId } = (await request.json()) as { instanceId?: string };
+  const target = teammates.find((entry) => entry.id === instanceId);
+  if (!target)
+    return Response.json(
+      { error: { code: 'not_found', message: 'That machine is not in this team.' } },
+      { status: 404 }
+    );
+  const expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS;
+  const token = await createConnectToken(target.connectKey, {
+    instanceId: target.id,
+    userId: viewer.id,
+    expiresAt,
+  });
+  const answer: ConnectResponse = {
+    url: resolveTeamChannelUrl(`ws://${HOST}:${PORT}/__preview/tunnel/${target.id}`, token),
+    expiresAt,
+  };
+  return Response.json(answer);
+}
+
+function selectCallerOwner(request: Request) {
+  const id = (request.headers.get('authorization') ?? '').replace(/^Bearer preview-/, '');
+  return MACHINE_OWNERS[id] ?? null;
+}
+
+function respondTeams(request: Request, url: URL, teammates: Machine[]) {
   const { pathname } = url;
+  if (pathname === REMOTE_PATHS.teams) return Response.json([resolvePreviewTeam(USER)]);
+  if (pathname === REMOTE_PATHS.teamJoin) {
+    const answer: TeamJoinResponse = {
+      teamId: TEAM.id,
+      name: TEAM.name,
+      owner: TEAM.owner,
+      status: 'member',
+    };
+    return Response.json(answer);
+  }
+  if (pathname === `${REMOTE_PATHS.teams}/${TEAM.id}/connect`)
+    return respondTeamConnect(request, USER, teammates);
+  const owner = selectCallerOwner(request);
+  if (owner && pathname === `${REMOTE_PATHS.machineTeams}/${TEAM.id}/connect`)
+    return respondTeamConnect(request, owner, teammates);
+  if (owner && pathname.startsWith(`${REMOTE_PATHS.machineTeams}/`)) return Response.json({ ok: true });
+  return null;
+}
+
+async function respondDashboard(request: Request, url: URL, machines: Machine[], teammates: Machine[]) {
+  const { pathname } = url;
+  const team = respondTeams(request, url, teammates);
+  if (team) return team;
   if (pathname === REMOTE_PATHS.session) return Response.json({ user: USER });
   if (pathname === REMOTE_PATHS.signIn && url.searchParams.get('client') === REMOTE_NATIVE_CLIENT)
     return respondNativeSignIn(url);
@@ -536,18 +700,30 @@ async function main() {
     );
   rmSync(PREVIEW_DIR, { recursive: true, force: true });
   const studioData = seedStudio();
-  const laptopData = prepareLaptop();
+  const laptopData = prepareMachine('laptop');
   const studio = await startMachine('studio', 'Studio', studioData);
   const laptop = await startMachine('laptop', 'Laptop', laptopData);
-  await seedLaptop(laptop.engine, laptopData);
+  await seedProject(laptop.engine, laptopData, { repo: 'website', project: 'Website', tasks: LAPTOP_TASKS });
+  const teammateData = prepareMachine('kai');
+  const teammate = await startMachine('kai', 'Kai’s MacBook', teammateData);
+  const paywalls = await seedProject(teammate.engine, teammateData, {
+    repo: 'paywalls',
+    project: 'Paywalls',
+    tasks: TEAMMATE_TASKS,
+  });
+  await shareProjectWithTeam(teammate.engine, paywalls.projectId ?? undefined);
+  await shareProjectWithTeam(studio.engine, selectBusiestProject(studio.engine));
   const machines = [studio.machine, laptop.machine];
+  const teammates = [...machines, teammate.machine];
   const shares = await createPreviewShares(studio);
+  const [teamTask] = Object.values(teammate.engine.state.tasks);
+  const teamTaskPath = teamTask ? `/teams/${TEAM.id}/kai/${teamTask.id}` : null;
   Bun.serve<TunnelData>({
     port: PORT,
     hostname: HOST,
     async fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname === '/__preview') return respondIndex(machines, shares);
+      if (url.pathname === '/__preview') return respondIndex(machines, shares, teamTaskPath);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
@@ -559,17 +735,20 @@ async function main() {
         const target = link?.url ?? REMOTE_PATHS.app;
         return Response.redirect(onMachine ? target.replace('#', '?on=machine#') : target, 302);
       }
-      const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share)?$/.exec(url.pathname);
-      const machine = machines.find((entry) => entry.id === tunnel?.[1]);
+      const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share|\/team)?$/.exec(url.pathname);
+      const machine = teammates.find((entry) => entry.id === tunnel?.[1]);
       if (machine) {
-        const path = tunnel?.[2]
-          ? `${SHARE_CHANNEL_PATH}${url.search}`
-          : `${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '')}`;
+        const token = encodeURIComponent(url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '');
+        const channels: Record<string, string> = {
+          '/share': `${SHARE_CHANNEL_PATH}${url.search}`,
+          '/team': `${TEAM_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${token}`,
+        };
+        const path = channels[tunnel?.[2] ?? ''] ?? `${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${token}`;
         if (server.upgrade(request, { data: { machine, path, upstream: null, pending: [] } }))
           return undefined;
         return new Response('Upgrade failed', { status: 400 });
       }
-      if (url.pathname.startsWith('/__remote/')) return respondDashboard(request, url, machines);
+      if (url.pathname.startsWith('/__remote/')) return respondDashboard(request, url, machines, teammates);
       return respondStatic(url.pathname);
     },
     websocket: {

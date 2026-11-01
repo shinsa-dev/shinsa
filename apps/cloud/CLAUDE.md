@@ -100,6 +100,24 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   it and can `POST /__remote/instances/<id>/leave`; only the owner removes it (403 `not_owner`), and the owner cannot
   leave (409). The machine removes a member with `POST /__remote/machine/members/remove { userId }`. Shared machines
   do not count toward the 5 machines a member may pair.
+- **Teams** (`teams.ts`, `0005_teams.sql`; `docs/engine.md` → Teams). Who is in which team, and nothing else: no task,
+  project, title or key is ever sent here. A team (`teams`) has one owner, the account whose machine made it with
+  `POST /__remote/machine/teams { name }` (machine token; at most 10 owned, 409 `teams_full`), a name of 60 characters
+  at most and up to 20 members (`team_members`, 409 `members_full`). It mirrors a machine's members: one reusable
+  invite kept as its SHA-256 (`team_invites`; `…/<team>/invite` replaces it, `…/invite/remove` turns it off), and
+  whoever opens the join link and signs in sends `POST /__remote/teams/join { invite }` (or the engine
+  `/__remote/machine/teams/join`), which records that the account asked (`team_requesters`) and makes it no member
+  (404 `invite_invalid` for a link turned off). Only the owner's machine answers a request (`members/add` and
+  `requests/decline` with `{ userId }`, only of an account that asked), removes a member (`members/remove`) or the
+  team (`remove`), each 403 `not_owner` for anyone else; a member leaves with `…/leave` from the engine or
+  `/__remote/teams/<team>/leave` from a page, and the owner cannot (409). The team key lives in the join link's
+  fragment, so it never reaches the Worker. `GET /__remote/teams` lists your teams for a page; every heartbeat's
+  answer carries them as `teams` (`RemoteTeam`), with every member's machines and whether each is online, and the
+  owner's requests. A team connect token (`/__remote/teams/<team>/connect` from a page,
+  `/__remote/machine/teams/<team>/connect` from the engine, `{ instanceId }`) is minted only for the owner or a member
+  and a machine of one of them, as `wss://t-<instance>.shinsa.dev/team?token=…`, signed with that machine's connect
+  key for the account that asked; the machine then checks the account against its own copy of the members and the
+  team key's proof. Removing a user, a team or a machine cascades its rows.
 - **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, for the owner or a member, answers
   `wss://t-<id>.shinsa.dev/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
   seconds), signed for the account that asked. It only keeps random traffic off the machine's endpoint; the machine

@@ -103,6 +103,7 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
   }
 
   const keptTarget = { projectId: focus?.id ?? null, teamId: focusTeam?.id ?? null };
+  const radioValue = resolveRadioValue(keptTarget.projectId, keptTarget.teamId);
 
   return (
     <DropdownMenu>
@@ -115,7 +116,7 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
       />
       <DropdownMenuContent align={compact ? 'end' : 'start'} className='min-w-52'>
         <DropdownMenuRadioGroup
-          value={resolveRadioValue(focus?.id ?? null, focusTeam?.id ?? null)}
+          value={radioValue}
           onValueChange={(value) => changeFocus(parseRadioValue(String(value)), null)}
         >
           <DropdownMenuLabel>Focus on</DropdownMenuLabel>
@@ -123,9 +124,14 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
             <ProjectOption color='gray' name={YOUR_WORK} />
           </DropdownMenuRadioItem>
           <ProjectRadioItems projects={projects} />
-          {teams.length > 0 && (
-            <>
-              <DropdownMenuSeparator />
+        </DropdownMenuRadioGroup>
+        {teams.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup
+              value={radioValue}
+              onValueChange={(value) => changeFocus(parseRadioValue(String(value)), null)}
+            >
               <DropdownMenuLabel>Teams</DropdownMenuLabel>
               {teams.map((team) => (
                 <DropdownMenuRadioItem key={team.id} value={`${TEAM_VALUE_PREFIX}${team.id}`}>
@@ -135,9 +141,9 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
                   </span>
                 </DropdownMenuRadioItem>
               ))}
-            </>
-          )}
-        </DropdownMenuRadioGroup>
+            </DropdownMenuRadioGroup>
+          </>
+        )}
         {kept && (
           <>
             <DropdownMenuSeparator />

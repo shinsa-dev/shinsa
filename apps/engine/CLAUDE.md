@@ -186,7 +186,13 @@ src/
 │                        remote access goes off, and a link whose time ran out refused),
 │                        share-clock.ts (ShareClock: share.expire when a share's time runs out),
 │                        share-channel.ts (ShareChannel: the tunnel's /share channel, the hello checked against
-│                        the link's key, sealed frames out, nothing read after the hello), index.ts (Remote: wires
+│                        the link's key, sealed frames out, nothing read after the hello; a host authorizes the
+│                        hello, so team views run on it too), teams.ts (Teams: making, joining, leaving and
+│                        answering requests through app.shinsa.dev with the machine token, the team keys in
+│                        remote.json, and the tunnel's /team channel, checked against membership, the key and the
+│                        team's projects, ended the moment access ends), team-feeds.ts (TeamFeeds: a list channel
+│                        to every other machine of each team whose key this machine holds, GET /api/teams/tasks,
+│                        the teams socket message and the /api/teams/view relay of one task), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
 ├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention

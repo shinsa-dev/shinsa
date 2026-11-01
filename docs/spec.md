@@ -393,6 +393,12 @@ nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is
 a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
 cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
 (`docs/engine.md` → Sharing a task).
+Teams: Settings → Teams makes a team or joins one with its link, and you pick which of your projects it sees; every
+member then sees every task in them, live and read-only, next to their own, on app.shinsa.dev and in the local app,
+marked with whose it is. The focus menu reads Your work, your projects, then Teams; focusing a team shows your tasks
+in it and your teammates'. A teammate's task opens on the same read-only page a share link shows: no chat, no
+controls, no messages, read live from its owner's machine, and app.shinsa.dev keeps only who is in which team
+(`docs/engine.md` → Teams).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
 that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
@@ -1088,8 +1094,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   project, with a strict bar: the same outcome only. Not a duplicate starts any duplicate again: one triage closed
   as if it had not flagged it, one that had already worked in a fresh round with the same request. You close one yourself with Close as a duplicate in the
   task's menu or ⌘K, and agents with `tasks_duplicate`.
-- **Teams come next.** Shared, read-only views of teammates' tasks (chats never leave the machine), public share
-  links, machines shared with other accounts and duplicates found across a team are their own tasks.
+- **Across a team next.** Triage checking teammates' open tasks for duplicates is its own task, on the teams'
+  read API.
 
 ### Replies on the Overview, not in the chat (2026-10-31)
 
@@ -1105,6 +1111,29 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
   pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
   cards).
+
+### Teams (2026-11-01)
+
+- **A team is a share link for whole projects.** You join a team and pick which of your projects it sees; every
+  task in them is shown to every member, live, without a link, a banner or a warning per task. It reuses the share
+  link's projection, channel and page, so a teammate sees exactly what a share link shows: the title, status,
+  request, plan, phase reports, review, findings, checks, branches, the pull request with its diff and code,
+  evidence, gates without your answers, runs without their prompts, and activity without messages. Never a chat, a
+  transcript, live agent output, a message to an agent, a gate answer, a verdict note, an attachment, the worktree
+  or a path on your disk, and they can change nothing.
+- **Joining works like a machine invite.** The owner's join link sends a request; the owner accepts or declines it
+  in Settings → Teams, and a member leaves or is removed there, which ends their access at once. Which projects a
+  team sees is yours alone: no agent can add one.
+- **Nothing about the work leaves your machine for the cloud.** app.shinsa.dev keeps who is in which team, never a
+  task. Each view is read from the owner's machine over its tunnel and sealed with a team key that lives only on
+  members' machines and browsers, carried in the join link's fragment, which no server receives. A teammate's
+  machine that is offline shows nothing until it is back.
+- **Focus on a team.** The focus menu says Your work instead of All work, then your projects, then Teams. A focused
+  team's Home and All tasks add your teammates' tasks, each marked with its owner; they never count towards Needs
+  you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
+  full control, never twice.
+- **For agents.** The engine serves the team's tasks at `GET /api/teams/tasks`, which triage's team-wide duplicate
+  check will read. Agents can list teams (`teams_list`) and change nothing about them.
 
 ## 11. Open questions
 
