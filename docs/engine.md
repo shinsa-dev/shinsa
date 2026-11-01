@@ -3202,9 +3202,12 @@ online, and the last list of it their own machine kept while it is not (Offline 
   team, never both (`focus_refused`). A team focus keeps your own tasks in the team's projects in the queue, Home and
   every list built on it (`isInFocus` through `isTeamTask`), and the page adds the team's tasks from your teammates:
   the focus menu (`components/focus/menu.tsx`) reads Your work, then your projects, then Teams (each team you are in,
-  not one you only asked to join); All tasks gets a Teammates in <team> group and Home a section of their open
-  tasks (`components/teams/tasks.tsx`), each row marked with its owner's GitHub login (`@kai`), neither shown while a
-  status filter is on. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
+  not one you only asked to join). All tasks lists their tasks among your own, in the same groups and order
+  (`listTaskGroupSections` with the team's entries, `mergeTeamEntries`: a teammate's task sits before the first of
+  your chains it ranks above), under the same search and status filter, with an Owner column (`TEAM_TASK_LIST_COLUMNS`:
+  You, or the owner's GitHub login, `@kai`, the machine in its hint) and their repository
+  (`SharedListing.repo`); their rows are `TeamTaskListRow` (`components/teams/tasks.tsx`), read-only. Home stays yours
+  alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
   guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
   a team channel the browser opens with its own key; a browser without the key says "Add the team to this browser"
@@ -3215,7 +3218,7 @@ online, and the last list of it their own machine kept while it is not (Offline 
   merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`, `HostedTeamFeeds`,
   which retries as `TeamFeeds` does: a refused channel again after 1, 2, then every 5 minutes), keeping the freshest
   copy of each task: a live machine over a kept copy, and of two kept copies the newer (`isBetterMachine`).
-- **Offline teammates** (`TeamFeeds`, `remote/team-snapshots.ts`; `HostedTeamFeeds`). A teammate's tasks stay listed
+- **Offline teammates** (`TeamFeeds`, `remote/team-snapshots.ts`, `remote/team-views.ts`; `HostedTeamFeeds`). A teammate's tasks stay listed
   while their machine is offline, since nothing can change on them until it is back: only that machine works on
   them. The copies live with the teammates, never on app.shinsa.dev, which holds and reads no task state.
   - **Where a copy lives.** Each engine writes the last list it got from each machine it watches to
@@ -3224,11 +3227,23 @@ online, and the last list of it their own machine kept while it is not (Offline 
     `snapshot` when there is one, and a SHA-256 of the team key (`keyDigest`), never the key. A browser on
     app.shinsa.dev keeps what its own channels got in memory only, until the page reloads.
   - **What it shows.** A machine whose channel dropped keeps its tasks, with its `TeamFeedMachine.updatedAt` set to
-    when the owner's machine made the list. The rows on All tasks and Home carry an Offline badge whose hint reads
-    "Updated 2 hours ago" and show that time in place of the task's own (`OfflineBadge`, `listHeldTeamMachines`).
-    Opening one shows its title, handle and status from the copy and says the full task opens once the machine is
-    back (`routes/team-task.tsx`), since only the list is kept, never a task view. When the machine is back its live
-    list replaces the copy at once.
+    when the owner's machine made the list. Their rows on All tasks carry an Offline badge in place of the kind of
+    task, whose hint reads "Updated 2 hours ago" (`OfflineBadge`, `listHeldTeamMachines`). When the machine is back
+    its live list replaces the copy at once.
+  - **The full task, kept too.** Each engine also keeps the whole page of every task in a list it watches, as the
+    owner's machine sent it (the view and its files: the diff, the code, evidence), in `data/team-views/` (`TeamViews`:
+    one file per task named by a SHA-256 of its team, machine and task, an `index.json` of each one's team, machine,
+    task, `keyDigest` and the task's `updatedAt`, read leniently, the folder removed once empty). It fetches them
+    30 seconds after a list arrives (`TEAM_VIEW_REFRESH_MS`), one at a time, only those whose task changed since its
+    copy, each over a task channel closed once the view and every file it lists came or after 30 seconds
+    (`TeamViewRecorder`, `TEAM_VIEW_FETCH_TIMEOUT_MS`); a task you open live is kept as it streams. Files past 8 MB a
+    task are left out (`TEAM_VIEW_FILES_LIMIT`). While the owner's machine is not live, the local relay
+    (`TeamFeeds.openRelay`) replays the kept copy instead of reaching for the machine, and closes once the machine is
+    live again so the page reconnects to the live task. The page then shows the whole task read-only with the note
+    "Read-only copy from before their machine went offline" and when it was updated (`routes/team-task.tsx`); with no
+    full copy (never fetched, or on app.shinsa.dev, whose browser keeps none) it shows the task's title, handle and
+    status from the list and says the full task opens once the machine is back. Full copies are never passed on to
+    teammates: only the signed list is.
   - **Passing copies on.** Every list view carries the copies its machine keeps of the team's other machines while
     they are offline (`TeamListView.held`, `TeamFeeds.listHeld`, pushed again when one changes), so a teammate who
     never saw a machine's tasks still gets them from any online teammate. Anyone in the team holds the team key and
@@ -3244,7 +3259,8 @@ online, and the last list of it their own machine kept while it is not (Offline 
     removed, or the owner's machine is no longer in the team (the next heartbeat drops it from the watched machines);
     when the team key changes (a copy kept under another key is not shown, and the next list replaces it); and when
     the owner's machine refuses this one (the share revoked: no longer in its copy of the team, or the project taken
-    out). Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause.
+    out). A full task copy goes with its machine's list, and also when the task leaves that list or its channel is
+    refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
   change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
@@ -5440,6 +5456,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── remote.json    Remote access: the machine's key, its credentials from app.shinsa.dev and the enrolled devices
     │                  (mode 600; never in the log; Remote access, above)
     ├── team-snapshots.json  The last list of each teammate machine this one watches, shown while it is offline
+    │                  (never in the log; Teams → Offline teammates)
+    ├── team-views/    The last full page of each of those teammates' tasks, opened while their machine is offline
     │                  (never in the log; Teams → Offline teammates)
     ├── bin/           The pinned `cloudflared-<version>` remote access runs
     ├── onboarding.json  The run of setup so far, so a reload or a restart picks it up on the same step

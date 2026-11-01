@@ -100,10 +100,6 @@ export function listTeamFeedTasks(
     );
 }
 
-export function listOpenTeamFeedTasks(tasks: readonly TeamFeedTask[]) {
-  return tasks.filter((task) => !isTaskSettled(task.task));
-}
-
 export function resolveTeamTaskState(entry: TeamFeedTask): ShinsaState {
   const state = createState();
   return {
@@ -111,15 +107,8 @@ export function resolveTeamTaskState(entry: TeamFeedTask): ShinsaState {
     tasks: { [entry.task.id]: entry.task },
     gates: Object.fromEntries(entry.gates.map((gate) => [gate.id, gate])),
     projects: entry.project ? { [entry.project.id]: entry.project } : {},
+    repos: entry.repo ? { [entry.repo.id]: entry.repo } : {},
   };
-}
-
-export function matchesTeamTaskSearch(entry: TeamFeedTask, search: string) {
-  const words = search.trim().toLowerCase();
-  if (!words) return true;
-  return [entry.task.title, entry.task.handle ?? '', entry.owner ?? '', entry.machine ?? ''].some((text) =>
-    text.toLowerCase().includes(words)
-  );
 }
 
 export function resolveTeamTaskPath(target: TeamViewTarget) {

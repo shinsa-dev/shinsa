@@ -4,27 +4,27 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { TEAM_ICON } from '@/components/focus/menu.tsx';
-import { ListRow } from '@/components/layout/list-row.tsx';
-import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { WideSection } from '@/components/queue/queue.tsx';
-import { TaskGlyph } from '@/components/status/glyphs.tsx';
-import { StatusText, TaskMeta } from '@/components/status/text.tsx';
+import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { PullRequestBadge } from '@/components/tasks/pull-request-badge.tsx';
-import { TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
+import {
+  KindMark,
+  RepoMark,
+  RowStatus,
+  TASK_LIST_ROW,
+  TEAM_TASK_LIST_COLUMNS,
+} from '@/components/tasks/row.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useMachines, useRemoteSnapshot, useTeamFeed } from '@/lib/connection/socket.ts';
 import { type FocusTeam, listFocusTeams, selectFocusTeam } from '@/lib/focus.ts';
+import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { formatSince } from '@/lib/format/time.ts';
-import { resolveHomeSectionId } from '@/lib/home.ts';
-import { createDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
+import type { TeamEntry } from '@/lib/tasks/groups.ts';
 import {
   describeTeamTaskOwner,
   listHeldTeamMachines,
-  listOpenTeamFeedTasks,
   listTeamFeedTasks,
-  matchesTeamTaskSearch,
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
@@ -32,12 +32,9 @@ import {
 } from '@/lib/teams/feeds.ts';
 import { navigate } from '@/router.ts';
 
-const TEAMMATES_TITLE = 'Teammates';
-
 export interface FocusedTeamTasks {
   team: FocusTeam;
-  tasks: TeamFeedTask[];
-  held: ReadonlyMap<string, number>;
+  entries: TeamEntry[];
 }
 
 export function useFocusedTeamTasks(state: ShinsaState): FocusedTeamTasks | null {
@@ -45,12 +42,18 @@ export function useFocusedTeamTasks(state: ShinsaState): FocusedTeamTasks | null
   const feed = useTeamFeed();
   const machines = useMachines();
   const teamId = team?.id ?? null;
-  const tasks = React.useMemo(
-    () => (teamId ? listTeamFeedTasks(feed, teamId, new Set(machines.map((machine) => machine.id))) : []),
-    [feed, teamId, machines]
-  );
-  const held = React.useMemo(() => listHeldTeamMachines(feed), [feed]);
-  return team ? { team, tasks, held } : null;
+  const entries = React.useMemo(() => {
+    if (!teamId) return [];
+    const held = listHeldTeamMachines(feed);
+    return listTeamFeedTasks(feed, teamId, new Set(machines.map((machine) => machine.id))).map(
+      (entry): TeamEntry => ({
+        entry,
+        state: resolveTeamTaskState(entry),
+        heldAt: selectTeamTaskHeldAt(held, entry),
+      })
+    );
+  }, [feed, teamId, machines]);
+  return team ? { team, entries } : null;
 }
 
 function openTeamTask(entry: TeamFeedTask) {
@@ -77,15 +80,10 @@ export function OfflineBadge({ heldAt }: { heldAt: number }) {
   );
 }
 
-const TeamTaskListRow = React.memo(function TeamTaskListRowItem({
-  entry,
-  heldAt,
-}: {
-  entry: TeamFeedTask;
-  heldAt: number | null;
-}) {
-  const state = React.useMemo(() => resolveTeamTaskState(entry), [entry]);
+export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }: { team: TeamEntry }) {
+  const { entry, state, heldAt } = team;
   const { task } = entry;
+  const repo = task.repoId ? state.repos[task.repoId] : undefined;
   return (
     // biome-ignore lint/a11y/useSemanticElements: the row holds a pull request link, so it cannot be a button
     <div
@@ -97,100 +95,34 @@ const TeamTaskListRow = React.memo(function TeamTaskListRowItem({
       onKeyDown={(event) => {
         if (event.key === 'Enter' && event.target === event.currentTarget) openTeamTask(entry);
       }}
-      className={`grid h-9 w-full cursor-pointer items-center gap-4 border-border border-b px-3 text-left text-xs outline-none hover:not-has-[a:hover]:bg-bg-a1 active:not-has-[a:active]:bg-bg-a1 ${TASK_LIST_COLUMNS}`}
+      className={`${TASK_LIST_ROW} ${TEAM_TASK_LIST_COLUMNS}`}
     >
       <span className='flex min-w-0 items-center gap-1.5'>
-        <TaskGlyph state={state} task={task} />
+        <Hint label={`${PRIORITY_LABEL[task.priority]} priority`}>
+          <span className='grid size-4 shrink-0 place-items-center'>
+            <PriorityIcon priority={task.priority} />
+          </span>
+        </Hint>
         <TaskHandle task={task} />
         <Truncate className='text-fg-4'>{task.title}</Truncate>
+      </span>
+      <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>
+        {repo && <RepoMark state={state} repo={repo} />}
+        <Truncate>{repo?.name ?? 'No repository'}</Truncate>
       </span>
       <span className='min-w-0 max-md:hidden'>
         <OwnerMark entry={entry} />
       </span>
       <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
-        {heldAt !== null && <OfflineBadge heldAt={heldAt} />}
-        <StatusText state={state} task={task} className='truncate text-xs' />
+        {heldAt === null ? <KindMark state={state} task={task} /> : <OfflineBadge heldAt={heldAt} />}
+        <RowStatus state={state} task={task} />
       </span>
       <span className='max-md:hidden'>
         <PullRequestBadge task={task} />
       </span>
       <span className='text-right text-2xs text-fg-2'>
-        <TimeAgo at={heldAt ?? task.updatedAt} />
+        <TimeAgo at={task.updatedAt} />
       </span>
     </div>
   );
 });
-
-export function TeamTasksGroup({ focused, search }: { focused: FocusedTeamTasks; search: string }) {
-  const disclosure = useDisclosure(createDisclosureId('tasks', 'group', 'team'), true);
-  const entries = focused.tasks.filter((entry) => matchesTeamTaskSearch(entry, search));
-  if (entries.length === 0) return null;
-  return (
-    <section className='flex flex-col'>
-      <DisclosureHeader
-        disclosure={disclosure}
-        strip='block'
-        chevron='glyph'
-        className='sticky top-0 z-10 w-full gap-2 bg-bg-1 ps-3 font-medium text-2xs text-fg-3 after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-border hover:text-fg-4 active:text-fg-4'
-      >
-        <Icon size='sm' name={TEAM_ICON} />
-        {TEAMMATES_TITLE} in {focused.team.name}
-        <span className='font-normal text-fg-2 tabular-nums'>{entries.length}</span>
-      </DisclosureHeader>
-      {disclosure.open &&
-        entries.map((entry) => (
-          <TeamTaskListRow
-            key={resolveTeamTaskPath(resolveTeamTaskTarget(entry))}
-            entry={entry}
-            heldAt={selectTeamTaskHeldAt(focused.held, entry)}
-          />
-        ))}
-    </section>
-  );
-}
-
-function TeamTaskHomeRow({ entry, heldAt }: { entry: TeamFeedTask; heldAt: number | null }) {
-  const state = React.useMemo(() => resolveTeamTaskState(entry), [entry]);
-  return (
-    <ListRow
-      leading={<TaskGlyph state={state} task={entry.task} />}
-      title={entry.task.title}
-      meta={
-        <>
-          {describeTeamTaskOwner(entry)} · <TaskMeta state={state} task={entry.task} />
-        </>
-      }
-      trailing={
-        heldAt === null ? (
-          <TimeAgo at={entry.task.updatedAt} compact />
-        ) : (
-          <span className='flex items-center gap-1.5'>
-            <OfflineBadge heldAt={heldAt} />
-            <TimeAgo at={heldAt} compact />
-          </span>
-        )
-      }
-      onClick={() => openTeamTask(entry)}
-    />
-  );
-}
-
-export function TeamTasksSection({ focused }: { focused: FocusedTeamTasks }) {
-  const open = listOpenTeamFeedTasks(focused.tasks);
-  return (
-    <WideSection
-      title={`${TEAMMATES_TITLE} in ${focused.team.name}`}
-      count={open.length}
-      empty='No teammate has an open task in this team. Their tasks show here, read-only, as soon as they start one.'
-      persistId={resolveHomeSectionId('team')}
-    >
-      {open.map((entry) => (
-        <TeamTaskHomeRow
-          key={resolveTeamTaskPath(resolveTeamTaskTarget(entry))}
-          entry={entry}
-          heldAt={selectTeamTaskHeldAt(focused.held, entry)}
-        />
-      ))}
-    </WideSection>
-  );
-}

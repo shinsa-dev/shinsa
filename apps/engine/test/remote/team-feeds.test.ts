@@ -30,6 +30,7 @@ import {
   TeamFeeds,
 } from '../../src/remote/team-feeds.ts';
 import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots.ts';
+import { TEAM_VIEWS_DIR, TeamViews } from '../../src/remote/team-views.ts';
 import { TEAM_GONE_REASON, Teams } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
@@ -119,6 +120,7 @@ interface SetUp {
   watcherMachines?: TeamMachine[];
   held?: TeamSnapshot[];
   now?: () => number;
+  live?: unknown;
 }
 
 function setUp(options: SetUp = {}) {
@@ -155,7 +157,7 @@ function setUp(options: SetUp = {}) {
   const teams = new Teams({
     engine: stub.engine,
     remote: studio,
-    shares: { resolveLive: () => Promise.resolve(live as never) },
+    shares: { resolveLive: () => Promise.resolve((options.live ?? live) as never) },
     transcripts: { subscribe: () => () => undefined },
     held: { listHeld: () => options.held ?? [], subscribeHeld: () => () => true },
     now: () => 50,
@@ -178,6 +180,7 @@ function setUp(options: SetUp = {}) {
   );
   const sockets: FakeFeedSocket[] = [];
   const waits: (() => void)[] = [];
+  const viewWaits: (() => void)[] = [];
   const createSocket = (url: string, origin: string) => {
     const listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {
       open: [],
@@ -229,8 +232,15 @@ function setUp(options: SetUp = {}) {
       waits.push(run);
       return () => waits.splice(waits.indexOf(run), 1);
     },
+    waitForViews: (_ms, run) => {
+      viewWaits.push(run);
+      return () => {
+        const at = viewWaits.indexOf(run);
+        if (at >= 0) viewWaits.splice(at, 1);
+      };
+    },
   });
-  return { plane, stub, studio, laptop, teams, feeds, sockets, waits };
+  return { plane, stub, studio, laptop, teams, feeds, sockets, waits, viewWaits };
 }
 
 function listMachineStatus(feeds: TeamFeeds) {
@@ -611,6 +621,122 @@ function createPeer(): RelayPeer {
   };
   return peer;
 }
+
+const FULL_VIEW_AT = 10_000_000_000_000;
+
+function createFullLive(
+  read: () => Promise<Uint8Array> = () => Promise.resolve(new TextEncoder().encode('diff'))
+) {
+  return {
+    view: {
+      shared: { task: { id: 'task', updatedAt: FULL_VIEW_AT } },
+      files: { diff: { version: 'v1', type: 'text/plain' } },
+      updatedAt: 50,
+    },
+    files: [{ id: 'diff', version: 'v1', type: 'text/plain', read }],
+  };
+}
+
+function readKeptViews(remote: Remote) {
+  return new TeamViews(join(dirname(remote.store.path), TEAM_VIEWS_DIR));
+}
+
+function listKeptViewKinds(remote: Remote, taskId: string) {
+  return readKeptViews(remote)
+    .select('team1', 'inst1', taskId)
+    ?.messages.map((message) => message.t);
+}
+
+describe('keeping a teammate’s full tasks', () => {
+  test('fetches each listed task’s full view a while after the list, with its files, and only the ones that changed', async () => {
+    const { feeds, laptop, stub, sockets, viewWaits } = setUp({ live: createFullLive() });
+    feeds.start();
+    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    expect(viewWaits).toHaveLength(1);
+    viewWaits.shift()?.();
+    await until('both views are kept', () => readKeptViews(laptop).list().length === 2);
+    expect(listKeptViewKinds(laptop, 'task-1')).toEqual(['view', 'file', 'body', 'end']);
+    expect(listKeptViewKinds(laptop, 'task-2')).toEqual(['view', 'file', 'body', 'end']);
+    const opened = sockets.length;
+    stub.state.tasks['task-3'] = createTask({ id: 'task-3', repoId: 'repo-1', activity: [] });
+    stub.notify();
+    await until('the new task arrives', () => feeds.snapshot().tasks.length === 3);
+    viewWaits.shift()?.();
+    await until('the new view is kept', () => readKeptViews(laptop).list().length === 3);
+    expect(sockets.length - opened).toBe(1);
+    feeds.stop();
+  });
+
+  test('opens a kept task in full while its machine is offline, and lets the page reconnect once it is back', async () => {
+    const { feeds, laptop, viewWaits } = setUp({ live: createFullLive() });
+    feeds.start();
+    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    viewWaits.shift()?.();
+    await until('the views are kept', () => readKeptViews(laptop).list().length === 2);
+    laptop.store.recordTeams([createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] })]);
+    laptop.publish();
+    const peer = createPeer();
+    feeds.openRelay(peer, TARGET_TASK);
+    expect(peer.messages.map((message) => message.t)).toEqual(['view', 'file', 'body', 'end']);
+    expect(peer.closed).toBeNull();
+    const left = createPeer();
+    feeds.openRelay(left, TARGET_TASK).close();
+    laptop.store.recordTeams([createTeam({ role: 'member' })]);
+    laptop.publish();
+    await until('the page is sent back to the live task', () => peer.closed !== null);
+    expect(peer.closed).toBe(TEAM_FEED_OFFLINE);
+    expect(left.closed).toBeNull();
+    const live = createPeer();
+    feeds.openRelay(live, TARGET_TASK);
+    await until('the live view arrives', () => live.messages.length > 0);
+    feeds.stop();
+  });
+
+  test('keeps the view of a task opened live, and nothing of a fetch that ran out of time before its view came', async () => {
+    const { feeds, laptop, viewWaits } = setUp({ live: createFullLive(() => new Promise(() => undefined)) });
+    feeds.start();
+    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    const peer = createPeer();
+    feeds.openRelay(peer, TARGET_TASK);
+    await until('the live view is kept', () => readKeptViews(laptop).list().length === 1);
+    expect(listKeptViewKinds(laptop, 'task-1')).toEqual(['view']);
+    viewWaits.shift()?.();
+    await until('the fetch starts its clock', () => viewWaits.length === 1);
+    viewWaits.shift()?.();
+    expect(readKeptViews(laptop).selectEntry('team1', 'inst1', 'task-2')).toBeNull();
+    feeds.stop();
+  });
+
+  test('drops a task’s view once it leaves the team or the list, and every view of a machine that leaves', async () => {
+    const { feeds, laptop, stub, viewWaits } = setUp({ live: createFullLive() });
+    feeds.start();
+    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    viewWaits.shift()?.();
+    await until('the views are kept', () => readKeptViews(laptop).list().length === 2);
+    stub.state.tasks['task-3'] = createTask({ id: 'task-3', repoId: 'repo-1', activity: [] });
+    stub.notify();
+    await until('the new task arrives', () => feeds.snapshot().tasks.length === 3);
+    if (stub.state.projects.p1) stub.state.projects.p1.teamIds = [];
+    viewWaits.shift()?.();
+    await until('the refused fetch is done', () => viewWaits.length === 0);
+    expect(readKeptViews(laptop).selectEntry('team1', 'inst1', 'task-3')).toBeNull();
+    if (stub.state.projects.p1) stub.state.projects.p1.teamIds = ['team1'];
+    delete stub.state.tasks['task-1'];
+    stub.notify();
+    await until('the list loses a task', () => feeds.snapshot().tasks.length === 2);
+    expect(
+      readKeptViews(laptop)
+        .list()
+        .map((entry) => entry.taskId)
+    ).toEqual(['task-2']);
+    laptop.store.recordTeams([createTeam({ role: 'member', machines: [LAPTOP] })]);
+    laptop.publish();
+    expect(readKeptViews(laptop).list()).toEqual([]);
+    feeds.stop();
+  });
+});
+
+const TARGET_TASK = { teamId: 'team1', instanceId: 'inst1', taskId: 'task-1' };
 
 describe('relaying a teammate’s task to the local app', () => {
   const TARGET = { teamId: 'team1', instanceId: 'inst1', taskId: 'task-1' };

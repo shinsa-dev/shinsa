@@ -1350,7 +1350,7 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 fresh key and a proof over all of it or by `refused`; both derive the session key with the view in it
 (`deriveTeamSessionKey`, `TeamKeys`), then the machine sends `ShareMessage`s as a share does. A list view is a
 `TeamListView` (`tasks`: `TeamTask[]`, `machineKey`: the machine's public key, `updatedAt`, `snapshot`: the same list
-signed, and `held`: the signed lists it keeps of the team's offline machines): each a `SharedListing` (the redacted task, its gates, its project)
+signed, and `held`: the signed lists it keeps of the team's offline machines): each a `SharedListing` (the redacted task, its gates, its project, its repository)
 with `owner` (GitHub login) and `machine` (its name), every open task of the team's projects and the
 `TEAM_SETTLED_LIMIT` (50) most recently finished. A task view is a `ShareLiveView`. What a machine watches is a
 `TeamFeedSnapshot`: `machines` (`TeamFeedMachine`: `teamId`, `instanceId`, `name`, `userId`, `status`, one of

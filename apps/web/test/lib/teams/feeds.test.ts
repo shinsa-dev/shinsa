@@ -14,16 +14,14 @@ import {
   describeTeamTaskOwner,
   HostedTeamFeeds,
   listHeldTeamMachines,
-  listOpenTeamFeedTasks,
   listTeamFeedTasks,
-  matchesTeamTaskSearch,
   mergeTeamFeeds,
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
   selectTeamTaskHeldAt,
 } from '@/lib/teams/feeds.ts';
-import { createGate, createProject, createTask } from '../../support/state.ts';
+import { createGate, createProject, createRepo, createTask } from '../../support/state.ts';
 import { createTeam } from '../../support/teams.ts';
 import { createTeamFeedTask, TEAM_KEY } from './machine.ts';
 
@@ -87,7 +85,6 @@ describe('teammates’ task lists', () => {
     const feed = { machines: [], tasks: [old, done, otherTeam, reachable, recent] };
     const listed = listTeamFeedTasks(feed, 'team1', new Set(['k3x9']));
     expect(listed.map((entry) => entry.task.id)).toEqual(['recent', 'old', 'done']);
-    expect(listOpenTeamFeedTasks(listed).map((entry) => entry.task.id)).toEqual(['recent', 'old']);
   });
 
   it('opens a teammate’s task at its own address and names whose it is', () => {
@@ -99,26 +96,17 @@ describe('teammates’ task lists', () => {
     expect(describeTeamTaskOwner({ owner: null, machine: null })).toBe('A teammate');
   });
 
-  it('builds a state of just the task, its gates and its project, so its status reads as on its own machine', () => {
+  it('builds a state of just the task, its gates, project and repository, so its status reads as on its own machine', () => {
     const gate = createGate({ id: 'g1', taskId: 'kai-task' });
     const project = createProject({ id: 'p1', name: 'Platform' });
-    const state = resolveTeamTaskState(createTeamFeedTask({ gates: [gate], project }));
+    const repo = createRepo({ id: 'r1', name: 'paywalls' });
+    const state = resolveTeamTaskState(createTeamFeedTask({ gates: [gate], project, repo }));
     expect(Object.keys(state.tasks)).toEqual(['kai-task']);
     expect(state.gates).toEqual({ g1: gate });
     expect(state.projects).toEqual({ p1: project });
+    expect(state.repos).toEqual({ r1: repo });
     expect(resolveTeamTaskState(createTeamFeedTask()).projects).toEqual({});
-  });
-
-  it('matches a search against the title, handle, owner and machine', () => {
-    const entry = createTeamFeedTask();
-    expect(matchesTeamTaskSearch(entry, '')).toBe(true);
-    expect(matchesTeamTaskSearch(entry, 'BILLING')).toBe(true);
-    expect(matchesTeamTaskSearch(entry, 'pl-3')).toBe(true);
-    expect(matchesTeamTaskSearch(entry, 'kai')).toBe(true);
-    expect(matchesTeamTaskSearch(entry, 'studio')).toBe(true);
-    expect(
-      matchesTeamTaskSearch(createTeamFeedTask({ task: createTask({ id: 'bare', handle: undefined }) }), 'x')
-    ).toBe(false);
+    expect(resolveTeamTaskState(createTeamFeedTask()).repos).toEqual({});
   });
 });
 

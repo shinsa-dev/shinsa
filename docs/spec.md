@@ -1162,11 +1162,12 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   `remote.json`, and shows it marked Offline with when it was last updated; the live list replaces it once the
   machine is back. A teammate who never saw it gets it from any online teammate, and takes it only when the owner
   machine's own signing key verifies it, since the team key alone would let any member forge one. A copy goes after
-  30 days, or when the team, the member, the machine or the key does. Only the list is kept: an offline task opens to
-  its title and status, not the full page.
+  30 days, or when the team, the member, the machine or the key does. Each machine also keeps the full page of every
+  teammate task it lists, so an offline task opens whole, marked as a copy; a teammate machine that never fetched it
+  shows the title and status.
 - **Focus on a team.** The focus menu says Your work instead of All work, then your projects, then Teams. A focused
-  team's Home and All tasks add your teammates' tasks, each marked with its owner; they never count towards Needs
-  you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
+  team's All tasks lists your teammates' tasks among yours, in the same groups, with an Owner column; Home stays
+  yours alone. They never count towards Needs you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
   full control, never twice.
 - **For agents.** The engine serves the team's tasks at `GET /api/teams/tasks`, which triage's team-wide duplicate
   check will read. Agents can list teams (`teams_list`) and change nothing about them.

@@ -42,11 +42,24 @@ function useHostedKey(teamId: string) {
   return key;
 }
 
-function TeamTaskView({ target, transport }: { target: TeamViewTarget; transport: TeamTransport }) {
+const OFFLINE_COPY_NOTE = 'Read-only copy from before their machine went offline';
+
+function TeamTaskView({
+  target,
+  transport,
+  note = SHARED_READ_ONLY_NOTE,
+  fallback = null,
+}: {
+  target: TeamViewTarget;
+  transport: TeamTransport;
+  note?: string;
+  fallback?: React.ReactNode;
+}) {
   const load = useSharedView(resolveTeamTaskPath(target), (handlers) =>
     openTeamTaskStream(transport, handlers)
   );
   if (load.status === 'loading') return <LoadingLine label='Opening the team task' className='m-auto' />;
+  if (load.status === 'error' && fallback) return fallback;
   if (load.status === 'error') {
     return (
       <EmptyState
@@ -56,7 +69,7 @@ function TeamTaskView({ target, transport }: { target: TeamViewTarget; transport
       />
     );
   }
-  return <SharedTaskPage view={load.view} note={SHARED_READ_ONLY_NOTE} viewer={null} />;
+  return <SharedTaskPage view={load.view} note={note} viewer={null} />;
 }
 
 function HostedTeamTask({ target }: { target: TeamViewTarget }) {
@@ -110,7 +123,7 @@ function HeldTeamTask({ entry, heldAt }: { entry: TeamFeedTask; heldAt: number }
     <EmptyState
       icon='IconCloudSimpleDisconnected'
       title={entry.task.title}
-      description={`${describeTeamTaskOwner(entry)}’s machine is offline, so this is the task as it last stood. The full task opens once the machine is back.`}
+      description={`${describeTeamTaskOwner(entry)}’s machine is offline, and this machine kept only the task’s summary. The full task opens once their machine is back.`}
     >
       <span className='flex items-center gap-1.5 text-xs'>
         <TaskGlyph state={state} task={entry.task} />
@@ -124,7 +137,14 @@ function HeldTeamTask({ entry, heldAt }: { entry: TeamFeedTask; heldAt: number }
 
 export function TeamTaskPage({ target }: { target: TeamViewTarget }) {
   const held = useHeldTeamTask(target);
-  if (held) return <HeldTeamTask entry={held.entry} heldAt={held.heldAt} />;
-  if (isRemoteBuild()) return <HostedTeamTask target={target} />;
-  return <TeamTaskView target={target} transport={(handlers) => openLocalTeamView(target, handlers)} />;
+  const summary = held && <HeldTeamTask entry={held.entry} heldAt={held.heldAt} />;
+  if (isRemoteBuild()) return summary || <HostedTeamTask target={target} />;
+  return (
+    <TeamTaskView
+      target={target}
+      transport={(handlers) => openLocalTeamView(target, handlers)}
+      note={held ? OFFLINE_COPY_NOTE : SHARED_READ_ONLY_NOTE}
+      fallback={summary}
+    />
+  );
 }
