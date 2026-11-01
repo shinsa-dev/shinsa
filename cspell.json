@@ -8,6 +8,8 @@
     "ECDH",
     "HKDF",
     "gtimeout",
+    "recalc",
+    "recalcs",
     "gitdir",
     "commondir",
     "Macbook",
