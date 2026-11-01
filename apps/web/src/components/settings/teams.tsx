@@ -22,6 +22,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { type DialogControl, useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import * as React from 'react';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { UserTag } from '@/components/people/user-tag.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { NewTeamDialog } from '@/components/teams/new-team-dialog.tsx';
 import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
@@ -33,12 +34,13 @@ import { TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
-import { describeUserName } from '@/lib/remote/users.ts';
+import { describeUserName, resolveFirstName } from '@/lib/remote/users.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import {
   canUseTeams,
   describePeopleCount,
   describeTeamEntry,
+  describeTeamFacts,
   describeTeamsUnavailable,
   hasMachineAccess,
   listProjectChoices,
@@ -270,7 +272,7 @@ function TeamRequests({ team, actions }: { team: RemoteTeam; actions: TeamAction
             onClick={() =>
               void requestWithToast(
                 () => actions.acceptRequest(team.id, request.user.id),
-                `${describeUserName(request.user)} joined ${team.name}.`
+                `${resolveFirstName(request.user)} joined ${team.name}.`
               )
             }
           >
@@ -380,7 +382,15 @@ function TeamHeader({
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
         <Truncate className='font-medium text-fg-4 text-xs'>{entry.name}</Truncate>
-        <Truncate className='text-2xs text-fg-2'>{describeTeamEntry(entry, now)}</Truncate>
+        <Truncate className='text-2xs text-fg-2'>
+          {entry.team && entry.team.role !== 'owner' ? (
+            <>
+              Owned by <UserTag user={entry.team.owner} /> · {describeTeamFacts(entry.team, now)}
+            </>
+          ) : (
+            describeTeamEntry(entry, now)
+          )}
+        </Truncate>
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>
         {owns ? (

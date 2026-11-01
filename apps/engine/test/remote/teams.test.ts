@@ -209,7 +209,12 @@ describe('a team view of this machine', () => {
     expect(viewer.refused).toBeNull();
     const [view] = viewer.views() as TeamListView[];
     expect(view?.tasks.map((task) => task.task.id)).toEqual(['task-1']);
-    expect(view?.tasks[0]).toMatchObject({ owner: 'mona', machine: 'Studio', project: { id: 'p1' } });
+    expect(view?.tasks[0]).toMatchObject({
+      owner: 'mona',
+      ownerProfile: { name: 'Mona Lisa', avatarUrl: null },
+      machine: 'Studio',
+      project: { id: 'p1' },
+    });
     expect(view?.updatedAt).toBe(50);
     expect(view?.machineKey).toBe((await remote.store.resolveMachineKey()).publicKey);
     expect(view?.grant).toBeUndefined();

@@ -272,7 +272,7 @@ describe('access requests in Settings → Machines', () => {
     expect(screen.queryByText('Waiting on Air')).toBeNull();
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     expect(screen.getAllByText('Safari on iPad')).toHaveLength(1);
-    expect(screen.getByText('@mona')).toBeTruthy();
+    expect(screen.getByText('mona')).toBeTruthy();
     unmount();
     render(
       <MachineAccessRequests machines={[{ id: 'w4t8', name: 'Laptop', remote: null }]} instances={[]} />
@@ -343,7 +343,7 @@ describe('the machines in Settings', () => {
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
-    expect(await screen.findByText('Shared by Lee Park · In this dashboard')).toBeTruthy();
+    expect(await screen.findByText('Shared by Lee · In this dashboard')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     await waitFor(() => expect(devices.removed).toEqual(['k3x9']));

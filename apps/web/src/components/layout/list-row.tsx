@@ -22,6 +22,7 @@ export function ListRow({
   trailing,
   active = false,
   revealWhenActive = false,
+  holdsLinks = false,
   onClick,
 }: {
   leading?: React.ReactNode;
@@ -32,26 +33,23 @@ export function ListRow({
   trailing?: React.ReactNode;
   active?: boolean;
   revealWhenActive?: boolean;
+  holdsLinks?: boolean;
   onClick: () => void;
 }) {
-  const ref = React.useRef<HTMLButtonElement>(null);
+  const ref = React.useRef<HTMLButtonElement & HTMLDivElement>(null);
   React.useEffect(() => {
     if (active && revealWhenActive) ref.current?.scrollIntoView({ block: 'nearest' });
   }, [active, revealWhenActive]);
-  return (
-    <button
-      ref={ref}
-      type='button'
-      onClick={onClick}
-      aria-current={active || undefined}
-      data-active={active}
-      data-highlight-item=''
-      className={cn(
-        LIST_ROW,
-        meta || summary ? LIST_ROW_LINES : LIST_ROW_LINE,
-        leading ? 'px-1.5' : 'px-2.5'
-      )}
-    >
+  const row = {
+    ref,
+    onClick,
+    'aria-current': active || undefined,
+    'data-active': active,
+    'data-highlight-item': '',
+    className: cn(LIST_ROW, meta || summary ? LIST_ROW_LINES : LIST_ROW_LINE, leading ? 'px-1.5' : 'px-2.5'),
+  };
+  const content = (
+    <>
       {leading}
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
         {mark ? (
@@ -66,6 +64,28 @@ export function ListRow({
         {summary && <span className={cn(LIST_ROW_META, 'flex h-4 min-w-0 items-center')}>{summary}</span>}
       </span>
       {trailing && <span className='shrink-0 text-2xs text-fg-2 tabular-nums leading-5'>{trailing}</span>}
+    </>
+  );
+  if (holdsLinks)
+    return (
+      // biome-ignore lint/a11y/useSemanticElements: the row holds a link, and a link cannot sit inside a button
+      <div
+        {...row}
+        role='button'
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) {
+            event.preventDefault();
+            onClick();
+          }
+        }}
+      >
+        {content}
+      </div>
+    );
+  return (
+    <button {...row} type='button'>
+      {content}
     </button>
   );
 }

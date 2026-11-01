@@ -4,6 +4,7 @@ import {
   createTeamDraft,
   describePeopleCount,
   describeTeamEntry,
+  describeTeamFacts,
   describeTeamsUnavailable,
   hasMachineAccess,
   listProjectChoices,
@@ -47,8 +48,9 @@ describe('Settings → Teams', () => {
     expect(describeTeamEntry(createTeamEntry({ team }), NOW)).toBe('You own it · 2 people · Made 2d ago');
     const alone = createTeam({ owner: KAI, role: 'member', members: [], createdAt: NOW - 2 * 86_400_000 });
     expect(describeTeamEntry(createTeamEntry({ team: alone }), NOW)).toBe(
-      'Owned by Kai Lane · 1 person · Made 2d ago'
+      'Owned by Kai · 1 person · Made 2d ago'
     );
+    expect(describeTeamFacts(alone, NOW)).toBe('1 person · Made 2d ago');
     expect(describeTeamEntry(createTeamEntry({ team: null }), NOW)).toBe(
       'You asked to join. The team’s owner has not answered yet.'
     );

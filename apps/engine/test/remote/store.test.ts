@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log } from '../../src/log/index.ts';
-import { RemoteStore, readRemoteFile, readTeams } from '../../src/remote/store.ts';
+import { RemoteStore, readRemoteFile, readTeams, resolveOwnerProfile } from '../../src/remote/store.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const CREDENTIALS = {
@@ -225,6 +225,26 @@ describe('the remote store', () => {
     const store = new RemoteStore(path);
     const key = await store.resolveMachineKey();
     expect(key.publicKey).not.toBe('p');
+  });
+});
+
+describe('the owner’s profile', () => {
+  const mona = { id: '1', login: 'Mona', name: 'Mona Lisa', avatarUrl: 'https://avatars.example/mona' };
+
+  test('is the name and avatar of the access owner whose login is the machine’s owner, in any case', () => {
+    const file = { ...readRemoteFile(join(createTempDir(), 'none.json')), owner: 'mona' };
+    expect(resolveOwnerProfile({ ...file, access: { owner: mona, members: [] } })).toEqual({
+      name: 'Mona Lisa',
+      avatarUrl: 'https://avatars.example/mona',
+    });
+  });
+
+  test('is unknown without access, without an owner, or when the access owner is someone else', () => {
+    const file = readRemoteFile(join(createTempDir(), 'none.json'));
+    const access = { owner: mona, members: [] };
+    expect(resolveOwnerProfile({ ...file, owner: 'mona' })).toBeNull();
+    expect(resolveOwnerProfile({ ...file, access })).toBeNull();
+    expect(resolveOwnerProfile({ ...file, owner: 'kai', access })).toBeNull();
   });
 });
 

@@ -19,19 +19,24 @@ function isSameList(a: string[], b: string[]) {
   return a.length === b.length && a.every((id) => b.includes(id));
 }
 
-function describeWhy(auto: boolean, decided: string, why: string) {
+function describeWhy(auto: boolean, decided: string, why: string, owner: string | null) {
   if (auto) return `Shinsa chose this: ${why}`;
-  return `You changed this. Shinsa chose “${lowerFirst(decided)}”: ${why}`;
+  return `${owner ?? 'You'} changed this. Shinsa chose “${lowerFirst(decided)}”: ${why}`;
 }
 
-export function resolveTriageWhy(state: ShinsaState, task: Task, fact: TriageFact): string | null {
+export function resolveTriageWhy(
+  state: ShinsaState,
+  task: Task,
+  fact: TriageFact,
+  owner: string | null = null
+): string | null {
   if (fact === 'start') {
     const decision = task.triageDecisions?.start;
     if (!decision) return null;
     const auto = isSameList(task.waitsOn, decision.value);
-    return describeWhy(auto, describeStart(state, decision.value), decision.why);
+    return describeWhy(auto, describeStart(state, decision.value), decision.why, owner);
   }
   const decision = task.triageDecisions?.priority;
   if (!decision) return null;
-  return describeWhy(task.priority === decision.value, describePriority(decision.value), decision.why);
+  return describeWhy(task.priority === decision.value, describePriority(decision.value), decision.why, owner);
 }

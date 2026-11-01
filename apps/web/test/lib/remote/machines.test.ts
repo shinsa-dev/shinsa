@@ -38,7 +38,7 @@ describe('a machine in the dashboard', () => {
       owner: { id: '3', login: 'lee', name: null, avatarUrl: null },
       role: 'member',
     };
-    expect(describeMachine(shared, null, NOW).access).toBe('Shared by @lee · Not added on this device');
+    expect(describeMachine(shared, null, NOW).access).toBe('Shared by lee · Not added on this device');
   });
 
   it('says whether it is online and whether this browser has it in its dashboard', async () => {

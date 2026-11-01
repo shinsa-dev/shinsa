@@ -1,7 +1,7 @@
 import { parseTeamJoinFragment, type TeamJoinFragment, type TeamJoinStatus } from '@shinsa/core';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { KeyValueStore } from '@/lib/remote/devices.ts';
-import { describeUserName } from '@/lib/remote/users.ts';
+import { resolveFirstName } from '@/lib/remote/users.ts';
 
 const JOIN_KEY = 'shinsa.remote.team-join';
 
@@ -73,5 +73,5 @@ export async function requestTeamJoin(
     key: fragment.key,
     joinedAt: earlier?.joinedAt ?? (options.now ?? Date.now)(),
   });
-  return { name: answer.name, owner: describeUserName(answer.owner), status: answer.status };
+  return { name: answer.name, owner: resolveFirstName(answer.owner), status: answer.status };
 }

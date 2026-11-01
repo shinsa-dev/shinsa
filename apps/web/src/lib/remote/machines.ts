@@ -7,7 +7,7 @@ import type { DeviceStore, EnrolledDevice } from './devices.ts';
 import type { FleetMember } from './fleet.ts';
 import { RemoteLink, type RemoteLinkOptions } from './link.ts';
 import { resolveMachineLabel } from './mode.ts';
-import { describeUserName } from './users.ts';
+import { resolveFirstName } from './users.ts';
 
 export interface MachineRow {
   instance: RemoteInstance;
@@ -32,7 +32,7 @@ export function describeMachine(
   const current = device?.onMachine === true;
   const added = resolveDeviceAccess(device);
   const access =
-    instance.role === 'member' ? `Shared by ${describeUserName(instance.owner)} · ${added}` : added;
+    instance.role === 'member' ? `Shared by ${resolveFirstName(instance.owner)} · ${added}` : added;
   return {
     instance,
     device,
