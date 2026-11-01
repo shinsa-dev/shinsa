@@ -69,8 +69,8 @@ const TEAMS = [createTeam('team1'), createTeam('team2')];
 describe('resolveTeammateCheck', () => {
   test('a task whose project is in no team gets no team check', () => {
     const feed = { machines: [machine()], tasks: [listing()] };
-    expect(resolveTeammateCheck(null, { feed, teams: TEAMS })).toBeNull();
-    expect(resolveTeammateCheck({ ...PROJECT, teamIds: [] }, { feed, teams: TEAMS })).toBeNull();
+    expect(resolveTeammateCheck(null, { feed, teams: TEAMS, self: null })).toBeNull();
+    expect(resolveTeammateCheck({ ...PROJECT, teamIds: [] }, { feed, teams: TEAMS, self: null })).toBeNull();
   });
 
   test('lists the open tasks of the project’s teams only, each keyed apart from local tasks', () => {
@@ -83,7 +83,7 @@ describe('resolveTeammateCheck', () => {
         listing({}, { id: 'kt4', handle: null, title: 'Second', request: 'Make it faster' }),
       ],
     };
-    const check = resolveTeammateCheck(PROJECT, { feed, teams: TEAMS });
+    const check = resolveTeammateCheck(PROJECT, { feed, teams: TEAMS, self: null });
     expect(check?.tasks).toEqual([
       {
         key: 'teammate-1',
@@ -112,7 +112,10 @@ describe('resolveTeammateCheck', () => {
       machines: [machine(), machine({ teamId: 'team2' })],
       tasks: [listing(), listing({ teamId: 'team2' })],
     };
-    const check = resolveTeammateCheck({ ...PROJECT, teamIds: ['team1', 'team2'] }, { feed, teams: TEAMS });
+    const check = resolveTeammateCheck(
+      { ...PROJECT, teamIds: ['team1', 'team2'] },
+      { feed, teams: TEAMS, self: null }
+    );
     expect(check?.tasks.map((task) => task.original.taskId)).toEqual(['kt1']);
   });
 
@@ -130,7 +133,7 @@ describe('resolveTeammateCheck', () => {
         ),
       ],
     };
-    const [task] = resolveTeammateCheck(PROJECT, { feed, teams: TEAMS })?.tasks ?? [];
+    const [task] = resolveTeammateCheck(PROJECT, { feed, teams: TEAMS, self: null })?.tasks ?? [];
     expect(task?.original.owner).toBe('kai');
     expect(task?.goal).toBe('Ship the theme');
     expect(task?.request.startsWith('Line one word word')).toBe(true);
@@ -152,11 +155,38 @@ describe('resolveTeammateCheck', () => {
       tasks: [],
     };
     const project = { ...PROJECT, teamIds: ['team1', 'team2', 'team4'] };
-    expect(resolveTeammateCheck(project, { feed, teams: TEAMS })?.unreached).toEqual([
+    expect(resolveTeammateCheck(project, { feed, teams: TEAMS, self: null })?.unreached).toEqual([
       { teamId: 'team1', machineId: 'laptop', name: 'Laptop', owner: 'kai' },
       { teamId: 'team1', machineId: 'box', name: 'Box', owner: null },
       { teamId: 'team1', machineId: 'new', name: 'New', owner: 'mona' },
       { teamId: 'team4', machineId: 'lost', name: 'Lost', owner: null },
     ]);
+  });
+
+  test('with no feed at all, every other machine of the project’s teams is unreached', () => {
+    const team: RemoteTeam = {
+      ...createTeam('core'),
+      machines: [
+        { id: 'own', name: 'Desk', userId: MONA.id, online: true, lastSeenAt: 1 },
+        { id: 'laptop', name: 'Laptop', userId: KAI.id, online: true, lastSeenAt: 1 },
+      ],
+    };
+    const check = resolveTeammateCheck(
+      { ...PROJECT, teamIds: ['core'] },
+      { feed: { machines: [], tasks: [] }, teams: [team], self: 'own' }
+    );
+    expect(check).toEqual({
+      tasks: [],
+      unreached: [{ teamId: 'core', machineId: 'laptop', name: 'Laptop', owner: 'kai' }],
+    });
+  });
+
+  test('a live feed of a team machine counts it as reached', () => {
+    const team: RemoteTeam = {
+      ...createTeam('team1'),
+      machines: [{ id: 'studio', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: 1 }],
+    };
+    const feed = { machines: [machine()], tasks: [] };
+    expect(resolveTeammateCheck(PROJECT, { feed, teams: [team], self: null })?.unreached).toEqual([]);
   });
 });

@@ -260,6 +260,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
           resolveTriage(state, task, local, quick.classify, () => ({
             feed: teamFeeds.snapshot(),
             teams: remote.store.file.teams,
+            self: remote.store.file.credentials?.instanceId ?? null,
           }))),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),

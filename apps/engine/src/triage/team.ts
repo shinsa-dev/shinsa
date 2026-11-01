@@ -11,6 +11,7 @@ import {
 export interface TeamReading {
   feed: TeamFeedSnapshot;
   teams: readonly RemoteTeam[];
+  self: string | null;
 }
 
 export type TeamReader = () => TeamReading;
@@ -73,17 +74,39 @@ export function resolveTeammateCheck(project: Project | null, reading: TeamReadi
       goal: listing.task.plan?.document?.goal ? clipText(listing.task.plan.document.goal) : null,
     });
   }
-  const reached = new Set<string>();
+  const live = new Set(
+    machines.filter((machine) => machine.status === 'live').map((machine) => machine.instanceId)
+  );
+  const listed = new Set<string>();
   const unreached: UnreachedTeammate[] = [];
-  for (const machine of machines) {
-    if (machine.status === 'live' || reached.has(machine.instanceId)) continue;
-    reached.add(machine.instanceId);
-    unreached.push({
+  const candidates = [
+    ...teams
+      .filter((team) => teamIds.has(team.id))
+      .flatMap((team) =>
+        team.machines.map((machine) => ({
+          teamId: team.id,
+          machineId: machine.id,
+          name: machine.name,
+          owner: resolveMemberLogin(teams, team.id, machine.userId),
+        }))
+      ),
+    ...machines.map((machine) => ({
       teamId: machine.teamId,
       machineId: machine.instanceId,
       name: machine.name,
       owner: owners.get(machine.instanceId) ?? null,
-    });
+    })),
+  ];
+  for (const candidate of candidates) {
+    if (
+      candidate.machineId === reading.self ||
+      live.has(candidate.machineId) ||
+      listed.has(candidate.machineId)
+    ) {
+      continue;
+    }
+    listed.add(candidate.machineId);
+    unreached.push(candidate);
   }
   return { tasks, unreached };
 }

@@ -1045,8 +1045,10 @@ A pick of one is sent with `task.triage` as `duplicateOfTeammate` (its team, mac
 owner) and recorded as `TaskDuplicate.teammate`, with `of` holding the teammate's task id; its "Duplicate of" fact
 reads "@kai’s KAI-12 …" and opens that task's read-only team view (`/teams/<team>/<machine>/<task>`), in the local
 app and on app.shinsa.dev alike. A teammate's listing carries no share link, so none is stored or built; nothing is
-written to the teammate's machine, so their task shows no Kept over. A team machine that is not live (offline,
-refused or still connecting) has sent no tasks, so triage goes on with what it could read and records those machines
+written to the teammate's machine, so their task shows no Kept over. Every other machine of
+the project's teams (`RemoteTeam.machines`, this machine left out) without a live feed (offline, refused, still
+connecting, or no feed at all while remote access is off or paused or the team key is missing) has sent no tasks, so
+triage goes on with what it could read and records those machines
 in `triageDecisions.duplicate.unreached`; the task's activity says once whose were not compared ("Could not check
 @kai’s Studio for duplicates"). With no answer from the model nothing is recorded, since no check ran. Not a
 duplicate works as for a local duplicate. A task without a project, or whose project is in no team, is triaged as

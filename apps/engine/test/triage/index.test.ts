@@ -854,7 +854,7 @@ describe('resolveTriage for teammates’ duplicates', () => {
       },
     ],
   };
-  const team: TeamReader = () => ({ feed, teams: [] });
+  const team: TeamReader = () => ({ feed, teams: [], self: null });
   const base = { title: 'Add dark mode', repo: 'api', size: 'small', branch: 'feat/dark' };
   const task = newTask({ projectId: 'p1' });
 
