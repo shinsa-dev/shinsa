@@ -17,15 +17,18 @@ src/
 │                        starts nothing), wires the pieces, recovers in-flight work, returns { url, engine, stop }
 ├── cli/                 The command line (docs/cli.md: why it is shaped like Tailscale's and Docker's).
 │                        index.ts routes the commands (`engine`, hidden from the help, runs the engine: it reads
-│                        the login shell's environment first unless started from a terminal, exits 0 when launchd
-│                        started it and finds the lock held, and in the bundle writes data/engine.log and puts its
-│                        bin/ on PATH; waking the engine through `launchctl kickstart`); help.ts the top-level
+│                        the login shell's environment first unless started from a terminal, exits 0 when its
+│                        service (launchd or systemd) started it and finds the lock held, and in the bundle writes
+│                        data/engine.log and puts its bin/ on PATH; createPlatformService picks launchd on the Mac
+│                        and systemd on Linux, and waking the engine kicks that service; createOpenApp opens the
+│                        app on the Mac, a browser elsewhere, or prints the URL with no display); help.ts the top-level
 │                        commands as one table (OPEN_COMMANDS, ENGINE_COMMANDS) that the help (describeHelp,
 │                        describeHelpAll), each command's --help and docs/cli.md's generated half
 │                        (replaceReference) come from; commands.ts open
 │                        (the app, a task, or a folder's project) / do / import / status; engine.ts start / stop /
-│                        restart / version through launchctl on the bundle's job (EngineControl, readHealth,
-│                        HUMAN_ONLY_ENGINE_COMMANDS); logs.ts `shinsa logs`; app.ts the app's bundle id, the
+│                        restart / version through the platform's EngineService (EngineControl, readHealth,
+│                        HUMAN_ONLY_ENGINE_COMMANDS); launchd.ts the Mac's EngineService on the app's launchd job
+│                        (createLaunchdService); logs.ts `shinsa logs`; app.ts the app's bundle id, the
 │                        engine's label and `shinsa://` links; surface.ts every `shinsa <group> <action>` (help,
 │                        --json, the idempotency key); api.ts the HTTP client and the surface client, which wake the
 │                        engine once when it does not answer; session.ts reads a Claude Code session for
@@ -43,9 +46,14 @@ src/
 │                        ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
-│                        source), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
-│                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or after draining:
-│                        new runs held until the working ones hand over, 15 minutes at most)
+│                        source), targets.ts (ENGINE_TARGETS, the darwin and Linux builds scripts/build-engine.ts
+│                        accepts, and each one's dist folder), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1`
+│                        the launchd job and the systemd unit set; EngineService, what start, stop, restart and
+│                        waking need from either), systemd.ts (createSystemdService: the `shinsa.service` user
+│                        unit with Restart=always, written or refreshed on Linux by the start command and driven
+│                        through `systemctl --user`), restart.ts (EngineRestarter, createServiceRestarter: stop
+│                        cleanly and exit 75 for the service to start it again, now or after draining: new runs
+│                        held until the working ones hand over, 15 minutes at most)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
 │                        (argv, MCP schemas and tool input), spec.ts (defineCommand / defineRead / defineAction),
@@ -69,6 +77,8 @@ src/
 │                        `fish -lc` when the interactive shell handed off to fish) and
 │                        merges it into the server's, and
 │                        isStartedFromTerminal (a TTY on stdin or stdout) decides whether `shinsa engine` needs it
+│                        (the default shell is zsh on the Mac, /bin/sh elsewhere); browser.ts
+│                        (resolveBrowserCommand: `open` on the Mac, `xdg-open` with a display, null without one)
 ├── store/               EventLog (event-log.ts: the SQLite events, effects, receipts, snapshots and briefings (the
 │                        Home guide) tables; readEvents reports a damaged row instead of throwing and reads from a
 │                        position; replaceLegacyEvents, the one-time rewrite of older events and move of briefings
