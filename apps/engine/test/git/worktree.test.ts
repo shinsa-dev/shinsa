@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   commitWorktree,
@@ -163,5 +163,26 @@ describe('worktrees', () => {
     writeFiles(bun, { 'package.json': '{"name":"x","private":true}', 'bun.lock': '' });
     await prepareWorktree(bun);
     expect(existsSync(join(bun, 'package.json'))).toBe(true);
+  });
+
+  test('an install that fails the first time runs once more', async () => {
+    const bin = createTempDir();
+    const fake = join(bin, 'pnpm');
+    writeFileSync(
+      fake,
+      '#!/bin/sh\necho run >> attempts\nif [ -f tried ]; then touch installed; exit 0; fi\ntouch tried\nexit 1\n'
+    );
+    chmodSync(fake, 0o755);
+    const flaky = createTempDir();
+    writeFiles(flaky, { 'pnpm-lock.yaml': '' });
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      await prepareWorktree(flaky);
+    } finally {
+      process.env.PATH = path;
+    }
+    expect(readFileSync(join(flaky, 'attempts'), 'utf8').trim().split('\n')).toHaveLength(2);
+    expect(existsSync(join(flaky, 'installed'))).toBe(true);
   });
 });

@@ -57,6 +57,8 @@ export async function resolveStartPoint(repo: Repo, baseBranch: string | null, s
 export async function prepareWorktree(path: string, signal?: AbortSignal) {
   const install = resolveInstallCommand(path);
   if (!install) return;
+  const first = await runCommand(install, path, { signal });
+  if (first.ok || signal?.aborted) return;
   const result = await runCommand(install, path, { signal });
   if (!result.ok && !signal?.aborted) {
     log.warn('[Git] Installing dependencies failed; the agent sets them up', {

@@ -13,6 +13,8 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     dataDir,
     databasePath: join(dataDir, 'shinsa.sqlite'),
     worktreesDir: join(dataDir, 'worktrees'),
+    checkBasesDir: join(dataDir, 'check-bases'),
+    scratchDir: join(dataDir, 'scratch'),
     evidenceDir: join(dataDir, 'evidence'),
     attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),

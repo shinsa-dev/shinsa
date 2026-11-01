@@ -1,5 +1,4 @@
 import { rmSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   type CheckEvidence,
   type Coverage,
@@ -197,7 +196,7 @@ export class EffectRunner {
     this.#slack = options.slack ?? null;
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);
-    this.#bases = new BaseCheckouts(join(config.dataDir, 'check-bases'));
+    this.#bases = new BaseCheckouts(config.checkBasesDir);
     this.#workspaces = options.workspaces ?? new Workspaces({ worktreesDir: config.worktreesDir });
   }
 
