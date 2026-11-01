@@ -10,6 +10,7 @@ import { EvidenceText } from '@/components/evidence/evidence-text.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
+import { SKIPPED_OFFSCREEN } from '@/components/layout/surface/offscreen.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
 import {
@@ -19,6 +20,7 @@ import {
   useTaskPreviews,
 } from '@/components/services/task-previews.tsx';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
+import { useStructuralValue } from '@/hooks/use-structural-value.ts';
 import { useServerHealth } from '@/lib/connection/health.ts';
 import {
   describeEvidenceKind,
@@ -69,7 +71,7 @@ function listAttachedUris(layout: EvidenceLayout) {
 
 function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer }) {
   return (
-    <section className='flex min-w-0 flex-col gap-1.5'>
+    <section className={cn('flex min-w-0 flex-col gap-1.5', SKIPPED_OFFSCREEN)}>
       <div className='flex min-w-0 flex-col gap-px'>
         <h3 className='flex min-w-0 items-center gap-1.5 text-xs'>
           <span className='min-w-0 font-medium text-fg-4'>{entry.title}</span>
@@ -206,7 +208,7 @@ function Group({
   const count = group.entries.length + local.length;
   const linked = group.entries.filter((entry) => entry.check);
   return (
-    <section className='flex min-w-0 flex-col gap-1'>
+    <section className={cn('flex min-w-0 flex-col gap-1', SKIPPED_OFFSCREEN)}>
       <SectionLabel count={count > 1 ? count : undefined}>
         {local.length > 0 ? describeEvidenceKind(group.kind, count) : group.label}
       </SectionLabel>
@@ -313,11 +315,13 @@ function EvidenceBody({
   );
 }
 
-export function EvidencePanel({
+const NO_PREVIEWS: ServiceView[] = [];
+
+export const EvidencePanel = React.memo(function EvidencePanelView({
   layout,
   persistId,
   checks = null,
-  previews = [],
+  previews = NO_PREVIEWS,
 }: {
   layout: EvidenceLayout;
   persistId: DisclosureId;
@@ -329,7 +333,7 @@ export function EvidencePanel({
       <EvidenceBody layout={layout} checks={checks} persistId={persistId} previews={previews} />
     </Panel>
   );
-}
+});
 
 export function EvidenceSection({
   state,
@@ -342,12 +346,16 @@ export function EvidenceSection({
 }) {
   const dataDir = useServerHealth()?.dataDir ?? null;
   const { evidence, runs, repos } = state;
-  const layout = React.useMemo(
-    () => resolveEvidenceLayout({ evidence, runs }, task, dataDir),
-    [evidence, runs, task, dataDir]
+  const layout = useStructuralValue(
+    React.useMemo(
+      () => resolveEvidenceLayout({ evidence, runs }, task, dataDir),
+      [evidence, runs, task, dataDir]
+    )
   );
-  const checks = React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task]);
-  const previews = useTaskPreviews(state, task);
+  const checks = useStructuralValue(
+    React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task])
+  );
+  const previews = useStructuralValue(useTaskPreviews(state, task));
   const persistId = resolveTaskDisclosureId(task.id, 'evidence', 'panel');
   if (layout.count === 0 && layout.earlier.length === 0) {
     if (!(showEmpty || previews.length > 0)) return null;

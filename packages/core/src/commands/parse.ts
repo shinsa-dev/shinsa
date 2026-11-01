@@ -382,6 +382,7 @@ function readTaskCreate(fields: Fields): UserCommand {
     ...(fields.planFirst === undefined ? {} : { planFirst: readBoolean(fields, 'planFirst') }),
     ...(fields.origin === undefined ? {} : { origin: readNullableText(fields, 'origin') }),
     ...(fields.waitsOn === undefined ? {} : { waitsOn: readList(fields, 'waitsOn', readId) }),
+    ...(fields.stacksOn === undefined ? {} : { stacksOn: readId(fields, 'stacksOn') }),
     ...(fields.mode === undefined ? {} : { mode: readChoice(fields, 'mode', MODES) }),
     ...(fields.account === undefined ? {} : { account: readAccount(fields, 'account') }),
     ...(fields.forkOf === undefined ? {} : { forkOf: readId(fields, 'forkOf') }),
@@ -418,6 +419,14 @@ function readTaskWaitOn(fields: Fields): UserCommand {
     type: 'task.wait_on',
     taskId: readId(fields, 'taskId'),
     waitsOn: readList(fields, 'waitsOn', readId),
+  };
+}
+
+function readTaskStackOn(fields: Fields): UserCommand {
+  return {
+    type: 'task.stack_on',
+    taskId: readId(fields, 'taskId'),
+    stacksOn: readNullableId(fields, 'stacksOn'),
   };
 }
 
@@ -674,6 +683,7 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'task.create': readTaskCreate,
   'task.prioritize': readTaskPrioritize,
   'task.wait_on': readTaskWaitOn,
+  'task.stack_on': readTaskStackOn,
   'task.move_to_backlog': (fields) => ({ type: 'task.move_to_backlog', taskId: readId(fields, 'taskId') }),
   'task.remove_from_backlog': (fields) => ({
     type: 'task.remove_from_backlog',

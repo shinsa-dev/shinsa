@@ -442,6 +442,8 @@ describe('the summary of each action', () => {
     const summaries: [ShinsaCommand, string][] = [
       [{ type: 'task.message', taskId, text: 'Look again.' }, 'Messaged “Fix tab group scroll”'],
       [{ type: 'task.wait_on', taskId, waitsOn: [other] }, 'Changed what “Fix tab group scroll” waits on'],
+      [{ type: 'task.stack_on', taskId, stacksOn: other }, 'Stacked “Fix tab group scroll” on “Second”'],
+      [{ type: 'task.stack_on', taskId, stacksOn: null }, 'Took “Fix tab group scroll” out of its bundle'],
       [{ type: 'task.move_to_backlog', taskId: other }, 'Moved “Second” to the backlog'],
       [{ type: 'task.remove_from_backlog', taskId: other }, 'Moved “Second” out of the backlog'],
       [{ type: 'task.snooze', taskId: other }, 'Snoozed “Second”'],

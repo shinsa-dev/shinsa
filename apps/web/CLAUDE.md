@@ -58,7 +58,8 @@ src/
 │                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
 │                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares; the task's composer on
 │                        Overview, Review and Chat is one draft per task, lib/chat/task-drafts.ts), review draft, the
-│                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
+│                        handle, bundle.tsx: BundleFact, the toolbar's Bundle item and its popover of the bundle's
+│                        tasks, and BundleMark, its count beside a queue row's name, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
 │                        steps left after the merge), the plan's
@@ -124,7 +125,7 @@ src/
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,
 │                        sound and notification, a menu item's answer (use-menu-answer), review draft, the Code
-│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys), the fading mark on a place you jump to (use-spotlight),
+│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys),
 │                        the Terminal page's ⌘T and ⌘W (use-terminal-keys),
 │                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
@@ -246,7 +247,8 @@ src/
     ├── review/          The Review tab (report.ts: the report read as chapters in reading order (how it's built with
     │                    how to test and the steps around the merge, key code, judgement calls with the reviewer's
     │                    disagreements, read carefully with the risks, the agent review), the stops of the index and the one in view, the point count,
-    │                    the other changed files, the review card's items; merge-steps.ts: the steps around the merge, the
+    │                    the other changed files, the review card's items; selection.ts: the stop in view and the fading mark on a place you jump to, a store each
+    │                    point and the index read their own part of, so scrolling and J and K render only what changes; merge-steps.ts: the steps around the merge, the
     │                    merge they hold, "Post-merge · 2 steps left", when a step can be ticked; testing.ts: what a step to try points at
     │                    (a link, a file in Code, a command or plain text); keys.ts: J and K; places.ts:
     │                    the paths into Code and into the Review tab), the Code tab's spot targets (spots, judgement calls, risks, findings), the fallback
@@ -265,7 +267,9 @@ src/
     │                    summaries; the row a linked test or check renders as),
     │                    Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
     │                    rounds, a round's track and pull request, how a round ships), status and tone per task (Resolving conflicts on a conflict fix),
-    │                    task groups and chains, next action, the now line,
+    │                    task groups and chains, bundles (bundles.ts: a bundle's rows and their states, the Stack on another task
+    │                    choices core accepts, the now card's wait and note; groups.ts lists a ready task with its root),
+    │                    next action, the now line,
     │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
     │                    queued messages, when they send (describeQueue, describeRoundRelease: after you merge or

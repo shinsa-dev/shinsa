@@ -76,8 +76,9 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
 | waits on | The tasks a task waits for before it starts (or before its merge gate opens) | `Task.waitsOn`, stage `waiting_on_tasks` | "Waits on", "Wait for another task" |
+| bundle | A line of tasks in one repository, each stacked on the one below: each starts once the one below is ready to merge, branches off its branch and opens its pull request on it, and the root's one merge gate, on the task into the default branch, merges them all once the whole bundle merges cleanly (`docs/engine.md` → Bundles). Never a round stack, which is one task's own rounds | `Task.stacksOn`, `Task.stackBase`, `Task.bundleReady`, `Task.bundleConflict`, `resolveBundle`, `listBundleBelow`, `listBundleAbove`, `decide/bundles.ts` | "Bundle", "Stack on another task", "Take out of the bundle", "Ready, merges with its bundle" |
 | backlog | Where work you want planned now and built later waits: a status of a task, never a kind; it is triaged and planned, then its plan waits out of Needs you until you start building it. Only you, or an agent you asked, put work there | `Task.backlog` (`TaskBacklog`), `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `isHeldInBacklog`, `queue.backlog`, plan gate reason `backlog` | Backlog, "Move to the backlog", "Remove from the backlog", "Start building" |
-| All tasks | Every task in to-do order, in status groups (the Backlog one of them) | `resolveTaskGroup`, `TASK_GROUPS` (web) | All tasks |
+| All tasks | Every task in to-do order, in status groups (the Backlog one of them), a waiting or stacked task nested under the task it builds on | `resolveTaskGroup`, `TASK_GROUPS` (web) | All tasks |
 | schedule (automation) | A trigger (once, interval, daily, webhook) that starts a task, messages one, or watches an integration; on screen a Schedule, a Trigger or a Watch | `Schedule`, `ScheduleSource` | Settings → Automations: Schedule, Trigger, Watch |
 | monitor | An agent's armed wait (`wait_for`): its run ends and a fresh one checks in again later | `Monitor` | "Waiting to check in again" |
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
@@ -98,6 +99,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | The kind of task | `TaskShape`, `shape`, `reshape_task`, `task.reshaped`; UI "kind of task"; `mode: 'ask'` for an answer task asked for as one (`tasks create --ask`, a schedule's `just_answer`) |
 | Your request | `request` everywhere new; the refusal code for an empty one is still `intent_required` (`decide/tasks.ts`) |
 | Waiting on another task | `waitsOn`, `task.wait_on`, `task.waits_on_changed`, stage `waiting_on_tasks`, triage's `waits_on`; the rules in `decide/dependencies.ts` (`resolveDependencies`, `listPendingDependencies`); UI "Waits on" |
+| A bundle | `stacksOn` (on `Task`, `task.create`, `task.stack_on`), `stack_on_this` (`create_task`), `task.stack_changed`, `stackBase` and `task.stack_based`, `bundleReady` and `task.bundle_ready`, `bundleConflict`, `bundle.record_check` and `task.bundle_conflict`, `bundle` on `pull_request.merge`, `tasks stack-on` and `tasks unstack`; UI "Bundle", "Stack on another task", "Ready". Never "stack" alone on screen: that is a round stack |
 | Snoozing | `Task.snoozed` (`TaskSnooze`), `task.snooze_changed`, `task.snooze`, `task.unsnooze`, `queue.snoozed`, `decide/snooze.ts`, the task group and queue section `snoozed`; UI "Snooze", "Unsnooze", "Snoozed". Never "pause" for it: Paused is a step that stopped for you |
 | The backlog | `Task.backlog`, `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `backlog: true` on `task.create`, `suggestion.accept` and `create_task`; the rules in `domain/backlog.ts` (`canWaitInBacklog`, `resolveBacklogRefusal`) and `decide/backlog.ts`; UI "Backlog" |
 | A round that waits to start | `RoundStatus 'waiting'`; event `round.queued`, `Round.queuedAt`, `ROUND_LIMITS.queued` |
@@ -224,6 +226,10 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `duplicate?` | `{ of, by, why }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
+| `stacksOn?` | string \| null | the task it stacks on as a bundle (Bundles in `docs/engine.md`) |
+| `stackBase?` | string \| null | the branch of the task below, recorded once that task is ready; `resolveRoundBase` returns it when no round of its own is stacked |
+| `bundleReady?` | `{ commit }` \| null | ready to merge with its bundle at head `commit`; a task stacked on another has it in place of a merge gate of its own |
+| `bundleConflict?` | `{ taskId, behindTaskId, base }` \| null | on a bundle's root: the task that conflicts with the default branch once the bundle merges, and the lowest task behind its base, updated first (null when none is) |
 | `note` | string \| null | the latest `note` an agent kept |
 | `activity` | `Activity[]` | what happened, newest last (each with an `ActivityKind`: `check` for check results and the agent's check changes); a gate's entry names its `gateType`, and a decision sent with line comments keeps them (`comments`); a message of yours that needed nothing is `noted`, and one dropped from the inbox keeps its `undelivered` text and reason |
 
@@ -765,7 +771,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 
 | Command | Does | Command line | Who |
 | --- | --- | --- | --- |
-| `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, mode, account, the task it forks: `forkOf`) | `tasks create` | you; task agents file tasks with `create_task` |
+| `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, stacks on: `stacksOn`, mode, account, the task it forks: `forkOf`) | `tasks create` | you; task agents file tasks with `create_task` |
 | `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
@@ -773,6 +779,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `round.send` | sends a round waiting to start to the current round now: it leaves the queue (`round.removed`) and its request is delivered as your message, read as `feedback` (What a message does); a round that started is refused (`round_started`) | `rounds send` | agent |
 | `task.prioritize` | sets the priority | `tasks prioritize` | agent |
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
+| `task.stack_on` | stacks it on a task as a bundle (`stacksOn`), or takes it out (`null`); refused on itself (`stack_self`), a cancelled (`dependency_cancelled`) or finished task (`stack_parent_settled`), one with no pull request (`stack_no_pull_request`), in another repository (`stack_repository`) or already stacked on (`stack_taken`), a cycle (`dependency_cycle`), and once it builds (`stack_started`) | `tasks stack-on`, `tasks unstack` | agent |
 | `task.move_to_backlog` | puts a task in the backlog; its open plan gate becomes held ("in the backlog"); refused for a settled task (`task_settled`), an inquiry (`backlog_inquiry`) or once a plan was approved or building started (`backlog_started`); a task already there records nothing | `tasks move-to-backlog` | agent |
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
 | `task.snooze` | snoozes an open task in any step: its gates leave `ready` and it is listed in `queue.snoozed`, nothing else changes; refused for a settled task (`task_settled`); a snoozed task records nothing | `tasks snooze` | agent |
@@ -790,7 +797,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `watch_source.write`, `watch_source.remove` | adds, changes or removes an integration the project uses (`server`, `data`, `repoIds`); at most 20 (`too_many_sources`) | `sources write`, `sources remove` | agent |
 | `task.complete` | marks it done without merging, and stops its watchdogs; sent for you, refused while one watches or waits for a source (`task_open`) | `tasks done` | agent |
 | `task.bind_account` | binds it to an account, or any | `tasks bind` | agent |
-| `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below); approving a merge gate needs every step before the merge ticked (`merge_steps_open`) | `gates answer`, `plans *`, `reviews *`, `merges approve`, `merges reject`, `operations *`, `questions answer`, `command` | **human** |
+| `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below); approving a merge gate needs every step before the merge ticked, on every task of its bundle too (`merge_steps_open`) | `gates answer`, `plans *`, `reviews *`, `merges approve`, `merges reject`, `operations *`, `questions answer`, `command` | **human** |
 | `merge_step.tick` | ticks or unticks a step around the merge (`key`, `done`); a step that is not due is refused (`merge_step_early`: one after the merge before its pull request merged, one before the merge once it merged), a step the task does not have is refused (`merge_step_not_found`), and a closed task's not at all (`task_settled`); ticking the last open step after the merge withdraws the Post-merge gate | `merges tick [--undo]` | **human** |
 | `suggestion.accept` | adds a suggested task, optionally waiting on this one or in the backlog (`backlog`) | `suggestions accept` | agent |
 | `suggestion.dismiss` | dismisses one | `suggestions dismiss` | agent |
@@ -880,7 +887,7 @@ role without the tool (`hasTool`).
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
-| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`) or forked from a task (`forkOf`) |
+| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`), stacked on this task as a bundle (`stackOnThis`, never with `thisWaits` or `afterThis`) or forked from a task (`forkOf`) |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
@@ -918,6 +925,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.record_step` | open and push effects | `step`: `{ kind: 'updating', base }`, `{ kind: 'pushing', hook }` or `{ kind: 'opening' }`; sets the stage reason while the task ships with a push pending |
 | `pull_request.record_retry` | the engine, before it requeues a failed open or push | `step` (`updating`, `pushing`, `opening`), the `attempt` that failed, `attempts`, `retryAt`, a short `detail`: `pull_request.push_retrying` and the stage reason "pushing again in 30s, attempt 2 of 5: …" |
 | `pull_request.record_update_conflict` | open and push effects, after aborting the merge of the base | `base`, the conflicted `files`: a fix round (`fixFor: 'update'`) |
+| `bundle.record_check` | the pull request watch, reading a bundle's root while every task above is ready | `conflict` (`{ taskId, behindTaskId, base }` or null) from merging the bundle into the default branch in git: holds the root's gate and pushes the lowest task behind its base, or pauses the root when none is; null clears it and reads the root again |
 | `pull_request.record_hook_failure` | open and push effects | the hook's `output` tail and the `failures` read from it (or null): `pull_request.hook_failed`, then a fix round (`fixFor: 'hook'`), or the `push_hook` failure gate when the same failures come back |
 | `pull_request.record_closed` | the close effect | the pull requests it `closed` and the ones it `failed` to close (`{ number, detail }[]`): `pull_request.closed`, only on a cancelled task with something in either list |
 | `evidence.record_uploads` | open and push effects | the GitHub attachment `url` of each uploaded piece (`uploads: { evidenceId, url }[]`): `evidence.uploaded` with the pieces of this task whose address is new, nothing otherwise |
@@ -977,6 +985,10 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.duplicated` | the task was closed as a duplicate (`duplicate: { of, by, why }`); the `cancelled` stage follows |
 | `task.duplicate_cleared` | a triage-closed duplicate is not one after all: the mark, `closedAt` and `cancelledFrom` are cleared |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
+| `task.stack_changed` | the task it stacks on changed (`stacksOn`, `null` when taken out; `by` you or Shinsa) |
+| `task.stack_based` | its base became the branch of the task below (`base`), or the default branch again (`null`) once that task merged or left |
+| `task.bundle_ready` | it is ready to merge with its bundle (`ready: { commit }`), or no longer is (`null`) |
+| `task.bundle_conflict` | its bundle conflicts with the default branch once it merges (`conflict`), or no longer does (`null`) |
 | `task.snooze_changed` | you (or an agent for you) snoozed or unsnoozed it (`snoozed`) |
 | `task.backlog_changed` | it entered or left the backlog (`backlog`; `cause`: `you`, `started` when you approved its plan, `inquiry` when triage made it an inquiry) |
 | `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off, `kept` when it was sent for you while a gate was open (adds it to `untoldMessages`) |
@@ -1079,7 +1091,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `checks.run` | replay_safe | `task:<id>` | `task.commit_edits` first when the review was approved with edits, then `checks.record`; payload `round`, `checks: CheckToRun[]` (run in parallel) and `coverage` (true for the run before review) |
 | `pull_request.open` | replay_safe | `task:<id>` | `pull_request.record_step` per step, then `pull_request.record_push`, `evidence.record_uploads` when it uploaded evidence for the description, and `pull_request.record`; or `pull_request.record_update_conflict` or `pull_request.record_hook_failure` instead of the push |
 | `pull_request.push` | replay_safe | `task:<id>` | as `pull_request.open`, without opening when the pull request is open; then rewrites the description's block (`evidence.record_uploads` for what it uploaded) |
-| `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record`; merges only `headSha` (`--match-head-commit`), and records a moved head instead of merging it |
+| `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record`; merges only `headSha` (`--match-head-commit`), and records a moved head instead of merging it; on a bundle's root, with `bundle` (`{ taskId, number }[]`, the tasks above, the top first): checks the root's head and that the bundle merges into the default branch, then merges each of them and the root last, without a head to match, and records each; a failure lands on the root |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
 | `pull_request.close` | replay_safe | `task:<id>` | `pull_request.record_closed`; queued by `settleTask` only on a cancel, with `numbers`, the task's open pull request and its open stacked ones; `gh pr close <n> --comment …` for each, the branch kept; a failed close is reported, never thrown |
 | `share.link` | replay_safe | `share:<id>` | `share.record`, or `share.fail` when it gives up: makes a share id and a key for this machine's instance, unless a link to it is recorded; not paired fails at once (`SHARE_NOT_PAIRED`) |

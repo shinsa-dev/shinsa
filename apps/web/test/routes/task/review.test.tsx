@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import {
   type DiffFile,
   type MergeStep,
@@ -14,7 +14,9 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { TaskCommandRunner } from '@/components/task/command-runner.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
+import * as evidenceLayout from '@/lib/evidence/layout.ts';
 import { writeStoredComments } from '@/lib/review/draft.ts';
+import * as identity from '@/lib/review/identity.ts';
 import { resolveCodePath } from '@/lib/review/places.ts';
 import { navigate } from '@/router.ts';
 import { ReviewTab } from '@/routes/task/review.tsx';
@@ -23,6 +25,7 @@ import {
   createEvidence,
   createGate,
   createProject,
+  createRun,
   createShinsaState,
   createTask,
 } from '../../support/state.ts';
@@ -174,10 +177,8 @@ function reviewing(overrides: Partial<Task> = {}, gateType: 'review' | 'merge' |
   return { task, state: createShinsaState({ tasks: [task], gates }) };
 }
 
-function renderReview(state: ShinsaState, task: Task, query = '') {
-  navigate(`/tasks/${task.id}?tab=review${query}`);
-  pushState(state);
-  return render(
+function ReviewTree({ state, task }: { state: ShinsaState; task: Task }) {
+  return (
     <TooltipProvider>
       <ReviewDraftProvider enabled draftKey={`gate-${task.id}`}>
         <TaskCommandRunner state={state} task={task}>
@@ -187,6 +188,12 @@ function renderReview(state: ShinsaState, task: Task, query = '') {
       <Toaster />
     </TooltipProvider>
   );
+}
+
+function renderReview(state: ShinsaState, task: Task, query = '') {
+  navigate(`/tasks/${task.id}?tab=review${query}`);
+  pushState(state);
+  return render(<ReviewTree state={state} task={task} />);
 }
 
 function selectedKey() {
@@ -223,6 +230,8 @@ describe('the Review tab', () => {
       'finding:1',
       'finding:0',
     ]);
+    for (const item of document.querySelectorAll('[data-review-item]'))
+      expect(item.className).toContain('[content-visibility:auto]');
     for (const heading of [
       'How it’s built',
       'Approach',
@@ -327,6 +336,78 @@ describe('the Review tab', () => {
       await waitFor(() => expect(index.textContent).toBe('Every point6 of 6·Agent review·A bare number'));
     } finally {
       HTMLElement.prototype.getBoundingClientRect = realRect;
+    }
+  });
+
+  it('renders only the index and the lit point while you scroll and step, never the whole review', async () => {
+    const { task, state } = reviewing();
+    renderReview(state, task);
+    await screen.findAllByText('The loop never stops when the call keeps failing.');
+    fireEvent.click(await screen.findByText('Everything else'));
+    await screen.findByText('Binary');
+    await act(async () => {});
+    const viewport = document.querySelector('[data-slot="scroll-area-viewport"]') as HTMLElement;
+    const keys = [...document.querySelectorAll('[data-review-item]')].map((item) =>
+      item.getAttribute('data-review-item')
+    );
+    const realRect = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function rect(this: HTMLElement) {
+      const at = keys.indexOf(this.dataset.reviewItem ?? '');
+      return { ...realRect.call(this), top: at < 0 ? 0 : at * 100 - 360 };
+    };
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 2000 });
+    const cards = spyOn(identity, 'resolveReviewItemIdentity');
+    try {
+      const index = screen.getByRole('button', { name: 'Every point' });
+      fireEvent.scroll(viewport);
+      await waitFor(() =>
+        expect(index.textContent).toBe('Every point2 of 6·Judgement calls·Retry three times')
+      );
+      expect(cards).not.toHaveBeenCalled();
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }));
+      });
+      await waitFor(() => expect(selectedKey()).not.toBeNull());
+      expect(cards).not.toHaveBeenCalled();
+    } finally {
+      cards.mockRestore();
+      HTMLElement.prototype.getBoundingClientRect = realRect;
+    }
+  });
+
+  it('renders no evidence or point card again when the state changes for another task', async () => {
+    const { task, state } = reviewing();
+    const withEvidence = {
+      ...state,
+      evidence: {
+        shot: createEvidence({ id: 'shot', taskId: task.id, title: 'Settings page', label: 'Empty' }),
+      },
+    };
+    const view = renderReview(withEvidence, task);
+    await screen.findAllByText('The loop never stops when the call keeps failing.');
+    const figure = await screen.findByRole('button', { name: /^Open Settings page/ });
+    await act(async () => {});
+    const cards = spyOn(identity, 'resolveReviewItemIdentity');
+    const figures = spyOn(evidenceLayout, 'describeEvidencePart');
+    try {
+      const other = createTask({ id: 'other', title: 'Another task', stage: 'building' });
+      const patched: ShinsaState = {
+        ...withEvidence,
+        tasks: { ...withEvidence.tasks, other },
+        runs: { ...withEvidence.runs, 'other-run': createRun({ id: 'other-run', taskId: 'other' }) },
+        evidence: {
+          ...withEvidence.evidence,
+          'other-shot': createEvidence({ id: 'other-shot', taskId: 'other' }),
+        },
+      };
+      view.rerender(<ReviewTree state={patched} task={task} />);
+      await act(async () => {});
+      expect(figure.isConnected).toBe(true);
+      expect(cards).not.toHaveBeenCalled();
+      expect(figures).not.toHaveBeenCalled();
+    } finally {
+      cards.mockRestore();
+      figures.mockRestore();
     }
   });
 

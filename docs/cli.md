@@ -499,6 +499,35 @@ Every task agent's tool: `tasks_stop_waiting`. Sends `task.wait_on`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa tasks stack-on
+
+Stack a task on another as a bundle: it starts once that task is ready to merge, builds on its branch, and the bundle merges as one.
+
+```
+shinsa tasks stack-on <task> <below> [--json]
+```
+
+Every task agent's tool: `tasks_stack_on`. Sends `task.stack_on`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<below>` | text, required | The task it stacks on. |
+
+#### shinsa tasks unstack
+
+Take a task out of its bundle before it starts: it no longer waits for the task below.
+
+```
+shinsa tasks unstack <task> [--json]
+```
+
+Every task agent's tool: `tasks_unstack`. Sends `task.stack_on`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks move-to-backlog
 
 Keep a task in the backlog: its plan waits there until you start building it.

@@ -11,6 +11,7 @@ import { NoticeLine } from '@/components/chat/notice-line.tsx';
 import { AgentText, ErrorLine, TurnDetail } from '@/components/chat/turn-detail.tsx';
 import { UserMessage } from '@/components/chat/user-message.tsx';
 import { CHAT_INSET, CHAT_PROSE_INSET } from '@/components/layout/surface/card.ts';
+import { SKIPPED_OFFSCREEN } from '@/components/layout/surface/offscreen.ts';
 import { Duration } from '@/components/text/time-ago.tsx';
 import { RunEvidence, TaskEvidence } from '@/lib/chat/run-evidence.ts';
 import { RUN_ROLE, resolveRunHeadline } from '@/lib/chat/run-role.ts';
@@ -28,9 +29,6 @@ const PROSE_ROW = cn(ROW, CHAT_PROSE_INSET);
 
 const SECTION_EDGES =
   'mb-3 [&>:first-child]:mt-0 [&>:first-child]:pt-0 [&>:last-child]:mb-0 [&>:last-child]:pb-0';
-
-const SKIPPED_OFFSCREEN =
-  'supports-[overflow-anchor:auto]:[content-visibility:auto] supports-[overflow-anchor:auto]:[contain-intrinsic-block-size:auto_600px]';
 
 const PAINT_ROOM = '-mx-0.5 mt-1.5 mb-2.5 p-0.5';
 

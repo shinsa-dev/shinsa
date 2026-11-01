@@ -1002,13 +1002,16 @@ Only these, and they win over anything below:
 
 16. **All tasks.** `routes/tasks.tsx` (rows in `components/tasks/`) lists every task in
     to-do order, grouped by `resolveTaskGroup` (`lib/tasks/groups.ts`): Ready to merge, Changes to review, Plan to
-    approve, Needs your answer, Answered, Paused, In progress, Waiting on another task, Backlog, Done and Cancelled
-    (both collapsed). Each section header is a sticky
+    approve, Needs your answer, Answered, Paused, In progress, Backlog, Done and Cancelled
+    (both collapsed). There is no section for waiting: a task waiting on another task is filed in the section of the
+    task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
+    a task stacked on another, so a bundle reads from its root, each task above nested under the one below. Each
+    section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
-    first. Waiting on another task is drawn as a tree that handles every shape
-    (`orderChains`): each task appears once. Its depth is its longest path from a task outside the
-    section, and it sits under the parent at the level above that comes last on screen, so in a
+    first. Every open section is drawn as a tree that handles every shape
+    (`orderChains`, parents from `waitsOn` and `stacksOn`): each task appears once. Its depth is its longest path from
+    a task outside the section, and it sits under the parent at the level above that comes last on screen, so in a
     diamond (B and C wait on A, D on B and C) D sits under whichever of B and C is shown second,
     after both. Fan-out siblings sit side by side under their parent. The status column names
     every parent, "Waits on ‹A›, ‹B›", each a link that opens it and truncates on its own, with
@@ -1030,7 +1033,7 @@ Only these, and they win over anything below:
     - **Answered** follows Needs your answer (`IconBubbleCheck`, blue, open): an answer, report or diagnosis that
       waits for you to read it (the `result` gate). Its now card is the result with Close, which moves it to Done;
       it never sits in Done before you have read it.
-    - **Backlog** comes after Waiting on another task (`IconArchive`, neutral, open): every task kept for later
+    - **Backlog** comes after In progress (`IconArchive`, neutral, open): every task kept for later
       (`Task.backlog`), planning or with its plan held (`isHeldInBacklog`). A held plan never reads as Plan to
       approve: its status label and glyph are the Backlog group's (`resolveTaskStatus`, `resolveTaskMenuIcon`). Any
       other gate on a backlog task (a question, a failure) sorts it by that gate, as on any task.
@@ -2529,7 +2532,7 @@ Only these, and they win over anything below:
         the proposed fix; the body's markdown has inline code and smart links to tasks, pull
       requests, files and branches through the shared reference components. The card you jump to has a 2px
       `primary-a3` outline 2px outside it and scrolls into view; on the Review tab the outline (and a risk row's
-      `primary-a1` wash) holds 1.5s and fades over 500ms (`useSpotlight`, `hooks/use-spotlight.ts`, the hold the chat's
+      `primary-a1` wash) holds 1.5s and fades over 500ms (the selection's `light`, `lib/review/selection.ts`, the hold the chat's
       jumped-to run uses), while `?spot=` keeps the place. In the Code tab the same card is compact: no snippet and no
       place (32). The chat's review card and the Overview's finding verdicts (`FindingText`) show a finding on the same
       `FindingNote`. There is one finding layout with Fix / Dismiss, never a

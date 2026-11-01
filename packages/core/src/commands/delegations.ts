@@ -27,6 +27,7 @@ export type DelegationAgentCommand =
       repoId: string | null;
       thisWaits: boolean;
       afterThis?: boolean;
+      stackOnThis?: boolean;
       backlog?: boolean;
       forkOf?: string;
     }

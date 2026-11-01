@@ -1,4 +1,5 @@
 import { resolveSlackThreadKey, type SlackThreadRef } from '../domain/slack.ts';
+import type { BundlePullRequest } from '../domain/types.ts';
 import type { SlackMention } from '../slack/contract.ts';
 import type { SlackPost } from '../slack/posts.ts';
 
@@ -18,7 +19,7 @@ export type ShinsaEffect =
   | { kind: 'checks.run'; taskId: string; round: number; checks: CheckToRun[]; coverage: boolean }
   | { kind: 'pull_request.open'; taskId: string }
   | { kind: 'pull_request.push'; taskId: string }
-  | { kind: 'pull_request.merge'; taskId: string; headSha: string | null }
+  | { kind: 'pull_request.merge'; taskId: string; headSha: string | null; bundle?: BundlePullRequest[] }
   | { kind: 'pull_request.watch'; taskId: string }
   | { kind: 'pull_request.close'; taskId: string; numbers: number[] }
   | { kind: 'worktree.remove'; taskId: string }

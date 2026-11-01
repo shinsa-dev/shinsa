@@ -140,8 +140,13 @@ export async function createWorktree(
   return { path, branch: named };
 }
 
-export async function refreshWorktree(repo: Repo, path: string, signal?: AbortSignal) {
-  const base = await resolveStartPoint(repo, null, signal);
+export async function refreshWorktree(
+  repo: Repo,
+  path: string,
+  baseBranch: string | null,
+  signal?: AbortSignal
+) {
+  const base = await resolveStartPoint(repo, baseBranch, signal);
   await runGitOrThrow(['reset', '--hard', '--quiet', base], path, { signal });
   await runGitOrThrow(['clean', '-fdq'], path, { signal });
   await prepareWorktree(path, signal);

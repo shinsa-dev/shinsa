@@ -23,13 +23,14 @@ import {
   reportReview,
 } from './agents.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
+import { reviewBundles } from './bundles.ts';
 import { recordChecks } from './checks.ts';
 import { recordCompaction } from './compaction.ts';
 import { recordConfig } from './config.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
-import { releaseWaiting } from './dependencies.ts';
+import { releaseWaiting, stackOnTask } from './dependencies.ts';
 import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
 import {
@@ -62,6 +63,7 @@ import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import {
+  recordBundleCheck,
   recordClosedPullRequests,
   recordHookFailure,
   recordPullRequest,
@@ -189,6 +191,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return prioritizeTask(decider, command);
     case 'task.wait_on':
       return waitOnTasks(decider, command);
+    case 'task.stack_on':
+      return stackOnTask(decider, command);
     case 'task.move_to_backlog':
       return moveToBacklog(decider, command);
     case 'task.remove_from_backlog':
@@ -332,6 +336,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordPushRetry(decider, command);
     case 'pull_request.record_update_conflict':
       return recordUpdateConflict(decider, command);
+    case 'bundle.record_check':
+      return recordBundleCheck(decider, command);
     case 'pull_request.record_hook_failure':
       return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
@@ -465,6 +471,7 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   syncWatchdogs(decider);
   syncMergeSteps(decider);
   startQueuedRounds(decider);
+  reviewBundles(decider);
   syncMergeSteps(decider);
   enforceLiveness(decider);
   dispatchRuns(decider);

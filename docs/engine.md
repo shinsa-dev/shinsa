@@ -1151,8 +1151,97 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   repository locks its merge to that part (`create_task` with `this_task_waits`, Work across repositories): the
   pre-merge steps list each task it waits on as a row that ticks itself once that task finishes (`listMergeWaits`),
   on the review gate's card, the merge gate's card and the Review tab, so the hold is visible before you approve.
-- **No stacking across tasks.** A dependent waits for its parents to finish instead of branching off an unmerged
-  branch; only a task's own rounds stack (Rounds, above).
+- **Stacking is a bundle.** A plain dependent waits for its parents to finish and branches off the default branch. To
+  build on a parent's unmerged branch instead, stack it on that parent: a bundle (below).
+
+### Bundles
+
+A bundle is a line of tasks in one repository that GitHub shows as a stack of pull requests and that merges as one. A
+task stacks on another (`Task.stacksOn`, one id), a second kind of wait next to `waitsOn` that reuses its waiting and
+release, but releases on ready instead of merged. You set it when creating the task (the composer's When to start:
+Stack on another task…), later (the Waits on menu on the task page, the task's `•••` and context menus, ⌘K's Stack on
+another task… and Take out of the bundle) or from the command line (`shinsa tasks stack-on`, `shinsa tasks unstack`),
+all `task.stack_on` (a task id, or `null` to unstack), recorded as `task.stack_changed`; an agent files the next
+piece of a bundle with `create_task`'s `stack_on_this` (`stacksOn` on `task.create`, never with `this_task_waits` or
+`after_this`). Stacking on a task it already waits on moves that wait into the stack.
+
+- **One line.** A task stacks on at most one task and at most one task stacks on any task, so a bundle never
+  branches: `resolveBundle` reads it from the chain of `stacksOn`, bottom first. `task.stack_on` refuses a task
+  stacking on itself (`stack_self`), on a cancelled (`dependency_cancelled`) or finished task (`stack_parent_settled`),
+  on one that opens no pull request (`stack_no_pull_request`), on one in another repository (`stack_repository`), on
+  one another task already stacks on (`stack_taken`) and a cycle (`dependency_cycle`). The bundle can change only
+  until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels
+  the planning run and plans again once released (Taking a task out, below).
+- **Ready instead of merged.** Every task of a bundle is ready (`Task.bundleReady`, `task.bundle_ready`, with the head
+  it is ready at) when the watch finds its pull request clean, where the merge gate would open, and keeps watching: a
+  read that is not clean on the same head, or a new head, takes ready away and starts the usual fix (CI, comments,
+  conflicts). A task stacked on another never gets a merge gate of its own: it stays in `shipping` with "ready, merges
+  with its bundle". A ready task counts as at its merge gate for a new round, so a round sent to it starts at once
+  (Rounds, above), and that is how a flaw a later task finds in the root is fixed in the root's still-open pull
+  request: the stacked task's prompt tells its agent to message the task below with `tasks_message`
+  (`describeBundle`).
+- **Release on ready.** A stacked task waits in `waiting_on_tasks` ("waiting for ‹A› to be ready to merge") until
+  the task below is ready or has its merge gate open, or is merged or done (`isStackPending`). It then records the
+  branch below as its base (`Task.stackBase`, `task.stack_based`), which `resolveRoundBase` returns when no round of
+  its own is stacked: its worktree branches off that branch (a worktree left from before, of a task stacked while it
+  planned, is reset onto it, `refreshWorktree`) and its pull request targets it, so GitHub shows the stack. Its prompts say where it sits in the bundle, from the bottom, with each pull request.
+- **One merge gate, on the root.** The root, the task whose pull request targets the default branch, owns the merge.
+  Its merge gate opens only once every task above it is ready and the whole bundle merges into the default branch
+  without conflicts; until then it waits ("waiting for ‹A› to be ready to merge"), and a task above that stops being
+  ready withdraws the gate. The gate says it merges the whole bundle as one with each pull request, its card lists
+  every task above as a Bundle row that ticks itself when ready and its own pre-merge steps are ticked, and its button
+  says how many pull requests it merges. Approving it is refused while any task of the bundle has a pre-merge step
+  open (`assertMergeStepsDone`). Approving it puts every task above into `awaiting_merge` ("merging with its bundle")
+  and queues one `pull_request.merge` on the root with the bundle's other pull requests (`bundle`, the top first).
+  The engine checks the root's approved head and that the bundle still merges cleanly, then merges the top into its
+  base, then each one below, and the root into the default branch last, the way a round stack merges (each read
+  first and merged only when still open), and reads each again so every task ends merged. Merging the one above
+  moves the head of the one below, so only the root's head is matched, before anything merges. A failed merge lands
+  on the root, the tasks above go back to ready, and Retry opens the gate again; the ones still open form a smaller
+  bundle on the same root.
+- **Conflicts with the default branch.** GitHub checks each pull request only against its own base, so a task three
+  layers up can conflict with the default branch while every pull request shows clean. Each time the watch reads the
+  root while every task above is ready, the engine merges the bundle into the default branch in git, without a
+  working tree (`checkBundleMerge`, `git/bundle.ts`: `git merge-tree` of the default branch with the root, then each
+  task above in turn), and records the result (`bundle.record_check`, `Task.bundleConflict`, `task.bundle_conflict`).
+  A conflict holds the root's gate ("‹A› conflicts with main once the bundle merges; updating ‹B› first") and brings
+  the lowest branch at or below the conflicting one that is behind its base up to date: Shinsa pushes it, which merges
+  its base in first (`updateOntoBase`); a clean merge goes up, and a conflict there becomes that task's usual conflict
+  fix with its agent. Each push makes that task ready again, which reads the root again, so the bundle is brought up
+  to date one branch at a time, bottom up, each pull request's diff staying its own work. When no branch is behind,
+  the root pauses with a failure gate, "The bundle conflicts with main". The engine runs the same check again right
+  before the merge and merges nothing when it fails.
+- **Leaving and losing a bundle.** When the task stacked on top is cancelled or turns out to ship no pull request,
+  the bundle is one task shorter; a root with nothing left above it gets its own merge gate. A task below merged
+  outside Shinsa drops out of the bundle: the task above's base becomes the default branch and the watch retargets
+  its pull request (a conflict that brings is fixed like any other), and the task above a merged root is the new root
+  and owns the merge. A task below cancelled pauses the stacked task, started or not,
+  with a failure gate, "“‹parent›” was cancelled"; Retry takes it out of the bundle and bases it on the default
+  branch, and Stack on another task… points it elsewhere while it has not started.
+- **Where it shows.** The task toolbar's Bundle item ("Bundle 2/3", the ready tasks of all of them) opens a popover
+  that lists each task numbered from 1, the one whose pull request targets the default branch, with its
+  state (Waiting, Working, Ready, Merging, Merged), its pull request and This task (`BundleFact`); a queue row carries
+  the same count, live, as a small mark beside the task's name, where the shared mark goes (`BundleMark`). A
+  ready task's now card says it merges when you approve the bundle on the root. All tasks files a ready task with its
+  bundle's root, the root first and each task above nested under the one below (`orderChains`). The rules run after every
+  command for the tasks in a bundle (`reviewBundles`, `decide/bundles.ts`), and the invariant walk checks that a task
+  stacked on another never has a merge gate open, and that a root's gate opens only with every task above ready and
+  no conflict recorded.
+- **Taking a task out.** Take out of the bundle (`task.stack_on` with `null`) works until the task builds. A task
+  still waiting starts at once from the default branch. A task already planning on the branch below loses its stack
+  base, its planning run is cancelled, and `worktree.create` resets its worktree onto the default branch before it
+  plans again; the task below, with nothing stacked on it any more, goes back to its own merge gate. Once the stacked
+  task builds, its commits sit on the branch below, so the bundle no longer changes; cancel the task or let the bundle
+  merge.
+- **Stack or wait.** Neither is the default; the agent picks by what the later task needs (the `create_task`
+  description says so). Stack when the later task builds directly on this one's code in the same repository and
+  ships with it: the next piece of one feature, a schema then its API then its screen, where a flaw found in the
+  later piece should be fixed in the earlier pull request before anything merges, and where each small pull request
+  reads well only next to the one below. Wait (`after_this`, `waitsOn`) when the earlier task should ship on its own:
+  a fix or a feature that is worth merging today even if the follow-up stalls, work that needs the earlier change
+  live on the default branch first (a migration run, a deploy, a flag), work in another repository, or several tasks
+  that build on one (a bundle is one line, so fan-out is a wait). A bundle holds every merge until its last task is ready,
+  so a long bundle delays the first piece; waiting delivers each piece as it merges.
 
 ### The backlog
 
@@ -2228,7 +2317,8 @@ and the run supervisor.
   repositories), with `this_task_waits` making this task wait on it (a blocker, not just a parent link; only an Agent
   run that builds or fixes may wait, others are refused with `cannot_wait`) or `after_this` making it wait on this
   task (any run; created with `waitsOn` set, so triage infers no other dependencies for it, and the wait is logged
-  as Shinsa's); setting both is refused (`dependency_cycle`). `backlog` files it for the backlog (Scheduling → The
+  as Shinsa's); setting both is refused (`dependency_cycle`). `stack_on_this` files the next piece of a bundle in this
+  repository instead (`stacksOn` set to this task, Scheduling → Bundles), and is refused next to either of them. `backlog` files it for the backlog (Scheduling → The
   backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
   exactly-once per `client_request_id`.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan

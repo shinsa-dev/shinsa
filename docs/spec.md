@@ -170,6 +170,7 @@ not chat text.
   its plan and builds it in the same conversation (`docs/engine.md` → Agents, Task shapes).
 - **Ordering.** A task that depends on nothing starts at once, on its own agent, however many
   others are running; one that depends on others waits, costing nothing, until they have merged.
+  One stacked on another as a bundle starts once that one is ready to merge, and the bundle merges as one.
   Priority and what a decision unblocks only decide how high it sits in Needs you (`docs/engine.md`
   → Scheduling).
 - **The pull request loop.** CI failures, review-bot comments and conflicts go back to the task’s agent until
@@ -1124,6 +1125,34 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
   pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
   cards).
+
+### Bundles (2026-11-01)
+
+- **A stack of pull requests, as tasks.** A task can stack on another (Stack on another task… in the composer's When
+  to start, the Waits on menu, `•••`, ⌘K, `shinsa tasks stack-on`, `create_task`'s `stack_on_this`): it waits until
+  that task is ready to merge, not merged, then branches off its branch, and its pull request targets that branch, so
+  GitHub shows the stack. A bundle is one line in one repository (`docs/engine.md` → Bundles).
+- **Why not just wait.** The only difference from a dependency is that the bundle merges together. That buys three
+  things: the next task starts sooner; a flaw a later task finds in the root is fixed in the root's still-open pull
+  request instead of a follow-up on top of a merged one (the stacked task's agent messages the task below); and each
+  pull request's diff is small and builds on the one before, for you and for review bots.
+- **Ready, then one merge, on the root.** A stacked task never gets its own merge gate: it shows Ready, merges with
+  its bundle, and keeps fixing CI, comments and conflicts. The root, the task whose pull request targets main, owns
+  the merge: one merge gate for the whole bundle once every task above is ready, listing each pull request; approving
+  merges them from the last back to the root and every task ends merged.
+- **Our own stack, not GitHub's.** Shinsa runs the bundle itself rather than through GitHub's stack API, which gives
+  it the control: it decides when each task is ready, holds the one gate, checks every task's pre-merge steps and,
+  since GitHub checks a pull request only against its own base, merges the whole bundle into main in git before the
+  gate opens and again before the merge. A branch that would conflict with main is brought up to date bottom up, a
+  conflict going to that task's agent, so a bundle never merges halfway because of a conflict. The task
+  toolbar's Bundle item ("Bundle 2/3") lists each task in order with its state and pull request, a queue row carries
+  the same count, and All tasks nests each task under the one below, as it now nests every waiting task under the
+  task it waits on instead of filing it in a section of its own.
+- **Stack or wait.** Both stay first-class: stack the next piece of one feature that should ship with it and may
+  still change it; wait when the earlier piece should ship on its own, needs to be live first, or lives in another
+  repository. Agents get the same rule in `create_task`.
+- **Not yet.** Bundles that branch, GitHub's own stack API (chained bases already show as a stack), triage inferring
+  a bundle and `split_task` splitting into one.
 
 ### Feedback (2026-11-01)
 
