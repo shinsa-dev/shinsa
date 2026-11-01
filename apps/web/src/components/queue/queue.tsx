@@ -22,6 +22,7 @@ import {
   resolveSectionDefault,
   resolveSectionId,
 } from '@/lib/queue.ts';
+import { listBundleRows } from '@/lib/tasks/bundles.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 type Variant = 'wide' | 'compact';
@@ -128,7 +129,11 @@ function QueueSectionView({
       active={item.task.id === activeTaskId}
       revealWhenActive={variant === 'compact'}
       title={item.task.title}
-      mark={<BundleMark state={state} task={item.task} />}
+      mark={
+        listBundleRows(state, item.task).length > 0 ? (
+          <BundleMark state={state} task={item.task} />
+        ) : undefined
+      }
       summary={<RowSummary state={state} task={item.task} detail={variant === 'wide'} />}
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {

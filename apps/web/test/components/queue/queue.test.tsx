@@ -166,6 +166,12 @@ describe('compact queue', () => {
     expect(count.parentElement?.textContent).toBe('Add the screen1/2');
   });
 
+  it('keeps a row outside a bundle on its plain title, with no mark beside it', () => {
+    renderQueue();
+    const row = screen.getByRole('button', { name: /Review the login fix/ });
+    expect(row.querySelector('.contain-inline-size')?.textContent).toBe('Review the login fix');
+  });
+
   it('opens the task from a row', () => {
     const onNavigate = mock();
     renderQueue({ onNavigate });
