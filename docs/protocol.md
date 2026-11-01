@@ -1236,13 +1236,13 @@ or `browser` (a tab, Floaty).
 
 | Server → page (`ServerMessage`) | When |
 | --- | --- |
-| `state { state }` | On connect, and on `state.sync`: the state as the page holds it (`WireState`, below) |
+| `state { state }` | On connect, after every other connect message, and on `state.sync`: the state as the page holds it (`WireState`, below) |
 | `state.patch { patch }` | After every change: a `StatePatch` from log position `from` to `to` |
 | `ack { id, error }` | After a command, after its patch; `error` is `{ code, message }` or null |
 | `transcript { runId, entries, start }` | On subscribing (the entries from `from`, in pages of 500) and for each new entry; `start` is the position of the first one |
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
-| `engine { engine }` | On connect, right after `surfaces`: what this engine speaks, an `EngineInfo` (below) |
+| `engine { engine }` | On connect, right after `surfaces` and before every other message: what this engine speaks, an `EngineInfo` (below) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
 | `resources { resources }` | On connect once sampled, then every 5 s while a page is connected: `MachineResources` (core's `remote/resources.ts`: the machine's cores, CPU percent, memory used and total, disk free and total, and each open task's agent, services and checks as CPU percent and memory, its process count and its worktree's size). An engine samples only while a socket listens, so a page that never reads it costs nothing; an older engine never sends it and an older page ignores it |
 | `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
