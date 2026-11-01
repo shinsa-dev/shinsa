@@ -13,6 +13,7 @@ import {
   resolveTunnelRoute,
 } from '../remote/index.ts';
 import type { ShareChannel } from '../remote/share-channel.ts';
+import type { ResourceMonitor } from '../resources/index.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import {
   createTerminalRoutes,
@@ -41,6 +42,7 @@ export interface HttpContext extends ApiContext {
   transcripts: Transcripts;
   terminals?: Terminals;
   refiner?: ServiceRefiner;
+  resources?: ResourceMonitor;
 }
 
 interface RemoteSocketData {
@@ -157,7 +159,8 @@ export function startServer(context: HttpContext) {
     context.classify ?? null,
     terminals,
     context.remote,
-    (context.instance ?? createServerInstance()).version
+    (context.instance ?? createServerInstance()).version,
+    context.resources
   );
   const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
   const { remote } = context;

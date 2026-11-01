@@ -71,6 +71,7 @@ import {
   upsertRepo,
   verifySetup,
 } from '../repos/index.ts';
+import type { ProcessTracker } from '../resources/index.ts';
 import type { WatchWriter } from '../schedules/suggest.ts';
 import type { Slack } from '../slack/index.ts';
 import { EvidenceStore } from '../store/evidence.ts';
@@ -95,6 +96,7 @@ export interface EffectRunnerOptions {
   services?: TaskServices;
   shares: ShareEffects;
   slack?: Slack;
+  trackProcess?: ProcessTracker;
 }
 
 export interface TaskServices {
@@ -174,6 +176,7 @@ export class EffectRunner {
   readonly #services: TaskServices | null;
   readonly #shares: ShareEffects;
   readonly #slack: Slack | null;
+  readonly #trackProcess: ProcessTracker | null;
   readonly #feedback: FeedbackEffects;
   readonly #evidence: EvidenceStore;
   readonly #descriptions: PullRequestDescriptions;
@@ -207,6 +210,7 @@ export class EffectRunner {
     this.#services = options.services ?? null;
     this.#shares = options.shares;
     this.#slack = options.slack ?? null;
+    this.#trackProcess = options.trackProcess ?? null;
     this.#feedback = new FeedbackEffects(
       engine,
       config.dataDir,
@@ -601,11 +605,16 @@ export class EffectRunner {
     if (task.approvedEdits === 'review') await this.#commitEdits(task, repo, context);
     const worktree = task.worktreePath;
     const env = resolveSharedCacheEnv(worktree, this.#config.dataDir, repo.id);
+    const releases: (() => void)[] = [];
+    const track = this.#trackProcess;
     const runs = await runChecks(effect.checks, worktree, {
       timeoutMs: CHECK_TIMEOUT_MS,
       signal: context.signal,
       env,
       compare: this.#createBaseComparison(task, repo, worktree, env, context.signal),
+      ...(track ? { onSpawn: (pid: number) => releases.push(track(task.id, 'checks', pid)) } : {}),
+    }).finally(() => {
+      for (const release of releases) release();
     });
     let coverage: Coverage | null = null;
     if (effect.coverage && !runs.some((run) => isBlockingCheck(run.check))) {

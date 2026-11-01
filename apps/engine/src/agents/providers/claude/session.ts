@@ -220,7 +220,7 @@ export function startClaudeSession(
   const prompts = new AsyncQueue<SDKUserMessage>();
   const ledger = new PromptLedger(false);
   const recorder = createClaudeRecorder(input.onEntry, input.storeImage);
-  const child = (options.createProcess ?? createClaudeProcess)();
+  const child = (options.createProcess ?? createClaudeProcess)(input.onProcess);
   let session: Query | null = null;
   let cancelled = false;
   let closed = false;

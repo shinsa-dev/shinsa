@@ -32,6 +32,7 @@ import {
   stashEdits,
 } from '../git/index.ts';
 import { describeError, log } from '../log/index.ts';
+import type { ProcessTracker } from '../resources/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { EvidenceStore } from '../store/index.ts';
 import { Workspaces } from '../workspaces/index.ts';
@@ -104,6 +105,7 @@ export interface SupervisorOptions {
   manage?: ManageAccess;
   workspaces?: Workspaces;
   services?: TaskServiceRunner;
+  trackProcess?: ProcessTracker;
 }
 
 interface Workspace {
@@ -194,6 +196,7 @@ export class RunSupervisor {
   readonly #extensions: SessionExtensionSource | null;
   readonly #extensionSets: SessionExtensionSets;
   readonly #manages: boolean;
+  readonly #trackProcess: ProcessTracker | null;
   readonly #held = new Set<string>();
   readonly workspaces: Workspaces;
   #shuttingDown = false;
@@ -243,6 +246,7 @@ export class RunSupervisor {
       listServerNames: (run) => this.#listServerNames(run),
     });
     this.#manages = options.manage !== undefined;
+    this.#trackProcess = options.trackProcess ?? null;
     this.#deliveries = new Deliveries({
       engine,
       transcripts,
@@ -637,6 +641,7 @@ export class RunSupervisor {
     const startSession = this.#startSession ?? provider.startSession;
     let sessionId = plan.fork ? null : plan.resume;
     const options = await this.#resolveSpeed(run, provider, active.lease, true);
+    const releases: (() => void)[] = [];
     const fold = resolveTurnFold({
       run,
       plan,
@@ -675,6 +680,9 @@ export class RunSupervisor {
       },
       onEntry: (entry) => this.#recordEntry(run.id, entry),
       onActivity: () => this.#questions.touch(run.id),
+      onProcess: (pid) => {
+        if (this.#trackProcess) releases.push(this.#trackProcess(run.taskId, 'agent', pid));
+      },
       storeImage: (data, mediaType) => this.#storeImage(data, mediaType),
     });
     active.session = session;
@@ -687,6 +695,7 @@ export class RunSupervisor {
       return { attemptId, result: { ...result, failure: { ...result.failure, account } } };
     } finally {
       active.session = null;
+      for (const release of releases) release();
       await loader?.close();
     }
   }

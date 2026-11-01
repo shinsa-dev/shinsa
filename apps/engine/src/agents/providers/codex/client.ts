@@ -112,6 +112,10 @@ export class CodexClient {
     });
   }
 
+  get pid() {
+    return this.#process.pid;
+  }
+
   onNotification(handler: NotificationHandler) {
     this.#notify = handler;
   }

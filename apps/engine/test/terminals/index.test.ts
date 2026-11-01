@@ -349,6 +349,7 @@ describe('Terminals services', () => {
     expect(seen.length).toBe(before + 1);
     expect(terminals.find(shell.id).info.status).toBe('running');
     expect(terminals.listTerminalPids()).toEqual([1003]);
+    expect(terminals.listServiceProcesses()).toEqual([{ taskId: 'b', pid: 1002 }]);
   });
 
   it('starts a task’s run again after a restart only while the task is open', async () => {
