@@ -40,6 +40,13 @@ export {
   type TaskCreatorKind,
   type TaskSplit,
 } from './delegations.ts';
+export {
+  copyTeammateOriginal,
+  copyUnreachedTeammate,
+  quoteDuplicateOriginal,
+  resolveFirstName,
+  resolveTeammateMachineLabel,
+} from './duplicates.ts';
 export { DomainError } from './errors.ts';
 export {
   type CurrentEvidenceItem,
@@ -209,6 +216,8 @@ export {
   type TaskResult,
   type TaskShape,
   type TriageDecisions,
+  type TriageDuplicateCheck,
+  type UnreachedTeammate,
   validateComposition,
   type WorkStep,
 } from './shapes.ts';

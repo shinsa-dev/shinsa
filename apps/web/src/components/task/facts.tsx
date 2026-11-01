@@ -29,6 +29,7 @@ import {
   InfoRow,
   InfoSection,
 } from '@/components/overlays/info-popover.tsx';
+import { UserTag } from '@/components/people/user-tag.tsx';
 import { TaskServicesFact } from '@/components/services/task-menu.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
@@ -40,7 +41,7 @@ import { useReadOnly, useReadOnlyOwnerName } from '@/components/task/read-only.t
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
-import { useMachine, useMachines } from '@/lib/connection/socket.ts';
+import { useConnection, useMachine, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
 import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
@@ -48,7 +49,12 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { describeMachineResources, listTaskUseLines } from '@/lib/remote/resources.ts';
-import { describeUserName } from '@/lib/remote/users.ts';
+import {
+  describeUserName,
+  resolveFirstName,
+  resolveSharedProfile,
+  type UserProfile,
+} from '@/lib/remote/users.ts';
 import { HANDOFF_ICON, resolveHandoffFact } from '@/lib/share/handoff.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
@@ -60,6 +66,7 @@ import {
   listDuplicates,
   listForkSourcesBesides,
   listForks,
+  listTeammateDuplicates,
   resolveFiledByFact,
   resolveReportFact,
   selectDuplicateOriginal,
@@ -420,15 +427,72 @@ function AccountFact({ task }: { task: Task }) {
   );
 }
 
+function TeammateTaskFact({
+  icon,
+  verb,
+  owner,
+  handle,
+  title,
+  path,
+  hint,
+}: {
+  icon: IconName;
+  verb: string;
+  owner: UserProfile | null;
+  handle: string | null;
+  title: string;
+  path: string;
+  hint: string | null;
+}) {
+  const task = (
+    <button
+      type='button'
+      onClick={() => navigate(path)}
+      className='flex min-w-0 cursor-pointer outline-none hover:text-fg-4 active:text-fg-4'
+    >
+      {handle && <span className='shrink-0 whitespace-pre tabular-nums'>{handle} </span>}
+      <Truncate>{title}</Truncate>
+    </button>
+  );
+  return (
+    <span className={cn(FACT, 'max-w-80')}>
+      <Icon size='sm' name={icon} />
+      <span className='flex min-w-0'>
+        <span className='shrink-0 whitespace-pre'>{verb} </span>
+        {owner && (
+          <span className='shrink-0 whitespace-pre'>
+            <UserTag user={owner} label={`${resolveFirstName(owner)}’s`} />{' '}
+          </span>
+        )}
+        {hint ? <Hint label={hint}>{task}</Hint> : task}
+      </span>
+    </span>
+  );
+}
+
 function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
   const original = selectDuplicateOriginal(state, task);
   const owner = useReadOnlyOwnerName();
   if (!original || !task.duplicate) return null;
+  const hint = describeDuplicateHint(task.duplicate, owner);
+  if (original.owner) {
+    return (
+      <TeammateTaskFact
+        icon='IconSquareBehindSquare2'
+        verb='Duplicate of'
+        owner={original.owner}
+        handle={original.handle}
+        title={original.title}
+        path={original.path}
+        hint={hint}
+      />
+    );
+  }
   return (
-    <Hint label={describeDuplicateHint(task.duplicate, owner)}>
+    <Hint label={hint}>
       <button
         type='button'
-        onClick={() => navigate(resolveTaskPath(original))}
+        onClick={() => navigate(original.path)}
         className={cn(FACT, FACT_INTERACTIVE, 'max-w-80')}
       >
         <Icon size='sm' name='IconSquareBehindSquare2' />
@@ -442,6 +506,23 @@ function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
       </button>
     </Hint>
   );
+}
+
+function TeammateKeptOverFacts({ task }: { task: Task }) {
+  const { state } = useConnection();
+  const feed = useTeamFeed();
+  return listTeammateDuplicates(state, feed, task).map(({ key, handle, title, path, listing }) => (
+    <TeammateTaskFact
+      key={key}
+      icon='IconSquareBehindSquare2'
+      verb='Kept over'
+      owner={listing?.owner ? resolveSharedProfile(listing.owner, listing.ownerProfile) : null}
+      handle={handle}
+      title={title}
+      path={path}
+      hint={null}
+    />
+  ));
 }
 
 function RelatedFact({
@@ -642,6 +723,7 @@ export function TaskFacts({
         verb='Kept over'
         tasks={listDuplicates(state, task)}
       />
+      <TeammateKeptOverFacts task={task} />
     </div>
   );
 }

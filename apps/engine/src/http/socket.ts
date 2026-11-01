@@ -5,15 +5,19 @@ import {
   DomainError,
   type GuestActor,
   isSurface,
+  listSummarizedTasks,
   type RequestOrigin,
   resolveEngineInfo,
   resolveScopedEngineInfo,
   resolveScopedPatch,
   resolveScopedState,
   resolveStatePatch,
+  resolveTaskDetail,
+  resolveViewPatch,
   type ServerMessage,
   type Surface,
   serializeState,
+  serializeViewState,
   type UserCommand,
 } from '@shinsa/core';
 import type { Accounts } from '../accounts/index.ts';
@@ -44,6 +48,8 @@ export interface HubSocket {
 type Socket = HubSocket;
 
 const DROPPED = 0;
+
+const NO_SUMMARIES: ReadonlySet<string> = new Set();
 
 function deliver(socket: Socket, payload: string) {
   if (socket.send(payload) !== DROPPED) return;
@@ -82,9 +88,13 @@ function parseClientMessage(raw: string | Buffer): ClientMessage | null {
     command?: unknown;
     surface?: unknown;
     from?: unknown;
+    taskId?: unknown;
   };
   if (fields.type === 'hello' && isSurface(fields.surface)) return { type: 'hello', surface: fields.surface };
   if (fields.type === 'state.sync') return { type: 'state.sync' };
+  if (fields.type === 'task.detail' && isId(fields.taskId)) {
+    return { type: 'task.detail', taskId: fields.taskId };
+  }
   if (fields.type === 'command' && isId(fields.id)) {
     return { type: 'command', id: fields.id, command: fields.command as UserCommand };
   }
@@ -113,6 +123,7 @@ export function createSocketHub(
   resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>
 ) {
   const sockets = new Set<Socket>();
+  const views = new WeakMap<SocketData, ReadonlySet<string>>();
   const engineInfo = resolveEngineInfo(version);
   const scopedEngineInfo = resolveScopedEngineInfo(version);
   let desktopConnected = false;
@@ -123,14 +134,29 @@ export function createSocketHub(
     for (const socket of sockets) if (!socket.data.guest) deliver(socket, payload);
   }
 
-  function resolveSocketState(socket: Socket) {
-    const { guest } = socket.data;
-    return serializeState(guest ? resolveScopedState(engine.state, guest.taskId) : engine.state);
-  }
-
   function isVisibleRun(socket: Socket, runId: string) {
     const { guest } = socket.data;
     return !guest || engine.state.runs[runId]?.taskId === guest.taskId;
+  }
+
+  function selectView(socket: Socket): ReadonlySet<string> {
+    return views.get(socket.data) ?? NO_SUMMARIES;
+  }
+
+  function sendState(socket: Socket) {
+    const { guest } = socket.data;
+    if (guest) {
+      send(socket, { type: 'state', state: serializeState(resolveScopedState(engine.state, guest.taskId)) });
+      return;
+    }
+    const summarized = listSummarizedTasks(engine.state);
+    views.set(socket.data, summarized);
+    send(socket, { type: 'state', state: serializeViewState(engine.state, summarized) });
+  }
+
+  function sendTaskDetail(socket: Socket, taskId: string) {
+    views.set(socket.data, new Set([...selectView(socket)].filter((id) => id !== taskId)));
+    send(socket, { type: 'task.detail', detail: resolveTaskDetail(engine.state, taskId) });
   }
 
   function syncSurfaces() {
@@ -169,14 +195,25 @@ export function createSocketHub(
 
   const unsubscribeState = engine.subscribe((state, { previous, changes }) => {
     if (sockets.size === 0) return;
-    broadcast({ type: 'state.patch', patch: resolveStatePatch(previous, state, changes) });
+    const patch = resolveStatePatch(previous, state, changes);
+    let shared: string | null = null;
     for (const socket of sockets) {
       const { guest } = socket.data;
-      if (guest)
+      if (guest) {
         send(socket, {
           type: 'state.patch',
           patch: resolveScopedPatch(previous, state, changes, guest.taskId),
         });
+        continue;
+      }
+      const view = resolveViewPatch(patch, previous, state, selectView(socket));
+      views.set(socket.data, view.summarized);
+      if (view.patch !== patch) {
+        send(socket, { type: 'state.patch', patch: view.patch });
+        continue;
+      }
+      shared ??= JSON.stringify({ type: 'state.patch', patch } satisfies ServerMessage);
+      deliver(socket, shared);
     }
   });
 
@@ -224,7 +261,11 @@ export function createSocketHub(
         return;
       }
       case 'state.sync':
-        send(socket, { type: 'state', state: resolveSocketState(socket) });
+        sendState(socket);
+        return;
+      case 'task.detail':
+        if (socket.data.guest) return;
+        sendTaskDetail(socket, message.taskId);
         return;
       case 'transcript.subscribe': {
         if (!isVisibleRun(socket, message.runId)) return;
@@ -248,7 +289,7 @@ export function createSocketHub(
       send(socket, { type: 'surfaces', desktop: desktopConnected });
       if (socket.data.guest) {
         send(socket, { type: 'engine', engine: scopedEngineInfo });
-        send(socket, { type: 'state', state: resolveSocketState(socket) });
+        sendState(socket);
         return;
       }
       send(socket, { type: 'engine', engine: engineInfo });
@@ -258,7 +299,7 @@ export function createSocketHub(
       if (teamFeeds) send(socket, { type: 'teams', teams: teamFeeds.snapshot() });
       const sampled = resources?.snapshot();
       if (sampled) send(socket, { type: 'resources', resources: sampled });
-      send(socket, { type: 'state', state: resolveSocketState(socket) });
+      sendState(socket);
       syncResources();
     },
     close(socket: Socket) {

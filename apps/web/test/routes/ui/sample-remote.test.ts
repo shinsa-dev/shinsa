@@ -77,6 +77,8 @@ describe('the /ui remote access samples', () => {
     expect(fleet.members.map((member) => member.name)).toEqual(['Studio', 'Laptop']);
     expect(fleet.selectTranscript('run')).toEqual([]);
     fleet.watchTranscript('run')();
+    fleet.requestTaskDetail('task');
+    fleet.watchTaskDetail('task')();
     fleet.subscribe(() => undefined)();
     expect(fleet.selectAccounts()).toBeNull();
     fleet.replaceAccounts(null as never);
@@ -93,6 +95,7 @@ describe('the /ui remote access samples', () => {
     expect(single.listMachines()).toEqual([]);
     expect(single.listUnreachableMachines()).toEqual([]);
     expect(single.listMachineAccess()).toEqual([]);
+    expect(single.removeMachine('studio')).toBeUndefined();
     single.subscribeTeams(() => undefined)();
     expect(single.selectTeams()).toBe(NO_TEAM_FEED);
     expect(single.selectEngine('task')).toMatchObject({ version: DEVELOPMENT_VERSION });

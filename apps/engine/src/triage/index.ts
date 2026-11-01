@@ -2,6 +2,7 @@ import {
   isTaskSettled,
   listProjectRepos,
   type Project,
+  quoteDuplicateOriginal,
   resolveRoundTitle,
   resolveTaskProject,
   resolveTaskShape,
@@ -12,7 +13,9 @@ import {
   type TaskPriority,
   type TaskShape,
   type TaskSize,
+  type TeammateOriginal,
   type TriageReasons,
+  type UnreachedTeammate,
 } from '@shinsa/core';
 import type { JsonSchema } from '../agents/providers/index.ts';
 import {
@@ -26,6 +29,7 @@ import type { QuickJson } from '../agents/quick/index.ts';
 import { BRANCH_PATTERN, COMMIT_TYPES, slugify } from '../git/index.ts';
 import { type LocalRepo, listLocalRepos, resolveContainingRepo } from '../repos/index.ts';
 import { parseAnswerText, SHAPE_QUESTION } from './decisions.ts';
+import { resolveTeammateCheck, type TeammateCheck, type TeammateTask, type TeamReader } from './team.ts';
 
 export interface TriageResult {
   title: string;
@@ -34,6 +38,8 @@ export interface TriageResult {
   branch: string;
   waitsOn: Task[];
   duplicateOf?: string;
+  duplicateOfTeammate?: TeammateOriginal;
+  unreached?: UnreachedTeammate[];
   shape?: TaskShape;
   priority?: TaskPriority;
   reasons?: TriageReasons;
@@ -142,14 +148,15 @@ function resolveWaitsOnQuestion(open: Task[]): ChoicesQuestion {
 
 const NOT_A_DUPLICATE = 'none';
 
-function resolveDuplicateQuestion(open: Task[]): ChoiceQuestion | null {
-  if (open.length === 0) return null;
+function resolveDuplicateQuestion(open: Task[], teammates: TeammateTask[]): ChoiceQuestion | null {
+  if (open.length === 0 && teammates.length === 0) return null;
   return {
     type: 'choice',
     instructions: `Is this request the same work as an open task, so that doing both would do the work twice? Name a task only when it would deliver the same outcome. Related, overlapping, follow-up or partly the same work is "${NOT_A_DUPLICATE}"; so is anything you are unsure of. Usually "${NOT_A_DUPLICATE}".`,
     criteria: {
       [NOT_A_DUPLICATE]: 'not the same work as any open task',
       ...Object.fromEntries(open.map((task) => [task.id, task.title])),
+      ...Object.fromEntries(teammates.map((task) => [task.key, quoteDuplicateOriginal(task.original)])),
     },
   };
 }
@@ -357,6 +364,20 @@ function describeOpenTask(state: ShinsaState, task: Task) {
   return `- ${task.id}: ${task.title} (${repo}, ${task.stage})`;
 }
 
+function describeTeammateTask(task: TeammateTask) {
+  const plan = task.goal ? ` Plan: ${task.goal}` : '';
+  return `- ${task.key}: ${quoteDuplicateOriginal(task.original)} (${task.stage}). Request: ${task.request}${plan}`;
+}
+
+function describeTeammateTasks(teammates: TeammateCheck | null) {
+  if (!teammates || teammates.tasks.length === 0) return [];
+  return [
+    '',
+    'Teammates’ open tasks, on their own machines, each with its owner, stage, request and plan:',
+    ...teammates.tasks.map(describeTeammateTask),
+  ];
+}
+
 function describeHumanChoices(state: ShinsaState, task: Task) {
   const choices = [
     ...(task.auto.shape ? [] : [`the kind of task is ${resolveTaskShape(task)}`]),
@@ -402,6 +423,7 @@ interface TriagePlan {
   open: Task[];
   waitsOnQuestion: ChoicesQuestion;
   duplicateQuestion: ChoiceQuestion | null;
+  teammates: TeammateCheck | null;
   fallback: TriageResult;
 }
 
@@ -414,7 +436,12 @@ function listOpenTasks(state: ShinsaState, task: Task, project: Project | null) 
   );
 }
 
-function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): TriagePlan {
+function resolveTriagePlan(
+  state: ShinsaState,
+  task: Task,
+  local: LocalRepo[],
+  team: TeamReader | null
+): TriagePlan {
   const pinned = task.repoId ? state.repos[task.repoId] : undefined;
   const pool = resolveCandidatePool(state, task, local);
   const offered = listOfferedRepos(pool);
@@ -426,6 +453,7 @@ function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): 
   const size = resolveFallbackSize(task);
   const title = resolveRoundTitle(task.request).slice(0, TITLE_LIMIT).trim() || 'Untitled task';
   const open = listOpenTasks(state, task, pool.project);
+  const teammates = team ? resolveTeammateCheck(pool.project, team()) : null;
   return {
     task,
     asks,
@@ -434,7 +462,8 @@ function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): 
     optional: !pinned,
     open,
     waitsOnQuestion: resolveWaitsOnQuestion(open),
-    duplicateQuestion: resolveDuplicateQuestion(open),
+    duplicateQuestion: resolveDuplicateQuestion(open, teammates?.tasks ?? []),
+    teammates,
     fallback: {
       title,
       repoPath: bound?.path ?? null,
@@ -454,6 +483,7 @@ function describeTriagePrompt(state: ShinsaState, plan: TriagePlan) {
     'Open tasks (not finished yet), each with its repository and stage:',
     ...open.map((candidate) => describeOpenTask(state, candidate)),
     open.length === 0 ? '(none)' : '',
+    ...describeTeammateTasks(plan.teammates),
     '',
     ...describeProject(plan.pool),
     ...describeRepoCandidates(plan.candidates),
@@ -483,14 +513,24 @@ function parseWaitsOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer
   return { waitsOn, kept: { waitsOn, dropped: waitsOn.length < named.length } };
 }
 
+function resolveDuplicateWhy(answer: TriageAnswer, quoted: string) {
+  return parseAnswerText(answer.duplicate_why, WHY_LIMIT) ?? `It asks for the same work as ${quoted}.`;
+}
+
 function parseDuplicate(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer, repoPath: string | null) {
   if (!plan.duplicateQuestion) return null;
   const named = parseDecisionAnswer(plan.duplicateQuestion, answer.duplicate_of);
+  const teammate = plan.teammates?.tasks.find((candidate) => candidate.key === named);
+  if (teammate) {
+    const original = { ...teammate.original };
+    return {
+      duplicateOfTeammate: original,
+      why: resolveDuplicateWhy(answer, quoteDuplicateOriginal(original)),
+    };
+  }
   const original = plan.open.find((candidate) => candidate.id === named);
   if (!original || !isDependencyAllowed(state, plan, original, repoPath)) return null;
-  const why =
-    parseAnswerText(answer.duplicate_why, WHY_LIMIT) ?? `It asks for the same work as “${original.title}”.`;
-  return { duplicateOf: original.id, why };
+  return { duplicateOf: original.id, why: resolveDuplicateWhy(answer, `“${original.title}”`) };
 }
 
 function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer): TriageResult {
@@ -512,7 +552,9 @@ function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: TriageA
     size: large ? 'large' : 'small',
     branch: branch ?? fallback.branch,
     waitsOn,
-    ...(duplicate ? { duplicateOf: duplicate.duplicateOf } : {}),
+    ...(duplicate?.duplicateOf ? { duplicateOf: duplicate.duplicateOf } : {}),
+    ...(duplicate?.duplicateOfTeammate ? { duplicateOfTeammate: duplicate.duplicateOfTeammate } : {}),
+    ...(plan.teammates ? { unreached: plan.teammates.unreached } : {}),
     shape: shape ?? fallback.shape,
     priority: priority ?? plan.task.priority,
     reasons: {
@@ -526,9 +568,10 @@ export async function resolveTriage(
   state: ShinsaState,
   task: Task,
   local: LocalRepo[],
-  ask: QuickJson
+  ask: QuickJson,
+  team: TeamReader | null = null
 ): Promise<TriageResult> {
-  const plan = resolveTriagePlan(state, task, local);
+  const plan = resolveTriagePlan(state, task, local, team);
   const answer = await ask<TriageAnswer>(
     TRIAGE_SYSTEM,
     describeTriagePrompt(state, plan),

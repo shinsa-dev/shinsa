@@ -212,7 +212,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `proposedBranch?` | string \| null | triage's branch for a task with no worktree step yet |
 | `pipeline?` | `PipelineStep[]` | the steps; absent means change (or answer for `mode: 'ask'`) |
 | `auto` | `{ shape, start, priority }` booleans | which parts you left to Shinsa; `shape` is true unless `mode` was given |
-| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null | triage's choice and why, per Auto part |
+| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
 | `shapeChanges?` | `ShapeChange[]` (last 20) | each pipeline change: from, to, by (`you`, `agent`, `shinsa`), reason |
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
@@ -228,7 +228,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `stage` | `TaskStage` | where it is (Lifecycle, below) |
 | `stageReason` | string | a few lower-case words: "waiting for CI" |
 | `cancelledFrom?` | `TaskStage` \| null | the stage a cancelled task was in, so its progress shows the step it stopped at |
-| `duplicate?` | `{ of, by, why }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate |
+| `duplicate?` | `{ of, by, why, teammate? }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate. `teammate` (`TeammateOriginal`: `{ teamId, machineId, taskId, handle, title, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) when the original is a teammate's task, `of` then holding its id on their machine. A shared task and a team listing carry `duplicate` with the status fields, so the original's owner sees what was kept over it |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `stacksOn?` | string \| null | the task it stacks on as a bundle (Bundles in `docs/engine.md`) |
@@ -917,7 +917,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 | Command | Sender | Does |
 | --- | --- | --- |
-| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task closes it as that task's duplicate before any work |
+| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
@@ -1003,7 +1003,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.retitled` | an accepted plan named the work anew (`round`, `title`): the round takes the title, and the task too when it is round 1; activity “Renamed to …” |
-| `task.duplicated` | the task was closed as a duplicate (`duplicate: { of, by, why }`); the `cancelled` stage follows |
+| `task.duplicated` | the task was closed as a duplicate (`duplicate: { of, by, why, teammate? }`); the `cancelled` stage follows |
 | `task.duplicate_cleared` | a triage-closed duplicate is not one after all: the mark, `closedAt` and `cancelledFrom` are cleared |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
 | `task.stack_changed` | the task it stacks on changed (`stacksOn`, `null` when taken out; `by` you or Shinsa) |
@@ -1248,10 +1248,12 @@ or `browser` (a tab, Floaty).
 | `command { id, command }` | A `UserCommand`; answered by `ack` with the same id |
 | `state.sync` | Send the whole state again: a patch did not fit the state the page holds |
 | `transcript.subscribe { runId, from }` / `transcript.unsubscribe { runId }` | Follow a run's transcript from entry `from` (the number the page holds), or stop |
+| `task.detail { taskId }` | Send a summarized task whole and keep it whole on this socket: the page opened or hovered it |
 
 | Server → page (`ServerMessage`) | When |
 | --- | --- |
-| `state { state }` | On connect, after every other connect message, and on `state.sync`: the state as the page holds it (`WireState`, below) |
+| `state { state }` | On connect, after every other connect message, and on `state.sync`: the state as the page holds it (`WireState`, below), settled tasks as summaries |
+| `task.detail { detail }` | After `task.detail`: a `TaskDetail` (below), queued in order with patches |
 | `state.patch { patch }` | After every change: a `StatePatch` from log position `from` to `to` |
 | `ack { id, error }` | After a command, after its patch; `error` is `{ code, message }` or null |
 | `transcript { runId, entries, start }` | On subscribing (the entries from `from`, in pages of 500) and for each new entry; `start` is the position of the first one |
@@ -1307,6 +1309,23 @@ The page never gets a run's prompts. The state on the socket is a `WireState` (`
 | `changes` | The human asked for changes (`revise` on the review gate, with or without verdicts on findings) |
 | `pull_request` | The pull request needs work |
 | `conflicts` | The pull request conflicts with its base, or the branch was being updated onto its base |
+
+**Settled tasks as summaries** (`packages/core/src/protocol/summaries.ts`). `serializeViewState(state, summarized)`
+makes the state a socket gets, the tasks in `summarized` (`listSummarizedTasks`: every settled task, on connect and
+`state.sync`) as summaries; `resolveViewPatch(patch, previous, next, summarized)` rewrites the shared patch for one
+socket, returning the same patch when it touches none of them, and the view it leaves (a task that reopened or went
+away leaves it, sent whole):
+
+| Summarized | What the page gets |
+| --- | --- |
+| The task (`summarizeTask`) | A `WireTask` with `summarized: true`; `plan`, `report` and `coverage` null; `phaseReports`, `findings`, `overlaps`, `planHistory`, `iterations`, `dismissedFindings` and `reviewDisagreements` empty; `activity` only its last entry and its newest agent entry. `isSummarizedTask` tells one |
+| Its runs (`summarizeRun`) | Each without `summary` (null), `feedback`, `compactions`, `continuations`, `silence`, `cohort`, `waitingOn`, `fork` and `failure`, and only its last attempt, without `cwd` and with `handoff` null |
+| Its gates | Only the open ones, whole |
+| Its evidence | None |
+
+A `TaskDetail` (`resolveTaskDetail`) is `{ taskId, seq, task, runs, gates, evidence }`: the task whole (null when it is
+gone), its runs as `WireRun`s, its gates and evidence, and the log position it was read at. `applyTaskDetail` replaces
+the task's entries in a `WireState` with it, or answers null when `seq` is not the state's.
 
 A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolveStatePatch` makes one,
 `applyStatePatch` applies one, or answers null when its `from` is not the state's `seq`; a patch carries runs as

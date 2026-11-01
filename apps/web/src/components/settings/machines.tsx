@@ -15,6 +15,7 @@ import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/remote-access.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import {
+  connection,
   type MachineAccess,
   type MachineChoice,
   useGuestMachines,
@@ -225,6 +226,7 @@ function useMachineRows() {
     await (row.instance.role === 'owner'
       ? services.dashboard.removeInstance(id)
       : services.dashboard.leaveInstance(id));
+    connection.removeMachine(id);
     await services.devices.removeDevice(id);
     setVersion((value) => value + 1);
   };

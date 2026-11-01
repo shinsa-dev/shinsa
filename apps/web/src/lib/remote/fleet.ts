@@ -34,10 +34,12 @@ export interface FleetMember {
   id: string;
   name: string;
   current?: boolean;
+  online?: boolean;
   guest?: true;
   handedBy?: RemoteUser;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
+  close?: () => void;
 }
 
 const FLEET_RECORDS = [
@@ -152,6 +154,17 @@ const EMPTY_OWNERS: ReadonlyMap<string, string> = new Map();
 
 const NO_SHARED_HANDLES: ReadonlySet<string> = new Set();
 
+export const FLEET_WAIT_MS = 10_000;
+
+function waitForMachines(settle: () => void) {
+  const timer = setTimeout(settle, FLEET_WAIT_MS);
+  return () => clearTimeout(timer);
+}
+
+function isSettled(input: Snapshot, reachable: boolean | undefined, online: boolean | undefined) {
+  return !reachable || online === false || input.state !== null;
+}
+
 function isReachable(entry: FleetEntry) {
   return isEngineProtocolMatch(entry.member.connection.selectEngine());
 }
@@ -181,16 +194,21 @@ export class Fleet implements ShinsaConnection {
   readonly #hostedTeams: TeamFeedSource | null;
   #teamInputs: TeamFeedSnapshot[] = [];
   #teamFeed: TeamFeedSnapshot = NO_TEAM_FEED;
+  readonly #wait: (settle: () => void) => () => void;
+  #settled = false;
+  #stopWaiting: (() => void) | null = null;
 
   constructor(
     members: FleetMember[],
     unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES,
-    hostedTeams: TeamFeedSource | null = null
+    hostedTeams: TeamFeedSource | null = null,
+    wait: (settle: () => void) => () => void = waitForMachines
   ) {
     for (const member of [...members].sort((a, b) => Number(a.guest === true) - Number(b.guest === true)))
       this.#add(member);
     this.#unreachable = unreachable;
     this.#hostedTeams = hostedTeams;
+    this.#wait = wait;
     hostedTeams?.subscribe(() => this.#teams.publish());
     this.#listedUnreachable = unreachable;
   }
@@ -226,15 +244,33 @@ export class Fleet implements ShinsaConnection {
     });
   }
 
+  #drop(entry: FleetEntry) {
+    for (const release of entry.release) release();
+    entry.member.close?.();
+    this.#entries = this.#entries.filter((candidate) => candidate !== entry);
+  }
+
+  #publishMembers() {
+    this.#state.publish();
+    this.#transcripts.publish();
+    this.#remote.publish();
+  }
+
   removeMember(id: string) {
     const entry = this.#entries.find((candidate) => candidate.member.id === id);
     if (!entry) return;
-    for (const release of entry.release) release();
-    this.#entries = this.#entries.filter((candidate) => candidate !== entry);
+    this.#drop(entry);
     this.#unreachable = [...this.#unreachable, { id: entry.member.id, name: entry.member.name }];
-    this.#state.publish();
-    this.#transcripts.publish();
+    this.#publishMembers();
   }
+
+  removeMachine = (id: string) => {
+    const entry = this.#entries.find((candidate) => candidate.member.id === id);
+    if (entry) this.#drop(entry);
+    this.#unreachable = this.#unreachable.filter((machine) => machine.id !== id);
+    this.#listedUnreachable = this.#listedUnreachable.filter((machine) => machine.id !== id);
+    this.#publishMembers();
+  };
 
   get #home() {
     return this.#entries.find(isReachable)?.member.connection ?? null;
@@ -257,8 +293,22 @@ export class Fleet implements ShinsaConnection {
   }
 
   start = () => {
+    if (!this.#settled && !this.#stopWaiting) this.#stopWaiting = this.#wait(() => this.#settle());
     for (const entry of this.#entries) entry.member.connection.start();
   };
+
+  #settle() {
+    if (this.#settled) return;
+    this.#stopWaitingForMachines();
+    this.#settled = true;
+    this.#inputs = [];
+    this.#state.publish();
+  }
+
+  #stopWaitingForMachines() {
+    this.#stopWaiting?.();
+    this.#stopWaiting = null;
+  }
 
   subscribe = (listener: () => void) => this.#state.subscribe(listener);
 
@@ -274,6 +324,13 @@ export class Fleet implements ShinsaConnection {
     this.#inputs = inputs;
     this.#engines = engines;
     const reachable = engines.map(isEngineProtocolMatch);
+    if (
+      !this.#settled &&
+      inputs.every((input, index) => isSettled(input, reachable[index], this.#entries[index]?.member.online))
+    ) {
+      this.#settled = true;
+      this.#stopWaitingForMachines();
+    }
     const parts = this.#entries.flatMap((entry, index) => {
       const state = inputs[index]?.state;
       return state && reachable[index] ? [{ id: entry.member.id, state, view: entry.view }] : [];
@@ -287,7 +344,7 @@ export class Fleet implements ShinsaConnection {
     this.#owners = merged?.owners ?? EMPTY_OWNERS;
     replaceSharedHandles(merged?.sharedHandles ?? NO_SHARED_HANDLES);
     this.#snapshot = {
-      state: merged?.state ?? null,
+      state: this.#settled ? (merged?.state ?? null) : null,
       status: resolveFleetStatus(
         inputs.filter((_input, index) => reachable[index]).map((input) => input.status)
       ),
@@ -303,6 +360,14 @@ export class Fleet implements ShinsaConnection {
   watchTranscript = (runId: string) => {
     const member = this.#memberOf(this.#ownerOf(runId));
     return member ? member.connection.watchTranscript(runId) : () => undefined;
+  };
+
+  requestTaskDetail = (taskId: string) =>
+    this.#memberOf(this.#ownerOf(taskId))?.connection.requestTaskDetail(taskId);
+
+  watchTaskDetail = (taskId: string) => {
+    const member = this.#memberOf(this.#ownerOf(taskId));
+    return member ? member.connection.watchTaskDetail(taskId) : () => undefined;
   };
 
   subscribeAccounts = (listener: () => void) => this.#accounts.subscribe(listener);
@@ -437,7 +502,7 @@ export class Fleet implements ShinsaConnection {
   };
 
   close() {
-    for (const entry of this.#entries) for (const release of entry.release) release();
-    this.#entries = [];
+    this.#stopWaitingForMachines();
+    for (const entry of [...this.#entries]) this.#drop(entry);
   }
 }

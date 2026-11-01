@@ -4,11 +4,14 @@ import {
   type ClientMessage,
   decide,
   ENGINE_BASELINE_COMMANDS,
+  listSummarizedTasks,
   NO_TEAM_FEED,
   resolveEngineInfo,
   resolveStatePatch,
+  resolveTaskDetail,
   type ServerMessage,
   type ShinsaState,
+  serializeViewState,
   type UserCommand,
 } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
@@ -31,12 +34,13 @@ import {
   useMachine,
   useMachineAccess,
   useMachines,
+  useTaskDetail,
   useTranscript,
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createMachineResources } from '../../support/resources.ts';
-import { createShinsaState, createTask } from '../../support/state.ts';
+import { createGate, createShinsaState, createTask } from '../../support/state.ts';
 import { createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
 
 class FakeSocket extends EventTarget {
@@ -222,7 +226,7 @@ describe('Connection', () => {
     latest().receive({ type: 'ack', id, error: null });
   });
 
-  it('backs off between reconnects and resets once a socket opens', () => {
+  it('backs off between reconnects and resets once a socket delivers the state', () => {
     const { subject, sockets, retries, latest } = setup();
     subject.start();
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -232,8 +236,45 @@ describe('Connection', () => {
     expect(retries.map((retry) => retry.delayMs)).toEqual([250, 1000, 2000, 5000, 5000]);
     expect(sockets).toHaveLength(6);
     latest().open();
+    latest().receive({ type: 'state', state: createShinsaState({ tasks: [] }) });
     latest().close();
     expect(retries.at(-1)?.delayMs).toBe(250);
+    expect(subject.snapshot().status).toBe('closed');
+  });
+
+  it('keeps backing off when each socket opens and breaks before its state arrives', () => {
+    const { subject, retries, latest } = setup();
+    subject.start();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      latest().open();
+      latest().close();
+      retries.at(-1)?.reconnect();
+    }
+    expect(retries.map((retry) => retry.delayMs)).toEqual([250, 1000, 2000, 5000, 5000]);
+  });
+
+  it('stops for good: closes its socket, skips the retry and a pending reconnect, and never starts again', () => {
+    const { subject, sockets, retries, latest } = setup();
+    subject.start();
+    latest().close();
+    const pending = retries.at(-1);
+    pending?.reconnect();
+    latest().open();
+    subject.stop();
+    expect(latest().readyState).toBe(3);
+    expect(subject.snapshot().status).toBe('closed');
+    expect(retries).toHaveLength(1);
+    pending?.reconnect();
+    subject.start();
+    expect(sockets).toHaveLength(2);
+    expect(subject.removeMachine('m1')).toBeUndefined();
+  });
+
+  it('says it is closed when stopped before it ever opened a socket', () => {
+    const { subject, sockets } = setup();
+    subject.stop();
+    subject.start();
+    expect(sockets).toHaveLength(0);
     expect(subject.snapshot().status).toBe('closed');
   });
 
@@ -408,6 +449,97 @@ describe('Connection state', () => {
     expect(listener).not.toHaveBeenCalled();
     for (const id of commandIds(latest())) latest().receive({ type: 'ack', id, error: null });
     await Promise.all([early, other]);
+  });
+});
+
+describe('Connection task detail', () => {
+  function settled(seq = 4) {
+    return createShinsaState({
+      tasks: [createTask({ id: 'm1', stage: 'merged' }), createTask({ id: 'o1', stage: 'triage' })],
+      gates: [createGate({ id: 'g1', taskId: 'm1', status: 'answered' })],
+      patch: { seq },
+    });
+  }
+
+  function view(state: ShinsaState) {
+    return serializeViewState(state, listSummarizedTasks(state));
+  }
+
+  function detailRequests(socket: FakeSocket) {
+    return socket.sent.filter((message) => message.type === 'task.detail');
+  }
+
+  it('asks once for a summarized task and applies its detail in order with the patches', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    const state = settled();
+    latest().receive({ type: 'state', state: view(state) });
+    expect(subject.snapshot().state?.tasks.m1?.summarized).toBe(true);
+    expect(subject.snapshot().state?.gates.g1).toBeUndefined();
+    subject.requestTaskDetail('m1');
+    subject.requestTaskDetail('m1');
+    subject.requestTaskDetail('o1');
+    subject.requestTaskDetail('missing');
+    expect(detailRequests(latest())).toEqual([{ type: 'task.detail', taskId: 'm1' }]);
+    latest().receive({ type: 'state.patch', patch: { from: 4, to: 5, fields: {}, records: {} } });
+    latest().receive({ type: 'task.detail', detail: resolveTaskDetail({ ...state, seq: 5 }, 'm1') });
+    const after = subject.snapshot().state;
+    expect(after?.seq).toBe(5);
+    expect(after?.tasks.m1?.summarized).toBeUndefined();
+    expect(after?.gates.g1?.status).toBe('answered');
+    subject.requestTaskDetail('m1');
+    expect(detailRequests(latest())).toHaveLength(1);
+  });
+
+  it('asks for the whole state when a detail is not of the state it holds, then asks for the watched task again', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    const state = settled();
+    latest().receive({ type: 'state', state: view(state) });
+    subject.watchTaskDetail('m1');
+    latest().receive({ type: 'task.detail', detail: resolveTaskDetail({ ...state, seq: 9 }, 'm1') });
+    expect(latest().sent.at(-1)).toEqual({ type: 'state.sync' });
+    expect(subject.snapshot().state?.tasks.m1?.summarized).toBe(true);
+    latest().receive({ type: 'state', state: view(settled(9)) });
+    expect(detailRequests(latest())).toHaveLength(2);
+  });
+
+  it('asks again for a watched task on a new socket, and not for a released one', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    const releaseFirst = subject.watchTaskDetail('m1');
+    const releaseSecond = subject.watchTaskDetail('m1');
+    latest().open();
+    latest().receive({ type: 'state', state: view(settled()) });
+    expect(detailRequests(latest())).toEqual([{ type: 'task.detail', taskId: 'm1' }]);
+    latest().close();
+    latest().open();
+    latest().receive({ type: 'state', state: view(settled()) });
+    expect(detailRequests(latest())).toHaveLength(2);
+    releaseFirst();
+    releaseFirst();
+    latest().receive({ type: 'state', state: view(settled(6)) });
+    expect(detailRequests(latest())).toHaveLength(3);
+    releaseSecond();
+    latest().receive({ type: 'state', state: view(settled(7)) });
+    expect(detailRequests(latest())).toHaveLength(3);
+  });
+
+  it('asks for nothing while closed, and forgets what it watched on reset', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    latest().receive({ type: 'state', state: view(settled()) });
+    latest().close();
+    subject.requestTaskDetail('m1');
+    expect(detailRequests(latest())).toEqual([]);
+    subject.watchTaskDetail('m1');
+    subject.reset();
+    latest().open();
+    latest().receive({ type: 'state', state: view(settled()) });
+    expect(detailRequests(latest())).toEqual([]);
   });
 });
 
@@ -940,6 +1072,20 @@ describe('the shared connection', () => {
     expect(release).toHaveBeenCalledTimes(2);
     watch.mockRestore();
     select.mockRestore();
+  });
+
+  it('useTaskDetail watches the task while mounted and releases it after, and nothing without one', () => {
+    const release = mock(() => {});
+    const watch = spyOn(connection, 'watchTaskDetail').mockReturnValue(release);
+    const { rerender, unmount } = renderHook(({ taskId }) => useTaskDetail(taskId), {
+      initialProps: { taskId: 't1' as string | null },
+    });
+    expect(watch).toHaveBeenCalledWith('t1');
+    rerender({ taskId: null });
+    expect(release).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(watch).toHaveBeenCalledTimes(1);
+    watch.mockRestore();
   });
 
   it('useTranscript returns nothing and watches nothing without a run', () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { serializePublicKey } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
 import { ChannelError, openRemoteChannel } from '@/lib/remote/channel.ts';
+import { DashboardError } from '@/lib/remote/dashboard.ts';
 import type { EnrolledDevice } from '@/lib/remote/devices.ts';
 import { ChannelSocket, RemoteLink } from '@/lib/remote/link.ts';
 import { createKeyPair, FakeMac, type FakeMacOptions } from './fake-mac.ts';
@@ -162,5 +163,27 @@ describe('the link to a remote machine', () => {
     mac.options = { ...mac.options, refuseOpen: false };
     await link.resolveChannel();
     expect(connects).toHaveLength(2);
+  });
+
+  it('reports the machine removed when its connect call answers not found, and nothing else', async () => {
+    const keys = await createKeyPair();
+    const device: EnrolledDevice = { instanceId: 'k3x9', machineKey: 'key', keys, enrolledAt: 1 };
+    const failures = [
+      new DashboardError('not_found', 'No such machine.', 404),
+      new DashboardError('forbidden', 'This request needs an Origin.', 403),
+      new DashboardError('failed', 'Shinsa Cloud is down.', 503),
+      new Error('Offline.'),
+    ];
+    const removed: string[] = [];
+    for (const failure of failures) {
+      const link = new RemoteLink({
+        instanceId: 'k3x9',
+        device,
+        dashboard: { requestConnect: () => Promise.reject(failure) },
+        onRemoved: () => removed.push(failure.message),
+      });
+      await expect(link.resolveChannel()).rejects.toBe(failure);
+    }
+    expect(removed).toEqual(['No such machine.']);
   });
 });

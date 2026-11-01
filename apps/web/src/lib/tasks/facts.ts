@@ -1,7 +1,10 @@
-import type { ShinsaState, Task } from '@shinsa/core';
+import type { ShinsaState, Task, TeamFeedSnapshot, TeamFeedTask, TeammateOwner } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { formatCount } from '@/lib/format/count.ts';
 import { formatMoment, formatSince } from '@/lib/format/time.ts';
+import { resolveSourceTaskId } from '@/lib/share/view.ts';
+import { resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
+import { resolveTaskPath } from '@/router.ts';
 
 export function describeStarted(task: Task, now = Date.now()) {
   const verb = task.stage === 'waiting_on_tasks' ? 'Added' : 'Started';
@@ -23,14 +26,74 @@ export function listForkSources(state: ShinsaState, task: Task) {
   return source ? [source] : [];
 }
 
-export function selectDuplicateOriginal(state: ShinsaState, task: Task) {
-  return task.duplicate ? (state.tasks[task.duplicate.of] ?? null) : null;
+export interface DuplicateOriginalLink {
+  owner: TeammateOwner | null;
+  handle: string | null;
+  title: string;
+  path: string;
+}
+
+export function selectDuplicateOriginal(state: ShinsaState, task: Task): DuplicateOriginalLink | null {
+  const duplicate = task.duplicate;
+  if (!duplicate) return null;
+  const { teammate } = duplicate;
+  if (teammate) {
+    return {
+      owner: teammate.owner,
+      handle: teammate.handle,
+      title: teammate.title,
+      path: resolveTeamTaskPath({
+        teamId: teammate.teamId,
+        instanceId: teammate.machineId,
+        taskId: teammate.taskId,
+      }),
+    };
+  }
+  const original = state.tasks[duplicate.of];
+  if (!original) return null;
+  return {
+    owner: null,
+    handle: original.handle ?? null,
+    title: original.title,
+    path: resolveTaskPath(original),
+  };
 }
 
 export function listDuplicates(state: ShinsaState, task: Task) {
   return Object.values(state.tasks)
-    .filter((candidate) => candidate.duplicate?.of === task.id)
+    .filter((candidate) => candidate.duplicate?.of === task.id && !candidate.duplicate.teammate)
     .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export interface KeptOverTeammateLink {
+  key: string;
+  handle: string | null;
+  title: string;
+  path: string;
+  listing: TeamFeedTask | null;
+}
+
+export function listTeammateDuplicates(local: ShinsaState | null, feed: TeamFeedSnapshot, task: Task) {
+  const id = resolveSourceTaskId(task.id);
+  const isKeptOver = (candidate: Task) => candidate.duplicate?.teammate?.taskId === id;
+  const own = Object.values(local?.tasks ?? {})
+    .filter(isKeptOver)
+    .map((candidate) => ({ task: candidate, listing: null }));
+  const known = new Set(own.map((entry) => entry.task.id));
+  const shared = feed.tasks
+    .filter((listing) => isKeptOver(listing.task) && !known.has(listing.task.id))
+    .map((listing) => ({ task: listing.task, listing }));
+  return [...own, ...shared]
+    .sort((a, b) => a.task.createdAt - b.task.createdAt)
+    .map(
+      ({ task: duplicate, listing }): KeptOverTeammateLink => ({
+        key: listing ? `${listing.instanceId} ${duplicate.id}` : duplicate.id,
+        handle: duplicate.handle ?? null,
+        title: duplicate.title,
+        path: listing ? resolveTeamTaskPath(resolveTeamTaskTarget(listing)) : resolveTaskPath(duplicate),
+        listing,
+      })
+    );
 }
 
 export function describeDuplicateHint(
@@ -38,6 +101,10 @@ export function describeDuplicateHint(
   owner: string | null = null
 ) {
   if (duplicate.by === 'you') return `${owner ?? 'You'} closed this as a duplicate.`;
+  if (duplicate.teammate) {
+    const reason = duplicate.why ? ` ${duplicate.why}` : '';
+    return `Shinsa closed this as a duplicate of a teammate’s task, which you can only view.${reason}`;
+  }
   return duplicate.why
     ? `Shinsa closed this as a duplicate: ${duplicate.why}`
     : 'Shinsa closed this as a duplicate.';

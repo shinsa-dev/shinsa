@@ -539,6 +539,38 @@ async function shareProjectWithTeam(engine: Engine, projectId: string | undefine
   await engine.dispatch({ type: 'project.add_to_team', projectId, teamId: TEAM.id });
 }
 
+async function seedTeammateDuplicate(
+  engine: Engine,
+  projectId: string | undefined,
+  original: Task | undefined
+) {
+  const repo = Object.values(engine.state.repos).find((entry) => entry.projectId === projectId);
+  if (!(repo && original)) throw new Error('No project or teammate task for the teammate duplicate.');
+  const request = 'Let people copy a paywall from the list, products and copy included';
+  await engine.dispatch({ type: 'task.create', request, repoId: repo.id });
+  const created = Object.values(engine.state.tasks).find((entry) => entry.request === request);
+  if (!created) throw new Error('Creating the teammate duplicate failed.');
+  await engine.dispatch({
+    type: 'task.triage',
+    taskId: created.id,
+    title: 'Copy a paywall from the list',
+    repoId: repo.id,
+    size: 'small',
+    branch: 'feat/copy-paywall',
+    waitsOn: [],
+    duplicateOfTeammate: {
+      teamId: TEAM.id,
+      machineId: 'kai',
+      taskId: original.id,
+      handle: original.handle ?? null,
+      title: original.title,
+      owner: { login: TEAMMATE.login, name: TEAMMATE.name, avatarUrl: TEAMMATE.avatarUrl },
+    },
+    reasons: { duplicate: 'Kai is already adding a Duplicate action to the paywall menu.' },
+  });
+  return engine.state.tasks[created.id] ?? created;
+}
+
 function selectBusiestProject(engine: Engine) {
   const counts = new Map<string, number>();
   for (const task of Object.values(engine.state.tasks)) {
@@ -978,7 +1010,8 @@ function listSandboxSections(
   teammate: Machine,
   shares: PreviewShare[],
   teamTask: string | null,
-  preview: ServicePreview
+  preview: ServicePreview,
+  duplicate: { duplicate: string; original: string | null }
 ): SandboxSection[] {
   const studioPort = machines[0]?.port;
   return [
@@ -1092,6 +1125,18 @@ function listSandboxSections(
               {
                 label: 'One of Kai’s tasks on Studio, read-only',
                 url: `http://${HOST}:${studioPort}${teamTask}`,
+              },
+            ]
+          : []),
+        {
+          label: `Studio: ${duplicate.duplicate}, closed as a duplicate of Kai’s task`,
+          url: `http://${HOST}:${studioPort}/tasks/${duplicate.duplicate}`,
+        },
+        ...(duplicate.original
+          ? [
+              {
+                label: `${teammate.name}: ${duplicate.original}, which shows the task kept over on Studio`,
+                url: `http://${HOST}:${teammate.port}/tasks/${duplicate.original}`,
               },
             ]
           : []),
@@ -1368,17 +1413,22 @@ async function main() {
     tasks: TEAMMATE_TASKS,
   });
   await shareProjectWithTeam(teammate.engine, paywalls.projectId ?? undefined);
-  await shareProjectWithTeam(studio.engine, selectBusiestProject(studio.engine));
+  const studioProject = selectBusiestProject(studio.engine);
+  await shareProjectWithTeam(studio.engine, studioProject);
+  const [teamTask] = Object.values(teammate.engine.state.tasks);
+  const keptOver = await seedTeammateDuplicate(studio.engine, studioProject, teamTask);
   const machines = [studio.machine, laptop.machine];
   const teammates = [...machines, teammate.machine];
   const shares = await createPreviewShares(studio);
-  const [teamTask] = Object.values(teammate.engine.state.tasks);
   const teamTaskPath = teamTask ? `/teams/${TEAM.id}/kai/${teamTask.id}` : null;
   const { preview, shared } = await createServicePreview(studio);
   const { serializeSandboxPage }: SandboxPageModule = await import(
     join(ROOT, 'apps/web/src/components/sandbox/sandbox-page.tsx')
   );
-  const sections = listSandboxSections(machines, teammate.machine, shares, teamTaskPath, preview);
+  const sections = listSandboxSections(machines, teammate.machine, shares, teamTaskPath, preview, {
+    duplicate: keptOver.handle ?? keptOver.id,
+    original: teamTask?.handle ?? null,
+  });
   let page = serializeSandboxPage(sections, findRemoteStylesheet());
   const world = createPreviewWorld(machines);
   Bun.serve<TunnelData>({

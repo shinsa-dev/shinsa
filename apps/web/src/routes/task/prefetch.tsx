@@ -35,6 +35,7 @@ function prefetchTaskCode(state: ShinsaState, taskId: string, search: string) {
 }
 
 export function prefetchTask(state: ShinsaState, taskId: string, search = '') {
+  connection.requestTaskDetail(taskId);
   const task = prefetchTaskCode(state, taskId, search);
   if (!task) return;
   for (const runId of listPrefetchRuns(state, task.id)) prefetchTranscript(connection, runId);

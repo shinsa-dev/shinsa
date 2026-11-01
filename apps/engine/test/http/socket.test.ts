@@ -1,12 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import {
+  applyStatePatch,
+  applyTaskDetail,
   DEVELOPMENT_VERSION,
   type MachineResources,
   type RemoteSnapshot,
   resolveEngineInfo,
   type ServerMessage,
+  serializeViewState,
   type TeamFeedSnapshot,
+  type WireState,
 } from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
 import { createSocketHub, type SocketData } from '../../src/http/socket.ts';
@@ -17,6 +21,7 @@ import { createTempDir } from '../helpers/index.ts';
 
 function createSocket() {
   const sent: ServerMessage[] = [];
+  const payloads: string[] = [];
   const socket = {
     data: {
       kind: 'hub',
@@ -25,9 +30,34 @@ function createSocket() {
       origin: 'local',
       guest: null,
     } satisfies SocketData,
-    send: (payload: string) => sent.push(JSON.parse(payload) as ServerMessage),
+    send: (payload: string) => {
+      payloads.push(payload);
+      return sent.push(JSON.parse(payload) as ServerMessage);
+    },
   } as unknown as Parameters<ReturnType<typeof createSocketHub>['open']>[0];
-  return { socket, sent };
+  return { socket, sent, payloads };
+}
+
+function replayState(sent: ServerMessage[]) {
+  let state: WireState | null = null;
+  for (const message of sent) {
+    if (message.type === 'state') state = message.state;
+    if (message.type === 'state.patch' && state) state = applyStatePatch(state, message.patch);
+    if (message.type === 'task.detail' && state) state = applyTaskDetail(state, message.detail);
+  }
+  return state;
+}
+
+function plain<T>(value: T) {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+async function createSettledTask(engine: Engine) {
+  await engine.dispatch({ type: 'task.create', request: 'Keep the open one', repoId: null });
+  await engine.dispatch({ type: 'task.create', request: 'Drop the old tabs', repoId: null });
+  const [open, settled] = Object.keys(engine.state.tasks);
+  await engine.dispatch({ type: 'task.cancel', taskId: settled ?? '' });
+  return { open: open ?? '', settled: settled ?? '' };
 }
 
 async function startPlanning(engine: Engine) {
@@ -304,6 +334,100 @@ describe('the socket hub', () => {
     expect(healthy.sent.some((message) => message.type === 'state.patch')).toBe(true);
     hub.close(full);
     hub.close(healthy.socket);
+    hub.stop();
+    engine.stop();
+    log.close();
+  });
+
+  test('sends settled tasks as summaries, and each socket its own patch for them', async () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const { open, settled } = await createSettledTask(engine);
+    const summary = createSocket();
+    const detail = createSocket();
+    hub.open(summary.socket);
+    hub.open(detail.socket);
+    const connected = summary.sent.find((message) => message.type === 'state');
+    expect(connected?.type === 'state' && connected.state.tasks[settled]?.summarized).toBe(true);
+    expect(connected?.type === 'state' && connected.state.tasks[open]?.summarized).toBeUndefined();
+
+    hub.message(detail.socket, JSON.stringify({ type: 'task.detail', taskId: settled }));
+    await Promise.resolve();
+    const answer = detail.sent.at(-1);
+    expect(answer?.type === 'task.detail' && answer.detail).toMatchObject({
+      taskId: settled,
+      seq: engine.state.seq,
+      task: { id: settled, stage: 'cancelled' },
+    });
+    expect(answer?.type === 'task.detail' ? answer.detail.task : null).toEqual(
+      plain(engine.state.tasks[settled] ?? null)
+    );
+
+    const sharedFrom = summary.payloads.length;
+    await engine.dispatch({ type: 'task.prioritize', taskId: open, priority: 'urgent' });
+    expect(summary.payloads.slice(sharedFrom)).toEqual(detail.payloads.slice(-1));
+
+    await engine.dispatch({ type: 'task.prioritize', taskId: settled, priority: 'low' });
+    expect(summary.payloads.at(-1)).not.toEqual(detail.payloads.at(-1));
+    expect(replayState(summary.sent)).toEqual(plain(serializeViewState(engine.state, new Set([settled]))));
+    expect(replayState(detail.sent)).toEqual(plain(serializeViewState(engine.state, new Set())));
+
+    hub.message(detail.socket, JSON.stringify({ type: 'state.sync' }));
+    await Promise.resolve();
+    await engine.dispatch({ type: 'task.prioritize', taskId: settled, priority: 'high' });
+    expect(replayState(detail.sent)).toEqual(plain(serializeViewState(engine.state, new Set([settled]))));
+    hub.close(summary.socket);
+    hub.close(detail.socket);
+    hub.stop();
+    engine.stop();
+    log.close();
+  });
+
+  test('sends a guest its own task whole, scoped patches and no detail', async () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const { settled } = await createSettledTask(engine);
+    const guest = createSocket();
+    guest.socket.data.guest = { taskId: settled, login: 'kai' };
+    hub.open(guest.socket);
+    const connected = guest.sent.find((message) => message.type === 'state');
+    expect(connected?.type === 'state' && Object.keys(connected.state.tasks)).toEqual([settled]);
+    expect(connected?.type === 'state' && connected.state.tasks[settled]?.summarized).toBeUndefined();
+
+    hub.message(guest.socket, JSON.stringify({ type: 'task.detail', taskId: settled }));
+    hub.message(guest.socket, JSON.stringify({ type: 'state.sync' }));
+    await Promise.resolve();
+    expect(guest.sent.some((message) => message.type === 'task.detail')).toBe(false);
+    await engine.dispatch({ type: 'task.prioritize', taskId: settled, priority: 'low' });
+    expect(replayState(guest.sent)?.tasks[settled]?.priority).toBe('low');
+    hub.close(guest.socket);
+    hub.stop();
+    engine.stop();
+    log.close();
+  });
+
+  test('answers a detail request for a task it no longer has, and ignores one without a task', async () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const { socket, sent } = createSocket();
+    hub.open(socket);
+    hub.message(socket, JSON.stringify({ type: 'task.detail', taskId: 'gone' }));
+    hub.message(socket, JSON.stringify({ type: 'task.detail' }));
+    await Promise.resolve();
+    const details = sent.filter((message) => message.type === 'task.detail');
+    expect(details).toEqual([
+      {
+        type: 'task.detail',
+        detail: { taskId: 'gone', seq: 0, task: null, runs: {}, gates: {}, evidence: {} },
+      },
+    ]);
+    hub.close(socket);
     hub.stop();
     engine.stop();
     log.close();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { resolveSharedTaskId, resolveSharedView } from '@/lib/share/view.ts';
+import { resolveSharedTaskId, resolveSharedView, resolveSourceTaskId } from '@/lib/share/view.ts';
 import { createSharedTask } from './fixtures.ts';
 
 const FILES: Record<string, string> = { 'shot-1': '/files/shot-1', diff: '/files/diff' };
@@ -16,6 +16,8 @@ describe('a shared view', () => {
   it('keeps the shared task under an id of its own, so it never reads the real task’s code', () => {
     const view = resolveSharedView(source());
     expect(view.task.id).toBe(resolveSharedTaskId('task-1'));
+    expect(resolveSourceTaskId(view.task.id)).toBe('task-1');
+    expect(resolveSourceTaskId('task-1')).toBe('task-1');
     expect(view.task.id).toBe('shared-task-1');
     expect(Object.keys(view.state.tasks)).toEqual(['shared-task-1']);
     expect(view.updatedAt).toBe(5);

@@ -1,6 +1,7 @@
 import {
   type AccountsSnapshot,
   applyStatePatch,
+  applyTaskDetail,
   type ChatEntry,
   type ClientMessage,
   type EngineCommand,
@@ -16,6 +17,7 @@ import {
   type ServerMessage,
   type StatePatch,
   type Surface,
+  type TaskDetail,
   type TeamFeedSnapshot,
   type TerminalsSnapshot,
   type UserCommand,
@@ -48,6 +50,8 @@ interface TranscriptChunk {
 }
 
 type Scheduler = (flush: () => void) => void;
+
+type Incoming = { patch: StatePatch } | { detail: TaskDetail };
 
 export interface MachineView {
   id: string;
@@ -82,6 +86,8 @@ export interface ShinsaConnection {
   subscribeTranscripts: (listener: () => void) => () => void;
   selectTranscript: (runId: string) => ChatEntry[];
   watchTranscript: (runId: string) => () => void;
+  requestTaskDetail: (taskId: string) => void;
+  watchTaskDetail: (taskId: string) => () => void;
   subscribeAccounts: (listener: () => void) => () => void;
   selectAccounts: () => AccountsSnapshot | null;
   replaceAccounts: (accounts: AccountsSnapshot | null) => void;
@@ -101,6 +107,7 @@ export interface ShinsaConnection {
   listMachines: () => MachineChoice[];
   listUnreachableMachines: () => UnreachableMachine[];
   listMachineAccess: () => MachineAccess[];
+  removeMachine: (id: string) => void;
   selectEngine: (id?: string | null) => EngineInfo | null;
   command: (command: UserCommand, machineId?: string | null) => Promise<void>;
   reset: () => void;
@@ -185,11 +192,12 @@ export class Connection implements ShinsaConnection {
   #snapshot: Snapshot = { state: null, status: 'connecting' };
   #confirmed: WireState | null = null;
   #incomingState: WireState | null | undefined = undefined;
-  #incomingPatches: StatePatch[] = [];
+  #incoming: Incoming[] = [];
   readonly #incomingTranscripts = new Map<string, TranscriptChunk[]>();
   #flushing = false;
   #syncing = false;
   #attempt = 0;
+  #stopped = false;
   #accounts: AccountsSnapshot | null = null;
   #terminals: TerminalsSnapshot | null = null;
   #resources: MachineResources | null = null;
@@ -210,21 +218,29 @@ export class Connection implements ShinsaConnection {
   readonly #optimistic = new Map<string, UserCommand>();
   readonly #transcripts = new Map<string, ChatEntry[]>();
   readonly #transcriptRefs = new Map<string, number>();
+  readonly #detailRefs = new Map<string, number>();
+  readonly #detailsAsked = new Set<string>();
 
   constructor(options: ConnectionOptions = { openSocket: openShinsaSocket, retry: retryLater }) {
     this.#options = options;
   }
 
   start() {
-    if (this.#socket === null) this.#connect();
+    if (this.#socket === null && !this.#stopped) this.#connect();
+  }
+
+  stop() {
+    this.#stopped = true;
+    this.#socket?.close();
+    if (this.#snapshot.status !== 'closed') this.#update({ status: 'closed' });
   }
 
   #connect() {
     const socket = this.#options.openSocket();
     this.#socket = socket;
     socket.addEventListener('open', () => {
-      this.#attempt = 0;
       this.#syncing = true;
+      this.#detailsAsked.clear();
       this.#update({ status: 'open' });
       this.#send({ type: 'hello', surface: (this.#options.surface ?? resolveSurface)() });
       for (const runId of this.#transcriptRefs.keys()) this.#subscribeTranscript(runId);
@@ -237,9 +253,12 @@ export class Connection implements ShinsaConnection {
     socket.addEventListener('close', () => {
       this.#update({ status: 'closed' });
       this.#dropPending();
+      if (this.#stopped) return;
       const delay = RETRY_STEPS_MS[Math.min(this.#attempt, RETRY_STEPS_MS.length - 1)] ?? 5000;
       this.#attempt += 1;
-      this.#options.retry(() => this.#connect(), delay);
+      this.#options.retry(() => {
+        if (!this.#stopped) this.#connect();
+      }, delay);
     });
   }
 
@@ -290,6 +309,8 @@ export class Connection implements ShinsaConnection {
   listUnreachableMachines = (): UnreachableMachine[] => NO_UNREACHABLE_MACHINES;
 
   listMachineAccess = (): MachineAccess[] => NO_MACHINE_ACCESS;
+
+  removeMachine = (_id: string) => undefined;
 
   selectEngine = (_id?: string | null) => this.#engine;
 
@@ -343,10 +364,31 @@ export class Connection implements ShinsaConnection {
     };
   }
 
+  requestTaskDetail(taskId: string) {
+    const task = this.#confirmed?.tasks[taskId];
+    if (!task?.summarized || this.#detailsAsked.has(taskId)) return;
+    if (this.#socket?.readyState !== WebSocket.OPEN) return;
+    this.#detailsAsked.add(taskId);
+    this.#send({ type: 'task.detail', taskId });
+  }
+
+  watchTaskDetail(taskId: string) {
+    this.#detailRefs.set(taskId, (this.#detailRefs.get(taskId) ?? 0) + 1);
+    this.requestTaskDetail(taskId);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const remaining = (this.#detailRefs.get(taskId) ?? 1) - 1;
+      if (remaining > 0) this.#detailRefs.set(taskId, remaining);
+      else this.#detailRefs.delete(taskId);
+    };
+  }
+
   reset() {
     this.#confirmed = null;
     this.#incomingState = undefined;
-    this.#incomingPatches = [];
+    this.#incoming = [];
     this.#incomingTranscripts.clear();
     this.#syncing = false;
     this.#accounts = null;
@@ -360,6 +402,8 @@ export class Connection implements ShinsaConnection {
     this.#optimistic.clear();
     this.#transcripts.clear();
     this.#transcriptRefs.clear();
+    this.#detailRefs.clear();
+    this.#detailsAsked.clear();
     this.#update({ state: null });
     this.#transcriptSignal.publish();
     this.#accountsSignal.publish();
@@ -372,7 +416,10 @@ export class Connection implements ShinsaConnection {
 
   flush() {
     this.#flushing = false;
-    if (this.#flushState()) this.#publishState();
+    if (this.#flushState()) {
+      this.#publishState();
+      this.#requestWatchedDetails();
+    }
     if (this.#flushTranscripts()) this.#transcriptSignal.publish();
   }
 
@@ -384,19 +431,26 @@ export class Connection implements ShinsaConnection {
     });
   }
 
+  #requestWatchedDetails() {
+    for (const taskId of this.#detailRefs.keys()) this.requestTaskDetail(taskId);
+  }
+
   #flushState() {
-    const patches = this.#incomingPatches;
+    const incoming = this.#incoming;
     const full = this.#incomingState !== undefined;
     let base = full ? (this.#incomingState ?? null) : this.#confirmed;
-    if (full) this.#syncing = false;
+    if (full) {
+      this.#syncing = false;
+      this.#detailsAsked.clear();
+    }
     this.#incomingState = undefined;
-    this.#incomingPatches = [];
-    for (const patch of patches) {
+    this.#incoming = [];
+    for (const entry of incoming) {
       if (!base || this.#syncing) break;
-      if (patch.to < base.seq || (patch.to === base.seq && patch.from < patch.to)) continue;
-      const next = applyStatePatch(base, patch);
+      const next = this.#applyIncoming(base, entry);
       if (!next) {
         this.#syncing = true;
+        this.#detailsAsked.clear();
         this.#send({ type: 'state.sync' });
         break;
       }
@@ -405,6 +459,13 @@ export class Connection implements ShinsaConnection {
     if (base === this.#confirmed) return false;
     this.#confirmed = base;
     return true;
+  }
+
+  #applyIncoming(base: WireState, entry: Incoming) {
+    if ('detail' in entry) return applyTaskDetail(base, entry.detail);
+    const { patch } = entry;
+    if (patch.to < base.seq || (patch.to === base.seq && patch.from < patch.to)) return base;
+    return applyStatePatch(base, patch);
   }
 
   #flushTranscripts() {
@@ -488,12 +549,13 @@ export class Connection implements ShinsaConnection {
   #receive(message: ServerMessage) {
     switch (message.type) {
       case 'state':
+        this.#attempt = 0;
         this.#incomingState = message.state;
-        this.#incomingPatches = [];
+        this.#incoming = [];
         this.#scheduleFlush();
         return;
       case 'state.patch':
-        this.#incomingPatches.push(message.patch);
+        this.#incoming.push({ patch: message.patch });
         this.#scheduleFlush();
         return;
       case 'ack': {
@@ -537,6 +599,10 @@ export class Connection implements ShinsaConnection {
       case 'engine':
         this.#engine = message.engine;
         this.#state.publish();
+        return;
+      case 'task.detail':
+        this.#incoming.push({ detail: message.detail });
+        this.#scheduleFlush();
         return;
     }
   }
@@ -591,6 +657,13 @@ export function useTranscript(runId: string | null) {
     runId ? connection.selectTranscript(runId) : NO_ENTRIES
   );
   return shared ?? live;
+}
+
+export function useTaskDetail(taskId: string | null) {
+  useEffect(() => {
+    if (!taskId) return;
+    return connection.watchTaskDetail(taskId);
+  }, [taskId]);
 }
 
 export function sendCommand(command: UserCommand, machineId?: string | null) {

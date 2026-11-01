@@ -1131,8 +1131,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   project, with a strict bar: the same outcome only. Not a duplicate starts any duplicate again: one triage closed
   as if it had not flagged it, one that had already worked in a fresh round with the same request. You close one yourself with Close as a duplicate in the
   task's menu or ⌘K, and agents with `tasks_duplicate`.
-- **Across a team next.** Triage checking teammates' open tasks for duplicates is its own task, on the teams'
-  read API.
+- **Across a team.** When the project is in a team, triage also compares the request with teammates' open tasks,
+  using only what they share (title, request and plan goal). A duplicate of one reads "Duplicate of Kai’s KAI-12 …",
+  Kai by first name with their user card on hover, and opens that task's read-only team view; on Kai's machine their
+  task shows Kept over with yours, and so does its read-only view, for you and for everyone else in the team. A teammate's machine that cannot be read is not compared, and the task's activity
+  says whose. Not a duplicate works the same.
 
 ### Replies on the Overview, not in the chat (2026-10-31)
 

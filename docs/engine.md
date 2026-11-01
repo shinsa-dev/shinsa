@@ -1036,6 +1036,32 @@ of any duplicate and starts it again: one that never ran an agent (what triage c
 keeping what it waits on; one that did starts a fresh round with the same request (`restartInNewRound`: a new
 round, a new branch and an empty plan), since its cancel removed its worktree and closed its pull request.
 
+**Teammates' duplicates.** When the task's project is in a team (Teams, below), `duplicate_of` also offers the
+open tasks of every such team, read from this machine's team feeds (`TeamFeeds`, the same data
+`GET /api/teams/tasks?open=true` serves, read in the engine, so it takes no extra request and no token;
+`triage/team.ts`, `resolveTeammateCheck`). Each is offered under a key of its own (`teammate-1`, …), never its id,
+so a teammate's id never reaches a local lookup, and each shows only its owner, handle, stage, title and the start of
+its request and plan goal (`TEAMMATE_TEXT_LIMIT`, 280 characters): what a teammate shares, never their chats.
+A pick of one is sent with `task.triage` as `duplicateOfTeammate` (its team, machine, task id, handle, title and
+owner: `TeammateOwner`, their login, name and avatar from the listing's `ownerProfile` or the team's member) and
+recorded as `TaskDuplicate.teammate`, with `of` holding the teammate's task id. A person is named by first name,
+never `@login` (`resolveFirstName`): the stage reason and activity read "duplicate of Kai’s KAI-12 …", and the
+"Duplicate of" fact shows Kai as a user tag (`UserTag`, the user card on hover) beside the task, which opens its
+read-only team view (`/teams/<team>/<machine>/<task>`), in the local app and on app.shinsa.dev alike. A teammate's
+listing carries no share link, so none is stored or built. Nothing is written to the teammate's machine: the
+duplicate travels in this machine's own team listing (`TaskDuplicate` is in the shared status fields), so on the
+teammate's machine their task shows "Kept over Mona’s SW-3 …" (`listTeammateDuplicates` over the team feed),
+opening the duplicate's read-only team view. Its read-only team view shows the same fact to everyone in the team: it
+lists this machine's own tasks closed in its favour (opening them here) beside the team feed's, matched on the task id
+the shared view carries without its `shared-` prefix (`resolveSourceTaskId`). Every other machine of the project's teams (`RemoteTeam.machines`,
+this machine left out) with neither a live feed nor a kept copy of its list (refused, still connecting, offline with
+no copy, or no feed at all while remote access is off or paused or the team key is missing) has sent no tasks, so
+triage goes on with what it could read and records those machines in `triageDecisions.duplicate.unreached`; the
+task's activity says once whose were not compared ("Could not check Kai’s Studio for duplicates"). An offline
+machine whose kept copy is listed is compared with that copy, since only it works on those tasks. With no answer from the model nothing is recorded, since no check ran. Not a
+duplicate works as for a local duplicate. A task without a project, or whose project is in no team, is triaged as
+before. Closing a task by hand as a teammate's duplicate is not offered: the picker lists local tasks only.
+
 ## Steps and gates
 
 The steps and gates are a typed schema in core, not a list of names: `packages/core/src/domain/steps.ts` defines every
@@ -2849,7 +2875,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `openRemoteChannel`) with its own `Connection`, and the fleet stands in for the page's connection
   (`replaceConnection`). Its state is every machine's state merged (`mergeFleetStates`: tasks, runs, gates, projects,
   repositories, evidence, schedules, memories and usage side by side, keyed by their ids; settings and focus from the
-  first machine), and it remembers which machine owns each id. A command goes to the machine that owns an id it names
+  first machine), and it remembers which machine owns each id. The page keeps its loading spinner ("Connecting to your
+  machines") until every machine has sent its state, turned out outdated or been removed, or is listed offline on the dashboard (`FleetMember.online`), or until `FLEET_WAIT_MS`
+  (10 s) pass (a channel that fails keeps its machine waited for, since its connection tries again), so Home never first shows one machine's tasks with another machine's focus; a machine
+  that answers later merges in as it connects. A command goes to the machine that owns an id it names
   (`resolveCommandOwner`), a request to the machine that owns an id in its path or query (`resolveRequestOwner`), a
   transcript to the machine of its run; the rest goes to the first machine. With more than one machine in the account (this device need not reach them all), a task shows its machine in
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
@@ -2861,8 +2890,17 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`openRemoteChannel` takes the URL as a promise). `bun scripts/perf/remote.ts` times each leg (Shinsa Cloud's
   connect call, cloudflared, the handshake, the first state, `/api` requests through the channel) on a copy of your
   log in a scratch home with a test device of its own, over loopback and Cloudflare quick tunnels on QUIC and HTTP/2
-  (`--offline` skips Shinsa Cloud and the tunnels, `--json` writes the samples). A machine that refuses this device's key is forgotten
-  here and leaves the dashboard. A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
+  (`--offline` skips Shinsa Cloud and the tunnels, `--json` writes the samples). The retry waits 250 ms, 1 s, 2 s, then 5 s, and starts
+  over only once a socket has delivered the state, so a channel that opens and breaks before its state arrives backs
+  off instead of retrying every 250 ms. The Reconnecting dot (`ConnectionStatus`) shows only once the connection has
+  been down for a second (`RECONNECT_GRACE_MS`), so a reconnect that recovers within it never flashes. A machine that refuses this device's key is forgotten
+  here and leaves the dashboard, listed as one this device cannot reach. Removing or leaving a machine in Settings →
+  Machines drops it from the dashboard as soon as Shinsa Cloud confirms (`ShinsaConnection.removeMachine`,
+  `Fleet.removeMachine`): its tasks leave Home, All tasks and the queue at once, its connection stops
+  (`Connection.stop`) and its channel closes, so nothing calls its connect endpoint again, and it is not listed as
+  unreachable. A machine removed elsewhere, by its owner or by you on another device, or one whose owner removed you,
+  leaves the same way and its key is forgotten here once its connect call answers 404 (`RemoteLink`'s
+  `onRemoved`). A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
   the remote build without one of its own (signed out, no machine, no key, a failure, a pairing or link that cannot
   work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
   Every machine you are a member of joins it as your own do, once this browser is added there. The enroll page
@@ -3266,8 +3304,9 @@ online, and the last list of it their own machine kept while it is not (Offline 
   heartbeat, and a wrong key never calls a teammate more often than that. It accepts a teammate's machine only if it
   answers the welcome with the team key. The live lists are in memory and the last of each in
   `data/team-snapshots.json`, never in the log. It serves:
-  - `GET /api/teams/tasks` (`?team=<id>` for one team, `?open=true` for unfinished tasks only), the read API triage
-    uses for its team-wide duplicate check: `{ machines, tasks }`, each task a `TeamFeedTask` (a `TeamTask` with its
+  - `GET /api/teams/tasks` (`?team=<id>` for one team, `?open=true` for unfinished tasks only), the same data
+    triage reads in the engine for its team-wide duplicate check (A task's path → Teammates' duplicates):
+    `{ machines, tasks }`, each task a `TeamFeedTask` (a `TeamTask` with its
     team and machine). It only reads; your own devices reach it over the sealed channel like any API route, and the
     tunnel has no route to it.
   - the socket message `teams` (`TeamFeedSnapshot`), sent on connect and on every change, so a page never polls.
@@ -6192,7 +6231,8 @@ Every page holds one WebSocket on `/ws` (`apps/engine/src/http/socket.ts`, the w
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
 `docs/protocol.md` → The socket). On connect the server sends the small messages first, `surfaces`, `engine` (what it
 speaks, Remote access → What each machine speaks, above), the accounts, `terminals` (Terminals, above), `remote` (Remote
-access, above), `teams` and `resources`, and the state without the runs' prompts (`serializeState`) last: a state grows
+access, above), `teams` and `resources`, and the state without the runs' prompts and with settled tasks as summaries
+(`serializeViewState`, below) last: a state grows
 with the log (tens of MB on a long-used machine), and nothing it holds up may keep the page from learning what the engine
 speaks. Each socket queues up to 128 MB (`SOCKET_BACKPRESSURE_LIMIT_BYTES`, Bun's `backpressureLimit`, 16 MB by
 default) before Bun drops a frame; a send Bun drops (`socket.send` returns 0) is logged and closes that socket, so the
@@ -6221,6 +6261,29 @@ says hello counts as no desktop.
   patch it already has (`to` below its `seq`, or at it for a patch that moved the position). A patch whose `from` and
   `to` are equal changes the state without an event (a new Home guide, The briefing) and is applied like any other. A patch copies only what it changes: every entry, list and record
   it leaves alone keeps its identity, so a component that selects one task does not render again when another changes.
+- **Settled tasks as summaries.** Most of a long-used machine's state is the history of settled tasks (done, merged,
+  cancelled) that no page shows on load: on a machine with 162 tasks, 151 of them settled, the state on connect went
+  from 23.5 MB to 7.0 MB. So the state on connect and after `state.sync` holds each settled task as a summary
+  (`serializeViewState`, `summarizeTask` in core's `protocol/summaries.ts`): the task marked `summarized: true`, with its
+  plan, report, coverage, phase reports, findings, overlaps, plan history and iterations emptied and only two entries of
+  its activity kept, the last and the newest agent entry (what Home reads); its evidence and closed gates left out (an
+  open gate stays, so a Post-merge gate still reaches the queue); and its runs slimmed (`summarizeRun`: no summary,
+  feedback, compactions, continuations or failure, and only the last attempt, without its handoff), keeping the usage
+  and meters Settings → Stats, cost and the usage rate read. What a list, Home, ⌘K, dependencies, onboarding, a pull
+  request link's preview and Stats read comes out the same from a summary. Each socket keeps its view, the ids of the
+  tasks it holds as summaries (`listSummarizedTasks` on connect and `state.sync`), and every patch goes through
+  `resolveViewPatch` for it: a patch that touches none of them is the shared one, sent as one payload to every socket
+  like that; one that does is rewritten for that socket, a summarized task's entries changed as summaries; and a
+  summarized task that reopens or is removed leaves the view, its task, runs, gates and evidence sent whole in that
+  patch. A task that settles while a page is connected stays whole on it until the page connects again. Opening a
+  task's page (`useTaskDetail`) or hovering it (`prefetchTask`) on a summarized task sends `task.detail { taskId }`
+  once per connection; the server takes the task out of that socket's view and answers `task.detail { detail }`
+  (`resolveTaskDetail`: the task, its runs, gates and evidence, and the log position), which the page queues in order
+  with patches and applies with `applyTaskDetail`, asking for the state again (`state.sync`) when the position is not
+  its own; the task page shows "Reading the task" until it arrives. On the remote dashboard `Fleet` sends it to the
+  task's machine. A command the page guesses on a summarized task is decided on the summary and corrected by the
+  server's patch as any guess is. The share and team projections, the HTTP routes, the CLI and `read_task` read the
+  engine's state and are unchanged.
 - **Runs without their prompts.** A run's `prompt` and `rolePrompt` stay in the event log and in the engine's state,
   where recovery, a usage resume and a resumed session's brief read them, and never go to the page: the state on
   connect, after `state.sync` and in every patch holds each run as a `WireRun` (`serializeRun`), which leaves them out

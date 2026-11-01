@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { resolveSharedTaskId } from '@/lib/share/view.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createPartialCoverage } from '../../support/coverage.ts';
@@ -17,6 +18,7 @@ import {
   listSentCommands,
   pushAccounts,
   pushState,
+  pushTeams,
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
@@ -469,6 +471,117 @@ describe('a duplicate', () => {
     expect(await findTooltipText(link)).toBe('Shinsa closed this as a duplicate: Both ask for a dark theme.');
     fireEvent.click(link);
     expect(window.location.pathname).toBe('/tasks/SW-1');
+  });
+
+  it('names a teammate’s original by first name with their user card and opens its read-only team view', async () => {
+    const copy = createTask({
+      id: 'c',
+      handle: 'SW-3',
+      stage: 'cancelled',
+      duplicate: {
+        of: 'kai-task',
+        by: 'shinsa',
+        why: null,
+        teammate: {
+          teamId: 'core',
+          machineId: 'kai',
+          taskId: 'kai-task',
+          handle: 'KAI-12',
+          title: 'Add dark mode',
+          owner: { login: 'kai', name: 'Kai Tanaka', avatarUrl: null },
+        },
+      },
+    });
+    renderFacts(copy);
+    expect(screen.getByText('Duplicate of')).toBeTruthy();
+    const owner = screen.getByRole('link', { name: /Kai’s/ });
+    expect(owner.getAttribute('href')).toBe('https://github.com/kai');
+    expect(screen.queryByText(/@kai/)).toBeNull();
+    const link = screen.getByRole('button', { name: 'KAI-12 Add dark mode' });
+    expect(await findTooltipText(link)).toBe(
+      'Shinsa closed this as a duplicate of a teammate’s task, which you can only view.'
+    );
+    fireEvent.click(link);
+    expect(window.location.pathname).toBe('/teams/core/kai/kai-task');
+  });
+
+  it('shows on a teammate’s original which of your tasks was closed in favour of it', async () => {
+    const original = createTask({ id: 'kai-task', handle: 'KAI-12', title: 'Add dark mode' });
+    const copy = createTask({
+      id: 'c',
+      handle: 'SW-3',
+      title: 'Dark theme please',
+      stage: 'cancelled',
+      duplicate: {
+        of: 'kai-task',
+        by: 'shinsa',
+        why: null,
+        teammate: {
+          teamId: 'core',
+          machineId: 'kai',
+          taskId: 'kai-task',
+          handle: 'KAI-12',
+          title: 'Add dark mode',
+          owner: null,
+        },
+      },
+    });
+    renderFacts(original);
+    pushTeams({
+      machines: [],
+      tasks: [
+        {
+          task: copy,
+          gates: [],
+          project: null,
+          repo: null,
+          owner: 'christo',
+          ownerProfile: { name: 'Christo Todorov', avatarUrl: null },
+          machine: 'Studio',
+          teamId: 'core',
+          instanceId: 'studio',
+        },
+      ],
+    });
+    const link = await screen.findByRole('button', { name: 'SW-3 Dark theme please' });
+    expect(screen.getByText('Kept over')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Christo’s/ })).toBeTruthy();
+    fireEvent.click(link);
+    expect(window.location.pathname).toBe('/teams/core/studio/c');
+  });
+
+  it('shows on a teammate’s task you view read-only which of your own tasks was kept over', () => {
+    const original = createTask({ id: 'kai-task', handle: 'PAY-1', title: 'Duplicate a paywall' });
+    const mine = createTask({
+      id: 'mine',
+      handle: 'SW-83',
+      title: 'Add paywall duplication',
+      stage: 'cancelled',
+      duplicate: {
+        of: 'kai-task',
+        by: 'shinsa',
+        why: null,
+        teammate: {
+          teamId: 'core',
+          machineId: 'kai',
+          taskId: 'kai-task',
+          handle: 'PAY-1',
+          title: 'Duplicate a paywall',
+          owner: null,
+        },
+      },
+    });
+    pushState(createShinsaState({ tasks: [mine] }));
+    const viewed = { ...original, id: resolveSharedTaskId(original.id) };
+    const shared = createShinsaState({ tasks: [viewed] });
+    render(
+      <TooltipProvider>
+        <TaskFacts state={shared} task={viewed} />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('Kept over')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'SW-83 Add paywall duplication' }));
+    expect(window.location.pathname).toBe('/tasks/SW-83');
   });
 
   it('shows on the task it duplicates which task was closed in favour of it', () => {
