@@ -39,8 +39,8 @@ export function UserCard({ user, detail }: { user: UserProfile; detail?: string 
   const handle = describeUserHandle(user);
   return (
     <>
-      <div className='flex items-center gap-2.5 px-3 py-2.5'>
-        <UserAvatar user={user} className='size-8' />
+      <div className='flex items-center gap-2 px-3 py-2.5'>
+        <UserAvatar user={user} />
         <div className='flex min-w-0 flex-col gap-px'>
           <Truncate className='font-medium text-fg-4 text-xs'>{describeUserName(user)}</Truncate>
           {handle && <Truncate className='text-2xs text-fg-2'>{handle}</Truncate>}
