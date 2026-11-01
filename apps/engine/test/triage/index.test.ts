@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { createState, type ShinsaState, type Task } from '@shinsa/core';
+import { createState, type ShinsaState, type Task, type TeamFeedSnapshot } from '@shinsa/core';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import type { LocalRepo } from '../../src/repos/index.ts';
 import { SHAPE_QUESTION } from '../../src/triage/decisions.ts';
 import { resolveRepoProject, resolveTriage } from '../../src/triage/index.ts';
+import type { TeamReader } from '../../src/triage/team.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 
 const LOCAL: LocalRepo[] = [
@@ -814,5 +815,107 @@ describe('resolveTriage for duplicates', () => {
     await resolveTriage(stateWith(), newTask(), LOCAL, ask);
     expect(calls[0]?.schema?.properties.duplicate_of).toBeUndefined();
     expect(calls[0]?.prompt).not.toContain('duplicate_of');
+  });
+});
+
+describe('resolveTriage for teammates’ duplicates', () => {
+  const state = stateWith((draft) => {
+    draft.projects.p1 = {
+      id: 'p1',
+      name: 'Basket',
+      color: 'blue',
+      key: 'BAS',
+      description: '',
+      folders: [],
+      teamIds: ['team1'],
+    } as ShinsaState['projects'][string];
+    draft.repos.r1 = createRepo({ id: 'r1', path: '/code/api', name: 'api', projectId: 'p1' });
+    draft.tasks.same = createTask({ id: 'same', repoId: 'r1', projectId: 'p1', title: 'Add the export' });
+  });
+  const feed: TeamFeedSnapshot = {
+    machines: [
+      { teamId: 'team1', instanceId: 'studio', name: 'Studio', userId: '7', status: 'live', reason: null },
+      { teamId: 'team1', instanceId: 'laptop', name: 'Laptop', userId: '7', status: 'offline', reason: null },
+    ],
+    tasks: [
+      {
+        task: createTask({
+          id: 'same',
+          handle: 'KAI-12',
+          title: 'Add dark mode',
+          request: 'Add a dark theme to the app',
+        }),
+        gates: [],
+        project: null,
+        owner: 'kai',
+        machine: 'Studio',
+        teamId: 'team1',
+        instanceId: 'studio',
+      },
+    ],
+  };
+  const team: TeamReader = () => ({ feed, teams: [] });
+  const base = { title: 'Add dark mode', repo: 'api', size: 'small', branch: 'feat/dark' };
+  const task = newTask({ projectId: 'p1' });
+
+  function record(value: unknown) {
+    const prompts: string[] = [];
+    const schemas: (JsonSchema | undefined)[] = [];
+    const ask: QuickJson = <T>(_system: string, prompt: string, shape?: JsonSchema) => {
+      prompts.push(prompt);
+      schemas.push(shape);
+      return Promise.resolve(value as T);
+    };
+    return { prompts, schemas, ask };
+  }
+
+  test('offers teammates’ open tasks under keys of their own, with their owner, request and stage', async () => {
+    const { prompts, schemas, ask } = record({ ...base, duplicate_of: 'none' });
+    const triage = await resolveTriage(state, task, LOCAL, ask, team);
+    expect(schemas[0]?.properties.duplicate_of).toEqual({
+      type: 'string',
+      enum: ['none', 'same', 'teammate-1'],
+    });
+    expect(prompts[0]).toContain(
+      'Teammates’ open tasks, on their own machines, each with its owner, stage, request and plan:\n- teammate-1: @kai’s KAI-12 “Add dark mode” (building). Request: Add a dark theme to the app'
+    );
+    expect(prompts[0]).toContain('"teammate-1": @kai’s KAI-12 “Add dark mode”');
+    expect(triage.duplicateOf).toBeUndefined();
+    expect(triage.duplicateOfTeammate).toBeUndefined();
+    expect(triage.unreached).toEqual([{ teamId: 'team1', machineId: 'laptop', name: 'Laptop', owner: null }]);
+  });
+
+  test('a teammate’s task named as the duplicate is recorded as the original, with a reason', async () => {
+    const triage = await resolveTriage(
+      state,
+      task,
+      LOCAL,
+      answer({ ...base, duplicate_of: 'teammate-1' }),
+      team
+    );
+    expect(triage.duplicateOf).toBeUndefined();
+    expect(triage.duplicateOfTeammate).toEqual({
+      teamId: 'team1',
+      machineId: 'studio',
+      taskId: 'same',
+      handle: 'KAI-12',
+      title: 'Add dark mode',
+      owner: 'kai',
+    });
+    expect(triage.reasons?.duplicate).toBe('It asks for the same work as @kai’s KAI-12 “Add dark mode”.');
+  });
+
+  test('a local task keeps its own id though a teammate’s task shares it', async () => {
+    const triage = await resolveTriage(state, task, LOCAL, answer({ ...base, duplicate_of: 'same' }), team);
+    expect(triage.duplicateOf).toBe('same');
+    expect(triage.duplicateOfTeammate).toBeUndefined();
+  });
+
+  test('without an answer, or with a project in no team, nothing is checked against teammates', async () => {
+    expect((await resolveTriage(state, task, LOCAL, silent, team)).unreached).toBeUndefined();
+    const { prompts, ask } = record(base);
+    const lone = await resolveTriage(state, newTask(), LOCAL, ask, team);
+    expect(lone.unreached).toBeUndefined();
+    expect(prompts[0]).not.toContain('teammate-1');
   });
 });
