@@ -120,6 +120,7 @@ describe('resolveEngineFit', () => {
 });
 
 const GATED_COMMANDS: EngineCommand[] = [
+  'task.stack_on',
   'feedback.write',
   'feedback.update',
   'feedback.file',

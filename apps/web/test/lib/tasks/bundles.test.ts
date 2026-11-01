@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { canChangeStack } from '@shinsa/core';
+import { canChangeStack, ENGINE_BASELINE_COMMANDS, resolveEngineInfo } from '@shinsa/core';
 import {
   describeBundleNote,
   describeBundleProgress,
@@ -14,6 +14,7 @@ import {
   unstackTask,
 } from '@/lib/tasks/bundles.ts';
 import { spyOnCommands } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
 import { createGate, createRepo, createShinsaState, createTask } from '../../support/state.ts';
 
@@ -98,6 +99,23 @@ describe('the members of a bundle', () => {
 });
 
 describe('listStackChoices', () => {
+  let engine: ReturnType<typeof spyOnEngine>;
+
+  beforeEach(() => {
+    engine = spyOnEngine();
+  });
+
+  afterEach(() => {
+    engine.mockRestore();
+  });
+
+  it('offers nothing on an engine that cannot stack yet', () => {
+    engine.mockReturnValue({ ...resolveEngineInfo('1.0.0'), commands: [...ENGINE_BASELINE_COMMANDS] });
+    const subject = createTask({ id: 'self', repoId: 'app', stage: 'planning' });
+    const state = createShinsaState({ tasks: [subject, createTask({ id: 'open', repoId: 'app' })] });
+    expect(listStackChoices(state, subject)).toEqual([]);
+  });
+
   it('offers open tasks in the same repository that open a pull request and have nothing stacked on them', () => {
     const subject = createTask({ id: 'self', repoId: 'app', stage: 'planning' });
     const state = createShinsaState({

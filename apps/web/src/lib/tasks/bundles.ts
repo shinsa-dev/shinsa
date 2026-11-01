@@ -14,6 +14,7 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
+import { connection, selectEngineCommands } from '@/lib/connection/socket.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
 export const BUNDLE_ICON: IconName = 'IconLayersThree';
@@ -88,11 +89,16 @@ export function selectBundleRoot(state: ShinsaState, task: Task) {
   return resolveBundle(state, task).find((member) => !isTaskSettled(member)) ?? null;
 }
 
+function isStackSpoken(task: Task) {
+  return selectEngineCommands(connection.selectEngine(task.id)).has('task.stack_on');
+}
+
 export function listStackChoices(state: ShinsaState, task: Task | null) {
   if (task && !canChangeStack(task)) return [];
   return Object.values(state.tasks)
     .filter((candidate) => candidate.id !== task?.id && !isWatchHome(candidate))
     .filter((candidate) => selectStackRefusal(state, task, candidate) === null)
+    .filter((candidate) => isStackSpoken(candidate))
     .sort((a, b) => Number(a.id !== task?.stacksOn) - Number(b.id !== task?.stacksOn) || compareTasks(a, b));
 }
 
