@@ -1385,7 +1385,7 @@ Every click and hover lands in the frame it happens, as in a Mac app. A hover, p
 | Switch | track 200ms, knob 150ms | `ease-out` | `transition-[background-color,box-shadow]` on the track, `transition-transform` on the knob |
 | Scroll fade (fallback) | 150ms | `ease` | `scroll-fade` without scroll timelines |
 | Overlay scrollbar | 200ms, after a 300ms delay; thumb opacity 150ms | default | `ScrollArea`: shows on hover or scroll, lingers 700ms, widens under the pointer |
-| Spotlight | holds 1.5s, fades over 600ms | | `useSpotlight`: the row you jumped to keeps a `primary-a1` wash, then lets go |
+| Spotlight | holds 1.5s, fades over 600ms | | The Review tab's selection (`light`): the row you jumped to keeps a `primary-a1` wash, then lets go |
 | Focused or selected flash | 500ms | default | A chat line's `bg` and outline (`transition-[background-color,outline-color] duration-500`), a review note's outline, a review card's `bg-primary-a1` |
 | Chat text swap | in 360ms after 80ms, out 240ms | `cubic-bezier(0.23, 1, 0.32, 1)` | The live card's latest line: in from 0.625rem below with 2px blur, out to 0.625rem above |
 | Onboarding step | 420ms | `cubic-bezier(0.32, 0.72, 0, 1)` | The step you leave slides out to the left as the next slides in from the right (the other way back), the column's full width with no fade of their own; the track masks its 24px edges. The first step has no entry |

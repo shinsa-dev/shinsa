@@ -15,6 +15,7 @@ import {
   type ReviewChapter,
   type ReviewStop,
 } from '@/lib/review/report.ts';
+import { type ReviewSelection, useCurrentStop } from '@/lib/review/selection.ts';
 
 function StopRow({
   stop,
@@ -96,14 +97,15 @@ function IndexPlace({ stop, total }: { stop: ReviewStop | null; total: number })
 export function PointIndex({
   chapters,
   stops,
-  current,
+  selection,
   onSelect,
 }: {
   chapters: ReviewChapter[];
   stops: ReviewStop[];
-  current: string | null;
+  selection: ReviewSelection;
   onSelect: (key: string) => void;
 }) {
+  const current = useCurrentStop(selection);
   const [open, setOpen] = React.useState(false);
   const list = React.useRef<HTMLDivElement>(null);
   const total = stops.filter((stop) => stop.number !== null).length;

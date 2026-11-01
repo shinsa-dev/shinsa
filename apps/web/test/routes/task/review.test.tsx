@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import {
   type DiffFile,
   type MergeStep,
@@ -15,6 +15,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { TaskCommandRunner } from '@/components/task/command-runner.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { writeStoredComments } from '@/lib/review/draft.ts';
+import * as identity from '@/lib/review/identity.ts';
 import { resolveCodePath } from '@/lib/review/places.ts';
 import { navigate } from '@/router.ts';
 import { ReviewTab } from '@/routes/task/review.tsx';
@@ -326,6 +327,42 @@ describe('the Review tab', () => {
       fireEvent.scroll(viewport);
       await waitFor(() => expect(index.textContent).toBe('Every point6 of 6·Agent review·A bare number'));
     } finally {
+      HTMLElement.prototype.getBoundingClientRect = realRect;
+    }
+  });
+
+  it('renders only the index and the lit point while you scroll and step, never the whole review', async () => {
+    const { task, state } = reviewing();
+    renderReview(state, task);
+    await screen.findAllByText('The loop never stops when the call keeps failing.');
+    fireEvent.click(await screen.findByText('Everything else'));
+    await screen.findByText('Binary');
+    await act(async () => {});
+    const viewport = document.querySelector('[data-slot="scroll-area-viewport"]') as HTMLElement;
+    const keys = [...document.querySelectorAll('[data-review-item]')].map((item) =>
+      item.getAttribute('data-review-item')
+    );
+    const realRect = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function rect(this: HTMLElement) {
+      const at = keys.indexOf(this.dataset.reviewItem ?? '');
+      return { ...realRect.call(this), top: at < 0 ? 0 : at * 100 - 360 };
+    };
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 2000 });
+    const cards = spyOn(identity, 'resolveReviewItemIdentity');
+    try {
+      const index = screen.getByRole('button', { name: 'Every point' });
+      fireEvent.scroll(viewport);
+      await waitFor(() =>
+        expect(index.textContent).toBe('Every point2 of 6·Judgement calls·Retry three times')
+      );
+      expect(cards).not.toHaveBeenCalled();
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }));
+      });
+      await waitFor(() => expect(selectedKey()).not.toBeNull());
+      expect(cards).not.toHaveBeenCalled();
+    } finally {
+      cards.mockRestore();
       HTMLElement.prototype.getBoundingClientRect = realRect;
     }
   });

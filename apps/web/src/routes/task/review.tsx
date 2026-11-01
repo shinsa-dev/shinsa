@@ -32,7 +32,6 @@ import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { useReviewKeys } from '@/hooks/use-review-keys.ts';
-import { useSpotlight } from '@/hooks/use-spotlight.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { listReviewCommands } from '@/lib/command/review.ts';
 import { type Loaded, useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
@@ -61,6 +60,12 @@ import {
   toCommentItem,
   toFindingItem,
 } from '@/lib/review/report.ts';
+import {
+  type ReviewSelection,
+  useReviewSelection,
+  useSelectionRequest,
+  useStopLit,
+} from '@/lib/review/selection.ts';
 import { type ChecksView, resolveChecksView } from '@/lib/tasks/checks.ts';
 import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
@@ -94,8 +99,7 @@ const IN_VIEW_LINE = 48;
 
 const LETTING_GO = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
 
-function useHoldPointInView(selected: string | null, request: number) {
-  const holding = React.useRef(false);
+function useHoldPointInView(selection: ReviewSelection, selected: string | null, request: number) {
   React.useEffect(() => {
     if (!selected) return;
     void request;
@@ -105,32 +109,42 @@ function useHoldPointInView(selected: string | null, request: number) {
     const letGo = () => {
       if (timer) clearTimeout(timer);
       timer = null;
-      holding.current = false;
+      selection.holding = false;
     };
     const hold = () => {
       find()?.scrollIntoView?.({ block: 'start' });
       held += HOLD_STEP_MS;
       timer = setTimeout(held < HOLD_MS ? hold : letGo, HOLD_STEP_MS);
     };
-    holding.current = true;
+    selection.holding = true;
     hold();
     for (const name of LETTING_GO) window.addEventListener(name, letGo, { once: true, passive: true });
     return () => {
       letGo();
       for (const name of LETTING_GO) window.removeEventListener(name, letGo);
     };
-  }, [selected, request]);
-  return holding;
+  }, [selection, selected, request]);
+}
+
+function FollowSpot({ selection }: { selection: ReviewSelection }) {
+  const spot = useSearchParam('spot');
+  const request = useSelectionRequest(selection);
+  React.useEffect(() => {
+    if (spot) selection.writeCurrent(spot);
+  }, [selection, spot]);
+  React.useEffect(() => {
+    void request;
+    selection.light(spot);
+  }, [selection, spot, request]);
+  useHoldPointInView(selection, spot, request);
+  return null;
 }
 
 function useStopInView(
   viewport: React.RefObject<HTMLDivElement | null>,
   stops: readonly ReviewStop[],
-  holding: React.RefObject<boolean>,
-  onChange: (key: string | null) => void
+  selection: ReviewSelection
 ) {
-  const latest = React.useRef(onChange);
-  latest.current = onChange;
   React.useEffect(() => {
     const scroller = viewport.current;
     if (!scroller) return;
@@ -138,14 +152,14 @@ function useStopInView(
     let frame = 0;
     const measure = () => {
       frame = 0;
-      if (holding.current) return;
+      if (selection.holding) return;
       const box = scroller.getBoundingClientRect();
       const marks = [...scroller.querySelectorAll<HTMLElement>('[data-review-item]')].flatMap((element) => {
         const key = element.dataset.reviewItem ?? '';
         return keys.has(key) ? [{ key, top: element.getBoundingClientRect().top - box.top }] : [];
       });
       const end = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
-      latest.current(resolveStopInView(marks, IN_VIEW_LINE, end ? scroller.clientHeight : null));
+      selection.writeCurrent(resolveStopInView(marks, IN_VIEW_LINE, end ? scroller.clientHeight : null));
     };
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(measure);
@@ -155,7 +169,7 @@ function useStopInView(
       scroller.removeEventListener('scroll', onScroll);
       cancelAnimationFrame(frame);
     };
-  }, [viewport, stops, holding]);
+  }, [viewport, stops, selection]);
 }
 
 function resolveReviewDisclosure(task: Task, ...parts: string[]) {
@@ -173,17 +187,18 @@ function Chapter({ title, count, children }: { title: string; count?: number; ch
 
 function Stop({
   stop,
-  selected,
+  selection,
   children,
 }: {
   stop: string;
-  selected: string | null;
+  selection: ReviewSelection;
   children: React.ReactNode;
 }) {
+  const lit = useStopLit(selection, stop);
   return (
     <div
       data-review-item={stop}
-      data-selected={stop === selected || undefined}
+      data-selected={lit || undefined}
       className={cn('corner-superellipse/1.125 scroll-my-6 rounded-xl', REVIEW_SELECTED)}
     >
       {children}
@@ -250,19 +265,19 @@ function HowItIsBuilt({
   checks,
   waits,
   chapter,
-  selected,
+  selection,
 }: {
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
   waits: MergeWaitView[];
   chapter: ReviewChapter;
-  selected: string | null;
+  selection: ReviewSelection;
 }) {
   return (
     <Chapter title={chapter.title}>
       {chapter.prose.map((prose) => (
-        <Stop key={prose.key} stop={prose.key} selected={selected}>
+        <Stop key={prose.key} stop={prose.key} selection={selection}>
           <BuiltPart task={task} report={report} checks={checks} waits={waits} prose={prose.key} />
         </Stop>
       ))}
@@ -270,24 +285,45 @@ function HowItIsBuilt({
   );
 }
 
-function PointCard({ task, item, selected }: { task: Task; item: ReviewItem; selected: string | null }) {
+function LitNote({
+  selection,
+  persistId,
+  ...note
+}: Omit<React.ComponentProps<typeof ReviewNote>, 'selected'> & { selection: ReviewSelection }) {
+  const lit = useStopLit(selection, note.item.key);
+  return <ReviewNote persistId={persistId} {...note} selected={lit} />;
+}
+
+function PointCard({
+  task,
+  item,
+  selection,
+  className,
+}: {
+  task: Task;
+  item: ReviewItem;
+  selection: ReviewSelection;
+  className?: string;
+}) {
   return (
-    <ReviewNote
+    <LitNote
       persistId={resolveReviewDisclosure(task, 'card', resolveReviewItemIdentity(item))}
       task={task}
       item={item}
-      selected={item.key === selected}
+      selection={selection}
+      className={className}
       action={<FindingVerdictChoice task={task} finding={item.finding} />}
     />
   );
 }
 
-function RiskRow({ task, item, selected }: { task: Task; item: ReviewItem; selected: string | null }) {
+function RiskRow({ task, item, selection }: { task: Task; item: ReviewItem; selection: ReviewSelection }) {
   const place = item.place;
+  const lit = useStopLit(selection, item.key);
   return (
     <li
       data-review-item={item.key}
-      data-selected={item.key === selected || undefined}
+      data-selected={lit || undefined}
       className='corner-superellipse/1.125 flex scroll-my-6 flex-col gap-2 rounded-lg p-1.5 transition-[background-color] duration-500 data-selected:bg-primary-a1'
     >
       {item.title && <span className='font-medium text-fg-4 text-xs leading-5'>{item.title}</span>}
@@ -315,18 +351,18 @@ function RiskRow({ task, item, selected }: { task: Task; item: ReviewItem; selec
 function ReadCarefully({
   task,
   chapter,
-  selected,
+  selection,
 }: {
   task: Task;
   chapter: ReviewChapter;
-  selected: string | null;
+  selection: ReviewSelection;
 }) {
   const spots = chapter.items.filter((item) => !item.key.startsWith('risk:'));
   const risks = chapter.items.filter((item) => item.key.startsWith('risk:'));
   return (
     <Chapter title={chapter.title} count={chapter.items.length}>
       {spots.map((item) => (
-        <PointCard key={item.key} task={task} item={item} selected={selected} />
+        <PointCard key={item.key} task={task} item={item} selection={selection} />
       ))}
       {risks.length > 0 && (
         <Panel
@@ -337,7 +373,7 @@ function ReadCarefully({
         >
           <ul className='-m-1.5 flex flex-col gap-1'>
             {risks.map((item) => (
-              <RiskRow key={item.key} task={task} item={item} selected={selected} />
+              <RiskRow key={item.key} task={task} item={item} selection={selection} />
             ))}
           </ul>
         </Panel>
@@ -349,16 +385,16 @@ function ReadCarefully({
 function PointCards({
   task,
   chapter,
-  selected,
+  selection,
 }: {
   task: Task;
   chapter: ReviewChapter;
-  selected: string | null;
+  selection: ReviewSelection;
 }) {
   return (
     <Chapter title={chapter.title} count={chapter.items.length}>
       {chapter.items.map((item) => (
-        <PointCard key={item.key} task={task} item={item} selected={selected} />
+        <PointCard key={item.key} task={task} item={item} selection={selection} />
       ))}
     </Chapter>
   );
@@ -367,11 +403,11 @@ function PointCards({
 function AgentReview({
   task,
   chapter,
-  selected,
+  selection,
 }: {
   task: Task;
   chapter: ReviewChapter | undefined;
-  selected: string | null;
+  selection: ReviewSelection;
 }) {
   const reviewed = task.reviewSummary !== null;
   if (!chapter && !reviewed && !hasStep(task, 'agent_review')) return null;
@@ -394,21 +430,13 @@ function AgentReview({
         <p className='text-fg-2 text-xs'>The agent review has not run yet.</p>
       )}
       {items.map((item) => (
-        <ReviewNote
-          key={item.key}
-          persistId={resolveReviewDisclosure(task, 'card', resolveReviewItemIdentity(item))}
-          task={task}
-          item={item}
-          selected={item.key === selected}
-          className='rounded-lg'
-          action={<FindingVerdictChoice task={task} finding={item.finding} />}
-        />
+        <PointCard key={item.key} task={task} item={item} selection={selection} className='rounded-lg' />
       ))}
     </Panel>
   );
 }
 
-function Comments({ task, selected }: { task: Task; selected: string | null }) {
+function Comments({ task, selection }: { task: Task; selection: ReviewSelection }) {
   const draft = useReviewDraft();
   if (draft.comments.length === 0) return null;
   return (
@@ -416,12 +444,12 @@ function Comments({ task, selected }: { task: Task; selected: string | null }) {
       {draft.comments.map((comment) => {
         const item = toCommentItem(comment);
         return (
-          <ReviewNote
+          <LitNote
             key={item.key}
             persistId={resolveReviewDisclosure(task, 'card', resolveReviewItemIdentity(item))}
             task={task}
             item={item}
-            selected={item.key === selected}
+            selection={selection}
             action={
               <button
                 type='button'
@@ -531,14 +559,14 @@ function ReviewChapters({
   checks,
   waits,
   chapters,
-  selected,
+  selection,
 }: {
   task: Task;
   report: WorkReport;
   checks: ChecksView | null;
   waits: MergeWaitView[];
   chapters: ReviewChapter[];
-  selected: string | null;
+  selection: ReviewSelection;
 }) {
   return chapters.map((chapter) => {
     if (chapter.id === 'built') {
@@ -550,14 +578,14 @@ function ReviewChapters({
           checks={checks}
           waits={waits}
           chapter={chapter}
-          selected={selected}
+          selection={selection}
         />
       );
     }
     if (chapter.id === 'careful')
-      return <ReadCarefully key={chapter.id} task={task} chapter={chapter} selected={selected} />;
+      return <ReadCarefully key={chapter.id} task={task} chapter={chapter} selection={selection} />;
     if (chapter.id === 'review') return null;
-    return <PointCards key={chapter.id} task={task} chapter={chapter} selected={selected} />;
+    return <PointCards key={chapter.id} task={task} chapter={chapter} selection={selection} />;
   });
 }
 
@@ -608,30 +636,23 @@ export function ReviewTab({
   const { repos, evidence } = state;
   const checks = React.useMemo(() => resolveChecksView({ repos, evidence }, task), [repos, evidence, task]);
   const stops = React.useMemo(() => listReviewStops(chapters), [chapters]);
-  const selected = useSearchParam('spot');
-  const [request, setRequest] = React.useState(0);
-  const [current, setCurrent] = React.useState(selected);
+  const selection = useReviewSelection(new URLSearchParams(location.search).get('spot'));
   const viewport = React.useRef<HTMLDivElement>(null);
   const gate = selectReviewGate(state, task);
   React.useEffect(() => {
     prepareReviewSnippets(points);
   }, [points]);
-  React.useEffect(() => {
-    if (selected) setCurrent(selected);
-  }, [selected]);
   const select = (key: string) => {
-    setCurrent(key);
-    setRequest((count) => count + 1);
+    selection.writeCurrent(key);
+    selection.request();
     updateSearchParams({ spot: key }, { replace: true });
   };
   const step = (delta: ReviewStep) => {
-    const next = stepReviewItem(stops, current, delta);
+    const next = stepReviewItem(stops, selection.readCurrent(), delta);
     if (next) select(next.key);
   };
   useReviewKeys(step);
-  const holding = useHoldPointInView(report ? selected : null, request);
-  const lit = useSpotlight(selected, request);
-  useStopInView(viewport, stops, holding, setCurrent);
+  useStopInView(viewport, stops, selection);
   useRegisterCommands([listReviewCommands({ taskId: task.id, count: stops.length, step })]);
   if (!report && diff.status === 'error') {
     return (
@@ -655,9 +676,10 @@ export function ReviewTab({
   }
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
+      <FollowSpot selection={selection} />
       {stops.length > 0 && (
         <div className={cn(PAGE_COLUMN, 'shrink-0 pt-5 pb-1')}>
-          <PointIndex chapters={chapters} stops={stops} current={current} onSelect={select} />
+          <PointIndex chapters={chapters} stops={stops} selection={selection} onSelect={select} />
         </div>
       )}
       <PageScroll viewportRef={viewport}>
@@ -679,14 +701,14 @@ export function ReviewTab({
             checks={checks}
             waits={waits}
             chapters={chapters}
-            selected={lit}
+            selection={selection}
           />
           <AgentReview
             task={task}
             chapter={chapters.find((chapter) => chapter.id === 'review')}
-            selected={lit}
+            selection={selection}
           />
-          <Comments task={task} selected={lit} />
+          <Comments task={task} selection={selection} />
           <EverythingElse task={task} report={report} diff={diffValue} />
         </div>
       </PageScroll>
