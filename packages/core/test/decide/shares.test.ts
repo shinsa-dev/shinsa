@@ -17,7 +17,7 @@ describe('sharing a task', () => {
       at: harness.now,
       url: null,
       limit: 'until_done',
-      preset: 'everything',
+      preset: 'default',
       endsAt: null,
     });
     expect(links(harness, taskId)).toBe(1);
@@ -236,15 +236,15 @@ describe('how long a task is shared', () => {
     harness.send({ type: 'share.record', taskId, url: URL });
     const endsAt = harness.task(taskId).share?.endsAt;
     harness.advance(MINUTE_MS);
-    harness.send({ type: 'task.share', taskId, preset: 'everything' });
+    harness.send({ type: 'task.share', taskId, preset: 'default' });
     expect(harness.task(taskId).share).toMatchObject({
       url: URL,
-      preset: 'everything',
+      preset: 'default',
       limit: 'hour',
       endsAt,
     });
     expect(links(harness, taskId)).toBe(1);
-    expect(harness.send({ type: 'task.share', taskId, preset: 'everything' }).events).toEqual([]);
+    expect(harness.send({ type: 'task.share', taskId, preset: 'default' }).events).toEqual([]);
   });
 
   test('a preset is read from a command, and only the human picks one, in the settings too', () => {
@@ -257,10 +257,10 @@ describe('how long a task is shared', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     expect(() =>
-      harness.send({ type: 'settings.change', patch: { sharePreset: 'everything' } }, { onBehalf: true })
+      harness.send({ type: 'settings.change', patch: { sharePreset: 'status' } }, { onBehalf: true })
     ).toThrow();
     expect(() =>
-      harness.send({ type: 'task.share', taskId, preset: 'everything' }, { onBehalf: true })
+      harness.send({ type: 'task.share', taskId, preset: 'default' }, { onBehalf: true })
     ).toThrow();
   });
 });

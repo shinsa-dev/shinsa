@@ -27,7 +27,7 @@ function createSharedEvidence(overrides: Partial<Evidence> & { id: string }): Ev
 
 export function createSharedTask(overrides: Partial<SharedTask> = {}): SharedTask {
   return {
-    preset: 'full',
+    preset: 'default',
     task: createTask({
       id: 'task-1',
       handle: 'SW-34',

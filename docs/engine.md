@@ -2667,9 +2667,8 @@ A task you share can be read by anyone with its link, `https://app.shinsa.dev/sh
 in and without a device key. A link is
 read-only remote access to that one task, live: the browser opens a channel through the machine's tunnel, as remote
 access does, and the machine pushes the task down it the moment it changes. It shows everything its owner sees on its
-Overview, Review and Code, for a public or a private repository alike, but its chat, when shared as Full (the
-default); shared as Status it is an anonymous status card, and as Everything it adds the agents' live output and tool
-calls (the preset, below). Your messages to agents, their prompts and your answers never leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page where the machine's tunnel is. The same
+Overview, Review, Code and Chat, for a public or a private repository alike, with the agents' live output and tool
+calls, when shared as Default (the default); shared as Status it is an anonymous status card (the preset, below). Your messages to agents, their prompts and your answers never leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page where the machine's tunnel is. The same
 projection and channel will serve teams.
 
 - **The link.** The share id is 16 random bytes and the key 32 (base64url), both made by the engine
@@ -2698,13 +2697,14 @@ projection and channel will serve teams.
   the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
   core refuses them on your behalf (`human_only`), since they open a task to people outside the machine. An automation's home is
   refused (`share_refused`). The remote dashboard may share, as it may close a gate.
-- **What it shows: the preset.** `TaskShare.preset` is `full`, `status` or `everything` (the default), picked with
+- **What it shows: the preset.** `TaskShare.preset` is `default` (the default) or `status`, picked with
   Share as in Share task and defaulting to the `sharePreset` setting (Settings → General → Sharing, human-only). Each
-  preset is a list of field groups in core (`SHARE_PRESET_GROUPS` in `share/presets.ts`: identity, requests,
-  progress, summary, people, plan, reports, review, evidence, checks, pull_request, activity, code, runs, live), and
+  preset is a list of field groups in core (`SHARE_PRESET_GROUPS` in `share/presets.ts`: identity, description,
+  requests, progress, summary, people, plan, reports, review, evidence, checks, pull_request, activity, code, runs,
+  live), and
   each group names the fields it copies (`TASK_GROUP_FIELDS` and the `grants` checks in `share/index.ts`), so adding a
-  field to a preset is one entry and a field in no group is never sent. Status is identity, requests, progress and
-  summary; Full adds every group but live; Everything adds live. Changing the preset while shared (Share as on the
+  field to a preset is one entry and a field in no group is never sent. Status is identity, description (the plan's
+  goal), progress and summary; Default is every group. Changing the preset while shared (Share as on the
   banner, `shinsa tasks share --preset`) is `task.share` with another `preset`: it keeps the link, and every open page
   switches to the new view on the next push.
 - **The projection** (core's `share/`, `resolveSharedTask(state, task, { owner, machine, repository, preset })`) builds a
@@ -2716,34 +2716,34 @@ projection and channel will serve teams.
   (`Shares` never asks GitHub for it), so nothing outside its groups can reach it. What each preset keeps and drops,
   the same for every repository:
 
-  | Part | Status | Full | Everything |
-  | --- | --- | --- | --- |
-  | Title, handle, status, priority, kind of task | kept | kept | kept |
-  | The status's reason (it can name another task, the base branch or a watchdog) | never | kept | kept |
-  | Owner's login, machine, project, repository, branches | never | kept | kept |
-  | The request and each round's request, without attachments (pasted images, files) | kept | kept | kept |
-  | Progress: the stage, the progress track, phase titles, the rounds' timeline | kept | kept | kept |
-  | The latest summary, result or headline | kept | kept | kept |
-  | The plan whole: goal, phases, behaviour, approach, files, checks, its changes and approval | phase titles only | kept | kept |
-  | Phase reports, walkthrough (watchdogs and steps with their commands), review report, findings, decisions, with their files and lines | never | kept | kept |
-  | Checks, their commands, results, output and coverage | never | kept | kept |
-  | The pull request whole: address, head, merge commit, checks and check runs, changes; merge steps and which are ticked | never | kept | kept |
-  | Evidence | never | stored files by id, public `https://` addresses and GitHub uploads; titles and details with links scrubbed | as Full |
-  | The diff and the changed files whole (Code) | never | the pull request's, from GitHub, once one is open or merged | as Full |
-  | Gates | never | kept with their title, body, choices and decision; never your answer, verdicts, notes, a secret or an account | as Full |
-  | Runs (who worked, when, which model, delegations, cost) | never | kept; never their prompt, session, final message, feedback or account | as Full |
-  | Suggestions, watchdogs, a monitor, a usage wait (without its account) | never | kept | kept |
-  | Activity | never | kept, without messages, gate questions and answers, and account changes; a decision keeps its line, never your answer or review comments | as Full |
-  | Notes | never | kept | kept |
-  | Each run's transcript: the agent's output, tool calls and their results, status lines, errors | never | never | kept, live: without your turns, a task tool's prompt, images in tool results, a compaction's summary, notices other than interrupted, compaction, context and delegation, and the calls (with their results) to `ask`, `request_secret`, `delegate_task` and `delegation_answer` (`redactTranscript`) |
-  | A delegated agent's brief and the question it asked and its answer (its title, depth and state stay) | never | never | never |
-  | Messages to agents (a chat reply that stood in for a gate answer included), gate answers, plan answers, the notes you write with a finding's verdict, the inbox | never | never | never |
-  | Worktree, waits on other tasks, the task's origin, the repository's path and the project's folders | never | never | never |
-  | Links to other tasks (`shinsa://task/…`) | their label as plain text | as Status | as Status |
-  | Links to a file, pull request, branch or repository (`shinsa://file/…`, `pr`, `branch`, `repo`) in any text | their label as plain text, a bare address dropped | kept | kept |
+  | Part | Status | Default |
+  | --- | --- | --- |
+  | Title, handle, status, priority, kind of task | kept | kept |
+  | The status's reason (it can name another task, the base branch or a watchdog) | never | kept |
+  | Owner's login, machine, project, repository, branches | never | kept |
+  | The request and each round's request, without attachments (pasted images, files) | never | kept |
+  | Progress: the stage, the progress track, phase titles | kept | kept |
+  | The latest summary, result or headline | kept | kept |
+  | The plan whole: goal, phases, behaviour, approach, files, checks, its changes and approval | its goal (the task's description) and phase titles | kept |
+  | Phase reports, walkthrough (watchdogs and steps with their commands), review report, findings, decisions, with their files and lines | never | kept |
+  | Checks, their commands, results, output and coverage | never | kept |
+  | The pull request whole: address, head, merge commit, checks and check runs, changes; merge steps and which are ticked | never | kept |
+  | Evidence | never | stored files by id, public `https://` addresses and GitHub uploads; titles and details with links scrubbed |
+  | The diff and the changed files whole (Code) | never | the pull request's from GitHub once one is open or merged, before that the working copy's against the branch's base |
+  | Gates | never | kept with their title, body, choices and decision; never your answer, verdicts, notes, a secret or an account |
+  | Runs (who worked, when, which model, delegations, cost) | never | kept; never their prompt, session, final message, feedback or account |
+  | Suggestions, watchdogs, a monitor, a usage wait (without its account) | never | kept |
+  | Activity | never | kept, without messages, gate questions and answers, and account changes; a decision keeps its line, never your answer or review comments |
+  | Notes | never | kept |
+  | Each run's transcript: the agent's output, tool calls and their results, status lines, errors | never | kept, live: without your turns, a task tool's prompt, images in tool results, a compaction's summary, notices other than interrupted, compaction, context and delegation, and the calls (with their results) to `ask`, `request_secret`, `delegate_task` and `delegation_answer` (`redactTranscript`) |
+  | A delegated agent's brief and the question it asked and its answer (its title, depth and state stay) | never | never |
+  | Messages to agents (a chat reply that stood in for a gate answer included), gate answers, plan answers, the notes you write with a finding's verdict, the inbox | never | never |
+  | Worktree, waits on other tasks, the task's origin, the repository's path and the project's folders | never | never |
+  | Links to other tasks (`shinsa://task/…`) | their label as plain text | their label as plain text |
+  | Links to a file, pull request, branch or repository (`shinsa://file/…`, `pr`, `branch`, `repo`) in any text | their label as plain text, a bare address dropped | kept |
 
   A task without a repository has no Code. Check output, tool output and text an agent wrote (a summary, a finding, a
-  testing step) are kept as written; Everything sends a shell's output as it ran, so open the link yourself to read
+  testing step) are kept as written; Default sends a shell's output as it ran, so open the link yourself to read
   what it shows.
 - **Making the link.** `task.share` emits `task.shared` and queues `share.link` (`replay_safe`, lane `share:<task>`).
   The engine (`apps/engine/src/remote/shares.ts`, `Shares.link`) makes a share id and a key for this machine's
@@ -2770,10 +2770,13 @@ projection and channel will serve teams.
   (`gh api repos/<owner>/<name>/contents/<path>?ref=<head>`, 300 files and 50 MB at most), both versioned by the pull
   request and its head and read from GitHub once per head. Code opens each change in the editor as its owner sees it:
   an added or removed file comes whole from the diff, and a changed file's base is rebuilt from its head and its hunks
-  (`resolveBaseContent`). An Everything share also pushes each run's transcript in pages of 200 entries
+  (`resolveBaseContent`). Before a pull request, a task with a working copy sends the working copy's patch against the
+  branch's base instead (`readWorkingPatch`, untracked files included, the index untouched) and its changed files
+  read from the checkout, versioned by the task's `updatedAt`, so it is read again only when the task changes (an
+  edit an agent records is a change). A Default share also pushes each run's transcript in pages of 200 entries
   (`SHARE_TRANSCRIPT_PAGE`), each the file `transcript-<run id>-<page>` (`resolveShareTranscriptFile`), redacted by
   core's `redactTranscriptPage` and versioned by its entry count. A full page never changes, so it is sent once; when the
-  run adds output (`Transcripts.subscribe`) only its last page is sent again, and only a link shared as Everything is
+  run adds output (`Transcripts.subscribe`) only its last page is sent again, and only a link shared as Default is
   pushed at all. The page joins a run's pages in order; a page over 50 MB drops its oldest entries until it fits. Anything else is left out of the view rather than shown broken. The page keeps each file
   as a `blob:` address while it is open.
 - **The channel only listens.** After the hello the machine reads nothing from a link: any message closes the
@@ -2800,9 +2803,8 @@ projection and channel will serve teams.
   queue) its title carries a share mark, "Shared by link" on hover (`components/share/shared-mark.tsx`,
   `isTaskShared`), while its link works.
 - **A Status link** opens a small status card page instead (`components/share/status-card.tsx`, `lib/share/status.ts`):
-  the title, the stage, the progress track, what was asked, the latest update (the headline, the result or the
-  summary, else the newest round's) and, for a task of two rounds or more, a timeline of its rounds. It has no tabs,
-  names no person, machine, project or repository, and changes live like any shared page.
+  the title, the plan's goal as its description, the stage, the progress track and the latest update (the headline,
+  the result or the summary, else the newest round's). It has no request, no tabs, names no person, machine, project or repository, and changes live like any shared page.
 - **The shared page** (`routes/remote/share.tsx`, `lib/share/live.ts`, `components/share/shared-task-page.tsx`):
   the remote build's `/share/t/<token>` reads the key from the fragment (a link without one says the task
   is not shared), opens the live channel (`openShareStream`), builds a state from each view it receives
@@ -2812,9 +2814,9 @@ projection and channel will serve teams.
   app.shinsa.dev is its owner) and when the machine last read it. Read-only takes away
   only what acts: the task menu, the ⌘K commands, every card's buttons and links (`NowFrame`'s action, `QuietLink`),
   answer boxes, the composer, verdicts, merge-step boxes, suggestion and watchdog buttons, a delegation's Stop, the
-  priority menu, services and every way into a chat. Its tabs are the owner's without Chat (an Everything share keeps
-  Chat, read-only, each run's streamed transcript with no composer: `lib/share/transcripts.ts`), Code only once a pull request is open or merged, in its Changes view, from the streamed `diff` and
-  `code` files, never from a worktree. A link that stopped working says so at once.
+  priority menu, services and every way into a chat. Its tabs are the owner's, Chat read-only (each run's streamed
+  transcript with no composer: `lib/share/transcripts.ts`), and Code whenever the task has a working copy or an open
+  or merged pull request, in its Changes view, from the streamed `diff` and `code` files. A link that stopped working says so at once.
 - **Nothing writes through a link.** The channel above only listens, and hiding controls is a second layer. On the
   page itself, `SharedTaskPage` holds `enterReadOnly` (`lib/connection/read-only.ts`) while it is open: `sendCommand`
   rejects every command and `requestJson`/`requestLines` every `POST` with "This shared task is read-only. Nothing on it
@@ -3324,7 +3326,7 @@ truth, and a snapshot only saves replaying it.
   Logs from before Approve plans had three choices (log version 10, `PLAN_APPROVAL_LOG_VERSION`) have
   `settings.changed` events with `approvePlans` as a switch: on becomes `large` and off `when_asked`.
   Logs from before share presets (log version 12, `SHARE_PRESET_LOG_VERSION`) have `task.shared` events without
-  `preset`, which become Full shares (`preset: 'full'`).
+  `preset`, which become Default shares (`preset: 'default'`).
   A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 12) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:

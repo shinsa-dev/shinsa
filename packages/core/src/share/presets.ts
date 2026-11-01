@@ -2,6 +2,7 @@ import type { SharePreset } from '../domain/settings.ts';
 
 export type ShareGroup =
   | 'identity'
+  | 'description'
   | 'requests'
   | 'progress'
   | 'summary'
@@ -17,10 +18,11 @@ export type ShareGroup =
   | 'runs'
   | 'live';
 
-const STATUS_GROUPS: readonly ShareGroup[] = ['identity', 'requests', 'progress', 'summary'];
+const STATUS_GROUPS: readonly ShareGroup[] = ['identity', 'description', 'progress', 'summary'];
 
-const FULL_GROUPS: readonly ShareGroup[] = [
+const DEFAULT_GROUPS: readonly ShareGroup[] = [
   ...STATUS_GROUPS,
+  'requests',
   'people',
   'plan',
   'reports',
@@ -31,12 +33,12 @@ const FULL_GROUPS: readonly ShareGroup[] = [
   'activity',
   'code',
   'runs',
+  'live',
 ];
 
 export const SHARE_PRESET_GROUPS: Readonly<Record<SharePreset, readonly ShareGroup[]>> = {
+  default: DEFAULT_GROUPS,
   status: STATUS_GROUPS,
-  full: FULL_GROUPS,
-  everything: [...FULL_GROUPS, 'live'],
 };
 
 export function hasShareGroup(preset: SharePreset, group: ShareGroup) {

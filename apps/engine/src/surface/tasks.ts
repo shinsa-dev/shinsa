@@ -469,7 +469,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
         kind: 'choice',
         choices: SHARE_PRESETS,
         description:
-          "What the link shows: full (the task page without its chat), status (an anonymous status card) or everything (full, with the agents' live output and tool calls). Left out, the sharePreset setting.",
+          "What the link shows: default (the whole task with the agents' live output and tool calls, without your messages) or status (an anonymous status card). Left out, the sharePreset setting.",
       },
     ],
     build: async (values, client) => {

@@ -32,7 +32,7 @@ afterEach(() => {
 
 const PAIRED = createRemoteSnapshot({ paired: true });
 
-const SHARING = { at: 1, limit: 'until_done', preset: 'full', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'until_done', preset: 'default', endsAt: null } as const;
 
 describe('the share dialog', () => {
   it('opens for one task from its action and closes again', () => {
@@ -69,11 +69,11 @@ describe('the share dialog', () => {
     const spies = spyOnCommands();
     const task = createTask({ id: 't' });
     await shareTask(task, 'day', 'status');
-    await changeSharePreset(task, 'everything');
+    await changeSharePreset(task, 'default');
     await unshareTask(task);
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.share', taskId: 't', limit: 'day', preset: 'status' }],
-      [{ type: 'task.share', taskId: 't', preset: 'everything' }, 'Sharing as everything.'],
+      [{ type: 'task.share', taskId: 't', preset: 'default' }, 'Sharing as default.'],
       [{ type: 'task.unshare', taskId: 't' }, 'Stopped sharing.'],
     ]);
     spies.restore();
@@ -82,20 +82,19 @@ describe('the share dialog', () => {
 
 describe('what a shared task shows', () => {
   it('names each preset, and an unknown one by its value', () => {
-    expect(describeSharePreset('full')).toBe('Full task');
+    expect(describeSharePreset('default')).toBe('Default');
     expect(describeSharePreset('status')).toBe('Status');
-    expect(describeSharePreset('everything')).toBe('Everything');
     expect(describeSharePreset('other' as never)).toBe('other');
   });
 
-  it('defaults to the setting, keeps a shared task’s own, and is Full before settings load', () => {
+  it('defaults to the setting, keeps a shared task’s own, and is Default before settings load', () => {
     const settings = { ...createSettings(), sharePreset: 'status' as const };
     const task = createTask({ id: 't' });
     expect(resolveSharePresetChoice(task, settings)).toBe('status');
-    expect(resolveSharePresetChoice(task, null)).toBe('full');
+    expect(resolveSharePresetChoice(task, null)).toBe('default');
     expect(
-      resolveSharePresetChoice({ ...task, share: { ...SHARING, url: null, preset: 'everything' } }, settings)
-    ).toBe('everything');
+      resolveSharePresetChoice({ ...task, share: { ...SHARING, url: null, preset: 'default' } }, settings)
+    ).toBe('default');
   });
 });
 

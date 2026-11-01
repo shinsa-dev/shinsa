@@ -8,15 +8,11 @@ import { TaskTrack } from '@/components/overview/progress-track.tsx';
 import { ToneLabel } from '@/components/status/text.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { useNow } from '@/hooks/use-now.ts';
 import {
   resolveStatusCard,
   STATUS_EYEBROW,
   STATUS_LATEST_TITLE,
   STATUS_NO_UPDATE,
-  STATUS_REQUEST_TITLE,
-  STATUS_ROUNDS_TITLE,
-  type StatusRound,
 } from '@/lib/share/status.ts';
 import type { SharedView } from '@/lib/share/view.ts';
 
@@ -29,21 +25,8 @@ function StatusSection({ title, children }: { title: string; children: React.Rea
   );
 }
 
-function StatusRoundRow({ round }: { round: StatusRound }) {
-  return (
-    <li className='flex min-w-0 flex-col gap-1 py-1.5'>
-      <div className='flex min-w-0 items-center gap-2 text-xs'>
-        <span className='shrink-0 text-fg-4'>Round {round.number}</span>
-        <ToneLabel label={round.status.label} tone={round.status.tone} />
-        <span className='ms-auto shrink-0 text-2xs text-fg-2'>{round.time}</span>
-      </div>
-      <p className='selectable line-clamp-2 text-fg-3 text-xs'>{round.request}</p>
-    </li>
-  );
-}
-
 export function StatusCardPage({ view }: { view: SharedView }) {
-  const card = resolveStatusCard(view.task, useNow());
+  const card = resolveStatusCard(view.task);
   return (
     <PageScroll>
       <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex max-w-xl flex-col gap-3 pb-10')}>
@@ -57,6 +40,7 @@ export function StatusCardPage({ view }: { view: SharedView }) {
           <header className='flex flex-col gap-1.5 px-4 py-3'>
             <ToneLabel label={card.stage.label} tone={card.stage.tone} />
             <h1 className={cn(PAGE_TITLE, 'selectable')}>{card.title}</h1>
+            {card.description && <p className='selectable text-fg-3 text-xs'>{card.description}</p>}
           </header>
           <StatusSection title={STATUS_LATEST_TITLE}>
             {card.latest ? (
@@ -65,20 +49,6 @@ export function StatusCardPage({ view }: { view: SharedView }) {
               <p className='text-fg-2 text-xs'>{STATUS_NO_UPDATE}</p>
             )}
           </StatusSection>
-          {card.request && (
-            <StatusSection title={STATUS_REQUEST_TITLE}>
-              <Markdown text={card.request} className='text-xs' />
-            </StatusSection>
-          )}
-          {card.rounds.length > 0 && (
-            <StatusSection title={STATUS_ROUNDS_TITLE}>
-              <ol className='flex flex-col divide-y divide-border'>
-                {card.rounds.map((round) => (
-                  <StatusRoundRow key={round.number} round={round} />
-                ))}
-              </ol>
-            </StatusSection>
-          )}
           <div className={CARD_FOOTER}>
             <TaskTrack task={view.task} />
           </div>

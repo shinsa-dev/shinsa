@@ -4,8 +4,6 @@ import { resolveStatusCard, resolveStatusLatest } from '@/lib/share/status.ts';
 import { createRound } from '../../support/rounds.ts';
 import { createTask } from '../../support/state.ts';
 
-const NOW = 10 * 60_000;
-
 function report(headline: string) {
   return { headline, sections: [], checks: [], judgementCalls: [], walkthrough: null } as NonNullable<
     Task['report']
@@ -13,34 +11,26 @@ function report(headline: string) {
 }
 
 describe('the status card', () => {
-  it('shows the title, the stage in its words and tone, the request, and no timeline for one round', () => {
+  it('shows the title, the stage in its words and tone, and no description before a plan', () => {
     const card = resolveStatusCard(
-      createTask({ id: 't', title: 'Fix export', request: 'Exports fail on Safari.', stage: 'building' }),
-      NOW
+      createTask({ id: 't', title: 'Fix export', request: 'Exports fail on Safari.', stage: 'building' })
     );
     expect(card).toEqual({
       title: 'Fix export',
       stage: { label: 'Building', tone: card.stage.tone },
-      request: 'Exports fail on Safari.',
+      description: null,
       latest: null,
-      rounds: [],
     });
   });
 
-  it('lists every round with its status and time once there are two', () => {
-    const task = createTask({
-      id: 't',
-      rounds: [
-        createRound({ number: 1 }),
-        createRound({ number: 2, status: 'active', startedAt: NOW - 60_000, endedAt: null }),
-      ],
-    });
-    expect(
-      resolveStatusCard(task, NOW).rounds.map((round) => [round.number, round.request, round.status.label])
-    ).toEqual([
-      [1, 'Do round 1', 'Merged'],
-      [2, 'Do round 2', 'In progress'],
-    ]);
+  it('describes the task by its plan’s goal', () => {
+    const task = createTask({ id: 't' });
+    const plan = {
+      version: 1,
+      body: '',
+      document: { goal: 'Exports work on Safari.' },
+    } as unknown as Task['plan'];
+    expect(resolveStatusCard({ ...task, plan }).description).toBe('Exports work on Safari.');
   });
 
   it('takes the latest update from the report, the result, the summary, then the last round that had one', () => {

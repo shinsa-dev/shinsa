@@ -62,7 +62,7 @@ describe('the settings a command may change', () => {
       taskCapacity: null,
       placementPolicies: [],
       shareLimit: 'until_done',
-      sharePreset: 'full',
+      sharePreset: 'default',
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
   });

@@ -270,7 +270,7 @@ src/
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
 │                    from the task, its current evidence and the project's name; everything its owner sees but
 │                    chats, runs' prompts, messages, gate answers, and attachments) and hasSharedCode; presets.ts:
-│                    the share presets (SharePreset in domain/settings.ts: full, status, everything), each a list
+│                    the share presets (SharePreset in domain/settings.ts: default, status), each a list
 │                    of field groups (SHARE_PRESET_GROUPS, hasShareGroup), and resolveSharedTask copies only the
 │                    fields of the groups its context's preset grants (TASK_GROUP_FIELDS)
 │                    (decide/shares.ts: task.share and task.unshare, human-only, and the share.link effect;

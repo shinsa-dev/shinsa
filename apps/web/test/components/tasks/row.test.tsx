@@ -220,7 +220,7 @@ describe('a shared task in the list', () => {
       share: {
         at: 1,
         limit: 'until_done',
-        preset: 'full',
+        preset: 'default',
         endsAt: null,
         url: 'https://app.shinsa.dev/share/t/abc',
       },

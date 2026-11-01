@@ -1,15 +1,17 @@
 import { statSync } from 'node:fs';
-import { extname } from 'node:path';
+import { extname, join } from 'node:path';
 import {
   type ChatEntry,
   countShareTranscriptPages,
   DomainError,
   hasShareGroup,
   isShareId,
+  type PullRequest,
   parseShareUrl,
   parseUnifiedDiff,
   type Repo,
   redactTranscriptPage,
+  resolveRoundBase,
   resolveSharedTask,
   resolveSharePreset,
   resolveShareTranscriptFile,
@@ -27,6 +29,8 @@ import {
   serializeShareUrl,
   type Task,
 } from '@shinsa/core';
+import { readWorkingPatch } from '../git/diff.ts';
+import { resolveTaskCheckout, resolveTaskRefs } from '../git/task-refs.ts';
 import { readPullRequestDiff, readRepoFile, resolveRepoSlug } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
@@ -63,6 +67,12 @@ export interface ShareGitHub {
   readFile: (repo: Repo, ref: string, path: string) => Promise<string>;
 }
 
+export interface ShareWorktree {
+  readBase: (repo: Repo, task: Task) => Promise<string>;
+  readPatch: (worktree: string, base: string) => Promise<string>;
+  readFile: (worktree: string, path: string) => Promise<string>;
+}
+
 export interface ShareTranscripts {
   listEntries: (runId: string) => ChatEntry[];
   subscribe: (listener: (runId: string) => void) => () => void;
@@ -88,6 +98,7 @@ export interface SharesOptions {
   evidence: EvidenceStore;
   transcripts: ShareTranscripts;
   github?: ShareGitHub;
+  worktree?: ShareWorktree;
   now?: () => number;
   random?: (bytes: number) => Uint8Array<ArrayBuffer>;
 }
@@ -99,6 +110,17 @@ interface HashedFile {
 }
 
 const GITHUB: ShareGitHub = { readDiff: readPullRequestDiff, readFile: readRepoFile };
+
+const WORKTREE: ShareWorktree = {
+  readBase: async (repo, task) => {
+    const refs = await resolveTaskRefs(repo, task, resolveRoundBase(task));
+    return refs.base ?? refs.head;
+  },
+  readPatch: readWorkingPatch,
+  readFile: (worktree, path) => Bun.file(join(worktree, path)).text(),
+};
+
+const PULL_REQUEST_CODE: ReadonlySet<PullRequest['state']> = new Set(['open', 'merged']);
 
 const CODE_FILE_LIMIT = 300;
 
@@ -144,6 +166,7 @@ export class Shares implements ShareEffects, ShareLinks {
   readonly #evidence: EvidenceStore;
   readonly #transcripts: ShareTranscripts;
   readonly #github: ShareGitHub;
+  readonly #worktree: ShareWorktree;
   readonly #now: () => number;
   readonly #random: (bytes: number) => Uint8Array<ArrayBuffer>;
   readonly #hashes = new Map<string, HashedFile>();
@@ -157,6 +180,7 @@ export class Shares implements ShareEffects, ShareLinks {
     this.#evidence = options.evidence;
     this.#transcripts = options.transcripts;
     this.#github = options.github ?? GITHUB;
+    this.#worktree = options.worktree ?? WORKTREE;
     this.#now = options.now ?? Date.now;
     this.#random = options.random ?? createRandom;
     this.#pairedAs = this.#selectInstanceId();
@@ -349,48 +373,81 @@ export class Shares implements ShareEffects, ShareLinks {
     try {
       return await this.#listCodeFiles(shared, task, repo);
     } catch (error) {
-      log.warn('[Share] Could not read the pull request from GitHub', {
-        taskId: task.id,
-        error: describeError(error),
-      });
+      log.warn('[Share] Could not read the task’s code', { taskId: task.id, error: describeError(error) });
       return [];
     }
   }
 
-  async #listCodeFiles(shared: SharedTask, task: Task, repo: Repo | null) {
+  #listCodeFiles(shared: SharedTask, task: Task, repo: Repo | null) {
+    if (!(shared.code && repo)) return Promise.resolve([]);
     const pullRequest = task.pullRequest;
-    if (!(shared.code && repo && pullRequest)) return [];
+    if (pullRequest && PULL_REQUEST_CODE.has(pullRequest.state))
+      return this.#listPullRequestFiles(task, repo, pullRequest);
+    const worktree = resolveTaskCheckout(task);
+    return worktree ? this.#listWorkingFiles(task, repo, worktree) : Promise.resolve([]);
+  }
+
+  #listPullRequestFiles(task: Task, repo: Repo, pullRequest: PullRequest) {
     const key = `${pullRequest.number}:${pullRequest.headSha ?? ''}`;
-    const cached = this.#code.get(task.id);
+    const head = pullRequest.headSha;
+    return this.#cacheCode(
+      task.id,
+      key,
+      () => this.#github.readDiff(repo, pullRequest.number),
+      (path) => {
+        if (!head) return null;
+        return this.#github.readFile(repo, head, path);
+      }
+    );
+  }
+
+  #listWorkingFiles(task: Task, repo: Repo, worktree: string) {
+    return this.#cacheCode(
+      task.id,
+      `working:${task.updatedAt}`,
+      async () => this.#worktree.readPatch(worktree, await this.#worktree.readBase(repo, task)),
+      (path) => this.#worktree.readFile(worktree, path)
+    );
+  }
+
+  async #cacheCode(
+    taskId: string,
+    key: string,
+    readDiff: () => Promise<string>,
+    readFile: (path: string) => Promise<string> | null
+  ) {
+    const cached = this.#code.get(taskId);
     if (cached?.key === key) return cached.files;
-    const diff = await this.#github.readDiff(repo, pullRequest.number);
+    const diff = await readDiff();
     const encoder = new TextEncoder();
     const diffFile = createTextFile(SHARE_DIFF_FILE, key, encoder.encode(diff));
     let codeFile: LiveFile | null = null;
-    if (diffFile && pullRequest.headSha) {
-      const code = await this.#readChangedFiles(repo, pullRequest.headSha, diff);
-      codeFile = createTextFile(SHARE_CODE_FILE, key, encoder.encode(JSON.stringify(code)));
+    if (diffFile) {
+      const code = await this.#readChangedFiles(diff, readFile);
+      if (code) codeFile = createTextFile(SHARE_CODE_FILE, key, encoder.encode(JSON.stringify(code)));
     }
     const files = [diffFile, codeFile].flatMap((file) => file ?? []);
-    this.#code.set(task.id, { key, files });
+    this.#code.set(taskId, { key, files });
     return files;
   }
 
-  async #readChangedFiles(repo: Repo, head: string, diff: string): Promise<SharedCode> {
+  async #readChangedFiles(
+    diff: string,
+    readFile: (path: string) => Promise<string> | null
+  ): Promise<SharedCode | null> {
     const files: Record<string, string> = {};
     let bytes = 0;
     const changed = parseUnifiedDiff(diff).filter((file) => CODE_STATUSES.has(file.status) && !file.binary);
     for (const file of changed.slice(0, CODE_FILE_LIMIT)) {
+      const reading = readFile(file.path);
+      if (!reading) return null;
       try {
-        const content = await this.#github.readFile(repo, head, file.path);
+        const content = await reading;
         bytes += content.length;
         if (bytes > SHARE_FILE_BYTES) break;
         files[file.path] = content;
       } catch (error) {
-        log.warn('[Share] Could not read a changed file from GitHub', {
-          path: file.path,
-          error: describeError(error),
-        });
+        log.warn('[Share] Could not read a changed file', { path: file.path, error: describeError(error) });
       }
     }
     return { files };

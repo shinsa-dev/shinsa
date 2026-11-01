@@ -101,9 +101,9 @@ function redactPlan(plan: Plan): Plan {
   };
 }
 
-function redactPlanPhases(document: PlanDocument): PlanDocument {
+function redactPlanPhases(document: PlanDocument, grants: Grants): PlanDocument {
   return {
-    goal: '',
+    goal: grants('description') ? document.goal : '',
     phases: document.phases.map((phase) => ({ title: phase.title, detail: '' })),
     behaviour: [],
     approach: '',
@@ -114,11 +114,11 @@ function redactPlanPhases(document: PlanDocument): PlanDocument {
   };
 }
 
-function redactProgressPlan(plan: Plan): Plan {
+function redactProgressPlan(plan: Plan, grants: Grants): Plan {
   return {
     version: plan.version,
     body: '',
-    document: plan.document ? redactPlanPhases(plan.document) : null,
+    document: plan.document ? redactPlanPhases(plan.document, grants) : null,
     proposedAt: plan.proposedAt,
     changeSummary: null,
     changes: [],
@@ -130,7 +130,7 @@ function redactProgressPlan(plan: Plan): Plan {
 function resolveSharedPlan(plan: Plan | null, grants: Grants) {
   if (!plan) return null;
   if (grants('plan')) return redactPlan(plan);
-  return grants('progress') ? redactProgressPlan(plan) : null;
+  return grants('progress') ? redactProgressPlan(plan, grants) : null;
 }
 
 function resolveSharedReport(report: WorkReport | null, grants: Grants): WorkReport | null {
@@ -446,7 +446,8 @@ function listSharedEvidence(state: ShinsaState, task: Task) {
 
 export function hasSharedCode(task: Task, repository: string | null) {
   if (repository === null) return false;
-  return task.pullRequest !== null && CODE_STATES.has(task.pullRequest.state);
+  if (task.pullRequest !== null && CODE_STATES.has(task.pullRequest.state)) return true;
+  return Boolean(task.worktreePath);
 }
 
 export function resolveSharedTask(state: ShinsaState, task: Task, context: SharedTaskContext): SharedTask {

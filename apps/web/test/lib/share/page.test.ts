@@ -11,17 +11,21 @@ function createReport() {
 }
 
 describe('the shared page', () => {
-  it('has the owner’s tabs but Chat, and Code only when it is shared', () => {
+  it('has the owner’s tabs, without Chat when the share sends no live output, and Code only when it is shared', () => {
     const reviewed = createTask({ id: 't', repoId: 'r', stage: 'awaiting_review', report: createReport() });
-    expect(listSharedTabs(reviewed, createSharedTask())).toEqual(['overview', 'review', 'code']);
-    expect(listSharedTabs(reviewed, createSharedTask({ code: false }))).toEqual(['overview', 'review']);
+    const status = { preset: 'status' } as const;
+    expect(listSharedTabs(reviewed, createSharedTask(status))).toEqual(['overview', 'review', 'code']);
+    expect(listSharedTabs(reviewed, createSharedTask({ ...status, code: false }))).toEqual([
+      'overview',
+      'review',
+    ]);
     const planning = createTask({ id: 't', stage: 'planning' });
-    expect(listSharedTabs(planning, createSharedTask({ code: false }))).toEqual(['overview']);
+    expect(listSharedTabs(planning, createSharedTask({ ...status, code: false }))).toEqual(['overview']);
   });
 
-  it('has Chat only when the share is Everything', () => {
+  it('has Chat when the share sends the agents’ live output, as Default does', () => {
     const reviewed = createTask({ id: 't', repoId: 'r', stage: 'awaiting_review', report: createReport() });
-    expect(listSharedTabs(reviewed, createSharedTask({ preset: 'everything' }))).toEqual([
+    expect(listSharedTabs(reviewed, createSharedTask({ preset: 'default' }))).toEqual([
       'overview',
       'review',
       'code',

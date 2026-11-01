@@ -41,14 +41,16 @@ describe('a shared view', () => {
     expect(state.projects['project-1']?.name).toBe('Superwall');
   });
 
-  it('points an Everything share’s runs at their streamed transcripts, and a Full share’s at none', () => {
+  it('points a Default share’s runs at their streamed transcripts, and a Status share’s at none', () => {
     const transcripts = {
       ...source(),
       resolveFileUrl: (id: string) =>
         ({ 'transcript-run-1-0': '/t/1', 'transcript-run-1-1': '/t/2' })[id] ?? null,
     };
-    expect(resolveSharedView(transcripts).transcripts).toEqual({});
-    const everything = { ...transcripts, shared: createSharedTask({ preset: 'everything' }) };
+    expect(
+      resolveSharedView({ ...transcripts, shared: createSharedTask({ preset: 'status' }) }).transcripts
+    ).toEqual({});
+    const everything = { ...transcripts, shared: createSharedTask({ preset: 'default' }) };
     expect(resolveSharedView(everything).transcripts).toEqual({ 'run-1': ['/t/1', '/t/2'] });
     expect(resolveSharedView({ ...everything, resolveFileUrl: () => null }).transcripts).toEqual({});
   });

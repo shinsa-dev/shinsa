@@ -35,7 +35,7 @@ async function choose(label: string, option: RegExp) {
 
 const URL = 'https://app.shinsa.dev/share/t/abc';
 
-const SHARING = { at: 1, limit: 'until_done', preset: 'full', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'until_done', preset: 'default', endsAt: null } as const;
 
 beforeEach(() => {
   startFakeServer();
@@ -65,15 +65,15 @@ describe('the share dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'everything' },
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'default' },
       ])
     );
   });
 
-  it('shares it as the preset you pick, Everything by default', async () => {
+  it('shares it as the preset you pick, Default by default', async () => {
     showTask();
     const picker = await screen.findByRole('combobox', { name: 'Share as' });
-    expect(picker.textContent).toBe('Everything');
+    expect(picker.textContent).toBe('Default');
     await choose('Share as', /^Status/);
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
@@ -120,7 +120,7 @@ describe('the share dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'full' },
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'default' },
       ])
     );
   });
@@ -146,7 +146,7 @@ describe('the sharing banner', () => {
     const task = createTask({ id: 'source', share: { ...SHARING, url: URL } });
     pushState(createShinsaState({ tasks: [task] }));
     render(<SharingBanner task={task} />);
-    expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Full task');
+    expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Default');
     await choose('Share as', /^Status/);
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'task.share', taskId: 'source', preset: 'status' }])
@@ -157,7 +157,10 @@ describe('the sharing banner', () => {
     const endsAt = Date.now() + 60 * 60 * 1000;
     render(
       <SharingBanner
-        task={createTask({ id: 'source', share: { at: 1, limit: 'hour', preset: 'full', endsAt, url: URL } })}
+        task={createTask({
+          id: 'source',
+          share: { at: 1, limit: 'hour', preset: 'default', endsAt, url: URL },
+        })}
       />
     );
     const banner = screen.getByRole('status');

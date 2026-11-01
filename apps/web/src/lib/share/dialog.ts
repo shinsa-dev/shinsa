@@ -22,7 +22,7 @@ export const UNSHARE_TITLE = 'Stop sharing';
 export const SHARING_NOTE = 'Anyone with the link can watch this task.';
 
 export const SHARE_DESCRIPTION =
-  'Anyone with the link can watch this task live and read-only while this machine is online. Its chat never leaves it.';
+  'Anyone with the link can watch this task live and read-only while this machine is online. Your messages to its agents never leave it.';
 
 export const UNSHARE_DESCRIPTION = 'The link stops working at once, for everyone who has it.';
 
@@ -43,22 +43,16 @@ export const SHARE_PRESET_SETTING = 'Share tasks as';
 
 export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: string; icon: IconName }[] = [
   {
-    value: 'full',
-    label: 'Full task',
-    hint: 'Plan, reports, review, checks, evidence and code',
+    value: 'default',
+    label: 'Default',
+    hint: 'The whole task and the agents’ live output, without your messages',
     icon: 'IconListBullets',
   },
   {
     value: 'status',
     label: 'Status',
-    hint: 'Title, request and progress, with no names or code',
+    hint: 'Title, description, phases and the latest update, with no names or code',
     icon: 'IconProgress75',
-  },
-  {
-    value: 'everything',
-    label: 'Everything',
-    hint: 'The full task and the agents’ live output and tool calls',
-    icon: 'IconBubbleText',
   },
 ];
 
@@ -152,7 +146,7 @@ export function resolveShareLimitChoice(task: Task, settings: Settings): ShareLi
 
 export function resolveSharePresetChoice(task: Task, settings: Settings | null): SharePreset {
   if (task.share) return task.share.preset;
-  return settings ? resolveSharePreset(settings) : 'full';
+  return settings ? resolveSharePreset(settings) : 'default';
 }
 
 export function describeShareEnd(share: TaskShare, now = Date.now()) {

@@ -99,7 +99,7 @@ describe('the shared page on app.shinsa.dev', () => {
     expect(screen.getAllByText('Summary').length).toBeGreaterThan(0);
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Task actions' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Chat' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
     expect((await screen.findAllByText(/keys\.ts/)).length).toBeGreaterThan(0);
   });
@@ -117,7 +117,7 @@ describe('the shared page on app.shinsa.dev', () => {
     expect((await screen.findAllByText(/const ttl = 24/)).length).toBeGreaterThan(0);
   });
 
-  it('a Status link shows a small status card, with no names, tabs or code', async () => {
+  it('a Status link shows a small status card with the plan’s goal, and no request, names, tabs or code', async () => {
     const machine = connect();
     const view = liveView({
       preset: 'status',
@@ -130,20 +130,23 @@ describe('the shared page on app.shinsa.dev', () => {
       runs: [],
       gates: [],
     });
-    view.shared = { ...view.shared, task: { ...view.shared.task, request: 'Rotate the API keys weekly.' } };
+    const task = view.shared.task;
+    const plan = { version: 1, body: '', document: { goal: 'Keys rotate every week.', phases: [] } } as never;
+    view.shared = { ...view.shared, task: { ...task, request: 'Rotate the API keys weekly.', plan } };
     view.files = {};
     await open(machine, view);
     expect(screen.getByText('Status')).toBeTruthy();
     expect(screen.getByText('Changes to review')).toBeTruthy();
     expect(screen.getByText('Rotating a key keeps the old one for a day.')).toBeTruthy();
-    expect(screen.getByText('Rotate the API keys weekly.')).toBeTruthy();
+    expect(screen.getByText('Keys rotate every week.')).toBeTruthy();
+    expect(screen.queryByText('Rotate the API keys weekly.')).toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByText(/Shared by/)).toBeNull();
   });
 
-  it('an Everything link has a Chat tab with the agents’ streamed output and nothing to type in', async () => {
+  it('a Default link has a Chat tab with the agents’ streamed output and nothing to type in', async () => {
     const machine = connect();
-    const view = liveView({ preset: 'everything' });
+    const view = liveView({ preset: 'default' });
     view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-everything' } };
     view.files = { ...view.files, 'transcript-run-1-0': { version: '1', type: 'text/plain' } };
     await open(machine, view);

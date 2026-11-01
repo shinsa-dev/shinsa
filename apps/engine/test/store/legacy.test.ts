@@ -810,7 +810,7 @@ describe('moving briefings out of the event log', () => {
 });
 
 describe('shares made before presets', () => {
-  test('are rewritten on boot as Full shares, and a share with a preset is left as it is', () => {
+  test('are rewritten on boot as Default shares, and a share with a preset is left as it is', () => {
     const shared = { type: 'task.shared', taskId: TASK, limit: 'day', endsAt: 5 };
     const status = { ...shared, preset: 'status' };
     const path = writeLegacyLog([shared, status]);
@@ -822,7 +822,10 @@ describe('shares made before presets', () => {
     log.close();
     expect(readStoredLog(path)).toMatchObject({
       version: 12,
-      rows: [{ payload: JSON.stringify({ ...shared, preset: 'full' }) }, { payload: JSON.stringify(status) }],
+      rows: [
+        { payload: JSON.stringify({ ...shared, preset: 'default' }) },
+        { payload: JSON.stringify(status) },
+      ],
     });
   });
 });

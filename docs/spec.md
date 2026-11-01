@@ -388,10 +388,10 @@ where your policies, plain-English sentences the classifier reads with the reque
 `app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
 access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
 owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
-Review and Code (a private repository's too) but its chat, and it changes the moment the task does. Share as picks
-what it shows: Full (that page), Status (an anonymous status card of the title, the request, where the
-work stands and the latest update, for customers and issue subscribers) or Everything (Full with the agents' live
-output and tool calls, the default); it defaults to Settings → General → Sharing and changes on the banner while the link stays; the machine reads
+Review, Code (a private repository's too, from the working copy before a pull request) and Chat, with the agents'
+live output and tool calls but never your messages to them, and it changes the moment the task does. Share as picks
+what it shows: Default (that page) or Status (an anonymous status card of the title, the plan's goal as its
+description, the phases and the latest update, for customers and issue subscribers); it defaults to Settings → General → Sharing and changes on the banner while the link stays; the machine reads
 nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
 a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
 cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once

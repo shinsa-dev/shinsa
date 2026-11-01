@@ -302,7 +302,7 @@ async function createPreviewShare(
   studio: Awaited<ReturnType<typeof startMachine>>,
   task: Task,
   label: string,
-  preset: SharePreset = 'full'
+  preset: SharePreset = 'default'
 ): Promise<PreviewShare | null> {
   const seeded = task.repoId ? studio.engine.state.repos[task.repoId] : undefined;
   if (!seeded) return null;
@@ -359,8 +359,8 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
       (await createPreviewShare(
         studio,
         talked,
-        'A task shared as Everything, with the agents’ live output in Chat',
-        'everything'
+        'A task shared as Default, with the agents’ live output in Chat',
+        'default'
       )),
   ];
   return shares.filter((share): share is PreviewShare => Boolean(share));
@@ -390,43 +390,30 @@ function respondStatic(pathname: string) {
   });
 }
 
-function respondIndex(machines: Machine[], shares: PreviewShare[]) {
-  const links = [
-    ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
-    [
-      'Sign in as the iPhone app does (answers shinsa://signed-in?code=preview, which the token path takes)',
-      `${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
-    ],
+function listPreviewLinks(machines: Machine[], shares: PreviewShare[]) {
+  return [
+    ['The merged dashboard (always signed in)', `${ORIGIN}${REMOTE_PATHS.app}`],
     ...machines.map((machine) => [
-      `Add this device to ${machine.name} (request access, then accept it in that machine's own app below)`,
-      `/__preview/enroll/${machine.id}`,
+      `Add this device to ${machine.name}`,
+      `${ORIGIN}/__preview/enroll/${machine.id}`,
     ]),
     ...machines.map((machine) => [
-      `Add this device to ${machine.name} as the machine it sits on (it shows as This machine)`,
-      `/__preview/enroll/${machine.id}?on=machine`,
+      `Add this device to ${machine.name} as the machine it sits on`,
+      `${ORIGIN}/__preview/enroll/${machine.id}?on=machine`,
     ]),
-    ['The merged dashboard of every machine this device was added to', REMOTE_PATHS.app],
-    ['All tasks, each with its machine', '/tasks'],
-    ['Settings, with Machines', '/settings'],
-    ['Approving a pairing (code K7PQ)', `${REMOTE_PATHS.pairPage}?code=K7PQ`],
+    ['All tasks, each with its machine', `${ORIGIN}/tasks`],
+    ['Settings, with Machines', `${ORIGIN}/settings`],
+    ['Approving a pairing (code K7PQ)', `${ORIGIN}${REMOTE_PATHS.pairPage}?code=K7PQ`],
     ...shares.flatMap((share) => [
       [`${share.label} (a live link, no sign-in)`, share.url],
-      [
-        `The same task, ${share.handle}, as you see it on Studio`,
-        `http://${HOST}:${share.port}/tasks/${share.handle}`,
-      ],
+      [`The same task, ${share.handle}, on Studio`, `http://${HOST}:${share.port}/tasks/${share.handle}`],
     ]),
     ['A share link that no longer works', serializeShareUrl(ORIGIN, createShareLink('studio'))],
     ...machines.map((machine) => [
-      `${machine.name}'s own app on the machine: Settings, Remote access`,
+      `${machine.name}'s own app: Settings`,
       `http://${HOST}:${machine.port}/settings`,
     ]),
   ];
-  const items = links.map(([label, href]) => `<li><a href="${href}">${label}</a></li>`).join('');
-  return new Response(
-    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to each machine first: request access, accept it in the machine's own app, then open the dashboard.</p><ol>${items}</ol></body>`,
-    { headers: { 'content-type': 'text/html; charset=utf-8' } }
-  );
 }
 
 async function createConnect(machine: Machine): Promise<ConnectResponse> {
@@ -570,7 +557,6 @@ async function main() {
     hostname: HOST,
     async fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname === '/__preview') return respondIndex(machines, shares);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
@@ -608,9 +594,7 @@ async function main() {
       },
     },
   });
-  console.info(`Remote access preview: ${ORIGIN}/__preview`);
-  for (const machine of machines)
-    console.info(`${machine.name}'s own app: http://${HOST}:${machine.port}/settings`);
+  for (const [label, url] of listPreviewLinks(machines, shares)) console.info(`${label}: ${url}`);
 }
 
 await main();

@@ -58,15 +58,16 @@ function share(harness: Harness, taskId: string, preset: SharePreset) {
 }
 
 describe('share presets', () => {
-  test('each preset is a list of field groups, and Everything is Full with the live output', () => {
-    expect(SHARE_PRESETS).toEqual(['full', 'status', 'everything']);
-    expect(SHARE_PRESET_GROUPS.everything).toEqual([...SHARE_PRESET_GROUPS.full, 'live']);
-    expect(SHARE_PRESET_GROUPS.status.every((group) => hasShareGroup('full', group))).toBe(true);
-    expect(hasShareGroup('full', 'live')).toBe(false);
+  test('each preset is a list of field groups, and Default holds every group Status has and the live output', () => {
+    expect(SHARE_PRESETS).toEqual(['default', 'status']);
+    expect(SHARE_PRESET_GROUPS.status.every((group) => hasShareGroup('default', group))).toBe(true);
+    expect(hasShareGroup('default', 'live')).toBe(true);
+    expect(hasShareGroup('status', 'live')).toBe(false);
+    expect(hasShareGroup('status', 'requests')).toBe(false);
     expect(hasShareGroup('status', 'code')).toBe(false);
   });
 
-  test('Status keeps the title, the request, where the task stands and its headline, and nothing about who or where', () => {
+  test('Status keeps the title, the plan’s goal as its description, where the task stands and its headline, and no request, who or where', () => {
     const harness = createHarness();
     const taskId = reachPullRequest(harness);
     const task = harness.task(taskId);
@@ -87,7 +88,7 @@ describe('share presets', () => {
       id: task.id,
       handle: task.handle,
       title: task.title,
-      request: 'Fix the scroll in tab groups',
+      request: '',
       stage: task.stage,
       stageReason: '',
       phases: task.phases,
@@ -115,7 +116,7 @@ describe('share presets', () => {
     });
     expect(status.task.plan?.body).toBe('');
     expect(status.task.plan?.document).toEqual({
-      goal: '',
+      goal: task.plan?.document?.goal ?? '',
       phases: (task.plan?.document?.phases ?? []).map((phase) => ({ title: phase.title, detail: '' })),
       behaviour: [],
       approach: '',
@@ -126,7 +127,7 @@ describe('share presets', () => {
     });
     expect(status.task.rounds?.[0]).toMatchObject({
       title: task.title,
-      request: 'Fix the scroll in tab groups',
+      request: '',
       branch: null,
       base: null,
       pullRequest: null,
@@ -147,22 +148,20 @@ describe('share presets', () => {
     expect(status.task.summary).toBe('See scroll.ts on feat/acme in  and #7.');
     expect(JSON.stringify(status)).not.toContain('shinsa://');
     expect(JSON.stringify(status)).not.toContain('Acme billing');
-    const full = resolveSharedTask(harness.state, task, context('full'));
+    const full = resolveSharedTask(harness.state, task, context('default'));
     expect(full.task.summary).toBe(links);
     expect(full.task.stageReason).toBe(task.stageReason);
   });
 
-  test('Full and Everything keep what today’s share sends', () => {
+  test('Default keeps the whole task', () => {
     const harness = createHarness();
     const taskId = reachPullRequest(harness);
-    const full = share(harness, taskId, 'full');
-    expect(full).toMatchObject({ preset: 'full', owner: 'mona', machine: 'Studio', code: true });
+    const full = share(harness, taskId, 'default');
+    expect(full).toMatchObject({ preset: 'default', owner: 'mona', machine: 'Studio', code: true });
     expect(full.task.pullRequest?.state).toBe('open');
     expect(full.task.plan?.document?.approach).toBe(harness.task(taskId).plan?.document?.approach);
     expect(full.evidence).toHaveLength(1);
     expect(full.runs.length).toBeGreaterThan(0);
-    const everything = share(harness, taskId, 'everything');
-    expect({ ...everything, preset: 'full' }).toEqual(full);
   });
 
   test('a task with no plan, report, result or proposal shares none of them under any preset', () => {
@@ -201,7 +200,7 @@ describe('share presets', () => {
       headline: 'Done.',
       result: 'Answered.',
     });
-    const full = resolveSharedTask(harness.state, task, context('full')).task;
+    const full = resolveSharedTask(harness.state, task, context('default')).task;
     expect(full.proposal).toMatchObject({ request: 'Change it.', why: 'Because.' });
     expect(full.rounds?.[0]?.outcome?.goal).toBe('Ship it.');
   });
