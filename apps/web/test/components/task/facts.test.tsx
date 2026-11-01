@@ -3,12 +3,14 @@ import type { Task, TriageDecisions } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskFacts } from '@/components/task/facts.tsx';
+import { connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createPartialCoverage } from '../../support/coverage.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
+import { createMachineResources, createTaskResources } from '../../support/resources.ts';
 import { createRound } from '../../support/rounds.ts';
 import {
   listSentCommands,
@@ -225,6 +227,41 @@ describe('the Account fact', () => {
   it('is left out for a task that runs on any account', () => {
     renderFacts(createTask({ id: 't' }));
     expect(screen.queryByRole('button', { name: /^Runs on/ })).toBeNull();
+  });
+});
+
+describe('the machine in the facts row', () => {
+  function renderOnMachine(resources: MachineChoice['resources']) {
+    const local = connection;
+    const task = createTask({ id: 't', handle: 'SW-7' });
+    const state = createShinsaState({ tasks: [task] });
+    const machine: MachineChoice = { id: 'k3x9', name: 'Studio', current: false, state, resources };
+    const view = { id: machine.id, name: machine.name, current: false };
+    const machines = [machine];
+    replaceConnection({ ...local, selectMachine: () => view, listMachines: () => machines });
+    render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={task} />
+      </TooltipProvider>
+    );
+    return screen.getByText('Studio');
+  }
+
+  afterEach(() => replaceConnection(null));
+
+  it('shows on hover what the task uses on its machine', async () => {
+    const fact = renderOnMachine(
+      createMachineResources({
+        tasks: [createTaskResources({ taskId: 't', checks: { cpuPercent: 30, memoryBytes: 1024 ** 3 } })],
+      })
+    );
+    expect(await findTooltipText(fact)).toBe(
+      'The machine this task runs onAgent4% · 0.5 GBServicesIdleChecks30% · 1 GBWorktree2 GB'
+    );
+  });
+
+  it('only names the machine while it has sent no reading', async () => {
+    expect(await findTooltipText(renderOnMachine(null))).toBe('The machine this task runs on');
   });
 });
 

@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  describeMachineResources,
-  describeTaskUse,
-  IDLE_TASK_USE,
-  listResourceGauges,
-  listTaskResourceRows,
-} from '@/lib/remote/resources.ts';
+import { describeMachineResources, listResourceGauges, listTaskUseLines } from '@/lib/remote/resources.ts';
 import { createMachineResources, createTaskResources } from '../../support/resources.ts';
 
 const GIGABYTE = 1024 ** 3;
@@ -25,46 +19,41 @@ describe('a machine’s resource use in words', () => {
   });
 });
 
-describe('a task’s resource use in words', () => {
-  it('names each kind of process that uses something and leaves idle ones out', () => {
-    expect(
-      describeTaskUse(
+describe('a task’s use of its machine, shown on hover', () => {
+  it('lists the agent, services, checks and worktree, calling an unused kind idle', () => {
+    const resources = createMachineResources({
+      tasks: [
+        createTaskResources({ taskId: 'other', agent: { cpuPercent: 50, memoryBytes: GIGABYTE } }),
         createTaskResources({
           taskId: 't',
           agent: { cpuPercent: 4, memoryBytes: 0.5 * GIGABYTE },
           services: IDLE,
           checks: { cpuPercent: 30.4, memoryBytes: 1.2 * GIGABYTE },
-        })
-      )
-    ).toBe('Agent 4%, 0.5 GB · Checks 30%, 1.2 GB');
-  });
-
-  it('says no process runs when nothing does', () => {
-    expect(describeTaskUse(createTaskResources({ taskId: 't', agent: IDLE }))).toBe(IDLE_TASK_USE);
-  });
-});
-
-describe('a machine’s open tasks by use', () => {
-  const tasks = { quiet: { id: 'quiet', title: 'Quiet' }, busy: { id: 'busy', title: 'Busy' } };
-
-  it('lists the busiest task first and skips a task the page does not know', () => {
-    const resources = createMachineResources({
-      tasks: [
-        createTaskResources({ taskId: 'quiet', agent: { cpuPercent: 1, memoryBytes: GIGABYTE } }),
-        createTaskResources({ taskId: 'busy', agent: { cpuPercent: 9, memoryBytes: GIGABYTE } }),
-        createTaskResources({ taskId: 'gone' }),
-        createTaskResources({
-          taskId: 'quiet',
-          agent: { cpuPercent: 1, memoryBytes: 3 * GIGABYTE },
-          worktreeBytes: null,
         }),
       ],
     });
-    expect(listTaskResourceRows(resources, tasks)).toEqual([
-      { task: tasks.busy, use: 'Agent 9%, 1 GB', worktree: '2 GB worktree' },
-      { task: tasks.quiet, use: 'Agent 1%, 3 GB', worktree: null },
-      { task: tasks.quiet, use: 'Agent 1%, 1 GB', worktree: '2 GB worktree' },
+    expect(listTaskUseLines(resources, 't')).toEqual([
+      { label: 'Agent', value: '4% · 0.5 GB' },
+      { label: 'Services', value: 'Idle' },
+      { label: 'Checks', value: '30% · 1.2 GB' },
+      { label: 'Worktree', value: '2 GB' },
     ]);
+  });
+
+  it('leaves the worktree out before du measured it', () => {
+    const resources = createMachineResources({
+      tasks: [createTaskResources({ taskId: 't', worktreeBytes: null })],
+    });
+    expect(listTaskUseLines(resources, 't')?.map((line) => line.label)).toEqual([
+      'Agent',
+      'Services',
+      'Checks',
+    ]);
+  });
+
+  it('has nothing to show without a reading or for a task the machine does not report', () => {
+    expect(listTaskUseLines(null, 't')).toBeNull();
+    expect(listTaskUseLines(createMachineResources(), 't')).toBeNull();
   });
 });
 

@@ -348,15 +348,13 @@ describe('the machines in Settings', () => {
       const meters = await screen.findByRole('img', { name: 'CPU 20% · Memory 8 of 32 GB · 120 GB free' });
       expect(meters.textContent).toContain('CPU20%');
       expect(screen.queryByText('Retry exports')).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: 'Show the open tasks on Studio' }));
-      expect(await screen.findByText('Retry exports')).toBeTruthy();
-      expect(screen.getByText('Agent 4%, 0.5 GB')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /open tasks on Studio/ })).toBeNull();
     } finally {
       replaceConnection(null);
     }
   });
 
-  it('says a machine has no reading yet, and that no open task uses it once opened', async () => {
+  it('says a machine has no reading yet, then shows its meters', async () => {
     const local = connection;
     const state = createShinsaState({});
     const reading: MachineChoice = { id: 'k3x9', name: 'Studio', current: true, state, resources: null };
@@ -385,8 +383,10 @@ describe('the machines in Settings', () => {
           <MachinesSettings />
         </RemoteServicesContext.Provider>
       );
-      fireEvent.click(await screen.findByRole('button', { name: 'Show the open tasks on Studio' }));
-      expect(await screen.findByText('No open task is using this machine.')).toBeTruthy();
+      expect(
+        await screen.findByRole('img', { name: 'CPU 20% · Memory 8 of 32 GB · 120 GB free' })
+      ).toBeTruthy();
+      expect(screen.queryByText('No reading yet.')).toBeNull();
     } finally {
       replaceConnection(null);
     }

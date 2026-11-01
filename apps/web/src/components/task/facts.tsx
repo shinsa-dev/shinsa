@@ -39,13 +39,14 @@ import { useReadOnly } from '@/components/task/read-only.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
-import { useMachine } from '@/lib/connection/socket.ts';
+import { useMachine, useMachines } from '@/lib/connection/socket.ts';
 import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
+import { listTaskUseLines } from '@/lib/remote/resources.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {
@@ -102,14 +103,26 @@ function HandleFact({ task }: { task: Task }) {
 
 function MachineFact({ task }: { task: Task }) {
   const machine = useMachine(task.id);
+  const resources = useMachines().find((candidate) => candidate.id === machine?.id)?.resources;
   if (!machine) return null;
+  const use = listTaskUseLines(resources, task.id);
   return (
-    <Hint label='The machine this task runs on'>
-      <span className={FACT}>
+    <Tooltip>
+      <TooltipTrigger render={<span className={cn(FACT, 'cursor-default')} />}>
         <Icon size='sm' name={MACHINE_ICON} />
         <span className='truncate'>{resolveMachineLabel(machine)}</span>
-      </span>
-    </Hint>
+      </TooltipTrigger>
+      <TooltipContent className={use ? 'min-w-44 flex-col items-stretch gap-1' : undefined}>
+        <span>The machine this task runs on</span>
+        {use?.map((line) => (
+          <InfoLine
+            key={line.label}
+            label={<TooltipLabel>{line.label}</TooltipLabel>}
+            value={<span className='tabular-nums'>{line.value}</span>}
+          />
+        ))}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

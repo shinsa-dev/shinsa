@@ -2749,9 +2749,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   browser's key for it; machines in the dashboard also show their open
   tasks and their task capacity, and, once its engine reports them (How busy each machine is, below), a line of meters
   for CPU, memory and disk ("CPU 42%", "Memory 12 of 32 GB", "Disk 120 GB free", each with a bar toned as it fills,
-  `listResourceGauges` in `lib/remote/resources.ts`), or "No reading yet." until then. The machine's name opens it to
-  its open tasks by use, busiest first, each with its agent, services and checks and its worktree's size, opening the
-  task on a click ("No open task is using this machine." when none does); whether it is open is remembered per machine. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
+  `listResourceGauges` in `lib/remote/resources.ts`), or "No reading yet." until then. What one task uses is on the
+  task itself: hovering its machine in the task's facts row adds its agent, services and checks (CPU and memory each,
+  or Idle) and its worktree's size under "The machine this task runs on" (`listTaskUseLines`). Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
   lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
   it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The
   machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add

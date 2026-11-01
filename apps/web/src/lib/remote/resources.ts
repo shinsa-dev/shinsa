@@ -3,21 +3,11 @@ import {
   type MachineResources,
   type ResourceUse,
   resolveMemoryPercent,
-  type Task,
-  type TaskResources,
 } from '@shinsa/core';
 import { resolveUsageTone } from '@/lib/accounts/usage.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
 export const NO_RESOURCE_READING = 'No reading yet.';
-
-export const IDLE_TASK_USE = 'No process running.';
-
-export interface TaskResourceRow<T extends Pick<Task, 'title'> = Task> {
-  task: T;
-  use: string;
-  worktree: string | null;
-}
 
 function describePercent(value: number) {
   return `${Math.round(Math.min(100, Math.max(0, value)))}%`;
@@ -34,49 +24,31 @@ export function describeMachineResources(
   return parts.join(' · ');
 }
 
-function describeUse(label: string, use: ResourceUse) {
-  if (use.cpuPercent <= 0 && use.memoryBytes <= 0) return null;
-  return `${label} ${describePercent(use.cpuPercent)}, ${describeGigabytes(use.memoryBytes)} GB`;
+const IDLE_USE = 'Idle';
+
+function describeUse(use: ResourceUse) {
+  if (use.cpuPercent <= 0 && use.memoryBytes <= 0) return IDLE_USE;
+  return `${describePercent(use.cpuPercent)} · ${describeGigabytes(use.memoryBytes)} GB`;
 }
 
-export function describeTaskUse(task: TaskResources) {
-  const parts = [
-    describeUse('Agent', task.agent),
-    describeUse('Services', task.services),
-    describeUse('Checks', task.checks),
-  ].filter((part) => part !== null);
-  return parts.length === 0 ? IDLE_TASK_USE : parts.join(' · ');
+export interface TaskUseLine {
+  label: string;
+  value: string;
 }
 
-function resolveTaskWeight(task: TaskResources) {
-  return {
-    cpu: task.agent.cpuPercent + task.services.cpuPercent + task.checks.cpuPercent,
-    memory: task.agent.memoryBytes + task.services.memoryBytes + task.checks.memoryBytes,
-  };
-}
-
-function compareTaskUse(left: TaskResources, right: TaskResources) {
-  const a = resolveTaskWeight(left);
-  const b = resolveTaskWeight(right);
-  return b.cpu - a.cpu || b.memory - a.memory;
-}
-
-export function listTaskResourceRows<T extends Pick<Task, 'title'>>(
-  resources: MachineResources,
-  tasks: Record<string, T>
-): TaskResourceRow<T>[] {
-  return [...resources.tasks].sort(compareTaskUse).flatMap((entry) => {
-    const task = tasks[entry.taskId];
-    if (!task) return [];
-    return [
-      {
-        task,
-        use: describeTaskUse(entry),
-        worktree:
-          entry.worktreeBytes === null ? null : `${describeGigabytes(entry.worktreeBytes)} GB worktree`,
-      },
-    ];
-  });
+export function listTaskUseLines(
+  resources: MachineResources | null | undefined,
+  taskId: string
+): TaskUseLine[] | null {
+  const entry = resources?.tasks.find((candidate) => candidate.taskId === taskId);
+  if (!entry) return null;
+  const lines = [
+    { label: 'Agent', value: describeUse(entry.agent) },
+    { label: 'Services', value: describeUse(entry.services) },
+    { label: 'Checks', value: describeUse(entry.checks) },
+  ];
+  if (entry.worktreeBytes === null) return lines;
+  return [...lines, { label: 'Worktree', value: `${describeGigabytes(entry.worktreeBytes)} GB` }];
 }
 
 export interface ResourceGauge {
