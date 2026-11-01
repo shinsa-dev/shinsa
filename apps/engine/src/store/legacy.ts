@@ -81,6 +81,8 @@ const SHARE_PRESET_LOG_VERSION = 13;
 
 const TEAM_FOCUS_LOG_VERSION = 14;
 
+const PLAN_CHECKS_LOG_VERSION = 15;
+
 const COMPACTION_BY_EUNOE_MODE = new Map<unknown, CompactionMode>([
   ['eunoe_compact', 'fold'],
   ['eunoe_default', 'fold'],
@@ -103,7 +105,7 @@ const GITBUTLER_EVENT_TYPES = [
 ];
 
 export function listLegacyEventTypes(version: number) {
-  return [
+  const types = [
     ...(version < 1 ? LEGACY_EVENT_TYPES : []),
     ...(version < TESTING_LOG_VERSION ? WALKTHROUGH_EVENT_TYPES : []),
     ...(version < WEEKLY_READINGS_LOG_VERSION ? ['run.metered'] : []),
@@ -116,7 +118,9 @@ export function listLegacyEventTypes(version: number) {
     ...(version < AGENT_REPLY_LOG_VERSION ? ['plan.proposed'] : []),
     ...(version < SHARE_PRESET_LOG_VERSION ? ['task.shared'] : []),
     ...(version < TEAM_FOCUS_LOG_VERSION ? ['focus.changed'] : []),
+    ...(version < PLAN_CHECKS_LOG_VERSION ? ['plan.proposed'] : []),
   ];
+  return [...new Set(types)];
 }
 
 function isRecord(value: unknown): value is Payload {
@@ -221,6 +225,13 @@ function resolveFindings(event: Payload) {
   return { ...event, findings: event.findings.map(resolveFinding) };
 }
 
+function resolvePlanProposed(event: Payload): Payload {
+  const current = withoutKeys(event, ['changeSummary', 'feedback']);
+  const document = current.document;
+  if (!isRecord(document) || !Array.isArray(document.verification)) return current;
+  return { ...current, document: { ...document, verification: document.verification.filter(isRecord) } };
+}
+
 function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
   switch (event.type) {
     case 'task.answered': {
@@ -277,7 +288,7 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
     case 'watchdog.checked':
       return resolveForkTaskIds(event);
     case 'plan.proposed':
-      return withoutKeys(event, ['changeSummary', 'feedback']);
+      return resolvePlanProposed(event);
     case 'focus.changed':
       if (!isRecord(event.focus) || 'teamId' in event.focus) return event;
       return { ...event, focus: { ...event.focus, teamId: null } };
