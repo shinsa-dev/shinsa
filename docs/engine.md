@@ -2631,10 +2631,18 @@ beside your run (Runs for a task, below).
   worktree, and must already be there (a folder only on the task's branch is refused with a message that says so); a
   path that leaves the repository is refused. Everything else goes through the same `readServiceInput` check as
   `POST /api/services` and the same `Terminals.addService`, so a taken name, a preview URL without `{port}` and the
-  limit are refused as they are for you, and the new service shows in Services at once. No tool changes or removes a
-  service, and none starts your own run: those stay yours. The house rules tell those roles to add a service when the
-  project has none they need and never for a one-off command, and the last phase's preview instruction to add the
-  one that shows the change when none does.
+  limit are refused as they are for you, and the new service shows in Services at once. No tool changes a service in
+  place (remove it and add it again), and none starts your own run: that stays yours. The house rules tell those
+  roles to add a service when the project has none they need and never for a one-off command, and the last phase's
+  preview instruction to add the one that shows the change when none does.
+- **Agents remove services.** The same two roles have `remove_service`: `services`, a list of names or ids of any
+  service in the task's project, its folder in this task's repository or not, since a cleanup comes in a batch.
+  `list_services` also names the project's services that cannot run for the task, so the agent can name them. Every
+  name is resolved before anything changes, so an unknown one is refused with a pointer to `list_services` and
+  nothing is removed. A service that runs for you or for another task is refused the same way, naming who runs it,
+  so an agent never stops your dev server; the task's own run of it is stopped with it. The rest goes through
+  `Terminals.removeServices`, as `POST /api/services/remove` does for Manage. The house rules ask an agent to remove
+  a service it added that no longer serves, or one you ask it to remove, and never one you use unless you asked.
 - **Shared beyond this machine.** A task's run of a service with a preview URL can be shared at its own address on
   `shinsa.page`, through remote access's tunnel, for a teammate to open without Shinsa (Sharing a preview, below).
 

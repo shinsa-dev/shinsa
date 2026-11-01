@@ -152,6 +152,13 @@ describe('what the house rules leave to the tools', () => {
       expect(resolveHouseRules(role)).not.toContain(rule);
   });
 
+  test('the roles that remove services are told when to remove one, and the reviewer is not', () => {
+    const rule = 'Remove a service with `remove_service` when one you added no longer serves';
+    for (const role of ['agent', 'investigator'] as const) expect(resolveHouseRules(role)).toContain(rule);
+    for (const role of ['reviewer', 'answerer', 'researcher'] as const)
+      expect(resolveHouseRules(role)).not.toContain(rule);
+  });
+
   test('the writing rules are one block every role gets once', () => {
     for (const role of ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'] as const) {
       const rules = resolveHouseRules(role);

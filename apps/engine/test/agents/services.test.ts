@@ -17,7 +17,7 @@ function setup(options: { services?: boolean; worktree?: boolean } = {}) {
   mkdirSync(join(repoPath, 'apps/api'), { recursive: true });
   if (options.worktree ?? true) mkdirSync(join(worktree, 'apps/api'), { recursive: true });
   const task = createTask({ worktreePath: worktree });
-  const other = createTask({ id: 'task-2', worktreePath: join(root, 'wt-2') });
+  const other = createTask({ id: 'task-2', handle: 'APP-2', worktreePath: join(root, 'wt-2') });
   const state = {
     repos: { 'repo-1': createRepo({ path: repoPath, projectId: 'p1' }) },
     projects: { p1: { id: 'p1', name: 'App', key: 'APP', folders: [root] } },
@@ -48,16 +48,18 @@ function setup(options: { services?: boolean; worktree?: boolean } = {}) {
   }
   const call = (name: ServiceToolName, input: Record<string, unknown> = {}, on: Task = task) =>
     handleServiceTool(name, input, { state, task: on, runner, now: 200_000 });
-  return { call, runner, fake, worktree, repoPath, other };
+  return { call, runner, fake, worktree, repoPath, root, other };
 }
 
 describe('the service tools', () => {
-  test('lists the services the task can run, each in the worktree', async () => {
-    const { call, worktree } = setup();
+  test('lists the services the task can run, each in the worktree, then the project’s others', async () => {
+    const { call, worktree, root } = setup();
     expect(await call('list_services')).toBe(
       [
         'The project’s services, as they run for this task:',
         `- api (stopped): \`bun dev\` in ${join(worktree, 'apps/api')}`,
+        'Its other services, which cannot run for this task:',
+        `- notes: \`ls\` in ${root}`,
       ].join('\n')
     );
   });
@@ -67,9 +69,9 @@ describe('the service tools', () => {
       'The project has no services. Add the one you need with add_service.'
     );
     const { call, other } = setup();
-    expect(await call('list_services', {}, { ...other, worktreePath: null })).toStartWith(
-      'None of the project’s services can run for this task'
-    );
+    const listed = await call('list_services', {}, { ...other, worktreePath: null });
+    expect(listed).toStartWith('None of the project’s services can run for this task');
+    expect(listed).toContain('- api: `bun dev`');
   });
 
   test('starts, reads, restarts and stops the task’s own run, never the main one or another task’s', async () => {
@@ -215,5 +217,55 @@ describe('the service tools', () => {
     expect(call('add_service', { name: 'web', command: 'x' }, { ...other, repoId: null })).rejects.toThrow(
       'add_service needs a task that works in a project’s repository.'
     );
+  });
+
+  test('removes services by name or id, the task’s own runs with them, outside the repository too', async () => {
+    const { call, runner, fake } = setup();
+    await call('run_service', { service: 'api', action: 'start' });
+    expect(await call('remove_service', { services: [' API ', 'id-2', 'api'] })).toBe(
+      'Removed api, notes from the project. The human no longer sees them under Services.'
+    );
+    expect(runner.snapshot()).toMatchObject({ services: [], terminals: [] });
+    expect(fake.spawned[0]?.hungUp).toBe(true);
+  });
+
+  test('removes a service whose other runs have stopped', async () => {
+    const { call, runner, repoPath } = setup();
+    runner.startService('id-1', { cwd: join(repoPath, 'apps/api'), place: 'repository', taskId: null });
+    await runner.stopService('id-1', null);
+    expect(await call('remove_service', { services: ['api'] })).toStartWith('Removed api');
+  });
+
+  test('refuses a service that runs for the human or another task, and removes nothing', async () => {
+    const { call, runner, repoPath, root, other } = setup();
+    mkdirSync(join(root, 'wt-2/apps/api'), { recursive: true });
+    runner.startService('id-1', { cwd: join(repoPath, 'apps/api'), place: 'repository', taskId: null });
+    await call('run_service', { service: 'api', action: 'start' }, other);
+    expect(call('remove_service', { services: ['notes', 'api'] })).rejects.toThrow(
+      'Nothing was removed: api runs for the human and task APP-2. Leave it, or ask the human to stop that run first.'
+    );
+    await runner.stopService('id-1', null);
+    expect(call('remove_service', { services: ['api'] }, { ...other, id: 'task-3' })).rejects.toThrow(
+      'api runs for task APP-2.'
+    );
+    const gone = createTask({ id: 'task-9', worktreePath: '/nowhere' });
+    runner.startService('id-2', { cwd: repoPath, place: 'repository', taskId: gone.id });
+    expect(call('remove_service', { services: ['notes'] })).rejects.toThrow('notes runs for task task-9.');
+    expect(runner.snapshot().services.map((each) => each.name)).toEqual(['api', 'notes']);
+  });
+
+  test('refuses an unknown service before removing any, a bad list and a task outside a project', async () => {
+    const { call, runner, other } = setup();
+    expect(call('remove_service', { services: ['api', 'web'] })).rejects.toThrow(
+      'No service web in the project. Call list_services to see them.'
+    );
+    expect(runner.snapshot().services).toHaveLength(2);
+    for (const services of [undefined, [], 'api', [3]])
+      expect(call('remove_service', { services })).rejects.toThrow(
+        'services must be a list of the services’ names.'
+      );
+    expect(
+      call('remove_service', { services: ['api'] }, { ...other, repoId: null, projectId: null })
+    ).rejects.toThrow('remove_service needs a task in a project.');
   });
 });

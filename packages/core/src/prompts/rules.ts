@@ -68,6 +68,11 @@ function listToolRules(tools: readonly ShinsaToolName[]) {
           'When the project has no service you need, such as the dev server that shows your change, add it with `add_service`: a name, the folder in this task’s repository, the command and, for a server, the preview URL with `{port}` where the run’s port goes. The human sees it under Services and can run it too. Add only what someone would keep running; never a one-off command such as a test or a build.',
         ]
       : []),
+    ...(tools.includes('remove_service')
+      ? [
+          'Remove a service with `remove_service` when one you added no longer serves, or when the human asks you to remove one. It removes the service for everyone, so never remove one the human uses unless they asked.',
+        ]
+      : []),
   ];
 }
 

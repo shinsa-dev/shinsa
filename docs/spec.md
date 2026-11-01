@@ -983,6 +983,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Agents add services (2026-10-29).** The task's agent adds a service the project lacks (`add_service`), such as
   the dev server that shows its change, so it can run it and attach the preview (`docs/engine.md` → Services →
   Agents add the services they need).
+- **Agents remove services (2026-11-01).** The task's agent removes the project's services it no longer needs, or
+  the ones you ask it to (`remove_service`), several at once; one that runs for you or another task is refused
+  (`docs/engine.md` → Services → Agents remove services).
 - **Local previews (2026-10-29).** A service's preview URL and port variable, a free port per task run, Open in
   the Services popovers, a task's Services fact and the Terminal toolbar, and the agent's `preview` evidence before
   the review (`docs/engine.md` → Services → A live preview).
