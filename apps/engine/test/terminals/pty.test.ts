@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { resolveDefaultShell } from '../../src/shell/login.ts';
 import {
   listenOnce,
   PORT_PROBE_SOCKET,
@@ -54,15 +55,15 @@ describe('spawnTerminalProcess', () => {
 });
 
 describe('resolveLoginShell', () => {
-  it('uses $SHELL, then the account’s shell, then zsh', () => {
+  it('uses $SHELL, then the account’s shell, then the platform’s default', () => {
     expect(resolveLoginShell({ SHELL: '/opt/homebrew/bin/fish' })).toBe('/opt/homebrew/bin/fish');
     expect(resolveLoginShell({}, () => ({ shell: '/bin/bash' }))).toBe('/bin/bash');
-    expect(resolveLoginShell({}, () => ({ shell: null }))).toBe('/bin/zsh');
+    expect(resolveLoginShell({}, () => ({ shell: null }))).toBe(resolveDefaultShell());
     expect(
       resolveLoginShell({}, () => {
         throw new Error('no user');
       })
-    ).toBe('/bin/zsh');
+    ).toBe(resolveDefaultShell());
     expect(resolveLoginShell({})).toBeString();
   });
 

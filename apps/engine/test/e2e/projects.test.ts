@@ -5,6 +5,7 @@ import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { startServer } from '../../src/http/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
@@ -51,9 +52,11 @@ async function open() {
       wakeEngine: () => Promise.resolve(false),
       engine: {
         bundled: false,
-        uid: 0,
-        ownsJob: () => true,
-        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+        service: createLaunchdService({
+          uid: 0,
+          ownsJob: () => true,
+          launchctl: () => Promise.resolve({ ok: false, output: '' }),
+        }),
       },
       runEngine: () => Promise.reject(new Error('not in this test')),
       onShutdown: () => undefined,

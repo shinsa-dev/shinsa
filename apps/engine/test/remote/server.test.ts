@@ -34,7 +34,13 @@ import { Engine } from '../../src/runtime/index.ts';
 import type { Schedules } from '../../src/schedules/index.ts';
 import type { Slack } from '../../src/slack/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
-import { createTempDir, createTestConfig, createTestOnboarding, until } from '../helpers/index.ts';
+import {
+  createTempDir,
+  createTestConfig,
+  createTestOnboarding,
+  overrideEnv,
+  until,
+} from '../helpers/index.ts';
 import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
 import { startFakeControlPlane } from './control-plane.ts';
 
@@ -979,8 +985,17 @@ describe('naming and opening', () => {
   });
 
   test('opens a page with the system opener and reports when it fails', async () => {
-    await openRemoteUrl('https://app.shinsa.dev/pair', createTempDir());
-    await expect(openRemoteUrl('fail', createTempDir())).rejects.toThrow();
-    await expect(createUrlOpener(createTempDir())('fail')).rejects.toThrow();
+    const restore = overrideEnv({ DISPLAY: ':0' });
+    try {
+      await openRemoteUrl('https://app.shinsa.dev/pair', createTempDir());
+      await expect(openRemoteUrl('fail', createTempDir())).rejects.toThrow();
+      await expect(createUrlOpener(createTempDir())('fail')).rejects.toThrow();
+    } finally {
+      restore();
+    }
+  });
+
+  test('opens nothing on a machine without a display, since the command prints the pairing page', async () => {
+    await openRemoteUrl('fail', createTempDir(), null);
   });
 });

@@ -164,7 +164,7 @@ export async function stopWithin(
   }
 }
 
-export interface LaunchdRestart {
+export interface ServiceRestart {
   byService: boolean;
   stop: () => Promise<void>;
   drain?: RestartDrain;
@@ -172,13 +172,13 @@ export interface LaunchdRestart {
   deadlineMs?: number;
 }
 
-export function createLaunchdRestarter(source: RestartSource, launchd: LaunchdRestart) {
-  const exit = launchd.exit ?? ((code: number) => process.exit(code));
+export function createServiceRestarter(source: RestartSource, service: ServiceRestart) {
+  const exit = service.exit ?? ((code: number) => process.exit(code));
   return new EngineRestarter(source, {
-    isService: () => Promise.resolve(launchd.byService),
-    drain: launchd.drain,
+    isService: () => Promise.resolve(service.byService),
+    drain: service.drain,
     restart: async () => {
-      await stopWithin(launchd.stop, launchd.deadlineMs);
+      await stopWithin(service.stop, service.deadlineMs);
       exit(EXIT_RESTART);
     },
   });

@@ -1,0 +1,4 @@
+#!/bin/sh
+if [ -n "$FAKE_OPEN_LOG" ]; then printf '%s\n' "$*" >> "$FAKE_OPEN_LOG"; fi
+if [ "$1" = "fail" ]; then echo "cannot open" >&2; exit 1; fi
+exit 0
