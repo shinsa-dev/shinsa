@@ -51,10 +51,10 @@ const ENTRIES: Record<string, ChatEntry[]> = {
   ] as unknown as ChatEntry[],
 };
 
-const readEntries = (runId: string) => ENTRIES[runId] ?? [];
+const transcripts = { listEntries: (runId: string) => ENTRIES[runId] ?? [] };
 
 function canRead(path: string, method = 'GET') {
-  return isGuestRoute(createGuestState(), 't1', method, path, readEntries);
+  return isGuestRoute(createGuestState(), 't1', method, path, transcripts);
 }
 
 describe('isGuestRoute', () => {
