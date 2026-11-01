@@ -71,7 +71,7 @@ export function resolveReportFact(task: Task, now = Date.now()) {
   };
 }
 
-export type FiledByTarget = { kind: 'task'; taskId: string } | { kind: 'automation'; scheduleId: string };
+type FiledByTarget = { kind: 'task'; taskId: string } | { kind: 'automation'; scheduleId: string };
 
 export interface FiledByFact {
   icon: IconName;
