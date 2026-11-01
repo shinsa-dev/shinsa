@@ -81,8 +81,8 @@ function listFocusCommands(state: ShinsaState): Command[] {
   ];
 }
 
-function listGoCommands(route: Route): Command[] {
-  return [
+function listGoCommands(route: Route, commands: ReadonlySet<string>): Command[] {
+  const go: Command[] = [
     {
       kind: 'go',
       id: 'go.home',
@@ -128,6 +128,7 @@ function listGoCommands(route: Route): Command[] {
       run: openFeedback,
     },
   ];
+  return commands.has('feedback.write') ? go : go.filter((command) => command.id !== 'feedback.open');
 }
 
 function listAppearanceCommands(theme: ThemePreference, layout: LayoutPreference): Command[] {
@@ -168,10 +169,11 @@ export function listGlobalSections(
   state: ShinsaState,
   route: Route,
   theme: ThemePreference,
-  layout: LayoutPreference
+  layout: LayoutPreference,
+  commands: ReadonlySet<string>
 ): CommandSection[] {
   return [
-    { id: 'global.go', heading: 'Go to', rank: RANK.global, commands: listGoCommands(route) },
+    { id: 'global.go', heading: 'Go to', rank: RANK.global, commands: listGoCommands(route, commands) },
     { id: 'global.focus', heading: 'Focus', rank: RANK.global + 1, commands: listFocusCommands(state) },
     {
       id: 'global.appearance',

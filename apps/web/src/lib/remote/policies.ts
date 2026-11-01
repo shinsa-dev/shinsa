@@ -43,7 +43,7 @@ export function listPolicyMachineItems(
       .map((machine) => ({
         value: machine.id,
         label: machine.name,
-        disabled: describeUnreachableMachine(machine.name),
+        disabled: describeUnreachableMachine(machine),
       })),
   ];
 }

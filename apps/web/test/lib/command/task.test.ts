@@ -6,16 +6,20 @@ import type { LineComment } from '@/lib/review/draft.ts';
 import * as secrets from '@/lib/secrets.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnCommands } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
+let engine: ReturnType<typeof spyOnEngine>;
 
 beforeEach(() => {
   spies = spyOnCommands();
+  engine = spyOnEngine();
 });
 
 afterEach(() => {
   spies.restore();
+  engine.mockRestore();
 });
 
 const PULL_REQUEST = {
