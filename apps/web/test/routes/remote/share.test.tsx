@@ -9,6 +9,7 @@ import { createTask } from '../../support/state.ts';
 
 const ORIGINAL_SOCKET = globalThis.WebSocket;
 const CODE_TAB_LOADED = { timeout: 5000 };
+const blobs = new Map<string, Promise<string>>();
 
 afterEach(() => {
   mock.restore();
@@ -53,15 +54,15 @@ function connect(session: Response | null = null) {
   globalThis.WebSocket = function createFakeSocket(url: string) {
     return machine.options.createSocket(url);
   } as unknown as typeof WebSocket;
-  const blobs = new Map<string, string>();
   spyOn(URL, 'createObjectURL').mockImplementation(((blob: Blob) => {
-    const url = `blob:test-${blobs.size}`;
-    void blob.text().then((text) => blobs.set(url, text));
+    const url = `blob:test-${crypto.randomUUID()}`;
+    blobs.set(url, blob.text());
     return url;
   }) as never);
   spyOn(globalThis, 'fetch').mockImplementation(((input: string) => {
     if (input === '/__remote/session') return Promise.resolve(session ?? new Response('', { status: 401 }));
-    if (input.startsWith('blob:')) return Promise.resolve(new Response(blobs.get(input) ?? ''));
+    if (input.startsWith('blob:'))
+      return (blobs.get(input) ?? Promise.resolve('')).then((text) => new Response(text));
     return machine.options.fetch(input);
   }) as never);
   return machine;
