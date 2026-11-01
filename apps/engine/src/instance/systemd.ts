@@ -15,7 +15,7 @@ const STOP_TIMEOUT_S = STOP_DEADLINE_MS / 1000 + 10;
 
 const EXEC_ESCAPES: Record<string, string> = { '\\': '\\\\', '"': '\\"', '%': '%%', $: '$$' };
 
-export interface SystemdOptions {
+interface SystemdOptions {
   env: Env;
   program: string;
   user: string;

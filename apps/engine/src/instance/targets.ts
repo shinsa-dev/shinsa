@@ -1,9 +1,4 @@
-export const ENGINE_TARGETS = [
-  'bun-darwin-arm64',
-  'bun-darwin-x64',
-  'bun-linux-x64',
-  'bun-linux-arm64',
-] as const;
+const ENGINE_TARGETS = ['bun-darwin-arm64', 'bun-darwin-x64', 'bun-linux-x64', 'bun-linux-arm64'] as const;
 
 export type EngineTarget = (typeof ENGINE_TARGETS)[number];
 

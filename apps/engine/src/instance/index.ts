@@ -43,5 +43,4 @@ export {
   resolveUnit,
   resolveUnitPath,
   SYSTEMD_UNIT,
-  type SystemdOptions,
 } from './systemd.ts';
