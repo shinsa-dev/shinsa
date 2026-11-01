@@ -19,6 +19,7 @@ import {
 const CONTEXT: SharedTaskContext = {
   preset: 'standard',
   owner: 'mona',
+  ownerProfile: { name: 'Mona Lisa', avatarUrl: 'https://avatars.example/mona' },
   machine: 'Studio',
   repository: 'superwall/paywall-next',
 };
@@ -171,6 +172,7 @@ describe('what a shared task shows', () => {
     expect(shared.repo).toMatchObject({ id: task.repoId, path: '' });
     expect(shared).toMatchObject({
       owner: 'mona',
+      ownerProfile: { name: 'Mona Lisa', avatarUrl: 'https://avatars.example/mona' },
       machine: 'Studio',
       repository: 'superwall/paywall-next',
       code: true,
