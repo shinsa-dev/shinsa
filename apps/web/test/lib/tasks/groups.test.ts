@@ -11,7 +11,9 @@ import {
   TASK_GROUP,
   TASK_GROUPS,
 } from '@/lib/tasks/groups.ts';
+import { resolveTeamTaskState } from '@/lib/teams/feeds.ts';
 import { createGate, createRepo, createShinsaState, createTask, NOW } from '../../support/state.ts';
+import { createTeamFeedTask } from '../teams/machine.ts';
 
 function waiting(id: string, waitsOn: string[], overrides: Partial<Task> = {}) {
   return createTask({ id, stage: 'waiting_on_tasks', waitsOn, ...overrides });
@@ -391,6 +393,66 @@ describe('listTaskGroupSections', () => {
     expect(ids('working', 'oauth')).toEqual({ working: ['waiter'] });
     expect(ids('working', 'feat/next')).toEqual({ working: ['next'] });
     expect(ids(null, 'nothing like this').working).toEqual([]);
+  });
+});
+
+describe('listTaskGroupSections with a focused team', () => {
+  function teamEntry(task: Task, gates: Gate[] = [], owner = 'kai') {
+    const entry = createTeamFeedTask({ task, gates, owner });
+    return { entry, state: resolveTeamTaskState(entry), heldAt: null };
+  }
+
+  const state = createShinsaState({
+    tasks: [
+      createTask({ id: 'mine-old', createdAt: NOW - 90_000 }),
+      createTask({ id: 'mine-waiter', stage: 'waiting_on_tasks', waitsOn: ['mine-old'] }),
+      createTask({ id: 'mine-new', createdAt: NOW - 10_000 }),
+      createTask({ id: 'mine-done', stage: 'done', stageChangedAt: NOW - 5_000 }),
+    ],
+  });
+  const team = [
+    teamEntry(createTask({ id: 'kai-middle', createdAt: NOW - 50_000 })),
+    teamEntry(createTask({ id: 'kai-last', createdAt: NOW - 1_000 })),
+    teamEntry(createTask({ id: 'kai-high', priority: 'high', createdAt: NOW })),
+    teamEntry(createTask({ id: 'kai-done', stage: 'merged', stageChangedAt: NOW - 1_000 })),
+    teamEntry(createTask({ id: 'kai-review' }), [
+      createGate({ id: 'g', taskId: 'kai-review', type: 'review' }),
+    ]),
+    teamEntry(createTask({ id: 'lee-task', title: 'Elsewhere', createdAt: NOW + 1 }), [], 'lee'),
+  ];
+
+  function ids(search = '') {
+    return Object.fromEntries(
+      listTaskGroupSections(state, search, null, team)
+        .filter(({ entries }) => entries.length > 0)
+        .map(({ group, entries }) => [
+          group.key,
+          entries.map(
+            (entry) => `${entry.team ? '@' : ''}${entry.task.id}${entry.depth ? `:${entry.depth}` : ''}`
+          ),
+        ])
+    );
+  }
+
+  it('puts teammates’ tasks in the same groups as yours, in the same order, keeping your chains together', () => {
+    expect(ids()).toEqual({
+      review: ['@kai-review'],
+      working: [
+        '@kai-high',
+        'mine-old',
+        'mine-waiter:1',
+        '@kai-middle',
+        'mine-new',
+        '@kai-last',
+        '@lee-task',
+      ],
+      done: ['@kai-done', 'mine-done'],
+    });
+  });
+
+  it('matches a teammate’s task by its owner and machine too', () => {
+    expect(ids('lee')).toEqual({ working: ['@lee-task'] });
+    expect(ids('studio').working).toEqual(['@kai-high', '@kai-middle', '@kai-last', '@lee-task']);
   });
 });
 

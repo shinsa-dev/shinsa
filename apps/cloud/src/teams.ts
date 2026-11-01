@@ -42,6 +42,7 @@ async function serializeTeam(team: TeamRow, userId: string, world: CloudWorld): 
     userId: row.user_id,
     online: isInstanceOnline(row, now),
     lastSeenAt: row.last_seen_at,
+    ...(row.signing_key ? { signingKey: row.signing_key } : {}),
   }));
   const requests: MemberRow[] = [];
   if (role === 'owner') requests.push(...(await world.store.listTeamRequesters(team.id)));

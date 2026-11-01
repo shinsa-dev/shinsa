@@ -88,6 +88,7 @@ describe('remote.json', () => {
       teamKeys: [],
       grants: [{ userId: '7', teamId: 't1', secret: 'g1' }],
       machine: { publicKey: 'p', privateKey: 'k' },
+      signing: null,
       credentials: CREDENTIALS,
       owner: 'mona',
       enabled: true,
@@ -226,6 +227,23 @@ describe('the remote store', () => {
     const key = await store.resolveMachineKey();
     expect(key.publicKey).not.toBe('p');
   });
+
+  test('keeps a signing key apart from the machine key, made once and read back after a restart', async () => {
+    const path = createPath();
+    const store = new RemoteStore(path);
+    const first = await store.resolveSigningKey();
+    expect(await store.resolveSigningKey()).toEqual(first);
+    expect(first.publicKey).not.toBe((await store.resolveMachineKey()).publicKey);
+    const again = await new RemoteStore(path).resolveSigningKey();
+    expect(again.publicKey).toBe(first.publicKey);
+    expect(again.privateKey.algorithm.name).toBe('ECDSA');
+  });
+
+  test('makes a new signing key when the stored one cannot be read', async () => {
+    const path = createPath();
+    writeFileSync(path, JSON.stringify({ signing: { publicKey: 'p', privateKey: '{' } }));
+    expect((await new RemoteStore(path).resolveSigningKey()).publicKey).not.toBe('p');
+  });
 });
 
 describe('the owner’s profile', () => {
@@ -259,8 +277,8 @@ describe('readTeams', () => {
         owner,
         createdAt: 1,
         machines: [
-          { id: 'm1', name: 'Studio', userId: '1', online: true, lastSeenAt: 5 },
-          { id: 'm2', name: 'Laptop', userId: '7' },
+          { id: 'm1', name: 'Studio', userId: '1', online: true, lastSeenAt: 5, signingKey: 'sk' },
+          { id: 'm2', name: 'Laptop', userId: '7', signingKey: 4 },
           { id: 'm3', name: 4, userId: '7' },
           'nope',
         ],
@@ -273,7 +291,7 @@ describe('readTeams', () => {
         'team-1',
         'owner',
         [
-          { id: 'm1', name: 'Studio', userId: '1', online: true, lastSeenAt: 5 },
+          { id: 'm1', name: 'Studio', userId: '1', online: true, lastSeenAt: 5, signingKey: 'sk' },
           { id: 'm2', name: 'Laptop', userId: '7', online: false, lastSeenAt: null },
         ],
       ],

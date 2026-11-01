@@ -466,6 +466,7 @@ export interface SharedListing {
   task: Task;
   gates: Gate[];
   project: Project | null;
+  repo: Repo | null;
 }
 
 export function resolveSharedListing(
@@ -477,11 +478,13 @@ export function resolveSharedListing(
   const grants: Grants = (group) => hasShareGroup(preset, group);
   const projectId = resolveTaskProject(state, task);
   const project = grants('people') && projectId ? state.projects[projectId] : undefined;
+  const repo = grants('people') && task.repoId ? state.repos[task.repoId] : undefined;
   const links = grants('people') ? SHARED_LINK_KINDS : new Set<string>();
   return {
     task: scrubValue(redactTask(task, preset, grants), links),
     gates: grants('activity') ? gates.map((gate) => scrubValue(redactGate(gate), links)) : [],
     project: project ? redactProject(project) : null,
+    repo: repo ? redactRepo(repo) : null,
   };
 }
 
