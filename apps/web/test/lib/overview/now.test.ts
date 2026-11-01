@@ -3,6 +3,7 @@ import type { DisplayPhase } from '@shinsa/core';
 import {
   describeAgentReviewFact,
   describeFollowUpNote,
+  describeResultTitle,
   isAgentWorking,
   isTaskWatchable,
   listFeedLines,
@@ -90,6 +91,12 @@ describe('resolveNowTitle', () => {
     );
     const yours = { ...closed, cancelledFrom: 'planning' as const, stageReason: 'cancelled by you' };
     expect(resolveNowTitle(yours, [], null, undefined)).toBe('Cancelled at Plan: you cancelled the task.');
+    expect(resolveNowTitle(yours, [], null, undefined, null, 'Kai')).toBe(
+      'Cancelled at Plan: Kai cancelled the task.'
+    );
+    expect(resolveNowTitle(yours, [], null, undefined, null, 'The owner')).toBe(
+      'Cancelled at Plan: the owner cancelled the task.'
+    );
     const failed = { ...closed, stageReason: 'cancelled after a failure' };
     expect(resolveNowTitle(failed, [], null, undefined)).toBe(
       'Cancelled at Merge: cancelled after a failure.'
@@ -334,5 +341,14 @@ describe('what the now card shows', () => {
     expect(describeFollowUpNote('operate', 'agent')).toBe(
       'Ask a follow-up or for more work in the chat. The agent answers a follow-up; more work starts a new round.'
     );
+  });
+});
+
+describe('describeResultTitle', () => {
+  it('names the owner whose question was answered, and leaves the other steps alone', () => {
+    expect(describeResultTitle('answer')).toBe('Answered your question');
+    expect(describeResultTitle('answer', 'Kai')).toBe('Answered Kai’s question');
+    expect(describeResultTitle('answer', 'The owner')).toBe('Answered the owner’s question');
+    expect(describeResultTitle('research', 'Kai')).toBe('Wrote the report');
   });
 });

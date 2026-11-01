@@ -2,6 +2,8 @@ import { type Bytes, parseBase64Url, serializeBase64Url, serializeHex } from './
 
 export const REMOTE_KEY_ALGORITHM = { name: 'ECDH', namedCurve: 'P-256' } as const;
 
+export const SIGNING_KEY_ALGORITHM = { name: 'ECDSA', namedCurve: 'P-256' } as const;
+
 const RAW_PUBLIC_KEY_BYTES = 65;
 
 const FINGERPRINT_BYTES = 10;
@@ -30,6 +32,30 @@ export async function parsePrivateKey(text: string) {
   try {
     return await crypto.subtle.importKey('jwk', JSON.parse(text) as WebKey, REMOTE_KEY_ALGORITHM, false, [
       'deriveBits',
+    ]);
+  } catch {
+    return null;
+  }
+}
+
+export function isSigningPublicKey(text: string) {
+  return /^[A-Za-z0-9_-]+$/.test(text) && parseBase64Url(text)?.length === RAW_PUBLIC_KEY_BYTES;
+}
+
+export async function parseSigningPublicKey(text: string) {
+  const raw = isSigningPublicKey(text) ? parseBase64Url(text) : null;
+  if (!raw) return null;
+  try {
+    return await crypto.subtle.importKey('raw', raw, SIGNING_KEY_ALGORITHM, true, ['verify']);
+  } catch {
+    return null;
+  }
+}
+
+export async function parseSigningPrivateKey(text: string) {
+  try {
+    return await crypto.subtle.importKey('jwk', JSON.parse(text) as WebKey, SIGNING_KEY_ALGORITHM, false, [
+      'sign',
     ]);
   } catch {
     return null;

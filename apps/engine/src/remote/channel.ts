@@ -29,10 +29,12 @@ const MAX_OPEN_REQUESTS = 32;
 
 const POLICY_VIOLATION = 1008;
 
+const DROPPED = 0;
+
 const DROPPED_HEADERS = new Set(['host', 'connection', 'cookie', 'origin', 'content-length', 'upgrade']);
 
 export interface ChannelPeer {
-  send: (data: string | Bytes) => void;
+  send: (data: string | Bytes) => unknown;
   close: (code: number, reason: string) => void;
 }
 
@@ -217,7 +219,9 @@ export class RemoteChannel {
     const state = this.#state;
     if (state.kind !== 'open') return Promise.resolve();
     return state.seal(encodeText(serializeChannelMessage(message))).then((frame) => {
-      if (this.#state.kind === 'open') this.#peer.send(frame);
+      if (this.#state.kind !== 'open' || this.#peer.send(frame) !== DROPPED) return;
+      log.warn('[Remote] Dropped a sealed frame, closing the channel', { bytes: frame.byteLength });
+      this.fail('The channel dropped a frame.');
     });
   }
 

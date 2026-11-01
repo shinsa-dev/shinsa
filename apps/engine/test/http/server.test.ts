@@ -564,7 +564,7 @@ describe('the socket', () => {
     const client = connect(base);
     await client.opened;
     await until('the first state', () => client.messages.length === 3);
-    expect(client.messages.map((message) => message.type)).toEqual(['state', 'surfaces', 'engine']);
+    expect(client.messages.map((message) => message.type)).toEqual(['surfaces', 'engine', 'state']);
     client.socket.send(
       JSON.stringify({
         type: 'command',
@@ -639,6 +639,25 @@ describe('the socket', () => {
     await engine.dispatch({ type: 'project.write', project: { name: 'After close', color: 'blue' } });
   });
 
+  test('a state over 16 MB still reaches the page with every connect message before it', async () => {
+    const { base, engine } = await start();
+    const request = 'x'.repeat(1024 * 1024);
+    for (let index = 0; index < 17; index += 1) {
+      await engine.dispatch({ type: 'task.create', request: `${index}${request}`, repoId: null });
+    }
+    expect(JSON.stringify(serializeState(engine.state)).length).toBeGreaterThan(16 * 1024 * 1024);
+    const client = connect(base);
+    await client.opened;
+    await until('the state', () => client.messages.some((message) => message.type === 'state'));
+    expect(client.messages.map((message) => message.type)).toEqual(['surfaces', 'engine', 'state']);
+    client.socket.send(JSON.stringify({ type: 'hello', surface: 'browser' }));
+    await engine.dispatch({ type: 'task.create', request: 'After the state', repoId: null });
+    await until('a patch after the state', () =>
+      client.messages.some((message) => message.type === 'state.patch')
+    );
+    client.socket.close();
+  });
+
   test('every page learns on connect and on each change whether the desktop app is connected', async () => {
     const { base } = await start();
     const desktopNews = (messages: ServerMessage[]) =>
@@ -704,7 +723,7 @@ describe('the socket', () => {
       await until('the failure to be logged', () =>
         error.mock.calls.some(([message]) => message === '[Socket] Message failed')
       );
-      expect(client.messages.map((message) => message.type)).toEqual(['state', 'surfaces', 'engine']);
+      expect(client.messages.map((message) => message.type)).toEqual(['surfaces', 'engine', 'state']);
       client.socket.close();
     } finally {
       error.mockRestore();

@@ -120,6 +120,7 @@ export class Remote {
       ping: options.ping ?? requestHealth,
       localUrl: options.localUrl,
       version: options.version,
+      signingKey: async () => (await this.store.resolveSigningKey()).publicKey,
       onRevoked: () => this.#forget(),
       onAccess: (access) => this.#recordAccess(access),
       onTeams: (teams) => {

@@ -3,7 +3,8 @@ import { serializeShareMessage } from '@shinsa/core';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { TeamTaskPage } from '@/routes/team-task.tsx';
 import { createSharedTask } from '../lib/share/fixtures.ts';
-import { FakeTeamSocket } from '../lib/teams/machine.ts';
+import { createTeamFeedTask, FakeTeamSocket } from '../lib/teams/machine.ts';
+import { pushTeams, startFakeServer, stopFakeServer } from '../support/server.ts';
 import { createTask } from '../support/state.ts';
 
 const ORIGINAL_SOCKET = globalThis.WebSocket;
@@ -53,5 +54,53 @@ describe('a teammate’s task in the local app', () => {
     );
     await waitFor(() => expect(screen.getByText('This task is not shown to your team')).toBeDefined());
     expect(screen.getByText('Not shown any more.')).toBeDefined();
+  });
+});
+
+describe('a teammate’s task while their machine is offline', () => {
+  afterEach(stopFakeServer);
+
+  const OFFLINE = {
+    teamId: 'team1',
+    instanceId: 'p7m2',
+    name: 'Studio',
+    userId: '7',
+    status: 'offline' as const,
+    reason: 'Offline.',
+    updatedAt: Date.now() - 60_000,
+  };
+
+  it('opens the full copy this machine kept, marked as a copy from before their machine went offline', async () => {
+    startFakeServer();
+    pushTeams({ machines: [OFFLINE], tasks: [createTeamFeedTask()] });
+    const sockets = openRelay();
+    expect(screen.getByText('Opening the team task')).toBeDefined();
+    const shared = createSharedTask({
+      task: createTask({ id: 'kai-task', title: 'Add the billing page', stage: 'building' }),
+      owner: 'kai',
+    });
+    act(() =>
+      sockets[0]?.emit('message', {
+        data: serializeShareMessage({ t: 'view', data: JSON.stringify({ shared, files: {}, updatedAt: 1 }) }),
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Read-only copy from before their machine went offline')).toBeDefined()
+    );
+    expect(screen.getByRole('tab', { name: /Chat/ })).toBeDefined();
+  });
+
+  it('shows the task’s summary from its list when this machine kept no full copy', async () => {
+    startFakeServer();
+    pushTeams({ machines: [OFFLINE], tasks: [createTeamFeedTask()] });
+    const sockets = openRelay();
+    act(() =>
+      sockets[0]?.emit('message', {
+        data: serializeShareMessage({ t: 'closed', reason: 'The teammate’s machine is offline.' }),
+      })
+    );
+    await waitFor(() => expect(screen.getByText(/kai’s machine is offline/)).toBeDefined());
+    expect(screen.getByText('Add the billing page')).toBeDefined();
+    expect(screen.getByText('Offline')).toBeDefined();
   });
 });

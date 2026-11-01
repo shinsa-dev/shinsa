@@ -53,7 +53,7 @@ type ChannelState<Subject> =
   | { kind: 'closed' };
 
 function serializeViewKey(view: LiveShare['view']) {
-  return JSON.stringify({ ...view, updatedAt: 0 });
+  return JSON.stringify({ ...view, updatedAt: 0, snapshot: null });
 }
 
 export async function createChannelEphemeral() {

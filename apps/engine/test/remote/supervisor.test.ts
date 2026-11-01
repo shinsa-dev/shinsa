@@ -45,6 +45,7 @@ function createWorld(
     heartbeat?: () => Promise<HeartbeatResponse>;
     ping?: () => boolean;
     offline?: () => Promise<void>;
+    signingKey?: () => Promise<string>;
   } = {}
 ) {
   const connectors: FakeConnector[] = [];
@@ -91,6 +92,7 @@ function createWorld(
     },
     localUrl: () => 'http://127.0.0.1:7446',
     version: '1.0.0',
+    ...(options.signingKey ? { signingKey: options.signingKey } : {}),
     onRevoked: () => revoked.push(1),
     onAccess: (access) => accesses.push(access),
     timings: FAST,
@@ -119,6 +121,17 @@ describe('the restart delay', () => {
 });
 
 describe('the tunnel supervisor', () => {
+  test('sends the machine’s signing key with every heartbeat', async () => {
+    const world = createWorld({ signingKey: () => Promise.resolve('signing-key') });
+    world.supervisor.start(CREDENTIALS);
+    await until(() => world.heartbeats.length > 0);
+    expect(world.heartbeats[0]).toEqual({
+      token: 'machine',
+      request: { localUrl: 'http://127.0.0.1:7446', version: '1.0.0', signingKey: 'signing-key' },
+    });
+    await world.supervisor.stop();
+  });
+
   test('connects, heartbeats with the local URL, pings and heartbeats again every few pings', async () => {
     const world = createWorld();
     world.supervisor.start(CREDENTIALS);
