@@ -12,7 +12,7 @@ import {
 
 const USER_TAG = 'cursor-pointer text-inherit no-underline outline-none hover:text-fg-4 active:text-fg-4';
 
-export function UserAvatar({ user, className }: { user: UserProfile; className?: string }) {
+function UserAvatar({ user, className }: { user: UserProfile; className?: string }) {
   if (user.avatarUrl)
     return (
       <img
@@ -65,7 +65,7 @@ export function UserIdentity({
   );
 }
 
-export function UserCard({ user, detail }: { user: UserProfile; detail?: string }) {
+function UserCard({ user, detail }: { user: UserProfile; detail?: string }) {
   return (
     <>
       <UserIdentity user={user} detail={detail} className='px-3 py-2.5' />

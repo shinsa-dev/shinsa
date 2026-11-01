@@ -9,7 +9,7 @@ export function listSharedTabs(task: Task, shared: SharedTask): TaskTab[] {
   return listTaskTabs(task).filter((tab) => (tab !== 'chat' || chat) && (tab !== 'code' || shared.code));
 }
 
-export const UNKNOWN_OWNER = 'The owner';
+const UNKNOWN_OWNER = 'The owner';
 
 export interface SharedOwner {
   name: string;
