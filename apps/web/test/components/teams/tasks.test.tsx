@@ -50,7 +50,7 @@ describe('teammates’ tasks', () => {
     expect(screen.getByText('Teammates in Platform')).toBeDefined();
     expect(screen.getByText('Add the billing page')).toBeDefined();
     expect(screen.getByText('Ship the invoice export')).toBeDefined();
-    expect(screen.getAllByText('@kai')).toHaveLength(2);
+    expect(screen.getAllByText('kai')).toHaveLength(2);
     fireEvent.click(screen.getByText('Add the billing page'));
     expect(location.pathname).toBe('/teams/team1/p7m2/kai-task');
   });
@@ -81,6 +81,14 @@ describe('teammates’ tasks', () => {
     );
     expect(screen.getByText('Add the billing page')).toBeDefined();
     expect(screen.queryByText('Ship the invoice export')).toBeNull();
+    const row = screen.getByText('Add the billing page').closest('[role="button"]');
+    if (!(row instanceof HTMLElement)) throw new Error('No row.');
+    expect(row.tagName).toBe('DIV');
+    expect(row.closest('button')).toBeNull();
+    expect(row.querySelector('a')).not.toBeNull();
+    fireEvent.keyDown(row, { key: 'Enter' });
+    expect(location.pathname).toBe('/teams/team1/p7m2/kai-task');
+    history.replaceState(null, '', '/');
     fireEvent.click(screen.getByText('Add the billing page'));
     expect(location.pathname).toBe('/teams/team1/p7m2/kai-task');
     pushTeams({ machines: [], tasks: [MERGED] });

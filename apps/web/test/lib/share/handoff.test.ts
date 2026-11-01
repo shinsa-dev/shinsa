@@ -60,7 +60,7 @@ describe('handing a task off', () => {
       at: 5,
     });
     expect(describeHandoffClaim(KAI)).toBe('Kai Lane is working on this task');
-    expect(describeHandoffClaim({ ...KAI, name: null })).toBe('@kai is working on this task');
+    expect(describeHandoffClaim({ ...KAI, name: null })).toBe('kai is working on this task');
     expect(describeHandoffBanner({ kind: 'off' })).toBeNull();
     expect(describeHandoffBanner({ kind: 'linking' })).toBe('Making the hand-off link.');
     expect(describeHandoffBanner({ kind: 'failed', message: 'Remote access is off.' })).toBe(

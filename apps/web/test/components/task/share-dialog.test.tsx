@@ -228,7 +228,7 @@ describe('handing a task off as a kind of share', () => {
     const dialog = await findHandoff();
     const text = (await screen.findByRole('dialog')).textContent;
     expect(text).toContain('Kai Lane is working on this task. It stays yours');
-    expect(text).toContain('@kai');
+    expect(text).toContain('Kai Lanekai');
     expect(text).toContain('Joined just now');
     fireEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     const confirm = await screen.findByRole('alertdialog');

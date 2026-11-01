@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import type { AccessRequest, RemoteDevice, RemoteTeamEntry } from '@shinsa/core';
+import type { AccessRequest, RemoteDevice, RemoteTeamEntry, SharedPerson } from '@shinsa/core';
 import {
   isTeamKey,
   type MachineCredentials,
@@ -244,6 +244,12 @@ export function listTeamEntries(file: RemoteFile): RemoteTeamEntry[] {
       team: null,
     }));
   return [...known, ...asked];
+}
+
+export function resolveOwnerProfile(file: RemoteFile): SharedPerson | null {
+  const owner = file.access?.owner;
+  if (!(owner && file.owner && owner.login.toLowerCase() === file.owner.toLowerCase())) return null;
+  return { name: owner.name, avatarUrl: owner.avatarUrl };
 }
 
 export function readAccess(value: unknown): RemoteAccess | null {

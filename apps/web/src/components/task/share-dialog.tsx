@@ -9,19 +9,18 @@ import {
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
 import { Field, FieldLabel } from '@shinsa/ui/components/field';
-import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
-import { UserAvatar } from '@/components/settings/user-row.tsx';
+import { UserIdentity } from '@/components/people/user-tag.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
 import { useEngineCommand } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
-import { describeUserHandle, describeUserName } from '@/lib/remote/users.ts';
+import { describeUserName } from '@/lib/remote/users.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
   changeShareLimit,
@@ -205,20 +204,12 @@ function CopyLinkButton({ url, label = 'Copy link' }: { url: string; label?: str
 }
 
 function HandoffGuest({ view }: { view: Extract<HandoffView, { kind: 'claimed' }> }) {
-  const handle = describeUserHandle(view.guest);
   return (
-    <div className='flex w-full min-w-0 items-center gap-2.5 text-start'>
-      <UserAvatar user={view.guest} />
-      <div className='flex min-w-0 flex-1 flex-col'>
-        <div className='flex min-w-0 items-center gap-1.5 text-xs'>
-          <Truncate className='text-fg-4'>{describeUserName(view.guest)}</Truncate>
-          {handle && <span className='shrink-0 text-fg-2'>{handle}</span>}
-        </div>
-        <span className='text-2xs text-fg-2'>
-          <TimeAgo at={view.at} text={(now) => formatSince(HANDOFF_JOINED, view.at, now)} />
-        </span>
-      </div>
-    </div>
+    <UserIdentity
+      user={view.guest}
+      className='w-full'
+      detail={<TimeAgo at={view.at} text={(now) => formatSince(HANDOFF_JOINED, view.at, now)} />}
+    />
   );
 }
 

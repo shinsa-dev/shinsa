@@ -9,7 +9,7 @@ import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { RemotePoint } from '@/lib/remote/mode.ts';
-import { describeUserName } from '@/lib/remote/users.ts';
+import { resolveFirstName } from '@/lib/remote/users.ts';
 import {
   clearTeamJoinFragment,
   requestTeamJoin,
@@ -68,7 +68,7 @@ function useTeamPreview(link: TeamJoinFragment | null, dashboard: Pick<Dashboard
     let live = true;
     dashboard.previewTeam(invite).then(
       (answer) => {
-        if (live) setPreview({ name: answer.name, owner: describeUserName(answer.owner) });
+        if (live) setPreview({ name: answer.name, owner: resolveFirstName(answer.owner) });
       },
       (error: unknown) => {
         if (live) setPreview({ failure: describeFailure(error) });

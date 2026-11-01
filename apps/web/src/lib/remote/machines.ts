@@ -8,7 +8,7 @@ import type { DeviceStore, EnrolledDevice } from './devices.ts';
 import type { FleetMember } from './fleet.ts';
 import { RemoteLink, type RemoteLinkOptions } from './link.ts';
 import { resolveMachineLabel } from './mode.ts';
-import { describeUserName } from './users.ts';
+import { resolveFirstName } from './users.ts';
 
 export interface MachineRow {
   instance: RemoteInstance;
@@ -39,7 +39,7 @@ export function describeMachine(
   const access =
     instance.role === 'owner'
       ? added
-      : `${describeSharer(instance)} ${describeUserName(instance.owner)} · ${added}`;
+      : `${describeSharer(instance)} ${resolveFirstName(instance.owner)} · ${added}`;
   return {
     instance,
     device,
@@ -56,6 +56,7 @@ export function resolveMachineDetail(
   tasks: Readonly<Record<string, Pick<Task, 'title'>>> = {}
 ) {
   if (machine) return `${row.access} · ${describeMachineLoad(resolveMachineLoad(machine))}`;
+  if (row.instance.role !== 'guest') return row.access;
   const titles = Object.keys(handed?.state.tasks ?? {}).flatMap((id) => {
     const title = tasks[id]?.title;
     return title ? [title] : [];

@@ -36,7 +36,7 @@ import { PriorityChoices } from '@/components/task/action-items.tsx';
 import { BundleFact } from '@/components/task/bundle.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
-import { useReadOnly } from '@/components/task/read-only.tsx';
+import { useReadOnly, useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
@@ -355,7 +355,7 @@ function CostFact({ state, task }: { state: ShinsaState; task: Task }) {
 
 function PriorityFact({ state, task }: { state: ShinsaState; task: Task }) {
   const readOnly = useReadOnly();
-  const why = resolveTriageWhy(state, task, 'priority');
+  const why = resolveTriageWhy(state, task, 'priority', useReadOnlyOwnerName());
   if (readOnly) {
     const fact = (
       <span className={FACT}>
@@ -383,7 +383,8 @@ function PriorityFact({ state, task }: { state: ShinsaState; task: Task }) {
 
 function StartedFact({ state, task }: { state: ShinsaState; task: Task }) {
   const waiting = listPendingDependencies(state, task).length > 0;
-  const why = waiting ? null : resolveTriageWhy(state, task, 'start');
+  const owner = useReadOnlyOwnerName();
+  const why = waiting ? null : resolveTriageWhy(state, task, 'start', owner);
   return (
     <span className={FACT}>
       <Icon size='sm' name='IconClock' />
@@ -419,9 +420,10 @@ function AccountFact({ task }: { task: Task }) {
 
 function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
   const original = selectDuplicateOriginal(state, task);
+  const owner = useReadOnlyOwnerName();
   if (!original || !task.duplicate) return null;
   return (
-    <Hint label={describeDuplicateHint(task.duplicate)}>
+    <Hint label={describeDuplicateHint(task.duplicate, owner)}>
       <button
         type='button'
         onClick={() => navigate(resolveTaskPath(original))}
@@ -531,9 +533,10 @@ function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
 
 function WaitsOnFact({ state, task }: { state: ShinsaState; task: Task }) {
   const waitsOn = listPendingDependencies(state, task);
+  const owner = useReadOnlyOwnerName();
   if (waitsOn.length === 0) return null;
   const cancelled = waitsOn.some((blocker) => blocker.stage === 'cancelled');
-  const why = resolveTriageWhy(state, task, 'start');
+  const why = resolveTriageWhy(state, task, 'start', owner);
   const trigger = (
     <DropdownMenuTrigger render={<button type='button' className={cn(FACT, FACT_INTERACTIVE, 'max-w-72')} />}>
       <Icon size='sm' name='IconHourglass' className={cn(cancelled && 'text-orange-text')} />

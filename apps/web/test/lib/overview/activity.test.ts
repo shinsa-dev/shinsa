@@ -161,6 +161,28 @@ describe('activity marks', () => {
     expect(resolveActivityActor(state, { ...entry, byTask: 'gone' }).label).toBe('Shinsa (on your behalf)');
   });
 
+  it('names the owner instead of you when someone else reads their shared task', () => {
+    const state = createShinsaState({ tasks: [createTask({ id: 'a1', handle: 'SW-142' })] });
+    const entry = {
+      at: 1,
+      actor: 'you' as const,
+      kind: 'asked' as const,
+      text: 'Asked for this',
+      detail: null,
+      evidenceId: null,
+    };
+    expect(resolveActivityActor(state, entry, 'Kai')).toEqual({ label: 'Kai', taskId: null });
+    expect(resolveActivityActor(state, entry, 'The owner').label).toBe('The owner');
+    expect(resolveActivityActor(state, { ...entry, actor: 'agent' }, 'Kai').label).toBe('Agent');
+    expect(resolveActivityActor(state, { ...entry, onBehalf: true }, 'Kai').label).toBe(
+      'Shinsa (on Kai’s behalf)'
+    );
+    expect(resolveActivityActor(state, { ...entry, onBehalf: true, byTask: 'a1' }, 'The owner')).toEqual({
+      label: 'SW-142 agent (on the owner’s behalf)',
+      taskId: 'a1',
+    });
+  });
+
   it('marks a setup problem and a sign-in with the same tile as the task’s status', () => {
     const entry = {
       at: 1,

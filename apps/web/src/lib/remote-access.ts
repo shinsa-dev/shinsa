@@ -2,7 +2,7 @@ import type { AccessRequest, RemoteAccess, RemoteDevice, RemoteMember, RemoteSna
 import { encode } from 'uqr';
 import { formatSince, formatUntil } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
-import { describeUserName, selectDeviceMember } from '@/lib/remote/users.ts';
+import { resolveFirstName, selectDeviceMember } from '@/lib/remote/users.ts';
 
 export const REMOTE_ACCESS_SECTION = 'Remote access';
 
@@ -52,7 +52,7 @@ export function describeDeviceSeen(device: RemoteDevice, now = Date.now()) {
 export function describeDeviceDetail(device: RemoteDevice, access: RemoteAccess | null, now = Date.now()) {
   const member = selectDeviceMember(access, device);
   const seen = describeDeviceSeen(device, now);
-  return member ? `${seen} · Added by ${describeUserName(member)}` : seen;
+  return member ? `${seen} · Added by ${resolveFirstName(member)}` : seen;
 }
 
 export function describeMemberSince(member: RemoteMember, now = Date.now()) {
@@ -84,7 +84,7 @@ function joinsMachine(request: AccessRequest, access: RemoteAccess | null) {
 }
 
 export function describeAcceptOutcome(request: AccessRequest, access: RemoteAccess | null) {
-  if (joinsMachine(request, access)) return `${describeUserName(request.user)} joined.`;
+  if (joinsMachine(request, access)) return `${resolveFirstName(request.user)} joined.`;
   return `${request.deviceName} is added.`;
 }
 

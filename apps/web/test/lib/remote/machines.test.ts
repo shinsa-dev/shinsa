@@ -39,7 +39,7 @@ describe('a machine in the dashboard', () => {
       owner: { id: '3', login: 'lee', name: null, avatarUrl: null },
       role: 'member',
     };
-    expect(describeMachine(shared, null, NOW).access).toBe('Shared by @lee · Not added on this device');
+    expect(describeMachine(shared, null, NOW).access).toBe('Shared by lee · Not added on this device');
   });
 
   it('names who handed you a task on a machine, and the task once it is in this dashboard', async () => {
@@ -49,7 +49,7 @@ describe('a machine in the dashboard', () => {
       role: 'guest',
     };
     const row = describeMachine(handed, await createDevice('key'), NOW);
-    expect(row.access).toBe('A task handed to you by Lee Park · In this dashboard');
+    expect(row.access).toBe('A task handed to you by Lee · In this dashboard');
     const machine = {
       id: STUDIO.id,
       name: 'Studio',
@@ -63,12 +63,12 @@ describe('a machine in the dashboard', () => {
       },
     };
     expect(resolveMachineDetail(row, undefined, machine, { t1: { title: 'Fix the tab bar' } })).toBe(
-      'A task handed to you by Lee Park · In this dashboard · Fix the tab bar'
+      'A task handed to you by Lee · In this dashboard · Fix the tab bar'
     );
     expect(resolveMachineDetail(row, undefined, machine)).toBe(row.access);
     expect(resolveMachineDetail(row, undefined, undefined)).toBe(row.access);
     expect(resolveMachineDetail(row, { ...machine, guest: undefined }, undefined)).toBe(
-      'A task handed to you by Lee Park · In this dashboard · 1 open task'
+      'A task handed to you by Lee · In this dashboard · 1 open task'
     );
   });
 
