@@ -1,8 +1,18 @@
 import { describe, expect, test } from 'bun:test';
+import { USER_COMMAND_TYPES } from '../../src/commands/index.ts';
 import {
+  DEVELOPMENT_VERSION,
+  ENGINE_BASELINE_COMMANDS,
+  ENGINE_FEATURES,
   ENGINE_PROTOCOL,
+  type EngineCommand,
+  hasEngineFeature,
+  isEngineProtocolMatch,
   isPrereleaseVersion,
+  parseEngineInfo,
+  resolveEngineCommands,
   resolveEngineFit,
+  resolveEngineInfo,
   resolveReleaseChannel,
   resolveVersionOrder,
 } from '../../src/protocol/engine.ts';
@@ -106,5 +116,85 @@ describe('resolveEngineFit', () => {
     expect(resolveEngineFit(app('0.0.0'), app('0.5.0'))).toEqual({ kind: 'match' });
     expect(resolveEngineFit(app('0.5.0'), app('0.0.0'))).toEqual({ kind: 'match' });
     expect(resolveEngineFit(app('0.5.0'), app('main'))).toEqual({ kind: 'match' });
+  });
+});
+
+const GATED_COMMANDS: EngineCommand[] = ['task.share', 'task.unshare'];
+
+describe('ENGINE_BASELINE_COMMANDS', () => {
+  test('lists only commands the engine parses', () => {
+    for (const command of ENGINE_BASELINE_COMMANDS) expect(USER_COMMAND_TYPES).toContain(command);
+  });
+
+  test('leaves out every command added since, so a page offers it only where the engine says it parses it', () => {
+    const gated = USER_COMMAND_TYPES.filter((command) => !ENGINE_BASELINE_COMMANDS.includes(command));
+    expect(gated).toEqual(GATED_COMMANDS);
+  });
+});
+
+describe('resolveEngineInfo', () => {
+  test('announces the protocol, every command the engine parses and every feature', () => {
+    expect(resolveEngineInfo('1.2.0')).toEqual({
+      version: '1.2.0',
+      protocol: ENGINE_PROTOCOL,
+      commands: [...USER_COMMAND_TYPES],
+      features: [...ENGINE_FEATURES],
+    });
+  });
+});
+
+describe('parseEngineInfo', () => {
+  test('reads what an engine announced', () => {
+    expect(parseEngineInfo(resolveEngineInfo('1.2.0'))).toEqual(resolveEngineInfo('1.2.0'));
+  });
+
+  test('reads loosely: a missing version is a development build and anything but strings is dropped', () => {
+    expect(parseEngineInfo({ protocol: 2, commands: ['task.share', 3], features: 'task.share' })).toEqual({
+      version: DEVELOPMENT_VERSION,
+      protocol: 2,
+      commands: ['task.share'],
+      features: [],
+    });
+  });
+
+  test('is null without a whole-number protocol', () => {
+    expect(parseEngineInfo(null)).toBeNull();
+    expect(parseEngineInfo('engine')).toBeNull();
+    expect(parseEngineInfo({ version: '1.0.0' })).toBeNull();
+    expect(parseEngineInfo({ protocol: 1.5 })).toBeNull();
+  });
+});
+
+describe('resolveEngineCommands', () => {
+  test('is the baseline for an engine that announced nothing', () => {
+    const commands = resolveEngineCommands(null);
+    expect(commands.has('task.create')).toBe(true);
+    expect(commands.has('task.share')).toBe(false);
+  });
+
+  test('adds what the engine announced', () => {
+    const commands = resolveEngineCommands(resolveEngineInfo('1.2.0'));
+    for (const command of USER_COMMAND_TYPES) expect(commands.has(command)).toBe(true);
+  });
+});
+
+describe('hasEngineFeature', () => {
+  test('is true only for a feature the engine announced', () => {
+    expect(hasEngineFeature(resolveEngineInfo('1.2.0'), 'task.share')).toBe(true);
+    expect(hasEngineFeature({ ...resolveEngineInfo('1.2.0'), features: [] }, 'task.share')).toBe(false);
+    expect(hasEngineFeature(null, 'task.share')).toBe(false);
+  });
+});
+
+describe('isEngineProtocolMatch', () => {
+  test('matches the same protocol and an engine that announced nothing', () => {
+    expect(isEngineProtocolMatch(resolveEngineInfo('1.2.0'))).toBe(true);
+    expect(isEngineProtocolMatch(null)).toBe(true);
+  });
+
+  test('refuses an engine on another protocol, older or newer', () => {
+    const engine = resolveEngineInfo('1.2.0');
+    expect(isEngineProtocolMatch({ ...engine, protocol: ENGINE_PROTOCOL - 1 })).toBe(false);
+    expect(isEngineProtocolMatch({ ...engine, protocol: ENGINE_PROTOCOL + 1 })).toBe(false);
   });
 });

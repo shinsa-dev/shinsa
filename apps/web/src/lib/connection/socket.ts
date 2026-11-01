@@ -463,6 +463,8 @@ export class Connection implements ShinsaConnection {
       case 'remote':
         this.replaceRemote(message.remote);
         return;
+      case 'engine':
+        return;
     }
   }
 }
