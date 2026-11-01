@@ -126,6 +126,8 @@ const GATED_COMMANDS: EngineCommand[] = [
   'feedback.dismiss',
   'task.share',
   'task.unshare',
+  'preview.share',
+  'preview.unshare',
 ];
 
 describe('ENGINE_BASELINE_COMMANDS', () => {

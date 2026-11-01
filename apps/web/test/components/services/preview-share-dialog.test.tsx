@@ -13,6 +13,7 @@ import {
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createShinsaState, createTask, NOW } from '../../support/state.ts';
+import { addTeardown } from '../../support/teardown.ts';
 import { createService, createTerminal } from '../../support/terminals.ts';
 
 const URL = 'https://abc.shinsa.page/?key=k';
@@ -72,8 +73,8 @@ describe('Share preview', () => {
   });
 
   it('shows the link and when it ends, copies it, and closes when you stop sharing', async () => {
-    const writeText = mock(() => Promise.resolve());
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const writeText = spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    addTeardown(() => writeText.mockRestore());
     showDialog({ previews: [{ ...SHARING, url: URL }] });
     const link = (await screen.findByRole('textbox', { name: 'Preview link' })) as HTMLInputElement;
     expect(link.value).toBe(URL);

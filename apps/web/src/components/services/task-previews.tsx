@@ -5,6 +5,7 @@ import * as React from 'react';
 import { ServiceActionButton } from '@/components/services/service-row.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useTask } from '@/lib/connection/selectors.ts';
+import { useEngineCommand } from '@/lib/connection/socket.ts';
 import { useTerminals } from '@/lib/connection/terminals.ts';
 import {
   isPreviewShared,
@@ -36,7 +37,8 @@ export function PreviewShareButton({ view }: { view: ServiceView }) {
   const task = useTask(view.taskId);
   const target = resolvePreviewTarget(view);
   const now = useNow();
-  if (!(target && (sample || task))) return null;
+  const supported = useEngineCommand('preview.share', view.taskId);
+  if (!(target && (sample || (task && supported)))) return null;
   const shared = sample ? sample.isShared(view) : task ? isPreviewShared(task, target.serviceId, now) : false;
   return (
     <ServiceActionButton

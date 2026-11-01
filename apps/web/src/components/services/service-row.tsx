@@ -27,6 +27,7 @@ export interface ServiceHandlers {
   open: (view: ServiceView, project: Project) => void;
   preview: (view: ServiceView) => void;
   share?: (view: ServiceView) => void;
+  canShare?: (view: ServiceView) => boolean;
   sharing?: (view: ServiceView) => boolean;
 }
 
@@ -155,6 +156,7 @@ export function ServiceRow({
 function ServiceShareButton({ view, handlers }: { view: ServiceView; handlers: ServiceHandlers }) {
   const share = handlers.share;
   if (!(share && view.taskId && selectServicePreview(view))) return null;
+  if (handlers.canShare && !handlers.canShare(view)) return null;
   const shared = handlers.sharing?.(view) ?? false;
   return (
     <span className={cn('flex items-center', !shared && REVEAL)}>
