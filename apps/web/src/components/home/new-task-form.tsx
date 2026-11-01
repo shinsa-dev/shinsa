@@ -47,9 +47,9 @@ import {
   type NewTaskChoices,
   type NewTaskProjectItem,
   NO_PROJECT,
-  POLICY_FAILURE,
-  type PolicyPlacement,
-  requestPolicyPlacement,
+  ROUTING_FAILURE,
+  type RoutedPlacement,
+  requestRoutedPlacement,
   resolveNewTaskMachine,
   resolveProjectChoice,
   resolveShownProject,
@@ -268,10 +268,10 @@ export function NewTaskForm() {
   async function submit() {
     if (!ready) return;
     setBusy(true);
-    let policy: PolicyPlacement | null = null;
-    if (placement?.byPolicy) policy = await requestPolicyPlacement(machines, request);
-    if (policy?.failed) toast.warning(POLICY_FAILURE);
-    const machineId = policy?.answer?.machineId ?? placement?.id ?? null;
+    let routed: RoutedPlacement | null = null;
+    if (placement?.byRouter) routed = await requestRoutedPlacement(machines, request);
+    if (routed?.failed) toast.warning(ROUTING_FAILURE);
+    const machineId = routed?.answer?.machineId ?? placement?.id ?? null;
     const sent = await sendCommandWithToast(
       createNewTaskCommand(serializeAttachments(request, attachments.ready), choices),
       placement

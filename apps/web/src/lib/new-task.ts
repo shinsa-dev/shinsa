@@ -1,6 +1,5 @@
 import {
   describeCount,
-  hasPlacementPolicies,
   listPlacementCandidates,
   type MachineLoad,
   type PlacementAnswer,
@@ -230,7 +229,7 @@ function selectChosenMachine(machines: PlacementMachine[], machine: AutoChoice<s
 
 export interface NewTaskPlacement {
   id: string;
-  byPolicy: boolean;
+  byRouter: boolean;
 }
 
 export function resolveNewTaskMachine(
@@ -240,12 +239,12 @@ export function resolveNewTaskMachine(
 ): NewTaskPlacement | null {
   if (machines.length < 2) return null;
   const chosen = selectChosenMachine(machines, choices.machine);
-  if (chosen) return { id: chosen.id, byPolicy: false };
+  if (chosen) return { id: chosen.id, byRouter: false };
   const named = choices.project === 'auto' || choices.project === NO_PROJECT ? null : choices.project;
   const owner = named ? resolveProjectMachine(machines, named) : null;
-  if (owner) return { id: owner, byPolicy: false };
+  if (owner) return { id: owner, byRouter: false };
   const placed = resolvePlacement(machines, shownProject === NO_PROJECT ? null : shownProject);
-  return placed ? { id: placed, byPolicy: hasPlacementPolicies(machines) } : null;
+  return placed ? { id: placed, byRouter: true } : null;
 }
 
 export type PlacementAsker = (question: PlacementQuestion) => Promise<{ answer: PlacementAnswer | null }>;
@@ -254,11 +253,11 @@ function askPlacement(question: PlacementQuestion) {
   return requestJson<{ answer: PlacementAnswer | null }>('/api/placement', question);
 }
 
-export async function requestPolicyPlacement(
+export async function requestRoutedPlacement(
   machines: PlacementMachine[],
   request: string,
   ask: PlacementAsker = askPlacement
-): Promise<PolicyPlacement> {
+): Promise<RoutedPlacement> {
   try {
     const { answer } = await ask({ request, machines: listPlacementCandidates(machines) });
     return { answer, failed: false };
@@ -267,12 +266,12 @@ export async function requestPolicyPlacement(
   }
 }
 
-export interface PolicyPlacement {
+export interface RoutedPlacement {
   answer: PlacementAnswer | null;
   failed: boolean;
 }
 
-export const POLICY_FAILURE = 'Your routing policies weren’t read.';
+export const ROUTING_FAILURE = 'Couldn’t ask the router. Placed by room.';
 
 export function describePlacementDone(done: string, machine: MachineChoice | undefined) {
   return machine ? `${done} Runs on ${resolveMachineLabel(machine)}.` : done;
@@ -292,7 +291,9 @@ export function listNewTaskMachines(
       value: 'auto',
       label: 'Automatic',
       icon: 'IconArrowSplitRight',
-      ...(placement?.byPolicy ? { hint: 'Your routing policies decide when you start it' } : {}),
+      ...(placement?.byRouter
+        ? { hint: 'Chooses by your policies, projects and room when you start it' }
+        : {}),
     },
     ...machines.map((machine) => ({
       value: machine.id,

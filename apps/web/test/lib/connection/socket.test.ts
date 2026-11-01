@@ -824,7 +824,12 @@ describe('the shared connection', () => {
     const local = connection;
     const machine = { id: 'm2', name: 'Laptop', current: false };
     const machines = [
-      { id: 'm2', name: 'Laptop', current: false, state: { tasks: {}, projects: {}, settings: {} } },
+      {
+        id: 'm2',
+        name: 'Laptop',
+        current: false,
+        state: { tasks: {}, projects: {}, repos: {}, settings: {} },
+      },
     ];
     expect(renderHook(() => useMachines()).result.current).toEqual([]);
     expect(renderHook(() => useUnreachableMachines()).result.current).toEqual([]);

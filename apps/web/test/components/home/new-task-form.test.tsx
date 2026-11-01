@@ -80,7 +80,8 @@ function connectTwoMachines() {
       ...studio,
       state: {
         tasks: { a: { stage: 'building' as const } },
-        projects: { p1: {}, p2: {} },
+        projects: { p1: { name: 'Superwall', description: '' }, p2: { name: 'Paywalls', description: '' } },
+        repos: {},
         settings: { taskCapacity: 4 },
       },
     },
@@ -91,6 +92,7 @@ function connectTwoMachines() {
       state: {
         tasks: {},
         projects: {},
+        repos: {},
         settings: { taskCapacity: null, placementPolicies: ['Benchmarks run on the build box.'] },
       },
     },
@@ -111,7 +113,12 @@ describe('NewTaskForm with several machines', () => {
   it('shows a machine this device cannot reach in the picker, disabled with what to do', async () => {
     const local = connection;
     const machines: MachineChoice[] = [
-      { id: 'studio', name: 'Studio', current: true, state: { tasks: {}, projects: {}, settings: {} } },
+      {
+        id: 'studio',
+        name: 'Studio',
+        current: true,
+        state: { tasks: {}, projects: {}, repos: {}, settings: {} },
+      },
     ];
     const unreachable = [{ id: 'laptop', name: 'Laptop' }];
     replaceConnection({
@@ -132,7 +139,7 @@ describe('NewTaskForm with several machines', () => {
     expect(screen.queryByRole('combobox', { name: 'Machine' })).toBeNull();
   });
 
-  it('lets the policies place a task, and on the machine you pick with only that machine’s projects', async () => {
+  it('lets the router place a task, and on the machine you pick with only that machine’s projects', async () => {
     const sent = connectTwoMachines();
     const realFetch = globalThis.fetch;
     const asked: unknown[] = [];
@@ -156,7 +163,7 @@ describe('NewTaskForm with several machines', () => {
     expect(await listOptions('Project')).toEqual(['No project']);
   });
 
-  it('warns when the policies could not be read, and still places the task', async () => {
+  it('warns when the router could not be asked, and still places the task', async () => {
     const sent = connectTwoMachines();
     const warned = spyOn(toast, 'warning').mockReturnValue('id');
     const realFetch = globalThis.fetch;
@@ -168,7 +175,7 @@ describe('NewTaskForm with several machines', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     globalThis.fetch = realFetch;
-    expect(warned).toHaveBeenCalledWith('Your routing policies weren’t read.');
+    expect(warned).toHaveBeenCalledWith('Couldn’t ask the router. Placed by room.');
     warned.mockRestore();
   });
 });

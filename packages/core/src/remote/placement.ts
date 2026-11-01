@@ -1,6 +1,6 @@
 import type { Settings } from '../domain/settings.ts';
 import { isTaskSettled } from '../domain/stages.ts';
-import type { Task } from '../domain/types.ts';
+import type { Project, Repo, Task } from '../domain/types.ts';
 import {
   describeResourceSummary,
   parseResourceSummary,
@@ -14,7 +14,8 @@ export interface PlacementMachine {
   name: string;
   state: {
     tasks: Record<string, Pick<Task, 'stage'>>;
-    projects: Record<string, unknown>;
+    projects: Record<string, Pick<Project, 'name' | 'description'>>;
+    repos: Record<string, Pick<Repo, 'name' | 'projectId'>>;
     settings: Pick<Settings, 'taskCapacity' | 'placementPolicies'>;
   };
   resources?: ResourceSummary | null;
@@ -80,10 +81,25 @@ export function resolvePlacement(machines: PlacementMachine[], projectId: string
   return best?.id ?? null;
 }
 
+export interface PlacementProject {
+  name: string;
+  description: string;
+  repositories: string[];
+}
+
+const PLACEMENT_PROJECT_LIMITS = {
+  perMachine: 50,
+  name: 120,
+  description: 300,
+  repositories: 30,
+} as const;
+
 export interface PlacementCandidate {
   id: string;
   name: string;
   policies: string[];
+  projects: PlacementProject[];
+  repositories: string[];
   open: number;
   capacity: number | null;
   resources: ResourceSummary | null;
@@ -101,10 +117,31 @@ export interface PlacementAnswer {
 
 export const PLACEMENT_LIMITS = { request: 20_000, machines: 20, reason: 240 } as const;
 
-export const NO_POLICY_MACHINE = 'none';
+export const NO_PLACEMENT_MACHINE = 'none';
 
-export function hasPlacementPolicies(machines: PlacementMachine[]) {
-  return machines.some((machine) => (machine.state.settings.placementPolicies ?? []).length > 0);
+function listRepositoryNames(repos: Pick<Repo, 'name'>[]) {
+  return repos
+    .map((repo) => repo.name.slice(0, PLACEMENT_PROJECT_LIMITS.name))
+    .slice(0, PLACEMENT_PROJECT_LIMITS.repositories);
+}
+
+function listMachineProjects(machine: PlacementMachine): PlacementProject[] {
+  const repos = Object.values(machine.state.repos);
+  return Object.entries(machine.state.projects)
+    .slice(0, PLACEMENT_PROJECT_LIMITS.perMachine)
+    .map(([id, project]) => ({
+      name: project.name.slice(0, PLACEMENT_PROJECT_LIMITS.name),
+      description: project.description.slice(0, PLACEMENT_PROJECT_LIMITS.description),
+      repositories: listRepositoryNames(repos.filter((repo) => repo.projectId === id)),
+    }));
+}
+
+function listLooseRepositories(machine: PlacementMachine) {
+  return listRepositoryNames(
+    Object.values(machine.state.repos).filter(
+      (repo) => !repo.projectId || !(repo.projectId in machine.state.projects)
+    )
+  );
 }
 
 export function listPlacementCandidates(machines: PlacementMachine[]): PlacementCandidate[] {
@@ -114,6 +151,8 @@ export function listPlacementCandidates(machines: PlacementMachine[]): Placement
       id: machine.id,
       name: machine.name,
       policies: machine.state.settings.placementPolicies ?? [],
+      projects: listMachineProjects(machine),
+      repositories: listLooseRepositories(machine),
       open: load.open,
       capacity: load.capacity,
       resources: machine.resources ? resolveResourceSummary(machine.resources) : null,
@@ -123,12 +162,13 @@ export function listPlacementCandidates(machines: PlacementMachine[]): Placement
 
 export const PLACEMENT_SYSTEM = [
   'You choose which machine a new coding task runs on.',
-  'Each machine runs its own Shinsa engine. The person wrote policies in plain English saying what runs where.',
-  'Read the request and the policies. Pick the machine a policy sends this request to.',
-  `If no policy speaks to this request, answer "${NO_POLICY_MACHINE}"; the machine with the most room takes it then.`,
-  'When two policies conflict, follow the one that matches the request most closely.',
-  'Each machine lists its CPU, memory and disk use when it reports them; use them when a policy speaks of them.',
-  'The reason is one short sentence in plain words that names the policy you followed.',
+  'Each machine runs its own Shinsa engine with its own disk, projects and repositories, and a task stays on the machine it starts on.',
+  'Decide in this order.',
+  'First, the policies the person wrote in plain English saying what runs where: when one speaks to this request, follow it; when two conflict, follow the one that matches the request most closely.',
+  'Second, where the work lives: when the request is about a project or repository that only some machines hold, by its name, its code or its product, pick one of those machines, since a task cannot run where its repository is not.',
+  'Third, room: pass over a machine at its task capacity while another has room, then prefer the machine with the most free CPU and memory, and avoid one nearly out of disk.',
+  `Answer "${NO_PLACEMENT_MACHINE}" only when nothing sets one machine apart; the machine with the most room takes it then.`,
+  'The reason is one short sentence in plain words that names the policy, the project or the room that decided it.',
 ].join(' ');
 
 export const PLACEMENT_SCHEMA = {
@@ -153,18 +193,38 @@ function describeCandidate(candidate: PlacementCandidate) {
     candidate.policies.length > 0
       ? candidate.policies.map((policy) => `  - ${policy}`).join('\n')
       : '  (no policies)';
-  return `Machine "${candidate.id}" named ${candidate.name} (${load}; ${use}):\n${policies}`;
+  const projects =
+    candidate.projects.length > 0
+      ? candidate.projects.map((project) => `  - ${describePlacementProject(project)}`).join('\n')
+      : '  (no projects)';
+  const repositories =
+    candidate.repositories.length > 0 ? [`Other repositories: ${candidate.repositories.join(', ')}`] : [];
+  return [
+    `Machine "${candidate.id}" named ${candidate.name} (${load}; ${use})`,
+    'Policies:',
+    policies,
+    'Projects:',
+    projects,
+    ...repositories,
+  ].join('\n');
+}
+
+function describePlacementProject(project: PlacementProject) {
+  const repositories =
+    project.repositories.length > 0 ? ` (repositories: ${project.repositories.join(', ')})` : '';
+  const description = project.description.trim() ? `: ${project.description.trim()}` : '';
+  return `${project.name}${repositories}${description}`;
 }
 
 export function serializePlacementPrompt(question: PlacementQuestion) {
   return [
-    'Machines and their policies:',
+    'Machines:',
     ...question.machines.map(describeCandidate),
     '',
     'The request:',
     question.request,
     '',
-    `Answer with JSON: {"machine": the machine's id in quotes, or "${NO_POLICY_MACHINE}", "reason": one sentence}.`,
+    `Answer with JSON: {"machine": the machine's id in quotes, or "${NO_PLACEMENT_MACHINE}", "reason": one sentence}.`,
   ].join('\n');
 }
 
@@ -179,17 +239,57 @@ export function parsePlacementAnswer(question: PlacementQuestion, value: unknown
 
 function readCandidate(value: unknown): PlacementCandidate | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { id, name, policies, open, capacity, resources } = value as Record<string, unknown>;
+  const { id, name, policies, projects, repositories, open, capacity, resources } = value as Record<
+    string,
+    unknown
+  >;
   if (typeof id !== 'string' || !id || typeof name !== 'string') return null;
   if (!Array.isArray(policies) || !policies.every((policy) => typeof policy === 'string')) return null;
   if (!isPlacementPoliciesValid(policies)) return null;
+  const held = readPlacementProjects(projects);
+  const loose = readNames(repositories, PLACEMENT_PROJECT_LIMITS.repositories);
+  if (!held || !loose) return null;
   if (typeof open !== 'number' || !Number.isInteger(open) || open < 0) return null;
   if (capacity !== null && (typeof capacity !== 'number' || !Number.isInteger(capacity) || capacity < 1))
     return null;
   const reported = resources !== null && resources !== undefined;
   const use = reported ? parseResourceSummary(resources) : null;
   if (reported && !use) return null;
-  return { id, name: name.slice(0, 120), policies, open, capacity, resources: use };
+  return {
+    id,
+    name: name.slice(0, 120),
+    policies,
+    projects: held,
+    repositories: loose,
+    open,
+    capacity,
+    resources: use,
+  };
+}
+
+function readNames(value: unknown, limit: number) {
+  if (!Array.isArray(value) || value.length > limit) return null;
+  if (!value.every((entry) => typeof entry === 'string')) return null;
+  return value.map((entry: string) => entry.slice(0, PLACEMENT_PROJECT_LIMITS.name));
+}
+
+function readPlacementProject(value: unknown): PlacementProject | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { name, description, repositories } = value as Record<string, unknown>;
+  if (typeof name !== 'string' || typeof description !== 'string') return null;
+  const names = readNames(repositories, PLACEMENT_PROJECT_LIMITS.repositories);
+  if (!names) return null;
+  return {
+    name: name.slice(0, PLACEMENT_PROJECT_LIMITS.name),
+    description: description.slice(0, PLACEMENT_PROJECT_LIMITS.description),
+    repositories: names,
+  };
+}
+
+function readPlacementProjects(value: unknown) {
+  if (!Array.isArray(value) || value.length > PLACEMENT_PROJECT_LIMITS.perMachine) return null;
+  const projects = value.map(readPlacementProject);
+  return projects.every((project): project is PlacementProject => project !== null) ? projects : null;
 }
 
 export function parsePlacementQuestion(value: unknown): PlacementQuestion | null {

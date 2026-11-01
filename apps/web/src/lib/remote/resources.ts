@@ -2,12 +2,12 @@ import {
   describeGigabytes,
   type MachineResources,
   type ResourceUse,
-  resolveMachineLoad,
+  resolveMemoryPercent,
   type Task,
   type TaskResources,
 } from '@shinsa/core';
-import type { MachineChoice } from '@/lib/connection/socket.ts';
-import { describeMachineLoad } from '@/lib/new-task.ts';
+import { resolveUsageTone } from '@/lib/accounts/usage.ts';
+import type { Tone } from '@/lib/format/tone.ts';
 
 export const NO_RESOURCE_READING = 'No reading yet.';
 
@@ -17,14 +17,6 @@ export interface TaskResourceRow<T extends Pick<Task, 'title'> = Task> {
   task: T;
   use: string;
   worktree: string | null;
-}
-
-export interface MachineResourceRow<T extends Pick<Task, 'title'> = Task> {
-  id: string;
-  name: string;
-  use: string;
-  load: string;
-  tasks: TaskResourceRow<T>[];
 }
 
 function describePercent(value: number) {
@@ -87,15 +79,34 @@ export function listTaskResourceRows<T extends Pick<Task, 'title'>>(
   });
 }
 
-export function listMachineResourceRows<T extends Pick<Task, 'title'>>(
-  machines: MachineChoice[],
-  tasks: Record<string, T>
-): MachineResourceRow<T>[] {
-  return machines.map((machine) => ({
-    id: machine.id,
-    name: machine.name,
-    use: machine.resources ? describeMachineResources(machine.resources) : NO_RESOURCE_READING,
-    load: describeMachineLoad(resolveMachineLoad(machine)),
-    tasks: machine.resources ? listTaskResourceRows(machine.resources, tasks) : [],
-  }));
+export interface ResourceGauge {
+  id: 'cpu' | 'memory' | 'disk';
+  label: string;
+  percent: number | null;
+  tone: Tone;
+  value: string;
+}
+
+function createGauge(id: ResourceGauge['id'], label: string, percent: number | null, value: string) {
+  const rounded = percent === null ? null : Math.round(Math.min(100, Math.max(0, percent)));
+  return { id, label, percent: rounded, tone: resolveUsageTone(rounded ?? 0), value };
+}
+
+export function listResourceGauges(resources: MachineResources): ResourceGauge[] {
+  const gauges = [
+    createGauge('cpu', 'CPU', resources.cpuPercent, describePercent(resources.cpuPercent)),
+    createGauge(
+      'memory',
+      'Memory',
+      resolveMemoryPercent(resources),
+      `${describeGigabytes(resources.memoryUsedBytes)} of ${describeGigabytes(resources.memoryTotalBytes)} GB`
+    ),
+  ];
+  if (resources.diskFreeBytes === null) return gauges;
+  const total = resources.diskTotalBytes;
+  const used = total && total > 0 ? ((total - resources.diskFreeBytes) / total) * 100 : null;
+  return [
+    ...gauges,
+    createGauge('disk', 'Disk', used, `${describeGigabytes(resources.diskFreeBytes)} GB free`),
+  ];
 }

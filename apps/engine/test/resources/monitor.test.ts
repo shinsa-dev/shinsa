@@ -151,6 +151,41 @@ describe('the resource monitor', () => {
     monitor.stop();
   });
 
+  test('a slow du holds back neither the first reading nor the disk free', async () => {
+    let finish: (value: CommandResult) => void = () => undefined;
+    const df = 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/x 4000 1000 3000 25% /';
+    const tables = ['  100 1 100 1024 0:01.00', '  100 1 100 1024 0:02.00'];
+    const run: ResourceCommand = (argv) => {
+      if (argv[2] === '/wt/a') return new Promise((resolve) => (finish = resolve));
+      return Promise.resolve(result(argv[0] === 'df' ? df : (tables.shift() ?? '')));
+    };
+    let clock = 0;
+    const monitor = new ResourceMonitor({
+      ledger: new ProcessLedger(),
+      state: () => ({ tasks: createTasks() as unknown as Record<string, Task> }),
+      dataDir: '/data',
+      run,
+      cores: 2,
+      now: () => clock,
+      readCpuTimes: () => ({ busy: clock, total: clock * 4 }),
+      readMemory: () => Promise.resolve({ usedBytes: GB, totalBytes: 2 * GB }),
+      primeMs: 60_000,
+    });
+    const seen: MachineResources[] = [];
+    monitor.subscribe((resources) => seen.push(resources));
+    await monitor.refresh();
+    clock = 1000;
+    await monitor.refresh();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ diskFreeBytes: 3000 * 1024, tasks: [] });
+    finish(result('1024\t/wt/a'));
+    await monitor.measureDisk();
+    clock = 2000;
+    await monitor.refresh();
+    expect(seen.at(-1)?.tasks.map((task) => task.worktreeBytes)).toEqual([1024 * 1024]);
+    monitor.stop();
+  });
+
   test('samples on a timer only while someone listens, and not after it stops', async () => {
     const { monitor, advance } = createMonitor({
       table: Array(50).fill('  100 1 100 1024 0:01.00'),

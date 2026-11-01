@@ -60,7 +60,7 @@ export function listRecentlyFinished(state: ShinsaState, now: number, shown: Rea
     .slice(0, RECENT_LIMIT);
 }
 
-export function resolveHomeSectionId(key: QueueSection['key'] | 'finished' | 'conversations' | 'machines') {
+export function resolveHomeSectionId(key: QueueSection['key'] | 'finished' | 'conversations') {
   return createDisclosureId('home', 'section', key);
 }
 

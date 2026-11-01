@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import type { PairView, RemoteInstance, RemoteSession, RemoteSnapshot, RemoteUser } from '@shinsa/core';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MachineAccessRequests, MachinesSettings } from '@/components/settings/machines.tsx';
-import { Connection, connection } from '@/lib/connection/socket.ts';
+import { Connection, connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
@@ -10,6 +10,8 @@ import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/service
 import { EnrollPage } from '@/routes/remote/enroll.tsx';
 import { RemoteRoot } from '@/routes/remote/index.tsx';
 import { PairPage } from '@/routes/remote/pair.tsx';
+import { createMachineResources, createTaskResources } from '../../support/resources.ts';
+import { createShinsaState, createTask } from '../../support/state.ts';
 
 const USER: RemoteSession = { user: { id: '1', login: 'mona', name: null, avatarUrl: null } };
 
@@ -316,6 +318,78 @@ describe('the machines in Settings', () => {
     await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
     expect(left).toEqual(['k3x9']);
     expect(removed).toEqual([]);
+  });
+
+  it('shows each machine’s CPU, memory and disk, and opens to the open tasks using it', async () => {
+    const local = connection;
+    const task = createTask({ id: 'export', title: 'Retry exports' });
+    const state = createShinsaState({ tasks: [task] });
+    const machine: MachineChoice = {
+      id: 'k3x9',
+      name: 'Studio',
+      current: true,
+      state,
+      resources: createMachineResources({ tasks: [createTaskResources({ taskId: 'export' })] }),
+    };
+    const machines = [machine];
+    replaceConnection({
+      ...local,
+      snapshot: () => ({ state, status: 'open' }),
+      listMachines: () => machines,
+    });
+    try {
+      render(
+        <RemoteServicesContext.Provider
+          value={{ dashboard: createDashboard(), devices: createDevices(DEVICE), worker: createWorker() }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      const meters = await screen.findByRole('img', { name: 'CPU 20% · Memory 8 of 32 GB · 120 GB free' });
+      expect(meters.textContent).toContain('CPU20%');
+      expect(screen.queryByText('Retry exports')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Show the open tasks on Studio' }));
+      expect(await screen.findByText('Retry exports')).toBeTruthy();
+      expect(screen.getByText('Agent 4%, 0.5 GB')).toBeTruthy();
+    } finally {
+      replaceConnection(null);
+    }
+  });
+
+  it('says a machine has no reading yet, and that no open task uses it once opened', async () => {
+    const local = connection;
+    const state = createShinsaState({});
+    const reading: MachineChoice = { id: 'k3x9', name: 'Studio', current: true, state, resources: null };
+    const idle = { ...reading, resources: createMachineResources() };
+    let machines = [reading];
+    replaceConnection({
+      ...local,
+      snapshot: () => ({ state, status: 'open' }),
+      listMachines: () => machines,
+    });
+    try {
+      const { unmount } = render(
+        <RemoteServicesContext.Provider
+          value={{ dashboard: createDashboard(), devices: createDevices(DEVICE), worker: createWorker() }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      expect(await screen.findByText('No reading yet.')).toBeTruthy();
+      unmount();
+      machines = [idle];
+      render(
+        <RemoteServicesContext.Provider
+          value={{ dashboard: createDashboard(), devices: createDevices(DEVICE), worker: createWorker() }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Show the open tasks on Studio' }));
+      expect(await screen.findByText('No open task is using this machine.')).toBeTruthy();
+    } finally {
+      replaceConnection(null);
+    }
   });
 
   it('says when the machines cannot be read, and waits without the remote services', async () => {

@@ -101,11 +101,10 @@ export {
   resolveLocalOnlyRefusal,
 } from './local-only.ts';
 export {
-  hasPlacementPolicies,
   isPlacementPoliciesValid,
   listPlacementCandidates,
   type MachineLoad,
-  NO_POLICY_MACHINE,
+  NO_PLACEMENT_MACHINE,
   PLACEMENT_LIMITS,
   PLACEMENT_POLICY_LIMITS,
   PLACEMENT_SCHEMA,
@@ -113,6 +112,7 @@ export {
   type PlacementAnswer,
   type PlacementCandidate,
   type PlacementMachine,
+  type PlacementProject,
   type PlacementQuestion,
   parsePlacementAnswer,
   parsePlacementQuestion,

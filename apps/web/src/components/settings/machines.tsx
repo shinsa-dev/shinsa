@@ -1,11 +1,15 @@
-import { type RemoteInstance, resolveMachineLoad, type Settings } from '@shinsa/core';
+import { type MachineResources, type RemoteInstance, resolveMachineLoad, type Settings } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
+import { ListRow } from '@/components/layout/list-row.tsx';
+import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/remote-access.ts';
+import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import {
   type MachineAccess,
   type MachineChoice,
@@ -15,6 +19,7 @@ import {
 } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeMachineLoad } from '@/lib/new-task.ts';
+import { createDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
   listMachineRows,
   listTaskCapacityItems,
@@ -24,8 +29,14 @@ import {
   TASK_CAPACITY_TITLE,
 } from '@/lib/remote/machines.ts';
 import { describeOutdatedMachine, MACHINES_SECTION } from '@/lib/remote/mode.ts';
-import { describeMachineResources } from '@/lib/remote/resources.ts';
+import {
+  describeMachineResources,
+  listResourceGauges,
+  listTaskResourceRows,
+  NO_RESOURCE_READING,
+} from '@/lib/remote/resources.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
+import { navigate, resolveTaskPath } from '@/router.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
 import { AccessRequestRows } from './remote-access.tsx';
@@ -90,6 +101,46 @@ function MachineCapacity({ machine }: { machine: MachineChoice }) {
   );
 }
 
+function ResourceGauges({ resources }: { resources: MachineResources }) {
+  return (
+    <div
+      role='img'
+      aria-label={describeMachineResources(resources)}
+      className='flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-fg-2 tabular-nums'
+    >
+      {listResourceGauges(resources).map((gauge) => (
+        <span key={gauge.id} className='flex items-center gap-1.5'>
+          <span>{gauge.label}</span>
+          {gauge.percent !== null && (
+            <UsageBar row={{ percent: gauge.percent, tone: gauge.tone }} className='w-12' />
+          )}
+          <span className='text-fg-3'>{gauge.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function MachineTasks({ resources }: { resources: MachineResources }) {
+  const tasks = useShinsaSelector((state) => state.tasks) ?? {};
+  const rows = listTaskResourceRows(resources, tasks);
+  if (rows.length === 0)
+    return <p className='py-1.5 pl-7 text-2xs text-fg-2'>No open task is using this machine.</p>;
+  return (
+    <div className='flex flex-col gap-px pb-1 pl-5'>
+      {rows.map((entry) => (
+        <ListRow
+          key={entry.task.id}
+          title={entry.task.title}
+          meta={entry.use}
+          trailing={entry.worktree}
+          onClick={() => navigate(resolveTaskPath(entry.task))}
+        />
+      ))}
+    </div>
+  );
+}
+
 function MachineList({
   rows,
   onRemove,
@@ -134,31 +185,52 @@ function MachineItem({
   const outdated = useUnreachableMachines().some(
     (candidate) => candidate.id === row.instance.id && candidate.outdated
   );
+  const { open, toggle } = useDisclosure(createDisclosureId('settings', 'machines', row.instance.id), false);
   const detail = machine ? `${row.access} · ${describeMachineLoad(resolveMachineLoad(machine))}` : row.access;
+  const resources = !outdated && machine ? (machine.resources ?? null) : null;
+  const name = (
+    <>
+      <Truncate className='font-medium text-fg-4'>{row.label}</Truncate>
+      <span className={cn('shrink-0', row.instance.online ? TONE_TEXT.green : 'text-fg-2')}>
+        {row.status}
+      </span>
+    </>
+  );
   return (
-    <div className={SETTING_ROW}>
-      <div className='flex min-w-0 flex-1 flex-col'>
-        <div className='flex min-w-0 items-center gap-1.5 text-xs'>
-          <Truncate className='text-fg-4'>{row.label}</Truncate>
-          <span className={cn('shrink-0', row.instance.online ? TONE_TEXT.green : 'text-fg-2')}>
-            {row.status}
-          </span>
-        </div>
-        <Truncate className={cn('text-2xs', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
-          {outdated ? describeOutdatedMachine(row.instance.name) : detail}
-        </Truncate>
-        {!outdated && machine?.resources && (
-          <Truncate className='text-2xs text-fg-2 tabular-nums'>
-            {describeMachineResources(machine.resources)}
+    <div className='flex flex-col'>
+      <div className={cn(SETTING_ROW, 'items-start py-2')}>
+        <div className='flex min-w-0 flex-1 flex-col gap-1'>
+          {resources ? (
+            <button
+              type='button'
+              aria-expanded={open}
+              aria-label={`${open ? 'Hide' : 'Show'} the open tasks on ${row.instance.name}`}
+              onClick={toggle}
+              className='flex min-w-0 cursor-pointer items-center gap-1.5 text-left text-xs hover:text-fg-4 active:text-fg-4'
+            >
+              <SectionChevron open={open} className='shrink-0' />
+              {name}
+            </button>
+          ) : (
+            <div className='flex min-w-0 items-center gap-1.5 text-xs'>{name}</div>
+          )}
+          <Truncate className={cn('text-2xs', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
+            {outdated ? describeOutdatedMachine(row.instance.name) : detail}
           </Truncate>
-        )}
+          {resources ? (
+            <ResourceGauges resources={resources} />
+          ) : (
+            machine && !outdated && <p className='text-2xs text-fg-2'>{NO_RESOURCE_READING}</p>
+          )}
+        </div>
+        <div className='flex shrink-0 items-center gap-1.5'>
+          {machine && <MachineCapacity machine={machine} />}
+          <Button variant='secondary' size='sm' loading={removing} onClick={onRemove}>
+            {row.instance.role === 'member' ? 'Leave' : 'Remove'}
+          </Button>
+        </div>
       </div>
-      <div className='flex shrink-0 items-center gap-1.5'>
-        {machine && <MachineCapacity machine={machine} />}
-        <Button variant='secondary' size='sm' loading={removing} onClick={onRemove}>
-          {row.instance.role === 'member' ? 'Leave' : 'Remove'}
-        </Button>
-      </div>
+      {open && resources && <MachineTasks resources={resources} />}
     </div>
   );
 }

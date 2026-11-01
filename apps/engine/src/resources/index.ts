@@ -184,13 +184,19 @@ export class ResourceMonitor {
 
   async #measure() {
     const disk = await this.#run(['df', '-k', '-P', this.#options.dataDir]);
+    const free = disk.ok ? parseDiskFree(disk.stdout) : null;
+    this.#disk = {
+      at: this.#disk?.at ?? Number.NEGATIVE_INFINITY,
+      disk: free,
+      worktrees: this.#disk?.worktrees ?? new Map(),
+    };
     const worktrees = new Map<string, number | null>();
     for (const task of this.#openTasks()) {
       if (!task.worktreePath) continue;
       const usage = await this.#run(['du', '-sk', task.worktreePath]);
       worktrees.set(task.id, parseDiskUsage(usage.stdout));
     }
-    this.#disk = { at: this.#now(), disk: disk.ok ? parseDiskFree(disk.stdout) : null, worktrees };
+    this.#disk = { at: this.#now(), disk: free, worktrees };
   }
 
   #isDiskStale() {
@@ -199,8 +205,7 @@ export class ResourceMonitor {
   }
 
   async #sample() {
-    if (!this.#disk) await this.measureDisk();
-    else if (this.#isDiskStale()) void this.measureDisk();
+    if (this.#isDiskStale()) void this.measureDisk();
     const table = await this.#run(PROCESS_TABLE);
     const memory = await this.#readMemory();
     const cpu = this.#readCpuTimes();

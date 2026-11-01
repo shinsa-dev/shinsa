@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { TaskStage } from '../../src/domain/types.ts';
 import {
-  hasPlacementPolicies,
   isPlacementPoliciesValid,
   listPlacementCandidates,
-  NO_POLICY_MACHINE,
+  NO_PLACEMENT_MACHINE,
   type PlacementCandidate,
   type PlacementMachine,
   parsePlacementAnswer,
@@ -34,6 +33,7 @@ function machine(
   options: {
     capacity?: number | null;
     projects?: string[];
+    repos?: { name: string; projectId: string | null }[];
     policies?: string[];
     resources?: ResourceSummary | null;
   } = {}
@@ -44,7 +44,10 @@ function machine(
     name: id,
     state: {
       tasks: Object.fromEntries(stages.map((stage, index) => [`${id}-${index}`, { stage }])),
-      projects: Object.fromEntries((options.projects ?? []).map((project) => [project, {}])),
+      projects: Object.fromEntries(
+        (options.projects ?? []).map((project) => [project, { name: project, description: '' }])
+      ),
+      repos: Object.fromEntries((options.repos ?? []).map((repo) => [repo.name, repo])),
       settings: {
         ...(options.capacity === undefined ? {} : { taskCapacity: options.capacity }),
         ...(options.policies ? { placementPolicies: options.policies } : {}),
@@ -183,13 +186,11 @@ describe('placement policies', () => {
     machines: listPlacementCandidates([studio, server, bare]),
   };
 
-  test('a machine holds up to 20 policies of 1 to 240 characters, and any one turns the classifier on', () => {
+  test('a machine holds up to 20 policies of 1 to 240 characters', () => {
     expect(isPlacementPoliciesValid(['Run iOS work here.'])).toBe(true);
     expect(isPlacementPoliciesValid([' '])).toBe(false);
     expect(isPlacementPoliciesValid(['x'.repeat(241)])).toBe(false);
     expect(isPlacementPoliciesValid(Array.from({ length: 21 }, (_, index) => `p${index}`))).toBe(false);
-    expect(hasPlacementPolicies([studio, bare])).toBe(true);
-    expect(hasPlacementPolicies([bare])).toBe(false);
   });
 
   test('the prompt lists every machine with its load and its policies in plain English, then the request', () => {
@@ -197,6 +198,8 @@ describe('placement policies', () => {
       id: 'server',
       name: 'server',
       policies: ['Benchmarks and load tests always run here.'],
+      projects: [],
+      repositories: [],
       open: 2,
       capacity: 4,
       resources: null,
@@ -204,11 +207,13 @@ describe('placement policies', () => {
     expect(question.machines[2]?.resources).toEqual(use(42.4, 12.25));
     const prompt = serializePlacementPrompt(question);
     expect(prompt).toContain(
-      'Machine "studio" named studio (1 open tasks, no limit; resource use not reported):\n  - Run Xcode simulator tests'
+      'Machine "studio" named studio (1 open tasks, no limit; resource use not reported)\nPolicies:\n  - Run Xcode simulator tests'
     );
-    expect(prompt).toContain('Machine "server" named server (2 of 4 open tasks; resource use not reported):');
     expect(prompt).toContain(
-      'Machine "bare" named bare (0 open tasks, no limit; CPU 42% of 8 cores, memory 12 of 32 GB used, 120 GB disk free):\n  (no policies)'
+      'Machine "server" named server (2 of 4 open tasks; resource use not reported)\n'
+    );
+    expect(prompt).toContain(
+      'Machine "bare" named bare (0 open tasks, no limit; CPU 42% of 8 cores, memory 12 of 32 GB used, 120 GB disk free)\nPolicies:\n  (no policies)\nProjects:\n  (no projects)'
     );
     expect(prompt).toContain('The request:\nRun the iOS simulator tests');
   });
@@ -228,11 +233,39 @@ describe('placement policies', () => {
       reason: '',
     });
     expect(
-      parsePlacementAnswer(question, { machine: NO_POLICY_MACHINE, reason: 'No policy fits.' })
+      parsePlacementAnswer(question, { machine: NO_PLACEMENT_MACHINE, reason: 'No policy fits.' })
     ).toBeNull();
     expect(parsePlacementAnswer(question, { machine: 7 })).toBeNull();
     expect(parsePlacementAnswer(question, null)).toBeNull();
     expect(parsePlacementAnswer(question, 'studio')).toBeNull();
+  });
+
+  test('each machine lists the projects it holds with their repositories, and the repositories outside one', () => {
+    const app = machine('app', [], {
+      projects: ['web'],
+      repos: [
+        { name: 'web-app', projectId: 'web' },
+        { name: 'scratch', projectId: null },
+        { name: 'orphan', projectId: 'gone' },
+      ],
+    });
+    app.state.projects.web = { name: 'Web', description: ' The customer site. ' };
+    const [candidate] = listPlacementCandidates([app]);
+    expect(candidate?.projects).toEqual([
+      { name: 'Web', description: ' The customer site. ', repositories: ['web-app'] },
+    ]);
+    expect(candidate?.repositories).toEqual(['scratch', 'orphan']);
+    const prompt = serializePlacementPrompt({
+      request: 'Fix the checkout page',
+      machines: [candidate!, question.machines[0]!],
+    });
+    expect(prompt).toContain(
+      'Projects:\n  - Web (repositories: web-app): The customer site.\nOther repositories: scratch, orphan'
+    );
+    const plain = { ...candidate!, projects: [{ name: 'Bare', description: ' ', repositories: [] }] };
+    expect(serializePlacementPrompt({ request: 'x', machines: [plain, plain] })).toContain('  - Bare\n');
+    const many = machine('many', [], { projects: Array.from({ length: 60 }, (_, index) => `p${index}`) });
+    expect(listPlacementCandidates([many])[0]?.projects).toHaveLength(50);
   });
 
   test('a question from a page is checked field by field before the classifier sees it', () => {
@@ -262,6 +295,24 @@ describe('placement policies', () => {
       { ...question, machines: [candidate, { ...candidate, id: 'b', capacity: 0 }] },
       { ...question, machines: [candidate, { ...candidate, id: 'b', capacity: 'none' }] },
       { ...question, machines: [candidate, { ...candidate, id: 'b', resources: { cores: 0 } }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', projects: 'all' }] },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', projects: [null] }] },
+      {
+        ...question,
+        machines: [candidate, { ...candidate, id: 'b', projects: [{ name: 'p', description: 3 }] }],
+      },
+      {
+        ...question,
+        machines: [
+          candidate,
+          { ...candidate, id: 'b', projects: [{ name: 'p', description: '', repositories: [3] }] },
+        ],
+      },
+      { ...question, machines: [candidate, { ...candidate, id: 'b', repositories: 'all' }] },
+      {
+        ...question,
+        machines: [candidate, { ...candidate, id: 'b', repositories: Array.from({ length: 31 }, () => 'r') }],
+      },
     ];
     for (const value of broken) expect(parsePlacementQuestion(value)).toBeNull();
     expect(
@@ -270,6 +321,22 @@ describe('placement policies', () => {
         machines: [candidate, { ...candidate, id: 'b', name: 'n'.repeat(200) }],
       })?.machines[1]?.name
     ).toHaveLength(120);
+    const long = parsePlacementQuestion({
+      ...question,
+      machines: [
+        candidate,
+        {
+          ...candidate,
+          id: 'b',
+          projects: [
+            { name: 'n'.repeat(200), description: 'd'.repeat(400), repositories: ['r'.repeat(200)] },
+          ],
+        },
+      ],
+    })?.machines[1]?.projects[0];
+    expect([long?.name.length, long?.description.length, long?.repositories[0]?.length]).toEqual([
+      120, 300, 120,
+    ]);
     const older: Partial<PlacementCandidate> = { ...question.machines[0] };
     delete older.resources;
     expect(
@@ -280,7 +347,10 @@ describe('placement policies', () => {
 
   test('a project still wins, and room decides the rest', () => {
     expect(
-      resolvePlacement([studio, { ...server, state: { ...server.state, projects: { p: {} } } }], 'p')
+      resolvePlacement(
+        [studio, { ...server, state: { ...server.state, projects: { p: { name: 'P', description: '' } } } }],
+        'p'
+      )
     ).toBe('server');
     expect(resolvePlacement([server, studio], null)).toBe('studio');
   });

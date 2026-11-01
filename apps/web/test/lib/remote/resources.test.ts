@@ -1,31 +1,15 @@
 import { describe, expect, it } from 'bun:test';
-import type { MachineChoice } from '@/lib/connection/socket.ts';
 import {
   describeMachineResources,
   describeTaskUse,
   IDLE_TASK_USE,
-  listMachineResourceRows,
+  listResourceGauges,
   listTaskResourceRows,
-  NO_RESOURCE_READING,
 } from '@/lib/remote/resources.ts';
 import { createMachineResources, createTaskResources } from '../../support/resources.ts';
 
 const GIGABYTE = 1024 ** 3;
 const IDLE = { cpuPercent: 0, memoryBytes: 0 };
-
-function createChoice(overrides: Partial<MachineChoice> = {}): MachineChoice {
-  return {
-    id: 'studio',
-    name: 'Studio',
-    current: true,
-    state: {
-      tasks: { a: { stage: 'building' }, b: { stage: 'merged' } },
-      projects: {},
-      settings: { taskCapacity: 4 },
-    },
-    ...overrides,
-  };
-}
 
 describe('a machine’s resource use in words', () => {
   it('says CPU, memory and free disk, rounding to whole percents and gigabytes', () => {
@@ -60,7 +44,7 @@ describe('a task’s resource use in words', () => {
   });
 });
 
-describe('the rows of the Machines card', () => {
+describe('a machine’s open tasks by use', () => {
   const tasks = { quiet: { id: 'quiet', title: 'Quiet' }, busy: { id: 'busy', title: 'Busy' } };
 
   it('lists the busiest task first and skips a task the page does not know', () => {
@@ -82,21 +66,31 @@ describe('the rows of the Machines card', () => {
       { task: tasks.quiet, use: 'Agent 1%, 1 GB', worktree: '2 GB worktree' },
     ]);
   });
+});
 
-  it('gives each machine its use, its open tasks against its capacity and its tasks', () => {
-    const reported = createChoice({
-      resources: createMachineResources({ tasks: [createTaskResources({ taskId: 'busy' })] }),
-    });
-    const silent = createChoice({ id: 'box', name: 'Build box', resources: null });
-    expect(listMachineResourceRows([reported, silent], tasks)).toEqual([
-      {
-        id: 'studio',
-        name: 'Studio',
-        use: 'CPU 20% · Memory 8 of 32 GB · 120 GB free',
-        load: '1 of 4 open tasks',
-        tasks: [{ task: tasks.busy, use: 'Agent 4%, 0.5 GB', worktree: '2 GB worktree' }],
-      },
-      { id: 'box', name: 'Build box', use: NO_RESOURCE_READING, load: '1 of 4 open tasks', tasks: [] },
+describe('the meters of a machine in Settings', () => {
+  it('shows CPU, memory and disk with how full each is, toned as it fills', () => {
+    expect(
+      listResourceGauges(
+        createMachineResources({
+          cpuPercent: 91.4,
+          memoryUsedBytes: 8 * GIGABYTE,
+          diskFreeBytes: 120 * GIGABYTE,
+          diskTotalBytes: 1000 * GIGABYTE,
+        })
+      )
+    ).toEqual([
+      { id: 'cpu', label: 'CPU', percent: 91, tone: 'red', value: '91%' },
+      { id: 'memory', label: 'Memory', percent: 25, tone: 'neutral', value: '8 of 32 GB' },
+      { id: 'disk', label: 'Disk', percent: 88, tone: 'amber', value: '120 GB free' },
     ]);
+  });
+
+  it('shows free disk without a meter when the total is unknown, and no disk when nothing was read', () => {
+    expect(listResourceGauges(createMachineResources({ diskTotalBytes: null }))[2]).toMatchObject({
+      percent: null,
+      value: '120 GB free',
+    });
+    expect(listResourceGauges(createMachineResources({ diskFreeBytes: null }))).toHaveLength(2);
   });
 });

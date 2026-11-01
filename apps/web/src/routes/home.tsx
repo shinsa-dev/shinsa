@@ -1,7 +1,6 @@
 import { briefingKey, reconcileBriefing, resolveQueue, type ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { HomeGuide } from '@/components/home/guide.tsx';
-import { HomeMachines } from '@/components/home/machines.tsx';
 import { NewTaskForm } from '@/components/home/new-task-form.tsx';
 import { RecentConversations, RecentlyFinished } from '@/components/home/recent.tsx';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
@@ -38,7 +37,6 @@ export function HomePage({ state }: { state: ShinsaState }) {
         </div>
 
         <WideSections>
-          <HomeMachines state={state} />
           <TaskQueue state={state} variant='wide' sections={first} />
           <RecentlyFinished state={state} finished={finished} />
           <RecentConversations conversations={conversations} />

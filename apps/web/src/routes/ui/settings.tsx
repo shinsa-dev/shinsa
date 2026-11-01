@@ -273,6 +273,7 @@ const SAMPLE_POLICY_MACHINES = [
     state: {
       tasks: {},
       projects: {},
+      repos: {},
       settings: {
         placementPolicies: [
           'Run Xcode simulator tests and TestFlight builds here.',
@@ -288,6 +289,7 @@ const SAMPLE_POLICY_MACHINES = [
     state: {
       tasks: {},
       projects: {},
+      repos: {},
       settings: { placementPolicies: ['Benchmarks and load tests always run here.'] },
     },
   },

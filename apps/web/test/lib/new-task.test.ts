@@ -16,7 +16,7 @@ import {
   listNewTaskStarts,
   NO_PROJECT,
   requestNewTask,
-  requestPolicyPlacement,
+  requestRoutedPlacement,
   resolveNewTaskMachine,
   resolveProjectChoice,
   resolveShownProject,
@@ -240,7 +240,12 @@ function createMachine(id: string, open: number, capacity: number | null, projec
       tasks: Object.fromEntries(
         Array.from({ length: open }, (_, index) => [`${id}-${index}`, { stage: 'building' as const }])
       ),
-      projects: Object.fromEntries(projects.map((project) => [project, {}])),
+      projects: Object.fromEntries(
+        projects.map((project) => [project, { name: project.toUpperCase(), description: '' }])
+      ),
+      repos: Object.fromEntries(
+        projects.map((project) => [project, { name: `${project}-repo`, projectId: project }])
+      ),
       settings: { taskCapacity: capacity },
     },
   };
@@ -258,38 +263,38 @@ describe('the machine a new task runs on', () => {
   };
   const auto = { machine: 'auto', project: 'auto' } as const;
 
-  it('picks nothing with one machine, the project you pick, then the focus project or the most room', () => {
+  it('picks nothing with one machine, the machine you pick, and otherwise asks the router with a fallback', () => {
     expect(resolveNewTaskMachine([studio], auto, 'p1')).toBeNull();
-    expect(resolveNewTaskMachine([studio, box], auto, 'p1')).toEqual({ id: 'studio', byPolicy: false });
-    expect(resolveNewTaskMachine([studio, box], auto, NO_PROJECT)).toEqual({ id: 'box', byPolicy: false });
+    expect(resolveNewTaskMachine([studio, box], auto, 'p1')).toEqual({ id: 'studio', byRouter: true });
+    expect(resolveNewTaskMachine([studio, box], auto, NO_PROJECT)).toEqual({ id: 'box', byRouter: true });
     expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'studio' }, NO_PROJECT)).toEqual({
       id: 'studio',
-      byPolicy: false,
+      byRouter: false,
     });
     expect(resolveNewTaskMachine([studio, box], { ...auto, machine: 'gone' }, NO_PROJECT)).toEqual({
       id: 'box',
-      byPolicy: false,
+      byRouter: true,
     });
     expect(resolveNewTaskMachine([], { ...auto, machine: 'x' }, NO_PROJECT)).toBeNull();
   });
 
-  it('leaves Automatic to the policies when there are any and you named no project or machine', () => {
-    expect(resolveNewTaskMachine([studio, ruled], auto, 'p1')).toEqual({ id: 'studio', byPolicy: true });
+  it('leaves Automatic to the router, with or without policies, when you named no project or machine', () => {
+    expect(resolveNewTaskMachine([studio, ruled], auto, 'p1')).toEqual({ id: 'studio', byRouter: true });
     expect(resolveNewTaskMachine([studio, ruled], { ...auto, project: 'p1' }, 'p1')).toEqual({
       id: 'studio',
-      byPolicy: false,
+      byRouter: false,
     });
     expect(resolveNewTaskMachine([studio, ruled], { ...auto, machine: 'box' }, NO_PROJECT)).toEqual({
       id: 'box',
-      byPolicy: false,
+      byRouter: false,
     });
   });
 
-  it('asks the engine which machine the policies send a request to, and falls back on no answer', async () => {
+  it('asks the engine which machine fits a request, with each machine’s policies and projects, and falls back on no answer', async () => {
     const asked: unknown[] = [];
     const answer = { machineId: 'box', reason: 'Benchmarks run on the build box.' };
     expect(
-      await requestPolicyPlacement([studio, ruled], 'Run the benchmark', (question) => {
+      await requestRoutedPlacement([studio, ruled], 'Run the benchmark', (question) => {
         asked.push(question);
         return Promise.resolve({ answer });
       })
@@ -298,11 +303,22 @@ describe('the machine a new task runs on', () => {
       {
         request: 'Run the benchmark',
         machines: [
-          { id: 'studio', name: 'Studio', policies: [], open: 3, capacity: 4, resources: null },
+          {
+            id: 'studio',
+            name: 'Studio',
+            policies: [],
+            projects: [{ name: 'P1', description: '', repositories: ['p1-repo'] }],
+            repositories: [],
+            open: 3,
+            capacity: 4,
+            resources: null,
+          },
           {
             id: 'box',
             name: 'Build box',
             policies: ['Run benchmarks on the build box.'],
+            projects: [],
+            repositories: [],
             open: 1,
             capacity: null,
             resources: null,
@@ -311,10 +327,10 @@ describe('the machine a new task runs on', () => {
       },
     ]);
     expect(
-      await requestPolicyPlacement([studio, ruled], 'x', () => Promise.resolve({ answer: null }))
+      await requestRoutedPlacement([studio, ruled], 'x', () => Promise.resolve({ answer: null }))
     ).toEqual({ answer: null, failed: false });
     expect(
-      await requestPolicyPlacement([studio, ruled], 'x', () =>
+      await requestRoutedPlacement([studio, ruled], 'x', () =>
         Promise.reject(new Error('No Claude account is signed in.'))
       )
     ).toEqual({ answer: null, failed: true });
@@ -324,28 +340,28 @@ describe('the machine a new task runs on', () => {
     const roomy = { ...studio, state: { ...studio.state, settings: { taskCapacity: 8 } } };
     const busyBox = { ...box, resources: createMachineResources({ cpuPercent: 85 }) };
     const idleStudio = { ...roomy, resources: createMachineResources({ cpuPercent: 10 }) };
-    expect(resolveNewTaskMachine([roomy, box], auto, NO_PROJECT)).toEqual({ id: 'box', byPolicy: false });
+    expect(resolveNewTaskMachine([roomy, box], auto, NO_PROJECT)).toEqual({ id: 'box', byRouter: true });
     expect(resolveNewTaskMachine([idleStudio, busyBox], auto, NO_PROJECT)).toEqual({
       id: 'studio',
-      byPolicy: false,
+      byRouter: true,
     });
     expect(resolveNewTaskMachine([idleStudio, box], auto, NO_PROJECT)).toEqual({
       id: 'box',
-      byPolicy: false,
+      byRouter: true,
     });
     const fullStudio = { ...idleStudio, state: { ...studio.state, settings: { taskCapacity: 3 } } };
     expect(resolveNewTaskMachine([fullStudio, busyBox], auto, NO_PROJECT)).toEqual({
       id: 'box',
-      byPolicy: false,
+      byRouter: true,
     });
   });
 
-  it('tells the policy classifier each machine’s CPU, memory and disk, without its tasks', async () => {
+  it('tells the router each machine’s CPU, memory and disk, without its tasks', async () => {
     const asked: PlacementQuestion[] = [];
     const reported = createMachineResources({
       tasks: [createTaskResources({ taskId: 'box-0' })],
     });
-    await requestPolicyPlacement(
+    await requestRoutedPlacement(
       [studio, { ...ruled, resources: reported }],
       'Run the benchmark',
       (question) => {
@@ -373,7 +389,7 @@ describe('the machine a new task runs on', () => {
       posted.push(url);
       return Promise.resolve(Response.json({ answer }));
     }) as unknown as typeof globalThis.fetch;
-    const placed = await requestPolicyPlacement([studio, ruled], 'Run the benchmark');
+    const placed = await requestRoutedPlacement([studio, ruled], 'Run the benchmark');
     globalThis.fetch = realFetch;
     expect(placed).toEqual({ answer, failed: false });
     expect(posted).toEqual(['/api/placement']);
@@ -385,17 +401,17 @@ describe('the machine a new task runs on', () => {
     expect(describePlacementDone('Task started.', undefined)).toBe('Task started.');
   });
 
-  it('lists Automatic, with the policies’ hint when they decide, then each machine with its load', () => {
-    expect(listNewTaskMachines([studio, box], { id: 'box', byPolicy: false })).toEqual([
+  it('lists Automatic, with the router’s hint when it decides, then each machine with its load', () => {
+    expect(listNewTaskMachines([studio, box], { id: 'box', byRouter: false })).toEqual([
       { value: 'auto', label: 'Automatic', icon: 'IconArrowSplitRight' },
       { value: 'studio', label: 'This machine', icon: 'IconMacbookRemote', hint: '3 of 4 open tasks' },
       { value: 'box', label: 'Build box', icon: 'IconMacbookRemote', hint: '1 open task' },
     ]);
-    expect(listNewTaskMachines([studio, box], { id: 'box', byPolicy: true })[0]).toEqual({
+    expect(listNewTaskMachines([studio, box], { id: 'box', byRouter: true })[0]).toEqual({
       value: 'auto',
       label: 'Automatic',
       icon: 'IconArrowSplitRight',
-      hint: 'Your routing policies decide when you start it',
+      hint: 'Chooses by your policies, projects and room when you start it',
     });
     expect(listNewTaskMachines([studio, box], null)[0]?.label).toBe('Automatic');
   });
