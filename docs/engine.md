@@ -1146,7 +1146,7 @@ piece of a bundle with `create_task`'s `stack_on_this` (`stacksOn` on `task.crea
   on one that opens no pull request (`stack_no_pull_request`), on one in another repository (`stack_repository`), on
   one another task already stacks on (`stack_taken`) and a cycle (`dependency_cycle`). The bundle can change only
   until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels
-  the planning run and plans again once released.
+  the planning run and plans again once released (Taking a task out, below).
 - **Ready instead of merged.** The task below never gets a merge gate of its own: when the watch finds its pull
   request clean, where the merge gate would open, it is ready (`Task.bundleReady`, `task.bundle_ready`, with the head
   it is ready at), stays in `shipping` with "ready, merges with its bundle", and keeps watching: a read that is not
@@ -1176,11 +1176,28 @@ piece of a bundle with `create_task`'s `stack_on_this` (`stacksOn` on `task.crea
   (a conflict that brings is fixed like any other). A task below cancelled pauses the stacked task, started or not,
   with a failure gate, "“‹parent›” was cancelled"; Retry takes it out of the bundle and bases it on the default
   branch, and Stack on another task… points it elsewhere while it has not started.
-- **Where it shows.** The Overview's Bundle panel lists each task from the bottom with its state (Waiting, Working,
-  Ready, Merging, Merged), its pull request and This task; a ready task's now card says which task's merge gate merges
-  it. All tasks lists a ready task with its bundle's top task, bottom first, so the bundle reads as one row group.
-  The rules run after every command for the tasks in a bundle (`reviewBundles`, `decide/bundles.ts`), and the
-  invariant walk checks that a task with a task stacked on it never has a merge gate open.
+- **Where it shows.** The task toolbar's Bundle item ("Bundle 2/3", the ready tasks of all of them) opens a popover
+  that lists each task from the bottom with its state (Waiting, Working, Ready, Merging, Merged), its pull request and
+  This task (`BundleFact`); a queue row carries the same count as a small mark beside its status (`BundleMark`). A
+  ready task's now card says which task's merge gate merges it. All tasks files a ready task with its bundle's top
+  task, its root first and each task above nested under the one below (`orderChains`). The rules run after every
+  command for the tasks in a bundle (`reviewBundles`, `decide/bundles.ts`), and the invariant walk checks that a task
+  with a task stacked on it never has a merge gate open.
+- **Taking a task out.** Take out of the bundle (`task.stack_on` with `null`) works until the task builds. A task
+  still waiting starts at once from the default branch. A task already planning on the branch below loses its stack
+  base, its planning run is cancelled, and `worktree.create` resets its worktree onto the default branch before it
+  plans again; the task below, with nothing stacked on it any more, goes back to its own merge gate. Once the stacked
+  task builds, its commits sit on the branch below, so the bundle no longer changes; cancel the task or let the bundle
+  merge.
+- **Stack or wait.** Neither is the default; the agent picks by what the later task needs (the `create_task`
+  description says so). Stack when the later task builds directly on this one's code in the same repository and
+  ships with it: the next piece of one feature, a schema then its API then its screen, where a flaw found in the
+  later piece should be fixed in the earlier pull request before anything merges, and where each small pull request
+  reads well only next to the one below. Wait (`after_this`, `waitsOn`) when the earlier task should ship on its own:
+  a fix or a feature that is worth merging today even if the follow-up stalls, work that needs the earlier change
+  live on the default branch first (a migration run, a deploy, a flag), work in another repository, or several tasks
+  that build on one (a bundle is one line, so fan-out is a wait). A bundle holds every merge until its top is ready,
+  so a long bundle delays the first piece; waiting delivers each piece as it merges.
 
 ### The backlog
 

@@ -18,6 +18,7 @@ import {
   reachShipping,
   readyWorktree,
   registerRepo,
+  verifySetup,
 } from '../harness.ts';
 
 function recordClean(harness: Harness, taskId: string, number = 42, overrides: Partial<PullRequest> = {}) {
@@ -439,6 +440,23 @@ describe('a bundle on its way to the merge', () => {
     expect(harness.task(child).stacksOn).toBeNull();
     expect(harness.task(child).stackBase).toBeNull();
     expect(harness.task(child).stage).toBe('planning');
+  });
+
+  test('taking a planning task out of its bundle replans it from the default branch', () => {
+    const harness = createHarness();
+    const parent = createTask(harness, { request: 'Parent' });
+    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    reachReady(harness, parent, 1);
+    readyWorktree(harness, child);
+    expect(harness.task(child).stackBase).toBe(`fix/${parent}`);
+    const creates = harness.effectsOf('worktree.create').length;
+    stackOn(harness, child, null);
+    expect(harness.task(child).stacksOn).toBeNull();
+    expect(harness.task(child).stackBase).toBeNull();
+    expect(resolveRoundBase(harness.task(child))).toBeNull();
+    verifySetup(harness, child);
+    expect(harness.effectsOf('worktree.create').length).toBe(creates + 1);
+    expect(harness.task(parent).bundleReady).toBeNull();
   });
 
   test('a task below gets its own merge gate once nothing is stacked on it any more', () => {

@@ -31,12 +31,14 @@ function listGateItems(entries: QueuedGate[]): QueueItem[] {
   }));
 }
 
+const WAITING_GROUP = { title: 'Waiting on another task', icon: 'IconHourglass', tone: 'neutral' } as const;
+
 function createGroupSection(
   key: 'working' | 'waiting' | 'snoozed',
   items: QueueItem[],
   empty: string | null
 ): QueueSection {
-  const group = TASK_GROUP[key];
+  const group = key === 'waiting' ? WAITING_GROUP : TASK_GROUP[key];
   return {
     key,
     title: group.title,

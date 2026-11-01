@@ -14,7 +14,7 @@ import { STAGE_ICON, STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { describePostMergeStatus, describePreMergeStatus } from '@/lib/review/merge-steps.ts';
 import { BUNDLE_MERGING_STATUS, BUNDLE_READY_STATUS, isMergingWithBundle } from '@/lib/tasks/bundles.ts';
-import { resolveTaskGroup, TASK_GROUP } from '@/lib/tasks/groups.ts';
+import { isHeldByTasks, resolveTaskGroup, TASK_GROUP } from '@/lib/tasks/groups.ts';
 import { isWatchedTask } from '@/lib/tasks/watchdogs.ts';
 
 export interface Status {
@@ -130,8 +130,8 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
   if (task.usageWait?.status === 'armed') return WAITING_FOR_USAGE;
   if (isWaitingForDelegations(state, task)) return WAITING_FOR_DELEGATIONS;
-  if (task.stage !== 'waiting_on_tasks' && resolveTaskGroup(state, task) === 'waiting') {
-    return { label: TASK_GROUP.waiting.title, tone: TASK_GROUP.waiting.tone };
+  if (task.stage !== 'waiting_on_tasks' && isHeldByTasks(state, task)) {
+    return { label: 'Waiting on another task', tone: 'neutral' };
   }
   return { label: resolveStageLabel(task), tone: STAGE_TONE[task.stage] };
 }
@@ -176,15 +176,14 @@ export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName 
   if (task.monitor?.status === 'armed') return 'IconClockSnooze';
   if (task.usageWait?.status === 'armed') return 'IconGauge';
   if (isWaitingForDelegations(state, task)) return 'IconAgents';
-  if (task.stage !== 'waiting_on_tasks' && resolveTaskGroup(state, task) === 'waiting') {
-    return TASK_GROUP.waiting.icon;
-  }
+  if (task.stage !== 'waiting_on_tasks' && isHeldByTasks(state, task)) return 'IconHourglass';
   return STAGE_STATUS_ICON[task.stage];
 }
 
 export function resolveTaskGlyph(state: ShinsaState, task: Task): Glyph {
   const gate = selectLeadGate(state, task);
   if (gate && !isHeldInBacklog(state, gate)) return resolveGateGlyph(gate);
+  if (!gate && isHeldByTasks(state, task)) return { icon: 'IconHourglass', tone: 'neutral' };
   const group = TASK_GROUP[resolveTaskGroup(state, task)];
   if (group.key === 'working') return { icon: STAGE_ICON[task.stage] ?? group.icon, tone: group.tone };
   if (group.key === 'done' && task.stage === 'merged') return { icon: 'IconMerged', tone: group.tone };

@@ -12,9 +12,9 @@ import { ToolGroup, ToolRow } from '@/components/chat/tool-group.tsx';
 import { UserMessage } from '@/components/chat/user-message.tsx';
 import { CHAT_COLUMN, CHAT_INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
-import { BundlePanel } from '@/components/overview/bundle-panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
+import { BundleFact, BundleMark } from '@/components/task/bundle.tsx';
 import { Composer } from '@/components/task/composer.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { resolveContextMeter } from '@/lib/chat/context.ts';
@@ -148,9 +148,10 @@ function RoundSpecimens({ now }: { now: number }) {
         </div>
       </Specimen>
       {middle && (
-        <Specimen label='BundlePanel · the Overview’s bundle: each task bottom first with its state and pull request, the one you are on marked'>
-          <div className='w-full max-w-xl'>
-            <BundlePanel state={bundle} task={middle} />
+        <Specimen label='BundleFact and BundleMark · the task toolbar’s bundle, whose popover lists each task bottom first with its state and pull request, and the small mark a queue row carries'>
+          <div className='flex items-center gap-4'>
+            <BundleFact state={bundle} task={middle} />
+            <BundleMark state={bundle} task={middle} />
           </div>
         </Specimen>
       )}

@@ -24,7 +24,7 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectProject } from '@/lib/projects.ts';
 import { resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
-import type { TaskGroupKey } from '@/lib/tasks/groups.ts';
+import { isHeldByTasks } from '@/lib/tasks/groups.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
@@ -106,21 +106,19 @@ function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
   );
 }
 
-function RowStatus({ state, task, group }: { state: ShinsaState; task: Task; group: TaskGroupKey }) {
-  if (group === 'waiting') return <WaitsOnLinks waitsOn={listWaitsOn(state, task)} />;
+function RowStatus({ state, task }: { state: ShinsaState; task: Task }) {
+  if (isHeldByTasks(state, task)) return <WaitsOnLinks waitsOn={listWaitsOn(state, task)} />;
   return <StatusText state={state} task={task} className='truncate text-xs' />;
 }
 
 export const TaskListRow = React.memo(function TaskListRowItem({
   state,
   task,
-  group,
   depth,
   columns = TASK_LIST_COLUMNS,
 }: {
   state: ShinsaState;
   task: Task;
-  group: TaskGroupKey;
   depth: number;
   columns?: string;
 }) {
@@ -165,7 +163,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
         )}
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
           <KindMark state={state} task={task} />
-          <RowStatus state={state} task={task} group={group} />
+          <RowStatus state={state} task={task} />
         </span>
         <span className='max-md:hidden'>
           <PullRequestBadge task={task} />

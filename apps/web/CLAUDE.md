@@ -57,13 +57,14 @@ src/
 │                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
 │                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares; the task's composer on
 │                        Overview, Review and Chat is one draft per task, lib/chat/task-drafts.ts), review draft, the
-│                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
+│                        handle, bundle.tsx: BundleFact, the toolbar's Bundle item and its popover of the bundle's
+│                        tasks, and BundleMark, its count on a queue row, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
 │                        steps left after the merge), the plan's
 │                        parameters, the quiet-agent note,
 │                        question choices, finding verdicts, plan revision, suggested tasks, delegations and
-│                        result panels, the Rounds panel and its round headers, bundle-panel.tsx: the Bundle panel (each task of the bundle from the bottom, its state and pull request), progress track, mini-track.tsx: the track as dots for a queue row), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
+│                        result panels, the Rounds panel and its round headers, progress track, mini-track.tsx: the track as dots for a queue row), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
 │                        live card, handover, delegation and notice rows, the context meter, message-queue.tsx:
 │                        the queued messages docked above the composer, file-card.tsx: FileCard, the one card a non-image attachment is in a message and in a composer, a grey bordered tile with the kind's icon from lib/chat/attachments.ts; it and every image attachment take the composer card's corner, ATTACHMENT_CORNER, and its tile ATTACHMENT_TILE_CORNER, 4px in on every side, so the tile is 46px in the 56px card), review (merge-steps.tsx: the steps around the
 │                        merge as a checklist, its block on a now card and its panel on the Review tab, a step's command as a shell code block;

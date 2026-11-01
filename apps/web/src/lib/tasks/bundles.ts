@@ -72,9 +72,16 @@ export function listBundleRows(state: ShinsaState, task: Task): BundleRow[] {
   }));
 }
 
+function countReady(rows: BundleRow[]) {
+  return rows.filter((row) => row.state === 'ready' || row.state === 'merged').length;
+}
+
 export function describeBundleProgress(rows: BundleRow[]) {
-  const done = rows.filter((row) => row.state === 'ready' || row.state === 'merged').length;
-  return `${done} of ${rows.length} ready`;
+  return `${countReady(rows)} of ${rows.length} ready`;
+}
+
+export function describeBundleCount(rows: BundleRow[]) {
+  return `${countReady(rows)}/${rows.length}`;
 }
 
 export function selectBundleTop(state: ShinsaState, task: Task) {

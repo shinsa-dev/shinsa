@@ -9,7 +9,6 @@ import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { ActivityRow } from '@/components/overview/activity-row.tsx';
-import { BundlePanel } from '@/components/overview/bundle-panel.tsx';
 import { DelegationsPanel } from '@/components/overview/delegations-panel.tsx';
 import { NowCard } from '@/components/overview/now-card.tsx';
 import { RequestsPanel } from '@/components/overview/reply-report.tsx';
@@ -151,7 +150,6 @@ export function OverviewTab({
           <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
           <RequestsPanel task={task} shownId={resolveShownReplyId(state, task, gate)} />
           <SuggestionsPanel task={task} />
-          <BundlePanel state={state} task={task} />
           <PostMergePanel state={state} task={task} gate={gate} />
           <WatchdogsPanel state={state} task={task} />
           {resolveResultPlace(state, task, gate) === 'panel' && <ResultPanel task={task} />}

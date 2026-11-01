@@ -1108,8 +1108,13 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   pull request's diff is small and builds on the one before, for you and for review bots.
 - **Ready, then one merge.** A task below never gets its own merge gate: it shows Ready, merges with its bundle, and
   keeps fixing CI, comments and conflicts. The top task gets one merge gate for the whole bundle once every task below
-  is ready, listing each pull request; approving merges them top down and every task ends merged. The Overview's
-  Bundle panel shows each task in order with its state and pull request, and All tasks keeps a bundle's rows together.
+  is ready, listing each pull request; approving merges them top down and every task ends merged. The task
+  toolbar's Bundle item ("Bundle 2/3") lists each task in order with its state and pull request, a queue row carries
+  the same count, and All tasks nests each task under the one below, as it now nests every waiting task under the
+  task it waits on instead of filing it in a section of its own.
+- **Stack or wait.** Both stay first-class: stack the next piece of one feature that should ship with it and may
+  still change it; wait when the earlier piece should ship on its own, needs to be live first, or lives in another
+  repository. Agents get the same rule in `create_task`.
 - **Not yet.** Bundles that branch, GitHub's own stack API (chained bases already show as a stack), triage inferring
   a bundle and `split_task` splitting into one.
 
