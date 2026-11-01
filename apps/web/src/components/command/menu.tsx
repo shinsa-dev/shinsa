@@ -60,7 +60,7 @@ import { listVersionSections } from '@/lib/command/versions.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useExtensions } from '@/lib/connection/extensions.ts';
-import { useConnection } from '@/lib/connection/socket.ts';
+import { useConnection, useEngineCommands } from '@/lib/connection/socket.ts';
 import { useTerminals } from '@/lib/connection/terminals.ts';
 import { useVersions } from '@/lib/connection/versions.ts';
 import { describeNewTask } from '@/lib/new-task.ts';
@@ -407,6 +407,7 @@ export function CommandMenu() {
   const registered = useRegisteredSections();
   const theme = useThemePreference();
   const layout = useLayoutPreference();
+  const engineCommands = useEngineCommands();
   const accounts = useAccounts();
   const extensions = useExtensions(open);
   const versions = useVersions(open);
@@ -527,7 +528,7 @@ export function CommandMenu() {
 
   const sections = [
     ...registered,
-    ...listGlobalSections(state, route, theme, layout),
+    ...listGlobalSections(state, route, theme, layout, engineCommands),
     ...listAccountSections(accounts),
     ...listScheduleSections(state),
     ...(open ? listServiceSections(state, terminals, Date.now()) : []),

@@ -2753,10 +2753,11 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `EngineInfo`, and `Fleet.selectEngine(id)` answers for the machine that owns the id, through the same owner lookup
   commands are routed by. Every task action names the command it sends (`TASK_ACTION_COMMAND`), and the task menu, a
   row's menu and the command menu leave out an action whose command that machine did not list: Share task and Stop
-  sharing on an engine from before sharing. A command sent anyway is refused before it leaves the page, with "Update
+  sharing on an engine from before sharing; the Feedback button and Send feedback on Shinsa likewise ask the default
+  machine for `feedback.write`. A command sent anyway is refused before it leaves the page, with "Update
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
-  engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`
-  today). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`, and
+  `feedback` for `GET /api/feedback`, today). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app

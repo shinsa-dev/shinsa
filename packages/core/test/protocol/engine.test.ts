@@ -119,7 +119,14 @@ describe('resolveEngineFit', () => {
   });
 });
 
-const GATED_COMMANDS: EngineCommand[] = ['task.share', 'task.unshare'];
+const GATED_COMMANDS: EngineCommand[] = [
+  'feedback.write',
+  'feedback.update',
+  'feedback.file',
+  'feedback.dismiss',
+  'task.share',
+  'task.unshare',
+];
 
 describe('ENGINE_BASELINE_COMMANDS', () => {
   test('lists only commands the engine parses', () => {

@@ -8,6 +8,7 @@ import { FEEDBACK_POPOVER, FeedbackPanel } from '@/components/feedback/popover.t
 import { NAV_ICON_NUDGE } from '@/components/layout/nav-button.tsx';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { useEngineCommand } from '@/lib/connection/socket.ts';
 import {
   countFeedbackWaiting,
   describeFeedbackCount,
@@ -42,6 +43,7 @@ export function FeedbackButton({
     [openerId]
   );
   const open = useFeedbackOpen(openerId);
+  const supported = useEngineCommand('feedback.write');
   const count = describeFeedbackCount(countFeedbackWaiting(state));
   const icon = open ? FEEDBACK_ACTIVE_ICON : FEEDBACK_ICON;
   const trigger =
@@ -74,6 +76,7 @@ export function FeedbackButton({
         </PopoverTrigger>
       </Hint>
     );
+  if (!supported) return null;
   return (
     <Popover open={open} onOpenChange={(next) => updateFeedbackOpen(openerId, next)}>
       {trigger}
