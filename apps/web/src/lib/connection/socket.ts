@@ -227,7 +227,6 @@ export class Connection implements ShinsaConnection {
     const socket = this.#options.openSocket();
     this.#socket = socket;
     socket.addEventListener('open', () => {
-      this.#attempt = 0;
       this.#syncing = true;
       this.#update({ status: 'open' });
       this.#send({ type: 'hello', surface: (this.#options.surface ?? resolveSurface)() });
@@ -497,6 +496,7 @@ export class Connection implements ShinsaConnection {
   #receive(message: ServerMessage) {
     switch (message.type) {
       case 'state':
+        this.#attempt = 0;
         this.#incomingState = message.state;
         this.#incomingPatches = [];
         this.#scheduleFlush();

@@ -2840,7 +2840,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
   sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
-  its connection's retry opens a fresh channel with a new token. A machine that refuses this device's key is forgotten
+  its connection's retry opens a fresh channel with a new token. The retry waits 250 ms, 1 s, 2 s, then 5 s, and starts
+  over only once a socket has delivered the state, so a channel that opens and breaks before its state arrives backs
+  off instead of retrying every 250 ms. The Reconnecting dot (`ConnectionStatus`) shows only once the connection has
+  been down for a second (`RECONNECT_GRACE_MS`), so a reconnect that recovers within it never flashes. A machine that refuses this device's key is forgotten
   here and leaves the dashboard, listed as one this device cannot reach. Removing or leaving a machine in Settings →
   Machines drops it from the dashboard as soon as Shinsa Cloud confirms (`ShinsaConnection.removeMachine`,
   `Fleet.removeMachine`): its tasks leave Home, All tasks and the queue at once, its connection stops
