@@ -245,6 +245,15 @@ describe('resolveServiceUrl', () => {
     );
   });
 
+  it('carries the private address only while the run is running', () => {
+    const remoteUrl = 'https://abc.shinsa.page/tasks/SW-17';
+    expect(resolveServiceView(preview, terminal({ port: 4123, remoteUrl }), LATER).remoteUrl).toBe(remoteUrl);
+    expect(resolveServiceView(preview, terminal({ port: 4123 }), LATER).remoteUrl).toBeNull();
+    const ended = terminal({ port: 4123, remoteUrl, status: 'exited', exitCode: 0, endedAt: 5 });
+    expect(resolveServiceView(preview, ended, LATER).remoteUrl).toBeNull();
+    expect(resolveServiceView(preview, null, LATER).remoteUrl).toBeNull();
+  });
+
   it('has no URL without a preview URL, or without a port to put in it', () => {
     expect(resolveServiceUrl(service('api'), terminal({ port: 4123 }))).toBeNull();
     expect(resolveServiceUrl(preview, terminal({}))).toBeNull();

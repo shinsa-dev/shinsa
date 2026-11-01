@@ -1,4 +1,5 @@
 import {
+  type Bytes,
   concatBytes,
   decodeText,
   encodeText,
@@ -7,6 +8,7 @@ import {
   serializeBase32,
   serializeBase64Url,
 } from './bytes.ts';
+import { importConnectKey } from './connect-token.ts';
 
 export const PREVIEW_ORIGIN = 'https://shinsa.page';
 
@@ -22,6 +24,18 @@ export const PREVIEW_KEY_HEADER = 'x-shinsa-preview-key';
 
 export const PREVIEW_PAGE_HEADER = 'x-shinsa-preview-page';
 
+export const PREVIEW_ACCESS_PARAM = 'access';
+
+export const PREVIEW_ACCESS_HEADER = 'x-shinsa-preview-access';
+
+export const PREVIEW_OPEN_TTL_MS = 60_000;
+
+export const PREVIEW_ACCESS_TTL_MS = 12 * 60 * 60_000;
+
+const ACCESS_CONTEXT = 'shinsa-preview-access\n';
+
+const PRIVATE_ID_CONTEXT = 'shinsa-private-preview\n';
+
 const LABEL_LIMIT = 63;
 
 const SEGMENT = /^[A-Za-z0-9_-]+$/;
@@ -33,6 +47,16 @@ export interface PreviewAddress {
 
 export interface PreviewLink extends PreviewAddress {
   key: string;
+}
+
+export interface PreviewAccessClaim extends PreviewAddress {
+  userId: string;
+  expiresAt: number;
+}
+
+export interface PrivatePreviewRun {
+  serviceId: string;
+  taskId: string | null;
 }
 
 function hasBytes(text: string, length: number) {
@@ -107,4 +131,64 @@ export function parsePreviewTunnelPath(pathname: string) {
   const previewId = slash === -1 ? rest : rest.slice(0, slash);
   if (!isPreviewId(previewId)) return null;
   return { previewId, path: slash === -1 ? '/' : rest.slice(slash) };
+}
+
+export async function resolvePrivatePreviewId(connectKey: string, run: PrivatePreviewRun) {
+  const key = await importConnectKey(connectKey);
+  if (!key) throw new Error('The connect key is not valid.');
+  const message = encodeText(`${PRIVATE_ID_CONTEXT}${run.serviceId}\n${run.taskId ?? ''}`);
+  const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, message));
+  return serializeBase64Url(digest.slice(0, PREVIEW_ID_BYTES));
+}
+
+export function resolvePrivatePreviewUrl(
+  address: PreviewAddress,
+  localUrl: string,
+  zoneOrigin = PREVIEW_ORIGIN
+) {
+  const local = new URL(localUrl);
+  return `${resolvePreviewOrigin(address, zoneOrigin)}${local.pathname}${local.search}${local.hash}`;
+}
+
+function readAccessClaim(payload: Bytes): PreviewAccessClaim | null {
+  try {
+    const fields = JSON.parse(decodeText(payload)) as Record<string, unknown>;
+    if (typeof fields.i !== 'string' || typeof fields.p !== 'string') return null;
+    if (typeof fields.u !== 'string' || typeof fields.e !== 'number') return null;
+    return { instanceId: fields.i, previewId: fields.p, userId: fields.u, expiresAt: fields.e };
+  } catch {
+    return null;
+  }
+}
+
+export async function createPreviewAccessToken(connectKey: string, claim: PreviewAccessClaim) {
+  const key = await importConnectKey(connectKey);
+  if (!key) throw new Error('The connect key is not valid.');
+  const payload = encodeText(
+    JSON.stringify({ i: claim.instanceId, p: claim.previewId, u: claim.userId, e: claim.expiresAt })
+  );
+  const signed = concatBytes(encodeText(ACCESS_CONTEXT), payload);
+  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, signed));
+  return `${serializeBase64Url(payload)}.${serializeBase64Url(signature)}`;
+}
+
+export async function verifyPreviewAccessToken(
+  connectKey: string,
+  token: string,
+  address: PreviewAddress,
+  now: number,
+  ttlMs = PREVIEW_ACCESS_TTL_MS
+): Promise<PreviewAccessClaim | null> {
+  const [encoded, encodedSignature, extra] = token.split('.');
+  if (encoded === undefined || encodedSignature === undefined || extra !== undefined) return null;
+  const payload = parseBase64Url(encoded);
+  const signature = parseBase64Url(encodedSignature);
+  const key = await importConnectKey(connectKey);
+  if (!payload || !signature || !key) return null;
+  const signed = concatBytes(encodeText(ACCESS_CONTEXT), payload);
+  if (!(await crypto.subtle.verify('HMAC', key, signature, signed))) return null;
+  const claim = readAccessClaim(payload);
+  if (!claim || claim.instanceId !== address.instanceId || claim.previewId !== address.previewId) return null;
+  if (claim.expiresAt <= now || claim.expiresAt > now + ttlMs) return null;
+  return claim;
 }
