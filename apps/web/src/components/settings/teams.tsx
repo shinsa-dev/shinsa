@@ -29,16 +29,21 @@ import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
 import { formatSince } from '@/lib/format/time.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
 import { describeUserName } from '@/lib/remote/users.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import {
   canUseTeams,
+  describePeopleCount,
   describeTeamEntry,
   describeTeamsUnavailable,
   hasMachineAccess,
   listProjectChoices,
+  listTeamPeople,
   needsTeamLink,
+  PEOPLE_SEARCH_LABEL,
+  PEOPLE_SEARCH_MIN,
   type ProjectChoice,
   TEAM_LINK_COPY,
   TEAMS_DESCRIPTION,
@@ -46,6 +51,7 @@ import {
   validateTeamLink,
 } from '@/lib/teams/settings.ts';
 import {
+  FoldingBlock,
   ROW_INSET,
   SETTING_ROW,
   SETTINGS_SUBHEADING,
@@ -150,7 +156,7 @@ function GrantDialog({
         <DialogHeader>
           <DialogTitle>{`Give ${name} access to ${machine}?`}</DialogTitle>
           <DialogDescription>
-            {`${name} can open ${machine} in Shinsa Cloud and use it as you do: start tasks, answer questions and review work. Their browsers that hold ${team.name}’s key are added without asking. Take it back under Remote access.`}
+            {`${name} gets full control of ${machine} in Shinsa Cloud. Take it back under Remote access.`}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -306,32 +312,40 @@ function TeamPeople({
   onDialog: (dialog: TeamsDialog) => void;
 }) {
   const now = useNow();
+  const [query, setQuery] = React.useState('');
   const viewer = snapshot.access?.owner.id ?? null;
-  const ownerIsYou = team.owner.id === viewer;
+  const people = listTeamPeople(team, query);
+  const searchable = team.members.length + 1 >= PEOPLE_SEARCH_MIN;
   return (
-    <>
-      <p className={SETTINGS_SUBHEADING}>People</p>
-      <UserRow user={team.owner} detail={describePerson('Owner', snapshot, team.owner)} self={ownerIsYou}>
-        {!ownerIsYou && (
-          <TeammateActions team={team} user={team.owner} snapshot={snapshot} onDialog={onDialog} />
-        )}
-      </UserRow>
-      {team.members.map((member) => {
-        const self = member.user.id === viewer;
+    <FoldingBlock
+      persistId={createDisclosureId('settings', 'teams', team.id, 'people')}
+      title='People'
+      detail={describePeopleCount(team)}
+      startsOpen={!searchable}
+    >
+      {searchable && (
+        <div className='p-1.5'>
+          <Input
+            type='search'
+            size='sm'
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={PEOPLE_SEARCH_LABEL}
+            aria-label={PEOPLE_SEARCH_LABEL}
+          />
+        </div>
+      )}
+      {people.length === 0 && <SettingsEmpty>No one matches.</SettingsEmpty>}
+      {people.map(({ user, member }) => {
+        const self = user.id === viewer;
+        const base = member ? describeMemberSince(member, now) : 'Owner';
         return (
-          <UserRow
-            key={member.user.id}
-            user={member.user}
-            detail={describePerson(describeMemberSince(member, now), snapshot, member.user)}
-            self={self}
-          >
-            {!self && (
-              <TeammateActions team={team} user={member.user} snapshot={snapshot} onDialog={onDialog} />
-            )}
+          <UserRow key={user.id} user={user} detail={describePerson(base, snapshot, user)} self={self}>
+            {!self && <TeammateActions team={team} user={user} snapshot={snapshot} onDialog={onDialog} />}
           </UserRow>
         );
       })}
-    </>
+    </FoldingBlock>
   );
 }
 

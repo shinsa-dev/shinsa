@@ -50,6 +50,7 @@ import {
   respondTeamAction,
   respondTeamCreate,
   respondTeamJoin,
+  respondTeamPreview,
   respondTeams,
   TEAM_ACTIONS,
 } from './teams.ts';
@@ -188,6 +189,11 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: exact(REMOTE_PATHS.teamJoin),
     respond: (request, _url, _match, world) => respondTeamJoin(request, 'page', world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.teamPreview),
+    respond: (request, _url, _match, world) => respondTeamPreview(request, world),
   },
   {
     method: 'POST',

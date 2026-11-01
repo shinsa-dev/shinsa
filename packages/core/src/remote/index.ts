@@ -210,6 +210,7 @@ export {
   type TeamKeys,
   type TeamListView,
   type TeamMachine,
+  type TeamPreviewResponse,
   type TeamView,
   type TeamViewTarget,
   verifyTeamHello,

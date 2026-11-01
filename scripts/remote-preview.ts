@@ -48,6 +48,7 @@ import {
   type Task,
   TEAM_CHANNEL_PATH,
   type TeamJoinResponse,
+  type TeamPreviewResponse,
 } from '../packages/core/src/index.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -123,9 +124,83 @@ const TEAM: Omit<RemoteTeam, 'role'> = {
   createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
 };
 
-function resolvePreviewTeam(owner: RemoteUser): RemoteTeam {
-  const role = owner.id === TEAM.owner.id ? 'owner' : 'member';
-  return { ...TEAM, role, requests: role === 'owner' ? TEAM.requests : [] };
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const DESIGN_PEOPLE: RemoteUser[] = [
+  { id: '21', login: 'ines', name: 'Inês Costa', avatarUrl: null },
+  { id: '22', login: 'theo', name: 'Theo Park', avatarUrl: null },
+  { id: '23', login: 'amara', name: 'Amara Obi', avatarUrl: null },
+  { id: '24', login: 'jonas', name: 'Jonas Weber', avatarUrl: null },
+  { id: '25', login: 'lea', name: 'Léa Martin', avatarUrl: null },
+  { id: '26', login: 'sam', name: null, avatarUrl: null },
+  { id: '27', login: 'priya', name: 'Priya Nair', avatarUrl: null },
+];
+
+const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
+  {
+    id: 'design',
+    name: 'Design systems',
+    owner: TEAMMATE,
+    members: [USER, ...DESIGN_PEOPLE].map((user, index) => ({
+      user,
+      addedAt: Date.now() - (index + 1) * DAY_MS,
+    })),
+    requests: [],
+    machines: [{ id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: false, lastSeenAt: null }],
+    createdAt: Date.now() - 30 * DAY_MS,
+  },
+  {
+    id: 'platform',
+    name: 'Platform',
+    owner: USER,
+    members: [],
+    requests: [],
+    machines: TEAM.machines.filter((machine) => machine.userId === USER.id),
+    createdAt: Date.now() - DAY_MS,
+  },
+];
+
+const REQUESTED_TEAM = { id: 'growth', name: 'Growth' };
+
+const PREVIEW_TEAM_KEYS: Record<string, string> = Object.fromEntries(
+  [...OTHER_TEAMS, REQUESTED_TEAM].map((team) => [
+    team.id,
+    serializeBase64Url(crypto.getRandomValues(new Uint8Array(32))),
+  ])
+);
+
+function isInTeam(team: Omit<RemoteTeam, 'role'>, user: RemoteUser) {
+  return team.owner.id === user.id || team.members.some((member) => member.user.id === user.id);
+}
+
+function resolvePreviewTeams(owner: RemoteUser): RemoteTeam[] {
+  return [TEAM, ...OTHER_TEAMS]
+    .filter((team) => isInTeam(team, owner))
+    .map((team) => {
+      const role = owner.id === team.owner.id ? 'owner' : 'member';
+      return { ...team, role, requests: role === 'owner' ? team.requests : [] };
+    });
+}
+
+function listPreviewTeamKeys(owner: RemoteUser) {
+  const keys = resolvePreviewTeams(owner).map((team) => ({
+    teamId: team.id,
+    name: team.name,
+    key: PREVIEW_TEAM_KEYS[team.id] ?? TEAM_KEY,
+    invite: team.role !== 'owner' ? null : team.id === TEAM.id ? TEAM_INVITE : `${TEAM_INVITE}-${team.id}`,
+    addedAt: team.createdAt,
+  }));
+  if (owner.id !== USER.id) return keys;
+  return [
+    ...keys,
+    {
+      teamId: REQUESTED_TEAM.id,
+      name: REQUESTED_TEAM.name,
+      key: PREVIEW_TEAM_KEYS[REQUESTED_TEAM.id] ?? TEAM_KEY,
+      invite: null,
+      addedAt: Date.now() - 2 * 60 * 60 * 1000,
+    },
+  ];
 }
 
 interface Machine {
@@ -190,16 +265,8 @@ function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
       owner: owner.login,
       devices: [],
       access: { owner, members: [] },
-      teams: [resolvePreviewTeam(owner)],
-      teamKeys: [
-        {
-          teamId: TEAM.id,
-          name: TEAM.name,
-          key: TEAM_KEY,
-          invite: owner.id === TEAM.owner.id ? TEAM_INVITE : null,
-          addedAt: TEAM.createdAt,
-        },
-      ],
+      teams: resolvePreviewTeams(owner),
+      teamKeys: listPreviewTeamKeys(owner),
     })
   );
 }
@@ -623,7 +690,7 @@ function selectCallerOwner(request: Request) {
 
 function respondTeams(request: Request, url: URL, teammates: Machine[]) {
   const { pathname } = url;
-  if (pathname === REMOTE_PATHS.teams) return Response.json([resolvePreviewTeam(USER)]);
+  if (pathname === REMOTE_PATHS.teams) return Response.json(resolvePreviewTeams(USER));
   if (pathname === REMOTE_PATHS.teamJoin) {
     const answer: TeamJoinResponse = {
       teamId: TEAM.id,
@@ -631,6 +698,10 @@ function respondTeams(request: Request, url: URL, teammates: Machine[]) {
       owner: TEAM.owner,
       status: 'member',
     };
+    return Response.json(answer);
+  }
+  if (pathname === REMOTE_PATHS.teamPreview) {
+    const answer: TeamPreviewResponse = { name: TEAM.name, owner: TEAM.owner };
     return Response.json(answer);
   }
   if (pathname === `${REMOTE_PATHS.teams}/${TEAM.id}/connect`)

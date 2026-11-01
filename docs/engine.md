@@ -2818,8 +2818,9 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   the fragment, which no browser sends to a server, so app.shinsa.dev never sees it and cannot read a team view. The
   invite only lets someone ask; turning the link off (`invite/remove`) or making a new one (`invite`) stops the old
   one, and a member already in keeps their key.
-- **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page keeps the key in
-  the browser and sends `POST /__remote/teams/join { invite }`, which records that the account asked
+- **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page names the team
+  and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing), keeps the key in the browser
+  and, on Ask to join, sends `POST /__remote/teams/join { invite }`, which records that the account asked
   (`team_requesters`) and makes it no member. Once the owner accepts, the team shows in Settings → Teams on each of
   your machines; one without the key asks for the link right in the team's card (or `shinsa teams join <url>`), which
   stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
@@ -2912,8 +2913,8 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
   change to it is refused from off the machine like the rest of remote access): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
-  New task's), the link field when this machine has no key, requests with Accept and Decline, and People, each
-  teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
+  New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
+  that starts closed from six people on, with a search by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
   which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
   member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
   local routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`

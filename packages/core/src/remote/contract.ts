@@ -40,6 +40,7 @@ export const REMOTE_PATHS = {
   teamJoinPage: '/share/team',
   machineTeams: '/__remote/machine/teams',
   machineTeamJoin: '/__remote/machine/teams/join',
+  teamPreview: '/__remote/teams/preview',
 } as const;
 
 export const MAX_INSTANCE_MEMBERS = 20;

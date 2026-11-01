@@ -2,10 +2,12 @@ import { describe, expect, it } from 'bun:test';
 import {
   canUseTeams,
   createTeamDraft,
+  describePeopleCount,
   describeTeamEntry,
   describeTeamsUnavailable,
   hasMachineAccess,
   listProjectChoices,
+  listTeamPeople,
   listTeamProjectCommands,
   needsTeamLink,
   resolveProjectPick,
@@ -91,5 +93,20 @@ describe('Settings → Teams', () => {
     expect(hasMachineAccess(snapshot, KAI.id)).toBe(true);
     expect(hasMachineAccess(snapshot, BOB.id)).toBe(false);
     expect(hasMachineAccess(createRemoteSnapshot(), KAI.id)).toBe(false);
+  });
+
+  it('lists the owner first, then the members, and finds people by name or login', () => {
+    const team = createTeam({
+      members: [
+        { user: KAI, addedAt: 1 },
+        { user: BOB, addedAt: 2 },
+      ],
+    });
+    expect(listTeamPeople(team, '').map((person) => person.user.login)).toEqual(['mona', 'kai', 'bob']);
+    expect(listTeamPeople(team, '').map((person) => person.member === null)).toEqual([true, false, false]);
+    expect(listTeamPeople(team, ' LANE ').map((person) => person.user.login)).toEqual(['kai']);
+    expect(listTeamPeople(team, 'bo').map((person) => person.user.login)).toEqual(['bob']);
+    expect(listTeamPeople(team, 'nobody')).toEqual([]);
+    expect(describePeopleCount(team)).toBe('3');
   });
 });

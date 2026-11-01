@@ -16,6 +16,7 @@ import {
   type TeamCreateResponse,
   type TeamInviteResponse,
   type TeamJoinResponse,
+  type TeamPreviewResponse,
   verifyConnectToken,
 } from '@shinsa/core';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
@@ -116,6 +117,16 @@ describe('joining a team', () => {
     expect(owned?.requests.map((request) => request.user)).toEqual([KAI]);
     const beat = await readJson<HeartbeatResponse>(await heartbeat(harness, studio));
     expect(beat.teams[0]?.requests.map((request) => request.user.id)).toEqual([KAI.id]);
+  });
+
+  test('the link names its team and owner before anyone asks, and records no request', async () => {
+    const { harness, mona, kai, invite } = await startTeam();
+    const preview = await harness.post(REMOTE_PATHS.teamPreview, { invite }, { session: kai });
+    expect(await readJson<TeamPreviewResponse>(preview)).toEqual({ name: 'Payments', owner: MONA });
+    expect((await listTeams(harness, mona))[0]?.requests).toEqual([]);
+    const stale = await harness.post(REMOTE_PATHS.teamPreview, { invite: 'nope' }, { session: kai });
+    expect(await readCode(stale)).toBe('invite_invalid');
+    expect((await harness.post(REMOTE_PATHS.teamPreview, { invite })).status).toBe(401);
   });
 
   test('a machine can ask to join for its owner', async () => {

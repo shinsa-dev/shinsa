@@ -47,7 +47,9 @@ describe('a teammate’s task in the local app', () => {
   it('says the task is no longer shown to the team once its machine stops showing it', async () => {
     const sockets = openRelay();
     act(() =>
-      sockets[0]?.emit('message', { data: serializeShareMessage({ t: 'closed', reason: 'Not shown any more.' }) })
+      sockets[0]?.emit('message', {
+        data: serializeShareMessage({ t: 'closed', reason: 'Not shown any more.' }),
+      })
     );
     await waitFor(() => expect(screen.getByText('This task is not shown to your team')).toBeDefined());
     expect(screen.getByText('Not shown any more.')).toBeDefined();

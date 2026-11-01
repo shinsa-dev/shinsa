@@ -106,7 +106,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `POST /__remote/machine/teams { name }` (machine token; at most 10 owned, 409 `teams_full`), a name of 60 characters
   at most and up to 20 members (`team_members`, 409 `members_full`). It mirrors a machine's members: one reusable
   invite kept as its SHA-256 (`team_invites`; `…/<team>/invite` replaces it, `…/invite/remove` turns it off), and
-  whoever opens the join link and signs in sends `POST /__remote/teams/join { invite }` (or the engine
+  whoever opens the join link and signs in sees the team's name and owner (`POST /__remote/teams/preview { invite }`,
+  which records nothing), then sends `POST /__remote/teams/join { invite }` (or the engine
   `/__remote/machine/teams/join`), which records that the account asked (`team_requesters`) and makes it no member
   (404 `invite_invalid` for a link turned off). Only the owner's machine answers a request (`members/add` and
   `requests/decline` with `{ userId }`, only of an account that asked), removes a member (`members/remove`) or the

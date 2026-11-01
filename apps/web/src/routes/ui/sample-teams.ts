@@ -137,3 +137,8 @@ export function createSampleTeamActions(): TeamActions {
 export function requestSampleTeamJoin(): Promise<TeamJoinResult> {
   return Promise.resolve({ name: 'Platform', owner: 'Mona Lisa', status: 'requested' });
 }
+
+export const SAMPLE_TEAM_JOIN_DASHBOARD = {
+  joinTeam: () => Promise.reject(new Error('This is a sample.')),
+  previewTeam: () => Promise.resolve({ name: 'Platform', owner: MONA }),
+};

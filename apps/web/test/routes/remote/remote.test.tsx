@@ -51,6 +51,7 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
         user: USER.user as RemoteUser,
         connect: { url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 },
       }),
+    previewTeam: () => Promise.resolve({ name: 'Platform', owner: USER.user as RemoteUser }),
     joinTeam: () =>
       Promise.resolve({
         teamId: 'team1',
@@ -229,7 +230,7 @@ describe('the remote dashboard', () => {
     expect(await screen.findByText('Pair Studio with your account')).toBeTruthy();
     unmount();
     renderRoot(`/enroll#k3x9.${MACHINE_KEY}.secret_1.tok`);
-    expect(await screen.findByText('Add this device to your machine')).toBeTruthy();
+    expect(await screen.findByText('Add this device')).toBeTruthy();
   });
 });
 
@@ -442,7 +443,7 @@ describe('the enroll page', () => {
     );
     const field = (await screen.findByLabelText('Device name')) as HTMLInputElement;
     expect(field.value).toBe('Chrome on Mac');
-    expect(screen.getByText('Add this device to your machine')).toBeTruthy();
+    expect(screen.getByText('Add this device')).toBeTruthy();
     fireEvent.change(field, { target: { value: ' Work Mac ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request access' }));
     expect(await screen.findByText('Request sent. Accept it on the machine.')).toBeTruthy();

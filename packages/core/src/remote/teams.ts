@@ -94,6 +94,11 @@ export interface TeamJoinResponse {
   status: TeamJoinStatus;
 }
 
+export interface TeamPreviewResponse {
+  name: string;
+  owner: RemoteUser;
+}
+
 export interface TeamConnectRequest {
   instanceId: string;
 }

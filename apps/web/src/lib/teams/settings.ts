@@ -1,8 +1,11 @@
 import {
   listTeamProjectIds,
   parseTeamJoinUrl,
+  type RemoteMember,
   type RemoteSnapshot,
+  type RemoteTeam,
   type RemoteTeamEntry,
+  type RemoteUser,
   type ShinsaState,
   TEAM_NAME_LIMIT,
   type UserCommand,
@@ -103,4 +106,29 @@ export function resolveProjectPick(projects: readonly ProjectChoice[], chosen: r
   if (picked.length === 1) return { dots, label: first.name };
   if (picked.length === 2 && second) return { dots, label: `${first.name}, ${second.name}` };
   return { dots, label: `${first.name} and ${picked.length - 1} more` };
+}
+
+export const PEOPLE_SEARCH_MIN = 6;
+
+export const PEOPLE_SEARCH_LABEL = 'Search people';
+
+export interface TeamPerson {
+  user: RemoteUser;
+  member: RemoteMember | null;
+}
+
+export function listTeamPeople(team: RemoteTeam, query: string): TeamPerson[] {
+  const people: TeamPerson[] = [
+    { user: team.owner, member: null },
+    ...team.members.map((member) => ({ user: member.user, member })),
+  ];
+  const words = query.trim().toLowerCase();
+  if (!words) return people;
+  return people.filter((person) =>
+    [person.user.login, person.user.name ?? ''].some((text) => text.toLowerCase().includes(words))
+  );
+}
+
+export function describePeopleCount(team: RemoteTeam) {
+  return String(team.members.length + 1);
 }

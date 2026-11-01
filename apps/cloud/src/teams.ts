@@ -14,6 +14,7 @@ import {
   type TeamCreateResponse,
   type TeamInviteResponse,
   type TeamJoinResponse,
+  type TeamPreviewResponse,
 } from '@shinsa/core';
 import { createInstanceId, createToken, resolveTokenHash } from './crypto.ts';
 import type { MemberRow, TeamRow, UserRow } from './database.ts';
@@ -112,8 +113,7 @@ export async function respondTeamCreate(request: Request, world: CloudWorld) {
   return respondJson(answer);
 }
 
-export async function respondTeamJoin(request: Request, actor: TeamActor, world: CloudWorld) {
-  const user = await findTeamUser(request, actor, world);
+async function findInviteTeam(request: Request, world: CloudWorld) {
   const fields = await readJsonFields(request);
   const team = await world.store.selectInviteTeam(await resolveTokenHash(readText(fields, 'invite', 100)));
   if (!team)
@@ -124,6 +124,19 @@ export async function respondTeamJoin(request: Request, actor: TeamActor, world:
     );
   const owner = await world.store.selectUser(team.user_id);
   if (!owner) throw new CloudError('not_found', 'No such team.', 404);
+  return { team, owner };
+}
+
+export async function respondTeamPreview(request: Request, world: CloudWorld) {
+  await findPageUser(request, world);
+  const { team, owner } = await findInviteTeam(request, world);
+  const answer: TeamPreviewResponse = { name: team.name, owner: serializeUser(owner) };
+  return respondJson(answer);
+}
+
+export async function respondTeamJoin(request: Request, actor: TeamActor, world: CloudWorld) {
+  const user = await findTeamUser(request, actor, world);
+  const { team, owner } = await findInviteTeam(request, world);
   const member = team.user_id === user.id || (await world.store.isTeamMember(team.id, user.id));
   if (!member) await world.store.recordTeamRequester(team.id, user.id, world.now());
   const answer: TeamJoinResponse = {

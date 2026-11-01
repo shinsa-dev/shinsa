@@ -53,6 +53,7 @@ import {
   createSampleTeamActions,
   createSampleTeams,
   requestSampleTeamJoin,
+  SAMPLE_TEAM_JOIN_DASHBOARD,
   SAMPLE_TEAM_LINK,
 } from './sample-teams.ts';
 import { createSampleVersions } from './sample-versions.ts';
@@ -440,7 +441,7 @@ export function SettingsSpecimens() {
         <div className='w-full max-w-sm'>
           <TeamJoinPage
             link={SAMPLE_TEAM_LINK}
-            dashboard={{ joinTeam: () => Promise.reject(new Error('This is a sample.')) }}
+            dashboard={SAMPLE_TEAM_JOIN_DASHBOARD}
             teamKeys={{ selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() }}
             request={requestSampleTeamJoin}
           />

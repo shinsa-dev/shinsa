@@ -6,6 +6,7 @@ import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { RemotePoint } from '@/lib/remote/mode.ts';
+import { describeUserName } from '@/lib/remote/users.ts';
 import {
   clearTeamJoinFragment,
   requestTeamJoin,
@@ -33,10 +34,33 @@ const TEAM_POINTS: RemotePoint[] = [
 ];
 
 const SHARE_STEPS = [
-  'Open Shinsa on your machine, then Settings → General → Teams.',
-  'Choose Join a team and paste this link.',
+  'Once you are in, open Shinsa on your machine, then Settings → General → Teams.',
+  'Paste this link into the team’s card.',
   'Pick the projects your teammates should see.',
 ];
+
+type TeamPreview = { name: string; owner: string } | { failure: string } | null;
+
+function useTeamPreview(link: TeamJoinFragment | null, dashboard: Pick<DashboardClient, 'previewTeam'>) {
+  const [preview, setPreview] = React.useState<TeamPreview>(null);
+  const invite = link?.invite ?? null;
+  React.useEffect(() => {
+    if (!invite) return;
+    let live = true;
+    dashboard.previewTeam(invite).then(
+      (answer) => {
+        if (live) setPreview({ name: answer.name, owner: describeUserName(answer.owner) });
+      },
+      (error: unknown) => {
+        if (live) setPreview({ failure: describeFailure(error) });
+      }
+    );
+    return () => {
+      live = false;
+    };
+  }, [dashboard, invite]);
+  return preview;
+}
 
 type JoinState =
   | { kind: 'ready' }
@@ -82,11 +106,12 @@ export function TeamJoinPage({
   request = requestTeamJoin,
 }: {
   link: TeamJoinFragment | null;
-  dashboard: Pick<DashboardClient, 'joinTeam'>;
+  dashboard: Pick<DashboardClient, 'joinTeam' | 'previewTeam'>;
   teamKeys: Pick<TeamKeyStore, 'selectTeamKey' | 'writeTeamKey'>;
   request?: typeof requestTeamJoin;
 }) {
   const [state, setState] = React.useState<JoinState>({ kind: 'ready' });
+  const preview = useTeamPreview(link, dashboard);
   if (!link)
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
@@ -117,16 +142,20 @@ export function TeamJoinPage({
     );
   }
 
+  const named = preview && 'name' in preview ? preview : null;
+  const failure =
+    state.kind === 'failed' ? state.message : preview && 'failure' in preview ? preview.failure : null;
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconUserAdd' title='Join a team'>
-        Ask to join with your GitHub account. Once the team’s owner accepts, you see your teammates’ tasks
-        next to your own.
+      <RemoteHero icon='IconUserAdd' title={named ? `Join ${named.name}` : 'Join a team'}>
+        {named
+          ? `${named.owner} owns this team. Ask to join with your GitHub account. Once they accept, you see your teammates’ tasks next to your own.`
+          : 'Ask to join with your GitHub account. Once the team’s owner accepts, you see your teammates’ tasks next to your own.'}
       </RemoteHero>
       <RemoteBenefits points={TEAM_POINTS} />
-      {state.kind === 'failed' && (
+      {failure && (
         <p role='alert' className='w-full text-destructive text-xs'>
-          {state.message}
+          {failure}
         </p>
       )}
       <Button className='w-full' loading={state.kind === 'requesting'} onClick={() => join(link)}>

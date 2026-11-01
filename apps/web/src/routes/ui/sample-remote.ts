@@ -204,6 +204,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
       acceptInvite: refuse,
       listTeams: () => Promise.resolve([]),
       joinTeam: refuse,
+      previewTeam: refuse,
       readPair: refuse,
       approvePair: refuse,
       signOut: refuse,

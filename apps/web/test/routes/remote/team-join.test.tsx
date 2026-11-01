@@ -9,7 +9,12 @@ const LINK = { teamId: 'team1', invite: 'invite-1', key: KEY };
 
 const TEAM_KEYS = { selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() };
 
-const DASHBOARD = { joinTeam: () => Promise.reject(new Error('unused')) };
+const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+
+const DASHBOARD = {
+  joinTeam: () => Promise.reject(new Error('unused')),
+  previewTeam: () => Promise.resolve({ name: 'Platform', owner: MONA }),
+};
 
 afterEach(() => sessionStorage.clear());
 
@@ -26,12 +31,24 @@ describe('the team join page on app.shinsa.dev', () => {
     );
     render(<TeamJoinPage link={LINK} dashboard={DASHBOARD} teamKeys={TEAM_KEYS} request={request} />);
     expect(screen.getByText('Read-only, and never the chat')).toBeTruthy();
+    expect(await screen.findByText('Join Platform')).toBeTruthy();
+    expect(screen.getByText(/Mona Lisa owns this team/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Ask to join' }));
     expect(await screen.findByText('Request sent')).toBeTruthy();
     expect(screen.getByText(/Kai Lane accepts or declines your request to join Platform/)).toBeTruthy();
-    expect(screen.getByText('Choose Join a team and paste this link.')).toBeTruthy();
+    expect(screen.getByText('Paste this link into the team’s card.')).toBeTruthy();
     expect(screen.getByText(`${location.origin}/share/team#team1.invite-1.${KEY}`)).toBeTruthy();
     expect(sessionStorage.length).toBe(0);
+  });
+
+  it('says a link turned off before anyone asks, and keeps a generic title', async () => {
+    const dashboard = {
+      ...DASHBOARD,
+      previewTeam: () => Promise.reject(new Error('This team link was turned off.')),
+    };
+    render(<TeamJoinPage link={LINK} dashboard={dashboard} teamKeys={TEAM_KEYS} />);
+    expect((await screen.findByRole('alert')).textContent).toBe('This team link was turned off.');
+    expect(screen.getByText('Join a team')).toBeTruthy();
   });
 
   it('welcomes someone already in the team, and shows a refusal on the page', async () => {
