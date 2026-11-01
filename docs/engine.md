@@ -2182,9 +2182,11 @@ line and every task agent's management tools are generated from it, so neither c
   `config.json`'s `port`. `--help`, `--json` and the refusal shape are `docs/cli.md`. Commands carry an idempotency
   key per invocation (Command receipts, below).
 - **Yours alone** (`humanOnly`): the specs listed in Who can change Shinsa, below.
-- **When the engine is down**: in the Mac app's bundle, a command the engine does not answer asks launchd to start it
-  (`launchctl kickstart`) and waits up to 20 s for it, then tries once more; otherwise it says to open the Shinsa app
-  (`apps/engine/src/cli/api.ts`, `createWakeEngine`; Configuration and data → The engine in the background).
+- **When the engine is down**: from a compiled engine, a command the engine does not answer asks the platform's
+  service to start it (`launchctl kickstart` on a Mac, `systemctl --user start shinsa` on Linux once `shinsa start`
+  has set the unit up) and waits up to 20 s for it, then tries once more; otherwise it says how to start it
+  (`apps/engine/src/cli/api.ts`, `createWakeEngine`; Configuration and data → The engine in the background, Run on a
+  server).
   `shinsa status` and `shinsa version` only report, and never start it.
 - **Around the surface** (`apps/engine/src/cli`): the everyday commands (`shinsa [folder]`, `open`, `do`, `import`,
   `status`) and the engine's controls (`start`, `stop`, `restart`, `logs`, `version`) are the top level, one table in
@@ -2235,7 +2237,8 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
   path lists, folders and diffs in a 64 MB least-recently-used cache. Working-copy reads are `no-store`. The web keys every
   read by commit, so a task event (a chat line, a new priority) reads nothing again; it reads the refs again only when
   what pins the code changes (the stage, the branch, the worktree, a push, a phase or a fix), and the working copy
-  with each task update. The web keeps its last 300 reads (`CODE_READ_LIMIT`, least recently used first), shows
+  with each task update. The web keeps its last 300 reads (`CODE_READ_LIMIT`, least recently used first), only the newest
+  version of each once it answers, and at most 16 MB of answers (`CODE_READ_BUDGET`); it shows
   a read's last answer while a newer version of it loads, and reads most of them before they are asked for
   (`docs/design.md`, 36).
 
@@ -4977,6 +4980,42 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
   the desktop app does not open `x-apple.systempreferences:` links from the page), Check again and Leave it out.
 
+### Run on a server
+
+The same engine runs headless on a Linux machine that is always on, a VPS or a box under a desk, with no app and no
+window: you reach it from your other devices through remote access, and set it up over SSH.
+
+- **The bundle.** `SHINSA_ENGINE_TARGET=bun-linux-x64` (or `bun-linux-arm64`) makes `build-engine.ts` compile the
+  same bundle, `bin/shinsa` with `plugin/` and `web/` beside it, into `apps/engine/dist/engine-linux-x64` (each
+  target its own folder; the Mac app's stays `dist/engine`). An unknown target fails with the list
+  (`resolveBuildTarget`, `instance/targets.ts`). It needs git, the GitHub CLI and Claude Code on the login shell's
+  `PATH`, as on a Mac. Publishing it (npm and an install script) is its own task.
+- **The service** (`instance/systemd.ts`, `createSystemdService`). On Linux, `shinsa start` sets the engine up as a
+  systemd user service, `~/.config/systemd/user/shinsa.service`: `ExecStart` is this `shinsa` with `engine`,
+  `SHINSA_SERVICE=1`, the `SHINSA_HOME`, `SHINSA_DATA_DIR`, `XDG_CONFIG_HOME`, `SHINSA_PORT` and `SHINSA_HOST` the
+  command was run with, `Restart=on-failure` (a crash or the restart exit, 75, brings it back; a clean stop stays
+  stopped) and a `TimeoutStopSec` past the engine's own stop deadline. Every start writes the unit when it is missing
+  or differs (then `daemon-reload`), `enable`s it and starts it, so running `shinsa start` again after moving the
+  program or changing those variables is how the unit is updated. With no user manager to talk to (`systemctl --user
+  show-environment` fails, as under `su`) it refuses with `engine_no_systemd`. A user service stops when the user's
+  last session ends unless lingering is on, so when `loginctl` reports `Linger=no` the start says to run
+  `sudo loginctl enable-linger <user>`, which also starts it at boot.
+- **By hand.** `shinsa stop` is `systemctl --user stop --no-block shinsa` (then `kill --signal=SIGKILL` after 40 s,
+  which systemd does not answer with a fresh engine), `shinsa restart` is `systemctl --user restart shinsa`, and the
+  wake before a command that needs the engine is `systemctl --user start shinsa`, only once the unit exists. Both
+  managers sit behind one `EngineService` (`instance/service.ts`; launchd's is `cli/launchd.ts`), and both refuse
+  with `engine_not_installed` before the service exists. A bundled engine under systemd writes `data/engine.log` like
+  one under launchd, so `shinsa logs` reads the same file. To take the service away:
+  `systemctl --user disable --now shinsa`, then delete the unit file.
+- **No browser.** `shinsa open` and every link the command opens use `open` on a Mac, `xdg-open` where `DISPLAY` or
+  `WAYLAND_DISPLAY` is set, and otherwise print the address to open from a browser that reaches the machine
+  (`resolveBrowserCommand`, `shell/browser.ts`). Remote pairing does not try to open the GitHub sign-in either:
+  `shinsa remote pair` prints its address and code. Off the Mac, a missing `SHELL` means `/bin/sh`, not zsh.
+- **Setting it up over SSH**, in order: `shinsa start`; `shinsa accounts sign-in`, whose address you open anywhere,
+  then `shinsa accounts sign-in-code` with the code it shows; `gh auth login`; `shinsa folders add ~/code`; and
+  `shinsa remote pair`, finished from any device, after which the machine is on app.shinsa.dev with the rest. The
+  engine's port is not for the internet: it listens on loopback, and remote access is the way in.
+
 Developing Shinsa itself keeps `bun dev`: the engine runs from source in a terminal, and nothing above applies. Its
 `dev` and `start` scripts (`apps/engine/package.json`) pass `SHINSA_PORT=5180` unless one is exported, so a checkout
 never takes the Mac app's 7446, whatever `config.json` says.
@@ -5278,7 +5317,8 @@ says hello counts as no desktop.
   entry follows with its own. The page appends an entry at its position, skips one it has, starts over at position 0
   and asks again from what it holds when a page would leave a gap (for a run it no longer follows it drops the page
   instead). The page keeps every run it follows and the 24 others read or let go of last
-  (`TRANSCRIPT_CACHE_LIMIT`, least recently used first out), so a run dropped is read again from 0. The server keeps the entries of every followed run
+  (`TRANSCRIPT_CACHE_LIMIT`, least recently used first out) while they hold 10,000 entries in all
+  (`TRANSCRIPT_ENTRY_LIMIT`), so a run dropped is read again from 0. The server keeps the entries of every followed run
   and of the eight runs read last in memory (`Transcripts`) and reads only the bytes appended since, so a long
   transcript is parsed once, not on every line, and every `listEntries` caller gets its own copy.
 - **Selectors.** `useShinsaSelector(select)` (`lib/connection/selectors.ts`) gives a component the part of the state it
@@ -5316,7 +5356,7 @@ between turns; a held run does not count as busy. Shutdown marks each held run a
 command id `run.interrupt:<run>:0:<continuations>`), so the next engine starts it as a free shutdown continuation. After
 `RESTART_DRAIN_MS` (15 minutes) the engine restarts anyway and the runs it cuts off resume on their sessions. A
 restart that fails releases the held runs; it refuses with `restart_unsupported`
-unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it with `when: now` as soon as the app is newer than the engine
+unless launchd or systemd started this process (`createServiceRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it with `when: now` as soon as the app is newer than the engine
 (`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 
 ## Where the rules live

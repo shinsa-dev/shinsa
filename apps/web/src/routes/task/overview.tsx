@@ -1,6 +1,7 @@
 import { type Gate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
 import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { EvidencePointer } from '@/components/evidence/evidence-pointer.tsx';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
@@ -19,7 +20,9 @@ import { WatchdogsPanel } from '@/components/overview/watchdogs-panel.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
 import { Composer } from '@/components/task/composer.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
+import { useOnHide } from '@/hooks/use-on-hide.ts';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
+import { formatCount } from '@/lib/format/count.ts';
 import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
 import { selectShownReply } from '@/lib/overview/exchanges.ts';
 import { type NowTarget, resolveNowKind, resolveResultPlace } from '@/lib/overview/now.ts';
@@ -31,6 +34,8 @@ import { isCodeTask } from '@/lib/tasks/shapes.ts';
 import { hasReview } from '@/lib/tasks/tabs.ts';
 
 const FIRST_ACTIVITY = 24;
+
+const ACTIVITY_PAGE = 100;
 
 function resolveShownReplyId(state: ShinsaState, task: Task, gate: Gate | undefined) {
   if (resolveNowKind(state, task, gate) !== 'gate') return null;
@@ -111,7 +116,10 @@ function ActivityPanel({
   onOpenRun: (runId: string) => void;
 }) {
   const entries = listActivityNewestFirst(task);
-  const shown = useProgressiveCount(entries.length, FIRST_ACTIVITY);
+  const [limit, setLimit] = React.useState(ACTIVITY_PAGE);
+  const shown = useProgressiveCount(Math.min(entries.length, limit), FIRST_ACTIVITY);
+  const older = entries.length - limit;
+  useOnHide(() => setLimit(ACTIVITY_PAGE));
   return (
     <Panel persistId={resolveOverviewPanelId(task, 'activity')} title='Activity' icon='IconClock'>
       <ol className='flex flex-col'>
@@ -125,6 +133,16 @@ function ActivityPanel({
           />
         ))}
       </ol>
+      {older > 0 && shown >= limit && (
+        <Button
+          variant='link'
+          size='sm'
+          className='self-start'
+          onClick={() => setLimit(limit + ACTIVITY_PAGE)}
+        >
+          {`Show ${formatCount(Math.min(older, ACTIVITY_PAGE), 'older entry', 'older entries')}`}
+        </Button>
+      )}
     </Panel>
   );
 }

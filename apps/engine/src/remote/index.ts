@@ -15,6 +15,7 @@ import {
   verifyEnrollProof,
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
+import { resolveBrowserCommand } from '../shell/browser.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
 import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
 import { ControlClient, ControlError } from './control.ts';
@@ -79,8 +80,8 @@ export function resolveMachineName(name = hostname()) {
     .replace(/(^|[\s-])(\p{L})/gu, (_, gap: string, letter: string) => gap + letter.toUpperCase());
 }
 
-export async function openRemoteUrl(url: string, cwd: string) {
-  await runCommandOrThrow(['open', url], cwd);
+export async function openRemoteUrl(url: string, cwd: string, command = resolveBrowserCommand(url)) {
+  if (command) await runCommandOrThrow(command, cwd);
 }
 
 export function createUrlOpener(cwd: string) {

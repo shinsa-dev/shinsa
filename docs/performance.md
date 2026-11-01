@@ -229,8 +229,10 @@ comes into view.
   transition, so a click or a key is never queued behind it), keeps what you read in place by moving the scroll by
   the first block's shift, fills a short page before the first paint, and reaches back to a focused run
   (`?run=`, a delegation's chat run) before the jump. A run that is not rendered does not subscribe to its
-  transcript, so opening a 60-run chat subscribes to about 16, not 60. Mounted blocks stay mounted, so a folded row
-  you opened stays open.
+  transcript, so opening a 60-run chat subscribes to about 16, not 60. Mounted blocks stay mounted while you read, so a
+  folded row you opened stays open; once the page or the Chat tab is hidden, the window goes back to its newest
+  blocks and the chat to its bottom (`hooks/use-on-hide.ts`), so history you scrolled up through does not stay in a
+  kept page's DOM.
 - **Markdown is parsed once per text.** `components/text/markdown.tsx` caches the element tree per text
   (`lib/format/cache.ts`, 400 entries), and `useReferenceMarkdown` caches the linked text per reference catalog and
   scope and reads only the catalog and the route's task through `useShinsaSelector`, so a state push no longer
@@ -243,7 +245,8 @@ comes into view.
   (`components/queue/windowed-rows.tsx`, `hooks/use-row-window.ts`, rows 36px, in chunks of eight so scrolling
   re-renders rarely; rows are memoized). Home's queue sections, the Overview's activity and an opened turn's detail
   render their first rows at once and the rest a batch per task after the paint (`hooks/use-progressive-count.ts`);
-  queue rows are not one height, so they are not windowed.
+  queue rows are not one height, so they are not windowed. The Overview's activity stops at its newest 100 entries,
+  with a button for 100 older ones, and goes back to 100 once the Overview is hidden.
 - **Times format with shared `Intl.DateTimeFormat`s** (`lib/format/time.ts`; `toLocale*` built a formatter per
   call), and `TimeAgo` and `Duration` build their tooltip text only when the tooltip opens.
 - **The scroll fade no longer repaints** (second pass). The `ScrollArea` fade was a mask on the scroller, which the
@@ -746,9 +749,11 @@ the steps" on the progress track, and an update's toast.
 - **Stale while revalidate.** A read whose version moved (a working-copy read after a task update, the refs after
   a push) shows its last answer at once and updates in place; a search keeps the last results while the next one
   runs.
-- **Bounded.** The code reads' cache is least recently used, not first in, at 300 reads (`CODE_READ_LIMIT`), the
+- **Bounded.** The code reads' cache is least recently used, not first in, at 300 reads (`CODE_READ_LIMIT`), keeps
+  only the newest version of each once it answers and at most 16 MB of answers (`CODE_READ_BUDGET`), the
   finished searches 20, the evidence texts 32. The socket (`lib/connection/socket.ts`) keeps every transcript a chat
-  follows and the 24 others read or let go of last (`TRANSCRIPT_CACHE_LIMIT`), so the two read per hovered task no
+  follows and the 24 others read or let go of last (`TRANSCRIPT_CACHE_LIMIT`) while they hold 10,000 entries
+  (`TRANSCRIPT_ENTRY_LIMIT`), so the two read per hovered task no
   longer pile up for the page's life; a hidden kept chat lets go of its run, which counts as a read, so it is the
   last to be dropped.
 - **A wait never flashes.** Every remaining wait draws nothing for 300 ms (`useDelayed`), then its spinner.
@@ -760,3 +765,100 @@ the steps" on the progress track, and an update's toast.
   path typed nowhere else, waits for its read (blank under 300 ms).
 - **Idle reads cost the server git work**: four tasks' refs, diff, root folder, paths and first file after each
   change to the queue's top (the server caches them by commit, so a repeat is cheap).
+
+## Long sessions
+
+Whether the window after hours of use is as fast as right after a restart: the DOM, the heap and the main thread's
+idle cost over a long session, and a transition at the end of it.
+
+### How it is measured
+
+- **The live window first.** The Mac app after 10.6 hours of real use, read through its inspector without a restart
+  (the main process's Node inspector, opened by a signal, reaching the renderer through `webContents.debugger`):
+  element count, a heap snapshot after GC, `Performance.getMetrics` over 5 s with nothing happening, and a trace of
+  that idle time. Then the same page in a fresh headless Chromium on the same engine.
+- **The soak.** `bun scripts/perf/soak.ts <origin>` on a copy of the user's data served by `shinsa engine` in inspect
+  mode (`SHINSA_INSPECT=1`, `SHINSA_WEB_DIR` set to a production build). It opens Home, then laps over the first open
+  tasks (`SOAK_TASKS`, 8): each task's Chat scrolled up six screens, its Code tab with four files opened
+  (`SOAK_FILES`), Review and Overview, with 20 state pushes replayed on the page's own socket per lap (`SOAK_PUSHES`),
+  then All tasks and Home. Every `SOAK_SAMPLE_EVERY` laps it goes to the first task's Chat and samples: elements in
+  the document, heap after GC, the main thread's busy time, script time, style recalcs and layouts over
+  `SOAK_IDLE_MS` with nothing happening, and four Chat ⇄ Overview tab switches (time to the switched frame, the
+  longest frame and frames over 34 ms, from `soak-stats.ts`). `SOAK_ATTACH=<port>` drives a window that is already
+  open instead; `SOAK_OUT` writes the samples as JSON.
+- **Running it.** Build the web app, copy the data and serve the copy, then soak it from another terminal (the
+  `data-copy` service runs the first four lines on a port of its own):
+
+  ```bash
+  NODE_ENV=production bun run --cwd apps/web build --mode production
+  mkdir -p /tmp/shinsa-copy/data && cp ~/.config/shinsa/config.json /tmp/shinsa-copy/
+  sqlite3 ~/.config/shinsa/data/shinsa.sqlite ".backup /tmp/shinsa-copy/data/shinsa.sqlite"
+  SHINSA_HOME=/tmp/shinsa-copy SHINSA_INSPECT=1 SHINSA_PORT=5640 bun run --cwd apps/engine start
+  SOAK_LAPS=6 SOAK_SAMPLE_EVERY=2 SOAK_IDLE_MS=4000 bun scripts/perf/soak.ts http://127.0.0.1:5640
+  ```
+
+- **The runs below.** `SOAK_LAPS=6 SOAK_SAMPLE_EVERY=2 SOAK_IDLE_MS=4000` on the same data copy and the same build
+  settings, before (`bd8019f4`) and after this pass; an Apple silicon Mac with other agents working beside it.
+
+### Before and after
+
+The live window that started this pass, against a fresh load of the same page:
+
+| | After 10.6 hours | Fresh load |
+|---|---|---|
+| Elements | 17,348 | 1,683 |
+| Heap after GC | 147 MB | 40 MB |
+| Idle main thread | 23% | under 2% |
+| Idle style recalcs | 61 a second | none |
+
+Its biggest kept pages were one Overview whose activity had 2,559 elements and Chat tabs that had kept every run
+they had grown to; its heap held 7 copies of the 1 MB `docs/engine.md` and 5 of `docs/protocol.md`, one per version
+of the same code read.
+
+The soak, sampled on LOC-87's Chat:
+
+| Lap | Elements before | Elements after | Heap before | Heap after | Idle main thread before / after |
+|---|---|---|---|---|---|
+| 0 | 7,208 | 6,650 | 57 MB | 53 MB | 1.5% / 2.2% |
+| 2 | 19,054 | 14,540 | 285 MB | 233 MB | 1.4% / 1.6% |
+| 4 | 19,680 | 14,540 | 264 MB | 257 MB | 1.8% / 3.1% |
+| 6 | 20,197 | 14,540 | 268 MB | 235 MB | 1.8% / 2.4% |
+
+Before, the DOM grew with every lap (another 600 elements every two laps: the chats' scrolled-up runs and the
+activity rows); after, it stops at the kept pages' first size and stays there. Tab switches stayed at 5 to 19 ms
+with no frame over 34 ms in both. A heap snapshot after one lap holds one copy of each large read, and its biggest
+parts are compiled code (33 MB) and the highlighter's grammars and wasm memory; nothing in it grows per lap.
+
+With an agent running, on LOC-94's Chat with its live card and tool rows shimmering: idle main thread 11 to 13%
+before and 4 to 5% after, script 3% before and 0.1% after, each style recalc touching one element instead of every
+character of every running line.
+
+### What changed and why
+
+- **Shimmering text is CSS** (`packages/ui/src/components/shimmering-text.tsx`). It was one `motion` span per
+  character, each with its colour animated, so every running line wrote the inline style of every character on
+  every frame (about 1,500 writes a second with a few lines running) and every frame restyled them all. It is now
+  the text once, plus a hidden copy in the bright colour that shows through a band; both move by `transform` only
+  (`shimmer-window`, `shimmer-copy` in `globals.css`), timed by the text's length (`resolveShimmerDuration`), and
+  the band ends at the box's edge, so a cut-off line sweeps only to its ellipsis. `motion` is no longer a dependency.
+- **The Overview's activity stops at its newest 100 entries** with a button for the older ones
+  (`routes/task/overview.tsx`), and goes back to the newest when the Overview is hidden.
+- **A hidden chat trims back** (`hooks/use-on-hide.ts`, `hooks/use-transcript-window.ts`). A kept page or a Chat
+  tab that is hidden returns its window to its newest blocks and its scroll to the bottom, so the runs you scrolled
+  up to read leave the DOM instead of staying in it for the page's life.
+- **The caches are bounded by size, not only by count** (`lib/connection/code.ts`, `lib/connection/socket.ts`). A
+  code read keeps only its newest version once that answers, and all answers stay under 16 MB
+  (`CODE_READ_BUDGET`); a version that answers after a newer one is not stored. The transcripts no chat follows
+  are dropped once all transcripts together hold 10,000 entries (`TRANSCRIPT_ENTRY_LIMIT`).
+
+### What is left
+
+- **The soak cannot show the code reads' versions.** In inspect mode no task changes, so no read gets a newer
+  version; the version bound is proved by `test/lib/connection/code.test.ts` instead.
+- **About 49 style recalcs a second remain while idle**, each about 0.1 ms: the running lines' sweep and the pulse
+  dot are compositor animations that still tick the style system once a frame.
+- **The heap after the first lap is mostly kept pages**: eight tasks with their Code tabs and highlighted files.
+  It stays flat from there, but it is not a fresh load's 40 MB.
+- **The engine's own memory** grew to 1.2 GB after 10 hours in the same session; it is a pass of its own.
+- **macOS accessibility clients** can turn on Chromium's accessibility tree, which the live window had partly on
+  (22,046 accessibility nodes); that is outside the app.

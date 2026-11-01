@@ -30,8 +30,8 @@ function LiveActivity({ run, fallback }: { run: Run; fallback: string | null }) 
   if (!text) return null;
   if (describeParkedRun(run)) return <Truncate>{text}</Truncate>;
   return (
-    <Truncate key={text} tooltip={text} className='leading-normal'>
-      <ShimmeringText text={text} className='inline leading-normal' />
+    <Truncate key={text} tooltip={text} className='relative leading-normal'>
+      <ShimmeringText text={text} className='static inline leading-normal' />
     </Truncate>
   );
 }

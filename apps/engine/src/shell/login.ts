@@ -89,8 +89,12 @@ function mergeLoginEnvs(shell: Record<string, string> | null, fish: Record<strin
   return { ...fish, ...shell, PATH: mergePathLists(shell.PATH ?? '', fish.PATH ?? '') };
 }
 
+export function resolveDefaultShell(platform: string = process.platform) {
+  return platform === 'darwin' ? '/bin/zsh' : '/bin/sh';
+}
+
 export function createLoginEnvReader(env: Env = process.env, options: LoginEnvOptions = {}): LoginEnvReader {
-  const shell = options.shell ?? env.SHELL ?? '/bin/zsh';
+  const shell = options.shell ?? env.SHELL ?? resolveDefaultShell();
   const home = options.home ?? env.HOME ?? homedir();
   const timeoutMs = options.timeoutMs ?? LOGIN_TIMEOUT_MS;
   const run: ShellRunner =

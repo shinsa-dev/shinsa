@@ -7,6 +7,7 @@ import { Transcripts } from '../../src/agents/index.ts';
 import { resolveCommandVerdict } from '../../src/agents/providers/claude/guard.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
+import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { startServer } from '../../src/http/index.ts';
 import { createProjectChanges } from '../../src/projects/routes.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
@@ -72,9 +73,11 @@ async function shinsa(...args: string[]) {
     wakeEngine: () => Promise.resolve(false),
     engine: {
       bundled: false,
-      uid: 0,
-      ownsJob: () => true,
-      launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      service: createLaunchdService({
+        uid: 0,
+        ownsJob: () => true,
+        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      }),
     },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
