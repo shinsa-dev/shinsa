@@ -5,7 +5,9 @@ import { WindowedRows } from '@/components/queue/windowed-rows.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import type { ChainEntry, TaskGroup } from '@/lib/tasks/groups.ts';
-import { TASK_LIST_ROW_HEIGHT, TaskListRow } from './row.tsx';
+import { resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
+import { TeamTaskListRow } from '../teams/tasks.tsx';
+import { TASK_LIST_COLUMNS, TASK_LIST_ROW_HEIGHT, TaskListRow } from './row.tsx';
 
 export function TaskGroupSection({
   persistId,
@@ -13,12 +15,14 @@ export function TaskGroupSection({
   entries,
   state,
   defaultOpen,
+  columns = TASK_LIST_COLUMNS,
 }: {
   persistId: DisclosureId;
   group: TaskGroup;
   entries: ChainEntry[];
   state: ShinsaState;
   defaultOpen: boolean;
+  columns?: string;
 }) {
   const disclosure = useDisclosure(persistId, defaultOpen);
   if (entries.length === 0) return null;
@@ -36,7 +40,22 @@ export function TaskGroupSection({
       </DisclosureHeader>
       {disclosure.open && (
         <WindowedRows items={entries} rowHeight={TASK_LIST_ROW_HEIGHT}>
-          {(entry) => <TaskListRow key={entry.task.id} state={state} task={entry.task} depth={entry.depth} />}
+          {(entry) =>
+            entry.team ? (
+              <TeamTaskListRow
+                key={resolveTeamTaskPath(resolveTeamTaskTarget(entry.team.entry))}
+                team={entry.team}
+              />
+            ) : (
+              <TaskListRow
+                key={entry.task.id}
+                state={state}
+                task={entry.task}
+                depth={entry.depth}
+                columns={columns}
+              />
+            )
+          }
         </WindowedRows>
       )}
     </section>

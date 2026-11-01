@@ -12,6 +12,7 @@ import {
   selectLeadGate,
   selectStackParent,
   type Task,
+  type TeamFeedTask,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
@@ -41,9 +42,16 @@ export interface TaskGroup {
   defaultOpen: boolean;
 }
 
+export interface TeamEntry {
+  entry: TeamFeedTask;
+  state: ShinsaState;
+  heldAt: number | null;
+}
+
 export interface ChainEntry {
   task: Task;
   depth: number;
+  team?: TeamEntry;
 }
 
 export const TASK_GROUPS: TaskGroup[] = [
@@ -202,8 +210,12 @@ export function selectTaskGroup(value: string | null) {
   return TASK_GROUPS.find((group) => group.key === value) ?? null;
 }
 
+function isSettledGroup(key: TaskGroupKey) {
+  return key === 'done' || key === 'duplicate' || key === 'cancelled';
+}
+
 function orderTaskGroup(state: ShinsaState, key: TaskGroupKey, tasks: Task[]): ChainEntry[] {
-  if (key === 'done' || key === 'duplicate' || key === 'cancelled') {
+  if (isSettledGroup(key)) {
     return tasks
       .slice()
       .sort((a, b) => b.stageChangedAt - a.stageChangedAt)
@@ -212,21 +224,54 @@ function orderTaskGroup(state: ShinsaState, key: TaskGroupKey, tasks: Task[]): C
   return orderChains(state, tasks);
 }
 
+function compareInGroup(key: TaskGroupKey, left: Task, right: Task) {
+  return isSettledGroup(key) ? right.stageChangedAt - left.stageChangedAt : compareTasks(left, right);
+}
+
+function mergeTeamEntries(key: TaskGroupKey, own: ChainEntry[], team: TeamEntry[]): ChainEntry[] {
+  const waiting = team
+    .map((entry): ChainEntry => ({ task: entry.entry.task, depth: 0, team: entry }))
+    .sort((left, right) => compareInGroup(key, left.task, right.task));
+  const merged: ChainEntry[] = [];
+  for (const entry of own) {
+    while (entry.depth === 0 && waiting[0] && compareInGroup(key, waiting[0].task, entry.task) < 0) {
+      merged.push(waiting.shift() as ChainEntry);
+    }
+    merged.push(entry);
+  }
+  return [...merged, ...waiting];
+}
+
 function matchesSearch(state: ShinsaState, task: Task, needle: string) {
   const repo = task.repoId ? (state.repos[task.repoId]?.name ?? '') : '';
   return `${task.title} ${task.request} ${task.branch ?? ''} ${repo}`.toLowerCase().includes(needle);
 }
 
-export function listTaskGroupSections(state: ShinsaState, search: string, status: TaskGroupKey | null) {
+export function listTaskGroupSections(
+  state: ShinsaState,
+  search: string,
+  status: TaskGroupKey | null,
+  team: readonly TeamEntry[] = []
+) {
   const needle = search.trim().toLowerCase();
   const grouped = new Map<TaskGroupKey, Task[]>(TASK_GROUPS.map((group) => [group.key, []]));
   for (const task of Object.values(state.tasks)) {
     if (isWatchHome(task)) continue;
     if (!needle || matchesSearch(state, task, needle)) grouped.get(resolveTaskGroup(state, task))?.push(task);
   }
+  const teamGrouped = new Map<TaskGroupKey, TeamEntry[]>(TASK_GROUPS.map((group) => [group.key, []]));
+  for (const entry of team) {
+    const people = `${entry.entry.owner ?? ''} ${entry.entry.machine ?? ''}`.toLowerCase();
+    if (!needle || matchesSearch(entry.state, entry.entry.task, needle) || people.includes(needle))
+      teamGrouped.get(resolveTaskGroup(entry.state, entry.entry.task))?.push(entry);
+  }
   return TASK_GROUPS.filter((group) => status === null || group.key === status).map((group) => ({
     group,
-    entries: orderTaskGroup(state, group.key, grouped.get(group.key) ?? []),
+    entries: mergeTeamEntries(
+      group.key,
+      orderTaskGroup(state, group.key, grouped.get(group.key) ?? []),
+      teamGrouped.get(group.key) ?? []
+    ),
   }));
 }
 

@@ -12,6 +12,8 @@ import {
   resolveMachineTeamPath,
   resolveTeamConnectPath,
   resolveTeamLeavePath,
+  SIGNING_KEY_ALGORITHM,
+  serializePublicKey,
   type TeamAction,
   type TeamCreateResponse,
   type TeamInviteResponse,
@@ -319,5 +321,45 @@ describe('machine access for a teammate', () => {
     );
     expect(refused.status).toBe(404);
     expect(await readCode(refused)).toBe('not_found');
+  });
+});
+
+describe('each machine’s signing key', () => {
+  async function createSigningKey() {
+    const pair = (await crypto.subtle.generateKey(SIGNING_KEY_ALGORITHM, true, [
+      'sign',
+      'verify',
+    ])) as CryptoKeyPair;
+    return serializePublicKey(pair.publicKey);
+  }
+
+  function beat(harness: Harness, credentials: MachineCredentials, signingKey?: string) {
+    const body = { localUrl: 'http://127.0.0.1:7446', version: '1', ...(signingKey ? { signingKey } : {}) };
+    return harness.post(REMOTE_PATHS.heartbeat, body, machineAuth(credentials));
+  }
+
+  test('reaches teammates on the team’s machines, and stays when a later heartbeat leaves it out', async () => {
+    const { harness, studio, laptop, team } = await joinedTeam();
+    const signingKey = await createSigningKey();
+    expect((await beat(harness, studio, signingKey)).status).toBe(200);
+    expect((await beat(harness, studio)).status).toBe(200);
+    const answer = await readJson<HeartbeatResponse>(await beat(harness, laptop));
+    const machines = answer.teams.find((entry) => entry.id === team.id)?.machines ?? [];
+    expect(machines.find((machine) => machine.id === studio.instanceId)?.signingKey).toBe(signingKey);
+    expect(machines.find((machine) => machine.id === laptop.instanceId)).not.toHaveProperty('signingKey');
+  });
+
+  test('a new key replaces the old one, and one that is not a P-256 public key is refused', async () => {
+    const { harness, studio } = await startTeam();
+    await beat(harness, studio, await createSigningKey());
+    const next = await createSigningKey();
+    const answer = await readJson<HeartbeatResponse>(await beat(harness, studio, next));
+    expect(answer.teams[0]?.machines[0]?.signingKey).toBe(next);
+    const refused = await harness.post(
+      REMOTE_PATHS.heartbeat,
+      { localUrl: 'http://127.0.0.1:7446', version: '1', signingKey: 'nope' },
+      machineAuth(studio)
+    );
+    expect(refused.status).toBe(400);
   });
 });

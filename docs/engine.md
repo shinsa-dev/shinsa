@@ -338,7 +338,8 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
 - **Forking from the web.** Fork into a new task (the task menu, an All tasks row's menu and ⌘K, on every task but a
   cancelled one, a finished one included) opens a dialog for the new task's request (`ForkDialog`, `lib/tasks/fork.ts`),
   sent as `task.create` with the source's repository and project. The Overview's facts show Forked from and Forked
-  into, and a watchdog that finds an issue forks the task it watches (Watchdogs, below).
+  into (and Filed by, Split from or Started by when an agent, a split or an automation made the task), and a
+  watchdog that finds an issue forks the task it watches (Watchdogs, below).
 
 ### Who is who
 
@@ -1640,7 +1641,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   task (`fork_from` naming any other is refused, `fork_watchdog`), so the fix starts from this conversation and goes
   through every gate; it takes the task's repository unless one is named, and its priority. The filed task keeps
   `Task.sourceReport` with `scheduleId: null` and the `watchdogId`, `createdBy {kind: 'watchdog'}`, and its request
-  quotes the report ("Reported in <server> …"); its Reported in fact names the watchdog and opens the shipped task.
+  quotes the report ("Reported in <server> …"); its Filed by fact names the watchdog and opens the shipped task, and its Reported in card holds the report.
   The check ends with `report_read {summary}` (`PURPOSE_HAND_OVERS.watch`). One that filed nothing is healthy and
   kept (`watchdog.checked`, the last 20), and the next one is due an interval later; when that would fall past the
   window, the watchdog passes. One that filed or linked a report trips it (`tripped`, `forkTaskIds` the forks it
@@ -1776,6 +1777,17 @@ checks it ran.
   Code tab (Where agents work → Your edits). Fix N findings at an escalated review sends the drafted comments with the verdicts the same way. The
   comments are stored on `gate.answered` and on the decision's activity entry, so the task's activity lists each
   with its place. Comments with any other decision or at any other gate are refused.
+- Fix N findings and approve, from the Fix button's chevron, is the same `revise` with `thenApprove: true`
+  (refused at any other gate or with any other decision, `then_approve_invalid`, `then_approve_conflict`). The
+  `gate.answered` fold sets `task.approveAfterFix`; the fix then runs as any other: checks, the agent review and its
+  own fix rounds. While the flag is on, `reactToFindings` sends the agent review's `should_fix` findings to the Agent
+  as well as its blocking ones, the verdicts your review would have defaulted to, so the approval never passes a
+  finding you would have fixed; `optional` ones do not hold it. When the review gate would open again without an escalation, `openReviewGate` opens it and answers
+  it `approve` at once (`approveReviewAhead`, `gate.answered` with `ahead: true`), then approves as your click would:
+  the pull request opens, or every check runs first when you have uncommitted edits. The activity says "Approved after
+  the fix, as you asked". An escalated review, or a failure gate when checks run out of fixes, still stops for you.
+  Every later answer at a review gate writes the flag again (on only for another Fix N findings and approve), and a
+  new round clears it. The web shows the chevron only on an engine with `review.approve_after_fix`.
 - Dismissed findings are kept on the task (`dismissedFindings`, the last 30) and every later
   reviewer is told not to report them again unless the code around them changed. Your decision
   resets the round count.
@@ -2184,8 +2196,8 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
   (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog
   check. The home never shows as a task page: `/tasks/<home>` replaces itself with the watch's page,
-  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the
-  automation, a link to the report (an http or https link only, since an agent wrote it) and Open the watch.
+  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Filed by “<automation>”", which opens the watch, and "Reported in <server>", whose card
+  has the report, its author and time and a link to the report (an http or https link only, since an agent wrote it).
 - **Agents set automations up.** Settings → Automations has no form: you ask for a schedule, a trigger or a watch
   in the home chat or any task, and its agent writes it (`set_schedule`, `schedules_write`); the page lists them,
   pauses, resumes and deletes them. A new watch an agent writes is a suggested watch for you to accept (below).
@@ -2698,7 +2710,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, the enrolled devices (public key, name,
   enrolled and last seen, the GitHub account that added it), `access`, the owner and members the last heartbeat
   answered, the one invite link (`link`: its secret, its invite token and when it was made) and the access
-  requests waiting for an answer (`requests`). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
+  requests waiting for an answer (`requests`), and the machine's ECDSA P-256 signing key pair (`signing`, made on
+  first use, `RemoteStore.resolveSigningKey`), which signs its team list views (Teams → Offline teammates). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
 - **The control-plane client** (`ControlClient`): pair start and poll, heartbeat, offline, removal, all to
   `SHINSA_REMOTE_ORIGIN` (app.shinsa.dev by default). A 401 to a call made with the machine token is `RevokedError`.
 - **`cloudflared`** (`cloudflared.ts`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on first use into
@@ -2886,8 +2899,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   machine for `feedback.write`. A command sent anyway is refused before it leaves the page, with "Update
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
-  `feedback` for `GET /api/feedback`, and `teams` for the team routes and `GET /api/teams/tasks`, today; Settings →
-  Teams shows only on an engine that has it). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, today; Settings → Teams and the review's Fix and approve
+  choice show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -3150,12 +3164,15 @@ A team is people who watch each other's work. You put your own projects in a tea
 task in them, live and read-only, next to their own tasks, on the hosted dashboard and in the local app. It is a share
 link for a whole project, on the same projection and the same one-way channel, with membership in place of the link:
 nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its tunnel while it is
-online. Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
+online, and the last list of it their own machine kept while it is not (Offline teammates, below). Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
 
 - **What app.shinsa.dev keeps** (`apps/cloud/src/teams.ts`, `migrations/0005_teams.sql`): who is in which team. A
   team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
   up to 20 members (`MAX_TEAM_MEMBERS`), who asked to join, and one reusable invite kept as its SHA-256. An account
-  owns at most 10 teams (`MAX_OWNED_TEAMS`). It keeps no task, no title, no project and no key. Each machine's
+  owns at most 10 teams (`MAX_OWNED_TEAMS`). It keeps no task, no title, no project and no key but each machine's
+  public signing key (`instances.signing_key`, `migrations/0006_signing_keys.sql`), which the heartbeat sends
+  (`HeartbeatRequest.signingKey`; one left out keeps the stored key, one that is not a P-256 public key is 400
+  `body_invalid`) and the team listing returns (`TeamMachine.signingKey`). Each machine's
   heartbeat answers its owner's teams (`HeartbeatResponse.teams`, `RemoteTeam`: owner, your role, members, the owner's
   requests, and every member's machines with whether each is online), which the machine keeps in `remote.json`.
 - **The team key.** Making a team (Settings → Teams → New team, `shinsa teams create`) asks app.shinsa.dev for the
@@ -3218,7 +3235,8 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
 - **What a teammate sees.** The list view is `TeamListView`: every open task of the team's projects and the 50 most
   recently finished (`TEAM_SETTLED_LIMIT`), each a `TeamTask` (`listTeamTasks`): `resolveSharedListing`, the task,
   its gates and its project as a share link copies them, with the owner's GitHub login and the machine's name, and
-  the machine's public key (`machineKey`, for a teammate given this machine). A task
+  the machine's public key (`machineKey`, for a teammate given this machine), `updatedAt`, the same list signed
+  (`snapshot`) and the copies it keeps of the team's offline machines (`held`, Offline teammates, below). A task
   view is exactly a share link's `ShareLiveView` and files at Standard (`Shares.resolveLive` with `TEAM_SHARE_PRESET`,
   whatever the task's own share link or the default preset says), pushed again when one of its runs writes to its
   transcript (`Teams.#pushTranscript`): the table in Sharing a task is what a teammate can and cannot see, the same for
@@ -3236,11 +3254,12 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   turned off."). Otherwise the machine pushes a new view on each change, as a share does.
 - **Watching teammates** (`remote/team-feeds.ts`, `TeamFeeds`). Each machine watches, for each team whose key it
   holds, every machine of that team but itself (your other machines too, so the local app shows your team work
-  everywhere), each over a list channel opened with its machine token. An offline machine is left alone and shows no
-  tasks; a dropped channel opens again after 1, 2, 5, 10, then every 30 seconds; a refused one tries again after 1, 2,
+  everywhere), each over a list channel opened with its machine token. An offline machine is left alone and shows the
+  last list it sent (Offline teammates, below); a dropped channel opens again after 1, 2, 5, 10, then every 30 seconds; a refused one tries again after 1, 2,
   then every 5 minutes (at once when the key changes), since a teammate's machine learns a new member only at its next
   heartbeat, and a wrong key never calls a teammate more often than that. It accepts a teammate's machine only if it
-  answers the welcome with the team key. The cache is in memory, never in the log. It serves:
+  answers the welcome with the team key. The live lists are in memory and the last of each in
+  `data/team-snapshots.json`, never in the log. It serves:
   - `GET /api/teams/tasks` (`?team=<id>` for one team, `?open=true` for unfinished tasks only), the read API triage
     uses for its team-wide duplicate check: `{ machines, tasks }`, each task a `TeamFeedTask` (a `TeamTask` with its
     team and machine). It only reads; your own devices reach it over the sealed channel like any API route, and the
@@ -3253,9 +3272,12 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   team, never both (`focus_refused`). A team focus keeps your own tasks in the team's projects in the queue, Home and
   every list built on it (`isInFocus` through `isTeamTask`), and the page adds the team's tasks from your teammates:
   the focus menu (`components/focus/menu.tsx`) reads Your work, then your projects, then Teams (each team you are in,
-  not one you only asked to join); All tasks gets a Teammates in <team> group and Home a section of their open
-  tasks (`components/teams/tasks.tsx`), each row marked with its owner's first name as a user tag (Kai), neither shown while a
-  status filter is on. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
+  not one you only asked to join). All tasks lists their tasks among your own, in the same groups and order
+  (`listTaskGroupSections` with the team's entries, `mergeTeamEntries`: a teammate's task sits before the first of
+  your chains it ranks above), under the same search and status filter, with an Owner column (`TEAM_TASK_LIST_COLUMNS`:
+  You, or the owner's first name as a user tag, Kai, the machine in its hint) and their repository
+  (`SharedListing.repo`); their rows are `TeamTaskListRow` (`components/teams/tasks.tsx`), read-only. Home stays yours
+  alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
   guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
   a team channel the browser opens with its own key; a browser without the key says "Add the team to this browser"
@@ -3265,7 +3287,54 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   machine the dashboard reaches are left out (`listTeamFeedTasks`), so no task appears twice. The hosted dashboard
   merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`, `HostedTeamFeeds`,
   which retries as `TeamFeeds` does: a refused channel again after 1, 2, then every 5 minutes), keeping the freshest
-  copy of each task.
+  copy of each task: a live machine over a kept copy, and of two kept copies the newer (`isBetterMachine`).
+- **Offline teammates** (`TeamFeeds`, `remote/team-snapshots.ts`, `remote/team-views.ts`; `HostedTeamFeeds`). A teammate's tasks stay listed
+  while their machine is offline, since nothing can change on them until it is back: only that machine works on
+  them. The copies live with the teammates, never on app.shinsa.dev, which holds and reads no task state.
+  - **Where a copy lives.** Each engine writes the last list it got from each machine it watches to
+    `data/team-snapshots.json` (`TeamSnapshots`, written whole on each change, removed once empty, read leniently: a
+    broken file or entry is skipped with a warning), with the team, the machine, `updatedAt`, the tasks, the signed
+    `snapshot` when there is one, and a SHA-256 of the team key (`keyDigest`), never the key. A browser on
+    app.shinsa.dev keeps what its own channels got in memory only, until the page reloads.
+  - **What it shows.** A machine whose channel dropped keeps its tasks, with its `TeamFeedMachine.updatedAt` set to
+    when the owner's machine made the list. Their rows on All tasks carry an Offline badge in place of the kind of
+    task, whose hint reads "Updated 2 hours ago" (`OfflineBadge`, `listHeldTeamMachines`). When the machine is back
+    its live list replaces the copy at once.
+  - **The full task, kept too.** Each engine also keeps the whole page of every task in a list it watches, as the
+    owner's machine sent it (the view and its files: the diff, the code, evidence), in `data/team-views/` (`TeamViews`:
+    one file per task named by a SHA-256 of its team, machine and task, an `index.json` of each one's team, machine,
+    task, `keyDigest`, the task's `updatedAt` and the copy's `size`, read leniently, the folder removed once empty). It fetches them
+    30 seconds after a list arrives (`TEAM_VIEW_REFRESH_MS`), one at a time, only those whose task changed since its
+    copy, each over a task channel closed once the view and every file it lists came or after 30 seconds
+    (`TeamViewRecorder`, `TEAM_VIEW_FETCH_TIMEOUT_MS`); a task you open live is kept as it streams. Files past 8 MB a
+    task are left out (`TEAM_VIEW_FILES_LIMIT`), and all the kept views together stay under 64 MB (`TEAM_VIEWS_LIMIT`):
+    past it, the least recently updated tasks lose their full copy (the index keeps them with `size` 0, so they are
+    not fetched again until they change) and open to their summary instead. While the owner's machine is not live, the local relay
+    (`TeamFeeds.openRelay`) replays the kept copy instead of reaching for the machine, and closes once the machine is
+    live again so the page reconnects to the live task. The page then shows the whole task read-only with the note
+    "Read-only copy from before their machine went offline" and when it was updated (`routes/team-task.tsx`); with no
+    full copy (never fetched, or on app.shinsa.dev, whose browser keeps none) it shows the task's title, handle and
+    status from the list and says the full task opens once the machine is back. Full copies are never passed on to
+    teammates: only the signed list is.
+  - **Passing copies on.** Every list view carries the copies its machine keeps of the team's other machines while
+    they are offline (`TeamListView.held`, `TeamFeeds.listHeld`, pushed again when one changes), so a teammate who
+    never saw a machine's tasks still gets them from any online teammate. Anyone in the team holds the team key and
+    could seal a made-up list, so a copy must be signed: each machine signs its list view with its own signing key
+    (`signTeamSnapshot`, ECDSA P-256 with SHA-256 over `shinsa-team-snapshot-v1` and the JSON of `{ teamId,
+    instanceId, tasks, updatedAt }`), and a copy passed on counts only when the owner machine's key from
+    app.shinsa.dev verifies it (`verifyTeamSnapshot`), it names that team and machine, that machine is not live, it
+    is not expired and it is newer than the one held. A list from an engine without a signing key, or a team
+    listing without one (an older app.shinsa.dev), is still kept and shown by whoever got it from the owner, but never
+    passed on.
+  - **When a copy goes.** At 30 days after the owner's machine made it (`TEAM_SNAPSHOT_TTL_MS`,
+    `isTeamSnapshotExpired`, the same rule in the engine and the browser); when the team is removed, you leave or are
+    removed, or the owner's machine is no longer in the team (the next heartbeat drops it from the watched machines);
+    when the team key changes (a copy kept under another key is not shown, and the next list replaces it); and when
+    the owner's machine refuses this one (the share revoked: no longer in its copy of the team, or the project taken
+    out). A full task copy goes with its machine's list, and also when the task leaves that list or its channel is
+    refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause, but still drops
+    those past 30 days, with their full tasks, each time remote access changes and when the engine starts. Removing
+    the machine from remote access, or app.shinsa.dev forgetting it, drops every copy and full task at once.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
   change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
@@ -3914,7 +3983,10 @@ truth, and a snapshot only saves replaying it.
   `preset`, which become Standard shares (`preset: 'standard'`).
   Logs from before teams (log version 14, `TEAM_FOCUS_LOG_VERSION`) have `focus.changed` events without `teamId`,
   which gain `teamId: null`.
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 14) marks the log so
+  Logs from before agent-chosen checks (log version 15, `PLAN_CHECKS_LOG_VERSION`) can have `plan.proposed` events
+  whose `document.verification` is a list of prose strings; they carry no command, so they are dropped and only
+  `PlanCheck` records stay (the prose remains in the plan's `body`).
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 15) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
@@ -5512,6 +5584,10 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  the log)
     ├── remote.json    Remote access: the machine's key, its credentials from app.shinsa.dev and the enrolled devices
     │                  (mode 600; never in the log; Remote access, above)
+    ├── team-snapshots.json  The last list of each teammate machine this one watches, shown while it is offline
+    │                  (never in the log; Teams → Offline teammates)
+    ├── team-views/    The last full page of each of those teammates' tasks, opened while their machine is offline
+    │                  (never in the log; Teams → Offline teammates)
     ├── bin/           The pinned `cloudflared-<version>` remote access runs
     ├── onboarding.json  The run of setup so far, so a reload or a restart picks it up on the same step
     ├── serve.lock     Which server holds this data directory: pid, port, URL, version, commit, install path, start
@@ -6012,8 +6088,14 @@ run. Codes: `body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`
 
 Every page holds one WebSocket on `/ws` (`apps/engine/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
-`docs/protocol.md` → The socket). On connect the server sends the state without the runs' prompts (`serializeState`), the
-accounts, `surfaces`, `engine` (what it speaks, Remote access → What each machine speaks, above), `terminals` (Terminals, above) and `remote` (Remote access, above); then every change of state goes to every socket as a patch, every change of the accounts,
+`docs/protocol.md` → The socket). On connect the server sends the small messages first, `surfaces`, `engine` (what it
+speaks, Remote access → What each machine speaks, above), the accounts, `terminals` (Terminals, above), `remote` (Remote
+access, above), `teams` and `resources`, and the state without the runs' prompts (`serializeState`) last: a state grows
+with the log (tens of MB on a long-used machine), and nothing it holds up may keep the page from learning what the engine
+speaks. Each socket queues up to 128 MB (`SOCKET_BACKPRESSURE_LIMIT_BYTES`, Bun's `backpressureLimit`, 16 MB by
+default) before Bun drops a frame; a send Bun drops (`socket.send` returns 0) is logged and closes that socket, so the
+page reconnects and reads everything again instead of missing a message without a sign; a sealed remote channel that
+has a frame dropped closes the same way (`RemoteChannel`). Then every change of state goes to every socket as a patch, every change of the accounts,
 the terminals and remote access whole, and a transcript only to the sockets following its run. Each terminal has a socket of
 its own on `/ws/terminals/<id>`. The page's
 first message on each socket is `hello` with its surface, `desktop` in the Mac app (it has `window.shinsaDesktop`)

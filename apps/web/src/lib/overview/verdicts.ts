@@ -12,7 +12,7 @@ export const VERDICT_ITEMS: { value: FindingVerdictKind; label: string }[] = [
 ];
 
 export interface VerdictAction {
-  reply: Extract<GateReply, 'approveChanges' | 'fixFindings'>;
+  reply: Extract<GateReply, 'approveChanges' | 'fixFindings' | 'fixFindingsAndApprove'>;
   label: string;
 }
 
@@ -35,16 +35,31 @@ export function listVerdicts(findings: ReviewFinding[], draft: VerdictDraft): Fi
   return findings.map((_, index) => ({ index, verdict: resolveVerdict(draft, index), note: null }));
 }
 
-export function resolveVerdictAction(findings: ReviewFinding[], draft: VerdictDraft): VerdictAction {
-  const fixes = listVerdicts(findings, draft).filter((verdict) => verdict.verdict === 'fix').length;
+function countFixes(findings: ReviewFinding[], draft: VerdictDraft) {
+  return listVerdicts(findings, draft).filter((verdict) => verdict.verdict === 'fix').length;
+}
+
+export function resolveVerdictAction(
+  findings: ReviewFinding[],
+  draft: VerdictDraft,
+  thenApprove = false
+): VerdictAction {
+  const fixes = countFixes(findings, draft);
   if (fixes === 0) {
     return { reply: 'approveChanges', label: 'Approve changes' };
   }
-  return { reply: 'fixFindings', label: `Fix ${formatCount(fixes, 'finding', 'findings')}` };
+  const label = `Fix ${formatCount(fixes, 'finding', 'findings')}`;
+  return thenApprove
+    ? { reply: 'fixFindingsAndApprove', label: `${label} and approve` }
+    : { reply: 'fixFindings', label };
+}
+
+export function isFixingAction(action: VerdictAction) {
+  return action.reply !== 'approveChanges';
 }
 
 export function isVerdictActionBlocked(commented: boolean, action: VerdictAction) {
-  return commented && action.reply === 'approveChanges';
+  return commented && !isFixingAction(action);
 }
 
 export function resolveVerdictAnswer(
@@ -53,8 +68,7 @@ export function resolveVerdictAnswer(
   comments: readonly LineComment[]
 ): AnswerExtras {
   const verdicts = findings.length > 0 ? { verdicts: listVerdicts(findings, draft) } : {};
-  const fixing = resolveVerdictAction(findings, draft).reply === 'fixFindings';
-  if (!fixing || comments.length === 0) return verdicts;
+  if (countFixes(findings, draft) === 0 || comments.length === 0) return verdicts;
   return { ...verdicts, comments: serializeComments(comments) };
 }
 
@@ -80,6 +94,11 @@ export function describeReviewTitle(gate: Gate) {
 }
 
 export function describeApproveHint(commented: boolean, action: VerdictAction) {
+  if (action.reply === 'fixFindingsAndApprove') {
+    return commented
+      ? 'Sends the findings you kept and your line comments, then approves once checks and the agent review pass'
+      : 'Sends the findings you kept, then approves once checks and the agent review pass';
+  }
   if (action.reply === 'fixFindings') {
     return commented
       ? 'Sends the findings you kept and your line comments to the agent'
