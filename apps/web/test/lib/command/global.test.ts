@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, setSystemTime } from 'bun:
 import type { ShinsaState } from '@shinsa/core';
 import { listGlobalSections } from '@/lib/command/global.ts';
 import type { Command, CommandSection } from '@/lib/command/registry.ts';
+import { isFeedbackOpen } from '@/lib/feedback.ts';
 import { resolveEndOfDay } from '@/lib/format/time.ts';
 import { rememberTerminalPath } from '@/lib/terminal/tabs.ts';
 import { spyOnCommands } from '../../support/commands.ts';
@@ -58,13 +59,25 @@ describe('listGlobalSections', () => {
       ['All tasks', false],
       ['Terminal', false],
       ['Settings', true],
+      ['Send feedback on Shinsa', undefined],
     ]);
     expect(sections[0]?.commands.map((command) => (command.kind === 'go' ? command.to : null))).toEqual([
       '/',
       '/tasks',
       '/terminal',
       '/settings',
+      null,
     ]);
+  });
+
+  it('opens the feedback sheet', () => {
+    const command = find(
+      listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards'),
+      'feedback.open'
+    );
+    if (command.kind !== 'run') throw new Error('Expected a run command');
+    command.run();
+    expect(isFeedbackOpen()).toBe(true);
   });
 });
 

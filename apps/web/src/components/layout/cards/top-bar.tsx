@@ -2,6 +2,7 @@ import type { ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { UsageMenu } from '@/components/accounts/usage-menu.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
+import { FeedbackButton } from '@/components/feedback/button.tsx';
 import { FocusMenu } from '@/components/focus/menu.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
 import { NavButton } from '@/components/layout/nav-button.tsx';
@@ -44,6 +45,9 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
         </ErrorBoundary>
         {route.name !== 'onboarding' && (
           <>
+            <ErrorBoundary size='icon' resetKey={resetKey}>
+              <FeedbackButton state={state} />
+            </ErrorBoundary>
             <NavButton
               page='settings'
               label='Settings'

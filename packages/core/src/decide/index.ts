@@ -137,6 +137,7 @@ import {
 } from './watchdogs.ts';
 
 export type { DecideContext, Decision } from './decider.ts';
+export { describeFeedbackLeaks } from './feedback.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
 export { assertRunTool } from './runs.ts';

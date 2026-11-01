@@ -5,6 +5,7 @@ import { convertClaudeSession } from '../apps/engine/src/agents/index.ts';
 import { EventLog } from '../apps/engine/src/store/index.ts';
 import type {
   CodeSpot,
+  Feedback,
   Gate,
   MemoryEntry,
   PipelineStep,
@@ -1881,6 +1882,49 @@ function pushSeedMemory(start: number, push: (at: number, event: ShinsaEventInpu
   push(proposal.createdAt, { type: 'memory.proposed', entry: proposal });
 }
 
+function createSeedFeedback(at: number, id: string, overrides: Partial<Feedback>): Feedback {
+  return {
+    id,
+    source: 'human',
+    note: '',
+    title: null,
+    body: null,
+    status: 'draft',
+    failure: null,
+    issue: null,
+    taskId: null,
+    runId: null,
+    createdAt: at,
+    updatedAt: at,
+    ...overrides,
+  };
+}
+
+function pushSeedFeedback(push: (at: number, event: ShinsaEventInput) => void) {
+  const entries = [
+    createSeedFeedback(NOW - 3 * DAY, 'feedback-filed', {
+      note: 'The usage menu should say when my limit resets, not only how much is left.',
+      title: 'Show when a usage limit resets in the usage menu',
+      body: 'The usage menu shows how much of each limit is used, but not when it resets. Show the reset time beside each limit so it is clear how long a paused task will wait.',
+      status: 'filed',
+      issue: { number: 214, url: 'https://github.com/shinsa-dev/shinsa/issues/214' },
+    }),
+    createSeedFeedback(NOW - 50 * MINUTE, 'feedback-agent', {
+      source: 'agent',
+      taskId: 'task-basket-sync',
+      note: 'complete_phase refused my spots because one range ended past the last line of a file I had just shortened.',
+      title: 'Phase hand-over refuses a spot on a file shortened in the same phase',
+      body: 'When a phase shortens a file, a spot whose range was read before the edit can end past the new last line, and the hand-over is refused.\n\n- Expected: the hand-over names the spot and the file’s new length, or clamps the range.\n- Actual: the whole hand-over is refused with a generic range error.',
+    }),
+    createSeedFeedback(NOW - 12 * MINUTE, 'feedback-draft', {
+      note: 'I wish I could drag a task in the queue to change its priority.',
+      title: 'Change a task’s priority by dragging it in the queue',
+      body: 'Changing a priority takes a menu today. Dragging a row up or down in the queue to raise or lower its priority would be quicker when several tasks wait.',
+    }),
+  ];
+  for (const entry of entries) push(entry.createdAt, { type: 'feedback.recorded', entry });
+}
+
 function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[]) {
   const timeline: Timeline = [];
   const push = (at: number, event: ShinsaEventInput) => timeline.push({ at, event });
@@ -1891,6 +1935,7 @@ function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[]) {
 
   push(start, { type: 'settings.changed', settings: { ...createSettings(), taskUsageLimit: 10 } });
   for (const task of tasks) pushTask(task, push);
+  pushSeedFeedback(push);
   const runEnds = new Map(
     timeline.flatMap(({ at, event }) => (event.type === 'run.ended' ? [[event.runId, at] as const] : []))
   );

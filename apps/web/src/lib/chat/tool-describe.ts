@@ -249,7 +249,7 @@ function describeShinsaMessage(
     case 'remember':
       return plain('IconLightbulbGlow', 'Proposed a rule to remember:', readString(args, 'text'));
     case 'report_feedback':
-      return plain('IconBubbleText', 'Reported feedback on Shinsa:', readString(args, 'feedback'));
+      return plain('IconMegaphone', 'Reported feedback on Shinsa:', readString(args, 'feedback'));
     case 'delegation_answer':
       return plain('IconBubbleText', 'Answered a delegated agent:', readString(args, 'answer'));
     case 'request_secret':

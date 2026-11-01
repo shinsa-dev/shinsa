@@ -1,6 +1,7 @@
 import type { ShinsaState } from '@shinsa/core';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
+import { FEEDBACK_ICON, openFeedback } from '@/lib/feedback.ts';
 import { resolveFocusUntil, selectFocus } from '@/lib/focus.ts';
 import {
   LAYOUT_NAMES,
@@ -117,6 +118,14 @@ function listGoCommands(route: Route): Command[] {
       current: route.name === 'settings',
       keywords: ['preferences', 'config', 'options', 'projects', 'models'],
       to: '/settings',
+    },
+    {
+      kind: 'run',
+      id: 'feedback.open',
+      label: 'Send feedback on Shinsa',
+      icon: FEEDBACK_ICON,
+      keywords: ['feedback', 'issue', 'bug', 'report', 'github', 'idea'],
+      run: openFeedback,
     },
   ];
 }

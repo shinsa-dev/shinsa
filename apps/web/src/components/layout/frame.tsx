@@ -2,6 +2,8 @@ import type { ShinsaState } from '@shinsa/core';
 import { Sheet, SheetContent, SheetTitle } from '@shinsa/ui/components/sheet';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { ErrorBoundary } from '@/components/errors/boundary.tsx';
+import { FeedbackSheet } from '@/components/feedback/sheet.tsx';
 import type { LayoutPreference } from '@/lib/preferences/layout.ts';
 import { useRailWidth } from '@/lib/preferences/rail-width.ts';
 import { CardsTopBar } from './cards/top-bar.tsx';
@@ -46,6 +48,9 @@ export function AppFrame({
         {sidebar ? <CompactBar onMenu={() => setMenuOpen(true)} /> : null}
         {children}
       </main>
+      <ErrorBoundary size='silent'>
+        <FeedbackSheet state={state} />
+      </ErrorBoundary>
     </div>
   );
 }
