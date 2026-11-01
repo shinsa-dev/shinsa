@@ -58,6 +58,7 @@ export {
   type RemoteRole,
   type RemoteSession,
   type RemoteUser,
+  resolveClaimUrl,
   resolveEnrollUrl,
   resolveInstanceConnectPath,
   resolveInstanceLeavePath,
@@ -151,6 +152,13 @@ export {
   serializePreviewLabel,
   serializePreviewUrl,
 } from './previews.ts';
+export {
+  resolveScopedRefusal,
+  resolveScopedState,
+  SCOPE_MESSAGES,
+  SCOPE_REFUSAL_CODE,
+  SCOPED_COMMANDS,
+} from './scope.ts';
 export {
   createShareHello,
   createShareWelcome,

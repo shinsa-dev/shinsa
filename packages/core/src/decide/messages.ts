@@ -327,7 +327,12 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
     return;
   }
   recordMessages(decider, task.id, texts, scheduled);
-  deliverMessage(decider, decider.task(task.id), delivery, text);
+  deliverMessage(decider, decider.task(task.id), delivery, resolveGuestText(decider, text));
+}
+
+function resolveGuestText(decider: Decider, text: string) {
+  const guest = decider.context.guest;
+  return guest ? `From @${guest.login}, who the human handed this task to:\n\n${text}` : text;
 }
 
 export function messageTask(

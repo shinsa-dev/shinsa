@@ -68,6 +68,7 @@ import type {
 import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
 import type { FeedbackEventBody } from './feedback.ts';
+import type { HandoffEventBody } from './handoffs.ts';
 import type { MemoryEventBody } from './memory.ts';
 import type { ScheduleEventBody } from './schedules.ts';
 import type { ShareEventBody } from './shares.ts';
@@ -112,6 +113,7 @@ type EventBody =
   | MemoryEventBody
   | FeedbackEventBody
   | ShareEventBody
+  | HandoffEventBody
   | {
       type: 'task.triaged';
       taskId: string;
@@ -345,9 +347,15 @@ type EventBody =
       status: 'resumed' | 'reset' | 'cleared';
     };
 
-export type ShinsaEvent = EventBody & { seq: number; at: number; onBehalf?: true; byTask?: string };
+export interface EventActor {
+  onBehalf?: true;
+  byTask?: string;
+  byGuest?: string;
+}
 
-export type ShinsaEventInput = EventBody & { onBehalf?: true; byTask?: string };
+export type ShinsaEvent = EventBody & EventActor & { seq: number; at: number };
+
+export type ShinsaEventInput = EventBody & EventActor;
 
 type ShinsaEventType = ShinsaEvent['type'];
 

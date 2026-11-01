@@ -129,6 +129,8 @@ const GATED_COMMANDS: EngineCommand[] = [
   'task.unshare',
   'preview.share',
   'preview.unshare',
+  'task.hand_off',
+  'handoff.remove',
 ];
 
 describe('ENGINE_BASELINE_COMMANDS', () => {

@@ -60,8 +60,8 @@ src/
 │                    cannot apply, from an empty state or a snapshot), draft.ts (createDraft and sealDraft: the
 │                    copy-on-write state decide works on, and the ids it wrote (listChangedIds); writeEntry and removeEntry, the only
 │                    way a fold writes a record; STATE_RECORDS and STATE_FIELDS name every part of the state),
-│                    write.ts (the shared writes the folds use; applyOnBehalf: an event sent on your
-│                    behalf marks the activity it records), activity.ts (the wording of a task's activity),
+│                    write.ts (the shared writes the folds use; applyStamped: an event sent on your
+│                    behalf, or by the guest a task was handed to, marks the activity it records), activity.ts (the wording of a task's activity),
 │                    queries.ts (list*, find/select, isDependencyOf, isWaitingOnAnswer, isRunWaiting,
 │                    resolveTaskProject, selectTaskByReference), and the folds by concern, each an apply*Event:
 │                    runs.ts (attempts, links, lost sessions, metering per attempt with its weekly readings,
@@ -202,6 +202,9 @@ src/
 │   │                thread with `slack.thread_linked`; the status message's ts; and
 │   │                syncSlackThreads (after every command): a linked task's question, secret, plan, review and
 │   │                proposal gates and its result as `slack.post`, and one `slack.status` per changed task
+│   ├── handoffs.ts  Handing a task off (task.hand_off and handoff.remove, human-only; the handoff.link and
+│   │                handoff.revoke effects), the link the engine made (handoff.record, handoff.fail) and the one
+│   │                claim it takes (handoff.claim; another account is refused)
 │   ├── on-behalf.ts What a user command sent on your behalf records (`on_behalf.acted`, its sentence, task and
 │   │                acting task, kept as `OnBehalfAction`); a system command records nothing here
 │   └── liveness.ts  isTaskLive and the stuck-task failure gate
@@ -274,7 +277,9 @@ src/
 │                    HKDF into one AES-GCM key per direction, the enrollment proof), sealed frames (frames.ts: a
 │                    counter nonce, in order, closed after one bad frame), the channel's messages (channel.ts: the app
 │                    socket and HTTP requests and responses in chunks), connect tokens (connect-token.ts) and what stays
-│                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), and which machine a new task
+│                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), what the guest a task was
+│                    handed to sees and may send (scope.ts: resolveScopedState, resolveScopedRefusal, SCOPED_COMMANDS;
+│                    decide refuses the rest when its context names a guest), and which machine a new task
 │                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and the policies the classifier reads: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field

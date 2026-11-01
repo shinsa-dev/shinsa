@@ -33,6 +33,8 @@ export type ShinsaEffect =
   | { kind: 'share.link'; taskId: string }
   | { kind: 'share.describe'; taskId: string }
   | { kind: 'preview.link'; taskId: string; serviceId: string }
+  | { kind: 'handoff.link'; taskId: string }
+  | { kind: 'handoff.revoke'; taskId: string; guestId: string | null }
   | { kind: 'slack.evaluate'; mention: SlackMention }
   | { kind: 'slack.status'; taskId: string; thread: SlackThreadRef }
   | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost }
@@ -67,6 +69,8 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'share.link': 'replay_safe',
   'share.describe': 'replay_safe',
   'preview.link': 'replay_safe',
+  'handoff.link': 'replay_safe',
+  'handoff.revoke': 'replay_safe',
   'slack.evaluate': 'replay_safe',
   'slack.status': 'replay_safe',
   'slack.post': 'replay_safe',
@@ -133,6 +137,8 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
     case 'pull_request.close':
     case 'share.link':
     case 'share.describe':
+    case 'handoff.link':
+    case 'handoff.revoke':
       return `${effect.kind}:${effect.taskId}:${seq}`;
   }
 }
@@ -165,6 +171,9 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return `share:${effect.taskId}`;
     case 'preview.link':
       return `preview:${effect.taskId}`;
+    case 'handoff.link':
+    case 'handoff.revoke':
+      return `handoff:${effect.taskId}`;
     case 'slack.evaluate':
       return `slack:${resolveSlackThreadKey(effect.mention)}`;
     case 'slack.post':

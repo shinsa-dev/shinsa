@@ -9,26 +9,26 @@ type ActivityEntry = Pick<Activity, 'actor' | 'kind' | 'text'> &
 
 const ACTIVITY_LIMIT = 200;
 
-const ON_BEHALF = new WeakMap<ShinsaState, string | null>();
+type ActorStamp = Pick<Activity, 'onBehalf' | 'byTask' | 'byGuest'>;
 
-export function applyOnBehalf<T>(state: ShinsaState, byTask: string | null, apply: () => T): T {
-  ON_BEHALF.set(state, byTask);
+const ACTOR_STAMPS = new WeakMap<ShinsaState, ActorStamp>();
+
+export function applyStamped<T>(state: ShinsaState, stamp: ActorStamp, apply: () => T): T {
+  ACTOR_STAMPS.set(state, stamp);
   try {
     return apply();
   } finally {
-    ON_BEHALF.delete(state);
+    ACTOR_STAMPS.delete(state);
   }
 }
 
 export function record(state: ShinsaState, taskId: string, at: number, entry: ActivityEntry) {
   const task = state.tasks[taskId];
   if (!task) return;
-  const byTask = ON_BEHALF.get(state);
-  const onBehalf =
-    entry.actor === 'you' && ON_BEHALF.has(state) ? { onBehalf: true, ...(byTask ? { byTask } : {}) } : {};
+  const stamp = entry.actor === 'you' ? ACTOR_STAMPS.get(state) : undefined;
   const activity = [
     ...task.activity,
-    { detail: null, evidenceId: null, ...entry, ...onBehalf, ...resolveRoundStamp(task), at },
+    { detail: null, evidenceId: null, ...entry, ...stamp, ...resolveRoundStamp(task), at },
   ];
   writeEntry(state, 'tasks', taskId, { ...task, activity: activity.slice(-ACTIVITY_LIMIT) });
 }

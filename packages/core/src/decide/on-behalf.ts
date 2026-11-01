@@ -14,7 +14,9 @@ type HumanOnlyType =
   | 'task.share'
   | 'task.unshare'
   | 'preview.share'
-  | 'preview.unshare';
+  | 'preview.unshare'
+  | 'task.hand_off'
+  | 'handoff.remove';
 
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'gate.answer',
@@ -28,6 +30,8 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'task.unshare',
   'preview.share',
   'preview.unshare',
+  'task.hand_off',
+  'handoff.remove',
 ]);
 
 type OnBehalfCommand = Exclude<UserCommand, { type: HumanOnlyType }>;

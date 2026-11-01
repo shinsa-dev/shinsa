@@ -145,12 +145,15 @@ function describeRequest(task: Task) {
   return `${label}: ${cut(resolveRequest(task), REQUEST_LIMIT)}`;
 }
 
-function describeActivity(state: ShinsaState, entry: Activity) {
+function describeActor(state: ShinsaState, entry: Activity) {
+  if (entry.byGuest) return `@${entry.byGuest}`;
+  if (!entry.onBehalf) return ACTOR_WORDS[entry.actor];
   const from = entry.byTask ? state.tasks[entry.byTask] : undefined;
-  const agent = from
-    ? `the agent of ${from.handle ?? `"${from.title}"`} for the human`
-    : 'Shinsa for the human';
-  const who = entry.onBehalf ? agent : ACTOR_WORDS[entry.actor];
+  return from ? `the agent of ${from.handle ?? `"${from.title}"`} for the human` : 'Shinsa for the human';
+}
+
+function describeActivity(state: ShinsaState, entry: Activity) {
+  const who = describeActor(state, entry);
   return `- ${new Date(entry.at).toISOString()} ${who}: ${entry.text}`;
 }
 

@@ -287,6 +287,9 @@ export class EffectRunner {
         return this.#writeShareDescription(effect.taskId, context);
       case 'preview.link':
         return this.#previews.link(effect.taskId, effect.serviceId, context);
+      case 'handoff.link':
+      case 'handoff.revoke':
+        return Promise.resolve();
       case 'slack.evaluate':
         return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':

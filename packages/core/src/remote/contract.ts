@@ -14,6 +14,7 @@ export const REMOTE_PATHS = {
   pairPoll: '/__remote/pair/poll',
   pairPage: '/pair',
   enrollPage: '/enroll',
+  claimPage: '/claim',
   heartbeat: '/__remote/machine/heartbeat',
   offline: '/__remote/machine/offline',
   machineRemove: '/__remote/machine/remove',
@@ -98,7 +99,7 @@ export interface HeartbeatResponse extends RemoteAccess {
   ok: true;
 }
 
-export type RemoteRole = 'owner' | 'member';
+export type RemoteRole = 'owner' | 'member' | 'guest';
 
 export interface RemoteInstance {
   id: string;
@@ -228,4 +229,8 @@ export function parseEnrollFragment(fragment: string): EnrollFragment | null {
 
 export function resolveEnrollUrl(fragment: EnrollFragment, origin: string = REMOTE_APP_ORIGIN) {
   return `${origin}${REMOTE_PATHS.enrollPage}#${serializeEnrollFragment(fragment)}`;
+}
+
+export function resolveClaimUrl(fragment: EnrollFragment, origin: string = REMOTE_APP_ORIGIN) {
+  return `${origin}${REMOTE_PATHS.claimPage}#${serializeEnrollFragment(fragment)}`;
 }
