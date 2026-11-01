@@ -1,10 +1,11 @@
-import { type ShinsaState, selectTaskByReference, type Task } from '@shinsa/core';
+import { isSummarizedTask, type ShinsaState, selectTaskByReference, type Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { CARDS_FRAME, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { TaskCommandRunner } from '@/components/task/command-runner.tsx';
 import { TaskHeader } from '@/components/task/header.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
@@ -12,6 +13,7 @@ import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { applyNowTarget, type TaskView, useTaskView } from '@/hooks/use-task-view.ts';
 import { selectWatchOfHome } from '@/lib/automations.ts';
 import { removeCarriedCaret } from '@/lib/chat/task-drafts.ts';
+import { useTaskDetail } from '@/lib/connection/socket.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
 import { replaceRoute, resolveAutomationPath, resolveCanonicalTaskPath } from '@/router.ts';
@@ -175,10 +177,18 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
   usePrefetchCode(task, view.tabs, view.tab);
   usePrefetchTaskPage(state, task?.id ?? null);
   useCarryEndsWithPage(task?.id ?? null);
+  useTaskDetail(task?.id ?? null);
   if (!task) {
     return <EmptyState icon='IconInboxEmpty' title='No such task' description='It may have been removed.' />;
   }
   if (task.watchHome) return null;
+  if (isSummarizedTask(task)) {
+    return (
+      <div className={cn(PAGE_COLUMN, PAGE_TOP)}>
+        <LoadingLine label='Reading the task' />
+      </div>
+    );
+  }
   return (
     <ReviewDraftProvider enabled={view.reviewing} draftKey={view.draftKey}>
       <TaskCommandRunner state={state} task={task}>

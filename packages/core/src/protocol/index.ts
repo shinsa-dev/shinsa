@@ -164,6 +164,7 @@ export {
 } from './services.ts';
 export {
   applyTaskDetail,
+  isSummarizedTask,
   listSummarizedTasks,
   resolveTaskDetail,
   resolveViewPatch,

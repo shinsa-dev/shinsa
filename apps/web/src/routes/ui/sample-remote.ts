@@ -244,6 +244,8 @@ export function createStaticConnection(
     subscribeTranscripts: quiet,
     selectTranscript: () => NO_ENTRIES,
     watchTranscript: () => () => undefined,
+    requestTaskDetail: () => undefined,
+    watchTaskDetail: () => () => undefined,
     subscribeAccounts: quiet,
     selectAccounts: none,
     replaceAccounts: () => undefined,

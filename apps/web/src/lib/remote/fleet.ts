@@ -294,6 +294,14 @@ export class Fleet implements ShinsaConnection {
     return member ? member.connection.watchTranscript(runId) : () => undefined;
   };
 
+  requestTaskDetail = (taskId: string) =>
+    this.#memberOf(this.#ownerOf(taskId))?.connection.requestTaskDetail(taskId);
+
+  watchTaskDetail = (taskId: string) => {
+    const member = this.#memberOf(this.#ownerOf(taskId));
+    return member ? member.connection.watchTaskDetail(taskId) : () => undefined;
+  };
+
   subscribeAccounts = (listener: () => void) => this.#accounts.subscribe(listener);
 
   selectAccounts = () => this.#home?.selectAccounts() ?? null;

@@ -63,6 +63,14 @@ class FakeConnection implements ShinsaConnection {
     this.watched.push(runId);
     return () => undefined;
   };
+  readonly details: string[] = [];
+  requestTaskDetail = (taskId: string) => {
+    this.details.push(`request ${taskId}`);
+  };
+  watchTaskDetail = (taskId: string) => {
+    this.details.push(`watch ${taskId}`);
+    return () => undefined;
+  };
   subscribeAccounts = (listener: () => void) => this.signal.subscribe(listener);
   selectAccounts = () => this.accounts;
   replaceAccounts = (accounts: AccountsSnapshot | null) => {
@@ -308,6 +316,10 @@ describe('sending to the machine that owns it', () => {
     expect(studio.connection.commands.map((command) => command.type)).toEqual(['settings.change']);
     fleet.watchTranscript('run-laptop')();
     expect(laptop.connection.watched).toEqual(['run-laptop']);
+    fleet.requestTaskDetail('task-laptop');
+    fleet.watchTaskDetail('task-laptop')();
+    expect(laptop.connection.details).toEqual(['request task-laptop', 'watch task-laptop']);
+    expect(studio.connection.details).toEqual([]);
     laptop.connection.transcript = [{ kind: 'note' } as unknown as ChatEntry];
     expect(fleet.selectTranscript('run-laptop')).toHaveLength(1);
     expect(await (await fleet.fetch(new Request('https://shinsa.dev/api/tasks/task-laptop'))).text()).toBe(
@@ -453,6 +465,8 @@ describe('sending to the machine that owns it', () => {
     fleet.replaceAccounts(null);
     fleet.replaceTerminals({ terminals: [] } as unknown as TerminalsSnapshot);
     fleet.watchTranscript('run')();
+    fleet.requestTaskDetail('task');
+    fleet.watchTaskDetail('task')();
   });
 
   it('merges every machine’s teammates’ tasks with the browser’s own, kept until one of them changes', () => {

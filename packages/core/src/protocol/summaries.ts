@@ -72,6 +72,10 @@ function summarizeActivity(activity: Activity[]) {
   return summary;
 }
 
+export function isSummarizedTask(task: Task) {
+  return (task as WireTask).summarized === true;
+}
+
 export function summarizeTask(task: Task): WireTask {
   const known = TASK_SUMMARIES.get(task);
   if (known) return known;

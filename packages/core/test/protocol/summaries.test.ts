@@ -3,6 +3,7 @@ import {
   applyStatePatch,
   applyTaskDetail,
   decide,
+  isSummarizedTask,
   listSummarizedTasks,
   resolveStatePatch,
   resolveStats,
@@ -92,6 +93,8 @@ describe('the view state a socket gets on connect', () => {
     const { harness, merged } = seed();
     const task = harness.task(merged);
     expect(summarizeTask(task)).toBe(summarizeTask(task));
+    expect(isSummarizedTask(summarizeTask(task))).toBe(true);
+    expect(isSummarizedTask(task)).toBe(false);
     const run = serializeState(harness.state).runs[Object.keys(harness.state.runs)[0] ?? ''];
     if (!run) throw new Error('no run');
     expect(summarizeRun(run)).toBe(summarizeRun(run));
