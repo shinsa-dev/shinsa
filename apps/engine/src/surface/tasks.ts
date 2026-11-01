@@ -5,7 +5,9 @@ import {
   ROUND_SHIPPINGS,
   type RoundShipping,
   SHARE_LIMITS,
+  SHARE_PRESETS,
   type ShareLimit,
+  type SharePreset,
   TASK_PRIORITIES,
   type TaskDiff,
 } from '@shinsa/core';
@@ -462,13 +464,22 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description:
           'How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it). Left out, the shareLimit setting.',
       },
+      {
+        name: 'preset',
+        kind: 'choice',
+        choices: SHARE_PRESETS,
+        description:
+          "What the link shows: status (an anonymous status card), standard (the whole task with the agents' live output and tool calls, without your messages) or full (standard and your messages). Left out, the sharePreset setting.",
+      },
     ],
     build: async (values, client) => {
       const limit = readValue(values, 'until');
+      const preset = readValue(values, 'preset');
       return {
         type: 'task.share',
         taskId: await findTaskId(client, readValue(values, 'task')),
         ...(limit ? { limit: limit as ShareLimit } : {}),
+        ...(preset ? { preset: preset as SharePreset } : {}),
       };
     },
     done: () => 'Shared. Its link shows on the task in a moment.',

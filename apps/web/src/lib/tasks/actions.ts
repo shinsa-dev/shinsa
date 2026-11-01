@@ -109,9 +109,8 @@ export function listTaskActions(
 
 function listShareActions(task: Task, now: number): TaskActionKey[] {
   const live = selectLiveShare(task, now);
-  if (live?.url && !live.failure) return ['unshare'];
   const share: TaskActionKey[] = task.watchHome ? [] : ['share'];
-  return live ? [...share, 'unshare'] : share;
+  return live ? ['unshare'] : share;
 }
 
 function listSettledActions(task: Task): TaskActionKey[] {

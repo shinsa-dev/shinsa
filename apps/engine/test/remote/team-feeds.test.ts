@@ -146,6 +146,7 @@ function setUp(options: SetUp = {}) {
     engine: stub.engine,
     remote: studio,
     shares: { resolveLive: () => Promise.resolve(live as never) },
+    transcripts: { subscribe: () => () => undefined },
     now: () => 50,
   });
   const laptop = createRemote(

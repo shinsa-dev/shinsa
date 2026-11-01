@@ -14,6 +14,7 @@ import {
   serializeBase64Url,
   serializePublicKey,
   TEAM_KEY_BYTES,
+  TEAM_SHARE_PRESET,
   type TeamAction,
   type TeamInviteResponse,
   type TeamJoinStatus,
@@ -26,7 +27,7 @@ import type { ChannelPeer } from './channel.ts';
 import { ControlError } from './control.ts';
 import type { Remote } from './index.ts';
 import { createChannelEphemeral, type HelloAnswer, type LiveShare, ShareChannel } from './share-channel.ts';
-import type { Shares } from './shares.ts';
+import type { Shares, ShareTranscripts } from './shares.ts';
 
 export const TEAM_GONE_REASON = 'This task is no longer shown to the team, or you are no longer in it.';
 
@@ -48,6 +49,7 @@ export interface TeamsOptions {
   engine: Pick<Engine, 'state' | 'subscribe' | 'dispatch'>;
   remote: Remote;
   shares: Pick<Shares, 'resolveLive'>;
+  transcripts: Pick<ShareTranscripts, 'subscribe'>;
   now?: () => number;
   random?: (bytes: number) => Uint8Array<ArrayBuffer>;
 }
@@ -86,6 +88,15 @@ export class Teams implements TeamLinks {
     this.#random = options.random ?? createRandom;
     options.remote.subscribe(() => this.#syncChannels());
     options.engine.subscribe(() => this.#syncChannels());
+    options.transcripts.subscribe((runId) => this.#pushTranscript(runId));
+  }
+
+  #pushTranscript(runId: string) {
+    const taskId = this.#engine.state.runs[runId]?.taskId;
+    for (const channel of this.#channels) {
+      const view = channel.subject?.view;
+      if (view?.kind === 'task' && view.taskId === taskId) void channel.push();
+    }
   }
 
   get #store() {
@@ -329,7 +340,7 @@ export class Teams implements TeamLinks {
   }
 
   async #resolveLive(subject: TeamSubject): Promise<LiveShare> {
-    if (subject.view.kind === 'task') return this.#shares.resolveLive(subject.view.taskId);
+    if (subject.view.kind === 'task') return this.#shares.resolveLive(subject.view.taskId, TEAM_SHARE_PRESET);
     const tasks = listTeamTasks(this.#engine.state, subject.teamId, {
       owner: this.#store.file.owner,
       machine: this.#remote.snapshot().machineName,

@@ -159,7 +159,12 @@ async function start(
   });
   const engine = new Engine(new EventLog(config.databasePath));
   const teams = options.teams
-    ? new Teams({ engine, remote, shares: { resolveLive: () => Promise.reject(new Error('no task')) } })
+    ? new Teams({
+        engine,
+        remote,
+        shares: { resolveLive: () => Promise.reject(new Error('no task')) },
+        transcripts: { subscribe: () => () => undefined },
+      })
     : null;
   const http = startServer({
     engine,

@@ -242,7 +242,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     ];
     expect(listLegacyEventTypes(0)).toContain('task.answered');
     const watchdogReads = ['task.created', 'watchdog.armed', 'watchdog.checked'];
-    const later = [...watchdogReads, 'settings.changed', 'plan.proposed', 'focus.changed'];
+    const later = [...watchdogReads, 'settings.changed', 'plan.proposed', 'task.shared', 'focus.changed'];
     expect(listLegacyEventTypes(2)).toEqual([
       'phase.completed',
       'work.submitted',
@@ -270,11 +270,22 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(listLegacyEventTypes(6)).toEqual(['review.reported', 'schedule.written', ...later]);
     expect(listLegacyEventTypes(7)).toEqual(['schedule.written', ...later]);
     expect(listLegacyEventTypes(8)).toEqual(later);
-    expect(listLegacyEventTypes(9)).toEqual(['settings.changed', 'plan.proposed', 'focus.changed']);
-    expect(listLegacyEventTypes(10)).toEqual(['settings.changed', 'plan.proposed', 'focus.changed']);
-    expect(listLegacyEventTypes(11)).toEqual(['plan.proposed', 'focus.changed']);
-    expect(listLegacyEventTypes(12)).toEqual(['focus.changed']);
-    expect(listLegacyEventTypes(13)).toEqual([]);
+    expect(listLegacyEventTypes(9)).toEqual([
+      'settings.changed',
+      'plan.proposed',
+      'task.shared',
+      'focus.changed',
+    ]);
+    expect(listLegacyEventTypes(10)).toEqual([
+      'settings.changed',
+      'plan.proposed',
+      'task.shared',
+      'focus.changed',
+    ]);
+    expect(listLegacyEventTypes(11)).toEqual(['plan.proposed', 'task.shared', 'focus.changed']);
+    expect(listLegacyEventTypes(12)).toEqual(['task.shared', 'focus.changed']);
+    expect(listLegacyEventTypes(13)).toEqual(['focus.changed']);
+    expect(listLegacyEventTypes(14)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -290,7 +301,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(13);
+    expect(readStoredLog(path).version).toBe(14);
   });
 });
 
@@ -305,16 +316,16 @@ describe('A focus saved before teams', () => {
     ).toEqual([[1, { projectId: 'project-1', until: null, teamId: null }]]);
   });
 
-  test('is rewritten on boot in a log of the agent reply version', () => {
+  test('is rewritten on boot in a log of the share preset version', () => {
     const path = writeLegacyLog([{ type: 'focus.changed', focus: { projectId: null, until: null } }]);
     const db = new Database(path);
-    db.run('PRAGMA user_version = 12');
+    db.run('PRAGMA user_version = 13');
     db.close();
     const log = new EventLog(path);
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     expect(readStoredLog(path)).toMatchObject({
-      version: 13,
+      version: 14,
       rows: [
         {
           payload: JSON.stringify({
@@ -351,7 +362,7 @@ describe('Approve plans saved as a switch', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(13);
+    expect(stored.version).toBe(14);
     expect(stored.rows).toEqual([
       {
         seq: 1,
@@ -395,7 +406,7 @@ describe('a revised plan’s change summary and feedback, which the reply replac
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     expect(readStoredLog(path)).toMatchObject({
-      version: 13,
+      version: 14,
       rows: [{ payload: JSON.stringify({ type: 'plan.proposed', taskId: TASK, body: 'b', document }) }],
     });
   });
@@ -427,7 +438,7 @@ describe('the compaction setting saved under its Eunoe names', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     expect(readStoredLog(path)).toMatchObject({
-      version: 13,
+      version: 14,
       rows: [{ payload: JSON.stringify({ type: 'settings.changed', settings: { compaction: 'fold' } }) }],
     });
   });
@@ -454,7 +465,7 @@ describe('the weekly usage a metered run recorded as one number', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(13);
+    expect(stored.version).toBe(14);
     expect(stored.rows).toEqual([
       { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
     ]);
@@ -879,5 +890,26 @@ describe('moving briefings out of the event log', () => {
       { projectId: 'work', stored: { text: 'Moved.', at: 1002, briefing: null } },
     ]);
     log.close();
+  });
+});
+
+describe('shares made before presets', () => {
+  test('are rewritten on boot as Standard shares, and a share with a preset is left as it is', () => {
+    const shared = { type: 'task.shared', taskId: TASK, limit: 'day', endsAt: 5 };
+    const status = { ...shared, preset: 'status' };
+    const path = writeLegacyLog([shared, status]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 11');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.replaceLegacyEvents()).toBe(1);
+    log.close();
+    expect(readStoredLog(path)).toMatchObject({
+      version: 14,
+      rows: [
+        { payload: JSON.stringify({ ...shared, preset: 'standard' }) },
+        { payload: JSON.stringify(status) },
+      ],
+    });
   });
 });

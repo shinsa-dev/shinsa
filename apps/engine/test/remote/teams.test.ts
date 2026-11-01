@@ -78,6 +78,7 @@ afterEach(async () => {
 interface SetUp {
   file?: Record<string, unknown>;
   patch?: (state: ShinsaState) => void;
+  resolveLive?: () => Promise<never>;
 }
 
 function setUp(options: SetUp = {}) {
@@ -122,14 +123,24 @@ function setUp(options: SetUp = {}) {
     options.patch?.(state);
   });
   const live = { view: { live: true }, files: [] };
+  const transcriptListeners: ((runId: string) => void)[] = [];
   const teams = new Teams({
     engine: stub.engine,
     remote,
-    shares: { resolveLive: () => Promise.resolve(live as never) },
+    shares: { resolveLive: options.resolveLive ?? (() => Promise.resolve(live as never)) },
+    transcripts: {
+      subscribe: (listener) => {
+        transcriptListeners.push(listener);
+        return () => undefined;
+      },
+    },
     now: () => 50,
     random: (bytes) => new Uint8Array(bytes).fill(6),
   });
-  return { plane, stub, remote, teams, path };
+  const writeTranscript = (runId: string) => {
+    for (const listener of transcriptListeners) listener(runId);
+  };
+  return { plane, stub, remote, teams, path, writeTranscript };
 }
 
 interface Viewer {
@@ -218,6 +229,29 @@ describe('a team view of this machine', () => {
     const { teams } = setUp();
     const viewer = await openViewer(teams, MONA.id, TASK_VIEW);
     expect(viewer.views()).toEqual([{ live: true }]);
+  });
+
+  test('a task view is pushed again when one of its runs writes to its transcript, and no other is', async () => {
+    let pushes = 0;
+    const { teams, writeTranscript } = setUp({
+      patch: (state) => {
+        state.runs['run-1'] = { id: 'run-1', taskId: 'task-1' } as never;
+        state.runs['run-2'] = { id: 'run-2', taskId: 'task-2' } as never;
+      },
+      resolveLive: () => {
+        pushes += 1;
+        return Promise.resolve({ view: { push: pushes }, files: [] } as never);
+      },
+    });
+    const viewer = await openViewer(teams, MONA.id, TASK_VIEW);
+    const list = await openViewer(teams, MONA.id, LIST);
+    const listed = list.views().length;
+    writeTranscript('run-2');
+    writeTranscript('gone');
+    writeTranscript('run-1');
+    await until('the view is pushed again', () => viewer.views().length === 2);
+    expect(viewer.views()).toEqual([{ push: 1 }, { push: 2 }]);
+    expect(list.views()).toHaveLength(listed);
   });
 
   test('refuses anyone outside the team, a wrong key, a task outside its projects and a team without a key', async () => {

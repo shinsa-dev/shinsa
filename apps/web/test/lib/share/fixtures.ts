@@ -27,6 +27,7 @@ function createSharedEvidence(overrides: Partial<Evidence> & { id: string }): Ev
 
 export function createSharedTask(overrides: Partial<SharedTask> = {}): SharedTask {
   return {
+    preset: 'standard',
     task: createTask({
       id: 'task-1',
       handle: 'SW-34',
@@ -82,6 +83,8 @@ export function createSharedTask(overrides: Partial<SharedTask> = {}): SharedTas
     owner: 'mona',
     machine: 'Studio',
     repository: 'acme/app',
+    description: null,
+    update: null,
     code: true,
     ...overrides,
   };

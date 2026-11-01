@@ -8,7 +8,9 @@ import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import {
   describeShareEnd,
+  openShareDialog,
   openUnshareConfirm,
+  SHARE_MANAGE_TITLE,
   SHARING_NOTE,
   selectLiveShare,
   UNSHARE_TITLE,
@@ -42,6 +44,9 @@ export function SharingBanner({ task }: { task: Task }) {
         .
       </span>
       <div className='ms-auto flex shrink-0 items-center gap-2'>
+        <Button variant='bare' size='sm' onClick={() => openShareDialog(task.id)}>
+          {SHARE_MANAGE_TITLE}
+        </Button>
         {share.url && <CopyLinkButton url={share.url} />}
         <Button variant='secondary' size='sm' onClick={() => openUnshareConfirm(task.id)}>
           {UNSHARE_TITLE}

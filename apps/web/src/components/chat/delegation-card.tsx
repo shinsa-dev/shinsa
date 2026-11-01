@@ -11,6 +11,7 @@ import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { Duration } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
@@ -111,6 +112,7 @@ export function DelegationSpawnCard({
   conversation: ConversationRenderer;
   onStop: DelegationStopper;
 }) {
+  const readOnly = useReadOnly();
   const opened = React.useContext(OpenDelegations).has(view.run.id);
   const disclosure = useDisclosure(useDisclosureScope('delegation', view.run.id), opened);
   const { replaceOpen } = disclosure;
@@ -128,7 +130,7 @@ export function DelegationSpawnCard({
         label='delegation'
         strip='band'
         chevron='box'
-        action={view.live && <StopDelegation view={view} onStop={onStop} />}
+        action={view.live && !readOnly && <StopDelegation view={view} onStop={onStop} />}
         className={cn(CARD_LINE, 'gap-2')}
       >
         <DelegationSummary

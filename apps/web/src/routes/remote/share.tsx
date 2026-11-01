@@ -2,6 +2,7 @@ import type { ShareLink } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import * as React from 'react';
 import { SharedTaskPage } from '@/components/share/shared-task-page.tsx';
+import { StatusCardPage } from '@/components/share/status-card.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { useSharedView } from '@/hooks/use-shared-view.ts';
 import { openShareStream } from '@/lib/share/live.ts';
@@ -32,5 +33,6 @@ function LiveSharePage({ link }: { link: ShareLink }) {
       />
     );
   }
+  if (load.view.shared.preset === 'status') return <StatusCardPage view={load.view} />;
   return <SharedTaskPage view={load.view} note={SHARED_READ_ONLY_NOTE} viewer={viewer} />;
 }

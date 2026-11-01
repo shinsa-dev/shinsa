@@ -22,6 +22,7 @@ import {
 import { useEffect, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
+import { useSharedTranscript } from '@/lib/share/transcripts.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { selectReadOnlyRefusal } from './read-only.ts';
 
@@ -550,13 +551,16 @@ export function useDesktopConnected() {
 }
 
 export function useTranscript(runId: string | null) {
+  const shared = useSharedTranscript(runId);
+  const watched = shared === null;
   useEffect(() => {
-    if (!runId) return;
+    if (!(runId && watched)) return;
     return connection.watchTranscript(runId);
-  }, [runId]);
-  return useSyncExternalStore(connection.subscribeTranscripts, () =>
+  }, [runId, watched]);
+  const live = useSyncExternalStore(connection.subscribeTranscripts, () =>
     runId ? connection.selectTranscript(runId) : NO_ENTRIES
   );
+  return shared ?? live;
 }
 
 export function sendCommand(command: UserCommand, machineId?: string | null) {

@@ -403,7 +403,12 @@ where your policies, plain-English sentences the classifier reads with the reque
 `app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
 access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
 owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
-Review and Code (a private repository's too) but its chat, and it changes the moment the task does; the machine reads
+Review, Code (a private repository's too, from the working copy before a pull request) and Chat, with the agents'
+live output and tool calls but never your messages to them, and it changes the moment the task does. Share as picks
+what it shows: Status (an anonymous status card of the title, a short description an agent writes when sharing
+starts, a customer timeline (planning, in progress, in review, deploying, live) and a plain update for customers, such as in progress, deploying or live, which says live only
+once the change is out), Standard (that page) or Full access (Standard and your own chat messages); it defaults to
+Settings → General → Sharing, and Manage on the banner changes it and how long while the link stays; the machine reads
 nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
 a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
 cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
@@ -411,8 +416,8 @@ cannot be dismissed while it lasts, its title carries a share mark in the task l
 Teams: Settings → Teams makes a team, a teammate joins with its link, and you pick which of your projects it sees; every
 member then sees every task in them, live and read-only, next to their own, on app.shinsa.dev and in the local app,
 marked with whose it is. The focus menu reads Your work, your projects, then Teams; focusing a team shows your tasks
-in it and your teammates'. A teammate's task opens on the same read-only page a share link shows: no chat, no
-controls, no messages, read live from its owner's machine, and app.shinsa.dev keeps only who is in which team
+in it and your teammates'. A teammate's task opens on the same read-only page a Standard share link shows: the agents'
+live output but never your messages to them, and no controls, read live from its owner's machine, and app.shinsa.dev keeps only who is in which team
 (`docs/engine.md` → Teams).
 Share preview, on a task's running service with a preview URL, does the same for the dev server itself: a link,
 `<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's tunnel, hot reload

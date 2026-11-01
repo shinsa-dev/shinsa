@@ -109,6 +109,7 @@ import {
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
 import {
+  describeShare,
   expirePreview,
   expireShare,
   failPreview,
@@ -303,6 +304,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return failShare(decider, command);
     case 'share.expire':
       return expireShare(decider, command);
+    case 'share.describe':
+      return describeShare(decider, command);
     case 'preview.share':
       return sharePreview(decider, command);
     case 'preview.unshare':

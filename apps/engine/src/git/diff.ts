@@ -103,3 +103,9 @@ export function readChangedLinesPatch(
     readDiffText({ cwd: worktree, range: [base], env, signal }, ['-U0'], paths)
   );
 }
+
+export function readWorkingPatch(worktree: string, base: string, signal?: AbortSignal) {
+  return withScratchIndex(worktree, (env) =>
+    readDiffText({ cwd: worktree, range: [base], env, signal }, [], [])
+  );
+}
