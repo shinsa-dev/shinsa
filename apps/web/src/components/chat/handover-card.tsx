@@ -436,6 +436,7 @@ export function HandoverCard({
     case 'list_services':
     case 'run_service':
     case 'add_service':
+    case 'remove_service':
     case 'note':
     case 'wait_for':
       return <InsetToolRow call={call} live={live} />;

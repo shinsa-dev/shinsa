@@ -1110,6 +1110,7 @@ describe('hand-overs', () => {
       addService: () => {
         throw new Error('Nothing is added here.');
       },
+      removeServices: () => undefined,
     };
     const agent = await handOverSetup(undefined, { services });
     expect(await agent.call('list_services')).toBe(
@@ -1117,6 +1118,9 @@ describe('hand-overs', () => {
     );
     expect(agent.call('add_service', { name: 'web', command: 'bun dev' })).rejects.toThrow(
       'add_service needs a task that works in a project’s repository.'
+    );
+    expect(agent.call('remove_service', { services: ['web'] })).rejects.toThrow(
+      'remove_service needs a task in a project.'
     );
     agent.done();
     await agent.running;
