@@ -156,7 +156,7 @@ function waitForMachines(settle: () => void) {
 }
 
 function isSettled(input: Snapshot, reachable: boolean | undefined) {
-  return !reachable || input.state !== null || input.status === 'closed';
+  return !reachable || input.state !== null;
 }
 
 function isReachable(entry: FleetEntry) {

@@ -312,11 +312,15 @@ describe('waiting for every machine before showing the state', () => {
     expect(deadline.stopped).toBe(1);
   });
 
-  it('stops waiting for a machine whose connection closed', () => {
-    const { fleet, laptop } = createWaitingFleet();
+  it('keeps waiting for a machine whose connection failed, while it tries again', () => {
+    const { fleet, laptop, deadline } = createWaitingFleet();
     laptop.connection.push({ state: null, status: 'closed' });
-    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+    expect(fleet.snapshot().state).toBeNull();
     laptop.connection.push({ state: null, status: 'connecting' });
+    expect(fleet.snapshot().state).toBeNull();
+    deadline.settle();
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+    laptop.connection.push({ state: null, status: 'closed' });
     expect(fleet.snapshot().state).not.toBeNull();
   });
 
