@@ -376,6 +376,7 @@ export interface Activity {
   gateType?: GateType;
   onBehalf?: boolean;
   byTask?: string | null;
+  byGuest?: string;
   comments?: ReviewComment[];
   round?: number;
   noted?: boolean;
@@ -512,6 +513,7 @@ export interface Task {
   backlog?: TaskBacklog | null;
   share?: TaskShare | null;
   previews?: PreviewShare[];
+  handoff?: TaskHandoff | null;
   snoozed?: TaskSnooze | null;
   duplicate?: TaskDuplicate | null;
   iterations?: Iteration[];
@@ -570,6 +572,21 @@ export interface TaskSnooze {
 }
 
 export type BacklogCause = 'you' | 'started' | 'inquiry';
+
+export interface TaskGuest {
+  id: string;
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+export interface TaskHandoff {
+  at: number;
+  url: string | null;
+  failure?: string | null;
+  guest: TaskGuest | null;
+  claimedAt: number | null;
+}
 
 export interface InboxMessage {
   id: string;

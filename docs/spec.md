@@ -426,6 +426,10 @@ Share preview, on a task's running service with a preview URL, does the same for
 included, each preview its own origin on a domain apart from shinsa.dev. It has the same time limits, ends with the
 task, says when the service is stopped or the machine offline, and is only yours to share; unlike a task's link it is
 not sealed end to end, since a browser loads it as plain pages (`docs/engine.md` → Sharing a preview).
+Hand off, in Share task, gives a task to someone else by a link: the first GitHub account to open it works on
+that one task on your machine from its own dashboard on app.shinsa.dev, over the same sealed channel,
+with no request to accept. The task stays yours, it reaches nothing else on the machine, what it does shows as @login, and Remove takes the
+task back at once (`docs/engine.md` → Handing off a task).
 Through remote access, every running service also has a private `shinsa.page` address with nothing to click: Open
 on app.shinsa.dev goes there, and only the machine's owner and members get in, so a headless server's dev servers
 can be tested from a laptop (`docs/engine.md` → Private service addresses).

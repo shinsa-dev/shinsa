@@ -14,10 +14,15 @@ import {
 } from './instances.ts';
 import { recordFailure } from './log.ts';
 import {
+  respondHandoffAccept,
+  respondHandoffCreate,
+  respondHandoffRemove,
   respondInstanceLeave,
   respondInviteAccept,
   respondInviteCreate,
   respondInviteRemove,
+  respondMachineGuestAdd,
+  respondMachineGuestRemove,
   respondMachineMemberAdd,
   respondMachineMemberRemove,
   respondRequesterFind,
@@ -222,6 +227,31 @@ const ROUTES: Route[] = [
     pattern: teamActions(REMOTE_PATHS.machineTeams, TEAM_ACTIONS),
     respond: (request, _url, match, world) =>
       respondTeamAction(request, 'machine', match[1] ?? '', match[2] as TeamAction, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.handoffAccept),
+    respond: (request, _url, _match, world) => respondHandoffAccept(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineHandoffs),
+    respond: (request, _url, _match, world) => respondHandoffCreate(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineHandoffRemove),
+    respond: (request, _url, _match, world) => respondHandoffRemove(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineGuestAdd),
+    respond: (request, _url, _match, world) => respondMachineGuestAdd(request, world),
+  },
+  {
+    method: 'POST',
+    pattern: exact(REMOTE_PATHS.machineGuestRemove),
+    respond: (request, _url, _match, world) => respondMachineGuestRemove(request, world),
   },
   {
     method: 'POST',

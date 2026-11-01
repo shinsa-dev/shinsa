@@ -4,6 +4,7 @@ import {
   type Decision,
   DomainError,
   decide,
+  type GuestActor,
   PROCESS_BOUND_EFFECTS,
   replaceBriefing,
   replayEventLog,
@@ -48,12 +49,14 @@ export interface DispatchOptions {
   id?: string;
   onBehalf?: boolean;
   byTask?: string | null;
+  guest?: GuestActor | null;
   receipt?: ShinsaCommand;
 }
 
 interface BehalfContext {
   onBehalf: boolean;
   byTask: string | null;
+  guest: GuestActor | null;
 }
 
 type ReceiptIdentity = Pick<CommandReceipt, 'id' | 'type' | 'target' | 'fingerprint'>;
@@ -261,7 +264,11 @@ export class Engine {
       options.receipt ?? command,
       options.id ?? `server:${Bun.randomUUIDv7()}`
     );
-    const context = { onBehalf: options.onBehalf === true, byTask: options.byTask ?? null };
+    const context = {
+      onBehalf: options.onBehalf === true,
+      byTask: options.byTask ?? null,
+      guest: options.guest ?? null,
+    };
     const next = this.#tail.then(() => this.#apply(command, identity, supplied, context));
     this.#tail = next.then(
       () => undefined,

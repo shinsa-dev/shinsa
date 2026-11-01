@@ -15,7 +15,7 @@ import { createCloudflare } from './cloudflare.ts';
 import { resolveTokenHash } from './crypto.ts';
 import type { InstanceRow, SharedInstanceRow, UserRow } from './database.ts';
 import { CloudError, readBearer, readJsonFields, readText, respondJson } from './http.ts';
-import { listInstanceMembers } from './members.ts';
+import { listInstanceGuests, listInstanceMembers } from './members.ts';
 import { findPageUser, findSessionUser } from './session.ts';
 import { listUserTeams } from './teams.ts';
 import type { CloudWorld } from './world.ts';
@@ -28,7 +28,7 @@ export function isInstanceOnline(row: InstanceRow, now: number) {
   return row.online === 1 && row.last_seen_at !== null && row.last_seen_at > now - ONLINE_WINDOW_MS;
 }
 
-function serializeInstance(row: SharedInstanceRow, userId: string, now: number): RemoteInstance {
+function serializeInstance(row: SharedInstanceRow, now: number): RemoteInstance {
   return {
     id: row.id,
     name: row.name,
@@ -42,7 +42,7 @@ function serializeInstance(row: SharedInstanceRow, userId: string, now: number):
       name: row.owner_name,
       avatarUrl: row.owner_avatar_url,
     },
-    role: row.user_id === userId ? 'owner' : 'member',
+    role: row.role,
   };
 }
 
@@ -50,6 +50,7 @@ export async function findInstanceAccess(user: UserRow, instanceId: string, worl
   const row = await world.store.selectInstance(instanceId);
   if (row?.user_id === user.id) return { row, role: 'owner' as RemoteRole };
   if (row && (await world.store.isMember(row.id, user.id))) return { row, role: 'member' as RemoteRole };
+  if (row && (await world.store.isGuest(row.id, user.id))) return { row, role: 'guest' as RemoteRole };
   throw new CloudError('not_found', 'No such machine.', 404);
 }
 
@@ -68,7 +69,7 @@ export async function respondInstances(request: Request, world: CloudWorld) {
   const user = await findSessionUser(request, world);
   const now = world.now();
   const rows = await world.store.listUserInstances(user.id);
-  return respondJson(rows.map((row) => serializeInstance(row, user.id, now)));
+  return respondJson(rows.map((row) => serializeInstance(row, now)));
 }
 
 export async function createConnectAnswer(
@@ -145,6 +146,7 @@ export async function respondHeartbeat(request: Request, world: CloudWorld) {
   const answer: HeartbeatResponse = {
     ok: true,
     ...(await listInstanceMembers(row, world)),
+    guests: await listInstanceGuests(row, world),
     teams: await listUserTeams(row.user_id, world),
   };
   return respondJson(answer);

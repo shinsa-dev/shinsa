@@ -795,6 +795,8 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     taskId: readId(fields, 'taskId'),
     serviceId: readId(fields, 'serviceId'),
   }),
+  'task.hand_off': (fields) => ({ type: 'task.hand_off', taskId: readId(fields, 'taskId') }),
+  'handoff.remove': (fields) => ({ type: 'handoff.remove', taskId: readId(fields, 'taskId') }),
 };
 
 export const USER_COMMAND_TYPES = Object.keys(READERS) as UserCommand['type'][];

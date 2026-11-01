@@ -1,4 +1,10 @@
-import { type MachineResources, type RemoteInstance, resolveMachineLoad, type Settings } from '@shinsa/core';
+import {
+  type MachineResources,
+  type RemoteInstance,
+  resolveMachineLoad,
+  type Settings,
+  type ShinsaState,
+} from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -7,21 +13,23 @@ import { UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/remote-access.ts';
+import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import {
   connection,
   type MachineAccess,
   type MachineChoice,
+  useGuestMachines,
   useMachineAccess,
   useMachines,
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { describeMachineLoad } from '@/lib/new-task.ts';
 import {
   listMachineRows,
   listTaskCapacityItems,
   type MachineRow,
   parseTaskCapacity,
+  resolveMachineDetail,
   resolveTaskCapacityValue,
   TASK_CAPACITY_TITLE,
 } from '@/lib/remote/machines.ts';
@@ -143,6 +151,8 @@ function MachineList({
   );
 }
 
+const selectTasks = (state: ShinsaState) => state.tasks;
+
 function MachineItem({
   row,
   removing,
@@ -153,10 +163,12 @@ function MachineItem({
   onRemove: () => void;
 }) {
   const machine = useMachines().find((candidate) => candidate.id === row.instance.id);
+  const handed = useGuestMachines().find((candidate) => candidate.id === row.instance.id);
+  const tasks = useShinsaSelector(selectTasks);
   const outdated = useUnreachableMachines().some(
     (candidate) => candidate.id === row.instance.id && candidate.outdated
   );
-  const detail = machine ? `${row.access} · ${describeMachineLoad(resolveMachineLoad(machine))}` : row.access;
+  const detail = resolveMachineDetail(row, machine, handed, tasks ?? undefined);
   const resources = !outdated && machine ? (machine.resources ?? null) : null;
   return (
     <div className={cn(SETTING_ROW, 'items-start py-2')}>
@@ -181,7 +193,7 @@ function MachineItem({
       <div className='flex shrink-0 items-center gap-1.5'>
         {machine && <MachineCapacity machine={machine} />}
         <Button variant='secondary' size='sm' loading={removing} onClick={onRemove}>
-          {row.instance.role === 'member' ? 'Leave' : 'Remove'}
+          {row.instance.role === 'owner' ? 'Remove' : 'Leave'}
         </Button>
       </div>
     </div>
@@ -211,9 +223,9 @@ function useMachineRows() {
   const remove = async (row: MachineRow) => {
     if (!services) return;
     const id = row.instance.id;
-    await (row.instance.role === 'member'
-      ? services.dashboard.leaveInstance(id)
-      : services.dashboard.removeInstance(id));
+    await (row.instance.role === 'owner'
+      ? services.dashboard.removeInstance(id)
+      : services.dashboard.leaveInstance(id));
     connection.removeMachine(id);
     await services.devices.removeDevice(id);
     setVersion((value) => value + 1);

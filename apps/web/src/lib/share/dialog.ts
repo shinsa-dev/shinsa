@@ -13,6 +13,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { formatUntil } from '@/lib/format/time.ts';
+import { canHandOff, HANDOFF_ICON, HANDOFF_TITLE, isTaskHandedOff } from '@/lib/share/handoff.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const SHARE_TITLE = 'Share task';
@@ -59,6 +60,34 @@ export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: stri
   { value: 'full', label: 'Full access', hint: 'Standard and your messages', icon: 'IconEyeOpen' },
 ];
 
+export type ShareMode = SharePreset | 'handoff';
+
+const HANDOFF_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: IconName } = {
+  value: 'handoff',
+  label: HANDOFF_TITLE,
+  hint: 'One person works on it from their own Shinsa',
+  icon: HANDOFF_ICON,
+};
+
+export function listShareModeItems(task: Task, handoffSupported: boolean) {
+  const items: { value: ShareMode; label: string; hint: string; icon: IconName }[] = [...SHARE_PRESET_ITEMS];
+  return handoffSupported && canHandOff(task) ? [...items, HANDOFF_MODE_ITEM] : items;
+}
+
+export type ShareDialogFocus = 'share' | 'handoff';
+
+export function resolveShareModeChoice(
+  task: Task,
+  settings: Settings | null,
+  handoffSupported: boolean,
+  focus: ShareDialogFocus | null = null
+): ShareMode {
+  const handing = handoffSupported && canHandOff(task);
+  if (focus === 'handoff' && handing) return 'handoff';
+  if (focus === null && !task.share && task.handoff && handing) return 'handoff';
+  return resolveSharePresetChoice(task, settings);
+}
+
 export function describeSharePreset(preset: SharePreset) {
   return SHARE_PRESET_ITEMS.find((item) => item.value === preset)?.label ?? preset;
 }
@@ -87,6 +116,8 @@ const shareSignal = createSignal();
 
 let sharing: string | null = null;
 
+let sharingFocus: ShareDialogFocus | null = null;
+
 let stopping: string | null = null;
 
 export function openUnshareConfirm(taskId: string) {
@@ -103,14 +134,20 @@ export function useUnshareConfirm() {
   return useSyncExternalStore(shareSignal.subscribe, () => stopping);
 }
 
-export function openShareDialog(taskId: string) {
+export function openShareDialog(taskId: string, focus: ShareDialogFocus | null = null) {
   sharing = taskId;
+  sharingFocus = focus;
   shareSignal.publish();
 }
 
 export function closeShareDialog() {
   sharing = null;
+  sharingFocus = null;
   shareSignal.publish();
+}
+
+export function useShareDialogFocus() {
+  return useSyncExternalStore(shareSignal.subscribe, () => sharingFocus);
 }
 
 export function useShareDialog() {
@@ -126,6 +163,10 @@ export function selectLiveShare(task: Task, now = Date.now()) {
 export function isTaskShared(task: Task, now = Date.now()) {
   const share = selectLiveShare(task, now);
   return Boolean(share?.url && !share.failure);
+}
+
+export function hasShareMark(task: Task, now = Date.now()) {
+  return isTaskShared(task, now) || isTaskHandedOff(task);
 }
 
 export function resolveShareView(task: Task, remote: RemoteSnapshot | null, now = Date.now()): ShareView {
