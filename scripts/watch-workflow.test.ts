@@ -26,9 +26,16 @@ describe('the watch on main', () => {
   });
 
   it('reports only a run that failed, timed out or could not start', () => {
-    expect(report.if).toBe(
+    expect(report.if).toContain(
       `contains(fromJSON('["failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion)`
     );
+  });
+
+  it('never reports a pull request run, even one from a fork whose branch is named main', () => {
+    expect(report.if).toContain(
+      `contains(fromJSON('["push", "workflow_dispatch", "workflow_run"]'), github.event.workflow_run.event)`
+    );
+    expect(report.if).toContain('github.event.workflow_run.head_repository.full_name == github.repository');
   });
 
   it('signs the event it sends and names each attempt of a run once', () => {
