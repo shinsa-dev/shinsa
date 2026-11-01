@@ -170,6 +170,7 @@ not chat text.
   its plan and builds it in the same conversation (`docs/engine.md` → Agents, Task shapes).
 - **Ordering.** A task that depends on nothing starts at once, on its own agent, however many
   others are running; one that depends on others waits, costing nothing, until they have merged.
+  One stacked on another as a bundle starts once that one is ready to merge, and the bundle merges as one.
   Priority and what a decision unblocks only decide how high it sits in Needs you (`docs/engine.md`
   → Scheduling).
 - **The pull request loop.** CI failures, review-bot comments and conflicts go back to the task’s agent until
@@ -1094,6 +1095,23 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
   pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
   cards).
+
+### Bundles (2026-11-01)
+
+- **A stack of pull requests, as tasks.** A task can stack on another (Stack on another task… in the composer's When
+  to start, the Waits on menu, `•••`, ⌘K, `shinsa tasks stack-on`, `create_task`'s `stack_on_this`): it waits until
+  that task is ready to merge, not merged, then branches off its branch, and its pull request targets that branch, so
+  GitHub shows the stack. A bundle is one line in one repository (`docs/engine.md` → Bundles).
+- **Why not just wait.** The only difference from a dependency is that the bundle merges together. That buys three
+  things: the next task starts sooner; a flaw a later task finds in the root is fixed in the root's still-open pull
+  request instead of a follow-up on top of a merged one (the stacked task's agent messages the task below); and each
+  pull request's diff is small and builds on the one before, for you and for review bots.
+- **Ready, then one merge.** A task below never gets its own merge gate: it shows Ready, merges with its bundle, and
+  keeps fixing CI, comments and conflicts. The top task gets one merge gate for the whole bundle once every task below
+  is ready, listing each pull request; approving merges them top down and every task ends merged. The Overview's
+  Bundle panel shows each task in order with its state and pull request, and All tasks keeps a bundle's rows together.
+- **Not yet.** Bundles that branch, GitHub's own stack API (chained bases already show as a stack), triage inferring
+  a bundle and `split_task` splitting into one.
 
 ## 11. Open questions
 

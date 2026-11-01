@@ -340,8 +340,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Rounds share the task's worktree and push where their round says** (`docs/engine.md` → Rounds): a later round's
   worktree is never reset to the default branch (only its uncommitted scratch edits are dropped), a push goes to the
   task's branch, which a stacked round has changed to its own, a pull request opens on the round's base
-  (`resolveRoundBase`), and a merge merges the stack below the task's pull request top down
-  (`listStackedPullRequests`), reading each first.
+  (`resolveRoundBase`, the task below's branch for a task in a bundle), and a merge merges the stack below the task's
+  pull request top down (`listStackedPullRequests`), reading each first, then each task of its bundle below it
+  (`pull_request.merge`'s `bundle`, `docs/engine.md` → Bundles).
 - **The pull request watch reads, core decides**: the server dispatches a read only when `evaluatePullRequestWatch`
   (core) says it matters, and syncs of one task queue behind each other (`docs/engine.md` → The pull request watch).
 - **The HTTP surface is for this machine only.** Every route goes through `http/guard.ts` (what it checks, and the

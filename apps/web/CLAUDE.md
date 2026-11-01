@@ -63,7 +63,7 @@ src/
 │                        steps left after the merge), the plan's
 │                        parameters, the quiet-agent note,
 │                        question choices, finding verdicts, plan revision, suggested tasks, delegations and
-│                        result panels, the Rounds panel and its round headers, progress track, mini-track.tsx: the track as dots for a queue row), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
+│                        result panels, the Rounds panel and its round headers, bundle-panel.tsx: the Bundle panel (each task of the bundle from the bottom, its state and pull request), progress track, mini-track.tsx: the track as dots for a queue row), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
 │                        live card, handover, delegation and notice rows, the context meter, message-queue.tsx:
 │                        the queued messages docked above the composer, file-card.tsx: FileCard, the one card a non-image attachment is in a message and in a composer, a grey bordered tile with the kind's icon from lib/chat/attachments.ts; it and every image attachment take the composer card's corner, ATTACHMENT_CORNER, and its tile ATTACHMENT_TILE_CORNER, 4px in on every side, so the tile is 46px in the 56px card), review (merge-steps.tsx: the steps around the
 │                        merge as a checklist, its block on a now card and its panel on the Review tab, a step's command as a shell code block;
@@ -251,7 +251,9 @@ src/
     │                    summaries; the row a linked test or check renders as),
     │                    Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
     │                    rounds, a round's track and pull request, how a round ships), status and tone per task (Resolving conflicts on a conflict fix),
-    │                    task groups and chains, next action, the now line,
+    │                    task groups and chains, bundles (bundles.ts: a bundle's rows and their states, the Stack on another task
+    │                    choices core accepts, the now card's wait and note; groups.ts lists a ready task with its top),
+    │                    next action, the now line,
     │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
     │                    queued messages, when they send (describeQueue, describeRoundRelease: after you merge or

@@ -107,7 +107,11 @@ src/
 │   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key,
 │   │                whether no checks on a head means no CI (ciAbsent: the repository's RepoCi and CI_GRACE_MS
 │   │                from the push, resolvePullRequestCi)
-│   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks
+│   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on), releasing waiting
+│   │                tasks (a stacked one once the task below is ready) and recording a stacked task's base (stackBase)
+│   ├── bundles.ts   Bundles (reviewBundles, after every command): ready in place of a merge gate below the top
+│   │                (bundleReady), the top's one merge gate for the bundle, its merge top down, and a task below
+│   │                that merges, leaves or is cancelled
 │   ├── merge-steps.ts  The steps around the merge you tick (merge_step.tick, human-only), the merge gate's wait for
 │   │                the ones before it (assertMergeStepsDone), no done while one after it is open
 │   │                (assertNoMergeStepsLeft), and syncMergeSteps (after every command, for the tasks it changed:
