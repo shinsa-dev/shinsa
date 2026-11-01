@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Task } from '@shinsa/core';
-import { resolveStatusCard, STATUS_UPDATE } from '@/lib/share/status.ts';
+import { resolveStatusCard, resolveStatusTimeline, STATUS_UPDATE } from '@/lib/share/status.ts';
 import { createTask } from '../../support/state.ts';
 import { createSharedTask } from './fixtures.ts';
 
@@ -15,6 +15,7 @@ describe('the status card', () => {
       stage: { label: 'In progress', tone: 'blue' },
       description: null,
       latest: 'We’re working on it.',
+      timeline: resolveStatusTimeline('working'),
     });
   });
 
@@ -41,5 +42,27 @@ describe('the status card', () => {
     } as unknown as Task['plan'];
     const shared = createSharedTask({ description: 'Exports now work on Safari.' });
     expect(resolveStatusCard({ ...task, plan }, shared).description).toBe('Exports now work on Safari.');
+  });
+
+  it('shows a change’s timeline in customer steps, done up to where it stands', () => {
+    const steps = (update: Parameters<typeof resolveStatusTimeline>[0]) =>
+      resolveStatusTimeline(update).map((step) => `${step.label}:${step.status}`);
+    expect(steps('deploying')).toEqual([
+      'Planning:done',
+      'In progress:done',
+      'In review:done',
+      'Deploying:current',
+      'Live:pending',
+    ]);
+    expect(steps('live').every((step) => step.endsWith(':done'))).toBe(true);
+  });
+
+  it('shows an inquiry as looking into it then answered, and a closed or done task as one step', () => {
+    const steps = (update: Parameters<typeof resolveStatusTimeline>[0]) =>
+      resolveStatusTimeline(update).map((step) => `${step.label}:${step.status}`);
+    expect(steps('looking_into')).toEqual(['Looking into it:current', 'Answered:pending']);
+    expect(steps('answered')).toEqual(['Looking into it:done', 'Answered:done']);
+    expect(steps('closed')).toEqual(['Closed:cancelled']);
+    expect(steps('done')).toEqual(['Done:done']);
   });
 });

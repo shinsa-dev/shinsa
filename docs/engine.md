@@ -2824,7 +2824,7 @@ projection and channel will serve teams.
   queue) its title carries a share mark, "Shared by link" on hover (`components/share/shared-mark.tsx`,
   `isTaskShared`), while its link works.
 - **A Status link** opens a small status card page instead (`components/share/status-card.tsx`, `lib/share/status.ts`):
-  the title, the written description, the customer update as a label and a sentence (above) and the progress track. It has no request, no tabs, names no person, machine, project or repository, and changes live like any shared page.
+  the title, the written description, the customer update as a label and a sentence (above) and a customer timeline (`resolveStatusTimeline`): Planning, In progress, In review, Deploying and Live for a change, Looking into it and Answered for an inquiry, done up to where it stands. It has no request, no tabs, names no person, machine, project or repository, and changes live like any shared page.
 - **The shared page** (`routes/remote/share.tsx`, `lib/share/live.ts`, `components/share/shared-task-page.tsx`):
   the remote build's `/share/t/<token>` reads the key from the fragment (a link without one says the task
   is not shared), opens the live channel (`openShareStream`), builds a state from each view it receives

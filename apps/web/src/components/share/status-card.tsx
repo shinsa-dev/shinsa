@@ -4,10 +4,15 @@ import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PAGE_TITLE } from '@/components/layout/page/heading.tsx';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { CARD, CARD_FOOTER } from '@/components/layout/surface/card.ts';
-import { TaskTrack } from '@/components/overview/progress-track.tsx';
+import { StepMark } from '@/components/overview/progress-track.tsx';
 import { ToneLabel } from '@/components/status/text.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { resolveStatusCard, STATUS_EYEBROW, STATUS_LATEST_TITLE } from '@/lib/share/status.ts';
+import {
+  resolveStatusCard,
+  STATUS_EYEBROW,
+  STATUS_LATEST_TITLE,
+  type StatusStep,
+} from '@/lib/share/status.ts';
 import type { SharedView } from '@/lib/share/view.ts';
 
 function StatusSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -16,6 +21,32 @@ function StatusSection({ title, children }: { title: string; children: React.Rea
       <h2 className='text-2xs text-fg-2'>{title}</h2>
       {children}
     </section>
+  );
+}
+
+function StatusTimeline({ steps }: { steps: StatusStep[] }) {
+  return (
+    <ol aria-label='Progress' className='flex w-full min-w-0 flex-wrap items-center gap-x-1.5 gap-y-2'>
+      {steps.map((step, index) => (
+        <li key={step.key} className='flex items-center gap-1.5'>
+          {index > 0 && (
+            <span
+              aria-hidden
+              className={cn('h-px w-4', step.status === 'pending' ? 'bg-bg-a3' : 'bg-green-4')}
+            />
+          )}
+          <StepMark status={step.status} />
+          <span
+            className={cn(
+              'whitespace-nowrap text-2xs',
+              step.status === 'pending' ? 'text-fg-2' : 'text-fg-4'
+            )}
+          >
+            {step.label}
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -40,7 +71,7 @@ export function StatusCardPage({ view }: { view: SharedView }) {
             <p className='selectable text-xs'>{card.latest}</p>
           </StatusSection>
           <div className={CARD_FOOTER}>
-            <TaskTrack task={view.task} />
+            <StatusTimeline steps={card.timeline} />
           </div>
         </article>
       </div>

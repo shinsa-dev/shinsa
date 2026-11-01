@@ -1,5 +1,6 @@
 import type { SharedTask, ShareUpdate, Task } from '@shinsa/core';
 import type { Tone } from '@/lib/format/tone.ts';
+import type { StepStatus } from '@/lib/overview/progress.ts';
 
 export const STATUS_EYEBROW = 'Status';
 
@@ -25,19 +26,56 @@ export const STATUS_UPDATE: Record<ShareUpdate, { label: string; tone: Tone; tex
   closed: { label: 'Closed', tone: 'neutral', text: 'This was closed without a change.' },
 };
 
+const CHANGE_STEPS: readonly ShareUpdate[] = ['planning', 'working', 'ready', 'deploying', 'live'];
+
+const INQUIRY_STEPS: readonly ShareUpdate[] = ['looking_into', 'answered'];
+
+const FINAL_UPDATES: ReadonlySet<ShareUpdate> = new Set<ShareUpdate>(['live', 'answered', 'done']);
+
+export interface StatusStep {
+  key: ShareUpdate;
+  label: string;
+  status: StepStatus;
+}
+
+function resolvePath(update: ShareUpdate): readonly ShareUpdate[] {
+  if (CHANGE_STEPS.includes(update)) return CHANGE_STEPS;
+  if (INQUIRY_STEPS.includes(update)) return INQUIRY_STEPS;
+  return [update];
+}
+
+function resolveStepStatus(update: ShareUpdate, index: number, current: number): StepStatus {
+  if (update === 'closed') return 'cancelled';
+  if (index < current || FINAL_UPDATES.has(update)) return 'done';
+  return index === current ? 'current' : 'pending';
+}
+
+export function resolveStatusTimeline(update: ShareUpdate): StatusStep[] {
+  const path = resolvePath(update);
+  const current = path.indexOf(update);
+  return path.map((key, index) => ({
+    key,
+    label: STATUS_UPDATE[key].label,
+    status: index > current ? 'pending' : resolveStepStatus(key, index, current),
+  }));
+}
+
 export interface StatusCard {
   title: string;
   stage: { label: string; tone: Tone };
   description: string | null;
   latest: string;
+  timeline: StatusStep[];
 }
 
 export function resolveStatusCard(task: Task, shared: SharedTask): StatusCard {
-  const update = STATUS_UPDATE[shared.update ?? 'working'];
+  const key = shared.update ?? 'working';
+  const update = STATUS_UPDATE[key];
   return {
     title: task.title,
     stage: { label: update.label, tone: update.tone },
     description: shared.description,
     latest: update.text,
+    timeline: resolveStatusTimeline(key),
   };
 }

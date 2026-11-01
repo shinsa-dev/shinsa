@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { ShareLiveView, Task } from '@shinsa/core';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { READ_ONLY_REFUSAL, selectReadOnlyRefusal } from '@/lib/connection/read-only.ts';
 import { SharePage } from '@/routes/remote/share.tsx';
 import { createSharedTask, DIFF } from '../../lib/share/fixtures.ts';
@@ -141,7 +141,8 @@ describe('the shared page on app.shinsa.dev', () => {
     view.files = {};
     await open(machine, view);
     expect(screen.getByText('Status')).toBeTruthy();
-    expect(screen.getByText('Deploying')).toBeTruthy();
+    expect(screen.getAllByText('Deploying')).toHaveLength(2);
+    expect(within(screen.getByRole('list', { name: 'Progress' })).getByText('Live')).toBeTruthy();
     expect(screen.getByText(/isn’t live yet/)).toBeTruthy();
     expect(screen.queryByText('Rotating a key keeps the old one for a day.')).toBeNull();
     expect(screen.getByText('Keys now rotate every week.')).toBeTruthy();

@@ -214,7 +214,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     connectKey,
     publicKey: key.publicKey,
   };
-  return { machine, engine, evidence };
+  return { machine, engine, evidence, transcripts };
 }
 
 async function describePreviewShare(engine: Engine, taskId: string, key: string) {
@@ -341,6 +341,20 @@ async function recordPushedHead(engine: Engine, task: Task) {
   return engine.state.tasks[task.id] ?? task;
 }
 
+const SEEDED_MESSAGES = [
+  'Can you keep the old export working for one more release?',
+  'Looks good so far. Please also cover the empty state.',
+];
+
+function seedMessages(studio: Awaited<ReturnType<typeof startMachine>>, task: Task) {
+  const [run] = Object.values(studio.engine.state.runs)
+    .filter((entry) => entry.taskId === task.id)
+    .sort((left, right) => right.startedAt - left.startedAt);
+  if (!run) return;
+  for (const text of SEEDED_MESSAGES)
+    studio.transcripts.record(run.id, { type: 'user', from: 'you', text, attachments: [] });
+}
+
 function countRuns(engine: Engine, taskId: string) {
   return Object.values(engine.state.runs).filter((run) => run.taskId === taskId).length;
 }
@@ -360,7 +374,13 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
   const [talked] = tasks
     .filter((entry) => !taken.has(entry.id))
     .sort((left, right) => countRuns(engine, right.id) - countRuns(engine, left.id));
-  const status = tasks.find((entry) => !taken.has(entry.id) && entry.id !== talked?.id);
+  const [, chatty] = tasks
+    .filter((entry) => !taken.has(entry.id))
+    .sort((left, right) => countRuns(engine, right.id) - countRuns(engine, left.id));
+  const status = tasks.find(
+    (entry) => !taken.has(entry.id) && entry.id !== talked?.id && entry.id !== chatty?.id
+  );
+  for (const task of [talked, chatty]) if (task) seedMessages(studio, task);
   const shares = [
     pushed &&
       (await createPreviewShare(studio, pushed, 'A shared task with an open pull request, with Code')),
@@ -375,6 +395,13 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
         talked,
         'A task shared as Standard, with the agents’ live output in Chat',
         'standard'
+      )),
+    chatty &&
+      (await createPreviewShare(
+        studio,
+        chatty,
+        'A task shared as Full access, with your messages in Chat too',
+        'full'
       )),
   ];
   return shares.filter((share): share is PreviewShare => Boolean(share));

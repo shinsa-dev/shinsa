@@ -391,7 +391,7 @@ owner's own task page with every button and input taken away, showing everything
 Review, Code (a private repository's too, from the working copy before a pull request) and Chat, with the agents'
 live output and tool calls but never your messages to them, and it changes the moment the task does. Share as picks
 what it shows: Status (an anonymous status card of the title, a short description an agent writes when sharing
-starts, the phases and a plain update for customers, such as in progress, deploying or live, which says live only
+starts, a customer timeline (planning, in progress, in review, deploying, live) and a plain update for customers, such as in progress, deploying or live, which says live only
 once the change is out), Standard (that page) or Full access (Standard and your own chat messages); it defaults to
 Settings → General → Sharing, and Manage on the banner changes it and how long while the link stays; the machine reads
 nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
