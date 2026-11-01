@@ -31,10 +31,13 @@ export function describeOwnerPossessive(owner: string | null) {
   return owner === null ? 'your' : `${describeOwnerInSentence(owner)}’s`;
 }
 
+export function describeSharedFrom(shared: SharedTask) {
+  return shared.machine ? ` from ${shared.machine}` : '';
+}
+
 export function describeSharedBy(shared: SharedTask, viewer: string | null) {
   const owner = shared.owner && (resolveOwnerName(shared, viewer)?.name ?? 'you');
-  if (owner && shared.machine) return `Shared by ${owner} from ${shared.machine}`;
-  if (owner) return `Shared by ${owner}`;
+  if (owner) return `Shared by ${owner}${describeSharedFrom(shared)}`;
   if (shared.machine) return `Shared from ${shared.machine}`;
   return 'Shared';
 }

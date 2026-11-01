@@ -142,7 +142,7 @@ src/
     │                    checked with the key, the views and files it pushes as blob addresses, reconnecting),
     │                    sources.ts (a shared file's text, who is looking), view.ts (the read-only state and task the tab components render),
     │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner; resolveOwnerName: the owner's
-    │                    login, `@kai`, in place of "You" for anyone else), code.ts (the streamed diff and
+    │                    first name and profile, Kai with no `@`, in place of "You" for anyone else), code.ts (the streamed diff and
     │                    whole files in place of a worktree's refs and blobs, a base rebuilt from its hunks);
     │                    components/share/shared-task-page.tsx renders the owner's TaskFrame inside
     │                    components/task/read-only.tsx (ReadOnlyProvider, useReadOnly: every control hides; useReadOnlyNote: the line
@@ -170,7 +170,7 @@ src/
     │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
     │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
     │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
-    │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, login and initial, the member who added a device), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
+    │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, first name, login, initial and profile address, the member who added a device; components/people/user-tag.tsx: UserTag, a person's name that opens the one user card on hover, and UserAvatar), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
     │                    ones this device cannot reach yet, the form's checks and the
     │                    settings each add, edit, move or removal writes), machines.ts (a machine's row, the rows of the account, task capacity's choices, a machine as a
     │                    fleet member)

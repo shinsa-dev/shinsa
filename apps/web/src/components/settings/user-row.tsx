@@ -2,28 +2,9 @@ import type { RemoteUser } from '@shinsa/core';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
-import { describeUserHandle, describeUserName, resolveUserInitial } from '@/lib/remote/users.ts';
+import { UserAvatar } from '@/components/people/user-tag.tsx';
+import { describeUserHandle, describeUserName } from '@/lib/remote/users.ts';
 import { SETTING_ROW } from './group.tsx';
-
-function UserAvatar({ user }: { user: RemoteUser }) {
-  if (user.avatarUrl)
-    return (
-      <img
-        src={user.avatarUrl}
-        alt=''
-        referrerPolicy='no-referrer'
-        className='size-6 shrink-0 rounded-full bg-bg-a2'
-      />
-    );
-  return (
-    <span
-      aria-hidden
-      className='grid size-6 shrink-0 place-items-center rounded-full bg-bg-a2 text-2xs text-fg-2'
-    >
-      {resolveUserInitial(user)}
-    </span>
-  );
-}
 
 export function UserRow({
   user,

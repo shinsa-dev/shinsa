@@ -2,11 +2,11 @@ import type { RemoteAccess, RemoteDevice, RemoteUser, SharedPerson } from '@shin
 
 export type UserProfile = Pick<RemoteUser, 'login' | 'name' | 'avatarUrl'>;
 
-export function describeUserName(user: RemoteUser) {
+export function describeUserName(user: Pick<RemoteUser, 'login' | 'name'>) {
   return user.name ?? `@${user.login}`;
 }
 
-export function describeUserHandle(user: RemoteUser) {
+export function describeUserHandle(user: Pick<RemoteUser, 'login' | 'name'>) {
   return user.name ? `@${user.login}` : null;
 }
 
@@ -18,7 +18,11 @@ export function resolveSharedProfile(login: string, profile: SharedPerson | null
   return { login, name: profile?.name ?? null, avatarUrl: profile?.avatarUrl ?? null };
 }
 
-export function resolveUserInitial(user: RemoteUser) {
+export function resolveGitHubProfileUrl(user: Pick<RemoteUser, 'login'>) {
+  return `https://github.com/${encodeURIComponent(user.login)}`;
+}
+
+export function resolveUserInitial(user: Pick<RemoteUser, 'login' | 'name'>) {
   return describeUserName(user).replace(/^@/, '').slice(0, 1).toUpperCase();
 }
 

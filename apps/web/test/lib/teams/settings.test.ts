@@ -4,6 +4,7 @@ import {
   createTeamDraft,
   describePeopleCount,
   describeTeamEntry,
+  describeTeamFacts,
   describeTeamsUnavailable,
   hasMachineAccess,
   listProjectChoices,
@@ -49,6 +50,7 @@ describe('Settings → Teams', () => {
     expect(describeTeamEntry(createTeamEntry({ team: alone }), NOW)).toBe(
       'Owned by Kai · 1 person · Made 2d ago'
     );
+    expect(describeTeamFacts(alone, NOW)).toBe('1 person · Made 2d ago');
     expect(describeTeamEntry(createTeamEntry({ team: null }), NOW)).toBe(
       'You asked to join. The team’s owner has not answered yet.'
     );

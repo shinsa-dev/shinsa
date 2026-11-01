@@ -48,13 +48,27 @@ describe('the owner on a shared task page', () => {
     expect(readAskedLine()).toContain('Kai ·');
     expect(readAskedLine()).not.toContain('@');
     expect(readAskedLine()).not.toContain('You');
-    expect(screen.getByText('Shared by Kai from Studio')).toBeTruthy();
+    expect(document.body.textContent).toContain('Shared by Kai from Studio');
+    const tags = screen.getAllByText('Kai', { selector: 'a' });
+    expect(tags.map((tag) => tag.getAttribute('href'))).toEqual([
+      'https://github.com/kai',
+      'https://github.com/kai',
+    ]);
     unmount();
   });
 
   it('names the owner for a visitor who is not signed in', () => {
     const { unmount } = renderShared('kai', null);
     expect(readAskedLine()).toContain('Kai ·');
+    unmount();
+  });
+
+  it('gives the owner no card when they look at their own share or the share has no login', () => {
+    const own = renderShared('kai', 'kai');
+    expect(screen.queryAllByText('Kai', { selector: 'a' })).toEqual([]);
+    own.unmount();
+    const { unmount } = renderShared(null, 'mona');
+    expect(screen.queryAllByRole('link', { name: 'The owner' })).toEqual([]);
     unmount();
   });
 

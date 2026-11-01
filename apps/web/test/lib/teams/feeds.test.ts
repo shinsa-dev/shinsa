@@ -3,6 +3,7 @@ import { NO_TEAM_FEED, type TeamFeedMachine } from '@shinsa/core';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/channel.ts';
 import {
   describeTeamTaskOwner,
+  describeTeamTaskPlace,
   HostedTeamFeeds,
   listOpenTeamFeedTasks,
   listTeamFeedTasks,
@@ -63,6 +64,8 @@ describe('teammates’ task lists', () => {
     );
     expect(describeTeamTaskOwner({ owner: null, machine: 'Studio' })).toBe('Studio');
     expect(describeTeamTaskOwner({ owner: null, machine: null })).toBe('A teammate');
+    expect(describeTeamTaskPlace({ machine: 'Studio' })).toBe('On Studio, read-only');
+    expect(describeTeamTaskPlace({ machine: null })).toBe('Read-only');
   });
 
   it('builds a state of just the task, its gates and its project, so its status reads as on its own machine', () => {

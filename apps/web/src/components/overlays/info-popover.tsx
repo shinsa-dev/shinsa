@@ -28,7 +28,13 @@ const INFO_ACTION =
 export function InfoAction(props: { label: string } & ({ href: string } | { onClick: () => void })) {
   if ('href' in props) {
     return (
-      <a href={props.href} target='_blank' rel='noreferrer' className={INFO_ACTION}>
+      <a
+        href={props.href}
+        target='_blank'
+        rel='noreferrer'
+        onClick={(event) => event.stopPropagation()}
+        className={INFO_ACTION}
+      >
         {props.label}
         <Icon size='sm' name='IconArrowUpRight' />
       </a>

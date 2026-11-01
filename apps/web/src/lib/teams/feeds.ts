@@ -109,6 +109,10 @@ export function describeTeamTaskOwner(task: Pick<TeamFeedTask, 'owner' | 'machin
   return task.machine ?? 'A teammate';
 }
 
+export function describeTeamTaskPlace(task: Pick<TeamFeedTask, 'machine'>) {
+  return task.machine ? `On ${task.machine}, read-only` : 'Read-only';
+}
+
 export interface TeamFeedSource {
   subscribe: (listener: () => void) => () => void;
   snapshot: () => TeamFeedSnapshot;

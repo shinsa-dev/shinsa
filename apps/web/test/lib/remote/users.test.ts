@@ -4,6 +4,7 @@ import {
   describeUserHandle,
   describeUserName,
   resolveFirstName,
+  resolveGitHubProfileUrl,
   resolveSharedProfile,
   resolveUserInitial,
   selectDeviceMember,
@@ -34,6 +35,7 @@ describe('a GitHub user on screen', () => {
     expect(resolveFirstName(BARE)).toBe('mona');
     expect(resolveFirstName({ login: 'lee', name: '   ' })).toBe('lee');
     expect(resolveFirstName({ login: 'ada', name: '  Ada   Lovelace ' })).toBe('Ada');
+    expect(resolveGitHubProfileUrl(NAMED)).toBe('https://github.com/kai');
   });
 
   it('builds a profile from a shared login and whatever profile came with it', () => {

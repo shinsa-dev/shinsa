@@ -2,8 +2,9 @@ import type { Activity, ReviewComment, ShinsaState } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import type * as React from 'react';
 import { InAppLink } from '@/components/links/link.tsx';
+import { UserTag } from '@/components/people/user-tag.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
-import { useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
+import { useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
@@ -88,12 +89,18 @@ export function ActivityRow({
   onOpenRun: (runId: string) => void;
 }) {
   const run = entry.runId ? state.runs[entry.runId] : undefined;
-  const owner = useReadOnlyOwnerName();
+  const owner = useReadOnlyOwner();
   return (
     <ActivityEntry
       glyph={resolveActivityGlyph(entry)}
       text={entry.text}
-      actor={<ActorLabel state={state} actor={resolveActivityActor(state, entry, owner)} />}
+      actor={
+        entry.actor === 'you' && !entry.onBehalf && owner?.user ? (
+          <UserTag user={owner.user} label={owner.name} />
+        ) : (
+          <ActorLabel state={state} actor={resolveActivityActor(state, entry, owner?.name ?? null)} />
+        )
+      }
       at={entry.at}
       detail={listActivityDetail(entry)}
     >

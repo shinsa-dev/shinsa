@@ -2966,7 +2966,9 @@ projection and channel serve teams, always at Standard (Teams, below).
   change merged but not yet released never says live. It changes with the task, so an open card follows it.
 - **The projection** (core's `share/`, `resolveSharedTask(state, task, { owner, machine, repository, preset })`) builds a
   `SharedTask`: a redacted `Task`, its gates and runs, its current evidence, its repository and project records
-  (without their paths, folders or description), the owner's GitHub login and the machine's name from `remote.json`,
+  (without their paths, folders or description), the owner's GitHub login and the machine's name from `remote.json`
+  (with `ownerProfile`, the owner's GitHub name and photo kept from pairing, only when that profile's login is the
+  owner's; an older engine sends none and the page names the owner by login),
   the repository's name and whether it shares code, which is everything the owner's task page reads, so the shared
   page renders that same page; and the `preset`. It copies fields by name: a field added to `Task` later stays empty
   until it is added to a group on purpose. A Status share is read with no owner, machine or repository at all
@@ -3074,10 +3076,13 @@ projection and channel serve teams, always at Standard (Teams, below).
   and Code components, the same layout) inside `ReadOnlyProvider`, whose note sits in the header above the title, one
   header gap from it: read-only, who shared it from which machine ("you" when the GitHub login signed in to
   app.shinsa.dev is its owner) and when the machine last read it. To anyone but the owner, what the owner did or wrote
-  is labelled with their login instead of "You" (`resolveOwnerName`, read through `useReadOnlyOwner`): "Asked for this ·
-  @kai", "on @kai’s behalf", "@kai closed this as a duplicate.", "@kai cancelled the task", "@kai’s request" and
-  "What @kai sent" on Overview, "Asked @kai" and "@kai’s answer" in Chat, and "The
-  owner" when the share carries no login. Read-only takes away
+  is labelled with their first name instead of "You", with no `@` (`resolveOwnerName`, read through
+  `useReadOnlyOwner`; the GitHub name from `ownerProfile`, or the login when there is none): "Asked for this · Kai",
+  "on Kai’s behalf", "Kai closed this as a duplicate.", "Kai cancelled the task", "Kai’s request" and "What Kai sent"
+  on Overview, "Asked Kai" and "Kai’s answer" in Chat, and "The owner" when the share carries no login. Wherever a
+  person's name stands alone (an activity line's actor, the Shared by line, a teammate's task row, a team's owner in
+  Settings → Teams) it is a user tag (`components/people/user-tag.tsx`): hovering it opens the one user card, their
+  photo, full name, `@login` and View on GitHub, and clicking it opens their GitHub profile. Read-only takes away
   only what acts: the task menu, the ⌘K commands, every card's buttons and links (`NowFrame`'s action, `QuietLink`),
   answer boxes, the composer, verdicts, merge-step boxes, suggestion and watchdog buttons, a delegation's Stop, the
   priority menu, services and every way into a chat. Its tabs are the owner's, Chat read-only (each run's streamed
@@ -3201,7 +3206,7 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   every list built on it (`isInFocus` through `isTeamTask`), and the page adds the team's tasks from your teammates:
   the focus menu (`components/focus/menu.tsx`) reads Your work, then your projects, then Teams (each team you are in,
   not one you only asked to join); All tasks gets a Teammates in <team> group and Home a section of their open
-  tasks (`components/teams/tasks.tsx`), each row marked with its owner's GitHub login (`@kai`), neither shown while a
+  tasks (`components/teams/tasks.tsx`), each row marked with its owner's first name as a user tag (Kai), neither shown while a
   status filter is on. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
   guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by

@@ -4,6 +4,7 @@ import {
   describeOwnerInSentence,
   describeOwnerPossessive,
   describeSharedBy,
+  describeSharedFrom,
   listSharedTabs,
   resolveOwnerName,
 } from '@/lib/share/page.ts';
@@ -49,6 +50,8 @@ describe('the shared page', () => {
     expect(describeSharedBy(createSharedTask({ machine: null }), 'octocat')).toBe('Shared by mona');
     expect(describeSharedBy(createSharedTask({ owner: null }), null)).toBe('Shared from Studio');
     expect(describeSharedBy(createSharedTask({ owner: null, machine: null }), 'mona')).toBe('Shared');
+    expect(describeSharedFrom(createSharedTask())).toBe(' from Studio');
+    expect(describeSharedFrom(createSharedTask({ machine: null }))).toBe('');
   });
 
   it('says you shared it when the one looking is its owner, without the @', () => {
