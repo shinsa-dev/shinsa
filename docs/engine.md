@@ -80,7 +80,7 @@ builds never reviews its own work.
 Besides its hand-over tool, every working role can ask (`ask`; never the reviewer, which cannot ask the human
 anything), keep notes, find and read other tasks (`find_tasks`, `read_task`, which never changes anything), see the
 other open work in its repository (`list_repository_work`, Other work in the repository, below), suggest
-tasks, propose a rule for agents to remember (`remember`; never the reviewer, Memory, below), delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
+tasks, propose a rule for agents to remember (`remember`; never the reviewer, Memory, below), report what in Shinsa got in its way (`report_feedback`, Feedback, below), delegate (Delegation, below), file a task (`create_task`; the Agent also `split_task`) and schedule work,
 and the Agent and the investigator can wait (`wait_for`). So every task agent can read across every task, file a
 task, schedule work and suggest tasks, while its hand-over stays its own. Which role may call which tool is one
 table, `listCallableToolNames` in `packages/core/src/domain/tools.ts`: `decide` refuses a call the run's role does not
@@ -1843,6 +1843,62 @@ itself do not).
   compacted, handed off or never had these house rules; `resolveRunBrief`) carries every rule again, for any briefed
   role: the agent's round brief, a planning turn, the reviewer and the inquiry roles. Proposals are never told, and delegated agents and the quick calls get no memory.
 
+### Feedback
+
+Feedback on Shinsa itself, from you or from an agent, opened as a public issue on `shinsa-dev/shinsa`
+(`FEEDBACK_REPOSITORY`) only when you click: `domain/feedback.ts`, `decide/feedback.ts`, `state/feedback.ts`;
+`apps/engine/src/feedback/`; `apps/web/src/lib/feedback.ts`, `components/feedback/`. Everything it opens is public,
+so keeping you private comes before everything else: two passes, a rewrite and a check, stand between your note and
+GitHub. Feedback is not a task: no worktree, no pipeline, no agent session.
+
+```
+note (you, or report_feedback) ──► drafting ── quick call ──► draft
+                                       │                       │ you edit, then Open issue
+                                       ▼                       ▼
+                                    failed ◄── gh fails ──── filing ── gh issue create ──► filed
+```
+
+- **An entry** is a `Feedback` in `state.feedback`: the note (at most 4,000 characters, `FEEDBACK_LIMITS`), the
+  drafted `title` (120) and `body` (6,000), its `source` (`human` or `agent`, with the agent's task and run), its
+  `status` (`drafting`, `draft`, `filing`, `filed` or `failed`, with the `failure` shown to you) and, once filed, the
+  `issue` (number and link). `feedback.recorded` carries the whole entry, `feedback.removed` forgets it.
+- **Writing.** `feedback.write` (the sheet, `shinsa feedback write`) records a note as `drafting` and runs
+  `feedback.draft`; with `feedbackId` it rewrites an entry that is not busy or filed and drafts it again. The
+  `feedback.draft` effect (replay-safe) is a quick call on your account (`createFeedbackDrafter`,
+  `feedback/draft.ts`): its fixed system prompt says the issue is public, to describe only what Shinsa did and what
+  should change, and to replace every project, repository, file, branch, task, person, account, link, code and number
+  with a generic word; the user prompt carries the note and the private words below (at most 200), never the system
+  prompt (Caching, below). The answer is `feedback.record_draft`; no answer, an error or a title or body it cannot use
+  (empty, or over its limit) is `feedback.record_failure` ("write the note again"). Your note itself is never posted.
+- **The privacy check** (`listFeedbackLeaks`, pure, in core) refuses an email, a home folder path (`/Users/…`,
+  `/home/…`, `C:\Users\…`; `~/` names no one), a known token or key shape (private key blocks, `sk-`, `ghp_`,
+  `github_pat_`, `xox…`, AWS access keys, JWTs, `token=`) or a long run of letters and digits, a link outside `shinsa.dev`,
+  `localhost` and the repository itself, and every private word: `listPrivateWords` reads them from the state, the
+  names and keys of your projects and their folders, each repository's name, path and remote owner and name, every
+  task's handle, branch and worktree, the account emails tasks and runs used, and the user names in those paths. Words
+  match whole, case-insensitively, from two letters; "Shinsa" and `shinsa-dev` are allowed. The sheet shows what it
+  finds on each draft (`describeFeedbackLeaks`) and keeps Open issue off until you edit it out.
+- **Editing** (`feedback.update`) changes the title and body of an entry that waits for you (a draft, or one that
+  failed with a draft). **Dismissing** (`feedback.dismiss`) forgets an entry, refused while it is being opened.
+- **Opening** (`feedback.file`) is yours alone: core refuses it on your behalf (`human_only`; Who can change Shinsa,
+  below), so no agent and no command sent for you opens an issue. It runs the privacy check again on the title and
+  body as they are, after your edits, and refuses a leak (`feedback_private`, naming each one). Then the entry is
+  `filing` and the `feedback.file` effect runs `gh issue create --repo shinsa-dev/shinsa` with your GitHub login, the
+  body ending in one line that says whether it came from the feedback button or an agent; the link `gh` prints is
+  `feedback.record_filed`. The effect is process-bound and never retried, so an issue is never posted twice: one a
+  restart left `filing` is failed on start (`FeedbackEffects.recover`) with a note to check GitHub before opening it
+  again, and a `gh` failure shows its message on the entry.
+- **Agents report** with `report_feedback` (`feedback`; every task-session role, the reviewer included, never a
+  delegated agent), when Shinsa itself got in their way: a tool that refused what it should take, a limit or a rule
+  that blocked sound work, a step that made no sense, a missing tool; never the task or its code. Its description says the human reads each report before anything is public. A note already known,
+  whatever its case, is dropped; a task reports at most 3 and at most 10 agent reports wait at once
+  (`feedback_full`). The report is recorded in its task's activity and drafted like yours; it waits in the sheet,
+  marked as from an agent with a link to its task. There is no setting to open one without you.
+- **Where you see it.** A Feedback button in the Desk header and a Feedback row in the Shelf rail, with a count of the
+  drafts and failures waiting for you, open the feedback sheet: what happens to a note, the note field, Waiting for
+  you and Opened on GitHub. ⌘K has Send feedback on Shinsa; `shinsa feedback list|write|edit|file|dismiss` is the
+  same from the command line (`GET /api/feedback`).
+
 ### Setup verification
 
 - Before a task's first agent, the task stage reads "verifying the setup" (`VERIFYING_SETUP`) while
@@ -2855,6 +2911,8 @@ plainly what protects what.
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - what agents remember (`memory write`, `keep`, `remove`; core refuses `memory.write`, `memory.accept` and
     `memory.remove` on your behalf): an agent proposes with `remember` instead (Memory, above);
+  - opening feedback as a public GitHub issue (`feedback file`; core refuses `feedback.file` on your behalf): an
+    agent reports with `report_feedback`, and the draft waits for you (Feedback, above);
   - accepting a suggested watch (`schedules accept`; core refuses `watch_suggestion.accept` on your behalf): an
     agent's new watch is a suggestion instead (Schedules and webhooks → Suggested watches, above);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);

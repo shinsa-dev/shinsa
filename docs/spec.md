@@ -284,6 +284,14 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
   section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
   its own.
+- **Feedback.** A Feedback button in the header (Desk) and the rail (Shelf), and Send feedback on Shinsa in ⌘K,
+  open the feedback sheet. You write a note in your own words; your agent rewrites it as a public GitHub issue on
+  `shinsa-dev/shinsa` without your projects, repositories, files, branches, names, code or links, and you read it
+  before it opens. A check in core refuses an issue that still holds an email, a home folder path, a token or key, a
+  link elsewhere or one of your project, repository, branch, task or account names, and shows what it found. Agents
+  report what in Shinsa got in their way with `report_feedback`; a report waits in the same sheet, marked as from an
+  agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); the button's count is
+  what waits for you (`docs/engine.md` → Feedback).
 - **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
   questions: the folders that hold your repositories (found on this machine, with their
   repository counts), the default model, the merge method, plan approval, your Claude accounts and
@@ -1093,6 +1101,16 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
   pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
   cards).
+
+### Feedback (2026-11-01)
+
+- **Why.** Feedback on Shinsa had no way in but a chat with the person who builds it, and agents, who meet its
+  rough edges first, had no way to say so. Every issue is public, so the first rule is that nothing private leaves.
+- **Two passes.** A quick call rewrites the note as a generic issue, told your private words; then a pure check in
+  core (`listFeedbackLeaks`) refuses what still names you, again at the moment you open it, after your edits.
+- **Your click.** Agents propose with `report_feedback`, like memory rules; nothing opens an issue but you, with no
+  setting to change that. Feedback is an entry, not a task: no worktree, no pipeline. Issue-scoped tasks,
+  automations over the issues and shared task views are later work.
 
 ## 11. Open questions
 

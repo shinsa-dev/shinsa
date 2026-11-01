@@ -72,6 +72,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | delegation | Work a running step hands to another agent: a run of the same task with a parent run, never a new task | `RunDelegation` on `Run` | Delegations |
 | courier | A new task an agent files for work that belongs elsewhere (`create_task`), such as the part of a change in another repository, optionally making its own task wait on it (`this_task_waits`) or waiting on its own task (`after_this`) | `TaskCreator.kind: 'courier'` | a task |
 | memory | The rules you keep for every later agent, for every project or one; an agent proposes one with `remember` and only you keep it (`docs/engine.md` → Memory) | `MemoryEntry`, `state.memories`, `MEMORY_LIMITS` | Memory, "rule" |
+| feedback | A note on Shinsa itself, from you or an agent, that your agent drafts as a public issue on `shinsa-dev/shinsa` and only you open (`docs/engine.md` → Feedback) | `Feedback`, `state.feedback`, `FEEDBACK_LIMITS`, `FEEDBACK_REPOSITORY` | Feedback, "issue" |
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
 | waits on | The tasks a task waits for before it starts (or before its merge gate opens) | `Task.waitsOn`, stage `waiting_on_tasks` | "Waits on", "Wait for another task" |
@@ -787,6 +788,10 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `memory.write` | writes a rule (`text`, `projectId` or null for every project) or, with `memoryId`, changes one; writing over a proposal keeps it; at most 240 characters and 20 kept rules per scope (`memory_invalid`, `memory_full`) | `memory write` | **human** |
 | `memory.accept` | keeps a rule an agent proposed | `memory keep` | **human** |
 | `memory.remove` | forgets a rule, or dismisses a proposal | `memory remove` | **human** |
+| `feedback.write` | records a note on Shinsa (`note`, at most 4,000 characters) and drafts it as an issue; with `feedbackId`, rewrites one that is neither busy nor filed and drafts it again (`feedback_invalid`, `feedback_busy`, `feedback_filed`) | `feedback write` | agent |
+| `feedback.update` | changes the `title` (120) and `body` (6,000) of a draft that waits for you (`feedback_not_draft`) | `feedback edit` | agent |
+| `feedback.file` | opens a draft as a public issue with your GitHub login, after the privacy check passes on its text as it is (`feedback_private` names each leak) | `feedback file` | **human** |
+| `feedback.dismiss` | forgets an entry, refused while it is being opened | `feedback dismiss` | agent |
 | `monitor.check_in_now` | fires a monitor's next check-in now | `tasks check-in-now` | agent |
 | `usage_wait.change` | turns a usage wait's auto-resume on or off | `tasks auto-resume` | agent |
 | `usage_wait.resume_now` | resumes a usage wait now | `tasks resume-now` | agent |
@@ -857,6 +862,7 @@ role without the tool (`hasTool`).
 | `agent.wait_for` | `wait_for` | ends the run and arms a monitor |
 | `agent.suggest_tasks` | `suggest_tasks` | suggests up to five tasks |
 | `agent.remember` | `remember` | proposes a rule for every later agent (`scope`, `text`, `why`); a known one is dropped, at most ten wait at once |
+| `agent.report_feedback` | `report_feedback` | reports a problem with Shinsa itself (`feedback`), drafted like yours and waiting for you; a known note is dropped, at most 3 per task and 10 agent reports waiting (`feedback_full`) |
 | `agent.request_secret` | `request_secret` | opens a secret gate |
 | `agent.delegate` | `delegate_task` | starts a delegation from its `brief` |
 | `agent.cancel_delegation` | `delegation_cancel` | stops one |
@@ -913,6 +919,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
 | `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
+| `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
+| `feedback.record_filed` | the `feedback.file` effect | the new issue's `number` and `url`, for an entry still `filing` |
+| `feedback.record_failure` | either feedback effect, and the start after a restart | fails a `drafting` or `filing` entry with `detail` |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries.ts` | a delivery claim was taken, or released |
@@ -1024,6 +1033,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.claimed`, `delegation.delivered`, `delegation.released` | a delivery cohort was claimed, delivered, released |
 | `delegation.message_queued` | your message was queued for a waiting step |
 | `memory.written`, `memory.proposed`, `memory.removed` | you wrote, kept or changed a rule (the whole `entry`); an agent proposed one (recorded in its task's activity); a rule was forgotten or a proposal dismissed, or its project removed |
+| `feedback.recorded`, `feedback.removed` | an entry was written, drafted, changed, opened or failed (the whole `entry`; an agent's new report is recorded in its task's activity); an entry was dismissed |
 | `schedule.written`, `schedule.removed`, `schedule.fired` | a schedule was written, removed, fired (with its run) |
 | `watch_suggestion.recorded`, `watch_suggestion.accepted`, `watch_suggestion.dismissed`, `watch_suggestion.removed` | a watch was suggested (the whole `suggestion`; an agent's is recorded in its task's activity); you accepted it (with the `scheduleId` it became) or dismissed it; an open one was dropped with its integration, or any with its project |
 | `schedule.read` | a watch's read finished with `report_read`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
@@ -1050,6 +1060,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
 | `pull_request.close` | replay_safe | `task:<id>` | `pull_request.record_closed`; queued by `settleTask` only on a cancel, with `numbers`, the task's open pull request and its open stacked ones; `gh pr close <n> --comment …` for each, the branch kept; a failed close is reported, never thrown |
 | `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
+| `feedback.draft` | replay_safe | `feedback:<id>` | `feedback.record_draft`, after one quick call rewrites the note without anything private (`feedback/draft.ts`); `feedback.record_failure` when no usable draft comes back |
+| `feedback.file` | process_bound | `feedback:<id>` | `feedback.record_filed`, after `gh issue create --repo shinsa-dev/shinsa` (`feedback/file.ts`); `feedback.record_failure` with what `gh` said; never retried, and one a restart cut short is failed on start |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |
@@ -1096,6 +1108,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `wait_for` | ✓ | | | ✓ | | | |
 | `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `remember` | ✓ | | ✓ | ✓ | ✓ | | |
+| `report_feedback` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `delegate_task`, `delegation_status`, `delegation_cancel`, `delegation_answer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | `create_task` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `split_task` | ✓ | | | | | | |
@@ -1351,6 +1364,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | Projects, keys, handles | `packages/core/src/domain/projects.ts` |
 | Delegations, accounts, schedules, pull request watch, settings | `packages/core/src/domain/{delegations,accounts,schedules,pull-requests,settings}.ts` |
 | Memory: the rules, their limits, what agents are told | `packages/core/src/domain/memory.ts`, `decide/memory.ts`, `state/memory.ts`, `prompts/memory.ts`; `apps/web/src/lib/memory.ts`, `components/settings/memory.tsx` |
+| Feedback: entries, the privacy check, drafting and filing | `packages/core/src/domain/feedback.ts`, `decide/feedback.ts`, `state/feedback.ts`; `apps/engine/src/feedback/`, `surface/feedback.ts`; `apps/web/src/lib/feedback.ts`, `components/feedback/` |
 | On your behalf record | `packages/core/src/domain/on-behalf.ts`, `decide/on-behalf.ts`, `state/on-behalf.ts` |
 | Plan document, reports, findings, `PROTOCOL_LIMITS` | `packages/core/src/report/` |
 | Commands and the parser | `packages/core/src/commands/` |
