@@ -2569,10 +2569,11 @@ Only these, and they win over anything below:
       a file you open, ⌘P's top match as you type and a search match you hover.
     - **Keep it, then refresh it.** Code reads are cached by commit (32) and, once read, a read shows its last
       answer at once while a newer version (a task update, a moved head) loads, the way the Files tree and the
-      diff already held. Every cache is bounded: the code reads keep the last 300 (`CODE_READ_LIMIT`), finished
+      diff already held. Every cache is bounded: the code reads keep the last 300 (`CODE_READ_LIMIT`), only the newest version of
+      each and at most 16 MB of answers (`CODE_READ_BUDGET`), finished
       searches 20 (`CODE_SEARCH_LIMIT`), evidence texts 32 (`EVIDENCE_TEXT_LIMIT`), the review's snippets read
       ahead 8 per task (`SNIPPET_PREFETCH_LIMIT`), the socket's transcripts every run a chat follows plus the 24
-      read last (`TRANSCRIPT_CACHE_LIMIT`).
+      read last (`TRANSCRIPT_CACHE_LIMIT`) while they hold 10,000 entries in all (`TRANSCRIPT_ENTRY_LIMIT`).
     - **A wait shows only after 300ms.** For what could not be foreseen (a file nothing pointed at, a search
       never run, the first state after a reload, a sign-in), the place stays empty for 300ms
       (`LOADING_DELAY_MS`, `useDelayed`) and only then shows the spinner and its line (`LoadingLine`,

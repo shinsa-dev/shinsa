@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
   applySearchLine,
+  CODE_READ_BUDGET,
   CODE_READ_LIMIT,
   CODE_SEARCH_LIMIT,
   holdLoaded,
@@ -9,6 +10,7 @@ import {
   requestTaskRefs,
   resolveCodeUrl,
   resolveRawUrl,
+  resolveReadSize,
   resolveReadVersion,
   resolveRefsVersion,
   resolveSearchUrl,
@@ -72,6 +74,13 @@ describe('versions', () => {
     const task = createTask({ id: 't', updatedAt: 42 });
     expect(resolveReadVersion(task, SHA)).toBe('');
     expect(resolveReadVersion(task, 'working')).toBe('42');
+  });
+});
+
+describe('resolveReadSize', () => {
+  it('counts the characters of every string and key, and a little for every other value', () => {
+    expect(resolveReadSize('abc')).toBe(3);
+    expect(resolveReadSize({ path: 'ab', lines: [1, null, true] })).toBe(4 + 2 + 5 + 24);
   });
 });
 
@@ -143,6 +152,46 @@ describe('useCodeRead', () => {
     expect(fetch).toHaveBeenCalledTimes(CODE_READ_LIMIT + 1);
     await requestTaskRefs(createTask({ id: 'lru-0' }));
     expect(fetch).toHaveBeenCalledTimes(CODE_READ_LIMIT + 2);
+  });
+
+  it('keeps only the newest version of a read once it answers', async () => {
+    const fetch = serve((url) => Response.json({ url }));
+    const task = createTask({ id: 'versioned', stage: 'building' });
+    await requestTaskRefs(task);
+    await requestTaskRefs({ ...task, stage: 'awaiting_review' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await requestTaskRefs({ ...task, stage: 'awaiting_review' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await requestTaskRefs(task);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('drops an older version that answers after a newer one', async () => {
+    const { answer } = deferred();
+    const url = '/api/tasks/late/blob?ref=working';
+    const older = renderHook(() => useCodeRead(url, '1'));
+    const newer = renderHook(() => useCodeRead(url, '2'));
+    act(() => answer(`${url}&v=2`, Response.json({ content: 'two' })));
+    await waitFor(() => expect(newer.result.current).toEqual({ status: 'ready', value: { content: 'two' } }));
+    act(() => answer(`${url}&v=1`, Response.json({ content: 'one' })));
+    await waitFor(() => expect(older.result.current).toEqual({ status: 'ready', value: { content: 'one' } }));
+    const next = renderHook(() => useCodeRead(url, '3'));
+    expect(next.result.current).toEqual({ status: 'ready', value: { content: 'two' } });
+  });
+
+  it('forgets the reads used longest ago once their answers pass the byte budget', async () => {
+    const half = 'x'.repeat(CODE_READ_BUDGET / 2);
+    const fetch = serve(() => Response.json({ content: half }));
+    const first = renderHook(() => useCodeRead('/api/tasks/budget/blob?path=a'));
+    await waitFor(() => expect(first.result.current.status).toBe('ready'));
+    const second = renderHook(() => useCodeRead('/api/tasks/budget/blob?path=b'));
+    await waitFor(() => expect(second.result.current.status).toBe('ready'));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    renderHook(() => useCodeRead('/api/tasks/budget/blob?path=b'));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const again = renderHook(() => useCodeRead('/api/tasks/budget/blob?path=a'));
+    expect(again.result.current).toEqual({ status: 'loading' });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
   });
 
   it('shows loading for another read and ignores the first one answering late', async () => {

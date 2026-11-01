@@ -749,9 +749,11 @@ the steps" on the progress track, and an update's toast.
 - **Stale while revalidate.** A read whose version moved (a working-copy read after a task update, the refs after
   a push) shows its last answer at once and updates in place; a search keeps the last results while the next one
   runs.
-- **Bounded.** The code reads' cache is least recently used, not first in, at 300 reads (`CODE_READ_LIMIT`), the
+- **Bounded.** The code reads' cache is least recently used, not first in, at 300 reads (`CODE_READ_LIMIT`), keeps
+  only the newest version of each once it answers and at most 16 MB of answers (`CODE_READ_BUDGET`), the
   finished searches 20, the evidence texts 32. The socket (`lib/connection/socket.ts`) keeps every transcript a chat
-  follows and the 24 others read or let go of last (`TRANSCRIPT_CACHE_LIMIT`), so the two read per hovered task no
+  follows and the 24 others read or let go of last (`TRANSCRIPT_CACHE_LIMIT`) while they hold 10,000 entries
+  (`TRANSCRIPT_ENTRY_LIMIT`), so the two read per hovered task no
   longer pile up for the page's life; a hidden kept chat lets go of its run, which counts as a read, so it is the
   last to be dropped.
 - **A wait never flashes.** Every remaining wait draws nothing for 300 ms (`useDelayed`), then its spinner.

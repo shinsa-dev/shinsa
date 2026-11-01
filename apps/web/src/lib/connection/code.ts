@@ -39,11 +39,19 @@ const IDLE = { status: 'idle' } as const;
 
 const LOADING = { status: 'loading' } as const;
 
+export const CODE_READ_BUDGET = 16 * 1024 * 1024;
+
 const reads = new Map<string, Promise<unknown>>();
 
 const settled = new Map<string, Loaded<unknown>>();
 
+const sizes = new Map<string, number>();
+
 const latest = new Map<string, string>();
+
+const newest = new Map<string, string>();
+
+let settledSize = 0;
 
 function touch<V>(map: Map<string, V>, key: string, value: V, limit = CODE_READ_LIMIT) {
   map.delete(key);
@@ -54,6 +62,49 @@ function touch<V>(map: Map<string, V>, key: string, value: V, limit = CODE_READ_
   return oldest;
 }
 
+export function resolveReadSize(value: unknown): number {
+  let size = 0;
+  const pending: unknown[] = [value];
+  while (pending.length > 0) {
+    const next = pending.pop();
+    if (typeof next === 'string') size += next.length;
+    else if (Array.isArray(next)) pending.push(...next);
+    else if (next !== null && typeof next === 'object')
+      for (const [key, inner] of Object.entries(next)) {
+        size += key.length;
+        pending.push(inner);
+      }
+    else size += 8;
+  }
+  return size;
+}
+
+function removeRead(key: string) {
+  reads.delete(key);
+  settled.delete(key);
+  settledSize -= sizes.get(key) ?? 0;
+  sizes.delete(key);
+}
+
+function recordRead(url: string, key: string, value: unknown) {
+  const wanted = newest.get(url);
+  if (wanted !== undefined && wanted !== key && latest.has(url)) {
+    reads.delete(key);
+    return;
+  }
+  settled.set(key, { status: 'ready', value });
+  const size = resolveReadSize(value);
+  sizes.set(key, size);
+  settledSize += size;
+  const previous = latest.get(url);
+  if (previous !== undefined && previous !== key) removeRead(previous);
+  touch(latest, url, key);
+  for (const oldest of reads.keys()) {
+    if (settledSize <= CODE_READ_BUDGET) return;
+    if (oldest !== key) removeRead(oldest);
+  }
+}
+
 function remember<T>(url: string, key: string, create: () => Promise<T>): Promise<T> {
   const known = reads.get(key);
   if (known) {
@@ -62,12 +113,11 @@ function remember<T>(url: string, key: string, create: () => Promise<T>): Promis
   }
   const pending = create();
   const evicted = touch(reads, key, pending);
-  if (evicted !== null) settled.delete(evicted);
+  if (evicted !== null) removeRead(evicted);
+  touch(newest, url, key);
   pending.then(
     (value) => {
-      if (reads.get(key) !== pending) return;
-      settled.set(key, { status: 'ready', value });
-      touch(latest, url, key);
+      if (reads.get(key) === pending) recordRead(url, key, value);
     },
     () => {
       if (reads.get(key) === pending) reads.delete(key);

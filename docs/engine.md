@@ -2210,7 +2210,8 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
   path lists, folders and diffs in a 64 MB least-recently-used cache. Working-copy reads are `no-store`. The web keys every
   read by commit, so a task event (a chat line, a new priority) reads nothing again; it reads the refs again only when
   what pins the code changes (the stage, the branch, the worktree, a push, a phase or a fix), and the working copy
-  with each task update. The web keeps its last 300 reads (`CODE_READ_LIMIT`, least recently used first), shows
+  with each task update. The web keeps its last 300 reads (`CODE_READ_LIMIT`, least recently used first), only the newest
+  version of each once it answers, and at most 16 MB of answers (`CODE_READ_BUDGET`); it shows
   a read's last answer while a newer version of it loads, and reads most of them before they are asked for
   (`docs/design.md`, 36).
 
@@ -5167,7 +5168,8 @@ says hello counts as no desktop.
   entry follows with its own. The page appends an entry at its position, skips one it has, starts over at position 0
   and asks again from what it holds when a page would leave a gap (for a run it no longer follows it drops the page
   instead). The page keeps every run it follows and the 24 others read or let go of last
-  (`TRANSCRIPT_CACHE_LIMIT`, least recently used first out), so a run dropped is read again from 0. The server keeps the entries of every followed run
+  (`TRANSCRIPT_CACHE_LIMIT`, least recently used first out) while they hold 10,000 entries in all
+  (`TRANSCRIPT_ENTRY_LIMIT`), so a run dropped is read again from 0. The server keeps the entries of every followed run
   and of the eight runs read last in memory (`Transcripts`) and reads only the bytes appended since, so a long
   transcript is parsed once, not on every line, and every `listEntries` caller gets its own copy.
 - **Selectors.** `useShinsaSelector(select)` (`lib/connection/selectors.ts`) gives a component the part of the state it
