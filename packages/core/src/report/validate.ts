@@ -98,6 +98,7 @@ export const PROTOCOL_LIMITS = {
   watchdogProductionCheck: 400,
   disagreements: 8,
   disagreement: 280,
+  taskTitle: 60,
   goal: 300,
   minPlanPhases: 2,
   planPhases: 8,
@@ -804,7 +805,9 @@ function validatePlanDocument(input: Record<string, unknown>): Validation<PlanDo
   const questions = readPlanQuestions(reader, input.questions);
   const phases = readPlanPhases(reader, input.phases);
   const { listItems, listItem } = PROTOCOL_LIMITS;
+  const title = reader.optionalText(input.title, 'title', PROTOCOL_LIMITS.taskTitle);
   return reader.result({
+    ...(title === null ? {} : { title }),
     goal: reader.text(input.goal, 'goal', PROTOCOL_LIMITS.goal),
     phases,
     behaviour: readTextList(

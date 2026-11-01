@@ -897,6 +897,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'round.pull_request_merged':
     case 'round.updated':
     case 'round.removed':
+    case 'task.retitled':
       applyRoundEvent(state, event);
       break;
     case 'task.reshaped':

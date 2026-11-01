@@ -205,6 +205,12 @@ describe('the plan parameters propose_plan publishes', () => {
     expect(TOOL_SPECS.propose_plan.inputSchema.required).not.toContain('impact');
   });
 
+  test('a new title is optional, within the task title limit, and only for work that moved away from its title', () => {
+    expect(plan.title).toMatchObject({ type: 'string', maxLength: PROTOCOL_LIMITS.taskTitle });
+    expect(plan.title.description).toContain('Leave it out while the title still fits');
+    expect(TOOL_SPECS.propose_plan.inputSchema.required).not.toContain('title');
+  });
+
   test('each check in the plan is a label, a scoped command and its phases, within the protocol limits', () => {
     expect(plan.verification).toMatchObject({ type: 'array', maxItems: PROTOCOL_LIMITS.checks });
     expect(plan.verification.description).toContain(requirement('code.checks'));

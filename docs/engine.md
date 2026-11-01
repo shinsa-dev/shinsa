@@ -1285,6 +1285,12 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 - Approving records `plan.approved` (`approvedAt`), and your words with it `plan.answered` (`planAnswers`). The
   first phase's instruction says the plan was approved and carries your words; the round brief a fresh session gets
   names the approved version and says to follow it exactly.
+- A plan may carry a new `title` when the work moved away from the task's, such as an "Explain…" question that
+  became a change; the Agent leaves it out while the title still fits. The plan gate shows it in place of the task's
+  title. Once the plan is accepted (at the gate, with no gate, or started from the backlog: `startAfterPlan`), a
+  title that differs from the round's records `task.retitled`: the round takes it, and the task too when it is round
+  1, so a later round never renames the task. A revised plan accepted later renames it again. The handle and the
+  branch stay; pull requests opened after it carry the new title.
 
 ### The review report
 

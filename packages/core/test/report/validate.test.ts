@@ -892,6 +892,18 @@ describe('the plan parameters', () => {
     expect(bare.ok && Object.keys(bare.value.document)).not.toContain('approval');
   });
 
+  test('keeps a new title for the task only when the agent gives one, within its limit', () => {
+    const titled = validatePlanHandOver({ ...plan, title: ' Add the scroll settings page ' });
+    expect(titled.ok && titled.value.document.title).toBe('Add the scroll settings page');
+    for (const title of [undefined, '']) {
+      const untitled = validatePlanHandOver({ ...plan, title });
+      expect(untitled.ok && Object.keys(untitled.value.document)).not.toContain('title');
+    }
+    expect(errorsOf(validatePlanHandOver({ ...plan, title: 'x'.repeat(61) }))).toEqual([
+      'title is 61 characters; the limit is 60.',
+    ]);
+  });
+
   test('refuses an unknown or repeated kind of evidence and an approval that is not a flag', () => {
     const result = validatePlanHandOver({
       ...plan,

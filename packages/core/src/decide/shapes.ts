@@ -16,6 +16,7 @@ import {
   listComposedSteps,
   type PipelineStep,
   type Run,
+  resolveCurrentRound,
   resolveInquiryStep,
   resolveOperationTiming,
   resolveProposalUpgrade,
@@ -164,7 +165,16 @@ export function startOperation(decider: Decider, taskId: string, guidance: strin
   });
 }
 
+function retitleFromPlan(decider: Decider, taskId: string) {
+  const task = decider.task(taskId);
+  const title = task.plan?.document?.title;
+  const round = resolveCurrentRound(task);
+  if (!title || title === round.title) return;
+  decider.emit({ type: 'task.retitled', taskId, round: round.number, title });
+}
+
 export function startAfterPlan(decider: Decider, taskId: string, addition = '') {
+  retitleFromPlan(decider, taskId);
   if (resolveWorkStep(resolveTaskPipeline(decider.task(taskId))) === 'operate') {
     startOperation(decider, taskId, null);
     return;
