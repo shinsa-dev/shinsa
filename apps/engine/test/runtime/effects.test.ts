@@ -29,6 +29,7 @@ import {
   createTempDir,
   createTestConfig,
   git,
+  NO_PREVIEWS,
   NO_SHARES,
   overrideEnv,
   type TestRepo,
@@ -186,6 +187,7 @@ function setup(
   const briefings = createBriefings();
   const runner = new EffectRunner(stub.engine, config, runs, briefings.briefings, {
     shares: NO_SHARES,
+    previews: NO_PREVIEWS,
     resolveLogin: () => Promise.resolve(null),
     triage: (state, task, local) => resolveTriage(state, task, local, () => Promise.resolve(null)),
     ...options,
@@ -279,6 +281,27 @@ describe('routing effects', () => {
     await runner.reportExhausted({ kind: 'share.link', taskId: 't1' }, 'Turn on remote access.', 'share-key');
     expect(dispatched).toEqual([{ type: 'share.fail', taskId: 't1', detail: 'Turn on remote access.' }]);
     expect(commandIds).toEqual(['share-key:share.fail']);
+  });
+
+  test('a preview link is made by the previews, and one that could not be made is kept on its preview', async () => {
+    const linked: string[] = [];
+    const { runner, dispatched, commandIds } = setup(undefined, {
+      previews: {
+        link: (taskId, serviceId, effectContext) => {
+          linked.push(`link:${taskId}:${serviceId}:${effectContext.key}`);
+          return Promise.resolve();
+        },
+      },
+    });
+    const context = createContext();
+    await runner.apply({ kind: 'preview.link', taskId: 't1', serviceId: 'web' }, context);
+    expect(linked).toEqual([`link:t1:web:${context.key}`]);
+    const effect = { kind: 'preview.link', taskId: 't1', serviceId: 'web' } as const;
+    await runner.reportExhausted(effect, 'Turn on remote access.', 'preview-key');
+    expect(dispatched).toEqual([
+      { type: 'preview.fail', taskId: 't1', serviceId: 'web', detail: 'Turn on remote access.' },
+    ]);
+    expect(commandIds).toEqual(['preview-key:preview.fail']);
   });
 });
 
@@ -448,6 +471,7 @@ describe('triage', () => {
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
         resolveTriage(state, current, local, <T>() =>
@@ -479,6 +503,7 @@ describe('triage', () => {
     const { runs } = createRuns();
     const runner = new EffectRunner(engine, config, runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
         Promise.resolve({
@@ -519,6 +544,7 @@ describe('triage', () => {
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
         resolveTriage(state, current, local, <T>() =>
@@ -542,6 +568,7 @@ describe('triage', () => {
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
         Promise.resolve({
@@ -875,6 +902,7 @@ describe('scratch folders', () => {
     } as unknown as RunSupervisor;
     const runner = new EffectRunner(stub.engine, config, runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       triage: () => Promise.resolve(null),
     });
     await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());

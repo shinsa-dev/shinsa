@@ -41,6 +41,7 @@ import {
   resolveSuggestionKey,
   resolveSuggestionPicks,
   SERVICE_GLYPHS,
+  selectPreviewView,
   selectServicePreview,
   serializeServiceEnv,
   togglePick,
@@ -316,6 +317,9 @@ describe('a task’s previews', () => {
     const previews = listTaskPreviews(state, snapshot, task, LATER);
     expect(listUnattachedPreviews(previews, ['https://preview.dev', 'not a url'])).toEqual(previews);
     expect(listUnattachedPreviews(previews, ['http://localhost:4123/editor'])).toEqual([]);
+    expect(selectPreviewView(previews, 'http://localhost:4123/cart')?.service.id).toBe('web');
+    expect(selectPreviewView(previews, 'http://localhost:4000/')).toBeNull();
+    expect(selectPreviewView(previews, 'not a url')).toBeNull();
   });
 });
 

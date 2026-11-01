@@ -36,6 +36,40 @@ export function parseBase64Url(text: string): Bytes | null {
   return bytes;
 }
 
+const BASE32_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';
+
+export function serializeBase32(bytes: Bytes) {
+  let text = '';
+  let buffer = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      text += BASE32_ALPHABET[(buffer >> bits) & 31];
+    }
+  }
+  if (bits > 0) text += BASE32_ALPHABET[(buffer << (5 - bits)) & 31];
+  return text;
+}
+
+export function parseBase32(text: string): Bytes | null {
+  if (!/^[a-z2-7]*$/.test(text) || [1, 3, 6].includes(text.length % 8)) return null;
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const character of text) {
+    buffer = ((buffer << 5) | BASE32_ALPHABET.indexOf(character)) & 0xfff;
+    bits += 5;
+    if (bits < 8) continue;
+    bits -= 8;
+    bytes.push((buffer >> bits) & 255);
+  }
+  if ((buffer & ((1 << bits) - 1)) !== 0) return null;
+  return Uint8Array.from(bytes);
+}
+
 export function serializeHex(bytes: Uint8Array) {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }

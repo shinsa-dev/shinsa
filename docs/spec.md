@@ -408,6 +408,11 @@ nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is
 a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
 cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
 (`docs/engine.md` → Sharing a task).
+Share preview, on a task's running service with a preview URL, does the same for the dev server itself: a link,
+`<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's tunnel, hot reload
+included, each preview its own origin on a domain apart from shinsa.dev. It has the same time limits, ends with the
+task, says when the service is stopped or the machine offline, and is only yours to share; unlike a task's link it is
+not sealed end to end, since a browser loads it as plain pages (`docs/engine.md` → Sharing a preview).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
 that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice

@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ServerWebSocket } from 'bun';
+import { isPreviewHost, PREVIEW_COOKIE, respondPreview } from '../apps/cloud/src/previews.ts';
+import type { CloudWorld } from '../apps/cloud/src/world.ts';
 import { Transcripts } from '../apps/engine/src/agents/index.ts';
 import { ProviderRegistry } from '../apps/engine/src/agents/providers/index.ts';
 import { createQuickCalls } from '../apps/engine/src/agents/quick/index.ts';
@@ -10,11 +12,13 @@ import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
+import { Previews } from '../apps/engine/src/remote/previews.ts';
 import { ShareClock } from '../apps/engine/src/remote/share-clock.ts';
 import { type ShareGitHub, Shares } from '../apps/engine/src/remote/shares.ts';
 import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
+import { Terminals } from '../apps/engine/src/terminals/index.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,
@@ -22,7 +26,10 @@ import {
   createSettings,
   type InviteAcceptResponse,
   type InviteCreateResponse,
+  isTaskSettled,
   type NativeSignInTokenResponse,
+  PREVIEW_KEY_HEADER,
+  parsePreviewHost,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
   REMOTE_NATIVE_CLIENT,
@@ -32,6 +39,7 @@ import {
   type RemoteUser,
   type Repo,
   resolveKeyFingerprint,
+  resolvePreviewTunnelPath,
   SHARE_CHANNEL_PATH,
   SHARE_ID_BYTES,
   SHARE_KEY_BYTES,
@@ -46,6 +54,7 @@ const ROOT = resolve(import.meta.dirname, '..');
 const PORT = Number(Bun.env.PORT ?? 5195);
 const HOST = '127.0.0.1';
 const ORIGIN = `http://${HOST}:${PORT}`;
+const PREVIEW_ZONE = `http://localhost:${PORT}`;
 const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-remote-preview-${PORT}`);
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
@@ -85,6 +94,20 @@ interface PreviewShare {
   handle: string;
   port: number;
 }
+
+interface ServicePreview {
+  url: string;
+  handle: string;
+  port: number;
+}
+
+interface DemoService {
+  terminals: Terminals;
+  serviceId: string;
+  taskId: string;
+}
+
+const DEMO_COMMAND = `bun ${join(ROOT, 'scripts/remote-preview-demo.ts')}`;
 
 const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
 
@@ -143,6 +166,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     SHINSA_DATA_DIR: dataDir,
     SHINSA_PORT: '0',
     SHINSA_REMOTE_ORIGIN: ORIGIN,
+    SHINSA_PREVIEW_ORIGIN: PREVIEW_ZONE,
     SHINSA_WEB_DIR: LOCAL_WEB,
   });
   for (const dir of [config.worktreesDir, config.evidenceDir, config.transcriptsDir])
@@ -163,11 +187,18 @@ async function startMachine(id: string, name: string, dataDir: string) {
     openUrl: () => Promise.resolve(),
   });
   const evidence = new EvidenceStore(config.evidenceDir);
+  const terminals = new Terminals({ dataDir, home: config.userHome, version: 'preview' });
   const shares = new Shares({
     engine,
     remote,
     evidence,
     github: createPreviewGitHub(engine),
+  });
+  const previews = new Previews({
+    engine,
+    remote,
+    services: terminals,
+    origin: config.previewOrigin,
   });
   const http = startServer({
     engine,
@@ -190,9 +221,12 @@ async function startMachine(id: string, name: string, dataDir: string) {
     remote,
     place: PLACE,
     shares,
+    previews,
+    terminals,
   });
   engine.onEffect(async (effect, context) => {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
+    if (effect.kind === 'preview.link') await previews.link(effect.taskId, effect.serviceId, context);
   });
   engine.start();
   new ShareClock(engine).start();
@@ -205,7 +239,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     connectKey,
     publicKey: key.publicKey,
   };
-  return { machine, engine, evidence };
+  return { machine, engine, evidence, terminals };
 }
 
 async function seedLaptop(engine: Engine, dataDir: string) {
@@ -343,6 +377,116 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
   return shares.filter((share): share is PreviewShare => Boolean(share));
 }
 
+async function createServicePreview(
+  studio: Awaited<ReturnType<typeof startMachine>>
+): Promise<{ preview: ServicePreview; demo: DemoService } | null> {
+  const { engine, terminals } = studio;
+  const task = Object.values(engine.state.tasks).find(
+    (entry) => entry.repoId && entry.projectId && entry.worktreePath && !isTaskSettled(entry)
+  );
+  const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
+  if (!(task?.projectId && repo)) return null;
+  const service = terminals.addService(task.projectId, {
+    name: 'web',
+    cwd: repo.path,
+    command: DEMO_COMMAND,
+    env: {},
+    previewUrl: 'http://localhost:{port}/',
+    portVariable: 'PORT',
+  });
+  const demo: DemoService = { terminals, serviceId: service.id, taskId: task.id };
+  startDemoService(demo);
+  await engine.dispatch({ type: 'preview.share', taskId: task.id, serviceId: service.id, limit: 'none' });
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const preview = engine.state.tasks[task.id]?.previews?.find((entry) => entry.serviceId === service.id);
+    if (preview?.url)
+      return {
+        preview: { url: preview.url, handle: task.handle ?? task.id, port: studio.machine.port },
+        demo,
+      };
+    if (preview?.failure) throw new Error(`Sharing the demo preview failed: ${preview.failure}`);
+    await Bun.sleep(100);
+  }
+  throw new Error('Sharing the demo preview did not finish.');
+}
+
+function startDemoService(demo: DemoService) {
+  demo.terminals.startService(demo.serviceId, { cwd: ROOT, place: 'worktree', taskId: demo.taskId });
+}
+
+function createPreviewWorld(machines: Machine[]): CloudWorld {
+  return {
+    store: {
+      selectInstance: (id: string) =>
+        Promise.resolve(
+          machines.some((machine) => machine.id === id) ? { online: 1, last_seen_at: Date.now() } : null
+        ),
+    },
+    fetch: (target: string, init?: RequestInit) => {
+      const url = new URL(target);
+      const machine = machines.find((entry) => url.host === `t-${entry.id}.shinsa.dev`);
+      if (!machine) return Promise.reject(new Error('No such tunnel.'));
+      const headers = new Headers(init?.headers);
+      headers.set('cf-connecting-ip', '127.0.0.1');
+      return fetch(`http://127.0.0.1:${machine.port}${url.pathname}${url.search}`, { ...init, headers });
+    },
+    now: Date.now,
+    config: { previewOrigin: PREVIEW_ZONE },
+  } as unknown as CloudWorld;
+}
+
+function upgradePreview(request: Request, url: URL, machines: Machine[], server: Bun.Server<TunnelData>) {
+  const address = parsePreviewHost(url.host, PREVIEW_ZONE);
+  const machine = machines.find((entry) => entry.id === address?.instanceId);
+  const key = readPreviewCookie(request);
+  if (!(address && machine && key)) return new Response('Not shared', { status: 404 });
+  const path = `${resolvePreviewTunnelPath(address.previewId, url.pathname)}${url.search}`;
+  const data: TunnelData = {
+    machine,
+    path,
+    upstream: null,
+    pending: [],
+    headers: { [PREVIEW_KEY_HEADER]: key },
+  };
+  if (server.upgrade(request, { data })) return undefined;
+  return new Response('Upgrade failed', { status: 400 });
+}
+
+async function respondEnroll(machine: Machine, url: URL) {
+  await machine.remote.createLink();
+  const { link } = machine.remote.snapshot();
+  const target = link?.url ?? REMOTE_PATHS.app;
+  return Response.redirect(url.searchParams.has('on') ? target.replace('#', '?on=machine#') : target, 302);
+}
+
+const DEMO_TOGGLE = /^\/__preview\/demo\/(start|stop)$/;
+
+async function toggleDemoService(demo: DemoService | null, url: URL) {
+  if (demo && url.pathname.endsWith('/start')) startDemoService(demo);
+  if (demo && url.pathname.endsWith('/stop')) await demo.terminals.stopService(demo.serviceId, demo.taskId);
+  return Response.redirect(`${ORIGIN}/__preview`, 302);
+}
+
+function respondPreviewHost(
+  request: Request,
+  url: URL,
+  machines: Machine[],
+  world: CloudWorld,
+  server: Bun.Server<TunnelData>
+) {
+  if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
+    return upgradePreview(request, url, machines, server);
+  return respondPreview(request, url, world);
+}
+
+function readPreviewCookie(request: Request) {
+  for (const part of (request.headers.get('cookie') ?? '').split(';')) {
+    const [name, ...rest] = part.trim().split('=');
+    if (name === PREVIEW_COOKIE) return rest.join('=');
+  }
+  return null;
+}
+
 function respondShareConnect(match: RegExpExecArray, machines: Machine[]) {
   const machine = machines.find((entry) => entry.id === match[1]);
   if (!machine)
@@ -367,8 +511,23 @@ function respondStatic(pathname: string) {
   });
 }
 
-function respondIndex(machines: Machine[], shares: PreviewShare[]) {
+function respondIndex(machines: Machine[], shares: PreviewShare[], preview: ServicePreview | null) {
   const links = [
+    ...(preview
+      ? [
+          [
+            `${preview.handle} on Studio's own app, no sign-in: its Services, Share preview and Stop sharing`,
+            `http://${HOST}:${preview.port}/tasks/${preview.handle}`,
+          ],
+          [
+            `The shared preview of ${preview.handle}'s web service, with live updates over a WebSocket`,
+            preview.url,
+          ],
+          ['Stop the web service (the preview then says it is not running)', '/__preview/demo/stop'],
+          ['Start the web service again', '/__preview/demo/start'],
+          ['A preview link that no longer works', `http://${'a'.repeat(32)}.localhost:${PORT}/`],
+        ]
+      : []),
     ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
     [
       'Sign in as the iPhone app does (answers shinsa://signed-in?code=preview, which the token path takes)',
@@ -511,12 +670,13 @@ interface TunnelData {
   path: string;
   upstream: WebSocket | null;
   pending: (string | Uint8Array)[];
+  headers?: Record<string, string>;
 }
 
 function openUpstream(socket: ServerWebSocket<TunnelData>) {
   const { machine, path } = socket.data;
   const upstream = new WebSocket(`ws://127.0.0.1:${machine.port}${path}`, {
-    headers: { origin: ORIGIN, 'cf-connecting-ip': '127.0.0.1' },
+    headers: { origin: ORIGIN, 'cf-connecting-ip': '127.0.0.1', ...socket.data.headers },
   } as unknown as string[]);
   upstream.binaryType = 'arraybuffer';
   upstream.addEventListener('open', () => {
@@ -542,23 +702,24 @@ async function main() {
   await seedLaptop(laptop.engine, laptopData);
   const machines = [studio.machine, laptop.machine];
   const shares = await createPreviewShares(studio);
+  const shared = await createServicePreview(studio);
+  const preview = shared?.preview ?? null;
+  const demo = shared?.demo ?? null;
+  const world = createPreviewWorld(machines);
   Bun.serve<TunnelData>({
     port: PORT,
     hostname: HOST,
-    async fetch(request, server) {
+    fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname === '/__preview') return respondIndex(machines, shares);
+      if (isPreviewHost(url.host, PREVIEW_ZONE))
+        return respondPreviewHost(request, url, machines, world, server);
+      if (DEMO_TOGGLE.test(url.pathname)) return toggleDemoService(demo, url);
+      if (url.pathname === '/__preview') return respondIndex(machines, shares, preview);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
-      if (enrolling) {
-        await enrolling.remote.createLink();
-        const { link } = enrolling.remote.snapshot();
-        const onMachine = url.searchParams.has('on');
-        const target = link?.url ?? REMOTE_PATHS.app;
-        return Response.redirect(onMachine ? target.replace('#', '?on=machine#') : target, 302);
-      }
+      if (enrolling) return respondEnroll(enrolling, url);
       const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share)?$/.exec(url.pathname);
       const machine = machines.find((entry) => entry.id === tunnel?.[1]);
       if (machine) {

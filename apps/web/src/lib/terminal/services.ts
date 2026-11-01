@@ -120,6 +120,12 @@ export function listUnattachedPreviews(views: ServiceView[], attached: readonly 
   return views.filter((view) => !origins.has(resolveOrigin(selectServicePreview(view) ?? '')));
 }
 
+export function selectPreviewView(views: ServiceView[], url: string) {
+  const origin = resolveOrigin(url);
+  if (!origin) return null;
+  return views.find((view) => resolveOrigin(selectServicePreview(view) ?? '') === origin) ?? null;
+}
+
 export function describeServicePreview(view: ServiceView, label: string | null = null) {
   return label ? `Open ${view.service.name} for ${label}` : `Open ${view.service.name}`;
 }

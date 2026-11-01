@@ -12,6 +12,7 @@ import {
   resolveLocalOnlyRoute,
   resolveTunnelRoute,
 } from '../remote/index.ts';
+import type { PreviewRelay, PreviewUpgrade } from '../remote/previews.ts';
 import type { ShareChannel } from '../remote/share-channel.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import {
@@ -55,7 +56,18 @@ interface ShareSocketData {
   channel: ShareChannel | null;
 }
 
-type ServerSocketData = SocketData | TerminalSocketData | RemoteSocketData | ShareSocketData;
+interface PreviewSocketData {
+  kind: 'preview';
+  upgrade: PreviewUpgrade;
+  relay: PreviewRelay | null;
+}
+
+type ServerSocketData =
+  | SocketData
+  | TerminalSocketData
+  | RemoteSocketData
+  | ShareSocketData
+  | PreviewSocketData;
 
 type ServerSocket = ServerWebSocket<ServerSocketData>;
 
@@ -71,6 +83,10 @@ function isShareSocket(socket: ServerSocket): socket is ServerWebSocket<ShareSoc
   return socket.data.kind === 'share';
 }
 
+function isPreviewSocket(socket: ServerSocket): socket is ServerWebSocket<PreviewSocketData> {
+  return socket.data.kind === 'preview';
+}
+
 export interface RemoteSocketHandlers {
   open: (socket: ServerWebSocket<RemoteSocketData>) => void;
   close: (socket: ServerWebSocket<RemoteSocketData>) => void;
@@ -81,6 +97,12 @@ export interface ShareSocketHandlers {
   open: (socket: ServerWebSocket<ShareSocketData>) => void;
   close: (socket: ServerWebSocket<ShareSocketData>) => void;
   message: (socket: ServerWebSocket<ShareSocketData>, raw: string | Buffer) => void;
+}
+
+export interface PreviewSocketHandlers {
+  open: (socket: ServerWebSocket<PreviewSocketData>) => void;
+  close: (socket: ServerWebSocket<PreviewSocketData>) => void;
+  message: (socket: ServerWebSocket<PreviewSocketData>, raw: string | Buffer) => void;
 }
 
 export function resolveServerUrl(hostname: string, port: number) {
@@ -100,25 +122,29 @@ export function createSocketHandlers(
   hub: Pick<Hub, 'open' | 'close' | 'message'>,
   terminals: TerminalSockets | null,
   remote: RemoteSocketHandlers | null = null,
-  shares: ShareSocketHandlers | null = null
+  shares: ShareSocketHandlers | null = null,
+  previews: PreviewSocketHandlers | null = null
 ) {
   return {
     open: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.open(socket);
       else if (isRemoteSocket(socket)) remote?.open(socket);
       else if (isShareSocket(socket)) shares?.open(socket);
+      else if (isPreviewSocket(socket)) previews?.open(socket);
       else hub.open(socket as ServerWebSocket<SocketData>);
     },
     close: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.close(socket);
       else if (isRemoteSocket(socket)) remote?.close(socket);
       else if (isShareSocket(socket)) shares?.close(socket);
+      else if (isPreviewSocket(socket)) previews?.close(socket);
       else hub.close(socket as ServerWebSocket<SocketData>);
     },
     message: (socket: ServerSocket, raw: string | Buffer) => {
       if (isTerminalSocket(socket)) terminals?.message(socket, raw);
       else if (isRemoteSocket(socket)) remote?.message(socket, raw);
       else if (isShareSocket(socket)) shares?.message(socket, raw);
+      else if (isPreviewSocket(socket)) previews?.message(socket, raw);
       else hub.message(socket as ServerWebSocket<SocketData>, raw);
     },
     drain: (socket: ServerSocket) => {
@@ -235,6 +261,38 @@ export function startServer(context: HttpContext) {
       }
     : null;
 
+  const { previews } = context;
+  const previewSockets: PreviewSocketHandlers | null = previews
+    ? {
+        open: (socket) => {
+          socket.data.relay = previews.openSocket(
+            {
+              send: (data) => socket.send(data),
+              close: (code, reason) => socket.close(code, reason),
+            },
+            socket.data.upgrade
+          );
+        },
+        close: (socket) => {
+          socket.data.relay?.close();
+        },
+        message: (socket, raw) => {
+          socket.data.relay?.send(typeof raw === 'string' ? raw : new Uint8Array(raw));
+        },
+      }
+    : null;
+
+  async function respondPreview(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+    if (!previews) return respondError('not_found', 'No such endpoint.', 404);
+    const answer = await previews.answer(request, url);
+    if (answer.kind === 'response') return answer.response;
+    const [protocol] = answer.upgrade.protocols;
+    const headers = protocol ? { 'Sec-WebSocket-Protocol': protocol } : undefined;
+    const data: PreviewSocketData = { kind: 'preview', upgrade: answer.upgrade, relay: null };
+    if (bunServer.upgrade(request, { data, ...(headers ? { headers } : {}) })) return undefined;
+    return new Response('Upgrade failed', { status: 400 });
+  }
+
   function respondShareChannel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
     if (!(remote && shares)) return respondError('not_found', 'No such endpoint.', 404);
     const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
@@ -253,6 +311,7 @@ export function startServer(context: HttpContext) {
       return context.schedules.handleWebhook(request, url);
     }
     if (route === 'share') return respondShareChannel(request, url, bunServer);
+    if (route === 'preview') return respondPreview(request, url, bunServer);
     if (route === 'slack' && context.slack) {
       if (config.inspect) return respondReadOnly();
       return context.slack.handleTunnel(request, url);
@@ -315,7 +374,7 @@ export function startServer(context: HttpContext) {
         return serveStatic(config.webDir, url.pathname);
       },
       websocket: {
-        ...createSocketHandlers(hub, terminalSockets, remoteSockets, shareSockets),
+        ...createSocketHandlers(hub, terminalSockets, remoteSockets, shareSockets, previewSockets),
         maxPayloadLength: MAX_BODY_BYTES,
       },
     })

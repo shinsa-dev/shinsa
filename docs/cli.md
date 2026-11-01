@@ -1920,6 +1920,39 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `--project` | text, optional | The project the service belongs to, when two have one by that name. |
 | `--task` | text, optional | Run it for this task, in its worktree: its handle (SW-142), id or exact title. |
 
+#### shinsa services share
+
+Share a task’s run of a service by a link that opens its preview from this machine.
+
+```
+shinsa services share <service> [--project <text>] --task <text> [--until <until_done|hour|day|week|none>] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `preview.share`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<service>` | text, required | The service, by its name. |
+| `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, required | The task whose run of the service it is: its handle (SW-142), id or exact title. |
+| `--until` | choice, optional | How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it or the task finishes). Left out, the shareLimit setting. |
+
+#### shinsa services unshare
+
+Stop sharing a task’s run of a service. Its link stops working.
+
+```
+shinsa services unshare <service> [--project <text>] --task <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `preview.unshare`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<service>` | text, required | The service, by its name. |
+| `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, required | The task whose run of the service it is: its handle (SW-142), id or exact title. |
+
 ### mcp
 
 #### shinsa mcp list

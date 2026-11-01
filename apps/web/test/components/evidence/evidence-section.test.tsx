@@ -6,6 +6,7 @@ import { EVIDENCE_EMPTY, EvidenceSection } from '@/components/evidence/evidence-
 import { refreshHealth } from '@/lib/connection/health.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { FakeIntersectionObserver, installIntersectionObserver } from '../../support/intersection.ts';
+import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createEvidence, createRun, createShinsaState, createTask, NOW } from '../../support/state.ts';
 import {
   createService,
@@ -378,5 +379,19 @@ describe('the task’s running services in the Evidence section', () => {
     expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).not.toContain(
       'http://localhost:4123/'
     );
+  });
+
+  it('offers Share preview beside the agent’s preview of a running service of the task', () => {
+    runWeb(4123);
+    startFakeServer();
+    pushState(createShinsaState({ tasks: [createTask({ id: 'fix' })] }));
+    renderTaskSection([
+      piece('local', { kind: 'preview', title: 'Cart', uri: 'http://localhost:4123/cart' }),
+      piece('remote', { kind: 'preview', title: 'Remote', uri: 'https://preview.dev' }),
+    ]);
+    expect(screen.getAllByRole('button', { name: 'Share preview' })).toHaveLength(1);
+    expect(screen.getByText('Cart').closest('a')?.parentElement?.querySelector('button')).toBeTruthy();
+    expect(screen.getByText('Remote').closest('a')?.parentElement?.querySelector('button')).toBeNull();
+    stopFakeServer();
   });
 });

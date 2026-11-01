@@ -8,6 +8,7 @@ import {
   createTempDir,
   createTestConfig,
   git,
+  NO_PREVIEWS,
   NO_SHARES,
   writeFiles,
 } from '../helpers/index.ts';
@@ -32,6 +33,7 @@ function setup(task: Partial<Task>, repo: Partial<ReturnType<typeof createRepo>>
   const config = createTestConfig(createTempDir());
   const runner = new EffectRunner(stub.engine, config, RUNS, BRIEFINGS, {
     shares: NO_SHARES,
+    previews: NO_PREVIEWS,
     resolveLogin: () => Promise.resolve(null),
     triage: () => Promise.resolve(null),
   });

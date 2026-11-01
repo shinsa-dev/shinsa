@@ -2,6 +2,7 @@ import { listTerminalPlaces, type ShinsaState } from '@shinsa/core';
 import type { ServicesPanelActions } from '@/components/services/panel-views.tsx';
 import type { ServiceHandlers } from '@/components/services/service-row.tsx';
 import { requestWithToast } from '@/lib/connection/commands.ts';
+import { hasEngineCommand, useEngineCommands } from '@/lib/connection/socket.ts';
 import {
   openServiceTerminal,
   requestRefinedServiceSuggestions,
@@ -16,6 +17,7 @@ import {
   stopService,
   useTerminals,
 } from '@/lib/connection/terminals.ts';
+import { isPreviewShared, openPreviewShareDialog, resolvePreviewTarget } from '@/lib/share/previews.ts';
 import {
   describeServicesAdded,
   describeServicesRemove,
@@ -26,6 +28,7 @@ import {
 
 export function useServiceActions({ state, onNavigate }: { state: ShinsaState; onNavigate?: () => void }) {
   const home = useTerminals()?.home ?? null;
+  useEngineCommands();
 
   const handlers: ServiceHandlers = {
     start: (view) => void startService(view.service.id, view.taskId),
@@ -38,6 +41,15 @@ export function useServiceActions({ state, onNavigate }: { state: ShinsaState; o
       onNavigate?.();
     },
     preview: openServicePreview,
+    share: (view) => {
+      const target = resolvePreviewTarget(view);
+      if (target) openPreviewShareDialog(target);
+    },
+    canShare: (view) => hasEngineCommand('preview.share', view.taskId),
+    sharing: (view) => {
+      const task = view.taskId ? state.tasks[view.taskId] : undefined;
+      return task ? isPreviewShared(task, view.service.id) : false;
+    },
   };
 
   const actions: ServicesPanelActions = {
