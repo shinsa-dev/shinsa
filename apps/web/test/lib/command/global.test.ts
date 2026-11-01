@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, setSystemTime } from 'bun:
 import type { ShinsaState } from '@shinsa/core';
 import { listGlobalSections } from '@/lib/command/global.ts';
 import type { Command, CommandSection } from '@/lib/command/registry.ts';
-import { isFeedbackOpen } from '@/lib/feedback.ts';
+import { isFeedbackOpen, registerFeedbackOpener } from '@/lib/feedback.ts';
 import { resolveEndOfDay } from '@/lib/format/time.ts';
 import { rememberTerminalPath } from '@/lib/terminal/tabs.ts';
 import { spyOnCommands } from '../../support/commands.ts';
@@ -70,7 +70,8 @@ describe('listGlobalSections', () => {
     ]);
   });
 
-  it('opens the feedback sheet', () => {
+  it('opens the feedback popover on the button that is shown', () => {
+    registerFeedbackOpener('header', () => true);
     const command = find(
       listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards'),
       'feedback.open'

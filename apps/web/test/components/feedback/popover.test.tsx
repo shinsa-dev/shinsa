@@ -86,6 +86,21 @@ describe('FeedbackPanel', () => {
 });
 
 describe('FeedbackButton', () => {
+  it('opens only the button that was clicked when two are mounted', async () => {
+    const state = stateWith([createFeedback({ id: 'f1' })]);
+    render(
+      <TooltipProvider>
+        <FeedbackButton state={state} actions={createActions()} />
+        <FeedbackButton state={state} variant='rail' actions={createActions()} />
+      </TooltipProvider>
+    );
+    const [bar, rail] = screen.getAllByRole('button', { name: /Feedback/ });
+    fireEvent.click(rail as HTMLElement);
+    await waitFor(() => expect(screen.getAllByLabelText('Your feedback')).toHaveLength(1));
+    expect(rail?.getAttribute('data-active')).toBe('true');
+    expect(bar?.getAttribute('aria-expanded')).not.toBe('true');
+  });
+
   it('opens the popover from the header and shows the waiting count', async () => {
     const state = stateWith([createFeedback({ id: 'f1' }), createFeedback({ id: 'f2', status: 'failed' })]);
     render(
@@ -102,7 +117,6 @@ describe('FeedbackButton', () => {
 
   it('opens an entry from the rail, closing the popover and the rail', async () => {
     const onNavigate = mock(() => {});
-    act(() => openFeedback());
     render(
       <FeedbackButton
         state={stateWith([createFeedback({ id: 'f1' })])}
@@ -112,7 +126,9 @@ describe('FeedbackButton', () => {
       />
     );
     const item = screen.getAllByRole('button').find((button) => button.textContent === 'Feedback1');
-    expect(item?.getAttribute('data-active')).toBe('true');
+    if (item) item.getClientRects = () => [new DOMRect(0, 0, 100, 24)] as unknown as DOMRectList;
+    act(() => openFeedback());
+    await waitFor(() => expect(item?.getAttribute('data-active')).toBe('true'));
     const row = await screen.findByRole('button', { name: /Open feedback/ });
     fireEvent.click(row);
     expect(selectOpenFeedbackEntryId()).toBe('f1');

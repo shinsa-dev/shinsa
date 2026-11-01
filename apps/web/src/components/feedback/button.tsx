@@ -3,6 +3,7 @@ import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent, PopoverTrigger } from '@shinsa/ui/components/popover';
 import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
 import { FEEDBACK_POPOVER, FeedbackPanel } from '@/components/feedback/popover.tsx';
 import { NAV_ICON_NUDGE } from '@/components/layout/nav-button.tsx';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
@@ -16,6 +17,7 @@ import {
   FEEDBACK_ICON,
   type FeedbackActions,
   openFeedbackEntry,
+  registerFeedbackOpener,
   updateFeedbackOpen,
   useFeedbackOpen,
 } from '@/lib/feedback.ts';
@@ -33,12 +35,19 @@ export function FeedbackButton({
   actions?: FeedbackActions;
   onNavigate?: () => void;
 }) {
-  const open = useFeedbackOpen();
+  const openerId = React.useId();
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(
+    () => registerFeedbackOpener(openerId, () => (triggerRef.current?.getClientRects().length ?? 0) > 0),
+    [openerId]
+  );
+  const open = useFeedbackOpen(openerId);
   const count = describeFeedbackCount(countFeedbackWaiting(state));
   const icon = open ? FEEDBACK_ACTIVE_ICON : FEEDBACK_ICON;
   const trigger =
     variant === 'rail' ? (
       <PopoverTrigger
+        ref={triggerRef}
         render={<button type='button' data-active={open} data-highlight-item='' className={NAV_ITEM} />}
       >
         <span className='grid size-5 shrink-0 place-items-center'>
@@ -50,6 +59,7 @@ export function FeedbackButton({
     ) : (
       <Hint label={FEEDBACK_HINT}>
         <PopoverTrigger
+          ref={triggerRef}
           render={
             <Button
               variant='secondary'
@@ -65,13 +75,13 @@ export function FeedbackButton({
       </Hint>
     );
   return (
-    <Popover open={open} onOpenChange={updateFeedbackOpen}>
+    <Popover open={open} onOpenChange={(next) => updateFeedbackOpen(openerId, next)}>
       {trigger}
       <PopoverContent
         align={variant === 'rail' ? 'start' : 'end'}
         side={variant === 'rail' ? 'right' : 'bottom'}
         sideOffset={6}
-        collisionAvoidance={{ fallbackAxisSide: 'none' }}
+        collisionAvoidance={variant === 'rail' ? undefined : { fallbackAxisSide: 'none' }}
         className={FEEDBACK_POPOVER}
       >
         <FeedbackPanel

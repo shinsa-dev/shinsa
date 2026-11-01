@@ -30,31 +30,42 @@ export const FEEDBACK_AGENTS_NOTE =
   'Agents report what gets in their way here too. Nothing they report opens until you open it.';
 
 interface FeedbackView {
-  open: boolean;
+  openerId: string | null;
   selectedId: string | null;
 }
 
-const CLOSED: FeedbackView = { open: false, selectedId: null };
+const CLOSED: FeedbackView = { openerId: null, selectedId: null };
 
 let view: FeedbackView = CLOSED;
 const listeners = new Set<() => void>();
+const openers = new Map<string, () => boolean>();
 
 function replaceView(next: FeedbackView) {
-  if (next.open === view.open && next.selectedId === view.selectedId) return;
+  if (next.openerId === view.openerId && next.selectedId === view.selectedId) return;
   view = next;
   for (const listener of listeners) listener();
 }
 
-export function updateFeedbackOpen(open: boolean) {
-  replaceView({ ...view, open });
+export function registerFeedbackOpener(openerId: string, isShown: () => boolean) {
+  openers.set(openerId, isShown);
+  return () => {
+    openers.delete(openerId);
+    if (view.openerId === openerId) replaceView({ ...view, openerId: null });
+  };
+}
+
+export function updateFeedbackOpen(openerId: string, open: boolean) {
+  if (open) replaceView({ ...view, openerId });
+  else if (view.openerId === openerId) replaceView({ ...view, openerId: null });
 }
 
 export function openFeedback() {
-  updateFeedbackOpen(true);
+  const shown = [...openers].find(([, isShown]) => isShown());
+  if (shown) replaceView({ ...view, openerId: shown[0] });
 }
 
 export function openFeedbackEntry(feedbackId: string) {
-  replaceView({ open: false, selectedId: feedbackId });
+  replaceView({ openerId: null, selectedId: feedbackId });
 }
 
 export function closeFeedbackEntry() {
@@ -62,7 +73,7 @@ export function closeFeedbackEntry() {
 }
 
 export function isFeedbackOpen() {
-  return view.open;
+  return view.openerId !== null;
 }
 
 export function selectOpenFeedbackEntryId() {
@@ -71,6 +82,7 @@ export function selectOpenFeedbackEntryId() {
 
 export function resetFeedbackOpen() {
   view = CLOSED;
+  openers.clear();
 }
 
 function subscribe(listener: () => void) {
@@ -80,8 +92,9 @@ function subscribe(listener: () => void) {
   };
 }
 
-export function useFeedbackOpen() {
-  return React.useSyncExternalStore(subscribe, isFeedbackOpen, isFeedbackOpen);
+export function useFeedbackOpen(openerId: string) {
+  const isOpen = () => view.openerId === openerId;
+  return React.useSyncExternalStore(subscribe, isOpen, isOpen);
 }
 
 export function useOpenFeedbackEntryId() {

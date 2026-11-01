@@ -17,6 +17,7 @@ import {
   needsRedraft,
   openFeedback,
   openFeedbackEntry,
+  registerFeedbackOpener,
   resolveFeedbackLeaks,
   resolveFeedbackRowIcon,
   resolveFeedbackSectionId,
@@ -158,21 +159,38 @@ describe('validation', () => {
   });
 });
 
-describe('the dialog’s open state', () => {
-  it('opens from anywhere and every reader sees it', () => {
-    const { result } = renderHook(() => useFeedbackOpen());
-    expect(result.current).toBe(false);
-    act(() => openFeedback());
-    expect(result.current).toBe(true);
-    act(() => openFeedback());
+describe('the popover’s open state', () => {
+  it('opens only the button that was clicked, and closes only its own', () => {
+    const first = renderHook(() => useFeedbackOpen('a'));
+    const second = renderHook(() => useFeedbackOpen('b'));
+    act(() => updateFeedbackOpen('a', true));
+    expect([first.result.current, second.result.current]).toEqual([true, false]);
+    act(() => updateFeedbackOpen('b', false));
     expect(isFeedbackOpen()).toBe(true);
-    act(() => updateFeedbackOpen(false));
-    expect(result.current).toBe(false);
+    act(() => updateFeedbackOpen('b', true));
+    expect([first.result.current, second.result.current]).toEqual([false, true]);
+    act(() => updateFeedbackOpen('b', false));
+    expect(isFeedbackOpen()).toBe(false);
+  });
+
+  it('opens from the command menu on the first button that is shown, and on none when none is', () => {
+    const shown = { a: false, b: false };
+    const removeA = registerFeedbackOpener('a', () => shown.a);
+    registerFeedbackOpener('b', () => shown.b);
+    act(() => openFeedback());
+    expect(isFeedbackOpen()).toBe(false);
+    shown.b = true;
+    act(() => openFeedback());
+    const { result } = renderHook(() => useFeedbackOpen('b'));
+    expect(result.current).toBe(true);
+    act(() => updateFeedbackOpen('a', true));
+    act(() => removeA());
+    expect(isFeedbackOpen()).toBe(false);
   });
 
   it('opens one entry in its dialog and closes the popover, then closes it again', () => {
     const { result } = renderHook(() => useOpenFeedbackEntryId());
-    act(() => openFeedback());
+    act(() => updateFeedbackOpen('a', true));
     act(() => openFeedbackEntry('f1'));
     expect(result.current).toBe('f1');
     expect(isFeedbackOpen()).toBe(false);
