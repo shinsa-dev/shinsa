@@ -1243,7 +1243,10 @@ Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/
 server, `parseTerminalClientFrame`). A terminal (`TerminalInfo`) is in a project, at a place (`TerminalPlace`:
 `repository`, `folder` or `worktree`, `listTerminalPlaces`), and `running`, `exited` or `stopped`; a service's
 terminal keeps the port its run was given (`port`), which `resolveServiceUrl` puts in the service's `previewUrl`
-for `ServiceView.url`.
+for `ServiceView.url`, and while remote access is on a running service terminal carries its private address
+(`remoteUrl`, `https://<label>.shinsa.page/…`, null otherwise), which `ServiceView.remoteUrl` carries on. Opening it
+takes an access token (`createPreviewAccessToken`: instance, preview id, account and expiry, an HMAC with the connect
+key) that the Worker passes on as `x-shinsa-preview-access` (`docs/engine.md` → Private service addresses).
 
 **What an engine speaks** (`packages/core/src/protocol/engine.ts`). The hosted web app is built from `main` and can
 be newer than the engine it reaches, so every engine tells each page what it speaks (`resolveEngineInfo`) and the page
