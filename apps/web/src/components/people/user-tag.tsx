@@ -18,16 +18,15 @@ const USER_TAG =
 
 const USER_AVATAR = {
   row: 'size-6.5 text-2xs',
-  inline: 'relative -top-px me-1 inline-block size-3.5 align-middle',
+  inline: 'relative -top-px ms-0.5 me-1 inline-grid size-3.5 align-middle text-2xs leading-none',
 } as const;
 
 function UserAvatar({ user, size }: { user: UserProfile; size: keyof typeof USER_AVATAR }) {
   const className = cn('shrink-0 rounded-full bg-bg-a2', USER_AVATAR[size]);
   if (user.avatarUrl)
     return <img src={user.avatarUrl} alt='' referrerPolicy='no-referrer' className={className} />;
-  if (size === 'inline') return <span aria-hidden className={className} />;
   return (
-    <span aria-hidden className={cn('grid place-items-center text-fg-2', className)}>
+    <span aria-hidden className={cn('grid place-items-center font-medium text-fg-2', className)}>
       {resolveUserInitial(user)}
     </span>
   );

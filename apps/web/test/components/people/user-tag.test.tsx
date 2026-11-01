@@ -45,7 +45,10 @@ describe('the user tag', () => {
 
   it('falls back to the login with an initial when GitHub has no name or photo', async () => {
     render(<UserTag user={{ login: 'mona', name: null, avatarUrl: null }} />);
-    const card = await openCard(screen.getByText('mona'));
+    const name = screen.getByText('mona');
+    expect(name.closest('a')?.querySelector('[aria-hidden]')?.textContent).toBe('M');
+    expect(name.closest('a')?.querySelector('img')).toBeNull();
+    const card = await openCard(name);
     expect(card.textContent).not.toContain('@');
     expect(card.textContent).toContain('M');
     expect(card.querySelector('img')).toBeNull();

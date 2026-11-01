@@ -48,7 +48,10 @@ describe('the owner on a shared task page', () => {
     expect(readAskedLine()).toContain('Kai ·');
     expect(readAskedLine()).not.toContain('@');
     expect(readAskedLine()).not.toContain('You');
-    expect(document.body.textContent).toContain('Shared by Kai from Studio');
+    expect(document.body.textContent).toContain('Shared by KKai from Studio');
+    expect(screen.getByText('Shared by', { exact: false }).querySelector('[aria-hidden]')?.textContent).toBe(
+      'K'
+    );
     const tags = screen.getAllByText('Kai').map((name) => name.closest('a'));
     expect(tags.map((tag) => tag?.getAttribute('href'))).toEqual([
       'https://github.com/kai',
