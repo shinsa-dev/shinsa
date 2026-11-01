@@ -1254,7 +1254,7 @@ describe('handing off a task', () => {
     await engine.dispatch({ type: 'handoff.remove', taskId });
     await engine.dispatch({ type: 'task.hand_off', taskId });
     await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...OWNER } });
-    expect(await claimAs()).toContain('Someone else already took this task over');
+    expect(await claimAs()).toContain('Someone else already opened this hand-off link');
     expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('mona');
     warn.mockRestore();
   });

@@ -3084,12 +3084,14 @@ projection and channel will serve teams.
 ## Handing off a task
 
 A task you cannot work on any more can be handed to someone else by a link, `https://app.shinsa.dev/claim#<instance>.<machine
-key>.<secret>.<hand-off token>`. The first GitHub account to open it takes the task over: from then on it reaches that
+key>.<secret>.<hand-off token>`. The first GitHub account to open it works on the task: from then on it reaches that
 one task on your machine through remote access, as you do, from its own dashboard on app.shinsa.dev, until you take it
-back. The task keeps running on your machine, in its worktree, sessions and accounts; nothing moves. Sharing (above) is
+back. The task stays yours and keeps running on your machine, in its worktree, sessions and accounts; nothing moves,
+you see and do everything on it as before, and both pages say so (Share task, and the claim page's "The task stays
+theirs"). Sharing (above) is
 for watching; a hand-off is for steering. Teams are another matter (LOC-78).
 
-- **Handing off is yours alone.** `task.hand_off` and `handoff.remove` (Hand off in Share task, `shinsa tasks
+- **Handing off is yours alone.** `task.hand_off` and `handoff.remove` (Hand off in Share task's Share as, `shinsa tasks
   hand-off|hand-off-remove`) are human-only: their surface specs are `humanOnly`, and core refuses them on your behalf
   (`human_only`). An automation's home and a finished task are refused (`handoff_refused`). `task.hand_off` emits
   `task.handed_off` (`TaskHandoff`: `at`, `url` null, `guest` null) and queues `handoff.link`; again on a failed link it
@@ -3101,12 +3103,13 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   `remote.json` (`handoffs`), and records the URL with `handoff.record`. It is the enroll link's fragment with a
   hand-off token in place of the invite token; app.shinsa.dev never learns which task it is for. One link a task.
 - **The claim** (`routes/remote/claim.tsx`, `lib/remote/enroll.ts`). The page keeps the fragment through GitHub
-  sign-in, says what taking over gives, and claims only when Take over this task is pressed, so opening the link by
+  sign-in, says what working on it gives and that the task stays its owner's, and claims only when Work on this task
+  is pressed, so opening the link by
   mistake spends nothing. It sends `POST /__remote/handoffs/accept`, which answers a connect token for that account,
   makes a new device key and opens the sealed channel with the link's proof, as enrolling does. The machine finds the
   hand-off whose secret proves it (`#matchHandoff`) and, with no request to accept: dispatches `handoff.claim` with the
-  account (`TaskGuest`: id, login, name, avatar), which core refuses for a second account ("Someone else already took
-  this task over. Ask for a new link."); then adds the account as a guest at app.shinsa.dev
+  account (`TaskGuest`: id, login, name, avatar), which core refuses for a second account ("Someone else already
+  opened this hand-off link. Ask the task’s owner for a new one."); then adds the account as a guest at app.shinsa.dev
   (`/__remote/machine/guests/add`), unless it is the machine's owner or a member, who stay what they are and are never
   counted as a guest who left; adds the browser as a device with the task's id (`RemoteDevice.taskId`), turns the
   link off there and here, and answers `welcome`. The claim is recorded on the machine first, so two accounts racing
@@ -3145,11 +3148,15 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   asking to update Shinsa. Settings → Machines reads "A task handed to you by <owner> · In this dashboard · <task
   title>", with Leave; a browser that reaches only handed machines leaves Slack out of Settings, since Slack links a
   machine of its own. The task stays there once done, until you take it back or they leave.
-- **Share task** (`components/task/share-dialog.tsx`, `lib/share/handoff.ts`) has a Hand off section on an open task
-  (and on any task someone still holds) while remote access is on and the machine speaks `task.hand_off`: Hand off;
-  while the link is made, a busy button; then Copy hand-off link and Turn off link; a failure with its reason, Try
-  again and Remove; once claimed, their avatar, name, `@login` and when they took it over, with Remove, which asks
-  first and names who lost the task in its toast.
+- **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`, `lib/share/handoff.ts`): Hand off is
+  the last choice of Share as, after Status, Standard and Full access (`listShareModeItems`), on an open task (and on
+  any task someone still holds) while remote access is on and the machine speaks `task.hand_off`; the dialog opens on
+  it for a task handed off (`resolveShareModeChoice`). It is not a preset of the share: picking it sends nothing and
+  never changes a live share, and picking a preset again shows the share as before. With it, Share for goes, the
+  description says the task stays yours, and the footer has Hand off; while the link is made, a busy button; then
+  Turn off link, Copy hand-off link and Done; a failure with its reason, Remove and Try again; once claimed, their
+  avatar, name, `@login` and when they opened the link, "<name> is working on this task. It stays yours…", with
+  Remove, which asks first and names who lost the task in its toast.
 - **Taking it back.** `handoff.remove` emits `handoff.removed` and queues `handoff.revoke`, which turns the link off at
   app.shinsa.dev, forgets every device of that task and closes their channels at once, then removes the guest there
   (`/__remote/machine/guests/remove`) unless they still hold another task here, so app.shinsa.dev stops listing the

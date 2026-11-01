@@ -9,7 +9,6 @@ import {
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
 import { Field, FieldLabel } from '@shinsa/ui/components/field';
-import { Separator } from '@shinsa/ui/components/separator';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
@@ -30,16 +29,18 @@ import {
   closeShareDialog,
   closeUnshareConfirm,
   listShareLimitItems,
+  listShareModeItems,
   openUnshareConfirm,
   resolveShareLimitChoice,
+  resolveShareModeChoice,
   resolveSharePresetChoice,
   resolveShareView,
   SHARE_DESCRIPTION,
   SHARE_LIMIT_TITLE,
   SHARE_NEEDS_REMOTE,
-  SHARE_PRESET_ITEMS,
   SHARE_PRESET_TITLE,
   SHARE_TITLE,
+  type ShareMode,
   type ShareView,
   selectLiveShare,
   shareTask,
@@ -50,11 +51,11 @@ import {
   useUnshareConfirm,
 } from '@/lib/share/dialog.ts';
 import {
-  canHandOff,
   closeHandoffRemoveConfirm,
   describeHandoffClaim,
   HANDOFF_COPY,
   HANDOFF_DESCRIPTION,
+  HANDOFF_HELD_DESCRIPTION,
   HANDOFF_REMOVE,
   HANDOFF_REMOVE_DESCRIPTION,
   HANDOFF_TITLE,
@@ -108,12 +109,14 @@ function ShareLimitRow({
   );
 }
 
-function SharePresetRow({
-  preset,
+function ShareModeRow({
+  items,
+  mode,
   onChange,
 }: {
-  preset: SharePreset;
-  onChange: (preset: SharePreset) => void;
+  items: ReturnType<typeof listShareModeItems>;
+  mode: ShareMode;
+  onChange: (mode: ShareMode) => void;
 }) {
   return (
     <Field className='w-full'>
@@ -122,8 +125,8 @@ function SharePresetRow({
         label={SHARE_PRESET_TITLE}
         align='start'
         className='w-full'
-        items={SHARE_PRESET_ITEMS}
-        value={preset}
+        items={items}
+        value={mode}
         onValueChange={onChange}
       />
     </Field>
@@ -201,7 +204,7 @@ function CopyLinkButton({ url, label = 'Copy link' }: { url: string; label?: str
 function HandoffGuest({ view }: { view: Extract<HandoffView, { kind: 'claimed' }> }) {
   const handle = describeUserHandle(view.guest);
   return (
-    <div className='flex min-w-0 flex-1 items-center gap-2.5'>
+    <div className='flex w-full min-w-0 items-center gap-2.5 text-start'>
       <UserAvatar user={view.guest} />
       <div className='flex min-w-0 flex-1 flex-col'>
         <div className='flex min-w-0 items-center gap-1.5 text-xs'>
@@ -209,14 +212,25 @@ function HandoffGuest({ view }: { view: Extract<HandoffView, { kind: 'claimed' }
           {handle && <span className='shrink-0 text-fg-2'>{handle}</span>}
         </div>
         <span className='text-2xs text-fg-2'>
-          <TimeAgo at={view.at} text={(now) => formatSince('Took it over', view.at, now)} />
+          <TimeAgo at={view.at} text={(now) => formatSince('Opened the link', view.at, now)} />
         </span>
       </div>
     </div>
   );
 }
 
-function HandoffRow({ task, view }: { task: Task; view: HandoffView }) {
+function HandoffBody({ view }: { view: HandoffView }) {
+  if (view.kind === 'failed')
+    return (
+      <p role='alert' className='selectable text-destructive text-xs'>
+        {view.message}
+      </p>
+    );
+  if (view.kind === 'claimed') return <HandoffGuest view={view} />;
+  return null;
+}
+
+function HandoffActions({ task, view }: { task: Task; view: HandoffView }) {
   const [busy, setBusy] = React.useState(false);
   const handOff = async () => {
     setBusy(true);
@@ -227,70 +241,46 @@ function HandoffRow({ task, view }: { task: Task; view: HandoffView }) {
     case 'off':
     case 'linking':
       return (
-        <Button
-          variant='secondary'
-          className='self-start'
-          loading={busy || view.kind === 'linking'}
-          onClick={() => void handOff()}
-        >
+        <Button loading={busy || view.kind === 'linking'} onClick={() => void handOff()}>
           {HANDOFF_TITLE}
         </Button>
       );
     case 'failed':
       return (
         <>
-          <p role='alert' className='selectable text-destructive text-xs'>
-            {view.message}
-          </p>
-          <div className='flex gap-2'>
-            <Button variant='secondary' onClick={() => void removeHandoff(task)}>
-              {HANDOFF_REMOVE}
-            </Button>
-            <Button variant='secondary' loading={busy} onClick={() => void handOff()}>
-              Try again
-            </Button>
-          </div>
+          <Button variant='secondary' onClick={() => void removeHandoff(task)}>
+            {HANDOFF_REMOVE}
+          </Button>
+          <Button loading={busy} onClick={() => void handOff()}>
+            Try again
+          </Button>
         </>
       );
     case 'ready':
       return (
-        <div className='flex gap-2'>
-          <CopyLinkButton url={view.url} label={HANDOFF_COPY} />
+        <>
           <Button variant='secondary' onClick={() => void removeHandoff(task)}>
             Turn off link
           </Button>
-        </div>
+          <CopyLinkButton url={view.url} label={HANDOFF_COPY} />
+          <Button onClick={closeShareDialog}>Done</Button>
+        </>
       );
     case 'claimed':
       return (
-        <div className='flex min-w-0 items-center gap-3'>
-          <HandoffGuest view={view} />
+        <>
           <Button variant='secondary' onClick={() => openHandoffRemoveConfirm(task.id)}>
             {HANDOFF_REMOVE}
           </Button>
-        </div>
+          <Button onClick={closeShareDialog}>Done</Button>
+        </>
       );
   }
 }
 
-function HandoffSection({ task }: { task: Task }) {
-  const supported = useEngineCommand('task.hand_off', task.id);
-  if (!(supported && canHandOff(task))) return null;
-  const view = resolveHandoffView(task);
-  return (
-    <>
-      <Separator />
-      <section aria-label={HANDOFF_TITLE} className='flex w-full flex-col gap-2 text-start'>
-        <div className='flex flex-col gap-px'>
-          <h3 className='font-medium text-fg-4 text-sm'>{HANDOFF_TITLE}</h3>
-          <p className='text-fg-3 text-xs'>
-            {view.kind === 'claimed' ? describeHandoffClaim(view.guest) : HANDOFF_DESCRIPTION}
-          </p>
-        </div>
-        <HandoffRow task={task} view={view} />
-      </section>
-    </>
-  );
+function describeHandoffView(view: HandoffView) {
+  if (view.kind === 'claimed') return `${describeHandoffClaim(view.guest)}. ${HANDOFF_HELD_DESCRIPTION}`;
+  return HANDOFF_DESCRIPTION;
 }
 
 function ShareContent({ task }: { task: Task }) {
@@ -306,33 +296,49 @@ function ShareContent({ task }: { task: Task }) {
   }, [shared]);
   const [picked, setPicked] = React.useState<ShareLimit | null>(null);
   const limit = picked ?? live?.limit ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
-  const [pickedPreset, setPickedPreset] = React.useState<SharePreset | null>(null);
-  const preset = pickedPreset ?? resolveSharePresetChoice(task, settings);
+  const handoffSupported = useEngineCommand('task.hand_off', task.id);
+  const [pickedMode, setPickedMode] = React.useState<ShareMode | null>(null);
+  const mode = pickedMode ?? resolveShareModeChoice(task, settings, handoffSupported);
+  const preset = mode === 'handoff' ? resolveSharePresetChoice(task, settings) : mode;
+  const handing = mode === 'handoff' && view.kind !== 'unpaired';
+  const handoff = resolveHandoffView(task);
   const pickLimit = (next: ShareLimit) => {
     if (shared) void changeShareLimit(task, next);
     else setPicked(next);
   };
-  const pickPreset = (next: SharePreset) => {
-    if (shared) void changeSharePreset(task, next);
-    else setPickedPreset(next);
+  const pickMode = (next: ShareMode) => {
+    setPickedMode(next);
+    if (next !== 'handoff' && live && shared && next !== live.preset) void changeSharePreset(task, next);
   };
+  const shownMode = mode === 'handoff' || !(shared && live) ? mode : live.preset;
   return (
     <>
       <DialogHeader>
         <DialogTitle>{SHARE_TITLE}</DialogTitle>
-        <DialogDescription>{SHARE_DESCRIPTION}</DialogDescription>
+        <DialogDescription>{handing ? describeHandoffView(handoff) : SHARE_DESCRIPTION}</DialogDescription>
       </DialogHeader>
-      <ShareBody view={view} />
+      {!handing && <ShareBody view={view} />}
       {view.kind !== 'unpaired' && (
         <>
-          <SharePresetRow preset={shared && live ? live.preset : preset} onChange={pickPreset} />
-          <ShareLimitRow task={task} limit={shared && live ? live.limit : limit} onChange={pickLimit} />
+          <ShareModeRow
+            items={listShareModeItems(task, handoffSupported)}
+            mode={shownMode}
+            onChange={pickMode}
+          />
+          {handing ? (
+            <HandoffBody view={handoff} />
+          ) : (
+            <ShareLimitRow task={task} limit={shared && live ? live.limit : limit} onChange={pickLimit} />
+          )}
         </>
       )}
       <DialogFooter>
-        <ShareActions task={task} view={view} limit={limit} preset={preset} />
+        {handing ? (
+          <HandoffActions task={task} view={handoff} />
+        ) : (
+          <ShareActions task={task} view={view} limit={limit} preset={preset} />
+        )}
       </DialogFooter>
-      {view.kind !== 'unpaired' && <HandoffSection task={task} />}
     </>
   );
 }

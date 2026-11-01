@@ -13,6 +13,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { formatUntil } from '@/lib/format/time.ts';
+import { canHandOff, HANDOFF_TITLE } from '@/lib/share/handoff.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const SHARE_TITLE = 'Share task';
@@ -58,6 +59,29 @@ export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: stri
   },
   { value: 'full', label: 'Full access', hint: 'Standard and your messages', icon: 'IconEyeOpen' },
 ];
+
+export type ShareMode = SharePreset | 'handoff';
+
+export const HANDOFF_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: IconName } = {
+  value: 'handoff',
+  label: HANDOFF_TITLE,
+  hint: 'One person works on it from their own Shinsa',
+  icon: 'IconArrowsRepeatRightLeft',
+};
+
+export function listShareModeItems(task: Task, handoffSupported: boolean) {
+  const items: { value: ShareMode; label: string; hint: string; icon: IconName }[] = [...SHARE_PRESET_ITEMS];
+  return handoffSupported && canHandOff(task) ? [...items, HANDOFF_MODE_ITEM] : items;
+}
+
+export function resolveShareModeChoice(
+  task: Task,
+  settings: Settings | null,
+  handoffSupported: boolean
+): ShareMode {
+  if (task.handoff && handoffSupported) return 'handoff';
+  return resolveSharePresetChoice(task, settings);
+}
 
 export function describeSharePreset(preset: SharePreset) {
   return SHARE_PRESET_ITEMS.find((item) => item.value === preset)?.label ?? preset;

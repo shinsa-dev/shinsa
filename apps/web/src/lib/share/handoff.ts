@@ -7,7 +7,10 @@ import { createSignal } from '@/lib/signal.ts';
 export const HANDOFF_TITLE = 'Hand off';
 
 export const HANDOFF_DESCRIPTION =
-  'Send a link to the person taking over. The first GitHub account to open it works on this task from their own Shinsa, and reaches nothing else on this machine.';
+  'The first GitHub account to open the link works on this task from their own Shinsa and reaches nothing else on this machine. It stays yours: it runs here, you see everything they do, and you can take it back at any time.';
+
+export const HANDOFF_HELD_DESCRIPTION =
+  'It stays yours: it runs here, you see everything they do, and Remove takes it back at once.';
 
 export const HANDOFF_COPY = 'Copy hand-off link';
 
@@ -56,7 +59,7 @@ export function resolveHandoffView(task: Task): HandoffView {
 }
 
 export function describeHandoffClaim(guest: TaskGuest) {
-  return `${describeUserName(guest)} took this task over`;
+  return `${describeUserName(guest)} is working on this task`;
 }
 
 export function handOffTask(task: Task) {

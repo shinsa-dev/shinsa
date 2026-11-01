@@ -54,8 +54,8 @@ describe('handing a task off', () => {
     expect(resolveHandoffView(createTask({ id: 't1', handoff: { ...HANDED, guest: KAI } }))).toMatchObject({
       at: 5,
     });
-    expect(describeHandoffClaim(KAI)).toBe('Kai Lane took this task over');
-    expect(describeHandoffClaim({ ...KAI, name: null })).toBe('@kai took this task over');
+    expect(describeHandoffClaim(KAI)).toBe('Kai Lane is working on this task');
+    expect(describeHandoffClaim({ ...KAI, name: null })).toBe('@kai is working on this task');
   });
 
   it('sends the hand-off and its removal, naming who loses the task', async () => {

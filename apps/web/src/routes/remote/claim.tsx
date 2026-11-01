@@ -80,7 +80,7 @@ export function ClaimPage({
           tone='green'
           title={`This device already reaches ${standing.machine}`}
         >
-          You can open every task there already. Leave the link for the person taking this task over.
+          You can open every task there already. Leave the link for the person it was meant for.
         </RemoteHero>
         <OpenShinsa />
       </section>
@@ -89,7 +89,7 @@ export function ClaimPage({
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
         <RemoteHero icon='IconCircleX' tone='amber' title='This browser works on a task from there already'>
-          {`A browser takes over one task from ${standing.machine}. Open this link in another browser or profile to take this one over too.`}
+          {`A browser takes over one task from ${standing.machine}. Open this link in another browser or profile to work on this one too.`}
         </RemoteHero>
         <OpenShinsa variant='secondary' />
       </section>
@@ -106,9 +106,10 @@ export function ClaimPage({
   };
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconArrowsRepeatRightLeft' title='Take over a task'>
-        Someone handed you a task they started in Shinsa. Take it over to follow it, message its agent and
-        answer what it asks, from this browser.
+      <RemoteHero icon='IconArrowsRepeatRightLeft' title='Work on a task handed to you'>
+        Someone handed you a task they started in Shinsa. Follow it, message its agent and answer what it
+        asks, from this browser. The task stays theirs: it runs on their machine, they see what you do, and
+        they can take it back.
       </RemoteHero>
       <RemoteBenefits points={CLAIM_POINTS} />
       <div className='flex w-full flex-col items-center gap-2'>
@@ -118,9 +119,9 @@ export function ClaimPage({
           </p>
         )}
         <Button className='w-full' loading={state.kind === 'claiming'} onClick={take}>
-          Take over this task
+          Work on this task
         </Button>
-        <p className='text-2xs text-fg-2'>{`As @${user.login}. The first account to open this link takes the task.`}</p>
+        <p className='text-2xs text-fg-2'>{`As @${user.login}. Only the first account to open this link gets this task.`}</p>
       </div>
     </section>
   );

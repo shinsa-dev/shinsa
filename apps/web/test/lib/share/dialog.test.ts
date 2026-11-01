@@ -9,9 +9,11 @@ import {
   describeSharePreset,
   isTaskShared,
   listShareLimitItems,
+  listShareModeItems,
   openShareDialog,
   openUnshareConfirm,
   resolveShareLimitChoice,
+  resolveShareModeChoice,
   resolveSharePresetChoice,
   resolveShareView,
   selectLiveShare,
@@ -169,5 +171,32 @@ describe('whether a task shows as shared', () => {
     const task = createTask({ id: 'a', share: { ...SHARING, url, limit: 'hour', endsAt: HOUR_MS } });
     expect(isTaskShared(task, HOUR_MS - 1)).toBe(true);
     expect(isTaskShared(task, HOUR_MS)).toBe(false);
+  });
+});
+
+describe('the kinds of share', () => {
+  const HANDED = { at: 1, url: null, guest: null, claimedAt: null };
+
+  it('lists Hand off after the presets only where the machine and the task allow it', () => {
+    const open = createTask({ id: 'a', stage: 'building' });
+    expect(listShareModeItems(open, true).map((item) => item.value)).toEqual([
+      'status',
+      'standard',
+      'full',
+      'handoff',
+    ]);
+    expect(listShareModeItems(open, false).map((item) => item.value)).not.toContain('handoff');
+    expect(
+      listShareModeItems(createTask({ id: 'a', stage: 'done' }), true).map((item) => item.value)
+    ).not.toContain('handoff');
+  });
+
+  it('opens on Hand off for a task handed off, and on its preset otherwise', () => {
+    const settings = createSettings();
+    expect(resolveShareModeChoice(createTask({ id: 'a', handoff: HANDED }), settings, true)).toBe('handoff');
+    expect(resolveShareModeChoice(createTask({ id: 'a', handoff: HANDED }), settings, false)).toBe(
+      'standard'
+    );
+    expect(resolveShareModeChoice(createTask({ id: 'a' }), null, true)).toBe('standard');
   });
 });

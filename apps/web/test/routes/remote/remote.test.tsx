@@ -245,7 +245,7 @@ describe('the remote dashboard', () => {
     expect(location.hash).toBe('');
     unmount();
     renderRoot('/claim', { dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }) });
-    expect(await screen.findByText('Take over a task')).toBeTruthy();
+    expect(await screen.findByText('Work on a task handed to you')).toBeTruthy();
   });
 });
 
@@ -670,10 +670,12 @@ describe('the claim page', () => {
         }}
       />
     );
-    expect(await screen.findByText('Take over a task')).toBeTruthy();
+    expect(await screen.findByText('Work on a task handed to you')).toBeTruthy();
     expect(screen.getByText('This one task')).toBeTruthy();
-    expect(screen.getByText('As @kai. The first account to open this link takes the task.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Take over this task' }));
+    expect(
+      screen.getByText('As @kai. Only the first account to open this link gets this task.')
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Work on this task' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
     expect(named).toEqual(['kai’s Chrome']);
     expect(sessionStorage.getItem('shinsa.remote.enroll')).toBeNull();
@@ -688,13 +690,15 @@ describe('the claim page', () => {
         devices={createDevices()}
         resolveName={() => 'Chrome'}
         claim={() =>
-          Promise.reject(new Error('Someone else already took this task over. Ask for a new link.'))
+          Promise.reject(
+            new Error('Someone else already opened this hand-off link. Ask the task’s owner for a new one.')
+          )
         }
       />
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Take over this task' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Work on this task' }));
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'Someone else already took this task over. Ask for a new link.'
+      'Someone else already opened this hand-off link. Ask the task’s owner for a new one.'
     );
   });
 
@@ -717,7 +721,7 @@ describe('the claim page', () => {
     expect(await screen.findByText('This browser works on a task from there already')).toBeTruthy();
     second.unmount();
     render(<ClaimPage link={link} user={KAI} dashboard={createDashboard()} devices={failing} />);
-    expect(await screen.findByText('Take over a task')).toBeTruthy();
+    expect(await screen.findByText('Work on a task handed to you')).toBeTruthy();
   });
 
   it('says a link that cannot work is incomplete', () => {

@@ -33,9 +33,9 @@ export const CLAIM_POINTS: RemotePoint[] = [
     detail: 'Only this browser and the machine can read what passes between them.',
   },
   {
-    icon: 'IconListBullets',
-    title: 'Done under your name',
-    detail: 'The task keeps running on its owner’s machine, who sees what you do and can take it back.',
+    icon: 'IconUser',
+    title: 'Still its owner’s task',
+    detail: 'It keeps running on their machine. They see what you do, under your name, and can take it back.',
   },
 ];
 

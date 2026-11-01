@@ -82,7 +82,7 @@ describe('handing a task off', () => {
     });
     expect(harness.send({ type: 'handoff.claim', taskId, guest: KAI }).events).toEqual([]);
     expect(() => harness.send({ type: 'handoff.claim', taskId, guest: ROBIN })).toThrow(
-      'Someone else already took this task over. Ask for a new link.'
+      'Someone else already opened this hand-off link. Ask the task’s owner for a new one.'
     );
     expect(harness.send({ type: 'handoff.record', taskId, url: URL }).events).toEqual([]);
     expect(harness.send({ type: 'handoff.fail', taskId, detail: 'Late.' }).events).toEqual([]);

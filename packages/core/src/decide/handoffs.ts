@@ -55,7 +55,10 @@ export function claimHandoff(decider: Decider, command: CommandOf<'handoff.claim
     throw new DomainError('handoff_gone', 'This link no longer hands off a task. Ask for a new one.');
   if (handoff.guest?.id === command.guest.id) return;
   if (handoff.guest) {
-    throw new DomainError('handoff_claimed', 'Someone else already took this task over. Ask for a new link.');
+    throw new DomainError(
+      'handoff_claimed',
+      'Someone else already opened this hand-off link. Ask the task’s owner for a new one.'
+    );
   }
   decider.emit({ type: 'handoff.claimed', taskId: command.taskId, guest: command.guest });
 }
