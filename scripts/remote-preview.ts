@@ -188,13 +188,36 @@ function isInTeam(team: Omit<RemoteTeam, 'role'>, user: RemoteUser) {
   return team.owner.id === user.id || team.members.some((member) => member.user.id === user.id);
 }
 
+const teammateLink = {
+  online: true,
+  signingKey: null as string | null,
+  sockets: new Set<ServerWebSocket<TunnelData>>(),
+};
+
 function resolvePreviewTeams(owner: RemoteUser): RemoteTeam[] {
   return [TEAM, ...OTHER_TEAMS]
     .filter((team) => isInTeam(team, owner))
     .map((team) => {
       const role = owner.id === team.owner.id ? 'owner' : 'member';
-      return { ...team, role, requests: role === 'owner' ? team.requests : [] };
+      const machines = team.machines.map((machine) =>
+        machine.userId === TEAMMATE.id && team.id === TEAM.id
+          ? {
+              ...machine,
+              online: teammateLink.online,
+              ...(teammateLink.signingKey ? { signingKey: teammateLink.signingKey } : {}),
+            }
+          : machine
+      );
+      return { ...team, role, machines, requests: role === 'owner' ? team.requests : [] };
     });
+}
+
+const TEAMMATE_TOGGLE = /^\/__preview\/teammate\/(online|offline)$/;
+
+function toggleTeammate(url: URL) {
+  teammateLink.online = url.pathname.endsWith('/online');
+  if (!teammateLink.online) for (const socket of [...teammateLink.sockets]) socket.close(1001, 'Offline');
+  return new Response(`Kai’s MacBook is ${teammateLink.online ? 'online' : 'offline'}.`);
 }
 
 function listPreviewTeamKeys(owner: RemoteUser) {
@@ -789,6 +812,11 @@ function listPreviewLinks(
       `Studio's own app: Settings, Teams, with Inês asking to join`,
       `http://${HOST}:${machines[0]?.port}/settings`,
     ],
+    [
+      `Take Kai's MacBook offline (Studio keeps its tasks as Offline)`,
+      `${ORIGIN}/__preview/teammate/offline`,
+    ],
+    [`Bring Kai's MacBook back`, `${ORIGIN}/__preview/teammate/online`],
     ...(teamTask
       ? [
           [
@@ -975,6 +1003,7 @@ interface TunnelData {
 
 function openUpstream(socket: ServerWebSocket<TunnelData>) {
   const { machine, path } = socket.data;
+  if (machine.id === 'kai') teammateLink.sockets.add(socket);
   const upstream = new WebSocket(`ws://127.0.0.1:${machine.port}${path}`, {
     headers: { origin: ORIGIN, 'cf-connecting-ip': '127.0.0.1', ...socket.data.headers },
   } as unknown as string[]);
@@ -1002,6 +1031,7 @@ async function main() {
   await seedProject(laptop.engine, laptopData, { repo: 'website', project: 'Website', tasks: LAPTOP_TASKS });
   const teammateData = prepareMachine('kai');
   const teammate = await startMachine('kai', 'Kai’s MacBook', teammateData);
+  teammateLink.signingKey = (await teammate.machine.remote.store.resolveSigningKey()).publicKey;
   const paywalls = await seedProject(teammate.engine, teammateData, {
     repo: 'paywalls',
     project: 'Paywalls',
@@ -1026,6 +1056,7 @@ async function main() {
       if (isPreviewHost(url.host, PREVIEW_ZONE))
         return respondPreviewHost(request, url, machines, world, server);
       if (DEMO_TOGGLE.test(url.pathname)) return toggleDemoService(demo, url);
+      if (TEAMMATE_TOGGLE.test(url.pathname)) return toggleTeammate(url);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
@@ -1033,6 +1064,7 @@ async function main() {
       if (enrolling) return respondEnroll(enrolling, url);
       const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share|\/team)?$/.exec(url.pathname);
       const machine = teammates.find((entry) => entry.id === tunnel?.[1]);
+      if (machine?.id === 'kai' && !teammateLink.online) return new Response('Offline', { status: 502 });
       if (machine) {
         const token = encodeURIComponent(url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '');
         const channels: Record<string, string> = {
@@ -1056,6 +1088,7 @@ async function main() {
         else socket.data.pending.push(payload);
       },
       close(socket) {
+        teammateLink.sockets.delete(socket);
         socket.data.upstream?.close();
       },
     },

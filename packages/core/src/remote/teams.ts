@@ -31,6 +31,8 @@ const SEGMENT = /^[A-Za-z0-9_-]+$/;
 
 export const TEAM_KEY_BYTES = 32;
 
+export const TEAM_SNAPSHOT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 export const TEAM_NAME_LIMIT = 60;
 
 export const MAX_TEAM_MEMBERS = 20;
@@ -328,6 +330,10 @@ export async function signTeamSnapshot(privateKey: CryptoKey, body: TeamSnapshot
   const text = JSON.stringify(body);
   const signature = await crypto.subtle.sign(SNAPSHOT_SIGNATURE, privateKey, listSnapshotBytes(text));
   return { body: text, signature: serializeBase64Url(new Uint8Array(signature)) };
+}
+
+export function isTeamSnapshotExpired(updatedAt: number, now: number) {
+  return now - updatedAt > TEAM_SNAPSHOT_TTL_MS;
 }
 
 export function readTeamSnapshot(value: unknown): TeamSnapshot | null {

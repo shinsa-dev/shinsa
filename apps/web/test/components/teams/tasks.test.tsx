@@ -87,6 +87,35 @@ describe('teammates’ tasks', () => {
     expect(screen.getByText(/No teammate has an open task in this team/)).toBeDefined();
   });
 
+  it('marks the tasks of a machine that is offline, with when its owner last updated them', () => {
+    const offline = {
+      teamId: 'team1',
+      instanceId: 'p7m2',
+      name: 'Studio',
+      userId: '7',
+      status: 'offline' as const,
+      reason: 'Offline.',
+      updatedAt: Date.now() - 2 * 60 * 60 * 1000,
+    };
+    pushTeams({ machines: [offline], tasks: [OPEN, MERGED] });
+    const { unmount } = render(
+      <TooltipProvider>
+        <TasksPage state={FOCUSED} />
+      </TooltipProvider>
+    );
+    expect(screen.getAllByText('Offline')).toHaveLength(2);
+    expect(screen.getAllByText('2h ago')).toHaveLength(2);
+    unmount();
+    render(
+      <TooltipProvider>
+        <TeamHome />
+      </TooltipProvider>
+    );
+    expect(screen.getAllByText('Offline')).toHaveLength(1);
+    pushTeams({ machines: [{ ...offline, status: 'live', reason: null }], tasks: [OPEN, MERGED] });
+    expect(screen.queryByText('Offline')).toBeNull();
+  });
+
   it('shows nothing of a team while your own work is in focus', () => {
     function Unfocused() {
       return <p>{useFocusedTeamTasks(createShinsaState({})) === null ? 'Your work' : 'Team'}</p>;

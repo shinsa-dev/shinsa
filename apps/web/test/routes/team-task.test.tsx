@@ -3,7 +3,8 @@ import { serializeShareMessage } from '@shinsa/core';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { TeamTaskPage } from '@/routes/team-task.tsx';
 import { createSharedTask } from '../lib/share/fixtures.ts';
-import { FakeTeamSocket } from '../lib/teams/machine.ts';
+import { createTeamFeedTask, FakeTeamSocket } from '../lib/teams/machine.ts';
+import { pushTeams, startFakeServer, stopFakeServer } from '../support/server.ts';
 import { createTask } from '../support/state.ts';
 
 const ORIGINAL_SOCKET = globalThis.WebSocket;
@@ -53,5 +54,30 @@ describe('a teammate’s task in the local app', () => {
     );
     await waitFor(() => expect(screen.getByText('This task is not shown to your team')).toBeDefined());
     expect(screen.getByText('Not shown any more.')).toBeDefined();
+  });
+});
+
+describe('a teammate’s task while their machine is offline', () => {
+  afterEach(stopFakeServer);
+
+  it('shows the last copy of it, says the full task opens once the machine is back, and opens it when it is', async () => {
+    startFakeServer();
+    const offline = {
+      teamId: 'team1',
+      instanceId: 'p7m2',
+      name: 'Studio',
+      userId: '7',
+      status: 'offline' as const,
+      reason: 'Offline.',
+      updatedAt: Date.now() - 60_000,
+    };
+    pushTeams({ machines: [offline], tasks: [createTeamFeedTask()] });
+    const sockets = openRelay();
+    expect(screen.getByText('Add the billing page')).toBeDefined();
+    expect(screen.getByText(/@kai’s machine is offline/)).toBeDefined();
+    expect(screen.getByText('Offline')).toBeDefined();
+    expect(sockets).toEqual([]);
+    pushTeams({ machines: [{ ...offline, status: 'live', reason: null }], tasks: [createTeamFeedTask()] });
+    await waitFor(() => expect(screen.getByText('Opening the team task')).toBeDefined());
   });
 });

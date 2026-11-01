@@ -8,6 +8,7 @@ import {
   createTeamWelcome,
   deriveTeamSessionKey,
   isTeamKey,
+  isTeamSnapshotExpired,
   parseTeamHello,
   parseTeamJoinFragment,
   parseTeamJoinUrl,
@@ -22,6 +23,7 @@ import {
   selectTeamSnapshotSigner,
   serializeTeamJoinFragment,
   signTeamSnapshot,
+  TEAM_SNAPSHOT_TTL_MS,
   type TeamSnapshotBody,
   type TeamView,
   verifyTeamHello,
@@ -178,6 +180,11 @@ describe('a signed team snapshot', () => {
     expect(selectTeamSnapshotSigner(await signTeamSnapshot(signer.privateKey, BODY))).toBe(BODY.instanceId);
     expect(selectTeamSnapshotSigner({ body: '{"instanceId":3}', signature: 'x' })).toBeNull();
     expect(selectTeamSnapshotSigner({ body: 'not json', signature: 'x' })).toBeNull();
+  });
+
+  test('expires 30 days after the machine last updated it', () => {
+    expect(isTeamSnapshotExpired(0, TEAM_SNAPSHOT_TTL_MS)).toBe(false);
+    expect(isTeamSnapshotExpired(0, TEAM_SNAPSHOT_TTL_MS + 1)).toBe(true);
   });
 
   test('reads a snapshot only with a text body and signature', () => {

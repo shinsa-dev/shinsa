@@ -6,8 +6,6 @@ import { describeError, log } from '../log/index.ts';
 
 export const TEAM_SNAPSHOTS_FILE = 'team-snapshots.json';
 
-export const TEAM_SNAPSHOT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-
 export interface HeldTeamList {
   teamId: string;
   instanceId: string;
@@ -19,10 +17,6 @@ export interface HeldTeamList {
 
 export function resolveKeyDigest(key: string) {
   return createHash('sha256').update(key).digest('hex');
-}
-
-export function isHeldListExpired(held: Pick<HeldTeamList, 'updatedAt'>, now: number) {
-  return now - held.updatedAt > TEAM_SNAPSHOT_TTL_MS;
 }
 
 function readHeldList(value: unknown): HeldTeamList[] {

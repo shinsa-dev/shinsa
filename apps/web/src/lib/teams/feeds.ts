@@ -1,15 +1,20 @@
 import {
   createState,
   isTaskSettled,
+  isTeamSnapshotExpired,
   NO_TEAM_FEED,
   type RemoteTeam,
   type ShareMessage,
   type ShinsaState,
+  selectTeamSnapshotSigner,
   type TeamFeedMachine,
   type TeamFeedSnapshot,
   type TeamFeedTask,
   type TeamListView,
+  type TeamSnapshot,
+  type TeamTask,
   type TeamViewTarget,
+  verifyTeamSnapshot,
 } from '@shinsa/core';
 import { waitFor } from '@/lib/share/live.ts';
 import { createSignal } from '@/lib/signal.ts';
@@ -40,6 +45,28 @@ function resolveTaskKey(task: TeamFeedTask) {
   return `${resolveMachineKey(task)} ${task.task.id}`;
 }
 
+function isBetterMachine(machine: TeamFeedMachine, known: TeamFeedMachine) {
+  const rank = MACHINE_RANK[machine.status] - MACHINE_RANK[known.status];
+  return rank < 0 || (rank === 0 && (machine.updatedAt ?? -1) > (known.updatedAt ?? -1));
+}
+
+export function listHeldTeamMachines(feed: TeamFeedSnapshot): ReadonlyMap<string, number> {
+  return new Map(
+    feed.machines.flatMap((machine) =>
+      machine.status !== 'live' && machine.updatedAt !== undefined
+        ? [[resolveMachineKey(machine), machine.updatedAt] as const]
+        : []
+    )
+  );
+}
+
+export function selectTeamTaskHeldAt(
+  held: ReadonlyMap<string, number>,
+  entry: Pick<TeamFeedTask, 'teamId' | 'instanceId'>
+) {
+  return held.get(resolveMachineKey(entry)) ?? null;
+}
+
 export function mergeTeamFeeds(feeds: readonly TeamFeedSnapshot[]): TeamFeedSnapshot {
   const machines = new Map<string, TeamFeedMachine>();
   const tasks = new Map<string, TeamFeedTask>();
@@ -47,7 +74,7 @@ export function mergeTeamFeeds(feeds: readonly TeamFeedSnapshot[]): TeamFeedSnap
     for (const machine of feed.machines) {
       const key = resolveMachineKey(machine);
       const known = machines.get(key);
-      if (!known || MACHINE_RANK[machine.status] < MACHINE_RANK[known.status]) machines.set(key, machine);
+      if (!known || isBetterMachine(machine, known)) machines.set(key, machine);
     }
     for (const task of feed.tasks) {
       const key = resolveTaskKey(task);
@@ -118,12 +145,15 @@ export interface HostedTeamFeedsOptions {
   selectTeamKey: (teamId: string) => Promise<StoredTeamKey | null>;
   openChannel?: (target: TeamChannelTarget, handlers: TeamChannelHandlers) => () => void;
   wait?: (ms: number, run: () => void) => () => void;
+  now?: () => number;
 }
 
 interface HostedFeed {
   target: TeamChannelTarget;
   machine: TeamFeedMachine;
-  tasks: TeamFeedTask[];
+  signingKey: string | null;
+  tasks: TeamTask[];
+  updatedAt: number | null;
   attempt: number;
   stop: (() => void) | null;
 }
@@ -131,12 +161,14 @@ interface HostedFeed {
 export class HostedTeamFeeds implements TeamFeedSource {
   readonly #options: HostedTeamFeedsOptions;
   readonly #signal = createSignal();
+  readonly #now: () => number;
   #feeds: HostedFeed[] = [];
   #snapshot: TeamFeedSnapshot = NO_TEAM_FEED;
   #started = false;
 
   constructor(options: HostedTeamFeedsOptions) {
     this.#options = options;
+    this.#now = options.now ?? Date.now;
   }
 
   subscribe = (listener: () => void) => this.#signal.subscribe(listener);
@@ -166,7 +198,9 @@ export class HostedTeamFeeds implements TeamFeedSource {
             status: machine.online ? 'connecting' : 'offline',
             reason: machine.online ? null : TEAM_MACHINE_OFFLINE,
           },
+          signingKey: machine.signingKey ?? null,
           tasks: [],
+          updatedAt: null,
           attempt: 0,
           stop: null,
         };
@@ -184,12 +218,53 @@ export class HostedTeamFeeds implements TeamFeedSource {
     this.#snapshot = NO_TEAM_FEED;
   }
 
+  #isShown(feed: HostedFeed) {
+    if (feed.updatedAt === null) return false;
+    return feed.machine.status === 'live' || !isTeamSnapshotExpired(feed.updatedAt, this.#now());
+  }
+
   #publish() {
     this.#snapshot = {
-      machines: this.#feeds.map((feed) => feed.machine),
-      tasks: this.#feeds.flatMap((feed) => feed.tasks),
+      machines: this.#feeds.map((feed) =>
+        feed.machine.status !== 'live' && feed.updatedAt !== null && this.#isShown(feed)
+          ? { ...feed.machine, updatedAt: feed.updatedAt }
+          : feed.machine
+      ),
+      tasks: this.#feeds.flatMap((feed) =>
+        this.#isShown(feed)
+          ? feed.tasks.map((task) => ({
+              ...task,
+              teamId: feed.target.teamId,
+              instanceId: feed.target.instanceId,
+            }))
+          : []
+      ),
     };
     this.#signal.publish();
+  }
+
+  #canAdopt(feed: HostedFeed) {
+    return this.#started && (feed.machine.status === 'offline' || feed.machine.status === 'connecting');
+  }
+
+  async #adoptHeld(teamId: string, held: readonly TeamSnapshot[]) {
+    let adopted = false;
+    for (const snapshot of held) {
+      const instanceId = selectTeamSnapshotSigner(snapshot);
+      const feed = this.#feeds.find(
+        (candidate) => candidate.target.teamId === teamId && candidate.target.instanceId === instanceId
+      );
+      if (!(feed?.signingKey && this.#canAdopt(feed))) continue;
+      const body = await verifyTeamSnapshot(feed.signingKey, snapshot);
+      if (!(body && body.teamId === teamId && body.instanceId === instanceId && this.#canAdopt(feed)))
+        continue;
+      if (isTeamSnapshotExpired(body.updatedAt, this.#now()) || (feed.updatedAt ?? -1) >= body.updatedAt)
+        continue;
+      feed.tasks = body.tasks;
+      feed.updatedAt = body.updatedAt;
+      adopted = true;
+    }
+    if (adopted) this.#publish();
   }
 
   #mark(feed: HostedFeed, status: TeamFeedMachine['status'], reason: string | null) {
@@ -199,14 +274,12 @@ export class HostedTeamFeeds implements TeamFeedSource {
   #receive(feed: HostedFeed, message: ShareMessage) {
     if (message.t !== 'view') return;
     const view = JSON.parse(message.data) as TeamListView;
-    feed.tasks = view.tasks.map((task) => ({
-      ...task,
-      teamId: feed.target.teamId,
-      instanceId: feed.target.instanceId,
-    }));
+    feed.tasks = view.tasks;
+    feed.updatedAt = view.updatedAt ?? this.#now();
     feed.attempt = 0;
     this.#mark(feed, 'live', null);
     this.#publish();
+    void this.#adoptHeld(feed.target.teamId, view.held ?? []);
   }
 
   #connect(feed: HostedFeed) {
@@ -219,7 +292,10 @@ export class HostedTeamFeeds implements TeamFeedSource {
       onEnd: (end) => {
         feed.stop = null;
         if (!this.#started) return;
-        feed.tasks = [];
+        if (end.gone) {
+          feed.tasks = [];
+          feed.updatedAt = null;
+        }
         this.#mark(feed, end.gone ? 'refused' : 'offline', end.reason);
         this.#publish();
         const steps = end.gone ? FEED_REFUSED_RETRY_MS : FEED_RETRY_MS;

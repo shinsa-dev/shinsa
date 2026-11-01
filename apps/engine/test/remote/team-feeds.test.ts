@@ -13,6 +13,7 @@ import {
   serializeBase64Url,
   serializePublicKey,
   signTeamSnapshot,
+  TEAM_SNAPSHOT_TTL_MS,
   type TeamMachine,
   type TeamSnapshot,
   type TeamTask,
@@ -28,7 +29,7 @@ import {
   TEAM_VIEW_GONE,
   TeamFeeds,
 } from '../../src/remote/team-feeds.ts';
-import { TEAM_SNAPSHOT_TTL_MS, TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots.ts';
+import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots.ts';
 import { TEAM_GONE_REASON, Teams } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';

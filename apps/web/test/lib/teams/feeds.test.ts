@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'bun:test';
-import { NO_TEAM_FEED, type TeamFeedMachine } from '@shinsa/core';
+import {
+  NO_TEAM_FEED,
+  SIGNING_KEY_ALGORITHM,
+  serializePublicKey,
+  signTeamSnapshot,
+  TEAM_SNAPSHOT_TTL_MS,
+  type TeamFeedMachine,
+  type TeamMachine,
+  type TeamSnapshotBody,
+} from '@shinsa/core';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/channel.ts';
 import {
   describeTeamTaskOwner,
   HostedTeamFeeds,
+  listHeldTeamMachines,
   listOpenTeamFeedTasks,
   listTeamFeedTasks,
   matchesTeamTaskSearch,
@@ -11,6 +21,7 @@ import {
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
+  selectTeamTaskHeldAt,
 } from '@/lib/teams/feeds.ts';
 import { createGate, createProject, createTask } from '../../support/state.ts';
 import { createTeam } from '../../support/teams.ts';
@@ -39,6 +50,32 @@ describe('teammates’ task lists', () => {
     expect(merged.machines).toEqual([createMachine()]);
     expect(merged.tasks.map((entry) => entry.task.title)).toEqual(['Renamed']);
     expect(mergeTeamFeeds([NO_TEAM_FEED, NO_TEAM_FEED])).toBe(NO_TEAM_FEED);
+  });
+
+  it('keeps the newest snapshot of an offline machine when two feeds hold one', () => {
+    const older = createMachine({ status: 'offline', reason: 'Offline.', updatedAt: 10 });
+    const newer = createMachine({ status: 'offline', reason: 'Offline.', updatedAt: 20 });
+    const bare = createMachine({ status: 'offline', reason: 'Offline.' });
+    const merged = mergeTeamFeeds([
+      { machines: [older], tasks: [] },
+      { machines: [newer], tasks: [] },
+      { machines: [bare], tasks: [] },
+    ]);
+    expect(merged.machines).toEqual([newer]);
+  });
+
+  it('knows which tasks come from a snapshot, and since when', () => {
+    const held = listHeldTeamMachines({
+      machines: [
+        createMachine({ status: 'offline', reason: 'Offline.', updatedAt: 30 }),
+        createMachine({ instanceId: 'live', updatedAt: 40 }),
+        createMachine({ instanceId: 'bare', status: 'offline', reason: 'Offline.' }),
+      ],
+      tasks: [],
+    });
+    expect(selectTeamTaskHeldAt(held, createTeamFeedTask())).toBe(30);
+    expect(selectTeamTaskHeldAt(held, createTeamFeedTask({ instanceId: 'live' }))).toBeNull();
+    expect(selectTeamTaskHeldAt(held, createTeamFeedTask({ instanceId: 'bare' }))).toBeNull();
   });
 
   it('lists one team’s tasks, open ones first and the newest first, leaving out machines you reach with full control', () => {
@@ -86,12 +123,19 @@ describe('teammates’ task lists', () => {
 });
 
 describe('the hosted dashboard’s team feeds', () => {
-  function createHosted(options: { keys?: Record<string, string>; failing?: boolean } = {}) {
+  function createHosted(
+    options: {
+      keys?: Record<string, string>;
+      failing?: boolean;
+      machines?: TeamMachine[];
+      now?: () => number;
+    } = {}
+  ) {
     const opened: { target: TeamChannelTarget; handlers: TeamChannelHandlers; stopped: boolean }[] = [];
     const waits: (() => void)[] = [];
     const delays: number[] = [];
     const team = createTeam({
-      machines: [
+      machines: options.machines ?? [
         { id: 'p7m2', name: 'Studio', userId: '7', online: true, lastSeenAt: 1 },
         { id: 'q1', name: 'Laptop', userId: '7', online: false, lastSeenAt: 1 },
       ],
@@ -116,6 +160,7 @@ describe('the hosted dashboard’s team feeds', () => {
         waits.push(run);
         return () => undefined;
       },
+      now: options.now,
     });
     return { feeds, opened, waits, delays };
   }
@@ -186,5 +231,119 @@ describe('the hosted dashboard’s team feeds', () => {
     feeds.stop();
     await started;
     expect(opened).toEqual([]);
+  });
+
+  it('keeps a machine’s last list while it is offline, marked with when it was updated, and drops it on a refusal', async () => {
+    const { feeds, opened, waits } = createHosted({ now: () => 100 });
+    await feeds.start();
+    const task = createTeamFeedTask();
+    opened[0]?.handlers.onMessage({ t: 'view', data: JSON.stringify({ tasks: [task], updatedAt: 40 }) });
+    opened[0]?.handlers.onEnd({ reason: 'Offline.', gone: false });
+    expect(feeds.snapshot().machines[0]).toMatchObject({ status: 'offline', updatedAt: 40 });
+    expect(feeds.snapshot().tasks.map((entry) => entry.task.id)).toEqual(['kai-task']);
+    waits.shift()?.();
+    opened[1]?.handlers.onEnd({ reason: 'Not in the team.', gone: true });
+    expect(feeds.snapshot().tasks).toEqual([]);
+    expect(feeds.snapshot().machines[0]?.updatedAt).toBeUndefined();
+  });
+
+  async function createSigner() {
+    const pair = (await crypto.subtle.generateKey(SIGNING_KEY_ALGORITHM, true, [
+      'sign',
+      'verify',
+    ])) as CryptoKeyPair;
+    return { privateKey: pair.privateKey, signingKey: await serializePublicKey(pair.publicKey) };
+  }
+
+  async function createRelayed(options: { now?: () => number; laptopOnline?: boolean } = {}) {
+    const laptop = await createSigner();
+    const stranger = await createSigner();
+    const hosted = createHosted({
+      now: options.now ?? (() => 1_000),
+      machines: [
+        { id: 'p7m2', name: 'Studio', userId: '7', online: true, lastSeenAt: 1 },
+        {
+          id: 'q1',
+          name: 'Laptop',
+          userId: '9',
+          online: options.laptopOnline ?? false,
+          lastSeenAt: 1,
+          signingKey: laptop.signingKey,
+        },
+        { id: 'r2', name: 'Desk', userId: '9', online: false, lastSeenAt: 1 },
+      ],
+    });
+    await hosted.feeds.start();
+    const body = (overrides: Partial<TeamSnapshotBody> = {}): TeamSnapshotBody => ({
+      teamId: 'team1',
+      instanceId: 'q1',
+      tasks: [createTeamFeedTask({ task: createTask({ id: 'laptop-task', title: 'Fix the export' }) })],
+      updatedAt: 900,
+      ...overrides,
+    });
+    const relay = async (held: unknown[]) => {
+      hosted.opened[0]?.handlers.onMessage({
+        t: 'view',
+        data: JSON.stringify({ tasks: [], updatedAt: 950, held }),
+      });
+      await Bun.sleep(20);
+    };
+    return { ...hosted, laptop, stranger, body, relay };
+  }
+
+  it('shows an offline machine’s tasks from a teammate’s copy once its own key verifies it', async () => {
+    const { feeds, laptop, body, relay } = await createRelayed();
+    await relay([await signTeamSnapshot(laptop.privateKey, body())]);
+    expect(feeds.snapshot().tasks.map((entry) => [entry.instanceId, entry.task.id])).toEqual([
+      ['q1', 'laptop-task'],
+    ]);
+    expect(feeds.snapshot().machines[1]).toMatchObject({
+      instanceId: 'q1',
+      status: 'offline',
+      updatedAt: 900,
+    });
+    await relay([await signTeamSnapshot(laptop.privateKey, body({ updatedAt: 800, tasks: [] }))]);
+    expect(feeds.snapshot().tasks).toHaveLength(1);
+  });
+
+  it('refuses a copy signed by another key, about another team, of a machine with no key, or too old', async () => {
+    const now = 900 + TEAM_SNAPSHOT_TTL_MS + 1;
+    const { feeds, laptop, stranger, body, relay } = await createRelayed({ now: () => now });
+    const fresh = now - 10;
+    await relay([
+      await signTeamSnapshot(stranger.privateKey, body({ updatedAt: fresh })),
+      await signTeamSnapshot(laptop.privateKey, body({ teamId: 'team2', updatedAt: fresh })),
+      await signTeamSnapshot(laptop.privateKey, body({ instanceId: 'r2', updatedAt: fresh })),
+      await signTeamSnapshot(laptop.privateKey, body()),
+      { body: 'not json', signature: 'x' },
+    ]);
+    expect(feeds.snapshot().tasks).toEqual([]);
+  });
+
+  it('lets a copy expire 30 days after its machine last updated it', async () => {
+    let now = 1_000;
+    const { feeds, laptop, body, relay } = await createRelayed({ now: () => now });
+    await relay([await signTeamSnapshot(laptop.privateKey, body())]);
+    expect(feeds.snapshot().tasks).toHaveLength(1);
+    now = 900 + TEAM_SNAPSHOT_TTL_MS + 1;
+    await relay([]);
+    expect(feeds.snapshot().tasks).toEqual([]);
+    expect(feeds.snapshot().machines[1]?.updatedAt).toBeUndefined();
+  });
+
+  it('never lets a copy replace a machine that is live, nor take one once stopped', async () => {
+    const { feeds, opened, laptop, body, relay } = await createRelayed({ laptopOnline: true });
+    opened[1]?.handlers.onMessage({ t: 'view', data: JSON.stringify({ tasks: [], updatedAt: 500 }) });
+    await relay([await signTeamSnapshot(laptop.privateKey, body())]);
+    expect(feeds.snapshot().tasks).toEqual([]);
+    opened[1]?.handlers.onEnd({ reason: 'Offline.', gone: false });
+    const copy = await signTeamSnapshot(laptop.privateKey, body());
+    opened[0]?.handlers.onMessage({
+      t: 'view',
+      data: JSON.stringify({ tasks: [], updatedAt: 950, held: [copy] }),
+    });
+    feeds.stop();
+    await Bun.sleep(20);
+    expect(feeds.snapshot()).toBe(NO_TEAM_FEED);
   });
 });

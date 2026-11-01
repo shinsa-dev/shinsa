@@ -1,4 +1,5 @@
 import type { ShinsaState, TeamFeedTask } from '@shinsa/core';
+import { Badge } from '@shinsa/ui/components/badge';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
@@ -15,16 +16,19 @@ import { TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useMachines, useRemoteSnapshot, useTeamFeed } from '@/lib/connection/socket.ts';
 import { type FocusTeam, listFocusTeams, selectFocusTeam } from '@/lib/focus.ts';
+import { formatSince } from '@/lib/format/time.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
 import { createDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
   describeTeamTaskOwner,
+  listHeldTeamMachines,
   listOpenTeamFeedTasks,
   listTeamFeedTasks,
   matchesTeamTaskSearch,
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
+  selectTeamTaskHeldAt,
 } from '@/lib/teams/feeds.ts';
 import { navigate } from '@/router.ts';
 
@@ -33,6 +37,7 @@ const TEAMMATES_TITLE = 'Teammates';
 export interface FocusedTeamTasks {
   team: FocusTeam;
   tasks: TeamFeedTask[];
+  held: ReadonlyMap<string, number>;
 }
 
 export function useFocusedTeamTasks(state: ShinsaState): FocusedTeamTasks | null {
@@ -44,7 +49,8 @@ export function useFocusedTeamTasks(state: ShinsaState): FocusedTeamTasks | null
     () => (teamId ? listTeamFeedTasks(feed, teamId, new Set(machines.map((machine) => machine.id))) : []),
     [feed, teamId, machines]
   );
-  return team ? { team, tasks } : null;
+  const held = React.useMemo(() => listHeldTeamMachines(feed), [feed]);
+  return team ? { team, tasks, held } : null;
 }
 
 function openTeamTask(entry: TeamFeedTask) {
@@ -63,7 +69,21 @@ function OwnerMark({ entry }: { entry: TeamFeedTask }) {
   );
 }
 
-const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ entry }: { entry: TeamFeedTask }) {
+export function OfflineBadge({ heldAt }: { heldAt: number }) {
+  return (
+    <Hint label='Their machine is offline' detail={formatSince('Updated', heldAt)}>
+      <Badge size='sm'>Offline</Badge>
+    </Hint>
+  );
+}
+
+const TeamTaskListRow = React.memo(function TeamTaskListRowItem({
+  entry,
+  heldAt,
+}: {
+  entry: TeamFeedTask;
+  heldAt: number | null;
+}) {
   const state = React.useMemo(() => resolveTeamTaskState(entry), [entry]);
   const { task } = entry;
   return (
@@ -87,14 +107,15 @@ const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ entry }: { ent
       <span className='min-w-0 max-md:hidden'>
         <OwnerMark entry={entry} />
       </span>
-      <span className='flex min-w-0 items-center max-md:hidden'>
+      <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
+        {heldAt !== null && <OfflineBadge heldAt={heldAt} />}
         <StatusText state={state} task={task} className='truncate text-xs' />
       </span>
       <span className='max-md:hidden'>
         <PullRequestBadge task={task} />
       </span>
       <span className='text-right text-2xs text-fg-2'>
-        <TimeAgo at={task.updatedAt} />
+        <TimeAgo at={heldAt ?? task.updatedAt} />
       </span>
     </div>
   );
@@ -118,13 +139,17 @@ export function TeamTasksGroup({ focused, search }: { focused: FocusedTeamTasks;
       </DisclosureHeader>
       {disclosure.open &&
         entries.map((entry) => (
-          <TeamTaskListRow key={resolveTeamTaskPath(resolveTeamTaskTarget(entry))} entry={entry} />
+          <TeamTaskListRow
+            key={resolveTeamTaskPath(resolveTeamTaskTarget(entry))}
+            entry={entry}
+            heldAt={selectTeamTaskHeldAt(focused.held, entry)}
+          />
         ))}
     </section>
   );
 }
 
-function TeamTaskHomeRow({ entry }: { entry: TeamFeedTask }) {
+function TeamTaskHomeRow({ entry, heldAt }: { entry: TeamFeedTask; heldAt: number | null }) {
   const state = React.useMemo(() => resolveTeamTaskState(entry), [entry]);
   return (
     <ListRow
@@ -135,7 +160,16 @@ function TeamTaskHomeRow({ entry }: { entry: TeamFeedTask }) {
           {describeTeamTaskOwner(entry)} · <TaskMeta state={state} task={entry.task} />
         </>
       }
-      trailing={<TimeAgo at={entry.task.updatedAt} compact />}
+      trailing={
+        heldAt === null ? (
+          <TimeAgo at={entry.task.updatedAt} compact />
+        ) : (
+          <span className='flex items-center gap-1.5'>
+            <OfflineBadge heldAt={heldAt} />
+            <TimeAgo at={heldAt} compact />
+          </span>
+        )
+      }
       onClick={() => openTeamTask(entry)}
     />
   );
@@ -151,7 +185,11 @@ export function TeamTasksSection({ focused }: { focused: FocusedTeamTasks }) {
       persistId={resolveHomeSectionId('team')}
     >
       {open.map((entry) => (
-        <TeamTaskHomeRow key={resolveTeamTaskPath(resolveTeamTaskTarget(entry))} entry={entry} />
+        <TeamTaskHomeRow
+          key={resolveTeamTaskPath(resolveTeamTaskTarget(entry))}
+          entry={entry}
+          heldAt={selectTeamTaskHeldAt(focused.held, entry)}
+        />
       ))}
     </WideSection>
   );

@@ -2,13 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log } from '../../src/log/index.ts';
-import {
-  isHeldListExpired,
-  readTeamSnapshotsFile,
-  resolveKeyDigest,
-  TEAM_SNAPSHOT_TTL_MS,
-  TeamSnapshots,
-} from '../../src/remote/team-snapshots.ts';
+import { readTeamSnapshotsFile, resolveKeyDigest, TeamSnapshots } from '../../src/remote/team-snapshots.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const HELD = {
@@ -67,9 +61,7 @@ describe('the kept team snapshots', () => {
     warn.mockRestore();
   });
 
-  test('a list expires 30 days after it was last updated', () => {
-    expect(isHeldListExpired({ updatedAt: 0 }, TEAM_SNAPSHOT_TTL_MS)).toBe(false);
-    expect(isHeldListExpired({ updatedAt: 0 }, TEAM_SNAPSHOT_TTL_MS + 1)).toBe(true);
+  test('keeps a digest of the team key, never the key', () => {
     expect(resolveKeyDigest('a')).not.toBe(resolveKeyDigest('b'));
   });
 });

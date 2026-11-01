@@ -7,6 +7,7 @@ import {
   decodeText,
   deriveTeamSessionKey,
   isTaskSettled,
+  isTeamSnapshotExpired,
   parseShareMessage,
   parseShareWelcome,
   type RemoteTeam,
@@ -31,7 +32,7 @@ import type { ChannelPeer } from './channel.ts';
 import { ControlError } from './control.ts';
 import type { Remote } from './index.ts';
 import { createChannelEphemeral } from './share-channel.ts';
-import { isHeldListExpired, resolveKeyDigest, TEAM_SNAPSHOTS_FILE, TeamSnapshots } from './team-snapshots.ts';
+import { resolveKeyDigest, TEAM_SNAPSHOTS_FILE, TeamSnapshots } from './team-snapshots.ts';
 
 export const TEAM_FEED_OFFLINE = 'The teammate’s machine is offline.';
 
@@ -231,7 +232,9 @@ export class TeamFeeds {
     const keyDigest = resolveKeyDigest(key);
     const stored = this.#snapshots.select(teamId, machine.id);
     const held =
-      stored && stored.keyDigest === keyDigest && !isHeldListExpired(stored, this.#now()) ? stored : null;
+      stored && stored.keyDigest === keyDigest && !isTeamSnapshotExpired(stored.updatedAt, this.#now())
+        ? stored
+        : null;
     return {
       teamId,
       key,
@@ -331,7 +334,7 @@ export class TeamFeeds {
 
   #isExpired(feed: Feed) {
     if (feed.status === 'live' || feed.updatedAt === null) return false;
-    return isHeldListExpired({ updatedAt: feed.updatedAt }, this.#now());
+    return isTeamSnapshotExpired(feed.updatedAt, this.#now());
   }
 
   #isHeld(feed: Feed) {
@@ -352,7 +355,8 @@ export class TeamFeeds {
       const body = await verifyTeamSnapshot(signingKey, snapshot);
       if (!(body && body.teamId === teamId && body.instanceId === instanceId && this.#canAdopt(feed)))
         continue;
-      if (isHeldListExpired(body, this.#now()) || (feed.updatedAt ?? -1) >= body.updatedAt) continue;
+      if (isTeamSnapshotExpired(body.updatedAt, this.#now()) || (feed.updatedAt ?? -1) >= body.updatedAt)
+        continue;
       feed.tasks = body.tasks;
       feed.updatedAt = body.updatedAt;
       feed.snapshot = snapshot;
