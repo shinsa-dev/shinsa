@@ -1,10 +1,18 @@
-import { LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, REMOTE_CONNECT_PARAM, SHARE_CHANNEL_PARAM } from '@shinsa/core';
+import {
+  LOCAL_ONLY_CODE,
+  LOCAL_ONLY_MESSAGE,
+  parseTeamViewTarget,
+  REMOTE_CONNECT_PARAM,
+  SHARE_CHANNEL_PARAM,
+  TEAM_VIEW_PATH,
+} from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
 import { createServerInstance, INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import {
+  type ChannelPeer,
   isTunnelRequest,
   markRemoteRequest,
   type RemoteChannel,
@@ -13,7 +21,6 @@ import {
   resolveTunnelRoute,
 } from '../remote/index.ts';
 import type { PreviewRelay, PreviewUpgrade } from '../remote/previews.ts';
-import type { ShareChannel } from '../remote/share-channel.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import {
   createTerminalRoutes,
@@ -50,10 +57,15 @@ interface RemoteSocketData {
   userId: string;
 }
 
-interface ShareSocketData {
-  kind: 'share';
-  shareId: string;
-  channel: ShareChannel | null;
+interface LiveChannel {
+  receive: (raw: string | Buffer) => unknown;
+  close: () => void;
+}
+
+interface LiveSocketData {
+  kind: 'live';
+  open: (peer: ChannelPeer) => LiveChannel;
+  channel: LiveChannel | null;
 }
 
 interface PreviewSocketData {
@@ -66,7 +78,7 @@ type ServerSocketData =
   | SocketData
   | TerminalSocketData
   | RemoteSocketData
-  | ShareSocketData
+  | LiveSocketData
   | PreviewSocketData;
 
 type ServerSocket = ServerWebSocket<ServerSocketData>;
@@ -79,8 +91,8 @@ function isRemoteSocket(socket: ServerSocket): socket is ServerWebSocket<RemoteS
   return socket.data.kind === 'remote';
 }
 
-function isShareSocket(socket: ServerSocket): socket is ServerWebSocket<ShareSocketData> {
-  return socket.data.kind === 'share';
+function isLiveSocket(socket: ServerSocket): socket is ServerWebSocket<LiveSocketData> {
+  return socket.data.kind === 'live';
 }
 
 function isPreviewSocket(socket: ServerSocket): socket is ServerWebSocket<PreviewSocketData> {
@@ -93,11 +105,20 @@ export interface RemoteSocketHandlers {
   message: (socket: ServerWebSocket<RemoteSocketData>, raw: string | Buffer) => void;
 }
 
-export interface ShareSocketHandlers {
-  open: (socket: ServerWebSocket<ShareSocketData>) => void;
-  close: (socket: ServerWebSocket<ShareSocketData>) => void;
-  message: (socket: ServerWebSocket<ShareSocketData>, raw: string | Buffer) => void;
-}
+const LIVE_SOCKETS = {
+  open: (socket: ServerWebSocket<LiveSocketData>) => {
+    socket.data.channel = socket.data.open({
+      send: (data) => socket.send(data),
+      close: (code, reason) => socket.close(code, reason),
+    });
+  },
+  close: (socket: ServerWebSocket<LiveSocketData>) => {
+    socket.data.channel?.close();
+  },
+  message: (socket: ServerWebSocket<LiveSocketData>, raw: string | Buffer) => {
+    void socket.data.channel?.receive(raw);
+  },
+};
 
 export interface PreviewSocketHandlers {
   open: (socket: ServerWebSocket<PreviewSocketData>) => void;
@@ -122,28 +143,27 @@ export function createSocketHandlers(
   hub: Pick<Hub, 'open' | 'close' | 'message'>,
   terminals: TerminalSockets | null,
   remote: RemoteSocketHandlers | null = null,
-  shares: ShareSocketHandlers | null = null,
   previews: PreviewSocketHandlers | null = null
 ) {
   return {
     open: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.open(socket);
       else if (isRemoteSocket(socket)) remote?.open(socket);
-      else if (isShareSocket(socket)) shares?.open(socket);
+      else if (isLiveSocket(socket)) LIVE_SOCKETS.open(socket);
       else if (isPreviewSocket(socket)) previews?.open(socket);
       else hub.open(socket as ServerWebSocket<SocketData>);
     },
     close: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.close(socket);
       else if (isRemoteSocket(socket)) remote?.close(socket);
-      else if (isShareSocket(socket)) shares?.close(socket);
+      else if (isLiveSocket(socket)) LIVE_SOCKETS.close(socket);
       else if (isPreviewSocket(socket)) previews?.close(socket);
       else hub.close(socket as ServerWebSocket<SocketData>);
     },
     message: (socket: ServerSocket, raw: string | Buffer) => {
       if (isTerminalSocket(socket)) terminals?.message(socket, raw);
       else if (isRemoteSocket(socket)) remote?.message(socket, raw);
-      else if (isShareSocket(socket)) shares?.message(socket, raw);
+      else if (isLiveSocket(socket)) LIVE_SOCKETS.message(socket, raw);
       else if (isPreviewSocket(socket)) previews?.message(socket, raw);
       else hub.message(socket as ServerWebSocket<SocketData>, raw);
     },
@@ -183,6 +203,7 @@ export function startServer(context: HttpContext) {
     context.classify ?? null,
     terminals,
     context.remote,
+    context.teamFeeds,
     (context.instance ?? createServerInstance()).version
   );
   const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
@@ -240,26 +261,7 @@ export function startServer(context: HttpContext) {
       }
     : null;
 
-  const { shares } = context;
-  const shareSockets: ShareSocketHandlers | null = shares
-    ? {
-        open: (socket) => {
-          socket.data.channel = shares.openChannel(
-            {
-              send: (data) => socket.send(data),
-              close: (code, reason) => socket.close(code, reason),
-            },
-            socket.data.shareId
-          );
-        },
-        close: (socket) => {
-          if (socket.data.channel) shares.closeChannel(socket.data.channel);
-        },
-        message: (socket, raw) => {
-          void socket.data.channel?.receive(raw);
-        },
-      }
-    : null;
+  const { shares, teams } = context;
 
   const { previews } = context;
   const previewSockets: PreviewSocketHandlers | null = previews
@@ -299,8 +301,51 @@ export function startServer(context: HttpContext) {
     if (originRefusal) return respondError('forbidden', originRefusal, 403);
     const shareId = url.searchParams.get(SHARE_CHANNEL_PARAM) ?? '';
     if (!shares.acceptsShare(shareId)) return respondError('not_found', 'No such endpoint.', 404);
-    if (bunServer.upgrade(request, { data: { kind: 'share', shareId, channel: null } })) return undefined;
+    const open = (peer: ChannelPeer) => {
+      const channel = shares.openChannel(peer, shareId);
+      return {
+        receive: (raw: string | Buffer) => channel.receive(raw),
+        close: () => shares.closeChannel(channel),
+      };
+    };
+    const data: LiveSocketData = { kind: 'live', open, channel: null };
+    if (bunServer.upgrade(request, { data })) return undefined;
     return new Response('Upgrade failed', { status: 400 });
+  }
+
+  async function respondTeamChannel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+    if (!(remote && teams?.acceptsViewer())) return respondError('not_found', 'No such endpoint.', 404);
+    const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
+    if (originRefusal) return respondError('forbidden', originRefusal, 403);
+    const claim = await remote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM));
+    if (!claim) return respondError('unauthorized', 'The connect token is missing, wrong or expired.', 401);
+    const open = (peer: ChannelPeer) => {
+      const channel = teams.openChannel(peer, claim.userId);
+      return {
+        receive: (raw: string | Buffer) => channel.receive(raw),
+        close: () => teams.closeChannel(channel),
+      };
+    };
+    const data: LiveSocketData = { kind: 'live', open, channel: null };
+    if (bunServer.upgrade(request, { data })) return undefined;
+    return new Response('Upgrade failed', { status: 400 });
+  }
+
+  function respondTeamView(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+    const { teamFeeds } = context;
+    const target = parseTeamViewTarget(url);
+    if (!(teamFeeds && target)) return respondError('not_found', 'No such endpoint.', 404);
+    const open = (peer: ChannelPeer) => {
+      const relay = teamFeeds.openRelay(peer, target);
+      return {
+        receive: () => {
+          relay.close();
+          peer.close(1008, 'A team view only listens.');
+        },
+        close: () => relay.close(),
+      };
+    };
+    return upgrade(request, bunServer, { kind: 'live', open, channel: null });
   }
 
   function respondTunnel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
@@ -311,6 +356,7 @@ export function startServer(context: HttpContext) {
       return context.schedules.handleWebhook(request, url);
     }
     if (route === 'share') return respondShareChannel(request, url, bunServer);
+    if (route === 'team') return respondTeamChannel(request, url, bunServer);
     if (route === 'preview') return respondPreview(request, url, bunServer);
     if (route === 'slack' && context.slack) {
       if (config.inspect) return respondReadOnly();
@@ -368,13 +414,14 @@ export function startServer(context: HttpContext) {
             surface: null,
             origin: 'local',
           });
+        if (url.pathname === TEAM_VIEW_PATH) return respondTeamView(request, url, bunServer);
         const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
         if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });
         if (url.pathname.startsWith('/api/')) return respondApi(request, url);
         return serveStatic(config.webDir, url.pathname);
       },
       websocket: {
-        ...createSocketHandlers(hub, terminalSockets, remoteSockets, shareSockets, previewSockets),
+        ...createSocketHandlers(hub, terminalSockets, remoteSockets, previewSockets),
         maxPayloadLength: MAX_BODY_BYTES,
       },
     })

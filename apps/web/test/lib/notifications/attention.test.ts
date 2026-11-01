@@ -52,7 +52,7 @@ describe('the page status and badge', () => {
 
   it('counts only what the focus project lets through', () => {
     const review = createGate({ id: 'g-review', taskId: 't-2' });
-    const state = { ...withTasks(question, review), focus: { projectId: 'a-1', until: null } };
+    const state = { ...withTasks(question, review), focus: { projectId: 'a-1', teamId: null, until: null } };
     expect(resolvePageAttention(state, NOW).badge).toBe(1);
     expect(listOpenGateIds(state)).toEqual(new Set(['g-question', 'g-review']));
   });
@@ -180,7 +180,10 @@ describe('which decisions are new', () => {
 
   it('names gates that just opened, and not ones already seen or outside the focus project', () => {
     const review = createGate({ id: 'g-review', taskId: 't-2' });
-    const focused = { ...withTasks(question, review), focus: { projectId: 'a-1', until: null } };
+    const focused = {
+      ...withTasks(question, review),
+      focus: { projectId: 'a-1', teamId: null, until: null },
+    };
     expect(listNewDecisions(new Set(), focused, NOW).map((entry) => entry.gateId)).toEqual(['g-question']);
     expect(listNewDecisions(new Set(['g-question']), focused, NOW)).toEqual([]);
   });

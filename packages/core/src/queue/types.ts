@@ -10,6 +10,7 @@ export interface QueuedGate {
 
 export interface Queue {
   focusProjectId: string | null;
+  focusTeamId: string | null;
   ready: QueuedGate[];
   upNow: QueuedGate[];
   later: QueuedGate[];

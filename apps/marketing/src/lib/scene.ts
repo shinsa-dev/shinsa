@@ -273,7 +273,7 @@ export function createHomeScene(now: number): ShinsaState {
     ...state,
     projects: { [PROJECT.id]: PROJECT },
     repos: Object.fromEntries(REPOS.map((repo) => [repo.id, repo])),
-    focus: { projectId: PROJECT.id, until: null },
+    focus: { projectId: PROJECT.id, teamId: null, until: null },
     taskNumbers: { [PROJECT.key]: 159 },
     briefings: {
       [PROJECT.id]: {

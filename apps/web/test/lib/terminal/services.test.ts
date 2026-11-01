@@ -228,7 +228,7 @@ describe('which services the menu shows', () => {
   it('shows the project you are in, else the focus project, else every project', () => {
     expect(resolveServicesProjects(state, 'docs', NOW).map((project) => project.id)).toEqual(['docs']);
     expect(resolveServicesProjects(state, null, NOW).map((project) => project.id)).toEqual(['docs', 'shop']);
-    const focused = { ...state, focus: { projectId: 'shop', until: null } };
+    const focused = { ...state, focus: { projectId: 'shop', teamId: null, until: null } };
     expect(resolveServicesProjects(focused, null, NOW).map((project) => project.id)).toEqual(['shop']);
   });
 

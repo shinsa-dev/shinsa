@@ -56,7 +56,7 @@ function pushProjects(focus: string | null) {
         createTask({ id: 'paywall', title: 'Redo the paywall', stage: 'building', projectId: 'p1' }),
         createTask({ id: 'basket', title: 'Count the baskets', stage: 'building', projectId: 'p2' }),
       ],
-      patch: { focus: { projectId: focus, until: null } },
+      patch: { focus: { projectId: focus, teamId: null, until: null } },
     })
   );
 }

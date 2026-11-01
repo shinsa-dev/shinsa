@@ -38,7 +38,7 @@ const FULL = createShinsaState({
     createGate({ id: 'g-merge', taskId: 'merge', type: 'merge', title: 'Merge #12' }),
     createGate({ id: 'g-garden', taskId: 'garden', type: 'review' }),
   ],
-  patch: { focus: { projectId: 'work', until: null } },
+  patch: { focus: { projectId: 'work', teamId: null, until: null } },
 });
 
 function renderQueue(props: Partial<React.ComponentProps<typeof TaskQueue>> & { state?: ShinsaState } = {}) {

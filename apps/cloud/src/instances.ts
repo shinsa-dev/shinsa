@@ -16,6 +16,7 @@ import type { InstanceRow, SharedInstanceRow, UserRow } from './database.ts';
 import { CloudError, readBearer, readJsonFields, readText, respondJson } from './http.ts';
 import { listInstanceMembers } from './members.ts';
 import { findPageUser, findSessionUser } from './session.ts';
+import { listUserTeams } from './teams.ts';
 import type { CloudWorld } from './world.ts';
 
 export const ONLINE_WINDOW_MS = 5 * 60_000;
@@ -132,7 +133,11 @@ export async function respondHeartbeat(request: Request, world: CloudWorld) {
       localUrl
     );
   await world.store.recordHeartbeat(row.id, localUrl, world.now());
-  const answer: HeartbeatResponse = { ok: true, ...(await listInstanceMembers(row, world)) };
+  const answer: HeartbeatResponse = {
+    ok: true,
+    ...(await listInstanceMembers(row, world)),
+    teams: await listUserTeams(row.user_id, world),
+  };
   return respondJson(answer);
 }
 

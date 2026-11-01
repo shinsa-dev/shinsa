@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { PROJECT_LIMITS, resolveQueue } from '../../src/index.ts';
+import { PROJECT_LIMITS, parseUserCommand, resolveQueue } from '../../src/index.ts';
 import { createHarness, createTask, type Harness, registerRepo } from '../harness.ts';
 
 function registerAt(
@@ -291,7 +291,7 @@ describe('projects', () => {
     expect(harness.state.projects[projectId]).toBeUndefined();
     expect(harness.state.repos[repoId]?.projectId).toBeNull();
     expect(harness.state.repos[other]?.projectId).not.toBeNull();
-    expect(harness.state.focus).toEqual({ projectId: null, until: null });
+    expect(harness.state.focus).toEqual({ projectId: null, teamId: null, until: null });
     expect(harness.lastEffect('briefing.request').projectId).toBeNull();
     expect(resolveQueue(harness.state, 0).working).toHaveLength(1);
   });
@@ -315,7 +315,7 @@ describe('focus', () => {
     const harness = createHarness();
     const work = writeProject(harness, { name: 'Work' })?.id ?? '';
     harness.send({ type: 'focus.change', projectId: work, until: 9_000 });
-    expect(harness.state.focus).toEqual({ projectId: work, until: 9_000 });
+    expect(harness.state.focus).toEqual({ projectId: work, teamId: null, until: 9_000 });
     expect(harness.lastEffect('briefing.request').projectId).toBe(work);
     const events = harness.state.seq;
     harness.send({ type: 'focus.change', projectId: work, until: 9_000 });
@@ -327,6 +327,56 @@ describe('focus', () => {
     expect(() => harness.send({ type: 'focus.change', projectId: 'nope', until: null })).toThrow(
       'No project nope'
     );
+  });
+
+  test('a team focus shows only tasks of projects in that team, until it ends', () => {
+    const harness = createHarness();
+    const shared = registerRepo(harness, 'paywall-next', 'Superwall');
+    const own = registerRepo(harness, 'shinsa', 'Personal');
+    const projectId = harness.state.repos[shared]?.projectId ?? '';
+    harness.send({ type: 'project.add_to_team', projectId, teamId: 'team-1' });
+    const inTeam = createTask(harness, { repoId: shared });
+    createTask(harness, { repoId: own });
+    harness.send({ type: 'focus.change', projectId: null, teamId: 'team-1', until: 9_000 });
+    expect(harness.state.focus).toEqual({ projectId: null, teamId: 'team-1', until: 9_000 });
+    expect(harness.lastEffect('briefing.request').projectId).toBeNull();
+    const focused = resolveQueue(harness.state, 0);
+    expect(focused.focusTeamId).toBe('team-1');
+    expect(focused.focusProjectId).toBeNull();
+    expect(focused.working.map((task) => task.id)).toEqual([inTeam]);
+    const ended = resolveQueue(harness.state, 9_000);
+    expect(ended.focusTeamId).toBeNull();
+    expect(ended.working).toHaveLength(2);
+  });
+
+  test('focus is on a project or a team, never both', () => {
+    const harness = createHarness();
+    const work = writeProject(harness, { name: 'Work' })?.id ?? '';
+    expect(() =>
+      harness.send({ type: 'focus.change', projectId: work, teamId: 'team-1', until: null })
+    ).toThrow('Focus on a project or on a team, not both at once.');
+    expect(harness.state.seq).toBe(1);
+  });
+
+  test('a team focus on your behalf says it focused a team, and parses from the wire', () => {
+    expect(
+      parseUserCommand({ type: 'focus.change', projectId: null, teamId: 'team-1', until: null })
+    ).toEqual({ type: 'focus.change', projectId: null, teamId: 'team-1', until: null });
+    expect(parseUserCommand({ type: 'focus.change', projectId: null, until: null })).toEqual({
+      type: 'focus.change',
+      projectId: null,
+      until: null,
+    });
+    const harness = createHarness();
+    harness.send(
+      { type: 'focus.change', projectId: null, teamId: 'team-1', until: null },
+      { onBehalf: true }
+    );
+    harness.send({ type: 'focus.change', projectId: null, until: null }, { onBehalf: true });
+    expect(harness.state.onBehalfActions.map((action) => action.summary)).toEqual([
+      'Focused on a team',
+      'Cleared the focus',
+    ]);
   });
 });
 

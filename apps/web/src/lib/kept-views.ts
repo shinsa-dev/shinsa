@@ -21,6 +21,10 @@ export function isHubRoute(route: Route): route is { name: HubPage } {
 export function resolvePageKey(view: RouteView, taskId: string | null) {
   if (view.route.name === 'task') return `task:${taskId ?? view.route.reference}`;
   if (view.route.name === 'automation') return `automation:${view.route.scheduleId}`;
+  if (view.route.name === 'team-task') {
+    const { route } = view;
+    return `team-task:${route.teamId}/${route.instanceId}/${route.taskId}`;
+  }
   return view.route.name;
 }
 

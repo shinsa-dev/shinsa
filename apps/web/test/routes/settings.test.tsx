@@ -227,7 +227,7 @@ describe('Settings stats', () => {
       tasks,
       runs,
       projects: [project],
-      patch: { focus: { projectId: 'p1', until: null } },
+      patch: { focus: { projectId: 'p1', teamId: null, until: null } },
     });
     const view = await renderSettings('/settings?tab=statistics', focused);
     expect(screen.getAllByText('Only Parser, the project in focus')).toHaveLength(2);
@@ -235,7 +235,7 @@ describe('Settings stats', () => {
     expect(document.querySelectorAll('[data-task="t2"]').length).toBe(0);
     view.rerender(
       <TooltipProvider>
-        <SettingsPage state={{ ...focused, focus: { projectId: 'p1', until: now - 1 } }} />
+        <SettingsPage state={{ ...focused, focus: { projectId: 'p1', teamId: null, until: now - 1 } }} />
       </TooltipProvider>
     );
     await settle();

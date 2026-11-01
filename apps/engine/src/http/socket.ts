@@ -16,6 +16,7 @@ import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Remote } from '../remote/index.ts';
+import type { TeamFeeds } from '../remote/team-feeds.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Terminals } from '../terminals/index.ts';
 import type { Classifier } from '../triage/message.ts';
@@ -92,6 +93,7 @@ export function createSocketHub(
   classify: Classifier | null = null,
   terminals?: Terminals,
   remote?: Remote,
+  teamFeeds?: Pick<TeamFeeds, 'subscribe' | 'snapshot'>,
   version = DEVELOPMENT_VERSION
 ) {
   const sockets = new Set<Socket>();
@@ -119,6 +121,10 @@ export function createSocketHub(
   );
 
   const unsubscribeRemote = remote?.subscribe(() => broadcast({ type: 'remote', remote: remote.snapshot() }));
+
+  const unsubscribeTeams = teamFeeds?.subscribe(() =>
+    broadcast({ type: 'teams', teams: teamFeeds.snapshot() })
+  );
 
   const unsubscribeState = engine.subscribe((state, { previous, changes }) => {
     if (sockets.size === 0) return;
@@ -185,6 +191,7 @@ export function createSocketHub(
       if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
       if (terminals) send(socket, { type: 'terminals', terminals: terminals.snapshot() });
       if (remote) send(socket, { type: 'remote', remote: remote.snapshot() });
+      if (teamFeeds) send(socket, { type: 'teams', teams: teamFeeds.snapshot() });
       send(socket, { type: 'surfaces', desktop: desktopConnected });
       send(socket, { type: 'engine', engine: engineInfo });
     },
@@ -210,6 +217,7 @@ export function createSocketHub(
       unsubscribeAccounts?.();
       unsubscribeTerminals?.();
       unsubscribeRemote?.();
+      unsubscribeTeams?.();
     },
   };
 }

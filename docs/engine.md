@@ -2865,8 +2865,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   sharing on an engine from before sharing; the Feedback button and Send feedback on Shinsa likewise ask the default
   machine for `feedback.write`. A command sent anyway is refused before it leaves the page, with "Update
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
-  engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`, and
-  `feedback` for `GET /api/feedback`, today). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
+  `feedback` for `GET /api/feedback`, and `teams` for the team routes and `GET /api/teams/tasks`, today; Settings →
+  Teams shows only on an engine that has it). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -2910,7 +2911,7 @@ read-only remote access to that one task, live: the browser opens a channel thro
 access does, and the machine pushes the task down it the moment it changes. It shows everything its owner sees on its
 Overview, Review, Code and Chat, for a public or a private repository alike, with the agents' live output and tool
 calls, when shared as Standard (the default); shared as Status it is an anonymous status card (the preset, below). Your messages to agents, their prompts and your answers never leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page where the machine's tunnel is. The same
-projection and channel will serve teams.
+projection and channel serve teams, always at Standard (Teams, below).
 
 - **The link.** The share id is 16 random bytes and the key 32 (base64url), both made by the engine
   (`share.link`, `crypto.getRandomValues`) and kept only in the task's `TaskShare.url` on the machine. The path is
@@ -3089,6 +3090,142 @@ projection and channel will serve teams.
   changes nothing.
 - **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
   the link is missing; an agent has no tool to share or stop sharing.
+
+## Teams
+
+A team is people who watch each other's work. You put your own projects in a team, and every member then sees every
+task in them, live and read-only, next to their own tasks, on the hosted dashboard and in the local app. It is a share
+link for a whole project, on the same projection and the same one-way channel, with membership in place of the link:
+nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its tunnel while it is
+online. Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
+
+- **What app.shinsa.dev keeps** (`apps/cloud/src/teams.ts`, `migrations/0005_teams.sql`): who is in which team. A
+  team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
+  up to 20 members (`MAX_TEAM_MEMBERS`), who asked to join, and one reusable invite kept as its SHA-256. An account
+  owns at most 10 teams (`MAX_OWNED_TEAMS`). It keeps no task, no title, no project and no key. Each machine's
+  heartbeat answers its owner's teams (`HeartbeatResponse.teams`, `RemoteTeam`: owner, your role, members, the owner's
+  requests, and every member's machines with whether each is online), which the machine keeps in `remote.json`.
+- **The team key.** Making a team (Settings → Teams → New team, `shinsa teams create`) asks app.shinsa.dev for the
+  team and its invite, and makes a 32-byte key on the machine (`TEAM_KEY_BYTES`), kept only in `remote.json`
+  (`teamKeys`, never the event log) and in a member's browser (IndexedDB, `createTeamKeyStore`). The join link is
+  `https://app.shinsa.dev/share/team#<team>.<invite>.<key>` (`resolveTeamJoinUrl`, `parseTeamJoinUrl`): the key sits in
+  the fragment, which no browser sends to a server, so app.shinsa.dev never sees it and cannot read a team view. The
+  invite only lets someone ask; turning the link off (`invite/remove`) or making a new one (`invite`) stops the old
+  one, and a member already in keeps their key.
+- **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page names the team
+  and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing), keeps the key in the browser
+  and, on Ask to join, sends `POST /__remote/teams/join { invite }`, which records that the account asked
+  (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads their
+  projects over the sealed channel (`lib/teams/join-machines.ts`) and asks which to share, one or more being required;
+  Ask to join then sends each machine with a pick `POST /api/remote/teams/join { url }` (the one team route the
+  dashboard may call, and only from a device of the machine's owner: a member's device is refused with `not_owner`,
+  since joining your account to a team and sharing your projects is yours alone, `Remote.openChannel`) and `project.add_to_team` for each pick, so the key
+  and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
+  on each of your machines; one without the key asks for the link right in the team's card, with the projects to
+  share beside it (or `shinsa teams join <url>`), which stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
+  `requests/decline`; `shinsa teams accept|decline <team> --login`). A member may leave (`leave`, which also takes
+  your projects out of the team) and the owner may remove a member (`members/remove`) or the team (`remove`); either
+  way the next heartbeat drops it from every machine and their open views close (below). Making a team asks which of
+  your projects to share, and each team's card picks them after.
+- **Giving a teammate this machine.** A teammate is a step from full remote access: Give machine access beside them
+  in Settings → Teams (`shinsa teams grant <team> --login`, `POST /api/remote/members/grant { teamId, userId }`,
+  `Remote.grantTeammate`) makes them a member of this machine at once, with no invite and no request
+  (`/__remote/machine/members/add`, which app.shinsa.dev allows for an account that shares a team with the machine's
+  owner, `sharesTeam`), and records the grant in `remote.json` (`grants: { userId, teamId, secret }`, a fresh 32-byte
+  secret per grant). Their browser then adds itself: the hosted dashboard, finding a machine shared with them that
+  this browser has no key for (`admitTeamMachines`, `lib/teams/admit.ts`), reads the machine's public key and the
+  grant's secret from that team's channel (`TeamListView.machineKey` and `grant`, sealed with the team key, so
+  app.shinsa.dev cannot swap or read them; `grant` goes only to the channel of the account it was given to, in that
+  team), checks the key against the fingerprint app.shinsa.dev lists, and opens the sealed channel with an enroll
+  proof made with the grant's secret in place of an invite secret. The team key alone, which every member and anyone
+  removed since still holds, adds no device. The machine admits the device without asking (`AccessAnswer`
+  `admitted`) only while the account is a member here, holds a grant, is still in that team and the proof checks
+  against the grant's secret; any other proof falls back to the invite link. Removing the member under Remote access, or their leaving the
+  machine's members, drops the grant and their devices.
+- **Which projects a team sees is yours alone.** `Project.teamIds` lists the teams a project is in, written by
+  `project.add_to_team` and `project.remove_from_team` (`decide/teams.ts`; the project's team picker in Settings →
+  Teams, `shinsa projects add-to-team|remove-from-team`). Both are human-only: their surface specs are `humanOnly`
+  and core refuses them on your behalf (`human_only`), since they open tasks to other people. A task is in a team when
+  its project is (`isTeamTask`, through `resolveTaskProject`), except an automation's home. A task without a project
+  is never shown to a team.
+- **The team channel** (`TEAM_CHANNEL_PATH`, `/team` on the tunnel; core's `remote/teams.ts`, the engine's
+  `remote/teams.ts`, `Teams`). A viewer asks app.shinsa.dev for a team connect token
+  (`POST /__remote/teams/<team>/connect { instanceId }`, signed in, from a page; `/__remote/machine/teams/<team>/connect`
+  with the machine token, from your engine), which it answers only for a member or the owner and a machine of the
+  team, signed with that machine's connect key for the viewer's GitHub id (60 seconds), as `wss://t-<machine>.shinsa.dev/team?token=…`.
+  The machine upgrades it only while remote access is on and the token checks out (`verifyConnect`; 404 or 401
+  otherwise). The viewer's first and only message is a team hello: the team, the view it asks for (the team's task
+  list, `{ kind: 'list' }`, or one task, `{ kind: 'task', taskId }`), a fresh P-256 key and an HMAC with the team key
+  over all three. The machine opens it only when it holds that team's key, the token's account is the team's owner or
+  one of its members in the machine's own copy (`isTeamViewer`), a task asked for is in one of the team's projects,
+  and the HMAC checks in constant time; else `refused` ("This task is no longer shown to the team, or you are no
+  longer in it."). The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
+  view and both fresh keys), so the view asked for is bound into the key: a hello for the list cannot be replayed to
+  read a task. The share channel's code serves both (`ShareChannel`, with a host that authorizes the hello).
+- **What a teammate sees.** The list view is `TeamListView`: every open task of the team's projects and the 50 most
+  recently finished (`TEAM_SETTLED_LIMIT`), each a `TeamTask` (`listTeamTasks`): `resolveSharedListing`, the task,
+  its gates and its project as a share link copies them, with the owner's GitHub login and the machine's name, and
+  the machine's public key (`machineKey`, for a teammate given this machine). A task
+  view is exactly a share link's `ShareLiveView` and files at Standard (`Shares.resolveLive` with `TEAM_SHARE_PRESET`,
+  whatever the task's own share link or the default preset says), pushed again when one of its runs writes to its
+  transcript (`Teams.#pushTranscript`): the table in Sharing a task is what a teammate can and cannot see, the same for
+  every repository. In short, a teammate sees the title, status, request text, plan, phase reports, review report,
+  findings, checks, branches, the pull request and its diff and code from GitHub, evidence, gates without your answers,
+  runs without their prompts or sessions, activity without messages, and the agents' live output and tool calls in
+  Chat; never a message you sent an agent, an agent's prompt, a gate answer, a verdict note, a request attachment,
+  the worktree or a path on your disk. They can change nothing: no command, no message, no answer, no file.
+- **The channel only listens, and ends the moment access does.** After the hello the machine reads nothing; any
+  message closes the channel (1008, "A team view only listens."). It is never connected to the hub, the API or the
+  dispatcher. Every open view is checked again on every state change and every change to remote access
+  (`Teams.#syncChannels`): a member removed or who left, a project taken out of the team, a task moved out of it,
+  the team removed or its key gone ends it with "This task is no longer shown to the team, or you are no longer in
+  it.", and remote access paused or removed ends every view ("Remote access on the machine that shows these tasks was
+  turned off."). Otherwise the machine pushes a new view on each change, as a share does.
+- **Watching teammates** (`remote/team-feeds.ts`, `TeamFeeds`). Each machine watches, for each team whose key it
+  holds, every machine of that team but itself (your other machines too, so the local app shows your team work
+  everywhere), each over a list channel opened with its machine token. An offline machine is left alone and shows no
+  tasks; a dropped channel opens again after 1, 2, 5, 10, then every 30 seconds; a refused one tries again after 1, 2,
+  then every 5 minutes (at once when the key changes), since a teammate's machine learns a new member only at its next
+  heartbeat, and a wrong key never calls a teammate more often than that. It accepts a teammate's machine only if it
+  answers the welcome with the team key. The cache is in memory, never in the log. It serves:
+  - `GET /api/teams/tasks` (`?team=<id>` for one team, `?open=true` for unfinished tasks only), the read API triage
+    uses for its team-wide duplicate check: `{ machines, tasks }`, each task a `TeamFeedTask` (a `TeamTask` with its
+    team and machine). It only reads; your own devices reach it over the sealed channel like any API route, and the
+    tunnel has no route to it.
+  - the socket message `teams` (`TeamFeedSnapshot`), sent on connect and on every change, so a page never polls.
+  - `/api/teams/view?team=&machine=&task=` (`TEAM_VIEW_PATH`, local only), a socket that relays one teammate task:
+    the engine opens the task channel itself and forwards each decrypted message, so in the local app the team key
+    never reaches the page. Anything the page sends closes it.
+- **Focus on a team** (`focus.change` with `teamId`, `Focus.teamId`; `resolveFocusTeam`). A focus names a project or a
+  team, never both (`focus_refused`). A team focus keeps your own tasks in the team's projects in the queue, Home and
+  every list built on it (`isInFocus` through `isTeamTask`), and the page adds the team's tasks from your teammates:
+  the focus menu (`components/focus/menu.tsx`) reads Your work, then your projects, then Teams (each team you are in,
+  not one you only asked to join); All tasks gets a Teammates in <team> group and Home a section of their open
+  tasks (`components/teams/tasks.tsx`), each row marked with its owner's GitHub login (`@kai`), neither shown while a
+  status filter is on. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
+  guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
+  task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
+  a team channel the browser opens with its own key; a browser without the key says "Add the team to this browser"
+  until you open the join link there once.
+- **Machines you already reach.** A teammate who also made you a member of a machine (Remote access → members) shows
+  that machine's tasks as your own, with full control, through the dashboard's sealed channel; team rows from a
+  machine the dashboard reaches are left out (`listTeamFeedTasks`), so no task appears twice. The hosted dashboard
+  merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`, `HostedTeamFeeds`,
+  which retries as `TeamFeeds` does: a refused channel again after 1, 2, then every 5 minutes), keeping the freshest
+  copy of each task.
+- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
+  change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and
+  your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
+  New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
+  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
+  which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
+  member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
+  local routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`
+  and `POST /api/remote/members/grant`,
+  and the remote snapshot carries the teams (`RemoteSnapshot.teams`, `listTeamEntries`), so every change reaches every
+  page at once.
+- **Agents read it, never change it.** `shinsa teams list` (`teams_list`) is every agent's tool; every other `teams`
+  command and both project team commands are human-only.
 
 
 ## Sharing a preview
@@ -3438,10 +3575,10 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
   repository with its path (the task's own marked) and its folders, and the repository the task works in when it is
   outside the project (`resolveProjectContext`, appended in `Decider.startRun`), so you never have to say which
   repository "the server" is.
-- **The focus is a project** (`focus.change` `projectId`, or none for all work). It filters: `resolveQueue` keeps only
-  the focus project's decisions and tasks, and every list built on it (Home, the queue button, the guide, ⌘K's
-  decisions, the tab count and notifications) shows nothing from other projects. To see other work, you switch the
-  focus.
+- **The focus is a project or a team** (`focus.change` `projectId` or `teamId`, or neither for your work). It filters:
+  `resolveQueue` keeps only the focus project's decisions and tasks, or those of the team's projects, and every list
+  built on it (Home, the queue button, the guide, ⌘K's decisions, the tab count and notifications) shows nothing from
+  other projects. To see other work, you switch the focus. A team focus also shows your teammates' tasks (Teams).
 
 **Task identity.** Every id Shinsa makes for the log (tasks, runs, gates, schedules, projects) is a UUIDv7 from the
 engine (`Bun.randomUUIDv7()` behind `DecideContext.newId`); accounts use 8 hex characters and webhook deliveries
@@ -3670,7 +3807,9 @@ truth, and a snapshot only saves replaying it.
   `settings.changed` events with `approvePlans` as a switch: on becomes `large` and off `when_asked`.
   Logs from before share presets (log version 13, `SHARE_PRESET_LOG_VERSION`) have `task.shared` events without
   `preset`, which become Standard shares (`preset: 'standard'`).
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 13) marks the log so
+  Logs from before teams (log version 14, `TEAM_FOCUS_LOG_VERSION`) have `focus.changed` events without `teamId`,
+  which gain `teamId: null`.
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 14) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
