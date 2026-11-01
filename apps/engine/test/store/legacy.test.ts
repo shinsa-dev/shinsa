@@ -413,6 +413,59 @@ describe('a revised plan’s change summary and feedback, which the reply replac
   });
 });
 
+describe('a plan’s checks written as prose, before checks had a command', () => {
+  const prose = { goal: 'Ship it.', phases: [], verification: ['Core: unit tests keep 100% coverage.'] };
+  const current = {
+    goal: 'Ship it.',
+    phases: [],
+    verification: [{ label: 'Tests', command: 'bun test test/a.test.ts', phases: [1] }],
+  };
+
+  test('drop the prose checks; a plan with current checks or no document is left alone', () => {
+    expect(
+      rewrite(
+        { type: 'plan.proposed', taskId: TASK, body: 'b', document: prose },
+        { type: 'plan.proposed', taskId: TASK, body: 'b', document: current },
+        { type: 'plan.proposed', taskId: TASK, body: 'b', document: null }
+      )
+    ).toEqual([
+      {
+        seq: 1,
+        type: 'plan.proposed',
+        event: { type: 'plan.proposed', taskId: TASK, body: 'b', document: { ...prose, verification: [] } },
+      },
+    ]);
+  });
+
+  test('are rewritten on boot in a log of the team focus’s version and replay with no problems', () => {
+    const path = writeLegacyLog([
+      { type: 'plan.proposed', taskId: TASK, body: 'b', document: prose },
+      { type: 'plan.proposed', taskId: TASK, body: 'b', document: current },
+    ]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 14');
+    db.close();
+    const log = new EventLog(path);
+    const engine = new Engine(log);
+    expect(engine.problems).toEqual([]);
+    log.close();
+    expect(readStoredLog(path)).toMatchObject({
+      version: 15,
+      rows: [
+        {
+          payload: JSON.stringify({
+            type: 'plan.proposed',
+            taskId: TASK,
+            body: 'b',
+            document: { ...prose, verification: [] },
+          }),
+        },
+        { payload: JSON.stringify({ type: 'plan.proposed', taskId: TASK, body: 'b', document: current }) },
+      ],
+    });
+  });
+});
+
 describe('the compaction setting saved under its Eunoe names', () => {
   test('both Eunoe modes become the default and Claude Code’s becomes provider compaction; the rest is left alone', () => {
     expect(
