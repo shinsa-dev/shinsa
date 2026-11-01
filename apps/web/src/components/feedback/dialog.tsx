@@ -8,9 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
-import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Field, FieldError } from '@shinsa/ui/components/field';
-import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import { Textarea } from '@shinsa/ui/components/textarea';
@@ -24,82 +22,17 @@ import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import {
   canOpenFeedback,
-  describeFeedbackFiled,
-  describeFeedbackIssue,
+  closeFeedbackEntry,
   describeFeedbackSource,
   describeFeedbackStatus,
   FEEDBACK_ACTIONS,
-  FEEDBACK_AGENTS_NOTE,
-  FEEDBACK_ICON,
-  FEEDBACK_INTRO,
   type FeedbackActions,
-  listFeedbackGroups,
   needsRedraft,
   resolveFeedbackLeaks,
-  updateFeedbackOpen,
-  useFeedbackOpen,
+  useOpenFeedbackEntryId,
   validateFeedbackIssue,
-  validateFeedbackNote,
 } from '@/lib/feedback.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { isSubmitKey } from '@/lib/keys.ts';
-
-const SECTION = 'flex flex-col gap-2';
-
-const SECTION_HEADING = 'font-medium text-2xs text-fg-2';
-
-function NoteForm({ actions }: { actions: FeedbackActions }) {
-  const [note, setNote] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  async function send() {
-    const problem = validateFeedbackNote(note);
-    setError(problem);
-    if (problem || busy) return;
-    setBusy(true);
-    const sent = await actions.write(null, note);
-    setBusy(false);
-    if (sent) setNote('');
-  }
-
-  return (
-    <form
-      className='flex flex-col gap-1.5'
-      onSubmit={(event) => {
-        event.preventDefault();
-        void send();
-      }}
-    >
-      <Field data-invalid={error ? true : undefined}>
-        <Textarea
-          rows={4}
-          value={note}
-          aria-label='Your feedback'
-          aria-invalid={error ? true : undefined}
-          placeholder='What got in your way, or what you wish Shinsa did'
-          className='resize-none'
-          onKeyDown={(event) => {
-            if (isSubmitKey(event)) {
-              event.preventDefault();
-              void send();
-            }
-          }}
-          onChange={(event) => {
-            setNote(event.target.value);
-            setError(null);
-          }}
-        />
-        {error && <FieldError>{error}</FieldError>}
-      </Field>
-      <div className='flex items-center justify-end'>
-        <Button type='submit' size='sm' disabled={!note.trim()} loading={busy}>
-          Draft issue
-        </Button>
-      </div>
-    </form>
-  );
-}
 
 function IssueEditor({
   entry,
@@ -192,14 +125,21 @@ function EntryActions({
   leaking,
   actions,
   onEdit,
+  onDone,
 }: {
   entry: Feedback;
   leaking: boolean;
   actions: FeedbackActions;
   onEdit: () => void;
+  onDone: () => void;
 }) {
   const { busy, run } = useBusy<'dismiss' | 'file' | 'redraft'>();
   const blocked = entry.status === 'filing';
+  async function finish(sent: Promise<boolean>) {
+    const done = await sent;
+    if (done) onDone();
+    return done;
+  }
   return (
     <div className='flex items-center gap-1.5'>
       <Button
@@ -207,7 +147,7 @@ function EntryActions({
         size='sm'
         disabled={blocked || entry.status === 'drafting'}
         loading={busy === 'dismiss'}
-        onClick={() => run('dismiss', () => actions.dismiss(entry))}
+        onClick={() => run('dismiss', () => finish(actions.dismiss(entry)))}
       >
         Dismiss
       </Button>
@@ -237,7 +177,7 @@ function EntryActions({
             icon='IconArrowUpRight'
             disabled={!canOpenFeedback(entry) || leaking}
             loading={busy === 'file' || blocked}
-            onClick={() => run('file', () => actions.file(entry))}
+            onClick={() => run('file', () => finish(actions.file(entry)))}
           >
             Open issue
           </Button>
@@ -247,40 +187,40 @@ function EntryActions({
   );
 }
 
-function WaitingEntry({
+function EntryBody({
   state,
   entry,
   actions,
+  onDone,
 }: {
   state: ShinsaState;
   entry: Feedback;
   actions: FeedbackActions;
+  onDone: () => void;
 }) {
   const [editing, setEditing] = React.useState(false);
   const status = describeFeedbackStatus(entry);
-  const leaks = entry.title !== null && entry.body !== null ? resolveFeedbackLeaks(state, entry) : null;
+  const leaks = resolveFeedbackLeaks(state, entry);
   return (
-    <div className={cn(CARD, 'flex flex-col gap-2 p-3')} data-feedback={entry.id}>
+    <div className='flex w-full flex-col gap-3 text-left' data-feedback={entry.id}>
       <EntrySource state={state} entry={entry} />
-      {entry.status === 'drafting' ? (
+      {entry.status === 'drafting' && (
         <div className='flex items-center gap-1.5 text-fg-3 text-xs'>
           <Spinner size='sm' />
           <span>{status}</span>
         </div>
-      ) : null}
+      )}
       {editing ? (
         <IssueEditor entry={entry} actions={actions} onDone={() => setEditing(false)} />
       ) : (
         entry.title !== null && (
-          <div className='flex flex-col gap-1'>
+          <div className={cn(CARD, 'flex flex-col gap-1.5 p-3')}>
             <p className='selectable font-medium text-fg-4 text-sm'>{entry.title}</p>
             {entry.body !== null && <Markdown text={entry.body} className='selectable text-fg-3 text-xs' />}
           </div>
         )
       )}
-      {entry.status === 'drafting' && (
-        <p className='selectable line-clamp-3 text-fg-2 text-xs'>{entry.note}</p>
-      )}
+      {entry.status === 'drafting' && <p className='selectable text-fg-2 text-xs'>{entry.note}</p>}
       {entry.status === 'filing' && <p className='text-fg-3 text-xs'>{status}</p>}
       {entry.status === 'failed' && (
         <p className={cn(TONE_INSET.red, TONE_TEXT.red, 'selectable px-2.5 py-2 text-xs')}>{status}</p>
@@ -294,68 +234,8 @@ function WaitingEntry({
           leaking={leaks !== null}
           actions={actions}
           onEdit={() => setEditing(true)}
+          onDone={onDone}
         />
-      )}
-    </div>
-  );
-}
-
-function FiledEntry({ entry }: { entry: Feedback }) {
-  return (
-    <a
-      href={entry.issue?.url}
-      target='_blank'
-      rel='noreferrer'
-      data-feedback={entry.id}
-      className='group/issue corner-superellipse/1.125 flex min-w-0 items-start gap-2 rounded-item px-2 py-1.5 text-xs hover:bg-bg-a1 active:bg-bg-a1'
-    >
-      <span className='mt-px text-fg-3'>
-        <Icon size='sm' name='IconGithub' />
-      </span>
-      <span className='flex min-w-0 flex-1 flex-col gap-px'>
-        <span className='truncate font-medium text-fg-4'>{entry.title}</span>
-        <span className='truncate text-2xs text-fg-2'>
-          <span className='tabular-nums'>{describeFeedbackIssue(entry)}</span>
-          {' · '}
-          <TimeAgo at={entry.updatedAt} text={(now) => describeFeedbackFiled(entry, now)} />
-        </span>
-      </span>
-      <span className='mt-px text-fg-2 opacity-0 group-hover/issue:opacity-100 group-active/issue:opacity-100'>
-        <Icon size='sm' name='IconArrowUpRight' />
-      </span>
-    </a>
-  );
-}
-
-export function FeedbackPanel({ state, actions }: { state: ShinsaState; actions: FeedbackActions }) {
-  const groups = listFeedbackGroups(state);
-  return (
-    <div className='flex flex-col gap-5'>
-      <NoteForm actions={actions} />
-      <section className={SECTION}>
-        <h3 className={SECTION_HEADING}>Waiting for you</h3>
-        {groups.waiting.length === 0 ? (
-          <EmptyState
-            icon={FEEDBACK_ICON}
-            size='sm'
-            title='Nothing waits for you'
-            description={FEEDBACK_AGENTS_NOTE}
-          />
-        ) : (
-          groups.waiting.map((entry) => (
-            <WaitingEntry key={entry.id} state={state} entry={entry} actions={actions} />
-          ))
-        )}
-      </section>
-      {groups.filed.length > 0 && (
-        <section className={SECTION}>
-          <h3 className={SECTION_HEADING}>Opened on GitHub</h3>
-          <div className='-mx-2 flex flex-col gap-px'>
-            {groups.filed.map((entry) => (
-              <FiledEntry key={entry.id} entry={entry} />
-            ))}
-          </div>
-        </section>
       )}
     </div>
   );
@@ -368,21 +248,36 @@ export function FeedbackDialog({
   state: ShinsaState;
   actions?: FeedbackActions;
 }) {
-  const open = useFeedbackOpen();
+  const openId = useOpenFeedbackEntryId();
+  const live = openId ? (state.feedback[openId] ?? null) : null;
+  const shown = React.useRef<Feedback | null>(null);
+  if (live) shown.current = live;
+  const entry = live ?? shown.current;
   return (
-    <Dialog open={open} onOpenChange={updateFeedbackOpen}>
+    <Dialog
+      open={live !== null}
+      onOpenChange={(open) => {
+        if (!open) closeFeedbackEntry();
+      }}
+    >
       <DialogContent>
         <DialogHeader className='px-6'>
-          <DialogTitle>Feedback on Shinsa</DialogTitle>
+          <DialogTitle>Review the issue</DialogTitle>
           <DialogDescription>
-            {FEEDBACK_INTRO.before} <span className='whitespace-nowrap'>{FEEDBACK_REPOSITORY}</span>
-            {FEEDBACK_INTRO.after}
+            It opens as a public issue on <span className='whitespace-nowrap'>{FEEDBACK_REPOSITORY}</span>{' '}
+            under your GitHub account.
           </DialogDescription>
         </DialogHeader>
         <DialogCloseButton />
-        <div className='w-full'>
-          <FeedbackPanel state={state} actions={actions} />
-        </div>
+        {entry && (
+          <EntryBody
+            key={entry.id}
+            state={state}
+            entry={entry}
+            actions={actions}
+            onDone={closeFeedbackEntry}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

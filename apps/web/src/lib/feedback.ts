@@ -8,9 +8,12 @@ import {
   listFeedbackEntryLeaks,
   type ShinsaState,
 } from '@shinsa/core';
+import type { IconName } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { formatSince } from '@/lib/format/time.ts';
+import type { Tone } from '@/lib/format/tone.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 
 export const FEEDBACK_ICON = 'IconMegaphone';
 
@@ -26,29 +29,48 @@ export const FEEDBACK_HINT = 'Your agent turns it into a public GitHub issue tha
 export const FEEDBACK_AGENTS_NOTE =
   'Agents report what gets in their way here too. Nothing they report opens until you open it.';
 
-let open = false;
+interface FeedbackView {
+  open: boolean;
+  selectedId: string | null;
+}
+
+const CLOSED: FeedbackView = { open: false, selectedId: null };
+
+let view: FeedbackView = CLOSED;
 const listeners = new Set<() => void>();
 
-function emit() {
+function replaceView(next: FeedbackView) {
+  if (next.open === view.open && next.selectedId === view.selectedId) return;
+  view = next;
   for (const listener of listeners) listener();
 }
 
-export function updateFeedbackOpen(next: boolean) {
-  if (open === next) return;
-  open = next;
-  emit();
+export function updateFeedbackOpen(open: boolean) {
+  replaceView({ ...view, open });
 }
 
 export function openFeedback() {
   updateFeedbackOpen(true);
 }
 
+export function openFeedbackEntry(feedbackId: string) {
+  replaceView({ open: false, selectedId: feedbackId });
+}
+
+export function closeFeedbackEntry() {
+  replaceView({ ...view, selectedId: null });
+}
+
 export function isFeedbackOpen() {
-  return open;
+  return view.open;
+}
+
+export function selectOpenFeedbackEntryId() {
+  return view.selectedId;
 }
 
 export function resetFeedbackOpen() {
-  open = false;
+  view = CLOSED;
 }
 
 function subscribe(listener: () => void) {
@@ -60,6 +82,10 @@ function subscribe(listener: () => void) {
 
 export function useFeedbackOpen() {
   return React.useSyncExternalStore(subscribe, isFeedbackOpen, isFeedbackOpen);
+}
+
+export function useOpenFeedbackEntryId() {
+  return React.useSyncExternalStore(subscribe, selectOpenFeedbackEntryId, selectOpenFeedbackEntryId);
 }
 
 export interface FeedbackGroups {
@@ -107,6 +133,34 @@ export function describeFeedbackFiled(entry: Feedback, now: number) {
   return entry.source === 'agent' ? `${opened} from an agent’s report` : opened;
 }
 
+export function describeFeedbackPreview(entry: Feedback) {
+  return entry.title ?? entry.note;
+}
+
+export function describeFeedbackRowMeta(state: ShinsaState, entry: Feedback) {
+  if (entry.status === 'drafting') return 'Your agent is drafting it';
+  if (entry.status === 'filing') return 'Opening on GitHub';
+  if (entry.status === 'failed') return 'Failed. Open it to see why';
+  if (entry.source === 'human') return 'From you';
+  const task = entry.taskId ? state.tasks[entry.taskId] : undefined;
+  return task ? `From the agent on ${task.title}` : 'From an agent';
+}
+
+export type FeedbackRowIcon = { kind: 'busy' } | { kind: 'icon'; icon: IconName; tone: Tone };
+
+export function resolveFeedbackRowIcon(state: ShinsaState, entry: Feedback): FeedbackRowIcon {
+  if (entry.status === 'drafting' || entry.status === 'filing') return { kind: 'busy' };
+  if (entry.status === 'failed') return { kind: 'icon', icon: 'IconExclamationTriangle', tone: 'red' };
+  if (entry.status === 'filed') return { kind: 'icon', icon: 'IconGithub', tone: 'neutral' };
+  if (resolveFeedbackLeaks(state, entry) !== null)
+    return { kind: 'icon', icon: 'IconExclamationTriangle', tone: 'amber' };
+  return { kind: 'icon', icon: entry.source === 'agent' ? 'IconRobot' : 'IconUser', tone: 'neutral' };
+}
+
+export function resolveFeedbackSectionId(section: keyof FeedbackGroups) {
+  return createDisclosureId('feedback', 'section', section);
+}
+
 export function describeFeedbackIssue(entry: Feedback) {
   return entry.issue ? `#${entry.issue.number}` : null;
 }
@@ -115,6 +169,7 @@ export function resolveFeedbackLeaks(
   state: ShinsaState,
   text: Pick<Feedback, 'title' | 'body'>
 ): string | null {
+  if (text.title === null || text.body === null) return null;
   const leaks = listFeedbackEntryLeaks(state, text);
   return leaks.length > 0 ? describeFeedbackLeaks(leaks) : null;
 }

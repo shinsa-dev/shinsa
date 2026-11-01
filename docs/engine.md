@@ -1862,7 +1862,7 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   drafted `title` (120) and `body` (6,000), its `source` (`human` or `agent`, with the agent's task and run), its
   `status` (`drafting`, `draft`, `filing`, `filed` or `failed`, with the `failure` shown to you) and, once filed, the
   `issue` (number and link). `feedback.recorded` carries the whole entry, `feedback.removed` forgets it.
-- **Writing.** `feedback.write` (the dialog, `shinsa feedback write`) records a note as `drafting` and runs
+- **Writing.** `feedback.write` (the feedback popover, `shinsa feedback write`) records a note as `drafting` and runs
   `feedback.draft`; with `feedbackId` it rewrites an entry that is not busy or filed and drafts it again. The
   `feedback.draft` effect (replay-safe) is a quick call on your account (`createFeedbackDrafter`, `feedback/draft.ts`):
   its fixed system prompt says the issue is public, to describe only what Shinsa did and what should change, and to
@@ -1902,8 +1902,11 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   shell) is an agent's too: marked as from an agent with the task it came from, under the same limits. The report is recorded in its task's activity and drafted like yours; it waits in the dialog,
   marked as from an agent with a link to its task. There is no setting to open one without you.
 - **Where you see it.** A Feedback button right of Settings in the Desk header and a Feedback row under Settings in
-  the Shelf rail, with a count of the drafts and failures waiting for you, open the feedback dialog: what happens to a
-  note, the note field, Waiting for you and Opened on GitHub. ⌘K has Send feedback on Shinsa; `shinsa feedback
+  the Shelf rail, with a count of the drafts and failures waiting for you, open the feedback popover: what happens to a
+  note, the note field, then Waiting for you and Opened on GitHub as one row each, its title (the note while it drafts)
+  and who it is from or what is happening to it. A waiting row opens its dialog (`FeedbackDialog`, kept by
+  `openFeedbackEntry`): the whole draft, the privacy check's findings, Dismiss, Edit and Open issue; an opened issue's
+  row links to GitHub. ⌘K has Send feedback on Shinsa; `shinsa feedback
   list|write|edit|file|dismiss` is the same from the command line (`GET /api/feedback`).
 
 ### Setup verification

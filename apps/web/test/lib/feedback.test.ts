@@ -2,10 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
 import {
   canOpenFeedback,
+  closeFeedbackEntry,
   countFeedbackWaiting,
   describeFeedbackCount,
   describeFeedbackFiled,
   describeFeedbackIssue,
+  describeFeedbackPreview,
+  describeFeedbackRowMeta,
   describeFeedbackSource,
   describeFeedbackStatus,
   FEEDBACK_ACTIONS,
@@ -13,9 +16,14 @@ import {
   listFeedbackGroups,
   needsRedraft,
   openFeedback,
+  openFeedbackEntry,
   resolveFeedbackLeaks,
+  resolveFeedbackRowIcon,
+  resolveFeedbackSectionId,
+  selectOpenFeedbackEntryId,
   updateFeedbackOpen,
   useFeedbackOpen,
+  useOpenFeedbackEntryId,
   validateFeedbackIssue,
   validateFeedbackNote,
 } from '@/lib/feedback.ts';
@@ -111,6 +119,7 @@ describe('resolveFeedbackLeaks', () => {
   it('says which private details a draft still has, and nothing for a clean one', () => {
     const state = stateWith([], { projects: [createProject({ id: 'p1', name: 'Basket', key: 'BK' })] });
     expect(resolveFeedbackLeaks(state, DRAFT)).toBeNull();
+    expect(resolveFeedbackLeaks(state, { title: 'Basket plans fail', body: null })).toBeNull();
     expect(resolveFeedbackLeaks(state, { title: 'Basket plans fail', body: 'Mail me@example.com' })).toBe(
       'This issue still has a name from your projects (“Basket”), an email address (“me@example.com”). Take it out before you open the issue.'
     );
@@ -159,6 +168,70 @@ describe('the dialog’s open state', () => {
     expect(isFeedbackOpen()).toBe(true);
     act(() => updateFeedbackOpen(false));
     expect(result.current).toBe(false);
+  });
+
+  it('opens one entry in its dialog and closes the popover, then closes it again', () => {
+    const { result } = renderHook(() => useOpenFeedbackEntryId());
+    act(() => openFeedback());
+    act(() => openFeedbackEntry('f1'));
+    expect(result.current).toBe('f1');
+    expect(isFeedbackOpen()).toBe(false);
+    act(() => closeFeedbackEntry());
+    expect(selectOpenFeedbackEntryId()).toBeNull();
+  });
+});
+
+describe('the popover’s rows', () => {
+  const state = createShinsaState({
+    tasks: [createTask({ id: 't1', title: 'Fix the login page' })],
+    projects: [createProject({ id: 'p1', name: 'Basket', key: 'BK' })],
+  });
+
+  it('previews the title, or the note until there is one', () => {
+    expect(describeFeedbackPreview(DRAFT)).toBe('Plans with two phases are refused');
+    expect(describeFeedbackPreview(DRAFTING)).toBe('The plan tool refused a plan with two phases.');
+  });
+
+  it('says who it is from, or what is happening to it', () => {
+    expect(describeFeedbackRowMeta(state, DRAFT)).toBe('From you');
+    expect(describeFeedbackRowMeta(state, { ...DRAFT, source: 'agent', taskId: 't1' })).toBe(
+      'From the agent on Fix the login page'
+    );
+    expect(describeFeedbackRowMeta(state, { ...DRAFT, source: 'agent', taskId: 'gone' })).toBe(
+      'From an agent'
+    );
+    expect(describeFeedbackRowMeta(state, DRAFTING)).toBe('Your agent is drafting it');
+    expect(describeFeedbackRowMeta(state, { ...DRAFT, status: 'filing' })).toBe('Opening on GitHub');
+    expect(describeFeedbackRowMeta(state, { ...DRAFT, status: 'failed' })).toBe('Failed. Open it to see why');
+  });
+
+  it('marks each row by who sent it, its trouble or its progress', () => {
+    expect(resolveFeedbackRowIcon(state, DRAFT)).toEqual({ kind: 'icon', icon: 'IconUser', tone: 'neutral' });
+    expect(resolveFeedbackRowIcon(state, { ...DRAFT, source: 'agent' })).toEqual({
+      kind: 'icon',
+      icon: 'IconRobot',
+      tone: 'neutral',
+    });
+    expect(resolveFeedbackRowIcon(state, { ...DRAFT, title: 'Basket plans fail' })).toEqual({
+      kind: 'icon',
+      icon: 'IconExclamationTriangle',
+      tone: 'amber',
+    });
+    expect(resolveFeedbackRowIcon(state, { ...DRAFT, status: 'failed' })).toEqual({
+      kind: 'icon',
+      icon: 'IconExclamationTriangle',
+      tone: 'red',
+    });
+    expect(resolveFeedbackRowIcon(state, FILED)).toEqual({
+      kind: 'icon',
+      icon: 'IconGithub',
+      tone: 'neutral',
+    });
+    expect(resolveFeedbackRowIcon(state, DRAFTING)).toEqual({ kind: 'busy' });
+  });
+
+  it('keeps each section’s fold apart', () => {
+    expect(resolveFeedbackSectionId('waiting')).not.toBe(resolveFeedbackSectionId('filed'));
   });
 });
 

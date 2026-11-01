@@ -285,11 +285,12 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
   its own.
 - **Feedback.** A Feedback button beside Settings in the header (Desk) and the rail (Shelf), and Send feedback on
-  Shinsa in ⌘K, open the feedback dialog. You write a note in your own words; your agent rewrites it as a public
+  Shinsa in ⌘K, open the feedback popover: the note field and one row per entry, its title and who it is from;
+  clicking one opens it in a dialog to read in full, edit, dismiss or open. You write a note in your own words; your agent rewrites it as a public
   GitHub issue on `shinsa-dev/shinsa` without your projects, repositories, files, branches, names, code or links, and
   you read it before it opens under your GitHub account. A check in core refuses an issue that still holds an email, a folder path, a token
   or key, a link elsewhere or one of your project, repository, branch, task or account names, and shows what it found.
-  Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same dialog, marked as
+  Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same popover, marked as
   from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); the button's
   count is what waits for you (`docs/engine.md` → Feedback).
 - **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
