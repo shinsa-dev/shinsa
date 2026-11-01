@@ -6,6 +6,8 @@ export const STATUS_EYEBROW = 'Status';
 
 export const STATUS_LATEST_TITLE = 'Latest update';
 
+export const STATUS_UPDATED = 'Updated';
+
 export const STATUS_UPDATE: Record<ShareUpdate, { label: string; tone: Tone; text: string }> = {
   planning: { label: 'Planning', tone: 'neutral', text: 'We’re planning the work.' },
   working: { label: 'In progress', tone: 'blue', text: 'We’re working on it.' },
