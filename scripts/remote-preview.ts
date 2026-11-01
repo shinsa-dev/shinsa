@@ -168,6 +168,19 @@ function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
   );
 }
 
+function acceptEveryRequest(remote: Remote) {
+  const accepting = new Set<string>();
+  remote.subscribe(() => {
+    for (const request of remote.snapshot().requests) {
+      if (accepting.has(request.id)) continue;
+      accepting.add(request.id);
+      void remote.acceptRequest(request.id).catch((error: unknown) => {
+        console.error(`Could not accept ${request.deviceName}: ${String(error)}`);
+      });
+    }
+  });
+}
+
 async function startMachine(id: string, name: string, dataDir: string) {
   const connectKey = serializeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   writeRemoteFile(dataDir, id, connectKey);
@@ -196,6 +209,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     machineName: name,
     openUrl: () => Promise.resolve(),
   });
+  acceptEveryRequest(remote);
   const evidence = new EvidenceStore(config.evidenceDir);
   const terminals = new Terminals({ dataDir, home: config.userHome, version: 'preview' });
   const shares = new Shares({
@@ -586,7 +600,7 @@ function respondIndex(machines: Machine[], shares: PreviewShare[], preview: Serv
       `${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
     ],
     ...machines.map((machine) => [
-      `Add this device to ${machine.name} (request access, then accept it in that machine's own app below)`,
+      `Add this device to ${machine.name} (it is let in at once: the stand-in accepts every request)`,
       `/__preview/enroll/${machine.id}`,
     ]),
     ...machines.map((machine) => [
@@ -612,7 +626,7 @@ function respondIndex(machines: Machine[], shares: PreviewShare[], preview: Serv
   ];
   const items = links.map(([label, href]) => `<li><a href="${href}">${label}</a></li>`).join('');
   return new Response(
-    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to each machine first: request access, accept it in the machine's own app, then open the dashboard.</p><ol>${items}</ol></body>`,
+    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to each machine first: request access, which the stand-in accepts at once, then open the dashboard.</p><ol>${items}</ol></body>`,
     { headers: { 'content-type': 'text/html; charset=utf-8' } }
   );
 }
