@@ -160,7 +160,7 @@ function MachineItem({
   return (
     <div className={cn(SETTING_ROW, 'items-start py-2')}>
       <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
-        <div className='flex min-w-0 flex-col gap-px'>
+        <div className='flex min-w-0 flex-col'>
           <div className='flex min-w-0 items-center gap-1.5 text-xs leading-4'>
             <Truncate className='font-medium text-fg-4'>{row.label}</Truncate>
             <span className={cn('shrink-0', row.instance.online ? TONE_TEXT.green : 'text-fg-2')}>
