@@ -14,6 +14,7 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { TaskCommandRunner } from '@/components/task/command-runner.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
+import * as evidenceLayout from '@/lib/evidence/layout.ts';
 import { writeStoredComments } from '@/lib/review/draft.ts';
 import * as identity from '@/lib/review/identity.ts';
 import { resolveCodePath } from '@/lib/review/places.ts';
@@ -24,6 +25,7 @@ import {
   createEvidence,
   createGate,
   createProject,
+  createRun,
   createShinsaState,
   createTask,
 } from '../../support/state.ts';
@@ -175,10 +177,8 @@ function reviewing(overrides: Partial<Task> = {}, gateType: 'review' | 'merge' |
   return { task, state: createShinsaState({ tasks: [task], gates }) };
 }
 
-function renderReview(state: ShinsaState, task: Task, query = '') {
-  navigate(`/tasks/${task.id}?tab=review${query}`);
-  pushState(state);
-  return render(
+function ReviewTree({ state, task }: { state: ShinsaState; task: Task }) {
+  return (
     <TooltipProvider>
       <ReviewDraftProvider enabled draftKey={`gate-${task.id}`}>
         <TaskCommandRunner state={state} task={task}>
@@ -188,6 +188,12 @@ function renderReview(state: ShinsaState, task: Task, query = '') {
       <Toaster />
     </TooltipProvider>
   );
+}
+
+function renderReview(state: ShinsaState, task: Task, query = '') {
+  navigate(`/tasks/${task.id}?tab=review${query}`);
+  pushState(state);
+  return render(<ReviewTree state={state} task={task} />);
 }
 
 function selectedKey() {
@@ -364,6 +370,42 @@ describe('the Review tab', () => {
     } finally {
       cards.mockRestore();
       HTMLElement.prototype.getBoundingClientRect = realRect;
+    }
+  });
+
+  it('renders no evidence or point card again when the state changes for another task', async () => {
+    const { task, state } = reviewing();
+    const withEvidence = {
+      ...state,
+      evidence: {
+        shot: createEvidence({ id: 'shot', taskId: task.id, title: 'Settings page', label: 'Empty' }),
+      },
+    };
+    const view = renderReview(withEvidence, task);
+    await screen.findAllByText('The loop never stops when the call keeps failing.');
+    const figure = await screen.findByRole('button', { name: /^Open Settings page/ });
+    await act(async () => {});
+    const cards = spyOn(identity, 'resolveReviewItemIdentity');
+    const figures = spyOn(evidenceLayout, 'describeEvidencePart');
+    try {
+      const other = createTask({ id: 'other', title: 'Another task', stage: 'building' });
+      const patched: ShinsaState = {
+        ...withEvidence,
+        tasks: { ...withEvidence.tasks, other },
+        runs: { ...withEvidence.runs, 'other-run': createRun({ id: 'other-run', taskId: 'other' }) },
+        evidence: {
+          ...withEvidence.evidence,
+          'other-shot': createEvidence({ id: 'other-shot', taskId: 'other' }),
+        },
+      };
+      view.rerender(<ReviewTree state={patched} task={task} />);
+      await act(async () => {});
+      expect(figure.isConnected).toBe(true);
+      expect(cards).not.toHaveBeenCalled();
+      expect(figures).not.toHaveBeenCalled();
+    } finally {
+      cards.mockRestore();
+      figures.mockRestore();
     }
   });
 

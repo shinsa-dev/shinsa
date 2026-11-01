@@ -14,6 +14,7 @@ import { Panel } from '@/components/layout/surface/panel.tsx';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
 import { TaskPreviewLinks, useTaskPreviews } from '@/components/services/task-previews.tsx';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
+import { useStructuralValue } from '@/hooks/use-structural-value.ts';
 import { useServerHealth } from '@/lib/connection/health.ts';
 import {
   describeEvidenceKind,
@@ -298,11 +299,13 @@ function EvidenceBody({
   );
 }
 
-export function EvidencePanel({
+const NO_PREVIEWS: ServiceView[] = [];
+
+export const EvidencePanel = React.memo(function EvidencePanelView({
   layout,
   persistId,
   checks = null,
-  previews = [],
+  previews = NO_PREVIEWS,
 }: {
   layout: EvidenceLayout;
   persistId: DisclosureId;
@@ -314,7 +317,7 @@ export function EvidencePanel({
       <EvidenceBody layout={layout} checks={checks} persistId={persistId} previews={previews} />
     </Panel>
   );
-}
+});
 
 export function EvidenceSection({
   state,
@@ -327,12 +330,16 @@ export function EvidenceSection({
 }) {
   const dataDir = useServerHealth()?.dataDir ?? null;
   const { evidence, runs, repos } = state;
-  const layout = React.useMemo(
-    () => resolveEvidenceLayout({ evidence, runs }, task, dataDir),
-    [evidence, runs, task, dataDir]
+  const layout = useStructuralValue(
+    React.useMemo(
+      () => resolveEvidenceLayout({ evidence, runs }, task, dataDir),
+      [evidence, runs, task, dataDir]
+    )
   );
-  const checks = React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task]);
-  const previews = useTaskPreviews(state, task);
+  const checks = useStructuralValue(
+    React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task])
+  );
+  const previews = useStructuralValue(useTaskPreviews(state, task));
   const persistId = resolveTaskDisclosureId(task.id, 'evidence', 'panel');
   if (layout.count === 0 && layout.earlier.length === 0) {
     if (!(showEmpty || previews.length > 0)) return null;

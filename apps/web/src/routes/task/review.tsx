@@ -32,6 +32,7 @@ import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { useReviewKeys } from '@/hooks/use-review-keys.ts';
+import { useStructuralValue } from '@/hooks/use-structural-value.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { listReviewCommands } from '@/lib/command/review.ts';
 import { type Loaded, useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
@@ -400,7 +401,7 @@ function PointCards({
   );
 }
 
-function AgentReview({
+const AgentReview = React.memo(function AgentReviewPanel({
   task,
   chapter,
   selection,
@@ -434,9 +435,15 @@ function AgentReview({
       ))}
     </Panel>
   );
-}
+});
 
-function Comments({ task, selection }: { task: Task; selection: ReviewSelection }) {
+const Comments = React.memo(function CommentCards({
+  task,
+  selection,
+}: {
+  task: Task;
+  selection: ReviewSelection;
+}) {
   const draft = useReviewDraft();
   if (draft.comments.length === 0) return null;
   return (
@@ -464,9 +471,17 @@ function Comments({ task, selection }: { task: Task; selection: ReviewSelection 
       })}
     </Chapter>
   );
-}
+});
 
-function EverythingElse({ task, report, diff }: { task: Task; report: WorkReport; diff: TaskDiff | null }) {
+const EverythingElse = React.memo(function EverythingElsePanel({
+  task,
+  report,
+  diff,
+}: {
+  task: Task;
+  report: WorkReport;
+  diff: TaskDiff | null;
+}) {
   const files = diff ? listOtherFiles(diff.files, report, task.findings) : [];
   const dismissed = task.dismissedFindings ?? [];
   if (files.length === 0 && dismissed.length === 0) return null;
@@ -510,7 +525,7 @@ function EverythingElse({ task, report, diff }: { task: Task; report: WorkReport
       )}
     </Panel>
   );
-}
+});
 
 function ReviewSummary({
   state,
@@ -553,7 +568,7 @@ function ReviewSummary({
   );
 }
 
-function ReviewChapters({
+const ReviewChapters = React.memo(function ReviewChapterList({
   task,
   report,
   checks,
@@ -587,7 +602,7 @@ function ReviewChapters({
     if (chapter.id === 'review') return null;
     return <PointCards key={chapter.id} task={task} chapter={chapter} selection={selection} />;
   });
-}
+});
 
 function ReviewComposer({ state, task }: { state: ShinsaState; task: Task }) {
   const hint = resolveMessageHint(state, task);
@@ -614,7 +629,8 @@ export function ReviewTab({
 }) {
   const diff = useReviewDiff(task);
   const { tasks } = state;
-  const waits = React.useMemo(() => listMergeWaits({ tasks }, task), [tasks, task]);
+  const waits = useStructuralValue(React.useMemo(() => listMergeWaits({ tasks }, task), [tasks, task]));
+  const hasWaits = waits.length > 0;
   const diffValue = diff.status === 'ready' ? diff.value : null;
   const report = React.useMemo(
     () => task.report ?? (diffValue ? resolveFallbackReport(diffValue, task.summary ?? task.title) : null),
@@ -628,13 +644,15 @@ export function ReviewTab({
         task.reviewDisagreements,
         listMergeSteps(task),
         task.coverage ?? null,
-        waits.length > 0
+        hasWaits
       ),
-    [report, task, waits]
+    [report, task, hasWaits]
   );
   const points = React.useMemo(() => listReviewPoints(chapters), [chapters]);
   const { repos, evidence } = state;
-  const checks = React.useMemo(() => resolveChecksView({ repos, evidence }, task), [repos, evidence, task]);
+  const checks = useStructuralValue(
+    React.useMemo(() => resolveChecksView({ repos, evidence }, task), [repos, evidence, task])
+  );
   const stops = React.useMemo(() => listReviewStops(chapters), [chapters]);
   const selection = useReviewSelection(new URLSearchParams(location.search).get('spot'));
   const viewport = React.useRef<HTMLDivElement>(null);
