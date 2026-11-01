@@ -2,7 +2,6 @@ import type { ShareLimit, Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -10,9 +9,7 @@ import {
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
 import { Field, FieldLabel } from '@shinsa/ui/components/field';
-import { Input } from '@shinsa/ui/components/input';
 import * as React from 'react';
-import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { useNow } from '@/hooks/use-now.ts';
@@ -41,21 +38,13 @@ import {
 } from '@/lib/share/dialog.ts';
 import { navigate } from '@/router.ts';
 
-function ShareLink({ url }: { url: string }) {
-  return (
-    <div className='relative w-full'>
-      <Input readOnly value={url} aria-label='Share link' className='selectable pr-8' />
-      <CopyButton text={url} className='absolute top-1/2 right-0.5 -translate-y-1/2' />
-    </div>
-  );
-}
-
 function ShareBody({ view }: { view: ShareView }) {
   switch (view.kind) {
     case 'unpaired':
       return <p className='text-fg-3 text-xs'>{SHARE_NEEDS_REMOTE}</p>;
     case 'off':
     case 'linking':
+    case 'shared':
       return null;
     case 'failed':
       return (
@@ -63,8 +52,6 @@ function ShareBody({ view }: { view: ShareView }) {
           {view.message}
         </p>
       );
-    case 'shared':
-      return <ShareLink url={view.url} />;
   }
 }
 
@@ -111,26 +98,22 @@ function ShareActions({ task, view, limit }: { task: Task; view: ShareView; limi
       </Button>
     );
   }
-  if (view.kind === 'off' || view.kind === 'linking') {
+  if (view.kind === 'failed') {
     return (
-      <Button loading={busy || view.kind === 'linking'} onClick={() => void share()}>
-        Share
-      </Button>
-    );
-  }
-  return (
-    <>
-      <Button variant='secondary' onClick={() => openUnshareConfirm(task.id)}>
-        {UNSHARE_TITLE}
-      </Button>
-      {view.kind === 'failed' ? (
+      <>
+        <Button variant='secondary' onClick={() => openUnshareConfirm(task.id)}>
+          {UNSHARE_TITLE}
+        </Button>
         <Button loading={busy} onClick={() => void share()}>
           Try again
         </Button>
-      ) : (
-        <DialogClose render={<Button />}>Done</DialogClose>
-      )}
-    </>
+      </>
+    );
+  }
+  return (
+    <Button loading={busy || view.kind !== 'off'} onClick={() => void share()}>
+      Share
+    </Button>
   );
 }
 
@@ -140,6 +123,10 @@ function ShareContent({ task }: { task: Task }) {
   const now = useNow();
   const live = selectLiveShare(task, now);
   const view = resolveShareView(task, snapshot, now);
+  const shared = view.kind === 'shared';
+  React.useEffect(() => {
+    if (shared) closeShareDialog();
+  }, [shared]);
   const [picked, setPicked] = React.useState<ShareLimit | null>(null);
   const limit = live?.limit ?? picked ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
   const changeLimit = (next: ShareLimit) => {

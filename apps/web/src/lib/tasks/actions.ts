@@ -54,11 +54,17 @@ export function listTaskActions(task: Task, now = Date.now()): TaskActionKey[][]
   const worktree: TaskActionKey[] = task.worktreePath ? ['editor', 'terminal', 'finder'] : [];
   const lifecycle: TaskActionKey[] = isTaskSettled(task) ? [] : ['restart', 'complete', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
-  const share: TaskActionKey[] = task.watchHome ? [] : ['share'];
-  if (selectLiveShare(task, now)) share.push('unshare');
+  const share = listShareActions(task, now);
   return [links, worktree, [...fork, ...share], listBacklogActions(task), lifecycle].filter(
     (group) => group.length > 0
   );
+}
+
+function listShareActions(task: Task, now: number): TaskActionKey[] {
+  const live = selectLiveShare(task, now);
+  if (live?.url && !live.failure) return ['unshare'];
+  const share: TaskActionKey[] = task.watchHome ? [] : ['share'];
+  return live ? [...share, 'unshare'] : share;
 }
 
 function listBacklogActions(task: Task): TaskActionKey[] {

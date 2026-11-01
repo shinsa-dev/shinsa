@@ -65,13 +65,23 @@ describe('the share dialog', () => {
     expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull();
   });
 
-  it('shows the link to copy inside its field, and stops sharing once you confirm', async () => {
-    showTask({ share: { ...SHARING, url: URL } });
-    const link = (await screen.findByRole('textbox', { name: 'Share link' })) as HTMLInputElement;
-    expect(link.value).toBe(URL);
-    expect(link.parentElement?.querySelector('button[aria-label="Copy"]')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop sharing' }));
+  it('closes once the link is made, leaving the banner to copy it', async () => {
+    showTask({ share: { ...SHARING, url: null } });
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    act(() =>
+      pushState(
+        createShinsaState({
+          tasks: [createTask({ id: 'source', handle: 'SW-2', share: { ...SHARING, url: URL } })],
+        })
+      )
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull();
+  });
+
+  it('stops a share whose link failed once you confirm', async () => {
+    showTask({ share: { ...SHARING, url: null, failure: 'Remote access was removed.' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop sharing' }));
     const dialog = await screen.findByRole('alertdialog');
     expect(dialog.textContent).toContain('The link stops working at once');
     expect(listSentCommands()).toEqual([]);

@@ -53,6 +53,22 @@ describe('listTaskActions', () => {
     ]);
   });
 
+  it('offers only Stop sharing while a task is shared, and Share task again to retry a link that failed', () => {
+    const share = { at: 1, limit: 'until_done', endsAt: null } as const;
+    const shared = createTask({
+      id: 't',
+      stage: 'merged',
+      share: { ...share, url: 'https://app.shinsa.dev/share/t/a' },
+    });
+    expect(listTaskActions(shared)).toEqual([['fork', 'unshare']]);
+    const failed = createTask({
+      id: 't',
+      stage: 'merged',
+      share: { ...share, url: null, failure: 'Refused.' },
+    });
+    expect(listTaskActions(failed)).toEqual([['fork', 'share', 'unshare']]);
+  });
+
   it('labels every action with its icon', () => {
     expect(TASK_ACTION.cancel).toEqual({ label: 'Cancel task', icon: 'IconCircleX' });
     expect(TASK_ACTION.branch.label).toBe('Copy branch name');

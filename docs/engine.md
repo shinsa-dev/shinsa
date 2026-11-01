@@ -2618,10 +2618,11 @@ projection and channel will serve teams.
   machine is paired as another instance, each shared task's link is marked failed with "This machine was paired with
   remote access again…" (`SHARE_LINK_LOST`), and Try again makes a new link.
 - **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`): one short dialog over the task's
-  `TaskShare` and the remote snapshot, in five views: remote access needed (Open Settings), ready (Share, with Share
-  for), making the link, failed (the reason, Stop sharing and Try again) and shared (the link in a read-only field with
-  Copy inside it, Share for, Stop sharing and Done). Share task stays in the task's menu while it is shared, beside
-  Stop sharing, which asks first (`UnshareConfirm`) and is the only way a share ends early.
+  `TaskShare` and the remote snapshot, in four views: remote access needed (Open Settings), ready (Share, with Share
+  for), making the link (Share loading) and failed (the reason, Stop sharing and Try again). It closes by itself the
+  moment the link is made: the banner holds the link from then on. While a task is shared its menu shows Stop sharing
+  instead of Share task (both while a link failed, to try again); Stop sharing asks first (`UnshareConfirm`) and is the
+  only way a share ends early.
 - **While it is shared** (`components/task/sharing-banner.tsx`): the task's page shows a banner under its header that
   cannot be dismissed, saying anyone with the link can watch the task and when sharing ends, with Copy link and Stop
   sharing, until the share ends.
