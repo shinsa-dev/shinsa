@@ -86,6 +86,14 @@ export function resolveChannel(pathname: string): Channel | null {
   return null;
 }
 
+export function resolveVersionChannel(pathname: string): Channel | null {
+  const path = pathname.replace(/\/+$/, '');
+  if (path === '/download/version') return 'stable';
+  if (path === '/download/version/beta') return 'beta';
+  if (path === '/download/version/canary') return 'canary';
+  return null;
+}
+
 export function resolveChannelKey(channel: Channel) {
   return `channels/${channel}.json`;
 }
@@ -296,12 +304,44 @@ async function resolveFallbackUrl(channel: Channel, world: DownloadWorld) {
   return `${REPOSITORY_URL}/releases/download/${selectNewest(served)}/${DMG_NAME}`;
 }
 
+export function selectChannelVersion(tags: string[], channel: Channel) {
+  const served = tags.filter((tag) => SERVED_CHANNELS[channel].includes(resolveReleaseChannel(tag)));
+  const stable = served.filter((tag) => resolveReleaseChannel(tag) === 'stable');
+  const candidates = channel === 'stable' && stable.length > 0 ? stable : served;
+  if (candidates.length === 0) return null;
+  return selectNewest(candidates).replace(/^v/, '');
+}
+
+async function selectPointerVersion(channel: Channel, world: DownloadWorld) {
+  if (!world.bucket) return null;
+  try {
+    return (await resolveDownloadPointer(world.bucket, channel, world))?.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveChannelVersion(channel: Channel, world: DownloadWorld) {
+  const version = await selectPointerVersion(channel, world);
+  if (version) return version;
+  return selectChannelVersion((await resolveFeedVersions(world)) ?? [], channel);
+}
+
+async function respondVersion(channel: Channel, world: DownloadWorld) {
+  const version = await resolveChannelVersion(channel, world);
+  const headers = { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' };
+  if (version === null) return new Response(`No ${channel} release yet\n`, { status: 404, headers });
+  return new Response(`${version}\n`, { status: 200, headers });
+}
+
 async function redirectToGitHub(channel: Channel, world: DownloadWorld) {
   const location = await resolveFallbackUrl(channel, world);
   return new Response(null, { status: 302, headers: { Location: location, 'Cache-Control': 'no-store' } });
 }
 
 export async function respond(request: Request, world: DownloadWorld) {
+  const versionChannel = resolveVersionChannel(new URL(request.url).pathname);
+  if (versionChannel) return respondVersion(versionChannel, world);
   const channel = resolveChannel(new URL(request.url).pathname);
   if (!channel) return world.assets(request);
   const download = await streamFromBucket(request, channel, world);

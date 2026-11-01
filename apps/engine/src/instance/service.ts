@@ -2,6 +2,14 @@ type Env = Record<string, string | undefined>;
 
 export const SERVICE_MARKER = 'SHINSA_SERVICE';
 
+export const SERVICE_CARRIED_ENV = [
+  'SHINSA_HOME',
+  'SHINSA_DATA_DIR',
+  'XDG_CONFIG_HOME',
+  'SHINSA_PORT',
+  'SHINSA_HOST',
+];
+
 export function isStartedByService(env: Env) {
   return env[SERVICE_MARKER] === '1';
 }

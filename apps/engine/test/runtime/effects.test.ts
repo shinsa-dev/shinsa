@@ -13,6 +13,7 @@ import {
 import type { RunSupervisor } from '../../src/agents/index.ts';
 import type { Briefings } from '../../src/briefing/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../../src/config/index.ts';
+import { NO_DRAFT, STOPPED_WHILE_FILING } from '../../src/feedback/index.ts';
 import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
@@ -374,6 +375,43 @@ describe('suggesting a watch', () => {
         text: null,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       },
+    ]);
+  });
+});
+
+describe('the feedback effects', () => {
+  const ENTRY = {
+    source: 'human' as const,
+    note: 'The plan tab hides changes.',
+    title: 'Plan tab hides changes',
+    body: 'It hides them.',
+    failure: null,
+    issue: null,
+    taskId: null,
+    runId: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+
+  test('drafting, filing, a failure for good and recovery each report back on the entry', async () => {
+    const { runner, dispatched, commandIds } = setup((state) => {
+      state.feedback.f1 = { ...ENTRY, id: 'f1', status: 'drafting', title: null, body: null };
+      state.feedback.f2 = { ...ENTRY, id: 'f2', status: 'filing' };
+      state.feedback.f3 = { ...ENTRY, id: 'f3', status: 'draft' };
+    });
+    const draft = createContext();
+    await runner.apply({ kind: 'feedback.draft', feedbackId: 'f1' }, draft);
+    await runner.apply({ kind: 'feedback.file', feedbackId: 'f3' }, createContext());
+    await runner.reportExhausted({ kind: 'feedback.file', feedbackId: 'f3' }, 'gh is missing', 'file-key');
+    await runner.recover();
+    expect(dispatched).toEqual([
+      { type: 'feedback.record_failure', feedbackId: 'f1', detail: NO_DRAFT },
+      { type: 'feedback.record_failure', feedbackId: 'f3', detail: 'gh is missing' },
+      { type: 'feedback.record_failure', feedbackId: 'f2', detail: STOPPED_WHILE_FILING },
+    ]);
+    expect(commandIds.slice(0, 2)).toEqual([
+      `${draft.key}:feedback.record_failure`,
+      'file-key:feedback.record_failure',
     ]);
   });
 });

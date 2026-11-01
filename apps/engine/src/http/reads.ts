@@ -3,6 +3,8 @@ import {
   DomainError,
   isTaskSettled,
   isWatchHome,
+  listFeedback,
+  listFeedbackEntryLeaks,
   listMemory,
   listMergeSteps,
   listOpenGates,
@@ -326,6 +328,18 @@ export function createReadRoutes(engine: Engine, transcripts: Transcripts): Read
           memory: listMemory(engine.state).map((entry) => ({
             ...entry,
             project: entry.projectId ? (engine.state.projects[entry.projectId]?.name ?? null) : null,
+          })),
+        }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/feedback$/,
+      respond: () =>
+        respond({
+          feedback: listFeedback(engine.state).map((entry) => ({
+            ...entry,
+            task: entry.taskId ? (engine.state.tasks[entry.taskId]?.handle ?? null) : null,
+            leaks: entry.title && entry.body ? listFeedbackEntryLeaks(engine.state, entry) : [],
           })),
         }),
     },

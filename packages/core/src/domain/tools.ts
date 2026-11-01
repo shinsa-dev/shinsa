@@ -19,6 +19,7 @@ export const SHINSA_TOOL_NAMES = [
   'wait_for',
   'suggest_tasks',
   'remember',
+  'report_feedback',
   'answer',
   'report_diagnosis',
   'submit_report',
@@ -72,6 +73,7 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'wait_for',
     'suggest_tasks',
     'remember',
+    'report_feedback',
     'list_services',
     'run_service',
     'add_service',
@@ -83,10 +85,11 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'find_tasks',
     'note',
     'suggest_tasks',
+    'report_feedback',
     'list_services',
     'run_service',
   ],
-  answerer: ['answer', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember'],
+  answerer: ['answer', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember', 'report_feedback'],
   investigator: [
     'report_diagnosis',
     'ask',
@@ -97,11 +100,12 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'wait_for',
     'suggest_tasks',
     'remember',
+    'report_feedback',
     'list_services',
     'run_service',
     'add_service',
   ],
-  researcher: ['submit_report', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember'],
+  researcher: ['submit_report', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember', 'report_feedback'],
 };
 
 export const PURPOSE_HAND_OVERS: Record<RunPurpose, readonly ShinsaToolName[]> = {
