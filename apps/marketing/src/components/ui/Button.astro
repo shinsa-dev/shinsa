@@ -1,26 +1,40 @@
 ---
 import { buttonVariants } from '@shinsa/ui/components/button';
-import { Icon, type IconName } from '@shinsa/ui/components/icon';
+import { Icon, type IconName, type IconSize } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 
 interface Props {
   href: string;
   variant?: 'primary' | 'secondary' | 'outline';
+  size?: 'default' | 'icon';
   icon?: IconName;
+  iconSize?: IconSize;
+  label?: string;
   external?: boolean;
   class?: string;
 }
 
-const { href, variant = 'primary', icon, external = false, class: className } = Astro.props;
+const {
+  href,
+  variant = 'primary',
+  size = 'default',
+  icon,
+  iconSize,
+  label,
+  external = false,
+  class: className,
+} = Astro.props;
+const iconOnly = size === 'icon';
 ---
 
 <a
   href={href}
   target={external ? '_blank' : undefined}
   rel={external ? 'noreferrer' : undefined}
-  data-icon={icon ? 'inline-start' : undefined}
-  class={cn(buttonVariants({ variant }), className)}
+  aria-label={label}
+  data-icon={icon && !iconOnly ? 'inline-start' : undefined}
+  class={cn(buttonVariants({ variant, size }), className)}
 >
-  {icon && <Icon name={icon} />}
+  {icon && <Icon name={icon} size={iconSize} />}
   <slot />
 </a>

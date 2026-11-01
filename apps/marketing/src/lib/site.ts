@@ -6,5 +6,6 @@ export const site = {
     'Shinsa runs Claude Code and Codex from your request to a merged pull request. Agents research, build and check their own work, and bring you only your calls.',
   canaryUrl: 'https://shinsa.dev/download/canary',
   betaUrl: 'https://shinsa.dev/download/beta',
+  cloudUrl: 'https://app.shinsa.dev',
   githubUrl: 'https://github.com/shinsa-dev/shinsa',
 };
