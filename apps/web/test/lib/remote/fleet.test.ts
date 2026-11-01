@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import type {
   AccountsSnapshot,
   ChatEntry,
   EngineInfo,
+  MachineResources,
   RemoteSnapshot,
   TerminalsSnapshot,
   UserCommand,
@@ -22,6 +23,7 @@ import {
 import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveCanonicalTaskPath, resolveTaskPath } from '@/router.ts';
+import { createMachineResources } from '../../support/resources.ts';
 import { createTask } from '../../support/state.ts';
 
 function createWire(seq: number, records: Partial<WireState> = {}): WireState {
@@ -35,6 +37,8 @@ class FakeConnection implements ShinsaConnection {
   readonly calls: string[] = [];
   accounts: AccountsSnapshot | null = null;
   terminals: TerminalsSnapshot | null = null;
+  resources: MachineResources | null = null;
+  readonly resourcesSignal = createSignal();
   remote: RemoteSnapshot | null = null;
   desktop = false;
   engine: EngineInfo | null = null;
@@ -69,6 +73,12 @@ class FakeConnection implements ShinsaConnection {
   replaceTerminals = (terminals: TerminalsSnapshot) => {
     this.terminals = terminals;
   };
+  pushResources(resources: MachineResources | null) {
+    this.resources = resources;
+    this.resourcesSignal.publish();
+  }
+  subscribeResources = (listener: () => void) => this.resourcesSignal.subscribe(listener);
+  selectResources = () => this.resources;
   subscribeRemote = (listener: () => void) => this.signal.subscribe(listener);
   selectRemote = () => this.remote;
   replaceRemote = (remote: RemoteSnapshot) => {
@@ -320,6 +330,36 @@ describe('sending to the machine that owns it', () => {
     expect(fleet.listUnreachableMachines()).toEqual([{ id: 'm2', name: 'Laptop' }]);
     fleet.removeMember('m1');
     expect(fleet.listMachines()).toEqual([]);
+  });
+
+  it('lists each machine with the resources its engine last reported, kept until a machine reports again', () => {
+    const { fleet, studio, laptop } = createFleet();
+    const listener = mock(() => undefined);
+    const resourceListener = mock(() => undefined);
+    fleet.subscribe(listener);
+    fleet.subscribeResources(resourceListener);
+    const before = fleet.listMachines();
+    expect(before.map((machine) => machine.resources)).toEqual([null, null]);
+    const busy = createMachineResources({ cpuPercent: 90 });
+    laptop.connection.pushResources(busy);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(resourceListener).toHaveBeenCalledTimes(1);
+    const after = fleet.listMachines();
+    expect(after).not.toBe(before);
+    expect(after.map((machine) => [machine.id, machine.resources])).toEqual([
+      ['m1', null],
+      ['m2', busy],
+    ]);
+    expect(after[1]?.state).toBe(before[1]?.state);
+    expect(fleet.listMachines()).toBe(after);
+    const idle = createMachineResources({ cpuPercent: 5 });
+    studio.connection.pushResources(idle);
+    expect(fleet.selectResources()).toBe(idle);
+    expect(fleet.listMachines().map((machine) => machine.resources)).toEqual([idle, busy]);
+  });
+
+  it('reports no resources while no machine is reachable', () => {
+    expect(new Fleet([]).selectResources()).toBeNull();
   });
 
   it('keeps the account’s machines this device cannot reach, to show them disabled', () => {

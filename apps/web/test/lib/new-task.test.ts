@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from 'bun:test';
+import type { PlacementQuestion } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import {
   AUTO_CHOICES,
@@ -23,6 +24,7 @@ import {
   toggleAfterTask,
   useNewTaskRequest,
 } from '@/lib/new-task.ts';
+import { createMachineResources, createTaskResources } from '../support/resources.ts';
 import { createShinsaState, createTask } from '../support/state.ts';
 
 describe('useNewTaskRequest', () => {
@@ -316,6 +318,51 @@ describe('the machine a new task runs on', () => {
         Promise.reject(new Error('No Claude account is signed in.'))
       )
     ).toEqual({ answer: null, failed: true });
+  });
+
+  it('sends Automatic to the machine with the most free CPU and memory once every machine reports them', () => {
+    const roomy = { ...studio, state: { ...studio.state, settings: { taskCapacity: 8 } } };
+    const busyBox = { ...box, resources: createMachineResources({ cpuPercent: 85 }) };
+    const idleStudio = { ...roomy, resources: createMachineResources({ cpuPercent: 10 }) };
+    expect(resolveNewTaskMachine([roomy, box], auto, NO_PROJECT)).toEqual({ id: 'box', byPolicy: false });
+    expect(resolveNewTaskMachine([idleStudio, busyBox], auto, NO_PROJECT)).toEqual({
+      id: 'studio',
+      byPolicy: false,
+    });
+    expect(resolveNewTaskMachine([idleStudio, box], auto, NO_PROJECT)).toEqual({
+      id: 'box',
+      byPolicy: false,
+    });
+    const fullStudio = { ...idleStudio, state: { ...studio.state, settings: { taskCapacity: 3 } } };
+    expect(resolveNewTaskMachine([fullStudio, busyBox], auto, NO_PROJECT)).toEqual({
+      id: 'box',
+      byPolicy: false,
+    });
+  });
+
+  it('tells the policy classifier each machine’s CPU, memory and disk, without its tasks', async () => {
+    const asked: PlacementQuestion[] = [];
+    const reported = createMachineResources({
+      tasks: [createTaskResources({ taskId: 'box-0' })],
+    });
+    await requestPolicyPlacement(
+      [studio, { ...ruled, resources: reported }],
+      'Run the benchmark',
+      (question) => {
+        asked.push(question);
+        return Promise.resolve({ answer: null });
+      }
+    );
+    expect(asked[0]?.machines.map((machine) => machine.resources)).toEqual([
+      null,
+      {
+        cores: 8,
+        cpuPercent: 20,
+        memoryUsedBytes: reported.memoryUsedBytes,
+        memoryTotalBytes: reported.memoryTotalBytes,
+        diskFreeBytes: reported.diskFreeBytes,
+      },
+    ]);
   });
 
   it('asks the machine in front by POST /api/placement', async () => {

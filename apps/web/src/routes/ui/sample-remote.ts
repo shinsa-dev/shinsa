@@ -242,6 +242,8 @@ export function createStaticConnection(state: ShinsaState): ShinsaConnection {
     subscribeTerminals: quiet,
     selectTerminals: none,
     replaceTerminals: () => undefined,
+    subscribeResources: quiet,
+    selectResources: none,
     subscribeRemote: quiet,
     selectRemote: none,
     replaceRemote: () => undefined,

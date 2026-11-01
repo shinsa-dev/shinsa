@@ -7,6 +7,7 @@ import {
   type EngineFeature,
   type EngineInfo,
   hasEngineFeature,
+  type MachineResources,
   type PlacementMachine,
   type RemoteSnapshot,
   resolveEngineCommands,
@@ -52,6 +53,7 @@ export interface MachineView {
 
 export interface MachineChoice extends PlacementMachine {
   current: boolean;
+  resources?: MachineResources | null;
 }
 
 export interface UnreachableMachine {
@@ -81,6 +83,8 @@ export interface ShinsaConnection {
   subscribeTerminals: (listener: () => void) => () => void;
   selectTerminals: () => TerminalsSnapshot | null;
   replaceTerminals: (terminals: TerminalsSnapshot) => void;
+  subscribeResources: (listener: () => void) => () => void;
+  selectResources: () => MachineResources | null;
   subscribeRemote: (listener: () => void) => () => void;
   selectRemote: () => RemoteSnapshot | null;
   replaceRemote: (remote: RemoteSnapshot) => void;
@@ -179,6 +183,7 @@ export class Connection implements ShinsaConnection {
   #attempt = 0;
   #accounts: AccountsSnapshot | null = null;
   #terminals: TerminalsSnapshot | null = null;
+  #resources: MachineResources | null = null;
   #remote: RemoteSnapshot | null = null;
   #engine: EngineInfo | null = null;
   #desktopConnected = false;
@@ -188,6 +193,7 @@ export class Connection implements ShinsaConnection {
   readonly #accountsSignal = createSignal();
   readonly #surfacesSignal = createSignal();
   readonly #terminalsSignal = createSignal();
+  readonly #resourcesSignal = createSignal();
   readonly #remoteSignal = createSignal();
   readonly #pending = new Map<string, Pending>();
   readonly #optimistic = new Map<string, UserCommand>();
@@ -246,6 +252,10 @@ export class Connection implements ShinsaConnection {
     this.#terminals = terminals;
     this.#terminalsSignal.publish();
   }
+
+  subscribeResources = (listener: () => void) => this.#resourcesSignal.subscribe(listener);
+
+  selectResources = () => this.#resources;
 
   subscribeRemote = (listener: () => void) => this.#remoteSignal.subscribe(listener);
 
@@ -326,6 +336,7 @@ export class Connection implements ShinsaConnection {
     this.#syncing = false;
     this.#accounts = null;
     this.#terminals = null;
+    this.#resources = null;
     this.#remote = null;
     this.#engine = null;
     this.#desktopConnected = false;
@@ -338,6 +349,7 @@ export class Connection implements ShinsaConnection {
     this.#accountsSignal.publish();
     this.#surfacesSignal.publish();
     this.#terminalsSignal.publish();
+    this.#resourcesSignal.publish();
     this.#remoteSignal.publish();
   }
 
@@ -498,6 +510,8 @@ export class Connection implements ShinsaConnection {
         this.replaceRemote(message.remote);
         return;
       case 'resources':
+        this.#resources = message.resources;
+        this.#resourcesSignal.publish();
         return;
       case 'engine':
         this.#engine = message.engine;
