@@ -263,8 +263,9 @@ src/
 │                        (setup verification before a task's first agent)
 ├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts: the folders macOS keeps
 │                        private as PrivateFoldersError, and opening Full Disk Access), the prerequisite checks
-│                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional, each with
-│                        the command that fixes it), the setup steps: the fixed list, what each shows and saves
+│                        (prerequisites.ts: git, gh, claude, bun when a repository uses it, Homebrew when a fix
+│                        needs it, and codex and its sign-in as optional, each with the command that fixes it;
+│                        install.ts: that command run in a terminal of your own), the setup steps: the fixed list, what each shows and saves
 │                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
 │                        back and its saved state (flow.ts), the accounts it lists (accounts.ts)
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's

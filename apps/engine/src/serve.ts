@@ -269,6 +269,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
       models,
       run: options.runPrerequisite,
       accounts: options.accounts ?? createOnboardingAccounts(accounts),
+      terminals: services.terminals,
     }),
     accounts,
     schedules: services.schedules,

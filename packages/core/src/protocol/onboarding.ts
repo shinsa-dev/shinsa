@@ -36,6 +36,7 @@ export interface OnboardingCheck {
   fix: string | null;
   command: string | null;
   optional?: boolean;
+  signIn?: true;
 }
 
 export interface OnboardingOption {
@@ -75,6 +76,7 @@ export interface OnboardingStep {
   conversation: OnboardingProjectTurn[];
   problem: string | null;
   access: string[];
+  help: string | null;
   submitLabel: string;
 }
 
@@ -83,6 +85,7 @@ export interface OnboardingFlow {
   index: number;
   step: OnboardingStep | null;
   revisit: boolean;
+  welcome: string | null;
 }
 
 export interface OnboardingProjectTurn {
@@ -107,6 +110,7 @@ export type OnboardingReply =
     }
   | { type: 'revise'; stepId: OnboardingStepId; text: string; projects?: OnboardingProjectChoice[] }
   | { type: 'open'; stepId: OnboardingStepId }
+  | { type: 'help'; stepId: OnboardingStepId }
   | { type: 'restart' };
 
 export function serializeChoiceValue(group: OnboardingChoiceGroupId, value: string) {

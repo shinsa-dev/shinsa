@@ -24,7 +24,7 @@ import {
   type StepStatus,
 } from '@/lib/overview/progress.ts';
 
-function StepMark({ status }: { status: StepStatus }) {
+export function StepMark({ status }: { status: StepStatus }) {
   if (status === 'done') {
     return (
       <span className='grid size-4 shrink-0 place-items-center rounded-full bg-green-4/29'>

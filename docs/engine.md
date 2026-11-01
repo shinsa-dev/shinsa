@@ -4501,8 +4501,8 @@ the run and else from a fresh usage read, so auto-resume works for Codex as for 
 sign-in is read by `codex login status` (exit 0 and "Logged in using ChatGPT" or "an API key" is signed in, exit 1
 "Not logged in" signed out; a missing or outdated codex says how to install or update it) and rides along in the
 accounts snapshot as `providers` (refreshed with the accounts, a failed read logged and the last one kept). Settings →
-Agent usage shows it under the Claude accounts with the sign-in command, and onboarding's tools check lists codex
-and its sign-in as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
+Agent usage shows it under the Claude accounts with the sign-in command, and so does setup's Claude step; setup's
+tools check lists only codex itself, as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
 arrives as `RunFailure.login` (`{ provider: 'codex', email }`, the email the usage reading found, no account), the gate
 names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Paused: ‹email› needs signing in", and
 every sign-in check that finds Codex signed in again (the 5-minute refresh, or Check the Codex sign-in again in
@@ -4772,6 +4772,14 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
+- **Simulated missing tools.** `SHINSA_SIMULATE_MISSING=git,brew,gh,gh_auth,claude,bun,codex` (any of
+  them, comma separated) makes setup's tool checks answer as a Mac without those tools would (`onboarding/simulate.ts`):
+  `127` for a missing command, Apple's `xcrun` placeholder for Git, "not logged into any GitHub hosts" for `gh auth
+  status`. Install and a command from the help task then only print what they would run, and an install marks its tool
+  installed, so the next check passes; a `brew` install fails while Homebrew is still missing, and Homebrew brings Git.
+  Nothing else is simulated: the accounts, sign-in and agents are real. The `setup-*` services of the Shinsa project
+  each run a fresh Shinsa on one case (a new Mac, no Bun, no Homebrew, GitHub signed out, no Claude Code), to click
+  through setup as that person.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no
   effect runs (no agent, check, git or `gh`), no schedule or clock fires and no run is recovered, and every command
   is refused with `inspect_read_only` ("Inspect mode is read-only."): the engine refuses any dispatch (`Engine.readOnly`), the socket answers a
@@ -5022,19 +5030,55 @@ limit).
 {
   ready: boolean; // every check passed or is optional
   checks: {
-    id: 'git' | 'gh' | 'gh_auth' | 'claude' | 'claude_auth' | 'codex' | 'codex_auth' | 'bun';
-    label: string;      // "GitHub CLI", "Signed in to Claude"
+    id: 'git' | 'brew' | 'gh' | 'claude' | 'bun' | 'codex';
+    label: string;      // "GitHub CLI"
     ok: boolean;
-    detail: string;     // the version, "Signed in as octo.", or what went wrong
+    detail: string;     // the version, "Signed in as octo.", "Not installed.", "Not signed in.", or what went wrong
     fix: string | null; // one sentence on what fixes it
-    command: string | null; // the command to copy, when one fixes it (`gh auth login`)
-    optional?: true;    // codex and codex_auth
+    command: string | null; // the command that fixes it, when one does (`brew install gh`, `gh auth login`)
+    optional?: true;    // codex, and bun when no repository uses it
+    signIn?: true;      // the fix is a sign-in (`gh auth login`), so the web says Sign in, not Install
   }[];
 }
 ```
 
-**`POST /api/onboarding/complete`** with `{}`: marks onboarding done (`onboardedAt`), once; answers like
-`GET /api/onboarding`. Refused with `roots_required` until folders are saved.
+The checks (`onboarding/prerequisites.ts`) are git, the GitHub CLI, Claude Code, Bun and Codex. The GitHub CLI's
+one row covers its login too: missing, its command is `brew install gh`; installed but signed out, it reads "Not
+signed in." with `gh auth login` and `signIn`; it passes only signed in, showing who. Logins with a page of their own
+are not checked here: Shinsa signs in its own Claude accounts and the Claude step shows Codex's login (below). Bun is required only when a repository in your folders uses it (a `bun.lock`, `bun.lockb` or
+`bunfig.toml` in a chosen folder or one level inside it, `isBunUsed`); otherwise it is optional with "Only for
+repositories that use Bun." Homebrew is listed only when a failing check's command is a `brew` one (the GitHub CLI's
+`brew install gh`), required when that check is. Each command is for macOS: `xcode-select --install`, Homebrew's
+install script, `brew install gh`, `gh auth login`, Claude Code's `curl -fsSL https://claude.ai/install.sh | bash`,
+Bun's `curl -fsSL https://bun.sh/install | bash` and `npm install -g @openai/codex`. Before every
+check the engine adds `~/.bun/bin`, `~/.local/bin` and Homebrew's folders that exist to its own `PATH` again
+(`refreshInstallFolders` in `shell/login.ts`, the folders it adds at start when no login shell answers), so a tool
+you just installed is found without restarting Shinsa. On a Mac without Apple's command line tools `/usr/bin/git`
+is a placeholder that fails with `xcrun: error: invalid active developer path`; that reads "Not installed." too.
+
+**`POST /api/onboarding/install`** with `{ id }` (a check's id) or `{ command }` (a command from the help task's
+reply, below): opens a terminal running it and answers `{ terminal }` (`TerminalInfo`). Only a request from Shinsa's
+own page is taken: one with no `Origin` is refused with `browser_only`, so neither the `shinsa` command nor an agent
+installs anything. With `id`, the terminal runs that check's own command, never one the page sends (`install.ts`,
+`openInstallTerminal`; an id with none is `check_unknown`), as `‹command›; exit`, named "Set up ‹label›". With
+`{ all: true }`, it runs every required missing tool's script in one terminal named "Set up the missing tools", in
+the order they need each other (Git, Homebrew, the GitHub CLI, Claude Code, Bun; `listMissingInstalls`),
+each as `{ ‹script›; }` joined with `&&`, so one that fails stops the rest; Git is left out when Homebrew is in the list,
+since Homebrew's installer brings Apple's command line tools, and it is `nothing_missing` when no required tool is.
+A script is a check's command except for three (`resolveInstallScript`): Git's waits until `xcode-select -p` answers,
+because `xcode-select --install` only opens macOS's installer window and returns; Homebrew's puts `brew` on the
+terminal's `PATH` after it (`brew shellenv`), so the commands after it find it; and the GitHub CLI's installs it when
+it is missing and then signs in when `gh auth status` fails, so one Install covers both. With
+`command`, it runs only when every line of it, a leading `$` or `%` prompt dropped, is in one `bash run` block of
+the current help task's result (`isReplyCommand`), else `command_unknown`, in a terminal named "Fix from the agent".
+Every way the terminal opens in your home folder under the project id `setup`, which no project has, so the
+Terminal page does not list it, and an earlier setup terminal of the same name is closed first. The command is
+followed by `exit`, so the terminal ends when it does, with its exit code, and the web checks again then. Other codes:
+`body_invalid`, `terminals_off` (Shinsa runs with no terminals).
+
+Setup has no endpoint that finishes it: only answering the last step of the flow below does, and that step refuses
+while a required tool is missing or no Claude account is signed in. Finishing marks onboarding done
+(`onboardedAt`), once, and records the welcome task (below) when there is none.
 
 ### The setup steps
 
@@ -5044,9 +5088,11 @@ discovered folders with their repository counts, several at once, and any other 
 (the projects Shinsa suggests for the repositories in those folders), `defaults` (three choices on one step: the
 default model, from the provider's catalog, or each role's own; the merge method; plan approval: large plans first, the
 recommended pick, every plan first, or start building),
-`accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login, claude and its login,
-bun, and optionally codex and its login, each with its fix and the command to copy). Each step has a short label for
-the steps along the top (Folders, Projects, Defaults, Accounts, Tools), a title and a one-line description.
+`accounts` ("Sign in with Claude": Claude Code, then the Claude accounts agents work under) and `prerequisites` (the
+tool checks above, each with its fix and Install). Claude comes before Tools because signing in needs Claude Code and
+the help agent needs an account. Each step has a short label for the path of steps over it (Folders, Projects,
+Defaults, Claude, Tools), a title and a one-line description. The web shows setup as your first task: "Set up
+Shinsa" over that path, each step a gate you pass (`docs/design.md` → Where Shinsa differs, 24).
 Nothing you send can add, drop or reorder a step: a reply only ever answers the step on screen or opens one you
 have reached.
 
@@ -5094,20 +5140,44 @@ have reached.
   repositories of a suggestion keeps its id, key and folder, a new one gets a fresh key, and one named like an
   existing project adds to it. A repository filed since drops out. No model answering is the step's `problem`, and
   the suggestions stay as they were.
-- **Accounts are signed in, never imported.** The `accounts` step lists the Claude accounts Shinsa has and Codex's
-  login, and adds none by itself: Add account signs in to a new one, or to each claude-swap account it offers ("Sign
-  in to ‹email›"), through the same sign-in Settings uses; removing one and signing in again are the web's too
-  (`/api/accounts/*`), and so is Codex's login, which the web shows from the accounts snapshot's `providers` (signed
-  in with `codex login` in a terminal, read again when you come back to the window). With no Claude account signed
-  in the step's button says Skip for now.
+- **Claude accounts are signed in, never found or imported.** The `accounts` step carries the Claude Code check
+  (`checks`, only `claude`), and is not `ready` while Claude Code is missing: the web then shows only that check with
+  Install, since signing in runs it. Once it is there the step lists the Claude accounts Shinsa has and Codex's
+  login, and adds none by itself: Sign in with Claude (Add account once there is one) opens the same sign-in Settings
+  uses; removing one and signing in again are the web's too (`/api/accounts/*`), and so is Codex's login, which the
+  web shows from the accounts snapshot's `providers` (signed in with `codex login` in a terminal, read again when you
+  come back to the window). Setup reads no Claude Code or claude-swap login and offers none: a copied login shares
+  its single-use refresh token and signs one side out (Accounts and usage limits, above); Settings still signs in to
+  a claude-swap account by its email. The step is not `ready` until a Claude account is signed in, and continuing
+  without one is refused as its `problem` ("Sign in to a Claude account first. Agents work under it.").
+- **Setup never finishes with a tool missing.** The `prerequisites` step is `ready` only when every required check
+  passes, its button is always Finish setup, and finishing while one fails is refused as its `problem` ("Install the
+  missing tools first. Setup finishes once every one is there."). Once you are in the app, every tool and a Claude
+  account are there.
+- **Help from an agent.** `{ type: 'help', stepId }` on the step on screen starts a question task (`task.create`,
+  mode `ask`, no repository or project) whose request lists the step's required checks that fail, with what went
+  wrong and Shinsa's fix, and asks for the commands that fix them, each in a `bash run` block, without running
+  anything itself (`resolveHelpRequest` in `onboarding/welcome.ts`). The task's id is the step's `help`, kept in the
+  run, so the web shows its reply on the step and runs a command from it through `POST /install`'s `command`. Only
+  the latest help task is kept. With no failing check the reply is refused with `help_unneeded`.
+- **The welcome task.** Finishing setup (the last answer, or `POST /complete`) records one task, "Welcome to Shinsa"
+  (`onboarding.welcome { body }`, core's `decide/onboarding.ts`): `task.created` with origin `onboarding`, no
+  repository and mode `ask`, `task.triaged` with the next handle, `task.delivered` with the body as the answer, and
+  done. No triage, agent or effect runs. The body (`resolveWelcomeBody`) welcomes you and lists what you set up, each
+  step's summary (folders, projects, defaults, Claude accounts) and that every tool is installed, then what happens
+  next.
+  Core refuses a second one (`welcome_recorded`, any task with that origin), so running setup again never adds
+  another; a finished run with none yet (setup done before the welcome existed) records it. The flow's `welcome` is
+  its id, and the web opens it when setup ends the first time, and goes Home on a run again. In inspect mode nothing
+  is recorded.
 - **Saving** goes through the same code as the endpoints above: each answer is `POST /setup`'s `applySetup`
   (folders to `config.json`, the rest as `settings.change`), and the last step is `complete`. The `settings.change`
   carries an id from the answer it saves (`setup:<run>:<step>:<n>`, the run's id kept in `onboarding.json` and new
   on a restart, `n` the count of answers saved so far), so the same answer sent again after a crash is answered from
   its receipt while a later answer to the same step is not.
-- **Persistence.** The run of setup lives in `data/onboarding.json` (version 5, written atomically: the step on
-  screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem, and the
-  private folders with the picks they came from, and the projects as you changed them in words), so a
+- **Persistence.** The run of setup lives in `data/onboarding.json` (version 6, written atomically: the step on
+  screen, the furthest step reached, the answers saved, the last problem, the private folders with the picks they
+  came from, the projects as you changed them in words, and the help task), so a
   reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
   wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
 - **Run setup again** (`{ type: 'restart' }`, what Settings → General → Setup and ⌘K's Run setup again send before
@@ -5116,7 +5186,8 @@ have reached.
   setup.
 
 **`GET /api/onboarding/flow`**: the run of setup, started on the first call. A finished run (`step: null`) stays
-finished while setup is done, so the web goes Home when it opens one; a restart reopens it. The step on screen is
+finished while setup is done, so the web leaves setup when it opens one (for the welcome task on a first run, else
+Home); a restart reopens it. The step on screen is
 read fresh on every call (the folders, the model catalog, the accounts, the tool checks), so reading it again is
 how the tools are checked again.
 
@@ -5133,20 +5204,20 @@ how the tools are checked again.
     groups: { id: 'model' | 'merge' | 'plans'; label: string; options: Option[] }[]; // defaults
     projects: ProjectSuggestion[]; // projects: { id, name, key, color, projectId, folders, repos }
     access: string[];              // roots: the folders macOS keeps private, to ask access for
-    checks: Check[];               // prerequisites
-    ready: boolean;                // prerequisites: every required tool is there
-    imported: AccountImport[];     // accounts: what this run imported
-    notes: string[];               // accounts: imports that failed
+    checks: Check[];               // prerequisites; accounts: the Claude Code check
+    ready: boolean;                // prerequisites: every required tool is there; accounts: Claude Code is installed
+    help: string | null;           // the help task's id, once you asked
     problem: string | null;        // why the last answer was refused
-    submitLabel: string;           // "Continue", "Skip for now", "Finish setup", "Finish anyway"
+    submitLabel: string;           // "Continue", "Create 6 projects", "Finish setup"
   } | null;
   revisit: boolean;                // setup was done before this run
+  welcome: string | null;          // the welcome task's id, once there is one
 }
 ```
 
-**`POST /api/onboarding/flow`** with a reply (`answer`, `open` or `restart`): answers with the run. Codes:
-`body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`, `reply_invalid`, `step_stale`,
-`step_unreached`, `setup_finished`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
+**`POST /api/onboarding/flow`** with a reply (`answer`, `revise`, `open`, `help` or `restart`): answers with the
+run. Codes: `body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`, `reply_invalid`, `step_stale`,
+`step_unreached`, `setup_finished`, `help_unneeded`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
 
 ## The socket
 
@@ -5408,7 +5479,7 @@ following a file through its watch and the check every second, both triggered by
   loopback one is taken); `test/agents/providers/claude/guard.test.ts` the shell policy, human-only `shinsa`
   commands included.
 - **Configuration and setup.** `test/config/` covers the layout and `config.json`; `test/onboarding/`
-  and `test/repos/` the onboarding endpoints, discovery, the prerequisite checks and the setup steps.
+  and `test/repos/` the onboarding endpoints, discovery, the prerequisite checks, the install terminals, the welcome and help bodies and the setup steps.
 - **Running in the background.** `test/instance/lock.test.ts` covers the lock (a live holder refused, each kind of
   stale lock taken over, a contended takeover, an unreadable lock) and `test/serve.test.ts` the same through
   `startShinsa`; `test/e2e/lock.test.ts` runs real `shinsa engine` processes on one data directory (the second is

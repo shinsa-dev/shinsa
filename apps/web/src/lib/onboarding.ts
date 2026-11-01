@@ -1,6 +1,7 @@
 import {
   type AccountSummary,
   describeList,
+  type Gate,
   type OnboardingCheck,
   type OnboardingChoiceGroup,
   type OnboardingFlow,
@@ -12,10 +13,14 @@ import {
   type RootSuggestion,
   resolveDisplayPath,
   resolvePlanLabel,
+  type ShinsaState,
+  selectLeadGate,
+  type Task,
+  type TerminalInfo,
 } from '@shinsa/core';
 import { describeProviderLogin } from '@/lib/accounts/providers.ts';
 import { formatCount } from '@/lib/format/count.ts';
-import type { Route } from '@/router.ts';
+import { type Route, resolveTaskPath } from '@/router.ts';
 
 interface FolderRow {
   path: string;
@@ -83,12 +88,6 @@ export function resolveOnboardingRedirect(route: Route, status: OnboardingStatus
 
 export function describeStepPosition(flow: OnboardingFlow) {
   return `Step ${Math.min(flow.index + 1, flow.steps.length)} of ${flow.steps.length}`;
-}
-
-export function describeStepHeading(flow: OnboardingFlow) {
-  const entry = flow.steps[flow.index];
-  const position = describeStepPosition(flow);
-  return entry ? `${position}: ${entry.label}` : position;
 }
 
 export function resolveStepDirection(before: number | null, after: number): StepDirection {
@@ -163,16 +162,68 @@ export function resolveStepState(entry: OnboardingStepEntry, index: number, curr
   return index < current || entry.summary !== null ? 'done' : 'ahead';
 }
 
-export function listStepperItems(flow: OnboardingFlow) {
+const PATH_STATUS: Record<StepState, 'done' | 'current' | 'pending'> = {
+  done: 'done',
+  current: 'current',
+  ahead: 'pending',
+  upcoming: 'pending',
+};
+
+export function listOnboardingPath(flow: OnboardingFlow) {
   return flow.steps.map((entry, index) => {
     const state = resolveStepState(entry, index, flow.index);
     return {
-      value: entry.id,
+      id: entry.id,
       label: entry.label,
-      hint: entry.summary ?? undefined,
-      disabled: state === 'upcoming',
+      summary: entry.summary,
+      status: PATH_STATUS[state],
+      disabled: state === 'upcoming' || state === 'current',
     };
   });
+}
+
+export function describeFixAction(check: OnboardingCheck) {
+  return check.signIn ? 'Sign in' : 'Install';
+}
+
+export function isStepInstalled(step: OnboardingStep) {
+  return step.checks.every((check) => check.ok || check.optional);
+}
+
+export function isInstallable(check: OnboardingCheck) {
+  return !check.ok && check.command !== null;
+}
+
+export function countMissingInstalls(checks: readonly OnboardingCheck[]) {
+  return checks.filter((check) => isInstallable(check) && !check.optional).length;
+}
+
+export function describeInstallEnd(terminal: TerminalInfo) {
+  if (terminal.status === 'stopped')
+    return 'Shinsa’s engine restarted, so the install stopped. Install it again.';
+  if (terminal.exitCode === 0) return null;
+  const code = terminal.exitCode === null ? 'without an exit code' : `with code ${terminal.exitCode}`;
+  return `The install ended ${code}. Install it again, or ask an agent for help.`;
+}
+
+const STOPPED_STAGES: ReadonlySet<Task['stage']> = new Set(['answered', 'done', 'cancelled']);
+
+export type HelpView =
+  | { kind: 'loading' }
+  | { kind: 'result'; body: string }
+  | { kind: 'gate'; gate: Gate }
+  | { kind: 'stopped' };
+
+export function resolveHelpView(state: ShinsaState | null, task: Task | null): HelpView {
+  if (!(state && task)) return { kind: 'loading' };
+  const gate = selectLeadGate(state, task);
+  if (gate && gate.type !== 'result') return { kind: 'gate', gate };
+  if (task.result) return { kind: 'result', body: task.result.body };
+  return STOPPED_STAGES.has(task.stage) ? { kind: 'stopped' } : { kind: 'loading' };
+}
+
+export function resolveSetupEndPath(flow: OnboardingFlow) {
+  return flow.welcome && !flow.revisit ? resolveTaskPath({ id: flow.welcome }) : '/';
 }
 
 export const SUBMIT_KEY = 'submit';
@@ -182,6 +233,8 @@ export const REFRESH_KEY = 'refresh';
 export const ACCESS_KEY = 'access';
 
 export const REVISE_KEY = 'revise';
+
+export const HELP_KEY = 'help';
 
 export function describeAccessTitle(access: string[], userHome: string) {
   const names = access.map((path) => resolveDisplayPath(path, userHome));
@@ -196,10 +249,4 @@ export function listReadableRoots(values: string[], access: string[], userHome: 
 export function resolveSubmitValues(step: OnboardingStep, values: string[]) {
   if (step.id === 'roots' || step.options.length > 0 || step.groups.length > 0) return values;
   return ['continue'];
-}
-
-export function listSetupSummary(flow: OnboardingFlow) {
-  return flow.steps.flatMap((entry) =>
-    entry.summary === null ? [] : [{ id: entry.id, label: entry.label, summary: entry.summary }]
-  );
 }
