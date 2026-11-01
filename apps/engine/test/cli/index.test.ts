@@ -589,19 +589,19 @@ describe('opening the app', () => {
     const printed: string[] = [];
     const write = (line: string) => printed.push(line);
     try {
-      await createOpenApp('http://127.0.0.1:7446', { write, bundled: true, platform: 'darwin' })(
+      await createOpenApp('http://127.0.0.1:7446', { write, inApp: true, platform: 'darwin' })(
         'shinsa://home'
       );
-      await createOpenApp('http://127.0.0.1:7446', { write, bundled: false, platform: 'darwin', env: {} })(
+      await createOpenApp('http://127.0.0.1:7446', { write, inApp: false, platform: 'darwin', env: {} })(
         'shinsa://task/SW-1'
       );
       await createOpenApp('http://127.0.0.1:7446', {
         write,
-        bundled: true,
+        inApp: true,
         platform: 'linux',
         env: { DISPLAY: ':0' },
       })('shinsa://home');
-      await createOpenApp('http://127.0.0.1:7446', { write, bundled: true, platform: 'linux', env: {} })(
+      await createOpenApp('http://127.0.0.1:7446', { write, inApp: true, platform: 'linux', env: {} })(
         'shinsa://task/SW-1'
       );
       expect(readFileSync(openLog, 'utf8').trim().split('\n')).toEqual([

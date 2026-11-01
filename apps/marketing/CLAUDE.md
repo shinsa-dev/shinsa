@@ -102,10 +102,11 @@ src/
                             not lead to a review" when the link names no task. The page is the window's height and
                             never scrolls itself; copy in content.ts `openTask`; left out of the sitemap, never indexed (`noindex` meta and
                             `X-Robots-Tag` in public/_headers) and sends no referrer), og.png, llms.txt and design.md; public/ holds the
-                            PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
+                            PNG icons, site.webmanifest, robots.txt, _headers and `install`, the engine's install script (below); @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
   worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket
-                            into download.ts, which answers the download paths, updates.ts, which serves the Mac
+                            into download.ts, which answers the download paths and `/download/version[/beta|/canary]`
+                            (the channel's version as text, for the install script), updates.ts, which serves the Mac
                             app's update files, and open.ts, which writes the open page's tab title from the query with HTMLRewriter (tested in test/worker/ at 100%,
                             `bun run test`)
 ```
@@ -161,7 +162,7 @@ web app's components), deploy command `bun run deploy` (`wrangler deploy`) on `m
 workers.dev with a URL per branch and per deployment (`previews` turns it on, and repeats the R2 binding, since a
 preview inherits no binding). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There
 is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download`,
-`/download/*`, `/open` and `/updates/*` (`assets.run_worker_first`); every other request is a plain static asset hit. `bun run
+`/download/*` (the version path included), `/open` and `/updates/*` (`assets.run_worker_first`); every other request is a plain static asset hit. `bun run
 preview` serves `/open` without the Worker, so its tab keeps the generic title; `bunx wrangler dev`
 after a build shows it as production does.
 
@@ -230,6 +231,20 @@ pointer (`docs/release.md` → Downloads).
   on a cache miss, and the object), both Class B reads, of which ten million a month are free. Memory (128 MB) is never
   at risk, since nothing is buffered. The disk image itself is not kept in the edge cache: R2 serves it directly, and
   teeing a 170 MB stream into the Cache API would hold it in memory behind a slow client and cannot store a 206.
+- **The version.** `/download/version` (and `/beta`, `/canary`) answers the channel's version as `text/plain`
+  with `Cache-Control: no-store`: the pointer's `version` (stable falling back to the beta pointer, as `/download`
+  does), without reading the file, or, when R2 cannot serve, the newest version in the feed for that channel (for
+  stable the newest stable one, else the newest beta). No release of the channel answers 404. The pointer is written
+  only after the release carries its engine archives, so the version it names always has them.
+- **The install script.** `public/install` is a static file, served as `text/plain` (`_headers`), that
+  `curl -fsSL https://shinsa.dev/install | sh` runs: POSIX `sh`, every step inside `main` so a cut-off download runs
+  nothing. It picks `shinsa-<os>-<cpu>` (Linux x64 and arm64 with glibc, Apple Silicon Macs, a Rosetta shell
+  counted as arm64), reads the version from `/download/version` for `SHINSA_CHANNEL` (canary by default, like the
+  buttons; `SHINSA_VERSION` skips it), downloads the archive and its `.sha256` from the GitHub release
+  (`SHINSA_RELEASES_URL` for a mirror) with curl or wget, checks the sum, runs `bin/shinsa version`, replaces
+  `~/.local/share/shinsa` (`SHINSA_INSTALL_DIR`) and links `~/.local/bin/shinsa` (`SHINSA_BIN_DIR`). It stages in a
+  folder beside the install, removed on exit, so a failed run leaves the old install as it was. Check it with
+  `sh -n` and `shellcheck -s sh`.
 
 The Worker needs no secret: Workers Builds deploys it, with the assets and the binding, from the same `wrangler
 deploy`. The binding names a bucket that must exist, or the deploy fails.

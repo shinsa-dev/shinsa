@@ -376,8 +376,10 @@ app registers, so it keeps working when the window is closed or the app quit, an
 notifications, `shinsa://` links, the `shinsa` command and its own updates (`docs/plans/app-plan.md`,
 `docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
 On an always-on Linux server the same engine runs headless as a systemd user service that `shinsa start` sets up,
-set up over SSH and reached through remote access (`docs/engine.md` → Run on a server). Planned, not built: a
-published package and install script for it.
+set up over SSH and reached through remote access (`docs/engine.md` → Run on a server); on a Mac mini without the
+app, `shinsa start` runs it as its own launchd job. Every release publishes that engine on its own for Linux x64,
+arm64 and Apple Silicon: `curl -fsSL https://shinsa.dev/install | sh` or `npm i -g shinsa` (`docs/release.md` → The
+engine on its own).
 Planned, not built: signing with a Developer ID, other providers (Cursor), and dev-server and
 simulator previews per worktree.
 Remote access: Settings → General → Remote access pairs this machine with app.shinsa.dev through GitHub sign-in and adds

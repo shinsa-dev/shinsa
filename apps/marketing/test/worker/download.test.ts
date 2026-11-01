@@ -16,7 +16,9 @@ import {
   resolveChannelKey,
   resolvePointerCacheKey,
   resolveReleaseKey,
+  resolveVersionChannel,
   respond,
+  selectChannelVersion,
 } from '../../src/worker/download.ts';
 
 const DMG_BYTES = new Uint8Array([0x6b, 0x6f, 0x6c, 0x79, 0x00, 0x01, 0x02, 0x03]);
@@ -527,5 +529,89 @@ describe('respond to other paths', () => {
     expect(pages).toEqual(['/download/other']);
     expect(calls).toEqual([]);
     expect(fetched).toEqual([]);
+  });
+});
+
+describe('the version endpoint', () => {
+  async function expectVersion(response: Response, status: number, body: string) {
+    expect(response.status).toBe(status);
+    expect(response.headers.get('Content-Type')).toBe('text/plain; charset=utf-8');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(await response.text()).toBe(body);
+  }
+
+  it('reads the stable, beta and canary version paths, with or without a trailing slash', () => {
+    expect(resolveVersionChannel('/download/version')).toBe('stable');
+    expect(resolveVersionChannel('/download/version/')).toBe('stable');
+    expect(resolveVersionChannel('/download/version/beta')).toBe('beta');
+    expect(resolveVersionChannel('/download/version/canary/')).toBe('canary');
+    expect(resolveVersionChannel('/download/version/nightly')).toBeNull();
+    expect(resolveVersionChannel('/download/beta')).toBeNull();
+  });
+
+  it('answers each channel’s version from its pointer, stable falling back to beta, without reading the file', async () => {
+    const { bucket, calls } = createBucket(RELEASED);
+    const { world, fetched } = createWorld({ bucket });
+    await expectVersion(await respond(createRequest('/download/version'), world), 200, '1.2.9\n');
+    await expectVersion(await respond(createRequest('/download/version/beta'), world), 200, '1.3.0-beta.2\n');
+    expect(calls.every((call) => call.key.startsWith('channels/'))).toBe(true);
+    expect(fetched).toEqual([]);
+    const betaOnly = createWorld({
+      bucket: createBucket(storeChannels([['beta', pointerOf('1.0.0-beta.4')]])).bucket,
+    });
+    await expectVersion(
+      await respond(createRequest('/download/version'), betaOnly.world),
+      200,
+      '1.0.0-beta.4\n'
+    );
+  });
+
+  it('falls back to the feed when the bucket has no pointer, fails or is missing', async () => {
+    const feed = answerFeed(['v1.3.1-canary.3', 'v1.3.1-canary.2', 'v1.3.0-beta.2', 'v1.2.9']);
+    const worlds = [
+      createWorld({ bucket: createBucket({}).bucket, answer: feed }).world,
+      createWorld({ bucket: createBucket(RELEASED, new Error('R2 is down')).bucket, answer: feed }).world,
+      createWorld({ answer: feed }).world,
+    ];
+    for (const world of worlds) {
+      await expectVersion(
+        await respond(createRequest('/download/version/canary'), world),
+        200,
+        '1.3.1-canary.3\n'
+      );
+    }
+    await expectVersion(
+      await respond(createRequest('/download/version/beta'), worlds[2]!),
+      200,
+      '1.3.0-beta.2\n'
+    );
+    await expectVersion(await respond(createRequest('/download/version'), worlds[2]!), 200, '1.2.9\n');
+  });
+
+  it('answers 404 when no release of the channel exists or nothing can be read', async () => {
+    const canaries = createWorld({ answer: answerFeed(['v1.3.1-canary.3']) }).world;
+    await expectVersion(
+      await respond(createRequest('/download/version'), canaries),
+      404,
+      'No stable release yet\n'
+    );
+    await expectVersion(
+      await respond(createRequest('/download/version/beta'), canaries),
+      404,
+      'No beta release yet\n'
+    );
+    const offline = createWorld({}).world;
+    await expectVersion(
+      await respond(createRequest('/download/version/canary'), offline),
+      404,
+      'No canary release yet\n'
+    );
+  });
+
+  it('picks the newest stable over a newer beta, and the newest beta while no stable exists', () => {
+    expect(selectChannelVersion(['v1.4.0-beta.1', 'v1.3.0', 'v1.2.0'], 'stable')).toBe('1.3.0');
+    expect(selectChannelVersion(['v1.0.0-beta.2', 'v1.0.0-beta.11'], 'stable')).toBe('1.0.0-beta.11');
+    expect(selectChannelVersion(['v1.4.0-beta.1', 'v1.3.0'], 'beta')).toBe('1.4.0-beta.1');
+    expect(selectChannelVersion(['v1.3.0'], 'canary')).toBeNull();
   });
 });
