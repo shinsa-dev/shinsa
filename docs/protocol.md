@@ -1271,8 +1271,11 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 `Task` with every field not copied by name left empty), `gates` and `runs` (redacted), `evidence` (current evidence; a
 stored file's `uri` is `shared-evidence:<id>`, `SHARED_EVIDENCE_PREFIX`), `repo` and `project` (their records without
 path, folders or description), `owner`, `machine`, `repository` (its name), `code` (`hasSharedCode`: a repository
-with an open or merged pull request) and `preset`, whose groups decide which of them are filled (a Status share has no
-owner, machine, repository, evidence or code), the same for a public or a private repository (`docs/engine.md` → Sharing a
+with a working copy or an open or merged pull request), `description` (the writer's one or two sentences on what the
+task addresses, made when you share it), `update` (`ShareUpdate`, the customer's update worked out from where the task
+stands: `planning`, `working`, `ready`, `deploying`, `live`, `looking_into`, `answered`, `done` or `closed`) and
+`preset`, whose groups decide which of them are filled (a Status share has no owner, machine, repository, evidence or
+code; its card dates itself by the task's `stageChangedAt`), the same for a public or a private repository (`docs/engine.md` → Sharing a
 task has the table). A link is `ShareLink` (`instanceId`, `shareId` of `SHARE_ID_BYTES`, `key` of `SHARE_KEY_BYTES`),
 written `https://app.shinsa.dev/share/t/<token>#<key>`, the token the share id's bytes followed by the instance id's, as
 base64url (`serializeShareUrl`, `resolveSharePagePath`, `parseShareUrl`, `parseShareLocation`). Its channel is the tunnel's `SHARE_CHANNEL_PATH` (`/share?id=<share id>`,

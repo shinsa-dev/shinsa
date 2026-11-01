@@ -68,6 +68,7 @@ export interface StatusCard {
   description: string | null;
   latest: string;
   timeline: StatusStep[];
+  updatedAt: number;
 }
 
 export function resolveStatusCard(task: Task, shared: SharedTask): StatusCard {
@@ -79,5 +80,6 @@ export function resolveStatusCard(task: Task, shared: SharedTask): StatusCard {
     description: shared.description,
     latest: update.text,
     timeline: resolveStatusTimeline(key),
+    updatedAt: task.stageChangedAt,
   };
 }

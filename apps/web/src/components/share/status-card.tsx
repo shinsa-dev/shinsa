@@ -66,7 +66,7 @@ export function StatusCardPage({ view }: { view: SharedView }) {
           <Icon size='sm' name='IconProgress75' />
           <span>{STATUS_EYEBROW}</span>
           <span>·</span>
-          <TimeAgo at={view.updatedAt} text={(now) => formatSince(STATUS_UPDATED, view.updatedAt, now)} />
+          <TimeAgo at={card.updatedAt} text={(now) => formatSince(STATUS_UPDATED, card.updatedAt, now)} />
         </p>
         <article className={cn(CARD, 'flex flex-col overflow-hidden')}>
           <header className='flex flex-col gap-1.5 px-4 py-3'>

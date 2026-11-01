@@ -7,7 +7,14 @@ import { createSharedTask } from './fixtures.ts';
 describe('the status card', () => {
   it('shows the title, the customer update in its words and tone, and no description before one is written', () => {
     const card = resolveStatusCard(
-      createTask({ id: 't', title: 'Fix export', request: 'Exports fail on Safari.', stage: 'building' }),
+      createTask({
+        id: 't',
+        title: 'Fix export',
+        request: 'Exports fail on Safari.',
+        stage: 'building',
+        stageChangedAt: 5,
+        updatedAt: 9,
+      }),
       createSharedTask({ update: 'working' })
     );
     expect(card).toEqual({
@@ -16,6 +23,7 @@ describe('the status card', () => {
       description: null,
       latest: 'We’re working on it.',
       timeline: resolveStatusTimeline('working'),
+      updatedAt: 5,
     });
   });
 
