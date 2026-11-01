@@ -3256,7 +3256,13 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   from every cookie a dev server sets, so its cookies stay on its own host, but a page's script can still set a
   `Domain=shinsa.page` cookie that other previews' servers receive. The preview's own key is safe from it: a
   `__Host-` cookie cannot be set or replaced from another host. That is also why the Worker does not add the app's
-  security headers to a preview: the page is the dev server's own.
+  security headers to a preview: the page is the dev server's own. Listing `shinsa.page` on the Public Suffix List
+  (its owner's pull request on the Public Suffix List adding it to the private section, and a `_psl.shinsa.page` TXT
+  record whose value is that pull request's URL, which the list checks) makes each label
+  its own site, which ends both the shared cookie and the same-site trust between previews.
+- **Never indexed.** Every host under `shinsa.page` answers `/robots.txt` with `Disallow: /` before any key is
+  checked, so crawlers never fetch a preview, and every answer there, the Worker's errors and a dev server's pages
+  alike, carries `X-Robots-Tag: noindex, nofollow, noarchive`, so a link that leaks is still never listed.
 - **Not sealed end to end.** A task's link is sealed with its key in the fragment; a preview cannot be, since a
   browser loads a dev server as plain pages. Traffic is TLS to Cloudflare, then the Worker, then the tunnel, and the
   Worker reads it in passing. The machine checks the key on every request and every WebSocket, in constant time.

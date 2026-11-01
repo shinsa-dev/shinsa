@@ -137,8 +137,11 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   drops the `Domain` attribute from every `Set-Cookie` a dev server sends (a page's script can still set one).
   `respond` matches a preview host (`isPreviewHost`, the zone from
   `PREVIEW_ZONE`) before any other route, so nothing of the app is ever served there, and skips the app's security
-  headers, which would break most dev servers. `respondPreview` reads the instance and the preview id from the label
-  (`parsePreviewHost`); a `?key=` on any path is set as `__Host-shinsa_preview` (HttpOnly, Secure, SameSite=Lax, 30
+  headers, which would break most dev servers. Listing `shinsa.page` makes each label a site of its own, which stops
+  that; until then the gap is a page's own script, never a dev server's header. `respondPreview` answers
+  `/robots.txt` on every host, the bare zone and unknown labels included, with `User-agent: *` and `Disallow: /` before
+  any key or machine is checked, so a dev server's own robots file is never served there. It then reads the instance
+  and the preview id from the label (`parsePreviewHost`); a `?key=` on any path is set as `__Host-shinsa_preview` (HttpOnly, Secure, SameSite=Lax, 30
   days, that host only) and answered with a 303 to the same address without it, written in full so a path starting `//` stays on the host. With the cookie, a request to an
   instance that is online is forwarded to `https://t-<instance>.shinsa.dev/__preview/<id><path>` with its method,
   query, body and headers, minus the preview cookie, Cloudflare's and proxies' own, and with the key in
@@ -148,7 +151,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`), and a tunnel
   that fails for an online instance is logged as `[Preview] Could not reach the tunnel` or `[Preview] The tunnel did
   not answer`; the machine's own
-  pages, such as a stopped service's, pass through with the mark removed. Every answer carries `X-Robots-Tag`.
+  pages, such as a stopped service's, pass through with the mark removed. Every answer carries `X-Robots-Tag: noindex, nofollow, noarchive`, the Worker's own error page included.
   Traffic is plain to the Worker: unlike a task's share, a preview is not sealed end to end, and nothing of it is kept.
 - **Webhooks.** `/hooks/<instance>/<schedule>/<token>` is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The

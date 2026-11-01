@@ -328,7 +328,9 @@ export async function respond(request: Request, world: CloudWorld) {
     try {
       return await respondPreview(request, url, world);
     } catch (error) {
-      return respondError(describeFailure(error));
+      const failure = respondError(describeFailure(error));
+      failure.headers.set('x-robots-tag', NOINDEX);
+      return failure;
     }
   }
   if (url.pathname.startsWith(API_PREFIX)) return applySecurityHeaders(await respondApi(request, url, world));
