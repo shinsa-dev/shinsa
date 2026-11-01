@@ -2,8 +2,8 @@
 
 The Worker on `https://app.shinsa.dev` that remote access runs through (`docs/engine.md` → Remote access, the design in
 `docs/plans/remote-plan.md`). It signs you in with GitHub, pairs a machine, makes that machine's Cloudflare tunnel,
-lists your machines and the ones shared with you, keeps who belongs to each machine, mints the short connect token a browser opens a machine's channel with, forwards webhooks, and
-serves the web app's remote build. It never sees what a browser and a machine say to each other: the channel is
+lists your machines and the ones shared with you, keeps who belongs to each machine, mints the short connect token a browser opens a machine's channel with, forwards webhooks, passes a
+shared preview on `*.shinsa.page` through to its machine, and serves the web app's remote build. It never sees what a browser and a machine say to each other: the channel is
 sealed end to end (core's `remote/`), and the Worker holds no key that opens it. Everything it stores is in D1, and
 none of it is task data: a shared task is read live from its machine, never stored here.
 
@@ -24,6 +24,8 @@ src/
 ├── members.ts     A machine's members: its invite, who asked through it, adding and removing members, Leave
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
 ├── hooks.ts       /hooks/<instance>/<schedule>/<token> forwarded to the machine's tunnel
+├── previews.ts    *.shinsa.page: the link's key into a per-host cookie, then HTTP and WebSockets forwarded to the
+│                  machine's /__preview/<id> route
 ├── slack-link.ts  Connecting Slack: Sign in with Slack, adding the app to a workspace, the link to a machine
 ├── slack.ts       Slack's events (signature, dedupe, uninstall), a mention forwarded to its author's machine with
 │                  the thread, a question's choice clicked, and the machine's links, unlink and posts
@@ -107,6 +109,21 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   exist. The page then opens the machine's `/share?id=…` channel itself, sealed with the key in the link's fragment,
   which never reaches the Worker (`docs/engine.md` → Sharing a task). That answer and every `/share/t/…` page carry
   `X-Robots-Tag: noindex, nofollow, noarchive`.
+- **Previews on `shinsa.page`.** A shared preview (`docs/engine.md` → Sharing a preview) lives at
+  `https://<label>.shinsa.page/`, a domain apart from `shinsa.dev` so the dev server's cookies and scripts can reach
+  neither app.shinsa.dev nor another preview. `respond` matches a preview host (`isPreviewHost`, the zone from
+  `PREVIEW_ZONE`) before any other route, so nothing of the app is ever served there, and skips the app's security
+  headers, which would break most dev servers. `respondPreview` reads the instance and the preview id from the label
+  (`parsePreviewHost`); a `?key=` on any path is set as `__Host-shinsa_preview` (HttpOnly, Secure, SameSite=Lax, 30
+  days, that host only) and answered with a 303 to the same path without it. With the cookie, a request to an
+  instance that is online is forwarded to `https://t-<instance>.shinsa.dev/__preview/<id><path>` with its method,
+  query, body and headers, minus the preview cookie, Cloudflare's and proxies' own, and with the key in
+  `x-shinsa-preview-key`; a WebSocket upgrade passes through as Cloudflare's 101. The machine checks the key. No
+  cookie, a malformed key or an unknown instance is "This preview is no longer shared." (404); an instance offline or
+  a tunnel that does not answer (a network error, 502, 503, 504, 530 without the machine's
+  `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`); the machine's own
+  pages, such as a stopped service's, pass through with the mark removed. Every answer carries `X-Robots-Tag`.
+  Traffic is plain to the Worker: unlike a task's share, a preview is not sealed end to end, and nothing of it is kept.
 - **Webhooks.** `/hooks/<instance>/<schedule>/<token>` is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with
@@ -156,5 +173,9 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (the app's Basic Information) and `SLACK_TOKEN_KEY`
   (32 random bytes in base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Changing `SLACK_TOKEN_KEY`
   later makes every stored bot token unreadable, so each workspace has to add the app again.
+- Previews need the `shinsa.page` zone on the same Cloudflare account, with a proxied wildcard DNS record `*` (an
+  `AAAA` to `100::` is enough, the Worker answers) so every label resolves; the `*.shinsa.page/*` route in
+  `wrangler.jsonc` sends them to the Worker, and `wrangler deploy` fails while the zone is missing. `PREVIEW_ZONE`
+  (`shinsa.page`) names it; an engine reads the same origin from `SHINSA_PREVIEW_ORIGIN`.
 - The custom domain `app.shinsa.dev` is created by `wrangler deploy` (it needs the `shinsa.dev` zone on the same
   account). The GitHub OAuth app's callback URL must be exactly `https://app.shinsa.dev/__remote/sign-in/callback`.

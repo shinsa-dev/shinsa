@@ -20,6 +20,8 @@ export const PREVIEW_TUNNEL_PREFIX = '/__preview/';
 
 export const PREVIEW_KEY_HEADER = 'x-shinsa-preview-key';
 
+export const PREVIEW_PAGE_HEADER = 'x-shinsa-preview-page';
+
 export const PREVIEW_GONE = 'This preview is no longer shared.';
 
 export const PREVIEW_STOPPED =

@@ -4,6 +4,7 @@ import {
   PREVIEW_ID_BYTES,
   PREVIEW_KEY_BYTES,
   PREVIEW_KEY_HEADER,
+  PREVIEW_PAGE_HEADER,
   PREVIEW_STOPPED,
   parsePreviewTunnelPath,
   parsePreviewUrl,
@@ -116,7 +117,11 @@ function createRandom(bytes: number) {
 function respondPage(message: string, status: number) {
   return new Response(serializePreviewPage(message), {
     status,
-    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+      [PREVIEW_PAGE_HEADER]: '1',
+    },
   });
 }
 
@@ -311,12 +316,12 @@ export class Previews implements PreviewEffects, PreviewLinks {
   }
 
   async #forward(request: Request, target: string, headers: Record<string, string>, port: number) {
-    const bodyless = request.method === 'GET' || request.method === 'HEAD';
+    const withoutBody = request.method === 'GET' || request.method === 'HEAD';
     try {
       const response = await this.#fetch(target, {
         method: request.method,
         headers,
-        body: bodyless ? null : request.body,
+        body: withoutBody ? null : request.body,
         redirect: 'manual',
         decompress: false,
       });

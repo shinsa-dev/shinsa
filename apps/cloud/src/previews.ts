@@ -4,6 +4,7 @@ import {
   PREVIEW_KEY_HEADER,
   PREVIEW_KEY_PARAM,
   PREVIEW_OFFLINE,
+  PREVIEW_PAGE_HEADER,
   type PreviewAddress,
   parsePreviewHost,
   resolvePreviewTunnelPath,
@@ -95,8 +96,10 @@ async function forward(request: Request, url: URL, address: PreviewAddress, key:
     return respondPage(PREVIEW_OFFLINE, 503);
   }
   if (answer.status === 101) return answer;
-  if (TUNNEL_OFFLINE_STATUSES.has(answer.status)) return respondPage(PREVIEW_OFFLINE, 503);
+  const fromMachine = answer.headers.has(PREVIEW_PAGE_HEADER);
+  if (TUNNEL_OFFLINE_STATUSES.has(answer.status) && !fromMachine) return respondPage(PREVIEW_OFFLINE, 503);
   const proxied = new Response(answer.body, answer);
+  proxied.headers.delete(PREVIEW_PAGE_HEADER);
   proxied.headers.set('x-robots-tag', NOINDEX);
   return proxied;
 }

@@ -5,6 +5,8 @@ import {
   PREVIEW_KEY_BYTES,
   PREVIEW_KEY_HEADER,
   PREVIEW_OFFLINE,
+  PREVIEW_PAGE_HEADER,
+  PREVIEW_STOPPED,
   resolvePreviewOrigin,
   serializeBase64Url,
   serializePreviewUrl,
@@ -135,6 +137,18 @@ describe('a preview link', () => {
     const stale = await visit(harness, `${origin}/`, withKey());
     expect(stale.status).toBe(503);
     expect(await stale.text()).toContain(PREVIEW_OFFLINE.slice(0, 40));
+  });
+
+  test('passes on the machine’s own page for a stopped service, not the offline page', async () => {
+    const harness = createHarness();
+    const { origin } = await shareMachine(harness);
+    harness.handlers.push(
+      () => new Response(PREVIEW_STOPPED, { status: 503, headers: { [PREVIEW_PAGE_HEADER]: '1' } })
+    );
+    const stopped = await visit(harness, `${origin}/`, withKey());
+    expect(stopped.status).toBe(503);
+    expect(stopped.headers.has(PREVIEW_PAGE_HEADER)).toBe(false);
+    expect(await stopped.text()).toBe(PREVIEW_STOPPED);
   });
 
   test('answers a failure inside the Worker as an error, not the app', async () => {

@@ -6,6 +6,7 @@ import {
   PREVIEW_ID_BYTES,
   PREVIEW_KEY_BYTES,
   PREVIEW_KEY_HEADER,
+  PREVIEW_PAGE_HEADER,
   PREVIEW_STOPPED,
   type PreviewShare,
   parsePreviewUrl,
@@ -320,6 +321,7 @@ describe('answering a preview request', () => {
     const stopped = readResponse(await ask(previews, '/'));
     expect(stopped.status).toBe(503);
     expect(stopped.headers.get('cache-control')).toBe('no-store');
+    expect(stopped.headers.get(PREVIEW_PAGE_HEADER)).toBe('1');
     expect(await stopped.text()).toContain(PREVIEW_STOPPED);
     snapshot.terminals = [];
     expect(readResponse(await ask(previews, '/')).status).toBe(503);
@@ -372,6 +374,7 @@ describe('answering a preview request', () => {
     const warned = spyOn(log, 'warn').mockImplementation(() => undefined);
     const down = readResponse(await ask(previews, '/'));
     expect(down.status).toBe(502);
+    expect(down.headers.get(PREVIEW_PAGE_HEADER)).toBe('1');
     expect(await down.text()).toContain(PREVIEW_STOPPED);
     expect(warned).toHaveBeenCalledTimes(1);
     warned.mockRestore();
