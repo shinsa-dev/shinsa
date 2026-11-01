@@ -8,6 +8,7 @@ import {
   narrowHunks,
   resolveDiffClamp,
   resolveDiffNote,
+  resolveFileSource,
   resolveSpotSource,
   serializePatch,
   terminateText,
@@ -103,6 +104,32 @@ describe('narrowHunks', () => {
   it('has nothing when the marked lines are unchanged lines of a hunk far from its change', () => {
     const far = ['@@ -1,8 +1,8 @@', '-a', '+A', ' b', ' c', ' d', ' e', ' f', ' g'].join('\n');
     expect(narrowHunks(far, { start: 7, end: 7 })).toBeNull();
+  });
+});
+
+describe('resolveFileSource', () => {
+  it('shows a whole file’s hunks without its git headers', () => {
+    expect(resolveFileSource(createDiffFile())).toEqual({
+      kind: 'patch',
+      path: 'src/a.ts',
+      previousPath: null,
+      hunks: PATCH,
+      binary: false,
+    });
+  });
+
+  it('keeps a rename or a binary file with no hunks to show', () => {
+    const renamed = resolveFileSource(
+      createDiffFile({
+        previousPath: 'src/old.ts',
+        patch: 'diff --git a/src/old.ts b/src/a.ts\nrename from src/old.ts\n',
+      })
+    );
+    expect(renamed).toMatchObject({ previousPath: 'src/old.ts', hunks: '' });
+    expect(resolveFileSource(createDiffFile({ binary: true, patch: 'Binary files differ' }))).toMatchObject({
+      binary: true,
+      hunks: '',
+    });
   });
 });
 

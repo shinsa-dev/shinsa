@@ -4,7 +4,8 @@ The Worker on `https://app.shinsa.dev` that remote access runs through (`docs/en
 `docs/plans/remote-plan.md`). It signs you in with GitHub, pairs a machine, makes that machine's Cloudflare tunnel,
 lists your machines and the ones shared with you, keeps who belongs to each machine, mints the short connect token a browser opens a machine's channel with, forwards webhooks, and
 serves the web app's remote build. It never sees what a browser and a machine say to each other: the channel is
-sealed end to end (core's `remote/`), and the Worker holds no key that opens it. Everything it stores is in D1.
+sealed end to end (core's `remote/`), and the Worker holds no key that opens it. Everything it stores is in D1, and
+none of it is task data: a shared task is read live from its machine, never stored here.
 
 ## Layout
 
@@ -101,6 +102,11 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `wss://t-<id>.shinsa.dev/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
   seconds), signed for the account that asked. It only keeps random traffic off the machine's endpoint; the machine
   still needs an enrolled device key.
+- **Share links.** `POST /__remote/shares/<instance>/connect`, with no session, tells a share page where the machine is:
+  `{ url: "wss://t-<instance>.shinsa.dev", online }` (`ShareConnectResponse`), 404 for an instance that does not
+  exist. The page then opens the machine's `/share?id=…` channel itself, sealed with the key in the link's fragment,
+  which never reaches the Worker (`docs/engine.md` → Sharing a task). That answer and every `/share/t/…` page carry
+  `X-Robots-Tag: noindex, nofollow, noarchive`.
 - **Webhooks.** `/hooks/<instance>/<schedule>/<token>` is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with
@@ -131,7 +137,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   cookie (`findSessionUser`). Every POST a page makes (sign-out, approve, connect, remove, accept, leave) needs an `Origin` of the
   Worker's own origin, unless it carries a bearer token (`findPageUser`, `assertPageRequest`): a forged cross-site
   request can send the cookie but never the token. Every response carries a strict content security policy (scripts only from the site, sockets
-  only to `wss://*.shinsa.dev`, no framing), Strict-Transport-Security, `nosniff` and `Referrer-Policy: no-referrer`.
+  only to `wss://*.shinsa.dev` (and `blob:` reads and media, a share page's files), no framing), Strict-Transport-Security, `nosniff` and `Referrer-Policy: no-referrer`.
 
 ## Running and deploying
 

@@ -3,6 +3,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { CARD, CARD_FOOTER } from '@/components/layout/surface/card.ts';
 import { StatusText } from '@/components/status/text.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { resolveRoundCount } from '@/lib/tasks/rounds.ts';
 
@@ -19,6 +20,7 @@ export function NowFrame({
   children?: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  const readOnly = useReadOnly();
   return (
     <section className={cn(CARD, 'flex flex-col overflow-hidden')}>
       <div className='flex flex-col gap-3 p-3'>
@@ -27,7 +29,7 @@ export function NowFrame({
             <span className='text-2xs text-fg-2'>{eyebrow}</span>
             <InlineMarkdown text={title} className='font-medium text-fg-4 text-sm leading-tighter' />
           </div>
-          {action && <div className='flex shrink-0 items-center gap-1.5'>{action}</div>}
+          {action && !readOnly && <div className='flex shrink-0 items-center gap-1.5'>{action}</div>}
         </div>
         {children}
       </div>
@@ -58,11 +60,12 @@ export function Eyebrow({ state, task, extra }: { state: ShinsaState; task: Task
 }
 
 export function FooterNote({ note, children }: { note: string; children: React.ReactNode }) {
+  const readOnly = useReadOnly();
   return (
     <div className='flex items-center gap-3 text-2xs text-fg-2'>
       <span>{note}</span>
       <span className='flex-1' />
-      {children}
+      {!readOnly && children}
     </div>
   );
 }
@@ -76,6 +79,8 @@ export function QuietLink({
   onClick: () => void;
   children: React.ReactNode;
 }) {
+  const readOnly = useReadOnly();
+  if (readOnly) return null;
   return (
     <button
       type='button'

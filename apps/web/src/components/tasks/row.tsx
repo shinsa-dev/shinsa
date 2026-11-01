@@ -12,6 +12,7 @@ import * as React from 'react';
 import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
 import { RepoIcon } from '@/components/links/repo.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { StatusText } from '@/components/status/text.tsx';
 import { PriorityChoices, TaskActionItems } from '@/components/task/action-items.tsx';
@@ -156,6 +157,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
           </Hint>
           <TaskHandle task={task} />
           <Truncate className='text-fg-4'>{task.title}</Truncate>
+          <SharedMark task={task} />
         </span>
         {columns === TASK_LIST_COLUMNS && (
           <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>

@@ -8,6 +8,7 @@ import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { RowSummary } from '@/components/queue/row-summary.tsx';
+import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
@@ -21,6 +22,7 @@ import {
   resolveSectionDefault,
   resolveSectionId,
 } from '@/lib/queue.ts';
+import { isTaskShared } from '@/lib/share/dialog.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 type Variant = 'wide' | 'compact';
@@ -127,6 +129,7 @@ function QueueSectionView({
       active={item.task.id === activeTaskId}
       revealWhenActive={variant === 'compact'}
       title={item.task.title}
+      mark={isTaskShared(item.task) && <SharedMark task={item.task} />}
       summary={<RowSummary state={state} task={item.task} detail={variant === 'wide'} />}
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {

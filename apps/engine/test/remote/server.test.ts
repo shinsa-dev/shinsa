@@ -28,6 +28,8 @@ import {
   resolveMachineName,
   resolveRequestOrigin,
 } from '../../src/remote/index.ts';
+import type { ShareChannel } from '../../src/remote/share-channel.ts';
+import type { ShareLinks } from '../../src/remote/shares.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Schedules } from '../../src/schedules/index.ts';
 import type { Slack } from '../../src/slack/index.ts';
@@ -90,6 +92,7 @@ async function start(
     access?: RemoteAccess | null;
     config?: Partial<ServerConfig>;
     openUrl?: (url: string) => Promise<void>;
+    shares?: ShareLinks;
   } = {}
 ) {
   const config = createTestConfig(createTempDir(), options.config);
@@ -142,6 +145,7 @@ async function start(
     onboarding: createTestOnboarding(engine, config).onboarding,
     schedules: createFakeSchedules(),
     remote,
+    ...(options.shares ? { shares: options.shares } : {}),
     slack: createFakeSlack(),
   });
   running.push(async () => {
@@ -307,6 +311,53 @@ describe('the tunnel entry point', () => {
     const expired = encodeURIComponent(await createToken(Date.now() - 1));
     expect((await tunnel(`/remote?token=${expired}`, { headers: origin })).status).toBe(401);
     expect((await tunnel(`/remote?token=${good}`, { headers: origin })).status).toBe(400);
+  });
+
+  test('opens a share link only from app.shinsa.dev and only for a task that is shared, and the machine closes it', async () => {
+    const received: string[] = [];
+    const closed: string[] = [];
+    const shares = {
+      acceptsShare: (shareId: string) => shareId === 's1',
+      openChannel: (
+        peer: { send: (data: string) => void; close: (code: number, reason: string) => void },
+        shareId: string
+      ) => {
+        peer.send(`hello ${shareId}`);
+        return {
+          receive: (raw: string) => {
+            received.push(raw);
+            peer.close(1008, 'A share link accepts nothing.');
+            return Promise.resolve();
+          },
+          close: () => closed.push(shareId),
+        } as unknown as ShareChannel;
+      },
+      closeChannel: (channel: ShareChannel) => channel.close(),
+    } as unknown as ShareLinks;
+    const { tunnel, port, plane } = await start({ shares });
+    expect((await tunnel('/share?id=s1')).status).toBe(403);
+    expect((await tunnel('/share?id=nope', { headers: { origin: plane.origin } })).status).toBe(404);
+    expect((await tunnel('/share', { headers: { origin: plane.origin } })).status).toBe(404);
+    expect((await tunnel('/share?id=s1', { headers: { origin: plane.origin } })).status).toBe(400);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/share?id=s1`, {
+      headers: { origin: plane.origin, 'cf-connecting-ip': '203.0.113.9' },
+    } as unknown as string[]);
+    const first = await new Promise<string>((resolve) => {
+      socket.addEventListener('message', (event) => resolve(String(event.data)), { once: true });
+    });
+    expect(first).toBe('hello s1');
+    const ended = new Promise<CloseEvent>((resolve) => {
+      socket.addEventListener('close', resolve, { once: true });
+    });
+    socket.send('hi');
+    expect((await ended).code).toBe(1008);
+    await until('the share link is closed', () => closed.length === 1);
+    expect(received).toEqual(['hi']);
+  });
+
+  test('has no share link without the shares', async () => {
+    const { tunnel } = await start();
+    expect((await tunnel('/share?id=s1', { headers: { origin: REMOTE_APP_ORIGIN } })).status).toBe(404);
   });
 
   test('never treats a tunnel request as local, whatever its Host says', async () => {

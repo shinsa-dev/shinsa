@@ -143,6 +143,14 @@ export function resolveSpotSource(
   return { kind: 'patch', path, previousPath: null, hunks: createContextHunk(content, lines), binary: false };
 }
 
+export function resolveFileSource(file: DiffFile): DiffSource {
+  const hunks = listHunks(file.patch)
+    .filter((hunk) => hunk.body.length > 0)
+    .map((hunk) => serializeHunk(listPatchLines(hunk)))
+    .join('\n');
+  return { kind: 'patch', path: file.path, previousPath: file.previousPath, hunks, binary: file.binary };
+}
+
 export function terminateText(text: string | null) {
   if (text === null || text === '' || text.endsWith('\n')) return text;
   return `${text}\n`;
