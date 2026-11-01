@@ -206,6 +206,8 @@ export function createSocketHub(
         socket.data.transcripts.get(message.runId)?.();
         socket.data.transcripts.delete(message.runId);
         return;
+      case 'task.detail':
+        return;
     }
   }
 

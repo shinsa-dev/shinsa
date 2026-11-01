@@ -534,6 +534,8 @@ export class Connection implements ShinsaConnection {
         this.#engine = message.engine;
         this.#state.publish();
         return;
+      case 'task.detail':
+        return;
     }
   }
 }
