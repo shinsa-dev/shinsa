@@ -137,6 +137,11 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   and a machine of one of them, as `wss://t-<instance>.shinsa.dev/team?token=…`, signed with that machine's connect
   key for the account that asked; the machine then checks the account against its own copy of the members and the
   team key's proof. Removing a user, a team or a machine cascades its rows.
+- **Signing keys** (`instances.signing_key`, `0006_signing_keys.sql`). Each machine's heartbeat may send
+  `signingKey`, its ECDSA P-256 public key (raw, base64url; anything else is 400 `body_invalid`, and one left out keeps
+  the stored key), and the team listing returns it on each machine (`TeamMachine.signingKey`). Teammates verify a
+  machine's signed task list with it when another teammate passes it on while the machine is offline
+  (`docs/engine.md` → Teams → Offline teammates). The Worker stores the public half only and never sees a list.
 - **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, for the owner, a member or a guest, answers
   `wss://t-<id>.shinsa.dev/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
   seconds), signed for the account that asked. It only keeps random traffic off the machine's endpoint; the machine

@@ -173,8 +173,8 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
   });
   const shares = new Shares({ engine, remote, evidence, transcripts });
   const handoffs = new Handoffs({ engine, remote });
-  const teams = new Teams({ engine, remote, shares, transcripts });
   const teamFeeds = new TeamFeeds({ remote });
+  const teams = new Teams({ engine, remote, shares, transcripts, held: teamFeeds });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,

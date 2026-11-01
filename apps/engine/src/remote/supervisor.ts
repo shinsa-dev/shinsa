@@ -36,6 +36,7 @@ export interface TunnelSupervisorOptions {
   ping: (url: string) => Promise<boolean>;
   localUrl: () => string;
   version: string;
+  signingKey?: () => Promise<string>;
   onRevoked: () => void;
   onAccess?: (access: RemoteAccess, guests: RemoteMember[]) => void;
   onTeams?: (teams: RemoteTeam[]) => void;
@@ -164,9 +165,11 @@ export class TunnelSupervisor {
     const credentials = this.#credentials;
     if (!credentials) return false;
     try {
+      const signingKey = await this.#options.signingKey?.();
       const answer = await this.#options.control.recordHeartbeat(credentials.machineToken, {
         localUrl: this.#options.localUrl(),
         version: this.#options.version,
+        ...(signingKey ? { signingKey } : {}),
       });
       const access = readAccess(answer);
       const teams = readTeams(answer.teams);

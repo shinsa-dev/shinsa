@@ -1335,7 +1335,7 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `POST /__remote/pair/start` | The engine | `{ name, publicKey, version }` → `{ claimCode, pollSecret, url, expiresAt }` |
 | `POST /__remote/pair/poll` | The engine | `{ claimCode, pollSecret }` → `pending`, `expired` or `claimed` with `MachineCredentials` and the owner's GitHub login, once |
 | `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
-| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members, guests }` (`HeartbeatResponse`, a `RemoteAccess` and the machine's guests as `RemoteMember`s), which the engine reads leniently; a 401 means revoked |
+| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version, signingKey? }` (`HeartbeatRequest`; `signingKey` the machine's ECDSA P-256 public key, raw and base64url, kept when left out, else 400 `body_invalid`) keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members, guests }` (`HeartbeatResponse`, a `RemoteAccess` and the machine's guests as `RemoteMember`s), which the engine reads leniently; a 401 means revoked |
 | `POST /__remote/machine/invites`, `POST /__remote/machine/invites/remove` | The engine, with its machine token | The machine's one reusable invite token, replacing the one before (`InviteCreateResponse`: `token`); removing it turns the invite off |
 | `POST /__remote/machine/requesters/find`, `POST /__remote/machine/members/add`, `POST /__remote/machine/members/remove` | The engine, with its machine token | `{ userId }` (`MemberRequest`): the GitHub user of an account that opened this machine's invite, a member, the owner or someone in a team with the owner (a `RemoteUser`, else 404); making such an account a member when you accept its request or give a teammate this machine (a `RemoteMember`, 409 `members_full` past 20); taking a member's access away |
 | `POST /__remote/invites/accept` | The enroll page | `{ token }` (`InviteAcceptRequest`) records that the signed-in account asked and answers the machine's `instanceId`, `name`, `owner`, the account's `user` and a `connect` (`ConnectResponse`) to ask the machine with (`InviteAcceptResponse`); it makes no member |
@@ -1358,7 +1358,7 @@ A **team connect token** (`connect`, `{ instanceId }`) is answered only for the 
 machine of one of them, as `ConnectResponse` with `url` `wss://t-<instance>.shinsa.dev/team?token=…`
 (`resolveTeamChannelUrl`), the token signed with that machine's connect key for the GitHub account that asked. The
 heartbeat's answer also carries `teams` (`RemoteTeam[]`: `id`, `name`, `owner`, your `role`, `members`, `requests`
-(the owner's only), `machines` (`TeamMachine`: `id`, `name`, `userId`, `online`, `lastSeenAt`, every member's), and
+(the owner's only), `machines` (`TeamMachine`: `id`, `name`, `userId`, `online`, `lastSeenAt`, `signingKey` when the machine sent one, every member's), and
 `createdAt`).
 
 Every signed-in route above takes the session as the `__Host-shinsa_session` cookie or as `Authorization: Bearer
@@ -1371,14 +1371,21 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 `proof`, an HMAC with the team key over the team, the view and the key), answered by a welcome with the machine's
 fresh key and a proof over all of it or by `refused`; both derive the session key with the view in it
 (`deriveTeamSessionKey`, `TeamKeys`), then the machine sends `ShareMessage`s as a share does. A list view is a
-`TeamListView` (`tasks`: `TeamTask[]`, `machineKey`: the machine's public key, `updatedAt`): each a `SharedListing` (the redacted task, its gates, its project)
+`TeamListView` (`tasks`: `TeamTask[]`, `machineKey`: the machine's public key, `updatedAt`, `snapshot`: the same list
+signed, and `held`: the signed lists it keeps of the team's offline machines): each a `SharedListing` (the redacted task, its gates, its project, its repository)
 with `owner` (GitHub login) and `machine` (its name), every open task of the team's projects and the
 `TEAM_SETTLED_LIMIT` (50) most recently finished. A task view is a `ShareLiveView`. What a machine watches is a
 `TeamFeedSnapshot`: `machines` (`TeamFeedMachine`: `teamId`, `instanceId`, `name`, `userId`, `status`, one of
-`connecting`, `live`, `offline`, `refused`, and `reason`) and `tasks` (`TeamFeedTask`: a `TeamTask` with its `teamId`
+`connecting`, `live`, `offline`, `refused`, `reason`, and `updatedAt`, when the owner's machine made the list it shows; the page marks a machine that is not `live` but has one as Offline) and `tasks` (`TeamFeedTask`: a `TeamTask` with its `teamId`
 and `instanceId`); `GET /api/teams/tasks` (`TEAM_TASKS_PATH`, `?team=`, `?open=true`) answers the same shape. The
 local relay of one task is the socket `TEAM_VIEW_PATH` (`/api/teams/view?team=&machine=&task=`, `resolveTeamViewPath`,
-`parseTeamViewTarget`), which carries the task's `ShareMessage`s as text and closes on anything the page sends.
+`parseTeamViewTarget`), which carries the task's `ShareMessage`s as text and closes on anything the page sends. A
+`TeamSnapshot` is `{ body, signature }`: `body` the JSON of `TeamSnapshotBody` (`teamId`, `instanceId`, `tasks`,
+`updatedAt`), `signature` an ECDSA P-256 SHA-256 signature (`SIGNING_KEY_ALGORITHM`) over `shinsa-team-snapshot-v1`, a
+newline and `body`, as base64url (`signTeamSnapshot`, `verifyTeamSnapshot` with the signer's `TeamMachine.signingKey`,
+`selectTeamSnapshotSigner`); a copy lasts `TEAM_SNAPSHOT_TTL_MS` (30 days) from its `updatedAt`
+(`isTeamSnapshotExpired`). The engine keeps them in `data/team-snapshots.json` (`{ version: 1, lists }`, each
+`teamId`, `instanceId`, `keyDigest`, the team key's SHA-256 in hex, `tasks`, `updatedAt` and `snapshot` or null).
 
 **Shared previews** (core's `remote/previews.ts`): a link is `PreviewLink` (`instanceId`, `previewId` of
 `PREVIEW_ID_BYTES`, `key` of `PREVIEW_KEY_BYTES`, base64url), written `https://<label>.shinsa.page/?key=<key>`

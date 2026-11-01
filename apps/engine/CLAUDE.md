@@ -195,11 +195,14 @@ src/
 │                        remote.json, and the tunnel's /team channel, checked against membership, the key and the
 │                        team's projects, ended the moment access ends), team-feeds.ts (TeamFeeds: a list channel
 │                        to every other machine of each team whose key this machine holds, GET /api/teams/tasks,
-│                        the teams socket message and the /api/teams/view relay of one task), handoffs.ts (Handoffs:
-│                        the handoff.link and handoff.revoke effects and the claim recorded as handoff.claim),
-│                        guest-routes.ts (isGuestRoute: the reads of its one task a guest's channel may make),
-│                        index.ts (Remote: wires them, pairing, pausing, removing, enrolling, a hand-off's link,
-│                        claim and removal, the stable webhook URL, markRemoteRequest and resolveRequestOrigin)
+│                        the teams socket message and the /api/teams/view relay of one task), team-snapshots.ts
+│                        (TeamSnapshots: each teammate machine's last list), team-views.ts (TeamViews and
+│                        TeamViewRecorder: each of their tasks' last full page, replayed while the machine is
+│                        offline), handoffs.ts (Handoffs: the handoff.link and handoff.revoke effects and the claim
+│                        recorded as handoff.claim), guest-routes.ts (isGuestRoute: the reads of its one task a
+│                        guest's channel may make), index.ts (Remote: wires them, pairing, pausing, removing,
+│                        enrolling, a hand-off's link, claim and removal, the stable webhook URL, markRemoteRequest
+│                        and resolveRequestOrigin)
 ├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
 │                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
 │                        slack.mention, and a question's choice clicked in Slack as slack.answer

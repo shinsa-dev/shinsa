@@ -35,6 +35,7 @@ export interface InstanceRow {
   local_url: string | null;
   online: number;
   last_seen_at: number | null;
+  signing_key: string | null;
   created_at: number;
 }
 
@@ -90,6 +91,7 @@ const INSTANCE_COLUMN_NAMES = [
   'local_url',
   'online',
   'last_seen_at',
+  'signing_key',
   'created_at',
 ];
 
@@ -315,10 +317,12 @@ export function createStore(db: Database) {
         .first<InstanceRow>();
     },
 
-    async recordHeartbeat(id: string, localUrl: string, now: number) {
+    async recordHeartbeat(id: string, localUrl: string, signingKey: string | null, now: number) {
       await db
-        .prepare('UPDATE instances SET local_url = ?, online = 1, last_seen_at = ? WHERE id = ?')
-        .bind(localUrl, now, id)
+        .prepare(
+          'UPDATE instances SET local_url = ?, online = 1, last_seen_at = ?, signing_key = COALESCE(?, signing_key) WHERE id = ?'
+        )
+        .bind(localUrl, now, signingKey, id)
         .run();
     },
 

@@ -160,7 +160,7 @@ src/
     │                    machines, and joining and sharing them there), channel.ts (a team channel from the browser with its own
     │                    key, and the engine relay of one task), feeds.ts (teammates' tasks for the focused team,
     │                    merged from the machines and the browser, without machines the dashboard reaches);
-    │                    components/teams/ (the new team dialog, the shared projects dropdown, the team rows on All tasks and Home),
+    │                    components/teams/ (the new team dialog, the shared projects dropdown, a teammate's row on All tasks, among your own),
     │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's

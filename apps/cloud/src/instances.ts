@@ -3,6 +3,7 @@ import {
   type ConnectResponse,
   createConnectToken,
   type HeartbeatResponse,
+  isSigningPublicKey,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
   type RemoteInstance,
@@ -121,10 +122,18 @@ function isLoopbackUrl(value: string) {
   }
 }
 
+function readSigningKey(fields: Record<string, unknown>) {
+  const value = fields.signingKey;
+  if (value === undefined) return null;
+  if (typeof value === 'string' && isSigningPublicKey(value)) return value;
+  throw new CloudError('body_invalid', 'The signing key must be a P-256 public key.', 400);
+}
+
 export async function respondHeartbeat(request: Request, world: CloudWorld) {
   const row = await findMachine(request, world);
   const fields = await readJsonFields(request);
   const localUrl = readText(fields, 'localUrl', 200);
+  const signingKey = readSigningKey(fields);
   if (!isLoopbackUrl(localUrl))
     throw new CloudError('body_invalid', 'The local address must be this machine’s loopback address.', 400);
   if (localUrl !== row.local_url)
@@ -133,7 +142,7 @@ export async function respondHeartbeat(request: Request, world: CloudWorld) {
       resolveTunnelHost(row.id),
       localUrl
     );
-  await world.store.recordHeartbeat(row.id, localUrl, world.now());
+  await world.store.recordHeartbeat(row.id, localUrl, signingKey, world.now());
   const answer: HeartbeatResponse = {
     ok: true,
     ...(await listInstanceMembers(row, world)),

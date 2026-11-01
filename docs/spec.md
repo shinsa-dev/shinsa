@@ -418,7 +418,9 @@ member then sees every task in them, live and read-only, next to their own, on a
 marked with whose it is. The focus menu reads Your work, your projects, then Teams; focusing a team shows your tasks
 in it and your teammates'. A teammate's task opens on the same read-only page a Standard share link shows: the agents'
 live output but never your messages to them, and no controls, read live from its owner's machine, and app.shinsa.dev keeps only who is in which team
-(`docs/engine.md` → Teams).
+and each machine's public signing key. While a teammate's machine is offline its tasks stay listed, marked Offline with
+when they were last updated, from the copy each teammate's machine keeps and passes on, signed by the owner's machine
+(`docs/engine.md` → Teams → Offline teammates).
 Share preview, on a task's running service with a preview URL, does the same for the dev server itself: a link,
 `<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's tunnel, hot reload
 included, each preview its own origin on a domain apart from shinsa.dev. It has the same time limits, ends with the
@@ -1165,11 +1167,17 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   time they open Shinsa Cloud. You take it back under Remote access, like any member.
 - **Nothing about the work leaves your machine for the cloud.** app.shinsa.dev keeps who is in which team, never a
   task. Each view is read from the owner's machine over its tunnel and sealed with a team key that lives only on
-  members' machines and browsers, carried in the join link's fragment, which no server receives. A teammate's
-  machine that is offline shows nothing until it is back.
+  members' machines and browsers, carried in the join link's fragment, which no server receives.
+- **Offline teammates stay listed.** Each machine keeps the last list it got from every teammate's machine, beside
+  `remote.json`, and shows it marked Offline with when it was last updated; the live list replaces it once the
+  machine is back. A teammate who never saw it gets it from any online teammate, and takes it only when the owner
+  machine's own signing key verifies it, since the team key alone would let any member forge one. A copy goes after
+  30 days, or when the team, the member, the machine or the key does. Each machine also keeps the full page of every
+  teammate task it lists, so an offline task opens whole, marked as a copy; a teammate machine that never fetched it
+  shows the title and status.
 - **Focus on a team.** The focus menu says Your work instead of All work, then your projects, then Teams. A focused
-  team's Home and All tasks add your teammates' tasks, each marked with its owner; they never count towards Needs
-  you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
+  team's All tasks lists your teammates' tasks among yours, in the same groups, with an Owner column; Home stays
+  yours alone. They never count towards Needs you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
   full control, never twice.
 - **For agents.** The engine serves the team's tasks at `GET /api/teams/tasks`, which triage's team-wide duplicate
   check will read. Agents can list teams (`teams_list`) and change nothing about them.

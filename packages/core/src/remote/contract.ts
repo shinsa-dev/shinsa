@@ -92,6 +92,7 @@ export type PairPollResponse =
 export interface HeartbeatRequest {
   localUrl: string;
   version: string;
+  signingKey?: string;
 }
 
 export interface RemoteUser {
