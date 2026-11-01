@@ -8,6 +8,7 @@ import { ENGINE_STOPPED } from '../../src/cli/engine.ts';
 import { describeHelp, describeHelpAll } from '../../src/cli/help.ts';
 import {
   type CliIo,
+  createOpenApp,
   createPlatformService,
   createProcessIo,
   createWakeEngine,
@@ -577,6 +578,42 @@ describe('shinsa status and open', () => {
       `Shinsa has not worked in ${repoPath} yet. Ask for something there and it joins your projects.`,
       '/elsewhere is not in a git repository, so Shinsa opens on Home.',
     ]);
+  });
+});
+
+describe('opening the app', () => {
+  test('the Mac app opens the link, a checkout opens the page in the browser, and a headless box prints it', async () => {
+    const openLog = join(createTempDir(), 'opened');
+    const restore = overrideEnv({ FAKE_OPEN_LOG: openLog });
+    const printed: string[] = [];
+    const write = (line: string) => printed.push(line);
+    try {
+      await createOpenApp('http://127.0.0.1:7446', { write, bundled: true, platform: 'darwin' })(
+        'shinsa://home'
+      );
+      await createOpenApp('http://127.0.0.1:7446', { write, bundled: false, platform: 'darwin', env: {} })(
+        'shinsa://task/SW-1'
+      );
+      await createOpenApp('http://127.0.0.1:7446', {
+        write,
+        bundled: true,
+        platform: 'linux',
+        env: { DISPLAY: ':0' },
+      })('shinsa://home');
+      await createOpenApp('http://127.0.0.1:7446', { write, bundled: true, platform: 'linux', env: {} })(
+        'shinsa://task/SW-1'
+      );
+      expect(readFileSync(openLog, 'utf8').trim().split('\n')).toEqual([
+        expect.stringMatching(/^-b \S+ shinsa:\/\/home$/),
+        'http://127.0.0.1:7446/tasks/SW-1',
+        'http://127.0.0.1:7446/',
+      ]);
+      expect(printed).toEqual([
+        'No display here, so open http://127.0.0.1:7446/tasks/SW-1 in a browser that reaches this machine.',
+      ]);
+    } finally {
+      restore();
+    }
   });
 });
 

@@ -10,6 +10,7 @@ import {
   isStartedFromTerminal,
   mergePathLists,
   parseLoginEnv,
+  resolveDefaultShell,
 } from '../../src/shell/login.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 
@@ -190,6 +191,11 @@ describe('the login shell environment', () => {
     );
     expect(await reader.read()).toEqual({ A: '1' });
     expect(runs).toEqual([{ command: expect.arrayContaining(['/bin/zsh', '-lic']), cwd: homedir() }]);
+  });
+
+  test('falls back to zsh on the Mac and sh elsewhere', () => {
+    expect(resolveDefaultShell('darwin')).toBe('/bin/zsh');
+    expect(resolveDefaultShell('linux')).toBe('/bin/sh');
   });
 
   test('a shell that hangs, fails or is missing gives nothing, and says so', async () => {

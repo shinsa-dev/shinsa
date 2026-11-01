@@ -18,6 +18,7 @@ import {
 } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { type Shinsa, startShinsa } from '../serve.ts';
+import { resolveBrowserCommand } from '../shell/browser.ts';
 import { describeFailure, runCommand } from '../shell/index.ts';
 import {
   applyLoginEnv,
@@ -83,10 +84,25 @@ async function runOrThrow(command: string[]) {
   return result.stdout;
 }
 
-function createOpenApp(base: string) {
+export interface OpenAppOptions {
+  write: (line: string) => void;
+  bundled?: boolean;
+  platform?: string;
+  env?: Record<string, string | undefined>;
+}
+
+export function createOpenApp(base: string, options: OpenAppOptions) {
+  const platform = options.platform ?? process.platform;
+  const bundled = (options.bundled ?? Boolean(BUNDLE)) && platform === 'darwin';
   return async (link: string) => {
-    if (BUNDLE) await runOrThrow(['open', '-b', APP_BUNDLE_ID, link]);
-    else await runOrThrow(['open', `${base}${resolveLinkPage(link)}`]);
+    if (bundled) {
+      await runOrThrow(['open', '-b', APP_BUNDLE_ID, link]);
+      return;
+    }
+    const url = `${base}${resolveLinkPage(link)}`;
+    const command = resolveBrowserCommand(url, platform, options.env ?? Bun.env);
+    if (command) await runOrThrow(command);
+    else options.write(`No display here, so open ${url} in a browser that reaches this machine.`);
   };
 }
 
@@ -226,7 +242,7 @@ export function createProcessIo(options: ProcessOptions = {}): CliIo {
     cwd: process.cwd(),
     write: (line = '') => process.stdout.write(`${line}\n`),
     writeError: (line) => process.stderr.write(`${line}\n`),
-    openApp: createOpenApp(base),
+    openApp: createOpenApp(base, { write: (line) => process.stdout.write(`${line}\n`) }),
     readRepoRoot,
     wakeEngine: createWakeEngine(base),
     engine: { bundled: IS_BUNDLED, service: PLATFORM_SERVICE },

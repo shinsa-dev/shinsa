@@ -932,4 +932,8 @@ describe('naming and opening', () => {
     await expect(openRemoteUrl('fail', createTempDir())).rejects.toThrow();
     await expect(createUrlOpener(createTempDir())('fail')).rejects.toThrow();
   });
+
+  test('opens nothing on a machine without a display, since the command prints the pairing page', async () => {
+    await openRemoteUrl('fail', createTempDir(), null);
+  });
 });
