@@ -284,7 +284,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
   section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
   its own.
-- **Feedback.** A Feedback button beside Settings in the header (Desk) and the rail (Shelf), and Send feedback on
+- **Feedback.** A Feedback button beside Settings in the header (Desk), the rail (Shelf) and Shelf’s bar in a narrow window, and Send feedback on
   Shinsa in ⌘K, open the feedback popover: the note field, with Draft issue inside it, and one row per entry, its title and who it is from;
   clicking one opens it in a dialog to read in full, edit, dismiss or open. You write a note in your own words; your agent rewrites it as a public
   GitHub issue on `shinsa-dev/shinsa` without your projects, repositories, files, branches, names, code or links, and

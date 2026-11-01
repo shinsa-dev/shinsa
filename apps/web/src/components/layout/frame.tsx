@@ -45,7 +45,7 @@ export function AppFrame({
         </Sheet>
       ) : null}
       <main className={cn('flex flex-1 flex-col', sidebar ? 'min-w-0' : 'min-h-0')}>
-        {sidebar ? <CompactBar onMenu={() => setMenuOpen(true)} /> : null}
+        {sidebar ? <CompactBar state={state} onMenu={() => setMenuOpen(true)} /> : null}
         {children}
       </main>
       <ErrorBoundary size='silent'>
