@@ -12,6 +12,7 @@ import {
   isCrashing,
   isOnOtherPort,
   isSpawnRefused,
+  isStandaloneAgent,
   listEngineVariables,
   parseLaunchdJob,
   parseRegistration,
@@ -104,6 +105,7 @@ export class EngineSupervisor {
   }
 
   async ensure(onStarting: () => void): Promise<{ health: ServerHealth } | { screen: EngineScreen }> {
+    await this.#takeOverStandaloneEngine();
     const running = await requestHealth(this.origin);
     if (running) return { health: running };
     if (!app.isPackaged) return { screen: { kind: 'dev' } };
@@ -144,6 +146,15 @@ export class EngineSupervisor {
     if (!port) return;
     const job = parseLaunchdJob((await launchctl(['print', resolveEngineTarget(uid)])).output);
     if (isOnOtherPort(job, this.#readText(ENGINE_LOCK), port)) await this.restart();
+  }
+
+  async #takeOverStandaloneEngine() {
+    if (!app.isPackaged) return;
+    const plist = resolveLaunchAgentPath(homedir());
+    if (!existsSync(plist)) return;
+    if (!isStandaloneAgent(readFileSync(plist, 'utf8'), resolveEngineProgram(process.resourcesPath))) return;
+    await launchctl(['bootout', resolveEngineTarget(uid)]);
+    rmSync(plist, { force: true });
   }
 
   async #retireOldService() {

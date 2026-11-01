@@ -76,6 +76,7 @@ export {
   validateDelivery,
   validateEvidence,
   validateEvidenceRemoval,
+  validateFeedbackReport,
   validateFixHandOver,
   validateMemoryProposal,
   validatePhaseHandOver,

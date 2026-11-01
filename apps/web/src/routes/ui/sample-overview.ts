@@ -333,8 +333,6 @@ export function createOverviewScene(now: number) {
           questions: [],
         },
         proposedAt: now - 5 * MINUTE,
-        feedback: 'Keep the folder step first; people expect it.',
-        changeSummary: 'Moved the folder step back to the start and merged the two account steps.',
         changes: [
           { kind: 'phase_changed', title: 'Check accounts and tools in one step' },
           { kind: 'phase_added', title: 'Save each answer as it is given' },

@@ -110,6 +110,18 @@ function sentReplies() {
     .map((request) => request.body);
 }
 
+async function settle() {
+  await act(async () => {});
+}
+
+async function comeBackToWindow() {
+  await settle();
+  act(() => {
+    window.dispatchEvent(new Event('blur'));
+    window.dispatchEvent(new Event('focus'));
+  });
+}
+
 describe('the setup page', () => {
   it('shows the defaults with the recommended choice picked in each group, and where you are in setup', async () => {
     serve(createFlow(createStep()));
@@ -192,7 +204,8 @@ describe('the setup page', () => {
     serve(createFlow(createStep()));
     renderPage();
     const list = await screen.findByRole('listbox', { name: 'Merging' });
-    await waitFor(() => expect(document.activeElement).toBe(list));
+    await settle();
+    expect(document.activeElement).toBe(list);
     fireEvent.keyDown(list, { key: 'ArrowDown' });
     fireEvent.keyDown(list, { key: 'ArrowDown' });
     fireEvent.keyDown(list, { key: 'Tab' });
@@ -358,10 +371,7 @@ describe('the setup page', () => {
     await waitFor(() =>
       expect(fake?.requests.some((request) => request.path === '/api/accounts/login')).toBe(true)
     );
-    act(() => {
-      window.dispatchEvent(new Event('blur'));
-      window.dispatchEvent(new Event('focus'));
-    });
+    await comeBackToWindow();
     await waitFor(() =>
       expect(fake?.requests.some((request) => request.path === '/api/accounts/refresh')).toBe(true)
     );
@@ -468,17 +478,12 @@ describe('the setup page', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
     await waitFor(() => expect(sentReplies()).toHaveLength(1));
-    act(() => {
-      window.dispatchEvent(new Event('blur'));
-      window.dispatchEvent(new Event('focus'));
-    });
+    await comeBackToWindow();
     await waitFor(() => expect(sentReplies()).toHaveLength(2));
     fireEvent.click(screen.getByRole('option', { name: /~\/oss/ }));
-    act(() => {
-      window.dispatchEvent(new Event('blur'));
-      window.dispatchEvent(new Event('focus'));
-    });
+    await comeBackToWindow();
     await waitFor(() => expect(sentReplies()).toHaveLength(3));
+    await settle();
     fireEvent.click(await screen.findByRole('button', { name: 'Leave it out' }));
     await waitFor(() => expect(sentReplies()).toHaveLength(4));
     const both = { type: 'answer', stepId: 'roots', values: ['/Users/me/Developer', '/Users/me/oss'] };
@@ -517,10 +522,7 @@ describe('the setup page', () => {
       fake?.requests.filter((request) => request.method === 'GET' && request.path === '/api/onboarding/flow')
         .length;
     const before = reads();
-    act(() => {
-      window.dispatchEvent(new Event('blur'));
-      window.dispatchEvent(new Event('focus'));
-    });
+    await comeBackToWindow();
     await waitFor(() => expect(reads()).toBe((before ?? 0) + 1));
   });
 

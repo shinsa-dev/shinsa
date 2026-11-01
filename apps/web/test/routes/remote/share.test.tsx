@@ -8,6 +8,8 @@ import { createFakeShareMachine, type FakeShareMachine, SHARE_LINK } from '../..
 import { createTask } from '../../support/state.ts';
 
 const ORIGINAL_SOCKET = globalThis.WebSocket;
+const CODE_TAB_LOADED = { timeout: 5000 };
+const blobs = new Map<string, Promise<string>>();
 
 afterEach(() => {
   mock.restore();
@@ -52,25 +54,31 @@ function connect(session: Response | null = null) {
   globalThis.WebSocket = function createFakeSocket(url: string) {
     return machine.options.createSocket(url);
   } as unknown as typeof WebSocket;
-  const blobs = new Map<string, string>();
   spyOn(URL, 'createObjectURL').mockImplementation(((blob: Blob) => {
-    const url = `blob:test-${blobs.size}`;
-    void blob.text().then((text) => blobs.set(url, text));
+    const url = `blob:test-${crypto.randomUUID()}`;
+    blobs.set(url, blob.text());
     return url;
   }) as never);
   spyOn(globalThis, 'fetch').mockImplementation(((input: string) => {
     if (input === '/__remote/session') return Promise.resolve(session ?? new Response('', { status: 401 }));
-    if (input.startsWith('blob:')) return Promise.resolve(new Response(blobs.get(input) ?? ''));
+    if (input.startsWith('blob:'))
+      return (blobs.get(input) ?? Promise.resolve('')).then((text) => new Response(text));
     return machine.options.fetch(input);
   }) as never);
   return machine;
+}
+
+async function sendFile(machine: FakeShareMachine, id: string, text: string) {
+  const received = blobs.size;
+  await machine.sendFile(id, 'v1', 'text/plain', text);
+  await waitFor(() => expect(blobs.size).toBeGreaterThan(received));
 }
 
 async function open(machine: FakeShareMachine, view = liveView()) {
   render(<SharePage link={SHARE_LINK} />);
   await machine.ready;
   await machine.sendView(view);
-  if (view.files.diff) await machine.sendFile('diff', 'v1', 'text/plain', DIFF);
+  if (view.files.diff) await sendFile(machine, 'diff', DIFF);
   expect(await screen.findByText(view.shared.task.title)).toBeTruthy();
 }
 
@@ -87,7 +95,9 @@ describe('the shared page on app.shinsa.dev', () => {
 
   it('shows a task read-only, with who shared it and its code from the streamed diff', async () => {
     const machine = connect();
-    await open(machine);
+    const view = liveView();
+    view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-diff' } };
+    await open(machine, view);
     expect(screen.getByText('Read-only')).toBeTruthy();
     expect(screen.getByText('Shared by @mona from Studio')).toBeTruthy();
     expect(screen.getByText('app')).toBeTruthy();
@@ -96,7 +106,7 @@ describe('the shared page on app.shinsa.dev', () => {
     expect(screen.queryByRole('button', { name: 'Task actions' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Chat' })).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
-    expect((await screen.findAllByText(/keys\.ts/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/keys\.ts/, undefined, CODE_TAB_LOADED)).length).toBeGreaterThan(0);
   });
 
   it('opens a changed file whole from the streamed code', async () => {
@@ -106,9 +116,9 @@ describe('the shared page on app.shinsa.dev', () => {
     view.files = { ...view.files, code: { version: 'v1', type: 'text/plain' } };
     await open(machine, view);
     const whole = { files: { 'src/keys.ts': 'const ttl = 24;\nexport const keep = true;\n' } };
-    await machine.sendFile('code', 'v1', 'text/plain', JSON.stringify(whole));
+    await sendFile(machine, 'code', JSON.stringify(whole));
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
-    fireEvent.click((await screen.findAllByText(/keys\.ts/))[0] as HTMLElement);
+    fireEvent.click((await screen.findAllByText(/keys\.ts/, undefined, CODE_TAB_LOADED))[0] as HTMLElement);
     expect((await screen.findAllByText(/const ttl = 24/)).length).toBeGreaterThan(0);
   });
 

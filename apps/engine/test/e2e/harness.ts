@@ -56,12 +56,21 @@ export const PLAN: PlanDocument = {
 export const IMPACT =
   'Removes the stale greeting files, two at most. The dry run lists them first; restoring them from git undoes it.';
 
-export const FIX_REPLY = {
+export const AGENT_REPLY = {
   headline: 'Made the change you asked for.',
   points: [{ ask: 'The change', outcome: 'done', note: 'It is in.' }],
 };
 
 const IMPACT_REQUIRED = '`impact` is required';
+
+const REPLY_REQUIRED = '`reply` is required';
+
+function callReplying(agent: AgentContext, tool: string, input: Record<string, unknown>) {
+  return agent.call(tool, input).catch((error: Error) => {
+    if (!error.message.includes(REPLY_REQUIRED)) throw error;
+    return agent.call(tool, { ...input, reply: AGENT_REPLY });
+  });
+}
 
 const NO_CODE = 'this task changes no code';
 
@@ -119,24 +128,21 @@ interface SessionRecord {
 const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
   plan: async (agent) => {
     const plan = agent.prompt.includes(IMPACT_REQUIRED) ? { ...PLAN, impact: IMPACT } : PLAN;
-    await agent.call('propose_plan', toolPlan(plan)).catch((error: Error) => {
+    await callReplying(agent, 'propose_plan', toolPlan(plan)).catch((error: Error) => {
       if (!error.message.includes(NO_CODE)) throw error;
-      return agent.call('propose_plan', toolPlan({ ...plan, verification: [] }));
+      return callReplying(agent, 'propose_plan', toolPlan({ ...plan, verification: [] }));
     });
   },
   build: async (agent) => {
     const phase = (agent.phaseIndex ?? 0) + 1;
     agent.write(phase === 1 ? 'a.txt' : `${String.fromCharCode(96 + phase)}.txt`, `phase ${phase}\n`);
-    await agent.call('complete_phase', phaseReport(`Wrote the file for phase ${phase}.`));
+    await callReplying(agent, 'complete_phase', phaseReport(`Wrote the file for phase ${phase}.`));
   },
   fix: async (agent) => {
-    await agent.call('complete_fix', { summary: 'Fixed it.' }).catch((error: Error) => {
-      if (!error.message.includes('`reply` is required')) throw error;
-      return agent.call('complete_fix', { summary: 'Fixed it.', reply: FIX_REPLY });
-    });
+    await callReplying(agent, 'complete_fix', { summary: 'Fixed it.' });
   },
   operate: async (agent) => {
-    await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });
+    await callReplying(agent, 'report_outcome', { outcome: 'Ran the cleanup script.' });
   },
   watch: async (agent) => {
     await agent.call('report_read', { summary: 'The greeting still renders.' });
@@ -154,13 +160,13 @@ const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
     await agent.call('report_review', { findings: [] });
   },
   answerer: async (agent) => {
-    await agent.call('answer', { answer: 'It lives in a.txt.' });
+    await callReplying(agent, 'answer', { answer: 'It lives in a.txt.' });
   },
   investigator: async (agent) => {
-    await agent.call('report_diagnosis', { diagnosis: 'The greeting files were never written.' });
+    await callReplying(agent, 'report_diagnosis', { diagnosis: 'The greeting files were never written.' });
   },
   researcher: async (agent) => {
-    await agent.call('submit_report', { report: 'Plain text files are the simplest option.' });
+    await callReplying(agent, 'submit_report', { report: 'Plain text files are the simplest option.' });
   },
 };
 

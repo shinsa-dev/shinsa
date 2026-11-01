@@ -1,8 +1,8 @@
 import type { PlanChange } from '../report/plan-changes.ts';
 import type {
+  AgentReply,
   CarriedMergeStep,
   CodeSpot,
-  FixReply,
   JudgementCall,
   PlanDocument,
   ReportCheck,
@@ -283,9 +283,7 @@ export interface Plan {
   body: string;
   document: PlanDocument | null;
   proposedAt: number;
-  changeSummary?: string | null;
   changes?: PlanChange[];
-  feedback?: string | null;
   approvedAt?: number | null;
 }
 
@@ -515,7 +513,7 @@ export interface Iteration {
   id: string;
   round: number;
   requests: IterationRequest[];
-  reply: FixReply | null;
+  reply: AgentReply | null;
   runId: string | null;
   repliedAt: number | null;
 }

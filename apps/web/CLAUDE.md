@@ -253,7 +253,7 @@ src/
     │                    report, the line-comment draft (sides, ranges, kept in localStorage per gate, and your
     │                    Fix / Dismiss verdicts; serializeComments is what `gate.answer` sends as `comments`),
     │                    finding places
-    ├── evidence/        The Evidence section: media.ts (image, video, text, file or link from the URL; the round's
+    ├── evidence/        The Evidence section: media.ts (image, video, text, file or link from the URL, a shared page's blob address by its kind; the round's
     │                    evidence), runs.ts (a test or check run's commands, outcomes and counts), layout.ts (the round's items grouped by kind, comparisons as one item, a check's pieces as one item, the viewer's images
     │                    numbered item by item with their parts, the count of items by kind, the folder on disk), texts.ts (the bounded text cache; /ui records its samples in it), prefetch.ts (images and texts
     │                    read ahead with the task)
@@ -334,6 +334,13 @@ sets up what it reads. Module state a test can change is reset after every test 
 state, transcripts, accounts and terminals (`connection.reset()`), toasts, the highlight and evidence text caches, the
 agent providers, disclosures, `localStorage` and the URL. A new module-level cache or store gets a reset function
 called there.
+
+**Settle React before the next event.** A `findBy*` or `waitFor` returns once the DOM has the element, but when a real
+request settled outside `act`, React runs that render's effects later, on its scheduler: a window `blur`/`focus`, a
+key or a click sent straight after can reach the page before `useWindowReturn`, an autofocus or a reset `pending`.
+Flush first with `await act(async () => {})` (`settle()` and `comeBackToWindow()` in `test/routes/onboarding.test.tsx`)
+and check focus with a plain `expect` after it, never a `waitFor` on `document.activeElement`, whose failed tries
+print the whole document.
 
 ## Rules
 

@@ -92,6 +92,8 @@ const MAX_PATH = 1_024;
 
 const MAX_NOTE = 2_000;
 
+const MAX_FEEDBACK = 20_000;
+
 const MAX_STEP_KEY = 120;
 
 function refuse(message: string): never {
@@ -641,6 +643,23 @@ function readMemoryWrite(fields: Fields): UserCommand {
   };
 }
 
+function readFeedbackWrite(fields: Fields): UserCommand {
+  return {
+    type: 'feedback.write',
+    feedbackId: readNullableId(fields, 'feedbackId'),
+    note: readText(fields, 'note', MAX_FEEDBACK),
+  };
+}
+
+function readFeedbackUpdate(fields: Fields): UserCommand {
+  return {
+    type: 'feedback.update',
+    feedbackId: readId(fields, 'feedbackId'),
+    title: readText(fields, 'title', MAX_FEEDBACK),
+    body: readText(fields, 'body', MAX_FEEDBACK),
+  };
+}
+
 const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'repo.update': (fields) => ({
     type: 'repo.update',
@@ -722,6 +741,10 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'memory.write': readMemoryWrite,
   'memory.accept': (fields) => ({ type: 'memory.accept', memoryId: readId(fields, 'memoryId') }),
   'memory.remove': (fields) => ({ type: 'memory.remove', memoryId: readId(fields, 'memoryId') }),
+  'feedback.write': readFeedbackWrite,
+  'feedback.update': readFeedbackUpdate,
+  'feedback.file': (fields) => ({ type: 'feedback.file', feedbackId: readId(fields, 'feedbackId') }),
+  'feedback.dismiss': (fields) => ({ type: 'feedback.dismiss', feedbackId: readId(fields, 'feedbackId') }),
   'task.share': (fields) => ({
     type: 'task.share',
     taskId: readId(fields, 'taskId'),

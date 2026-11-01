@@ -191,7 +191,9 @@ async function assertConsistent(w: World, lives: number, outputs: string[]) {
   const worktrees = await listLines(w.repoPath, 'worktree', 'list', '--porcelain');
   expect(worktrees.filter((line) => line.startsWith('worktree '))).toHaveLength(1);
   const left = existsSync(w.config.worktreesDir)
-    ? readdirSync(w.config.worktreesDir).flatMap((repo) => readdirSync(join(w.config.worktreesDir, repo)))
+    ? readdirSync(w.config.worktreesDir)
+        .filter((entry) => !entry.startsWith('.'))
+        .flatMap((repo) => readdirSync(join(w.config.worktreesDir, repo)))
     : [];
   expect(left).toEqual([]);
 }

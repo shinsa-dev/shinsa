@@ -2,7 +2,7 @@ import { LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, REMOTE_CONNECT_PARAM, SHARE_CHANNE
 import type { ServerWebSocket } from 'bun';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
-import { INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
+import { createServerInstance, INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import {
   isTunnelRequest,
@@ -182,7 +182,8 @@ export function startServer(context: HttpContext) {
     context.accounts,
     context.classify ?? null,
     terminals,
-    context.remote
+    context.remote,
+    (context.instance ?? createServerInstance()).version
   );
   const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
   const { remote } = context;

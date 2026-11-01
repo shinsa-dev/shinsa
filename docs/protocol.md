@@ -55,7 +55,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
-| request (an iteration) | Something you sent the Agent after its work was in (changes at the review or merge gate, line comments, a question, a message while that fix runs), with the Agent's reply: a headline, each point you raised marked done, answered or not changed with a note, what you do now and any details. The overview shows the latest on the review card and the earlier ones under Earlier requests, so you never read the chat to know what changed | `Iteration` (`Task.iterations`), `IterationRequest`, `FixReply` (`complete_fix`'s `reply`), `ReplyPoint`, `ReplyOutcome`, `iteration.requested`, `iteration.answered` | "Your request", Earlier requests, Done, Answered, Not changed, "What to do now" |
+| request (an iteration) | Something you sent an agent that its next hand-over answers (changes at a gate, line comments, feedback on a plan, a message to a running or resting agent, a follow-up, a restarted step), with its reply: a headline, each point you raised marked done, answered or not changed with a note, and what you do now. The chat shows it on the hand-over's card and the overview on the card it belongs to, the earlier ones under Earlier requests, so you never read the chat to know what changed | `Iteration` (`Task.iterations`), `IterationRequest`, `AgentReply` (the `reply` of every hand-over that answers one), `ReplyingHandOver`, `ReplyPoint`, `ReplyOutcome`, `iteration.requested`, `iteration.answered` | "Your request", Earlier requests, Done, Answered, Not changed, "What to do now" |
 | merge step | Something you must do around the merge that needs a person or production access (a variable or secret to set, a migration or deploy to run, a config or flag to change), before it or after it; you tick each one, and the merge waits for every one before it. Never shipping code: a step that stages, commits, pushes or opens a pull request is refused. Each task the merge waits on (`Task.waitsOn`) shows among them as a linked row you never tick, done once that task finishes | `MergeStep` (`when`, `kind`, `title`, `detail`, `command`), `walkthrough.steps`, `MergeStepView` (a `ChecklistItem` with `round` and `due`), `Task.mergeStepsDone`, `Task.carriedMergeSteps`, `merge_step.tick`, the steps `pre_merge` and `post_merge`, the gate `post_merge` | Pre-merge, Post-merge, "Post-merge · 2 steps left" |
 | watchdog | A check the Agent writes in its walkthrough that watches the merged change for a window, with checks that back off, through a data source, from the merge or once the change is live in production; each check is a read of that source scoped to the change, and a report it files is a task forked from this one | `WatchdogSpec` (`walkthrough.watchdogs`), `Watchdog` (`Task.watchdogs`), `WatchdogStatus`, purpose `watch`, stage `watching`, `file_report`, `report_read` | Watchdogs, Watching |
 | integration (of a project) | An MCP server from Integrations a project's agents read, with what it holds there and the repositories it covers | `WatchSource` (`Project.watchSources`), `watch_source.write`, `ScheduleSource` (`Schedule.source`) | integration |
@@ -72,6 +72,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | delegation | Work a running step hands to another agent: a run of the same task with a parent run, never a new task | `RunDelegation` on `Run` | Delegations |
 | courier | A new task an agent files for work that belongs elsewhere (`create_task`), such as the part of a change in another repository, optionally making its own task wait on it (`this_task_waits`) or waiting on its own task (`after_this`) | `TaskCreator.kind: 'courier'` | a task |
 | memory | The rules you keep for every later agent, for every project or one; an agent proposes one with `remember` and only you keep it (`docs/engine.md` → Memory) | `MemoryEntry`, `state.memories`, `MEMORY_LIMITS` | Memory, "rule" |
+| feedback | A note on Shinsa itself, from you or an agent, that your agent drafts as a public issue on `shinsa-dev/shinsa` and only you open (`docs/engine.md` → Feedback) | `Feedback`, `state.feedback`, `FEEDBACK_LIMITS`, `FEEDBACK_REPOSITORY` | Feedback, "issue" |
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
 | waits on | The tasks a task waits for before it starts (or before its merge gate opens) | `Task.waitsOn`, stage `waiting_on_tasks` | "Waits on", "Wait for another task" |
@@ -265,7 +266,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| `update` \| `hook` \| null | what the current fix is for (`conflict`: the pull request conflicts with its base, read by the pull request watch; `update`: conflicts while updating the branch onto its base before a push; `hook`: the repository's pre-push hook rejected the push) |
 | `fixSignature`, `stalledFixes`, `fixFingerprints?` | | repeat detection: the same failures after the same tree |
 | `recoveries`, `recoveryFingerprint?` | number, string | the recovery budget and the durable state it is keyed to |
-| `iterations?` | `Iteration[]` | every request you sent after the work was in, with its reply, oldest first; kept across rounds, each with its `round` (not archived by a new round): `id`, `round`, `requests` (`text`, `comments`: the line comments sent with it, `at`), `reply` (`FixReply` \| null while open), `runId` and `repliedAt` of the fix that answered it. At most one is open, the last (`selectOpenIteration`) |
+| `iterations?` | `Iteration[]` | every request you sent after the work was in, with its reply, oldest first; kept across rounds, each with its `round` (not archived by a new round): `id`, `round`, `requests` (`text`, `comments`: the line comments sent with it, `at`), `reply` (`AgentReply` \| null while open), `runId` and `repliedAt` of the run whose hand-over answered it. At most one is open, the last (`selectOpenIteration`) |
 
 **Pull request**
 
@@ -739,15 +740,17 @@ with core's refusal (`message.drop` with `messageIds`, a `task.message_dropped` 
 activity that keeps the text and the reason as `undelivered`). An agent's `tasks_message` is classified
 before it is dispatched, since the agent waits for the answer.
 
-**Requests and replies.** A message or a gate answer that starts a fix for you (`request_changes`, `send_back`,
-`fix`, and Request changes at the review or merge gate, verdicts and line comments included) emits
-`iteration.requested` before the fix starts (`decide/iterations.ts`, `requestIteration`); so does a message that
-steers a running fix (`purpose: fix`), whatever the fix is for. While the last iteration has no reply, a request
-joins it (same `iterationId`), so one reply answers everything sent during one fix; otherwise it opens the next.
-`complete_fix` must carry `reply` while an iteration is open (`reply_required`) and must not otherwise
-(`reply_unasked`); the reply is `iteration.answered`. A message that steers a build phase, a follow-up to an
-inquiry and a plan revision open none: plan revisions keep their feedback in `planHistory`, which the overview's
-Earlier requests lists beside the iterations (`apps/web/src/lib/overview/exchanges.ts`).
+**Requests and replies.** Every message an agent must answer emits `iteration.requested` before the agent hears it
+(`decide/iterations.ts`, `requestIteration`): a gate answer or message that starts a fix (`request_changes`,
+`send_back`, `fix`, Request changes at the review or merge gate, verdicts and line comments included), Revise at the
+plan gate and `revise_plan`, `follow_up` and `decline_proposal` on an inquiry, `restart_step`, and a `steer` or `wake`
+of a run that can reply (`isReplyingRun`: the Agent planning, building, fixing or operating, or an answerer,
+investigator or researcher; never a delegated run, the reviewer or a watch). While the last iteration has no reply, a
+request joins it (same `iterationId`), so one reply answers everything sent before the hand-over; otherwise it opens
+the next. The seven hand-overs that answer (`ReplyingHandOver`: `propose_plan`, `complete_phase`, `complete_fix`,
+`answer`, `report_diagnosis`, `submit_report`, `report_outcome`) call `answerIteration`: `reply` is required while an
+iteration is open (`reply_required`) and refused otherwise (`reply_unasked`), each error naming the tool; the reply is
+`iteration.answered` with the run that wrote it. A first hand-over that answers only the task's request carries none.
 
 ## Commands
 
@@ -795,6 +798,10 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `memory.write` | writes a rule (`text`, `projectId` or null for every project) or, with `memoryId`, changes one; writing over a proposal keeps it; at most 240 characters and 20 kept rules per scope (`memory_invalid`, `memory_full`) | `memory write` | **human** |
 | `memory.accept` | keeps a rule an agent proposed | `memory keep` | **human** |
 | `memory.remove` | forgets a rule, or dismisses a proposal | `memory remove` | **human** |
+| `feedback.write` | records a note on Shinsa (`note`, at most 4,000 characters) and drafts it as an issue; with `feedbackId`, rewrites one that is neither busy nor filed and drafts it again (`feedback_invalid`, `feedback_busy`, `feedback_filed`) | `feedback write` | agent |
+| `feedback.update` | changes the `title` (120) and `body` (12,000) of a draft that waits for you (`feedback_not_draft`) | `feedback edit` | agent |
+| `feedback.file` | opens a draft as a public issue with your GitHub login, after the privacy check passes on its text as it is (`feedback_private` names each leak) | `feedback file` | **human** |
+| `feedback.dismiss` | forgets an entry, refused while it is being opened | `feedback dismiss` | agent |
 | `monitor.check_in_now` | fires a monitor's next check-in now | `tasks check-in-now` | agent |
 | `usage_wait.change` | turns a usage wait's auto-resume on or off | `tasks auto-resume` | agent |
 | `usage_wait.resume_now` | resumes a usage wait now | `tasks resume-now` | agent |
@@ -850,11 +857,11 @@ role without the tool (`hasTool`).
 
 | Command | Tool | Does |
 | --- | --- | --- |
-| `agent.propose_plan` | `propose_plan` | hands over a plan (checked by `validatePlanRules`) |
-| `agent.complete_phase` | `complete_phase` | hands over a phase with its judgement calls and `checkChanges?` (`check_changes`, recorded as `checks.changed`); Shinsa commits it, adds `treeHash` and `files` (the files the commit changed, kept on the `PhaseReport`) and runs the phase's checks (the last one needs the evidence) |
+| `agent.propose_plan` | `propose_plan` | hands over a plan (checked by `validatePlanRules`), with `reply` while a request of yours is open and only then (Messages → Requests and replies) |
+| `agent.complete_phase` | `complete_phase` | hands over a phase with its judgement calls, `reply` while a request of yours is open and only then, and `checkChanges?` (`check_changes`, recorded as `checks.changed`); Shinsa commits it, adds `treeHash` and `files` (the files the commit changed, kept on the `PhaseReport`) and runs the phase's checks (the last one needs the evidence) |
 | `agent.complete_fix` | `complete_fix` | hands over a fix (`summary`, `reply` while a request of yours is open and only then (`reply_required`, `reply_unasked`; Messages → Requests and replies), `walkthrough` when it changes how the change works, `checks?`: the ids to run again, `checkChanges?`, `evidenceKept?`: earlier evidence that still applies); refused while an earlier item whose files the fix changed is not replaced, removed or kept (`evidence_stale`, `docs/engine.md` → Evidence); Shinsa commits and adds `treeHash` and `files`, then runs the failing checks, those, the changed ones and the checks of every phase whose files the fix changed, or pushes when shipping |
 | `agent.report_review` | `report_review` | hands over the review: `summary` (or null), the findings and the `disagreements` with the Agent's judgement calls |
-| `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal; an operation without a code change needs its evidence first |
+| `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal, each with `reply` while a request of yours is open and only then; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
 | `agent.ask` | `ask` | asks you (or, from a delegated run, its parent) |
 | `agent.attach_evidence` | `attach_evidence` | attaches evidence, stored under its task and round (`validateEvidence`; `docs/engine.md` → Evidence) |
@@ -865,6 +872,7 @@ role without the tool (`hasTool`).
 | `agent.wait_for` | `wait_for` | ends the run and arms a monitor |
 | `agent.suggest_tasks` | `suggest_tasks` | suggests up to five tasks |
 | `agent.remember` | `remember` | proposes a rule for every later agent (`scope`, `text`, `why`); a known one is dropped, at most ten wait at once |
+| `agent.report_feedback` | `report_feedback` | reports a problem with Shinsa itself (`feedback`), drafted like yours and waiting for you; a known note is dropped, at most 3 per task and 10 agent reports waiting (`feedback_full`) |
 | `agent.request_secret` | `request_secret` | opens a secret gate |
 | `agent.delegate` | `delegate_task` | starts a delegation from its `brief` |
 | `agent.cancel_delegation` | `delegation_cancel` | stops one |
@@ -927,6 +935,10 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
 | `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
+| `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
+| `feedback.record_filed` | the `feedback.file` effect | the new issue's `number` and `url`, for an entry still `filing`; its `openedAt` is now and `closedAt` null |
+| `feedback.record_issue_state` | `FeedbackEffects.syncIssues`, with the pull request sync | an opened issue's `closedAt` as GitHub reports it, or null when it opened again; nothing when it did not change |
+| `feedback.record_failure` | either feedback effect, and the start after a restart | fails a `drafting` or `filing` entry with `detail` |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
@@ -1014,7 +1026,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `review.reported`, `review.escalated` | a reviewer reported (`summary`, `findings`, `disagreements?`); the review escalated to you |
 | `fix.started` | a fix round started (reason, signature, tree) |
 | `iteration.requested` | you sent a request after the work was in (`iterationId`, `round`, `text`, `comments`); appends to the iteration with that id or opens it |
-| `iteration.answered` | the fix that answered it handed over its `reply` (`iterationId`, `runId`); sets `reply`, `runId` and `repliedAt` |
+| `iteration.answered` | the hand-over that answered it carried its `reply` (`iterationId`, `runId`); sets `reply`, `runId` and `repliedAt` |
 | `evidence.attached` | evidence was attached (`checkId` on a check's output or a linked check; `replaces`: the ids of the pieces it replaced, which get `replacedBy`) |
 | `evidence.removed` | an agent removed evidence that no longer applies (`ids`, `reason`, `runId`; each piece gets `removedAt` and `removedReason`) |
 | `evidence.uploaded` | pieces were uploaded to GitHub for the pull request description (`taskId`, `uploads`; each piece gets `uploadUrl`) |
@@ -1044,6 +1056,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.claimed`, `delegation.delivered`, `delegation.released` | a delivery cohort was claimed, delivered, released |
 | `delegation.message_queued` | your message was queued for a waiting step |
 | `memory.written`, `memory.proposed`, `memory.removed` | you wrote, kept or changed a rule (the whole `entry`); an agent proposed one (recorded in its task's activity); a rule was forgotten or a proposal dismissed, or its project removed |
+| `feedback.recorded`, `feedback.removed` | an entry was written, drafted, changed, opened or failed (the whole `entry`; an agent's new report is recorded in its task's activity); an entry was dismissed |
 | `schedule.written`, `schedule.removed`, `schedule.fired` | a schedule was written, removed, fired (with its run) |
 | `watch_suggestion.recorded`, `watch_suggestion.accepted`, `watch_suggestion.dismissed`, `watch_suggestion.removed` | a watch was suggested (the whole `suggestion`; an agent's is recorded in its task's activity); you accepted it (with the `scheduleId` it became) or dismissed it; an open one was dropped with its integration, or any with its project |
 | `schedule.read` | a watch's read finished with `report_read`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
@@ -1072,6 +1085,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `share.link` | replay_safe | `share:<id>` | `share.record`, or `share.fail` when it gives up: makes a share id and a key for this machine's instance, unless a link to it is recorded; not paired fails at once (`SHARE_NOT_PAIRED`) |
 | `preview.link` | replay_safe | `preview:<id>` | `preview.record`, or `preview.fail` when it gives up: makes a preview id and a key for this machine's instance, unless a link to it is recorded; not paired (`PREVIEW_NOT_PAIRED`) or a service with no preview URL (`PREVIEW_NO_URL`) fails at once |
 | `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
+| `feedback.draft` | replay_safe | `feedback:<id>` | `feedback.record_draft`, after one quick call rewrites the note without anything private (`feedback/draft.ts`); `feedback.record_failure` when no usable draft comes back |
+| `feedback.file` | process_bound | `feedback:<id>` | `feedback.record_filed`, after `gh issue create --repo shinsa-dev/shinsa` (`feedback/file.ts`); `feedback.record_failure` with what `gh` said; never retried, and one a restart cut short is failed on start |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |
@@ -1118,6 +1133,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `wait_for` | ✓ | | | ✓ | | | |
 | `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `remember` | ✓ | | ✓ | ✓ | ✓ | | |
+| `report_feedback` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `delegate_task`, `delegation_status`, `delegation_cancel`, `delegation_answer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | `create_task` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `split_task` | ✓ | | | | | | |
@@ -1147,14 +1163,14 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 
 | Tool | Fields (required in bold) | Limits |
 | --- | --- | --- |
-| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `title`, `impact`, `evidence`, `approval`, `operation`, `change_summary` | title 60; goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; change summary 240 |
-| `complete_phase` | **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`), `watchdogs` (**`title`**, **`check`**, `first_check_minutes`, `max_gap_hours`, `for_hours`, `starts` (`merge` or `production`) with `production_check`, and exactly one of `source` (**`server`**, **`data`**) or `source_request` (**`data`**, **`evidence`**, **`suggestions`**))), asked for on the last phase; `check_changes` (**`action`**: add, change or remove, `id` (not for add), `label`, `command`, `phases`, **`reason`**) | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400); 5 watchdogs (title 80, unique; check 600; server 128; data 200; evidence 600; 1 to 4 suggestions of 160; first check 1 to 720 minutes, gaps up to 1 to 24 hours, for 1 to 720 hours and no less than the first check; production check 400, required with `starts: production`; a `source_request` whose suggestions name a server the run already has is refused unless its `evidence` says it checked that server (“checked <server>” in one clause), here and on `complete_fix`); 6 check changes (id 12, label 60, command 200, reason 200; an add needs a label and a command) |
+| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `title`, `impact`, `evidence`, `approval`, `operation`, `reply` (as in `complete_fix`) | title 60; goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; reply as in `complete_fix` |
+| `complete_phase` | `reply` (as in `complete_fix`); **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`), `watchdogs` (**`title`**, **`check`**, `first_check_minutes`, `max_gap_hours`, `for_hours`, `starts` (`merge` or `production`) with `production_check`, and exactly one of `source` (**`server`**, **`data`**) or `source_request` (**`data`**, **`evidence`**, **`suggestions`**))), asked for on the last phase; `check_changes` (**`action`**: add, change or remove, `id` (not for add), `label`, `command`, `phases`, **`reason`**) | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400); 5 watchdogs (title 80, unique; check 600; server 128; data 200; evidence 600; 1 to 4 suggestions of 160; first check 1 to 720 minutes, gaps up to 1 to 24 hours, for 1 to 720 hours and no less than the first check; production check 400, required with `starts: production`; a `source_request` whose suggestions name a server the run already has is refused unless its `evidence` says it checked that server (“checked <server>” in one clause), here and on `complete_fix`); 6 check changes (id 12, label 60, command 200, reason 200; an add needs a label and a command); reply as in `complete_fix` |
 | `complete_fix` | **`summary`**; `reply` (**`headline`**, **`points`** (**`ask`**, **`outcome`**: done, answered or not_changed, **`note`**), `next`), required while a request of yours is open and refused otherwise; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase`; `evidence_kept` (earlier items, by key or id, that still show the work as it is) | summary 240; reply headline 240, 1 to 8 points (ask 160, note 280), next 1,200; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase`; evidence kept 24 of 60 |
 | `report_review` | **`findings`** (**`severity`**: `blocking`, `should_fix` or `optional`, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary`; `disagreements` (**`call`**: the judgement call's number in the brief, **`reason`**) | summary 400; 12 findings (title 80, message 280, fix 600); 8 disagreements (reason 280), each call once |
-| `answer` | **`answer`**; `propose_change` (**`request`**, **`why`**) | answer 8,000; request 2,000, why 240 |
-| `report_diagnosis` | **`diagnosis`**; `propose_change` | 12,000 |
-| `submit_report` | **`report`**; `propose_change` | 40,000 |
-| `report_outcome` | **`outcome`** | 8,000 |
+| `answer` | **`answer`**; `propose_change` (**`request`**, **`why`**); `reply` (as in `complete_fix`) | answer 8,000; request 2,000, why 240; reply as in `complete_fix` |
+| `report_diagnosis` | **`diagnosis`**; `propose_change`; `reply` | 12,000; reply as in `complete_fix` |
+| `submit_report` | **`report`**; `propose_change`; `reply` | 40,000; reply as in `complete_fix` |
+| `report_outcome` | **`outcome`**; `reply` | 8,000; reply as in `complete_fix` |
 | `report_read` | **`summary`**: what it read, filed and skipped; `reached` (false when the source still failed after 3 tries; true when left out); `live` (only for a watchdog waiting for production: false while it is not live, true once it is; a report filed counts as true) | 1,000 |
 | `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle; a watchdog's is always the shipped task), `repository` (a name) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
@@ -1205,6 +1221,7 @@ or `browser` (a tab, Floaty).
 | `transcript { runId, entries, start }` | On subscribing (the entries from `from`, in pages of 500) and for each new entry; `start` is the position of the first one |
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
+| `engine { engine }` | On connect, right after `surfaces`: what this engine speaks, an `EngineInfo` (below) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
 | `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing): `RemoteSnapshot` (Remote access, below) |
 
@@ -1215,6 +1232,24 @@ server, `parseTerminalClientFrame`). A terminal (`TerminalInfo`) is in a project
 `repository`, `folder` or `worktree`, `listTerminalPlaces`), and `running`, `exited` or `stopped`; a service's
 terminal keeps the port its run was given (`port`), which `resolveServiceUrl` puts in the service's `previewUrl`
 for `ServiceView.url`.
+
+**What an engine speaks** (`packages/core/src/protocol/engine.ts`). The hosted web app is built from `main` and can
+be newer than the engine it reaches, so every engine tells each page what it speaks (`resolveEngineInfo`) and the page
+offers nothing an engine cannot do (`docs/engine.md` → Remote access, What each machine speaks):
+
+| `EngineInfo` field | Holds |
+| --- | --- |
+| `version` | The engine's build, `0.0.0` in development (`DEVELOPMENT_VERSION`) |
+| `protocol` | `ENGINE_PROTOCOL`, raised only when an older page and this engine cannot talk at all (a changed state shape) |
+| `commands` | Every user command type it parses, `USER_COMMAND_TYPES` itself, so a new command is announced the moment it exists |
+| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share` and `feedback` today) that are not a command, such as a route or a setting an older engine ignores |
+
+`ENGINE_BASELINE_COMMANDS` is frozen: the commands every engine has had since before the `engine` message, which a page
+sends to any engine, one that never announced included (`resolveEngineCommands(null)`). A command added since is
+outside it and must be listed in core's test (`GATED_COMMANDS` in `test/protocol/engine.test.ts`), which fails on any
+command in neither. `parseEngineInfo` reads the message leniently (unknown fields dropped, a missing version read as
+development) and refuses one without a whole-number `protocol`. `hasEngineFeature` and `isEngineProtocolMatch` answer
+for one engine; an engine that sent nothing has no features and matches.
 
 `isQuietSurface(surface, desktop)` is true for a page that is not the desktop while one is connected: it plays no
 sound, shows no notification and puts no count in its title or Floaty's tags.
@@ -1399,6 +1434,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | Projects, keys, handles | `packages/core/src/domain/projects.ts` |
 | Delegations, accounts, schedules, pull request watch, settings | `packages/core/src/domain/{delegations,accounts,schedules,pull-requests,settings}.ts` |
 | Memory: the rules, their limits, what agents are told | `packages/core/src/domain/memory.ts`, `decide/memory.ts`, `state/memory.ts`, `prompts/memory.ts`; `apps/web/src/lib/memory.ts`, `components/settings/memory.tsx` |
+| Feedback: entries, the privacy check, drafting and filing | `packages/core/src/domain/feedback.ts`, `decide/feedback.ts`, `state/feedback.ts`; `apps/engine/src/feedback/`, `surface/feedback.ts`; `apps/web/src/lib/feedback.ts`, `components/feedback/` |
 | On your behalf record | `packages/core/src/domain/on-behalf.ts`, `decide/on-behalf.ts`, `state/on-behalf.ts` |
 | Plan document, reports, findings, `PROTOCOL_LIMITS` | `packages/core/src/report/` |
 | Commands and the parser | `packages/core/src/commands/` |
@@ -1407,7 +1443,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | Decisions | `packages/core/src/decide/` (`messages.ts` for `resolveMessageEffect`) |
 | State folds | `packages/core/src/state/` |
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
-| Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/engine/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
+| Socket messages, surfaces, what an engine speaks | `packages/core/src/protocol/messages.ts`, `protocol/engine.ts`; `apps/engine/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
 | Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/engine/src/terminals/`, `apps/web/src/lib/terminal/` |
 | Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `ServiceView.url`, `resolveServiceUrl`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |

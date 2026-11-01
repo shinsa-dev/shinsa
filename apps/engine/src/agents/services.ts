@@ -26,6 +26,7 @@ type ServiceAction = (typeof SERVICE_ACTIONS)[number];
 
 export interface TaskServiceRunner {
   readonly home: string;
+  readonly dataDir: string;
   snapshot(): TerminalsSnapshot;
   startService(id: string, run: ServiceRun): TerminalInfo;
   stopService(id: string, taskId: string | null): Promise<void>;
@@ -76,7 +77,7 @@ function readAction(input: Record<string, unknown>): ServiceAction {
 }
 
 function resolveRun(context: ServiceToolContext, view: TaskServiceView) {
-  const run = resolveServiceRunIn(context.state, view.service, context.task.id, context.runner.home);
+  const run = resolveServiceRunIn(context.state, view.service, context.task.id, context.runner);
   if (!run) throw new Error(`${view.service.name} cannot run for this task.`);
   if (!existsSync(run.cwd)) throw new Error(`The folder ${run.cwd} is not in the worktree.`);
   return run;

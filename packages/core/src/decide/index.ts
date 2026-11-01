@@ -32,6 +32,17 @@ import { assertDelegationScope, routeQuestion } from './delegations.ts';
 import { releaseWaiting } from './dependencies.ts';
 import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
+import {
+  dismissFeedback,
+  fileFeedback,
+  recordFeedbackDraft,
+  recordFeedbackFailure,
+  recordFeedbackFiled,
+  recordFeedbackIssueState,
+  reportFeedback,
+  updateFeedback,
+  writeFeedback,
+} from './feedback.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
@@ -141,6 +152,7 @@ import {
 } from './watchdogs.ts';
 
 export type { DecideContext, Decision } from './decider.ts';
+export { describeFeedbackLeaks } from './feedback.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
 export { assertRunTool } from './runs.ts';
@@ -254,6 +266,24 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return acceptMemory(decider, command);
     case 'memory.remove':
       return removeMemory(decider, command);
+    case 'feedback.write':
+      return writeFeedback(decider, command);
+    case 'feedback.update':
+      return updateFeedback(decider, command);
+    case 'feedback.file':
+      return fileFeedback(decider, command);
+    case 'feedback.dismiss':
+      return dismissFeedback(decider, command);
+    case 'feedback.record_draft':
+      return recordFeedbackDraft(decider, command);
+    case 'feedback.record_filed':
+      return recordFeedbackFiled(decider, command);
+    case 'feedback.record_issue_state':
+      return recordFeedbackIssueState(decider, command);
+    case 'feedback.record_failure':
+      return recordFeedbackFailure(decider, command);
+    case 'agent.report_feedback':
+      return reportFeedback(decider, command);
     case 'task.share':
       return shareTask(decider, command);
     case 'task.unshare':

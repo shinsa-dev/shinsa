@@ -75,6 +75,8 @@ const WATCHDOG_READS_LOG_VERSION = 9;
 
 const CONTEXT_MANAGEMENT_LOG_VERSION = 11;
 
+const AGENT_REPLY_LOG_VERSION = 12;
+
 const COMPACTION_BY_EUNOE_MODE = new Map<unknown, CompactionMode>([
   ['eunoe_compact', 'fold'],
   ['eunoe_default', 'fold'],
@@ -107,6 +109,7 @@ export function listLegacyEventTypes(version: number) {
     ...(version < SCHEDULE_SOURCE_LOG_VERSION ? ['schedule.written'] : []),
     ...(version < WATCHDOG_READS_LOG_VERSION ? WATCHDOG_READS_EVENT_TYPES : []),
     ...(version < CONTEXT_MANAGEMENT_LOG_VERSION ? ['settings.changed'] : []),
+    ...(version < AGENT_REPLY_LOG_VERSION ? ['plan.proposed'] : []),
   ];
 }
 
@@ -265,6 +268,8 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       return { ...event, watchdog: resolveArmedWatchdog(event.watchdog) };
     case 'watchdog.checked':
       return resolveForkTaskIds(event);
+    case 'plan.proposed':
+      return withoutKeys(event, ['changeSummary', 'feedback']);
     default:
       return event;
   }

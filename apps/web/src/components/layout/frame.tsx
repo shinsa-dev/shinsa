@@ -2,6 +2,8 @@ import type { ShinsaState } from '@shinsa/core';
 import { Sheet, SheetContent, SheetTitle } from '@shinsa/ui/components/sheet';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { ErrorBoundary } from '@/components/errors/boundary.tsx';
+import { FeedbackDialog } from '@/components/feedback/dialog.tsx';
 import type { LayoutPreference } from '@/lib/preferences/layout.ts';
 import { useRailWidth } from '@/lib/preferences/rail-width.ts';
 import { CardsTopBar } from './cards/top-bar.tsx';
@@ -43,9 +45,12 @@ export function AppFrame({
         </Sheet>
       ) : null}
       <main className={cn('flex flex-1 flex-col', sidebar ? 'min-w-0' : 'min-h-0')}>
-        {sidebar ? <CompactBar onMenu={() => setMenuOpen(true)} /> : null}
+        {sidebar ? <CompactBar state={state} onMenu={() => setMenuOpen(true)} /> : null}
         {children}
       </main>
+      <ErrorBoundary size='silent'>
+        <FeedbackDialog state={state} />
+      </ErrorBoundary>
     </div>
   );
 }

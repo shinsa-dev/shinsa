@@ -24,6 +24,7 @@ import { Briefings } from './briefing/index.ts';
 import { ConfigStore, prepareDataDir, type ServerConfig } from './config/index.ts';
 import { EunoeServer } from './eunoe/index.ts';
 import { Extensions, type ExtensionsOptions } from './extensions/index.ts';
+import { createFeedbackDrafter } from './feedback/draft.ts';
 import { resolveServerUrl, startServer } from './http/index.ts';
 import {
   acquireDataDirLock,
@@ -249,6 +250,8 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
+      draftFeedback: createFeedbackDrafter(quick.write),
+      instance,
       resolveLogin,
       roots,
       services: terminals,
