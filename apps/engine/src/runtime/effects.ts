@@ -364,6 +364,8 @@ export class EffectRunner {
         (task.stage === 'shipping' || task.stage === 'awaiting_merge') && !task.pullRequestWatch?.stopped
     );
     for (const task of watched) await this.syncPullRequest(task.id);
+    const failure = await this.#feedback.syncIssues(this.#stopping.signal);
+    if (failure) log.warn('[Feedback] Could not read the state of opened issues', { error: failure });
   }
 
   syncPullRequest(taskId: string, force = false, signal = this.#stopping.signal) {

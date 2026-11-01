@@ -1,4 +1,5 @@
 import { FEEDBACK_REPOSITORY, type Feedback, type ShinsaState } from '@shinsa/core';
+import { Badge } from '@shinsa/ui/components/badge';
 import { Button } from '@shinsa/ui/components/button';
 import { Field, FieldError } from '@shinsa/ui/components/field';
 import { Icon } from '@shinsa/ui/components/icon';
@@ -16,13 +17,16 @@ import {
   describeFeedbackIssue,
   describeFeedbackPreview,
   describeFeedbackRowMeta,
+  describeFeedbackSender,
   FEEDBACK_AGENTS_NOTE,
   FEEDBACK_HINT,
   FEEDBACK_ICON,
   FEEDBACK_INTRO,
   type FeedbackActions,
+  isFeedbackClosed,
   listFeedbackGroups,
   openFeedbackEntry,
+  resolveFeedbackFiledAt,
   resolveFeedbackRowIcon,
   resolveFeedbackSectionId,
   validateFeedbackNote,
@@ -146,6 +150,7 @@ function WaitingRow({
 }
 
 function FiledRow({ state, entry }: { state: ShinsaState; entry: Feedback }) {
+  const closed = isFeedbackClosed(entry);
   return (
     <a
       href={entry.issue?.url}
@@ -157,13 +162,19 @@ function FiledRow({ state, entry }: { state: ShinsaState; entry: Feedback }) {
     >
       <RowIcon state={state} entry={entry} />
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
-        <Truncate className={LIST_ROW_TITLE}>{entry.title}</Truncate>
+        <Truncate className={cn(LIST_ROW_TITLE, closed && 'text-fg-3')}>{entry.title}</Truncate>
         <span className={cn(LIST_ROW_META, 'truncate')}>
+          <span className='sr-only'>{describeFeedbackSender(entry)}, </span>
           <span className='tabular-nums'>{describeFeedbackIssue(entry)}</span>
           {' · '}
-          <TimeAgo at={entry.updatedAt} text={(now) => describeFeedbackFiled(entry, now)} />
+          <TimeAgo at={resolveFeedbackFiledAt(entry)} text={(now) => describeFeedbackFiled(entry, now)} />
         </span>
       </span>
+      {closed && (
+        <Badge size='sm' className='shrink-0'>
+          Closed
+        </Badge>
+      )}
       <span className='grid size-5 shrink-0 place-items-center text-fg-2 opacity-0 group-hover/issue:opacity-100 group-active/issue:opacity-100'>
         <Icon size='sm' name='IconArrowUpRight' />
       </span>

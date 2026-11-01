@@ -294,8 +294,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   kind of task and its stage), so an automation reading the issues can act on them. A check in core refuses an issue that still holds an email, a folder path, a token
   or key, a link elsewhere or one of your project, repository, branch, task or account names, and shows what it found.
   Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same popover, marked as
-  from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); the button's
-  count is what waits for you (`docs/engine.md` → Feedback).
+  from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); an opened
+  issue's row shows who sent it and, once it is closed on GitHub, Closed. The button's count is what waits for you (`docs/engine.md` → Feedback).
 - **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
   questions: the folders that hold your repositories (found on this machine, with their
   repository counts), the default model, the merge method, plan approval, your Claude accounts and

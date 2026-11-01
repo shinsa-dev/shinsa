@@ -1978,7 +1978,62 @@ function pushSeedFeedback(push: (at: number, event: ShinsaEventInput) => void) {
         ['- Sent by: the person using Shinsa']
       ),
       status: 'filed',
-      issue: { number: 214, url: 'https://github.com/shinsa-dev/shinsa/issues/214' },
+      issue: {
+        number: 214,
+        url: 'https://github.com/shinsa-dev/shinsa/issues/214',
+        openedAt: NOW - 3 * DAY,
+        closedAt: null,
+      },
+    }),
+    createSeedFeedback(NOW - 6 * DAY, 'feedback-closed', {
+      source: 'agent',
+      note: 'report_review refused my findings because one file path had a leading ./ before it.',
+      title: 'Review hand-over refuses a finding whose file path starts with ./',
+      body: serializeSeedIssue(
+        [
+          [
+            'Summary',
+            [
+              '`report_review` refuses the whole review when a finding names its file as `./path` instead of `path`.',
+            ],
+          ],
+          [
+            'Where in Shinsa',
+            ['The agent review step, when the reviewer hands over findings with `report_review`.'],
+          ],
+          [
+            'What happened',
+            [
+              'The tool answered that the finding’s file is not in the change, though it is, and the reviewer had to send every finding again.',
+            ],
+          ],
+          ['What should happen', ['A leading `./` is read as the same path, and the review is accepted.']],
+          [
+            'Steps to reproduce',
+            [
+              '1. Open a task at its agent review.',
+              '2. Have the reviewer call `report_review` with a finding whose file starts with `./`.',
+            ],
+          ],
+          ['Why it matters', ['A review is sent twice, and its findings reach the human later.']],
+          ['Suggested change', ['Normalize finding paths before checking them against the change.']],
+          [
+            'Acceptance criteria',
+            [
+              '- [ ] A finding whose file starts with `./` is accepted.',
+              '- [ ] A file outside the change is still refused.',
+            ],
+          ],
+        ],
+        ['- Sent by: an agent working in Shinsa', '- Step: agent review, as the reviewer']
+      ),
+      status: 'filed',
+      issue: {
+        number: 198,
+        url: 'https://github.com/shinsa-dev/shinsa/issues/198',
+        openedAt: NOW - 6 * DAY,
+        closedAt: NOW - 2 * DAY,
+      },
     }),
     createSeedFeedback(NOW - 50 * MINUTE, 'feedback-agent', {
       source: 'agent',

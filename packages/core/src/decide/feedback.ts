@@ -184,7 +184,23 @@ export function recordFeedbackFiled(decider: Decider, command: CommandOf<'feedba
     entry: {
       ...entry,
       status: 'filed',
-      issue: { number: command.number, url: command.url },
+      issue: { number: command.number, url: command.url, openedAt: decider.context.now, closedAt: null },
+      updatedAt: decider.context.now,
+    },
+  });
+}
+
+export function recordFeedbackIssueState(
+  decider: Decider,
+  command: CommandOf<'feedback.record_issue_state'>
+) {
+  const entry = decider.state.feedback[command.feedbackId];
+  if (!entry?.issue || entry.issue.closedAt === command.closedAt) return;
+  decider.emit({
+    type: 'feedback.recorded',
+    entry: {
+      ...entry,
+      issue: { ...entry.issue, closedAt: command.closedAt },
       updatedAt: decider.context.now,
     },
   });

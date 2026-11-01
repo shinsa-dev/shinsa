@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileFeedbackIssue, parseIssueUrl, serializeFeedbackBody } from '../../src/feedback/file.ts';
+import {
+  fileFeedbackIssue,
+  listFeedbackIssueStates,
+  parseIssueStates,
+  parseIssueUrl,
+  serializeFeedbackBody,
+} from '../../src/feedback/file.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 
 let restore: (() => void) | null = null;
@@ -66,5 +72,62 @@ describe('opening a feedback issue', () => {
     expect(
       parseIssueUrl('https://github.com/a/b/issues/3\nhttps://github.com/shinsa-dev/shinsa/issues/12')
     ).toEqual({ number: 12, url: 'https://github.com/shinsa-dev/shinsa/issues/12' });
+  });
+});
+
+describe('reading the state of opened issues', () => {
+  test('lists your issues on shinsa-dev/shinsa with when each closed', async () => {
+    const github = useFakeGitHub({
+      issues: [
+        { number: 1, repo: 'shinsa-dev/shinsa', title: 'a', body: 'a' },
+        { number: 2, repo: 'shinsa-dev/shinsa', title: 'b', body: 'b', closedAt: '2026-11-01T10:00:00Z' },
+      ],
+    });
+    const listing = await listFeedbackIssueStates(createTempDir());
+    expect(listing).toEqual({
+      ok: true,
+      states: new Map([
+        [1, null],
+        [2, Date.parse('2026-11-01T10:00:00Z')],
+      ]),
+    });
+    expect(github.read().calls.at(-1)).toEqual([
+      'issue',
+      'list',
+      '--repo',
+      'shinsa-dev/shinsa',
+      '--author',
+      '@me',
+      '--state',
+      'all',
+      '--limit',
+      '500',
+      '--json',
+      'number,state,closedAt',
+    ]);
+  });
+
+  test('a failure says what gh said, and an answer that is not a list is refused', async () => {
+    useFakeGitHub({ failIssues: 'HTTP 401: Bad credentials' });
+    expect(await listFeedbackIssueStates(createTempDir())).toEqual({
+      ok: false,
+      detail: 'gh issue list failed: HTTP 401: Bad credentials',
+    });
+    expect(parseIssueStates('not json')).toBeNull();
+    expect(parseIssueStates('{}')).toBeNull();
+    expect(
+      parseIssueStates(
+        JSON.stringify([
+          { number: 3, state: 'CLOSED', closedAt: 'never' },
+          { number: 'x' },
+          { number: 4, state: 'CLOSED' },
+        ])
+      )
+    ).toEqual(
+      new Map([
+        [3, null],
+        [4, null],
+      ])
+    );
   });
 });

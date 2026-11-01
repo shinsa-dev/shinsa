@@ -9,15 +9,18 @@ import {
   describeFeedbackIssue,
   describeFeedbackPreview,
   describeFeedbackRowMeta,
+  describeFeedbackSender,
   describeFeedbackSource,
   describeFeedbackStatus,
   FEEDBACK_ACTIONS,
+  isFeedbackClosed,
   isFeedbackOpen,
   listFeedbackGroups,
   needsRedraft,
   openFeedback,
   openFeedbackEntry,
   registerFeedbackOpener,
+  resolveFeedbackFiledAt,
   resolveFeedbackLeaks,
   resolveFeedbackRowIcon,
   resolveFeedbackSectionId,
@@ -47,8 +50,14 @@ const DRAFTING = createFeedback({ id: 'f2', status: 'drafting', title: null, bod
 const FILED = createFeedback({
   id: 'f3',
   status: 'filed',
-  issue: { number: 42, url: 'https://github.com/shinsa-dev/shinsa/issues/42' },
+  issue: { number: 42, url: 'https://github.com/shinsa-dev/shinsa/issues/42', openedAt: 10, closedAt: null },
   createdAt: 1,
+});
+const CLOSED = createFeedback({
+  id: 'f5',
+  status: 'filed',
+  issue: { number: 40, url: 'https://github.com/shinsa-dev/shinsa/issues/40', openedAt: 5, closedAt: 20 },
+  createdAt: 5,
 });
 const FAILED = createFeedback({ id: 'f4', status: 'failed', failure: 'gh is not signed in.', createdAt: 4 });
 
@@ -61,9 +70,9 @@ function stateWith(entries: ReturnType<typeof createFeedback>[], parts = {}) {
 
 describe('listFeedbackGroups', () => {
   it('puts everything not yet opened first, newest first, and the opened issues apart', () => {
-    const groups = listFeedbackGroups(stateWith([DRAFT, DRAFTING, FILED, FAILED]));
+    const groups = listFeedbackGroups(stateWith([DRAFT, CLOSED, DRAFTING, FILED, FAILED]));
     expect(groups.waiting.map((entry) => entry.id)).toEqual(['f4', 'f1', 'f2']);
-    expect(groups.filed.map((entry) => entry.id)).toEqual(['f3']);
+    expect(groups.filed.map((entry) => entry.id)).toEqual(['f3', 'f5']);
   });
 });
 
@@ -107,12 +116,24 @@ describe('describeFeedbackStatus', () => {
     expect([describeFeedbackIssue(FILED), describeFeedbackIssue(DRAFT)]).toEqual(['#42', null]);
   });
 
-  it('says when an issue opened, and that it came from an agent’s report', () => {
-    const now = FILED.updatedAt + 2 * 60 * 60 * 1000;
-    expect(describeFeedbackFiled({ ...FILED, source: 'human' }, now)).toBe('Opened 2h ago');
-    expect(describeFeedbackFiled({ ...FILED, source: 'agent' }, now)).toBe(
-      'Opened 2h ago from an agent’s report'
-    );
+  it('says when an issue opened, or when GitHub closed it, and who sent it', () => {
+    const hours = 2 * 60 * 60 * 1000;
+    expect(describeFeedbackFiled(FILED, 10 + hours)).toBe('Opened 2h ago');
+    expect(describeFeedbackFiled(CLOSED, 20 + hours)).toBe('Closed 2h ago');
+    expect([isFeedbackClosed(FILED), isFeedbackClosed(CLOSED), isFeedbackClosed(DRAFT)]).toEqual([
+      false,
+      true,
+      false,
+    ]);
+    expect([
+      resolveFeedbackFiledAt(FILED),
+      resolveFeedbackFiledAt(CLOSED),
+      resolveFeedbackFiledAt(DRAFT),
+    ]).toEqual([10, 20, DRAFT.updatedAt]);
+    expect([describeFeedbackSender(FILED), describeFeedbackSender({ ...FILED, source: 'agent' })]).toEqual([
+      'From you',
+      'From an agent',
+    ]);
   });
 });
 
@@ -240,9 +261,14 @@ describe('the popover’s rows', () => {
       icon: 'IconExclamationTriangle',
       tone: 'red',
     });
-    expect(resolveFeedbackRowIcon(state, FILED)).toEqual({
+    expect(resolveFeedbackRowIcon(state, { ...FILED, title: 'Basket plans fail' })).toEqual({
       kind: 'icon',
-      icon: 'IconGithub',
+      icon: 'IconUser',
+      tone: 'neutral',
+    });
+    expect(resolveFeedbackRowIcon(state, { ...CLOSED, source: 'agent' })).toEqual({
+      kind: 'icon',
+      icon: 'IconRobot',
       tone: 'neutral',
     });
     expect(resolveFeedbackRowIcon(state, DRAFTING)).toEqual({ kind: 'busy' });

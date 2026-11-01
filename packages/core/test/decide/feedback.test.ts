@@ -182,6 +182,29 @@ describe('opening an issue', () => {
     ).toEqual([]);
   });
 
+  test('an opened issue records when GitHub closes it, and clears it when it opens again', () => {
+    const harness = createHarness();
+    const entry = drafted(harness);
+    expect(
+      harness.send({ type: 'feedback.record_issue_state', feedbackId: entry.id, closedAt: 5 }).events
+    ).toEqual([]);
+    harness.send({ type: 'feedback.file', feedbackId: entry.id });
+    const url = 'https://github.com/shinsa-dev/shinsa/issues/12';
+    harness.send({ type: 'feedback.record_filed', feedbackId: entry.id, number: 12, url });
+    expect(only(harness).issue).toMatchObject({ number: 12, url, closedAt: null });
+    expect(only(harness).issue?.openedAt).toBeNumber();
+    harness.send({ type: 'feedback.record_issue_state', feedbackId: entry.id, closedAt: 5 });
+    expect(only(harness).issue?.closedAt).toBe(5);
+    expect(
+      harness.send({ type: 'feedback.record_issue_state', feedbackId: entry.id, closedAt: 5 }).events
+    ).toEqual([]);
+    harness.send({ type: 'feedback.record_issue_state', feedbackId: entry.id, closedAt: null });
+    expect(only(harness).issue?.closedAt).toBeNull();
+    expect(
+      harness.send({ type: 'feedback.record_issue_state', feedbackId: 'missing', closedAt: 5 }).events
+    ).toEqual([]);
+  });
+
   test('a draft with a private detail is refused and says what it found', () => {
     const harness = createHarness();
     createTask(harness);

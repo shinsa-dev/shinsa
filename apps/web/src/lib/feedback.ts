@@ -110,7 +110,9 @@ export function listFeedbackGroups(state: ShinsaState): FeedbackGroups {
   const entries = listFeedback(state);
   return {
     waiting: entries.filter((entry) => entry.status !== 'filed'),
-    filed: entries.filter((entry) => entry.status === 'filed'),
+    filed: entries
+      .filter((entry) => entry.status === 'filed')
+      .sort((a, b) => Number(isFeedbackClosed(a)) - Number(isFeedbackClosed(b))),
   };
 }
 
@@ -141,9 +143,20 @@ export function describeFeedbackStatus(entry: Feedback) {
   }
 }
 
+export function isFeedbackClosed(entry: Feedback) {
+  return entry.issue !== null && entry.issue.closedAt !== null;
+}
+
+export function resolveFeedbackFiledAt(entry: Feedback) {
+  return entry.issue?.closedAt ?? entry.issue?.openedAt ?? entry.updatedAt;
+}
+
 export function describeFeedbackFiled(entry: Feedback, now: number) {
-  const opened = formatSince('Opened', entry.updatedAt, now);
-  return entry.source === 'agent' ? `${opened} from an agent’s report` : opened;
+  return formatSince(isFeedbackClosed(entry) ? 'Closed' : 'Opened', resolveFeedbackFiledAt(entry), now);
+}
+
+export function describeFeedbackSender(entry: Feedback) {
+  return entry.source === 'agent' ? 'From an agent' : 'From you';
 }
 
 export function describeFeedbackPreview(entry: Feedback) {
@@ -164,8 +177,7 @@ export type FeedbackRowIcon = { kind: 'busy' } | { kind: 'icon'; icon: IconName;
 export function resolveFeedbackRowIcon(state: ShinsaState, entry: Feedback): FeedbackRowIcon {
   if (entry.status === 'drafting' || entry.status === 'filing') return { kind: 'busy' };
   if (entry.status === 'failed') return { kind: 'icon', icon: 'IconExclamationTriangle', tone: 'red' };
-  if (entry.status === 'filed') return { kind: 'icon', icon: 'IconGithub', tone: 'neutral' };
-  if (resolveFeedbackLeaks(state, entry) !== null)
+  if (entry.status !== 'filed' && resolveFeedbackLeaks(state, entry) !== null)
     return { kind: 'icon', icon: 'IconExclamationTriangle', tone: 'amber' };
   return { kind: 'icon', icon: entry.source === 'agent' ? 'IconRobot' : 'IconUser', tone: 'neutral' };
 }

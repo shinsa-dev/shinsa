@@ -38,6 +38,7 @@ import {
   recordFeedbackDraft,
   recordFeedbackFailure,
   recordFeedbackFiled,
+  recordFeedbackIssueState,
   reportFeedback,
   updateFeedback,
   writeFeedback,
@@ -263,6 +264,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordFeedbackDraft(decider, command);
     case 'feedback.record_filed':
       return recordFeedbackFiled(decider, command);
+    case 'feedback.record_issue_state':
+      return recordFeedbackIssueState(decider, command);
     case 'feedback.record_failure':
       return recordFeedbackFailure(decider, command);
     case 'agent.report_feedback':

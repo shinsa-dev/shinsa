@@ -5,6 +5,8 @@ export type FeedbackSource = 'human' | 'agent';
 export interface FeedbackIssue {
   number: number;
   url: string;
+  openedAt: number;
+  closedAt: number | null;
 }
 
 export interface Feedback {

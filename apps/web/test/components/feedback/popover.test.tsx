@@ -70,18 +70,39 @@ describe('FeedbackPanel', () => {
     expect(onOpen).toHaveBeenCalledWith(draft);
   });
 
-  it('lists the opened issues with their links', () => {
+  it('lists the opened issues with their links, who sent each, and marks a closed one', () => {
     renderPanel([
       createFeedback({
         id: 'f1',
         status: 'filed',
-        issue: { number: 42, url: 'https://github.com/shinsa-dev/shinsa/issues/42' },
+        issue: {
+          number: 42,
+          url: 'https://github.com/shinsa-dev/shinsa/issues/42',
+          openedAt: 1,
+          closedAt: null,
+        },
+      }),
+      createFeedback({
+        id: 'f2',
+        source: 'agent',
+        title: 'Reviews skip the last phase',
+        status: 'filed',
+        issue: {
+          number: 41,
+          url: 'https://github.com/shinsa-dev/shinsa/issues/41',
+          openedAt: 1,
+          closedAt: 2,
+        },
       }),
     ]);
     expect(screen.getByText('Opened on GitHub')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /#42/ }).getAttribute('href')).toBe(
-      'https://github.com/shinsa-dev/shinsa/issues/42'
-    );
+    const open = screen.getByRole('link', { name: /#42/ });
+    expect(open.getAttribute('href')).toBe('https://github.com/shinsa-dev/shinsa/issues/42');
+    expect(open.textContent).toContain('From you');
+    expect(open.textContent).not.toContain('Closed');
+    const closed = screen.getByRole('link', { name: /#41/ });
+    expect(closed.textContent).toContain('From an agent');
+    expect(closed.textContent).toContain('Closed');
   });
 });
 

@@ -26,7 +26,7 @@ function createContext(key = 'effect') {
   return { context: { key, attempt: 1, signal: controller.signal }, abort: () => controller.abort() };
 }
 
-async function createWorld(drafter: FeedbackDrafter) {
+async function createWorld(drafter: FeedbackDrafter, syncMs = 0) {
   const dir = createTempDir('shinsa-feedback-');
   const engine = new Engine(new EventLog(join(dir, 'shinsa.sqlite')));
   await engine.dispatch({ type: 'project.write', project: { name: 'Paywalls', color: 'blue', key: 'PW' } });
@@ -35,7 +35,7 @@ async function createWorld(drafter: FeedbackDrafter) {
   return {
     engine,
     feedbackId,
-    effects: new FeedbackEffects(engine, dir, drafter, () => ['Shinsa: 1.2.0, the Mac app']),
+    effects: new FeedbackEffects(engine, dir, drafter, () => ['Shinsa: 1.2.0, the Mac app'], syncMs),
   };
 }
 
@@ -122,6 +122,49 @@ describe('feedback effects', () => {
       status: 'failed',
       failure: STOPPED_WHILE_FILING,
     });
+  });
+
+  test('an opened issue follows GitHub when it closes and opens again, at most once a sync window', async () => {
+    const read = useFakeGitHub();
+    const world = await createWorld(() => Promise.resolve(DRAFT));
+    expect(await world.effects.syncIssues()).toBeNull();
+    expect(read().calls).toHaveLength(0);
+    await world.effects.draft(world.feedbackId, createContext().context);
+    await world.engine.dispatch({ type: 'feedback.file', feedbackId: world.feedbackId });
+    await world.effects.file(world.feedbackId, createContext().context);
+    const opened = read() as { issues: { number: number }[] };
+    const closed = { issues: [{ ...opened.issues[0], closedAt: '2026-11-01T10:00:00Z' }] };
+    restore?.();
+    useFakeGitHub(closed);
+    expect(await world.effects.syncIssues()).toBeNull();
+    expect(world.engine.state.feedback[world.feedbackId]?.issue?.closedAt).toBe(
+      Date.parse('2026-11-01T10:00:00Z')
+    );
+    restore?.();
+    useFakeGitHub({ issues: [{ ...closed.issues[0], closedAt: undefined }] });
+    await world.effects.syncIssues();
+    expect(world.engine.state.feedback[world.feedbackId]?.issue?.closedAt).toBeNull();
+    restore?.();
+    useFakeGitHub({ issues: [] });
+    await world.effects.syncIssues();
+    expect(world.engine.state.feedback[world.feedbackId]?.issue?.closedAt).toBeNull();
+    restore?.();
+    useFakeGitHub({ failIssues: 'HTTP 502' });
+    expect(await world.effects.syncIssues()).toBe('gh issue list failed: HTTP 502');
+    const stopped = new AbortController();
+    stopped.abort();
+    expect(await world.effects.syncIssues(stopped.signal)).toBeNull();
+  });
+
+  test('a sync inside the window asks GitHub nothing', async () => {
+    const read = useFakeGitHub();
+    const world = await createWorld(() => Promise.resolve(DRAFT), 60_000);
+    await world.effects.draft(world.feedbackId, createContext().context);
+    await world.engine.dispatch({ type: 'feedback.file', feedbackId: world.feedbackId });
+    await world.effects.file(world.feedbackId, createContext().context);
+    await world.effects.syncIssues();
+    await world.effects.syncIssues();
+    expect(read().calls.filter((call) => call[1] === 'list')).toHaveLength(1);
   });
 
   test('an effect that gave up fails its entry with the error', async () => {

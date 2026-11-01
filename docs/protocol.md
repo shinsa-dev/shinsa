@@ -920,7 +920,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
-| `feedback.record_filed` | the `feedback.file` effect | the new issue's `number` and `url`, for an entry still `filing` |
+| `feedback.record_filed` | the `feedback.file` effect | the new issue's `number` and `url`, for an entry still `filing`; its `openedAt` is now and `closedAt` null |
+| `feedback.record_issue_state` | `FeedbackEffects.syncIssues`, with the pull request sync | an opened issue's `closedAt` as GitHub reports it, or null when it opened again; nothing when it did not change |
 | `feedback.record_failure` | either feedback effect, and the start after a restart | fails a `drafting` or `filing` entry with `detail` |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |

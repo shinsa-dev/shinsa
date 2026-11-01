@@ -1901,6 +1901,11 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   `feedback.record_filed`. The effect is process-bound and never retried, so an issue is never posted twice: one a
   restart left `filing` is failed on start (`FeedbackEffects.recover`) with a note to check GitHub before opening it
   again, and a `gh` failure shows its message on the entry.
+- **Closed issues.** With the pull request sync (`EffectRunner.syncAll`), at most every 10 minutes
+  (`FEEDBACK_SYNC_MS`) and only while an issue is open in the log, `FeedbackEffects.syncIssues` reads your issues on
+  `shinsa-dev/shinsa` in one `gh issue list --author @me --state all` and records each change with
+  `feedback.record_issue_state` (the issue's `closedAt`, or null when it opened again). A `gh` failure is logged and
+  changes nothing.
 - **Agents report** with `report_feedback` (`feedback`; every task-session role, the reviewer included, never a
   delegated agent), when Shinsa itself got in their way: a tool that refused what it should take, a limit or a rule
   that blocked sound work, a step that made no sense, a missing tool; never the task or its code. Its description says the human reads each report before anything is public. A note already known,
@@ -1913,7 +1918,8 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   note, the note field, then Waiting for you and Opened on GitHub as one row each, its title (the note while it drafts)
   and who it is from or what is happening to it. A waiting row opens its dialog (`FeedbackDialog`, kept by
   `openFeedbackEntry`): the whole draft, the privacy check's findings, Dismiss, Edit and Open issue; an opened issue's
-  row links to GitHub. ⌘K has Send feedback on Shinsa; `shinsa feedback
+  row links to GitHub, its icon who sent it (you or an agent), its line the number and when it opened or closed, and a
+  closed one shows Closed after the open ones. ⌘K has Send feedback on Shinsa; `shinsa feedback
   list|write|edit|file|dismiss` is the same from the command line (`GET /api/feedback`).
 
 ### Setup verification
