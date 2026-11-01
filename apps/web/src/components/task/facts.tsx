@@ -47,9 +47,9 @@ import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
+import { describeMachineResources, listTaskUseLines } from '@/lib/remote/resources.ts';
 import { describeUserName } from '@/lib/remote/users.ts';
 import { HANDOFF_ICON, resolveHandoffFact } from '@/lib/share/handoff.ts';
-import { describeMachineResources, listTaskUseLines } from '@/lib/remote/resources.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {

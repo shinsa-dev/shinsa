@@ -10,9 +10,9 @@ import {
   stashEnrollFragment,
 } from '@/lib/remote/mode.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
-import { ClaimPage } from './claim.tsx';
 import { createTeamKeyStore, selectTeamJoinFragment, stashTeamJoinFragment } from '@/lib/teams/join.ts';
 import { createJoinMachinesSource } from '@/lib/teams/join-machines.ts';
+import { ClaimPage } from './claim.tsx';
 import { EnrollPage } from './enroll.tsx';
 import { FleetApp } from './fleet.tsx';
 import { PairPage } from './pair.tsx';

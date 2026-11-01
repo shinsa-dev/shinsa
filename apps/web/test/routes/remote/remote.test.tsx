@@ -383,7 +383,9 @@ describe('the machines in Settings', () => {
       },
     });
     render(
-      <RemoteServicesContext.Provider value={{ dashboard, devices, teamKeys: createTeamKeys(), worker: createWorker() }}>
+      <RemoteServicesContext.Provider
+        value={{ dashboard, devices, teamKeys: createTeamKeys(), worker: createWorker() }}
+      >
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
