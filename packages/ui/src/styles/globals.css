@@ -1359,3 +1359,41 @@
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* ── Shimmering text ──────────────────────────────────────────────────────
+   `ShimmeringText`'s sweep: a window the width of the line, masked down to a
+   band at its right edge, crosses the line while the copy of the text inside
+   it moves back by as much, so the copy stays on top of the text and only the
+   band shows it. Both move by `transform` alone, so the sweep runs on the
+   compositor: no style, layout or paint while it loops. The last third of a
+   cycle is the rest between sweeps, with the band past the end of the line. */
+@utility shimmer-window {
+  mask-image: linear-gradient(90deg, transparent calc(100% - 6em), #000 calc(100% - 3em), transparent);
+  animation: shimmer-window var(--shimmer-duration, 1.5s) linear infinite;
+  will-change: transform;
+}
+
+@utility shimmer-copy {
+  animation: shimmer-copy var(--shimmer-duration, 1.5s) linear infinite;
+  will-change: transform;
+}
+
+@keyframes shimmer-window {
+  from {
+    transform: translateX(-100%);
+  }
+  66%,
+  to {
+    transform: translateX(6em);
+  }
+}
+
+@keyframes shimmer-copy {
+  from {
+    transform: translateX(100%);
+  }
+  66%,
+  to {
+    transform: translateX(-6em);
+  }
+}

@@ -7,7 +7,7 @@ import { createRun, NOW } from '../../support/state.ts';
 const run = createRun({ id: 'run-feed', taskId: 't', startedAt: NOW });
 
 function shimmers(element: Element | undefined) {
-  return Boolean(element?.querySelector('.sr-only'));
+  return Boolean(element?.querySelector('.shimmer-window'));
 }
 
 beforeEach(() => {
@@ -47,6 +47,8 @@ describe('LiveFeed', () => {
     expect(shimmers(older)).toBe(false);
     expect(older?.textContent).toBe('Compare project maturity by history');
     expect(shimmers(newest)).toBe(true);
-    expect(newest?.querySelector('.sr-only')?.textContent).toBe('Reading src/form.ts');
+    expect(newest?.querySelector('[data-slot="shimmering-text"]')?.firstChild?.textContent).toBe(
+      'Reading src/form.ts'
+    );
   });
 });
