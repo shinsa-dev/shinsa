@@ -384,7 +384,7 @@ owner's own task page with every button and input taken away, showing everything
 Review and Code (a private repository's too) but its chat, and it changes the moment the task does; the machine reads
 nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
 a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
-cannot be dismissed while it lasts, and Stop sharing, which asks first, ends every open link at once
+cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
 (`docs/engine.md` → Sharing a task).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and

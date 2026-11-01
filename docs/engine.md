@@ -2625,7 +2625,9 @@ projection and channel will serve teams.
   only way a share ends early.
 - **While it is shared** (`components/task/sharing-banner.tsx`): the task's page shows a banner under its header that
   cannot be dismissed, saying anyone with the link can watch the task and when sharing ends, with Copy link and Stop
-  sharing, until the share ends.
+  sharing, until the share ends. Everywhere else the task appears (the task list, Home's lists and the Needs you
+  queue) its title carries a share mark, "Shared by link" on hover (`components/share/shared-mark.tsx`,
+  `isTaskShared`), while its link works.
 - **The shared page** (`routes/remote/share.tsx`, `lib/share/live.ts`, `components/share/shared-task-page.tsx`):
   the remote build's `/share/t/<token>` reads the key from the fragment (a link without one says the task
   is not shared), opens the live channel (`openShareStream`), builds a state from each view it receives

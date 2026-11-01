@@ -5,6 +5,7 @@ import {
   closeShareDialog,
   closeUnshareConfirm,
   describeShareEnd,
+  isTaskShared,
   listShareLimitItems,
   openShareDialog,
   openUnshareConfirm,
@@ -124,5 +125,24 @@ describe('a share whose time ran out', () => {
     expect(resolveShareView(task, PAIRED, HOUR_MS)).toEqual({ kind: 'off' });
     expect(listTaskActions(task, HOUR_MS - 1).flat()).toContain('unshare');
     expect(listTaskActions(task, HOUR_MS).flat()).not.toContain('unshare');
+  });
+});
+
+describe('whether a task shows as shared', () => {
+  const url = 'https://app.shinsa.dev/share/t/abc';
+
+  it('is shared only while its link works', () => {
+    expect(isTaskShared(createTask({ id: 'a' }))).toBe(false);
+    expect(isTaskShared(createTask({ id: 'a', share: { ...SHARING, url: null } }))).toBe(false);
+    expect(isTaskShared(createTask({ id: 'a', share: { ...SHARING, url, failure: 'Refused.' } }))).toBe(
+      false
+    );
+    expect(isTaskShared(createTask({ id: 'a', share: { ...SHARING, url } }))).toBe(true);
+  });
+
+  it('stops showing as shared once its time runs out', () => {
+    const task = createTask({ id: 'a', share: { ...SHARING, url, limit: 'hour', endsAt: HOUR_MS } });
+    expect(isTaskShared(task, HOUR_MS - 1)).toBe(true);
+    expect(isTaskShared(task, HOUR_MS)).toBe(false);
   });
 });

@@ -26,6 +26,8 @@ export const UNSHARE_DESCRIPTION = 'The link stops working at once, for everyone
 
 export const SHARE_LIMIT_TITLE = 'Share for';
 
+export const SHARED_MARK_LABEL = 'Shared by link';
+
 export const SHARING_SECTION = 'Sharing';
 
 export const SHARING_SECTION_DESCRIPTION =
@@ -91,6 +93,11 @@ export function selectLiveShare(task: Task, now = Date.now()) {
   const share = task.share;
   if (!share || (share.endsAt !== null && share.endsAt <= now)) return null;
   return share;
+}
+
+export function isTaskShared(task: Task, now = Date.now()) {
+  const share = selectLiveShare(task, now);
+  return Boolean(share?.url && !share.failure);
 }
 
 export function resolveShareView(task: Task, remote: RemoteSnapshot | null, now = Date.now()): ShareView {

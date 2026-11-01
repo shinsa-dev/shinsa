@@ -16,6 +16,7 @@ export const LIST_ROW_META = 'text-2xs text-fg-2';
 export function ListRow({
   leading,
   title,
+  mark,
   meta,
   summary,
   trailing,
@@ -25,6 +26,7 @@ export function ListRow({
 }: {
   leading?: React.ReactNode;
   title: React.ReactNode;
+  mark?: React.ReactNode;
   meta?: React.ReactNode;
   summary?: React.ReactNode;
   trailing?: React.ReactNode;
@@ -52,7 +54,14 @@ export function ListRow({
     >
       {leading}
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
-        <Truncate className={cn(LIST_ROW_TITLE, 'contain-inline-size')}>{title}</Truncate>
+        {mark ? (
+          <span className='flex min-w-0 items-center gap-1.5'>
+            <Truncate className={cn(LIST_ROW_TITLE, 'min-w-0')}>{title}</Truncate>
+            {mark}
+          </span>
+        ) : (
+          <Truncate className={cn(LIST_ROW_TITLE, 'contain-inline-size')}>{title}</Truncate>
+        )}
         {meta && <Truncate className={LIST_ROW_META}>{meta}</Truncate>}
         {summary && <span className={cn(LIST_ROW_META, 'flex h-4 min-w-0 items-center')}>{summary}</span>}
       </span>

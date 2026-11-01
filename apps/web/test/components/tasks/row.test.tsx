@@ -208,3 +208,19 @@ describe('the kind of task', () => {
     );
   });
 });
+
+describe('a shared task in the list', () => {
+  it('shows a shared mark beside its title, and none when it is not shared', () => {
+    const shared = createTask({
+      id: 'shared',
+      title: 'Share the search page',
+      stage: 'building',
+      share: { at: 1, limit: 'until_done', endsAt: null, url: 'https://app.shinsa.dev/share/t/abc' },
+    });
+    const { unmount } = renderRow(shared, 'working');
+    expect(screen.getByRole('img', { name: 'Shared by link' })).toBeTruthy();
+    unmount();
+    renderRow(createTask({ id: 'plain', stage: 'building' }), 'working');
+    expect(screen.queryByRole('img', { name: 'Shared by link' })).toBeNull();
+  });
+});
