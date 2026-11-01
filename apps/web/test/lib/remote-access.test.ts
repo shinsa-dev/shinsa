@@ -85,7 +85,7 @@ describe('remote access words', () => {
     };
     expect(describeAccessRequest(request, NOW)).toMatch(/^Kai iPhone · Asked /);
     const access = { owner: mona, members: [] };
-    expect(describeAcceptOutcome(request, access)).toBe('Kai Lane joined.');
+    expect(describeAcceptOutcome(request, access)).toBe('Kai joined.');
     const member = { ...access, members: [{ user: kai, addedAt: 0 }] };
     expect(describeAcceptOutcome(request, member)).toBe('Kai iPhone is added.');
     expect(describeAcceptOutcome({ ...request, user: mona }, access)).toBe('Kai iPhone is added.');
@@ -105,7 +105,7 @@ describe('remote access words', () => {
       lastSeenAt: null,
       userId: '7',
     };
-    expect(describeDeviceDetail(device, access, NOW)).toMatch(/^Added .* · Added by @kai$/);
+    expect(describeDeviceDetail(device, access, NOW)).toMatch(/^Added .* · Added by kai$/);
     expect(describeDeviceDetail({ ...device, userId: null }, access, NOW)).not.toContain('Added by');
     expect(describeMemberSince(access.members[0] ?? { user: kai, addedAt: 0 }, NOW)).toStartWith('Joined ');
   });

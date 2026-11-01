@@ -33,7 +33,7 @@ import { TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
-import { describeUserName } from '@/lib/remote/users.ts';
+import { describeUserName, resolveFirstName } from '@/lib/remote/users.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import {
   canUseTeams,
@@ -270,7 +270,7 @@ function TeamRequests({ team, actions }: { team: RemoteTeam; actions: TeamAction
             onClick={() =>
               void requestWithToast(
                 () => actions.acceptRequest(team.id, request.user.id),
-                `${describeUserName(request.user)} joined ${team.name}.`
+                `${resolveFirstName(request.user)} joined ${team.name}.`
               )
             }
           >

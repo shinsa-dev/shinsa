@@ -1,10 +1,11 @@
 import * as React from 'react';
+import type { SharedOwner } from '@/lib/share/page.ts';
 
 const ReadOnlyContext = React.createContext(false);
 
 const ReadOnlyNoteContext = React.createContext<React.ReactNode>(null);
 
-const ReadOnlyOwnerContext = React.createContext<string | null>(null);
+const ReadOnlyOwnerContext = React.createContext<SharedOwner | null>(null);
 
 export function ReadOnlyProvider({
   note = null,
@@ -12,7 +13,7 @@ export function ReadOnlyProvider({
   children,
 }: {
   note?: React.ReactNode;
-  owner?: string | null;
+  owner?: SharedOwner | null;
   children: React.ReactNode;
 }) {
   return (
@@ -34,4 +35,8 @@ export function useReadOnlyNote() {
 
 export function useReadOnlyOwner() {
   return React.use(ReadOnlyOwnerContext);
+}
+
+export function useReadOnlyOwnerName() {
+  return useReadOnlyOwner()?.name ?? null;
 }

@@ -3,6 +3,8 @@ import type { RemoteAccess, RemoteDevice } from '@shinsa/core';
 import {
   describeUserHandle,
   describeUserName,
+  resolveFirstName,
+  resolveSharedProfile,
   resolveUserInitial,
   selectDeviceMember,
 } from '@/lib/remote/users.ts';
@@ -25,6 +27,22 @@ describe('a GitHub user on screen', () => {
     expect(describeUserHandle(NAMED)).toBe('@kai');
     expect(describeUserName(BARE)).toBe('@mona');
     expect(describeUserHandle(BARE)).toBeNull();
+  });
+
+  it('goes by the first word of their name, or by the login without the @', () => {
+    expect(resolveFirstName(NAMED)).toBe('Kai');
+    expect(resolveFirstName(BARE)).toBe('mona');
+    expect(resolveFirstName({ login: 'lee', name: '   ' })).toBe('lee');
+    expect(resolveFirstName({ login: 'ada', name: '  Ada   Lovelace ' })).toBe('Ada');
+  });
+
+  it('builds a profile from a shared login and whatever profile came with it', () => {
+    expect(resolveSharedProfile('kai', { name: 'Kai Lane', avatarUrl: 'a.png' })).toEqual({
+      login: 'kai',
+      name: 'Kai Lane',
+      avatarUrl: 'a.png',
+    });
+    expect(resolveSharedProfile('kai')).toEqual({ login: 'kai', name: null, avatarUrl: null });
   });
 
   it('stands in for a missing avatar with the first letter of what it shows', () => {

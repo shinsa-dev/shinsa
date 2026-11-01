@@ -151,10 +151,10 @@ describe('describeOutcomes', () => {
 describe('describeSentLabel and describeRequestLabel', () => {
   it('say you on your own page and name the owner for anyone else', () => {
     expect(describeSentLabel()).toBe('What you sent');
-    expect(describeSentLabel('@kai')).toBe('What @kai sent');
+    expect(describeSentLabel('Kai')).toBe('What Kai sent');
     expect(describeSentLabel('The owner')).toBe('What the owner sent');
     expect(describeRequestLabel()).toBe('Your request');
-    expect(describeRequestLabel('@kai')).toBe('@kai’s request');
+    expect(describeRequestLabel('Kai')).toBe('Kai’s request');
     expect(describeRequestLabel('The owner')).toBe('The owner’s request');
   });
 });

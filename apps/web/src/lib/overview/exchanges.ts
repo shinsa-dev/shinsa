@@ -3,7 +3,6 @@ import {
   capitalise,
   type Gate,
   type Iteration,
-  lowerFirst,
   type ReplyOutcome,
   resolveCurrentRound,
   type ShinsaState,
@@ -12,7 +11,7 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { formatCount } from '@/lib/format/count.ts';
-import { describeOwnerPossessive } from '@/lib/share/page.ts';
+import { describeOwnerInSentence, describeOwnerPossessive } from '@/lib/share/page.ts';
 
 export type AnsweredIteration = Iteration & { reply: AgentReply; repliedAt: number };
 
@@ -97,7 +96,7 @@ export function describeOutcomes(reply: AgentReply) {
 }
 
 export function describeSentLabel(owner: string | null = null) {
-  return `What ${owner === null ? 'you' : lowerFirst(owner)} sent`;
+  return `What ${owner === null ? 'you' : describeOwnerInSentence(owner)} sent`;
 }
 
 export function describeRequestLabel(owner: string | null = null) {

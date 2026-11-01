@@ -6,7 +6,6 @@ import {
   type Gate,
   listActiveRuns,
   listOpenGates,
-  lowerFirst,
   type Run,
   resolveTaskProgress,
   type ShinsaState,
@@ -19,7 +18,7 @@ import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { resolveSteps, selectCancelledStep } from '@/lib/overview/progress.ts';
-import { describeOwnerPossessive } from '@/lib/share/page.ts';
+import { describeOwnerInSentence, describeOwnerPossessive } from '@/lib/share/page.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 import { describeConflict } from '@/lib/tasks/now.ts';
 import { isPausedStatus, resolveTaskStatus } from '@/lib/tasks/status.ts';
@@ -55,7 +54,7 @@ const CANCEL_REASON: Record<string, string> = {
 
 function describeCancelReason(reason: string, owner: string | null) {
   if (reason === 'cancelled by you')
-    return `${owner === null ? 'you' : lowerFirst(owner)} cancelled the task`;
+    return `${owner === null ? 'you' : describeOwnerInSentence(owner)} cancelled the task`;
   return CANCEL_REASON[reason] ?? reason;
 }
 

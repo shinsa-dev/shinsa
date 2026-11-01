@@ -50,7 +50,7 @@ describe('teammates’ tasks', () => {
     expect(screen.getByText('Teammates in Platform')).toBeDefined();
     expect(screen.getByText('Add the billing page')).toBeDefined();
     expect(screen.getByText('Ship the invoice export')).toBeDefined();
-    expect(screen.getAllByText('@kai')).toHaveLength(2);
+    expect(screen.getAllByText('kai')).toHaveLength(2);
     fireEvent.click(screen.getByText('Add the billing page'));
     expect(location.pathname).toBe('/teams/team1/p7m2/kai-task');
   });

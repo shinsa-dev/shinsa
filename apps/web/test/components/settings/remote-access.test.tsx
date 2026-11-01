@@ -176,7 +176,7 @@ describe('Settings → Remote access', () => {
     expect(screen.queryByText('@mona')).toBeNull();
     fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[0] as HTMLElement);
     await waitFor(() => expect(actions.acceptRequest).toHaveBeenCalledWith('r1'));
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Kai Lane joined.'));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Kai joined.'));
     fireEvent.click(screen.getAllByRole('button', { name: 'Decline' })[1] as HTMLElement);
     await waitFor(() => expect(actions.declineRequest).toHaveBeenCalledWith('r2'));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Request declined.'));
@@ -198,7 +198,7 @@ describe('Settings → Remote access', () => {
     expect(screen.getByText('Owner')).toBeTruthy();
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     expect(screen.getByText('@kai')).toBeTruthy();
-    expect(screen.getByText(/Added by Kai Lane/)).toBeTruthy();
+    expect(screen.getByText(/Added by Kai$/)).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Remove' }).at(-1) as HTMLElement);
     fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
     await waitFor(() => expect(actions.removeMember).toHaveBeenCalledWith('7'));

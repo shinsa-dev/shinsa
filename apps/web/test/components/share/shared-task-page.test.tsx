@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Activity, Task } from '@shinsa/core';
+import type { Activity, SharedPerson, Task } from '@shinsa/core';
 import { render, screen } from '@testing-library/react';
 import { SharedTaskPage } from '@/components/share/shared-task-page.tsx';
 import { resolveSharedView } from '@/lib/share/view.ts';
@@ -15,7 +15,14 @@ const ASKED: Activity = {
   evidenceId: null,
 };
 
-function renderShared(owner: string | null, viewer: string | null, overrides: Partial<Task> = {}) {
+const KAI: SharedPerson = { name: 'Kai Tanaka', avatarUrl: null };
+
+function renderShared(
+  owner: string | null,
+  viewer: string | null,
+  overrides: Partial<Task> = {},
+  ownerProfile: SharedPerson | null = KAI
+) {
   const task = createTask({
     id: 'task-1',
     handle: 'SW-34',
@@ -24,7 +31,7 @@ function renderShared(owner: string | null, viewer: string | null, overrides: Pa
     ...overrides,
   });
   const view = resolveSharedView({
-    shared: createSharedTask({ task, evidence: [], owner, gates: [], runs: [] }),
+    shared: createSharedTask({ task, evidence: [], owner, ownerProfile, gates: [], runs: [] }),
     updatedAt: 1,
     resolveFileUrl: () => null,
   });
@@ -36,16 +43,25 @@ function readAskedLine() {
 }
 
 describe('the owner on a shared task page', () => {
-  it('names the owner by their login for a teammate', () => {
+  it('names the owner by their first name for a teammate, with no @', () => {
     const { unmount } = renderShared('kai', 'mona');
-    expect(readAskedLine()).toContain('@kai ·');
+    expect(readAskedLine()).toContain('Kai ·');
+    expect(readAskedLine()).not.toContain('@');
     expect(readAskedLine()).not.toContain('You');
+    expect(screen.getByText('Shared by Kai from Studio')).toBeTruthy();
     unmount();
   });
 
   it('names the owner for a visitor who is not signed in', () => {
     const { unmount } = renderShared('kai', null);
-    expect(readAskedLine()).toContain('@kai ·');
+    expect(readAskedLine()).toContain('Kai ·');
+    unmount();
+  });
+
+  it('falls back to the login without the @ when the engine sent no profile', () => {
+    const { unmount } = renderShared('kai', 'mona', {}, null);
+    expect(readAskedLine()).toContain('kai ·');
+    expect(readAskedLine()).not.toContain('@');
     unmount();
   });
 
@@ -69,7 +85,7 @@ describe('the owner on a shared task page', () => {
       cancelledFrom: 'planning',
       stageReason: 'cancelled by you',
     });
-    expect(screen.getByText('Cancelled at Plan: @kai cancelled the task.')).toBeTruthy();
+    expect(screen.getByText('Cancelled at Plan: Kai cancelled the task.')).toBeTruthy();
     cancelled.unmount();
     const fixing = renderShared('kai', 'mona', {
       stage: 'fixing',
@@ -84,7 +100,7 @@ describe('the owner on a shared task page', () => {
         },
       ],
     });
-    expect(screen.getByText('@kai’s request')).toBeTruthy();
+    expect(screen.getByText('Kai’s request')).toBeTruthy();
     expect(screen.queryByText('Your request')).toBeNull();
     fixing.unmount();
   });

@@ -91,8 +91,8 @@ describe('resolveNowTitle', () => {
     );
     const yours = { ...closed, cancelledFrom: 'planning' as const, stageReason: 'cancelled by you' };
     expect(resolveNowTitle(yours, [], null, undefined)).toBe('Cancelled at Plan: you cancelled the task.');
-    expect(resolveNowTitle(yours, [], null, undefined, null, '@kai')).toBe(
-      'Cancelled at Plan: @kai cancelled the task.'
+    expect(resolveNowTitle(yours, [], null, undefined, null, 'Kai')).toBe(
+      'Cancelled at Plan: Kai cancelled the task.'
     );
     expect(resolveNowTitle(yours, [], null, undefined, null, 'The owner')).toBe(
       'Cancelled at Plan: the owner cancelled the task.'
@@ -347,8 +347,8 @@ describe('what the now card shows', () => {
 describe('describeResultTitle', () => {
   it('names the owner whose question was answered, and leaves the other steps alone', () => {
     expect(describeResultTitle('answer')).toBe('Answered your question');
-    expect(describeResultTitle('answer', '@kai')).toBe('Answered @kai’s question');
+    expect(describeResultTitle('answer', 'Kai')).toBe('Answered Kai’s question');
     expect(describeResultTitle('answer', 'The owner')).toBe('Answered the owner’s question');
-    expect(describeResultTitle('research', '@kai')).toBe('Wrote the report');
+    expect(describeResultTitle('research', 'Kai')).toBe('Wrote the report');
   });
 });

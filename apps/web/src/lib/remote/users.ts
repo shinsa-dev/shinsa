@@ -1,4 +1,6 @@
-import type { RemoteAccess, RemoteDevice, RemoteUser } from '@shinsa/core';
+import type { RemoteAccess, RemoteDevice, RemoteUser, SharedPerson } from '@shinsa/core';
+
+export type UserProfile = Pick<RemoteUser, 'login' | 'name' | 'avatarUrl'>;
 
 export function describeUserName(user: RemoteUser) {
   return user.name ?? `@${user.login}`;
@@ -6,6 +8,14 @@ export function describeUserName(user: RemoteUser) {
 
 export function describeUserHandle(user: RemoteUser) {
   return user.name ? `@${user.login}` : null;
+}
+
+export function resolveFirstName(user: Pick<RemoteUser, 'login' | 'name'>) {
+  return user.name?.trim().split(/\s+/)[0] || user.login;
+}
+
+export function resolveSharedProfile(login: string, profile: SharedPerson | null = null): UserProfile {
+  return { login, name: profile?.name ?? null, avatarUrl: profile?.avatarUrl ?? null };
 }
 
 export function resolveUserInitial(user: RemoteUser) {

@@ -195,7 +195,7 @@ describe('HandoverCard for the process tools', () => {
   it('names the owner instead of you on a teammate’s shared page', () => {
     const view = render(
       <TooltipProvider>
-        <ReadOnlyProvider owner='@kai'>
+        <ReadOnlyProvider owner={{ name: 'Kai', user: null }}>
           <HandoverCard
             call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
             run={createRun({ id: 'r', taskId: 't' })}
@@ -206,8 +206,8 @@ describe('HandoverCard for the process tools', () => {
         </ReadOnlyProvider>
       </TooltipProvider>
     );
-    expect(view.getByText('Asked @kai')).toBeTruthy();
-    expect(view.getByText('@kai’s answer')).toBeTruthy();
+    expect(view.getByText('Asked Kai')).toBeTruthy();
+    expect(view.getByText('Kai’s answer')).toBeTruthy();
     expect(view.queryByText('Asked you')).toBeNull();
     expect(view.queryByText('Your answer')).toBeNull();
   });

@@ -3,7 +3,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import type * as React from 'react';
 import { InAppLink } from '@/components/links/link.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
-import { useReadOnlyOwner } from '@/components/task/read-only.tsx';
+import { useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
@@ -88,7 +88,7 @@ export function ActivityRow({
   onOpenRun: (runId: string) => void;
 }) {
   const run = entry.runId ? state.runs[entry.runId] : undefined;
-  const owner = useReadOnlyOwner();
+  const owner = useReadOnlyOwnerName();
   return (
     <ActivityEntry
       glyph={resolveActivityGlyph(entry)}

@@ -32,7 +32,7 @@ describe('the team join page on app.shinsa.dev', () => {
     render(<TeamJoinPage link={LINK} dashboard={DASHBOARD} teamKeys={TEAM_KEYS} request={request} />);
     expect(screen.getByText('Read-only, and never the chat')).toBeTruthy();
     expect(await screen.findByText('Join Platform')).toBeTruthy();
-    expect(screen.getByText(/Mona Lisa owns this team/)).toBeTruthy();
+    expect(screen.getByText(/Mona owns this team/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Ask to join' }));
     expect(await screen.findByText('Request sent')).toBeTruthy();
     expect(screen.getByText(/Kai Lane accepts or declines your request to join Platform/)).toBeTruthy();

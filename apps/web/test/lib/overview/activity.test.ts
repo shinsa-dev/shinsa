@@ -158,11 +158,11 @@ describe('activity marks', () => {
       detail: null,
       evidenceId: null,
     };
-    expect(resolveActivityActor(state, entry, '@kai')).toEqual({ label: '@kai', taskId: null });
+    expect(resolveActivityActor(state, entry, 'Kai')).toEqual({ label: 'Kai', taskId: null });
     expect(resolveActivityActor(state, entry, 'The owner').label).toBe('The owner');
-    expect(resolveActivityActor(state, { ...entry, actor: 'agent' }, '@kai').label).toBe('Agent');
-    expect(resolveActivityActor(state, { ...entry, onBehalf: true }, '@kai').label).toBe(
-      'Shinsa (on @kai’s behalf)'
+    expect(resolveActivityActor(state, { ...entry, actor: 'agent' }, 'Kai').label).toBe('Agent');
+    expect(resolveActivityActor(state, { ...entry, onBehalf: true }, 'Kai').label).toBe(
+      'Shinsa (on Kai’s behalf)'
     );
     expect(resolveActivityActor(state, { ...entry, onBehalf: true, byTask: 'a1' }, 'The owner')).toEqual({
       label: 'SW-142 agent (on the owner’s behalf)',

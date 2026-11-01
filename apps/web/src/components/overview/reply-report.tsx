@@ -5,7 +5,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { AgentReplyBlock } from '@/components/overview/agent-reply.tsx';
-import { useReadOnlyOwner } from '@/components/task/read-only.tsx';
+import { useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
@@ -36,7 +36,7 @@ function SentFold({ task, iteration }: { task: Task; iteration: Iteration }) {
     false
   );
   const sent = describeRequestText(iteration);
-  const label = describeSentLabel(useReadOnlyOwner());
+  const label = describeSentLabel(useReadOnlyOwnerName());
   if (!sent) return null;
   return (
     <div className='flex flex-col gap-1.5'>
@@ -72,7 +72,7 @@ export function ReplyReport({
 
 export function WorkingRequest({ iteration }: { iteration: Iteration }) {
   const text = describeRequestText(iteration);
-  const label = describeRequestLabel(useReadOnlyOwner());
+  const label = describeRequestLabel(useReadOnlyOwnerName());
   if (!text) return null;
   return (
     <div className='flex flex-col gap-1'>
@@ -116,7 +116,7 @@ function ExchangeRow({ task, iteration }: { task: Task; iteration: AnsweredItera
 
 export function RequestsPanel({ task, shownId }: { task: Task; shownId: string | null }) {
   const replies = listEarlierReplies(task, shownId);
-  const owner = useReadOnlyOwner();
+  const owner = useReadOnlyOwnerName();
   if (replies.length === 0) return null;
   return (
     <Panel

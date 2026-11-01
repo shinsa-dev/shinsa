@@ -1,7 +1,6 @@
 import {
   type ChatToolArgs,
   capitalise,
-  lowerFirst,
   type Run,
   resolvePhaseChange,
   type ShinsaState,
@@ -21,7 +20,7 @@ import { InAppLink } from '@/components/links/link.tsx';
 import { AgentReplyBlock } from '@/components/overview/agent-reply.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
 import { PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
-import { useReadOnlyOwner } from '@/components/task/read-only.tsx';
+import { useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -43,6 +42,7 @@ import { selectPlanRevision } from '@/lib/overview/plan-version.ts';
 import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeReportedFindings, readReportedFindings } from '@/lib/review/findings.ts';
 import { resolveReviewPath } from '@/lib/review/places.ts';
+import { describeOwnerInSentence } from '@/lib/share/page.ts';
 import { describeSteps } from '@/lib/tasks/shapes.ts';
 import {
   describeSuggestionDetail,
@@ -228,11 +228,15 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
   const context = readString(args, 'context');
   const choices = readStrings(args, 'choices');
   const answer = resolveAskAnswer(call);
-  const owner = useReadOnlyOwner();
+  const owner = useReadOnlyOwnerName();
   return (
     <Card
       icon='IconBubbleQuestion'
-      title={delegated ? 'Asked the agent that delegated it' : `Asked ${owner ? lowerFirst(owner) : 'you'}`}
+      title={
+        delegated
+          ? 'Asked the agent that delegated it'
+          : `Asked ${owner ? describeOwnerInSentence(owner) : 'you'}`
+      }
       meta={resolveAskMeta(call, delegated)}
     >
       <span className='selectable text-fg-4 text-xs'>

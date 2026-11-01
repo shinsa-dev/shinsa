@@ -11,7 +11,7 @@ import {
   type UserCommand,
 } from '@shinsa/core';
 import { formatSince } from '@/lib/format/time.ts';
-import { describeUserName } from '@/lib/remote/users.ts';
+import { resolveFirstName } from '@/lib/remote/users.ts';
 
 export const TEAMS_SECTION = 'Teams';
 
@@ -42,7 +42,7 @@ export function describeTeamEntry(entry: RemoteTeamEntry, now = Date.now()) {
   if (!team) return 'You asked to join. The team’s owner has not answered yet.';
   const people = team.members.length + 1;
   const count = `${people} ${people === 1 ? 'person' : 'people'}`;
-  const role = team.role === 'owner' ? 'You own it' : `Owned by ${describeUserName(team.owner)}`;
+  const role = team.role === 'owner' ? 'You own it' : `Owned by ${resolveFirstName(team.owner)}`;
   return `${role} · ${count} · ${formatSince('Made', team.createdAt, now)}`;
 }
 

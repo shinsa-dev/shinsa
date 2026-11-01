@@ -69,11 +69,11 @@ describe('resolveTriageWhy', () => {
   });
 
   it('names the owner who changed a fact to anyone else looking', () => {
-    expect(whyOf({ waitsOn: ['base'], priority: 'urgent' }, DECIDED, '@kai')).toEqual([
-      '@kai changed this. Shinsa chose “starts now”: Nothing it touches is in flight.',
-      '@kai changed this. Shinsa chose “normal priority”: Nothing is waiting on it.',
+    expect(whyOf({ waitsOn: ['base'], priority: 'urgent' }, DECIDED, 'Kai')).toEqual([
+      'Kai changed this. Shinsa chose “starts now”: Nothing it touches is in flight.',
+      'Kai changed this. Shinsa chose “normal priority”: Nothing is waiting on it.',
     ]);
-    expect(whyOf({}, DECIDED, '@kai')).toEqual([
+    expect(whyOf({}, DECIDED, 'Kai')).toEqual([
       'Shinsa chose this: Nothing it touches is in flight.',
       'Shinsa chose this: Nothing is waiting on it.',
     ]);

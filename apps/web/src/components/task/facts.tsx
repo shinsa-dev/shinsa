@@ -36,7 +36,7 @@ import { PriorityChoices } from '@/components/task/action-items.tsx';
 import { BundleFact } from '@/components/task/bundle.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
-import { useReadOnly, useReadOnlyOwner } from '@/components/task/read-only.tsx';
+import { useReadOnly, useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
@@ -319,7 +319,7 @@ function CostFact({ state, task }: { state: ShinsaState; task: Task }) {
 
 function PriorityFact({ state, task }: { state: ShinsaState; task: Task }) {
   const readOnly = useReadOnly();
-  const why = resolveTriageWhy(state, task, 'priority', useReadOnlyOwner());
+  const why = resolveTriageWhy(state, task, 'priority', useReadOnlyOwnerName());
   if (readOnly) {
     const fact = (
       <span className={FACT}>
@@ -347,7 +347,7 @@ function PriorityFact({ state, task }: { state: ShinsaState; task: Task }) {
 
 function StartedFact({ state, task }: { state: ShinsaState; task: Task }) {
   const waiting = listPendingDependencies(state, task).length > 0;
-  const owner = useReadOnlyOwner();
+  const owner = useReadOnlyOwnerName();
   const why = waiting ? null : resolveTriageWhy(state, task, 'start', owner);
   return (
     <span className={FACT}>
@@ -384,7 +384,7 @@ function AccountFact({ task }: { task: Task }) {
 
 function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
   const original = selectDuplicateOriginal(state, task);
-  const owner = useReadOnlyOwner();
+  const owner = useReadOnlyOwnerName();
   if (!original || !task.duplicate) return null;
   return (
     <Hint label={describeDuplicateHint(task.duplicate, owner)}>
@@ -497,7 +497,7 @@ function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
 
 function WaitsOnFact({ state, task }: { state: ShinsaState; task: Task }) {
   const waitsOn = listPendingDependencies(state, task);
-  const owner = useReadOnlyOwner();
+  const owner = useReadOnlyOwnerName();
   if (waitsOn.length === 0) return null;
   const cancelled = waitsOn.some((blocker) => blocker.stage === 'cancelled');
   const why = resolveTriageWhy(state, task, 'start', owner);

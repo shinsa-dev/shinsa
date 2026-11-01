@@ -35,7 +35,7 @@ import { SilenceNote } from '@/components/overview/silence-note.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
-import { useReadOnly, useReadOnlyOwner } from '@/components/task/read-only.tsx';
+import { useReadOnly, useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { InsetNote } from '@/components/text/inset-note.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
@@ -385,7 +385,7 @@ function WorkCard({
   const leaf = traceStalledLeaf(state, task);
   const checks = task.stage === 'checking' ? resolveChecksView(state, task) : null;
   const request = selectWorkingRequest(task);
-  const owner = useReadOnlyOwner();
+  const owner = useReadOnlyOwnerName();
   return (
     <NowFrame
       eyebrow={
@@ -501,7 +501,7 @@ export function ResultCard({
   onOpen: (target: NowTarget, runId?: string) => void;
   onReply?: GateReplier;
 }) {
-  const owner = useReadOnlyOwner();
+  const owner = useReadOnlyOwnerName();
   const result = task.result;
   if (!result) return null;
   const run = result.runId ? state.runs[result.runId] : undefined;
