@@ -4942,14 +4942,21 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
 
 ### Run on a server
 
-The same engine runs headless on a Linux machine that is always on, a VPS or a box under a desk, with no app and no
-window: you reach it from your other devices through remote access, and set it up over SSH.
+The same engine runs headless on a Linux machine that is always on, a VPS or a box under a desk, or on a Mac mini
+without the app, with no window: you reach it from your other devices through remote access, and set it up over SSH.
+
+- **Installing it.** `curl -fsSL https://shinsa.dev/install | sh` installs the release's engine under
+  `~/.local/share/shinsa` and links `~/.local/bin/shinsa`, after checking its SHA-256; `npm i -g shinsa` (or
+  `bunx shinsa`) installs the same engine through `@shinsa/<os>-<cpu>`. Either way it is the one folder every release
+  carries (`docs/release.md` → The engine on its own): `bin/shinsa` with `plugin/` and `web/` beside it, so the
+  interface comes with it and is served on the engine's port as in the app. Linux x64 and arm64 (glibc) and Apple
+  Silicon Macs only.
 
 - **The bundle.** `SHINSA_ENGINE_TARGET=bun-linux-x64` (or `bun-linux-arm64`) makes `build-engine.ts` compile the
   same bundle, `bin/shinsa` with `plugin/` and `web/` beside it, into `apps/engine/dist/engine-linux-x64` (each
   target its own folder; the Mac app's stays `dist/engine`). An unknown target fails with the list
   (`resolveBuildTarget`, `instance/targets.ts`). It needs git, the GitHub CLI and Claude Code on the login shell's
-  `PATH`, as on a Mac. Publishing it (npm and an install script) is its own task.
+  `PATH`, as on a Mac. The release packs these folders (`docs/release.md` → The engine on its own).
 - **The service** (`instance/systemd.ts`, `createSystemdService`). On Linux, `shinsa start` sets the engine up as a
   systemd user service, `~/.config/systemd/user/shinsa.service`: `ExecStart` is this `shinsa` with `engine`,
   `SHINSA_SERVICE=1`, the `SHINSA_HOME`, `SHINSA_DATA_DIR`, `XDG_CONFIG_HOME`, `SHINSA_PORT` and `SHINSA_HOST` the
@@ -4971,6 +4978,18 @@ window: you reach it from your other devices through remote access, and set it u
   `WAYLAND_DISPLAY` is set, and otherwise print the address to open from a browser that reaches the machine
   (`resolveBrowserCommand`, `shell/browser.ts`). Remote pairing does not try to open the GitHub sign-in either:
   `shinsa remote pair` prints its address and code. Off the Mac, a missing `SHELL` means `/bin/sh`, not zsh.
+- **On a Mac without the app** (`cli/launchd.ts`, `createLaunchdService` with `inApp: false`). A `shinsa` from npm or
+  the install script is a bundled build outside an app, so `shinsa start` sets up launchd itself: it writes
+  `~/Library/LaunchAgents/studio.overclock.shinsa.engine.plist`, the app's label, running this `shinsa` with `engine`,
+  `SHINSA_SERVICE=1` and the same carried variables as the systemd unit, with `RunAtLoad`, `KeepAlive` on a failed
+  exit, `ThrottleInterval` 5 s and `ProcessType` `Interactive`, and `bootstrap`s it; a later start leaves a current
+  job alone, and replaces a stale one (`bootout`, write, `bootstrap`). Sharing the app's label means only one engine
+  job is ever loaded, so two engines never meet on 7446: with the app's job loaded (`isAppJob`: a bundle id or a
+  program inside an `.app`) the start refuses with `engine_beside_app`, and installing the app later replaces the
+  agent with its own. `shinsa stop` and `shinsa restart` act only on a job this `shinsa` wrote, refusing the app's
+  with `engine_not_this_app` and another standalone copy's with `engine_not_this_install`, which `shinsa start` from
+  this copy takes over. `shinsa open` uses the browser there, since there is no app to open. To take it away:
+  `launchctl bootout gui/$(id -u)/studio.overclock.shinsa.engine`, then delete the plist.
 - **Setting it up over SSH**, in order: `shinsa start`; `shinsa accounts sign-in`, whose address you open anywhere,
   then `shinsa accounts sign-in-code` with the code it shows; `gh auth login`; `shinsa folders add ~/code`; and
   `shinsa remote pair`, finished from any device, after which the machine is on app.shinsa.dev with the rest. The
