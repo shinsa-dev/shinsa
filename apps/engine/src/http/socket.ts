@@ -42,7 +42,7 @@ const DROPPED = 0;
 
 function deliver(socket: Socket, payload: string) {
   if (socket.send(payload) !== DROPPED) return;
-  log.warn('[Socket] Dropped a message, closing the socket', { bytes: payload.length });
+  log.warn('[Socket] Dropped a message, closing the socket', { bytes: Buffer.byteLength(payload) });
   socket.close?.();
 }
 
