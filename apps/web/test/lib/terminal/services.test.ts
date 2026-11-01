@@ -35,6 +35,7 @@ import {
   resolveActiveService,
   resolveServiceForm,
   resolveServiceGroupId,
+  resolveServiceLink,
   resolveServicesAddTarget,
   resolveServicesProjects,
   resolveShownErrors,
@@ -124,6 +125,53 @@ describe('a service’s preview', () => {
     expect(open).not.toHaveBeenCalled();
     openServicePreview(running);
     expect(open).toHaveBeenCalledWith('http://localhost:4123/tasks/SH-4', '_blank', 'noopener');
+    open.mockRestore();
+  });
+});
+
+describe('a service’s private address', () => {
+  const service = createService({ id: 'web', previewUrl: 'http://localhost:{port}/tasks/SH-4' });
+  const remoteUrl = 'https://abc.shinsa.page/tasks/SH-4';
+  const running = resolveServiceView(
+    service,
+    createTerminal({ id: 't-web', serviceId: 'web', port: 4123, startedAt: NOW - 60_000, remoteUrl }),
+    NOW
+  );
+  const older = resolveServiceView(
+    service,
+    createTerminal({ id: 't-web', serviceId: 'web', port: 4123, startedAt: NOW - 60_000 }),
+    NOW
+  );
+  const opened = `/__remote/previews/open?url=${encodeURIComponent(remoteUrl)}`;
+
+  it('opens the local URL on this machine, and the private address through remote access', () => {
+    const local = 'http://localhost:4123/tasks/SH-4';
+    expect(resolveServiceLink(running, undefined, false)).toEqual({ href: local, text: local });
+    expect(resolveServiceLink(running, undefined, true)).toEqual({ href: opened, text: remoteUrl });
+  });
+
+  it('keeps the local URL for an engine that sends no private address, and nothing for a stopped service', () => {
+    const local = 'http://localhost:4123/tasks/SH-4';
+    expect(resolveServiceLink(older, undefined, true)).toEqual({ href: local, text: local });
+    const stopped = resolveServiceView(
+      service,
+      createTerminal({ id: 't-web', serviceId: 'web', status: 'stopped', endedAt: NOW, remoteUrl }),
+      NOW
+    );
+    expect(resolveServiceLink(stopped, undefined, true)).toBeNull();
+  });
+
+  it('carries the path of a preview the agent attached onto the private address', () => {
+    expect(resolveServiceLink(running, 'http://localhost:4123/cart?x=1#top', true)).toEqual({
+      href: `/__remote/previews/open?url=${encodeURIComponent('https://abc.shinsa.page/cart?x=1#top')}`,
+      text: 'https://abc.shinsa.page/cart?x=1#top',
+    });
+  });
+
+  it('opens the private address in a new window through remote access', () => {
+    const open = spyOn(window, 'open').mockImplementation(() => null);
+    openServicePreview(running, true);
+    expect(open).toHaveBeenCalledWith(opened, '_blank', 'noopener');
     open.mockRestore();
   });
 });

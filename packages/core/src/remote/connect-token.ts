@@ -8,7 +8,7 @@ export interface ConnectClaim {
   expiresAt: number;
 }
 
-function importConnectKey(connectKey: string) {
+export function importConnectKey(connectKey: string) {
   const raw = parseBase64Url(connectKey);
   if (!raw || raw.length === 0) return null;
   return crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);

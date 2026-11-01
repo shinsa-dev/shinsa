@@ -515,6 +515,7 @@ describe('the tunnel entry point', () => {
           return Promise.resolve({ kind: 'response', response: new Response('page', { status: 203 }) });
         const upgrade = {
           previewId: 'p1',
+          userId: null,
           target: 'ws://localhost:1/',
           headers: {},
           protocols: ['vite-hmr'],
@@ -1057,6 +1058,30 @@ describe('links, access requests and members', () => {
     await local('/api/remote/requests/accept', { requestId: await waitForRequest(remote) });
     await opening;
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineMemberAdd)).toBe(false);
+  });
+
+  test('a request accepted the moment it is announced still lets the browser in', async () => {
+    const { remote, local, port, plane } = await start({
+      access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },
+    });
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
+    remote.subscribe(() => {
+      const request = remote.snapshot().requests[0];
+      if (request) void remote.acceptRequest(request.id);
+    });
+    await local('/api/remote/link/create', {});
+    const machine = await remote.store.resolveMachineKey();
+    const channel = await openChannel(
+      remote.appOrigin,
+      port,
+      readLink(remote)?.secret ?? '',
+      machine.publicKey,
+      {
+        userId: KAI.id,
+      }
+    );
+    expect(channel.session).toBeTruthy();
+    expect(remote.snapshot().requests).toEqual([]);
   });
 
   test('a request is refused when the machine cannot check who asked', async () => {

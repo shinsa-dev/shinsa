@@ -14,7 +14,7 @@ import {
   PREVIEW_SHARED_TITLE,
   resolvePreviewTarget,
 } from '@/lib/share/previews.ts';
-import { listTaskPreviews, selectServicePreview } from '@/lib/terminal/services.ts';
+import { listTaskPreviews, resolveServiceLink } from '@/lib/terminal/services.ts';
 
 export const PREVIEW_LINK =
   'corner-superellipse/1.125 flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control bg-bg-2 px-2.5 text-xs hover:bg-bg-3 active:bg-bg-3';
@@ -69,14 +69,14 @@ export function TaskPreviewLinks({ views }: { views: ServiceView[] }) {
   return (
     <div className='flex flex-col gap-1'>
       {views.map((view) => {
-        const url = selectServicePreview(view);
-        if (!url) return null;
+        const link = resolveServiceLink(view);
+        if (!link) return null;
         return (
           <PreviewLinkRow key={view.service.id} share={view}>
-            <a href={url} target='_blank' rel='noreferrer' className={PREVIEW_LINK}>
+            <a href={link.href} target='_blank' rel='noreferrer' className={PREVIEW_LINK}>
               <Icon size='sm' name='IconArrowUpRight' className='shrink-0 text-fg-2' />
               <span className='shrink-0 font-medium text-fg-4'>{view.service.name}</span>
-              <Truncate className='min-w-0 text-2xs text-fg-2'>{url}</Truncate>
+              <Truncate className='min-w-0 text-2xs text-fg-2'>{link.text}</Truncate>
             </a>
           </PreviewLinkRow>
         );

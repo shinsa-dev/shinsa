@@ -46,6 +46,7 @@ export interface ServiceView {
   exitCode: number | null;
   since: number | null;
   url: string | null;
+  remoteUrl: string | null;
 }
 
 export interface TaskServiceView extends ServiceView {
@@ -126,6 +127,7 @@ export function resolveServiceView(
     exitCode: terminal?.exitCode ?? null,
     since,
     url: resolveServiceUrl(service, terminal),
+    remoteUrl: terminal?.status === 'running' ? (terminal.remoteUrl ?? null) : null,
   };
 }
 

@@ -6,6 +6,7 @@ import {
   listServiceTaskRuns,
   listTaskServices,
   type Project,
+  REMOTE_PATHS,
   resolveFocusProject,
   resolveServicesSummary,
   SERVICE_LIMITS,
@@ -26,6 +27,7 @@ import { formatDuration } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { listProjects } from '@/lib/projects.ts';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
 
 export const SERVICE_GLYPHS: Record<ServiceState, { icon: IconName; activeIcon: IconName; tone: Tone }> = {
   stopped: { icon: 'IconCircleDashed', activeIcon: 'IconCircleDashedFilled', tone: 'neutral' },
@@ -130,9 +132,32 @@ export function describeServicePreview(view: ServiceView, label: string | null =
   return label ? `Open ${view.service.name} for ${label}` : `Open ${view.service.name}`;
 }
 
-export function openServicePreview(view: ServiceView) {
-  const url = selectServicePreview(view);
-  if (url) window.open(url, '_blank', 'noopener');
+export interface ServiceLink {
+  href: string;
+  text: string;
+}
+
+export function resolveServiceLink(
+  view: ServiceView,
+  localUrl = selectServicePreview(view),
+  remote = isRemoteBuild()
+): ServiceLink | null {
+  if (!localUrl) return null;
+  if (!(remote && view.remoteUrl && isServiceActive(view))) return { href: localUrl, text: localUrl };
+  const local = new URL(localUrl);
+  const target = new URL(view.remoteUrl);
+  target.pathname = local.pathname;
+  target.search = local.search;
+  target.hash = local.hash;
+  return {
+    href: `${REMOTE_PATHS.previewOpen}?${new URLSearchParams({ url: target.href })}`,
+    text: target.href,
+  };
+}
+
+export function openServicePreview(view: ServiceView, remote = isRemoteBuild()) {
+  const link = resolveServiceLink(view, selectServicePreview(view), remote);
+  if (link) window.open(link.href, '_blank', 'noopener');
 }
 
 export function describeServicesTrigger(views: ServiceView[]): { label: string; tone: Tone } {

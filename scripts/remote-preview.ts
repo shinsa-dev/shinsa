@@ -1,7 +1,12 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ServerWebSocket } from 'bun';
-import { isPreviewHost, PREVIEW_COOKIE, respondPreview } from '../apps/cloud/src/previews.ts';
+import {
+  isPreviewHost,
+  PREVIEW_ACCESS_COOKIE,
+  PREVIEW_COOKIE,
+  respondPreview,
+} from '../apps/cloud/src/previews.ts';
 import type { CloudWorld } from '../apps/cloud/src/world.ts';
 import { Transcripts } from '../apps/engine/src/agents/index.ts';
 import { ProviderRegistry } from '../apps/engine/src/agents/providers/index.ts';
@@ -26,12 +31,16 @@ import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,
   createConnectToken,
+  createPreviewAccessToken,
   createSettings,
   type InviteAcceptResponse,
   type InviteCreateResponse,
   isTaskSettled,
   type NativeSignInTokenResponse,
+  PREVIEW_ACCESS_HEADER,
+  PREVIEW_ACCESS_PARAM,
   PREVIEW_KEY_HEADER,
+  PREVIEW_OPEN_TTL_MS,
   parsePreviewHost,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
@@ -236,6 +245,7 @@ interface PreviewShare {
 
 interface ServicePreview {
   url: string;
+  privateUrl: string | null;
   handle: string;
   port: number;
 }
@@ -300,6 +310,19 @@ function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
   );
 }
 
+function acceptEveryRequest(remote: Remote) {
+  const accepting = new Set<string>();
+  remote.subscribe(() => {
+    for (const request of remote.snapshot().requests) {
+      if (accepting.has(request.id)) continue;
+      accepting.add(request.id);
+      void remote.acceptRequest(request.id).catch((error: unknown) => {
+        console.error(`Could not accept ${request.deviceName}: ${String(error)}`);
+      });
+    }
+  });
+}
+
 async function startMachine(id: string, name: string, dataDir: string) {
   const connectKey = serializeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   writeRemoteFile(dataDir, id, connectKey);
@@ -328,6 +351,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     machineName: name,
     openUrl: () => Promise.resolve(),
   });
+  acceptEveryRequest(remote);
   const evidence = new EvidenceStore(config.evidenceDir);
   const transcripts = new Transcripts(config.transcriptsDir);
   const terminals = new Terminals({ dataDir, home: config.userHome, version: 'preview' });
@@ -346,6 +370,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     services: terminals,
     origin: config.previewOrigin,
   });
+  terminals.applyRemoteUrls(previews);
   const http = startServer({
     engine,
     config,
@@ -625,9 +650,17 @@ async function createServicePreview(
   await engine.dispatch({ type: 'preview.share', taskId: task.id, serviceId: service.id, limit: 'none' });
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const preview = engine.state.tasks[task.id]?.previews?.find((entry) => entry.serviceId === service.id);
-    if (preview?.url)
+    const run = terminals
+      .snapshot()
+      .terminals.find((entry) => entry.serviceId === service.id && entry.taskId === task.id);
+    if (preview?.url && run?.remoteUrl)
       return {
-        preview: { url: preview.url, handle: task.handle ?? task.id, port: studio.machine.port },
+        preview: {
+          url: preview.url,
+          privateUrl: run.remoteUrl,
+          handle: task.handle ?? task.id,
+          port: studio.machine.port,
+        },
         demo,
       };
     if (preview?.failure) throw new Error(`Sharing the demo preview failed: ${preview.failure}`);
@@ -643,10 +676,12 @@ function startDemoService(demo: DemoService) {
 function createPreviewWorld(machines: Machine[]): CloudWorld {
   return {
     store: {
-      selectInstance: (id: string) =>
-        Promise.resolve(
-          machines.some((machine) => machine.id === id) ? { online: 1, last_seen_at: Date.now() } : null
-        ),
+      selectInstance: (id: string) => {
+        const machine = machines.find((entry) => entry.id === id);
+        return Promise.resolve(
+          machine ? { online: 1, last_seen_at: Date.now(), connect_key: machine.connectKey } : null
+        );
+      },
     },
     fetch: (target: string, init?: RequestInit) => {
       const url = new URL(target);
@@ -664,15 +699,19 @@ function createPreviewWorld(machines: Machine[]): CloudWorld {
 function upgradePreview(request: Request, url: URL, machines: Machine[], server: Bun.Server<TunnelData>) {
   const address = parsePreviewHost(url.host, PREVIEW_ZONE);
   const machine = machines.find((entry) => entry.id === address?.instanceId);
-  const key = readPreviewCookie(request);
-  if (!(address && machine && key)) return new Response('Not shared', { status: 404 });
+  const key = readCookie(request, PREVIEW_COOKIE);
+  const access = readCookie(request, PREVIEW_ACCESS_COOKIE);
+  if (!(address && machine && (key || access))) return new Response('Not shared', { status: 404 });
   const path = `${resolvePreviewTunnelPath(address.previewId, url.pathname)}${url.search}`;
   const data: TunnelData = {
     machine,
     path,
     upstream: null,
     pending: [],
-    headers: { [PREVIEW_KEY_HEADER]: key },
+    headers: {
+      ...(key ? { [PREVIEW_KEY_HEADER]: key } : {}),
+      ...(access ? { [PREVIEW_ACCESS_HEADER]: access } : {}),
+    },
   };
   if (server.upgrade(request, { data })) return undefined;
   return new Response('Upgrade failed', { status: 400 });
@@ -705,12 +744,26 @@ function respondPreviewHost(
   return respondPreview(request, url, world);
 }
 
-function readPreviewCookie(request: Request) {
+function readCookie(request: Request, cookie: string) {
   for (const part of (request.headers.get('cookie') ?? '').split(';')) {
     const [name, ...rest] = part.trim().split('=');
-    if (name === PREVIEW_COOKIE) return rest.join('=');
+    if (name === cookie) return rest.join('=');
   }
   return null;
+}
+
+async function respondPreviewOpen(url: URL, machines: Machine[]) {
+  const target = new URL(url.searchParams.get('url') ?? '', PREVIEW_ZONE);
+  const address = parsePreviewHost(target.host, PREVIEW_ZONE);
+  const machine = machines.find((entry) => entry.id === address?.instanceId);
+  if (!(address && machine)) return new Response('Not a service of yours', { status: 404 });
+  const token = await createPreviewAccessToken(machine.connectKey, {
+    ...address,
+    userId: USER.id,
+    expiresAt: Date.now() + PREVIEW_OPEN_TTL_MS,
+  });
+  target.searchParams.set(PREVIEW_ACCESS_PARAM, token);
+  return Response.redirect(target.href, 303);
 }
 
 function respondShareConnect(match: RegExpExecArray, machines: Machine[]) {
@@ -756,6 +809,19 @@ function listPreviewLinks(
             `The shared preview of ${preview.handle}'s web service, with live updates over a WebSocket`,
             preview.url,
           ],
+          ...(preview.privateUrl
+            ? [
+                [
+                  `${preview.handle} through remote access: Open on its web service goes to the private address`,
+                  `${ORIGIN}/tasks/${preview.handle}`,
+                ],
+                [
+                  `${preview.handle}'s web service at its private address, as Open goes there`,
+                  `${ORIGIN}${REMOTE_PATHS.previewOpen}?${new URLSearchParams({ url: preview.privateUrl })}`,
+                ],
+                ['The private address without signing in through Open (not shared)', preview.privateUrl],
+              ]
+            : []),
           ['Stop the web service (the preview then says it is not running)', `${ORIGIN}/__preview/demo/stop`],
           ['Start the web service again', `${ORIGIN}/__preview/demo/start`],
           ['A preview link that no longer works', `http://${'a'.repeat(32)}.localhost:${PORT}/`],
@@ -766,7 +832,7 @@ function listPreviewLinks(
       `${ORIGIN}${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
     ],
     ...machines.map((machine) => [
-      `Add this device to ${machine.name}`,
+      `Add this device to ${machine.name} (it is let in at once: the stand-in accepts every request)`,
       `${ORIGIN}/__preview/enroll/${machine.id}`,
     ]),
     ...machines.map((machine) => [
@@ -928,10 +994,8 @@ function respondTeams(request: Request, url: URL, teammates: Machine[]) {
   return null;
 }
 
-async function respondDashboard(request: Request, url: URL, machines: Machine[], teammates: Machine[]) {
+function respondSession(request: Request, url: URL) {
   const { pathname } = url;
-  const team = respondTeams(request, url, teammates);
-  if (team) return team;
   if (pathname === REMOTE_PATHS.session) return Response.json({ user: USER });
   if (pathname === REMOTE_PATHS.signIn && url.searchParams.get('client') === REMOTE_NATIVE_CLIENT)
     return respondNativeSignIn(url);
@@ -942,6 +1006,16 @@ async function respondDashboard(request: Request, url: URL, machines: Machine[],
   if (pathname === REMOTE_PATHS.signIn)
     return Response.redirect(`${ORIGIN}${url.searchParams.get('return') ?? REMOTE_PATHS.app}`, 302);
   if (pathname === REMOTE_PATHS.signOut) return Response.json({});
+  return null;
+}
+
+async function respondDashboard(request: Request, url: URL, machines: Machine[], teammates: Machine[]) {
+  const { pathname } = url;
+  const team = respondTeams(request, url, teammates);
+  if (team) return team;
+  const session = respondSession(request, url);
+  if (session) return session;
+  if (pathname === REMOTE_PATHS.previewOpen) return respondPreviewOpen(url, machines);
   if (pathname === REMOTE_PATHS.instances) return Response.json(await listInstances(machines));
   if (pathname.startsWith(`${REMOTE_PATHS.pairs}/`)) {
     const [studio] = machines;
