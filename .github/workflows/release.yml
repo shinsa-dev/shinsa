@@ -72,6 +72,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
     steps:
       - name: Mark the commit's release as pending
@@ -203,6 +204,10 @@ jobs:
             spctl --assess --type execute --verbose=2 "$app"
             xcrun stapler validate "$app"
           fi
+      - name: Pack the engine
+        env:
+          SHINSA_VERSION: ${{ steps.version.outputs.version }}
+        run: bun scripts/release-engine.ts bun-darwin-arm64 apps/desktop/release/mac-arm64/Shinsa.app/Contents/Resources/engine apps/desktop/release
       - name: Update files for the channels
         working-directory: apps/desktop/release
         env:
@@ -251,11 +256,49 @@ jobs:
             --generate-notes --notes "$NOTES" "${kind[@]}" \
             Shinsa-mac-arm64.dmg Shinsa-mac-arm64.dmg.blockmap \
             Shinsa-mac-arm64.zip Shinsa-mac-arm64.zip.blockmap \
+            shinsa-darwin-arm64.tar.gz shinsa-darwin-arm64.tar.gz.sha256 \
             "${updates[@]}"
           printf '**Published** [%s](%s/%s/releases/tag/%s).\n' "$title" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$TAG" >> "$GITHUB_STEP_SUMMARY"
 
-  downloads:
+  linux:
     needs: [trigger, mac]
+    strategy:
+      matrix:
+        include:
+          - target: bun-linux-x64
+            runner: ubuntu-latest
+          - target: bun-linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.trigger.outputs.sha }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+        working-directory: apps/web
+      - name: Build the engine
+        env:
+          SHINSA_VERSION: ${{ needs.mac.outputs.version }}
+          SHINSA_ENGINE_TARGET: ${{ matrix.target }}
+        run: bun apps/engine/scripts/build-engine.ts
+      - name: Pack the engine
+        env:
+          SHINSA_VERSION: ${{ needs.mac.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: bun scripts/release-engine.ts "$TARGET" "apps/engine/dist/engine-${TARGET#bun-}" release-engine
+      - name: Add it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.mac.outputs.tag }}
+        run: gh release upload "$TAG" release-engine/*.tar.gz release-engine/*.tar.gz.sha256 --clobber
+
+  downloads:
+    needs: [trigger, mac, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -274,7 +317,7 @@ jobs:
         run: bun scripts/release-upload.ts
 
   status:
-    needs: [trigger, mac, downloads]
+    needs: [trigger, mac, linux, downloads]
     if: ${{ always() && (needs.trigger.result == 'failure' || needs.trigger.outputs.build == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -289,13 +332,15 @@ jobs:
           TAG: ${{ needs.mac.outputs.tag }}
           TRIGGER: ${{ needs.trigger.result }}
           MAC: ${{ needs.mac.result }}
+          LINUX: ${{ needs.linux.result }}
           DOWNLOADS: ${{ needs.downloads.result }}
         run: |
-          case "$TRIGGER/$MAC/$DOWNLOADS" in
-            success/success/success) state=success description="Published $TAG" ;;
+          case "$TRIGGER/$MAC/$LINUX/$DOWNLOADS" in
+            success/success/success/success) state=success description="Published $TAG" ;;
             failure/*) state=failure description="Could not decide whether to build the $CHANNEL release" ;;
-            */cancelled/* | */*/cancelled) state=error description="Cancelled" ;;
-            */success/*) state=failure description="Published $TAG, but the downloads were not updated" ;;
+            */cancelled/* | */*/cancelled/* | */*/*/cancelled) state=error description="Cancelled" ;;
+            */success/success/*) state=failure description="Published $TAG, but the downloads were not updated" ;;
+            */success/*) state=failure description="Published $TAG, but the Linux engines were not added" ;;
             *) state=failure description="The $CHANNEL release failed to build" ;;
           esac
           echo "Release status for $RELEASE_SHA: $state ($description)"
