@@ -2850,10 +2850,12 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `Location` pointing at the local origin back into a path. A WebSocket (`Upgrade: websocket`, the dev server's hot
   reload) is upgraded on the engine and relayed both ways with its subprotocol, its close code passed on when it can
   be sent.
-- **When it stops.** A wrong key, a share that ended and an unknown id all get the same page, "This preview is no
-  longer shared.", so a guess learns nothing. A stopped run gets "The service behind this preview is not running."
-  (503, or 502 when the dev server refuses the connection), and the link works again the moment the service starts; an
-  offline machine gets the Worker's offline page. The engine marks its own pages with `x-shinsa-preview-page`
+- **When it stops.** A wrong key, a share that ended and an unknown id all get the same page, "This preview is not
+  shared", so a guess learns nothing. A stopped run gets "The service is not running" (503, or 502 when the dev
+  server refuses the connection), and the link works again the moment the service starts; an offline machine gets the
+  Worker's "The machine is offline". Each is one self-contained page in the app's look, the Shinsa mark and an empty
+  state, light or dark with the device (`serializePreviewPage`, `PREVIEW_PAGES`); the stopped and offline ones reload
+  every `PREVIEW_RETRY_SECONDS` (10), so the preview comes back on its own. The engine marks its own pages with `x-shinsa-preview-page`
   (`PREVIEW_PAGE_HEADER`), so the Worker tells a stopped service from a tunnel that does not answer.
   Stop sharing, a time limit running out (`ShareClock`, `preview.expire`) and turning remote access off close every
   open socket of the preview at once (`Previews.#syncSockets`).

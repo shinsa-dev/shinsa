@@ -22,14 +22,6 @@ export const PREVIEW_KEY_HEADER = 'x-shinsa-preview-key';
 
 export const PREVIEW_PAGE_HEADER = 'x-shinsa-preview-page';
 
-export const PREVIEW_GONE = 'This preview is no longer shared.';
-
-export const PREVIEW_STOPPED =
-  'The service behind this preview is not running. This page works again once it starts.';
-
-export const PREVIEW_OFFLINE =
-  'The machine that shares this preview is offline. This page works again once it is back.';
-
 const LABEL_LIMIT = 63;
 
 const SEGMENT = /^[A-Za-z0-9_-]+$/;
@@ -115,24 +107,4 @@ export function parsePreviewTunnelPath(pathname: string) {
   const previewId = slash === -1 ? rest : rest.slice(0, slash);
   if (!isPreviewId(previewId)) return null;
   return { previewId, path: slash === -1 ? '/' : rest.slice(slash) };
-}
-
-const HTML_ESCAPES: Readonly<Record<string, string>> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-};
-
-export function serializePreviewPage(message: string) {
-  const text = message.replace(/[&<>"']/g, (character) => HTML_ESCAPES[character] ?? character);
-  return [
-    '<!doctype html>',
-    '<html lang="en"><head><meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    '<title>Shinsa preview</title>',
-    '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.5 system-ui,sans-serif;color:#3f3f46;background:#fafafa}p{max-width:28rem;padding:0 1.5rem;text-align:center}@media (prefers-color-scheme:dark){body{color:#d4d4d8;background:#18181b}}</style>',
-    `</head><body><p>${text}</p></body></html>`,
-  ].join('');
 }

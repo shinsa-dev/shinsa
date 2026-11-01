@@ -121,7 +121,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   instance that is online is forwarded to `https://t-<instance>.shinsa.dev/__preview/<id><path>` with its method,
   query, body and headers, minus the preview cookie, Cloudflare's and proxies' own, and with the key in
   `x-shinsa-preview-key`; a WebSocket upgrade passes through as Cloudflare's 101. The machine checks the key. No
-  cookie, a malformed key or an unknown instance is "This preview is no longer shared." (404); an instance offline or
+  cookie, a malformed key or an unknown instance is "This preview is not shared" (404); an instance offline or
   a tunnel that does not answer (a network error, 502, 503, 504, 530 without the machine's
   `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`), and a tunnel
   that fails for an online instance is logged as `[Preview] Could not reach the tunnel` or `[Preview] The tunnel did

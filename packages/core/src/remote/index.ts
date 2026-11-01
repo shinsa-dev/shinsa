@@ -122,17 +122,23 @@ export {
   serializePlacementPrompt,
 } from './placement.ts';
 export {
+  PREVIEW_GONE,
+  PREVIEW_OFFLINE,
+  PREVIEW_PAGES,
+  PREVIEW_RETRY_SECONDS,
+  PREVIEW_STOPPED,
+  type PreviewPageKind,
+  serializePreviewPage,
+} from './preview-page.ts';
+export {
   isPreviewId,
   isPreviewKey,
-  PREVIEW_GONE,
   PREVIEW_ID_BYTES,
   PREVIEW_KEY_BYTES,
   PREVIEW_KEY_HEADER,
   PREVIEW_KEY_PARAM,
-  PREVIEW_OFFLINE,
   PREVIEW_ORIGIN,
   PREVIEW_PAGE_HEADER,
-  PREVIEW_STOPPED,
   PREVIEW_TUNNEL_PREFIX,
   type PreviewAddress,
   type PreviewLink,
@@ -143,7 +149,6 @@ export {
   resolvePreviewOrigin,
   resolvePreviewTunnelPath,
   serializePreviewLabel,
-  serializePreviewPage,
   serializePreviewUrl,
 } from './previews.ts';
 export {

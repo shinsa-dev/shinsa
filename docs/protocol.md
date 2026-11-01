@@ -1279,8 +1279,8 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 (`PREVIEW_ORIGIN`; `serializePreviewUrl`, `parsePreviewUrl`), the label lowercase base32 of the preview id's bytes
 followed by the instance id's (`serializePreviewLabel`, `parsePreviewLabel`, `parsePreviewHost`), one DNS label of 63
 characters at most. The engine's tunnel route is `PREVIEW_TUNNEL_PREFIX` (`/__preview/<id><path>`,
-`parsePreviewTunnelPath`); its pages are `serializePreviewPage` over `PREVIEW_GONE`, `PREVIEW_STOPPED` and
-`PREVIEW_OFFLINE`. Nothing is sealed: the key is checked on every request (`docs/engine.md` → Sharing a preview).
+`parsePreviewTunnelPath`); its pages are `serializePreviewPage('gone' | 'stopped' | 'offline')` (`preview-page.ts`,
+`PREVIEW_PAGES`), one self-contained page each in the app's empty-state look. Nothing is sealed: the key is checked on every request (`docs/engine.md` → Sharing a preview).
 
 **Shared tasks** (`shares.ts` and `share-channel.ts` here, `share/` for the projection): `SharedTask` is `task` (a
 `Task` with every field not copied by name left empty), `gates` and `runs` (redacted), `evidence` (current evidence; a

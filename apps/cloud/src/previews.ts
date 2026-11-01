@@ -1,11 +1,10 @@
 import {
   isPreviewKey,
-  PREVIEW_GONE,
   PREVIEW_KEY_HEADER,
   PREVIEW_KEY_PARAM,
-  PREVIEW_OFFLINE,
   PREVIEW_PAGE_HEADER,
   type PreviewAddress,
+  type PreviewPageKind,
   parsePreviewHost,
   resolvePreviewTunnelPath,
   resolveTunnelHost,
@@ -31,8 +30,8 @@ export function isPreviewHost(host: string, previewOrigin: string) {
   return lower === zone || lower.endsWith(`.${zone}`);
 }
 
-function respondPage(message: string, status: number) {
-  return new Response(serializePreviewPage(message), {
+function respondPage(kind: PreviewPageKind, status: number) {
+  return new Response(serializePreviewPage(kind), {
     status,
     headers: {
       'content-type': 'text/html; charset=utf-8',
@@ -115,7 +114,7 @@ async function forward(request: Request, url: URL, address: PreviewAddress, key:
       instanceId: address.instanceId,
       error: String(error),
     });
-    return respondPage(PREVIEW_OFFLINE, 503);
+    return respondPage('offline', 503);
   }
   if (answer.status === 101) return answer;
   if (TUNNEL_OFFLINE_STATUSES.has(answer.status) && !answer.headers.has(PREVIEW_PAGE_HEADER)) {
@@ -123,7 +122,7 @@ async function forward(request: Request, url: URL, address: PreviewAddress, key:
       instanceId: address.instanceId,
       status: answer.status,
     });
-    return respondPage(PREVIEW_OFFLINE, 503);
+    return respondPage('offline', 503);
   }
   return new Response(answer.body, {
     status: answer.status,
@@ -134,13 +133,13 @@ async function forward(request: Request, url: URL, address: PreviewAddress, key:
 
 export async function respondPreview(request: Request, url: URL, world: CloudWorld) {
   const address = parsePreviewHost(url.host, world.config.previewOrigin);
-  if (!address) return respondPage(PREVIEW_GONE, 404);
+  if (!address) return respondPage('gone', 404);
   const query = url.searchParams.get(PREVIEW_KEY_PARAM);
   if (query && isPreviewKey(query)) return respondKeyRedirect(url, query);
   const key = readCookie(request, PREVIEW_COOKIE);
-  if (!(key && isPreviewKey(key))) return respondPage(PREVIEW_GONE, 404);
+  if (!(key && isPreviewKey(key))) return respondPage('gone', 404);
   const row = await world.store.selectInstance(address.instanceId);
-  if (!row) return respondPage(PREVIEW_GONE, 404);
-  if (!isInstanceOnline(row, world.now())) return respondPage(PREVIEW_OFFLINE, 503);
+  if (!row) return respondPage('gone', 404);
+  if (!isInstanceOnline(row, world.now())) return respondPage('offline', 503);
   return forward(request, url, address, key, world);
 }

@@ -5,7 +5,7 @@ import {
   PREVIEW_KEY_BYTES,
   PREVIEW_KEY_HEADER,
   PREVIEW_PAGE_HEADER,
-  PREVIEW_STOPPED,
+  type PreviewPageKind,
   parsePreviewTunnelPath,
   parsePreviewUrl,
   selectServiceTerminal,
@@ -114,8 +114,8 @@ function createRandom(bytes: number) {
   return crypto.getRandomValues(new Uint8Array(bytes));
 }
 
-function respondPage(message: string, status: number) {
-  return new Response(serializePreviewPage(message), {
+function respondPage(kind: PreviewPageKind, status: number) {
+  return new Response(serializePreviewPage(kind), {
     status,
     headers: {
       'content-type': 'text/html; charset=utf-8',
@@ -295,10 +295,10 @@ export class Previews implements PreviewEffects, PreviewLinks {
     const parsed = parsePreviewTunnelPath(url.pathname);
     const share = parsed ? this.#resolveShare(parsed.previewId) : null;
     if (!(parsed && share && isKey(request.headers.get(PREVIEW_KEY_HEADER), share.key)))
-      return { kind: 'response', response: respondPage(PREVIEW_GONE, 404) };
+      return { kind: 'response', response: respondPage('gone', 404) };
     const run = selectServiceTerminal(this.#services.snapshot(), share.serviceId, share.taskId);
     if (!(run?.status === 'running' && run.port))
-      return { kind: 'response', response: respondPage(PREVIEW_STOPPED, 503) };
+      return { kind: 'response', response: respondPage('stopped', 503) };
     const path = `${parsed.path}${url.search}`;
     const headers = resolveForwardHeaders(request.headers, run.port);
     if (isUpgrade(request)) {
@@ -332,7 +332,7 @@ export class Previews implements PreviewEffects, PreviewLinks {
       });
     } catch (error) {
       log.warn('[Preview] Could not reach the service', { target, error: describeError(error) });
-      return respondPage(PREVIEW_STOPPED, 502);
+      return respondPage('stopped', 502);
     }
   }
 

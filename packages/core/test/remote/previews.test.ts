@@ -12,7 +12,6 @@ import {
   resolvePreviewOrigin,
   resolvePreviewTunnelPath,
   serializePreviewLabel,
-  serializePreviewPage,
   serializePreviewUrl,
 } from '../../src/remote/previews.ts';
 
@@ -102,14 +101,5 @@ describe('the tunnel path', () => {
     expect(parsePreviewTunnelPath(`/__preview/${PREVIEW_ID}`)).toEqual({ previewId: PREVIEW_ID, path: '/' });
     expect(parsePreviewTunnelPath('/__preview/short/x')).toBeNull();
     expect(parsePreviewTunnelPath(`/share/${PREVIEW_ID}`)).toBeNull();
-  });
-});
-
-describe('the preview page', () => {
-  test('says the message in a page of its own, escaping what a message could carry', () => {
-    const page = serializePreviewPage('Ends at <5> & "soon"');
-    expect(page.startsWith('<!doctype html>')).toBe(true);
-    expect(page).toContain('<p>Ends at &lt;5&gt; &amp; &quot;soon&quot;</p>');
-    expect(page).not.toContain('<5>');
   });
 });
