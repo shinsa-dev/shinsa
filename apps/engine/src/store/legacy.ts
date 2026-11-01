@@ -79,6 +79,8 @@ const AGENT_REPLY_LOG_VERSION = 12;
 
 const SHARE_PRESET_LOG_VERSION = 13;
 
+const TEAM_FOCUS_LOG_VERSION = 14;
+
 const COMPACTION_BY_EUNOE_MODE = new Map<unknown, CompactionMode>([
   ['eunoe_compact', 'fold'],
   ['eunoe_default', 'fold'],
@@ -113,6 +115,7 @@ export function listLegacyEventTypes(version: number) {
     ...(version < CONTEXT_MANAGEMENT_LOG_VERSION ? ['settings.changed'] : []),
     ...(version < AGENT_REPLY_LOG_VERSION ? ['plan.proposed'] : []),
     ...(version < SHARE_PRESET_LOG_VERSION ? ['task.shared'] : []),
+    ...(version < TEAM_FOCUS_LOG_VERSION ? ['focus.changed'] : []),
   ];
 }
 
@@ -275,6 +278,9 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       return resolveForkTaskIds(event);
     case 'plan.proposed':
       return withoutKeys(event, ['changeSummary', 'feedback']);
+    case 'focus.changed':
+      if (!isRecord(event.focus) || 'teamId' in event.focus) return event;
+      return { ...event, focus: { ...event.focus, teamId: null } };
     default:
       return event;
   }

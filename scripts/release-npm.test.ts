@@ -246,6 +246,30 @@ describe('publishing', () => {
     ).toThrow('Usage:');
   });
 
+  it('hands npm an absolute folder for a relative out dir, so npm never reads it as a GitHub repository', async () => {
+    const archives = await createArchives();
+    const start = process.cwd();
+    process.chdir(createDir());
+    try {
+      const { calls, run } = createRunner((argv) => (argv[1] === 'view' ? { exitCode: 1 } : {}));
+      runReleaseNpm(
+        ['--dry-run', archives, 'npm-packages'],
+        { SHINSA_VERSION: VERSION, RELEASE_CHANNEL: 'canary' },
+        run
+      );
+      const folders = calls.filter((argv) => argv[1] === 'publish').map((argv) => argv[2]);
+      expect(folders).toEqual([
+        ...PUBLISHED_ENGINE_TARGETS.map((target) =>
+          join(process.cwd(), 'npm-packages', `shinsa-${target.replace(/^bun-/, '')}`)
+        ),
+        join(process.cwd(), 'npm-packages/shinsa'),
+      ]);
+      expect(folders.every((folder) => folder?.startsWith('/'))).toBe(true);
+    } finally {
+      process.chdir(start);
+    }
+  });
+
   it('runs a real command and reads its output', () => {
     expect(runCommand(['sh', '-c', 'echo out; echo err >&2; exit 3'])).toEqual({
       exitCode: 3,

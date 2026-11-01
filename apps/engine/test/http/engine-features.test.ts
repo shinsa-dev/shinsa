@@ -140,6 +140,8 @@ function listRouteKeys() {
     workspaces: stub,
     restarter: stub,
     previews: stub,
+    teams: stub,
+    teamFeeds: stub,
   };
   return listApiRoutes(context, createTerminalRoutes(engine, { home: '/tmp' } as never)).map(resolveRouteKey);
 }

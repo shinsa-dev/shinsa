@@ -14,6 +14,7 @@ import { PREVIEW_SHARE_TITLE, PREVIEW_SHARED_TITLE } from '@/lib/share/previews.
 import {
   describeServicePreview,
   describeServiceState,
+  resolveServiceLink,
   SERVICE_GLYPHS,
   selectServicePreview,
   type TaskServiceRun,
@@ -68,12 +69,12 @@ function ServicePreviewButton({
   size?: 'icon-xs' | 'icon-sm';
   onPreview: () => void;
 }) {
-  const url = selectServicePreview(view);
-  if (!url) return null;
+  const link = resolveServiceLink(view);
+  if (!link) return null;
   return (
     <ServiceActionButton
       label={describeServicePreview(view, label)}
-      detail={url}
+      detail={link.text}
       icon='IconArrowUpRight'
       size={size}
       onClick={(event) => {

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import {
+  PREVIEW_ACCESS_HEADER,
   PREVIEW_GONE,
   PREVIEW_ID_BYTES,
   PREVIEW_KEY_BYTES,
@@ -8,11 +9,17 @@ import {
   type PreviewPageKind,
   parsePreviewTunnelPath,
   parsePreviewUrl,
+  resolvePrivatePreviewId,
+  resolvePrivatePreviewUrl,
+  resolveServiceUrl,
+  type ServiceDefinition,
   selectServiceTerminal,
   serializeBase64Url,
   serializePreviewPage,
   serializePreviewUrl,
+  type TerminalInfo,
   type TerminalsSnapshot,
+  verifyPreviewAccessToken,
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
@@ -43,6 +50,7 @@ const DROPPED_HEADERS: ReadonlySet<string> = new Set([
   'host',
   'cdn-loop',
   PREVIEW_KEY_HEADER,
+  PREVIEW_ACCESS_HEADER,
 ]);
 
 const SOCKET_HEADERS: ReadonlySet<string> = new Set([
@@ -64,6 +72,7 @@ export interface PreviewEffects {
 
 export interface PreviewUpgrade {
   previewId: string;
+  userId: string | null;
   target: string;
   headers: Record<string, string>;
   protocols: string[];
@@ -104,10 +113,26 @@ interface PreviewShareTarget {
   key: string;
 }
 
+interface PrivateRun {
+  serviceId: string;
+  taskId: string | null;
+}
+
+interface PreviewTarget {
+  serviceId: string;
+  taskId: string | null;
+  userId: string | null;
+}
+
 interface LiveSocket {
   previewId: string;
+  userId: string | null;
   peer: PreviewPeer;
   upstream: WebSocket;
+}
+
+function resolvePrivateRunKey(run: PrivateRun) {
+  return `${run.serviceId}\n${run.taskId ?? ''}`;
 }
 
 function createRandom(bytes: number) {
@@ -199,6 +224,11 @@ export class Previews implements PreviewEffects, PreviewLinks {
   readonly #random: (bytes: number) => Uint8Array<ArrayBuffer>;
   readonly #fetch: typeof fetch;
   readonly #sockets = new Set<LiveSocket>();
+  readonly #listeners = new Set<() => void>();
+  readonly #privateIds = new Map<string, string>();
+  readonly #privateRuns = new Map<string, PrivateRun>();
+  readonly #pendingIds = new Map<string, Promise<void>>();
+  #privateKey: string | null = null;
   #pairedAs: string | null;
 
   constructor(options: PreviewsOptions) {
@@ -218,8 +248,18 @@ export class Previews implements PreviewEffects, PreviewLinks {
     return this.#remote.store.file.credentials?.instanceId ?? null;
   }
 
+  subscribe(listener: () => void) {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  #publish() {
+    for (const listener of this.#listeners) listener();
+  }
+
   #syncRemote() {
     this.#syncSockets();
+    this.#publish();
     const before = this.#pairedAs;
     this.#pairedAs = this.#selectInstanceId();
     if (before === null || before === this.#pairedAs) return;
@@ -245,11 +285,103 @@ export class Previews implements PreviewEffects, PreviewLinks {
 
   #syncSockets() {
     for (const socket of [...this.#sockets]) {
-      if (this.#remote.isEnabled && this.#resolveShare(socket.previewId)) continue;
+      if (this.#remote.isEnabled && this.#isStillOpen(socket)) continue;
       this.#sockets.delete(socket);
       socket.peer.close(1000, PREVIEW_GONE);
       socket.upstream.close();
     }
+  }
+
+  #isStillOpen(socket: LiveSocket) {
+    if (socket.userId === null) return this.#resolveShare(socket.previewId) !== null;
+    return this.#selectPrivateRun(socket.previewId) !== null && this.#isAllowed(socket.userId);
+  }
+
+  #isAllowed(userId: string) {
+    const { access } = this.#remote.store.file;
+    if (!access) return false;
+    return access.owner.id === userId || access.members.some((member) => member.user.id === userId);
+  }
+
+  #selectConnectKey() {
+    const key = this.#remote.isEnabled ? (this.#remote.store.file.credentials?.connectKey ?? null) : null;
+    if (key !== this.#privateKey) {
+      this.#privateKey = key;
+      this.#privateIds.clear();
+      this.#privateRuns.clear();
+      this.#pendingIds.clear();
+    }
+    return key;
+  }
+
+  #selectPrivateRun(previewId: string) {
+    this.#selectConnectKey();
+    return this.#privateRuns.get(previewId) ?? null;
+  }
+
+  #requestPrivateId(run: PrivateRun) {
+    const connectKey = this.#selectConnectKey();
+    const runKey = resolvePrivateRunKey(run);
+    if (!connectKey) return Promise.resolve();
+    const pending = this.#pendingIds.get(runKey);
+    if (pending) return pending;
+    const derived = resolvePrivatePreviewId(connectKey, run).then(
+      (previewId) => {
+        if (this.#privateKey !== connectKey) return;
+        this.#privateIds.set(runKey, previewId);
+        this.#privateRuns.set(previewId, run);
+        this.#publish();
+      },
+      (error: unknown) => {
+        this.#pendingIds.delete(runKey);
+        log.warn('[Preview] Could not make a private address', { ...run, error: describeError(error) });
+      }
+    );
+    this.#pendingIds.set(runKey, derived);
+    return derived;
+  }
+
+  resolveRemoteUrl(info: TerminalInfo, service: ServiceDefinition) {
+    const instanceId = this.#remote.store.file.credentials?.instanceId;
+    const local = resolveServiceUrl(service, info);
+    if (!(instanceId && local && info.status === 'running' && this.#selectConnectKey())) return null;
+    const run = { serviceId: service.id, taskId: info.taskId };
+    const previewId = this.#privateIds.get(resolvePrivateRunKey(run));
+    if (!previewId) {
+      void this.#requestPrivateId(run);
+      return null;
+    }
+    return resolvePrivatePreviewUrl({ instanceId, previewId }, local, this.#origin);
+  }
+
+  async #findPrivateRun(previewId: string) {
+    const known = this.#selectPrivateRun(previewId);
+    if (known) return known;
+    const runs = this.#services
+      .snapshot()
+      .terminals.flatMap((terminal) =>
+        terminal.serviceId ? [{ serviceId: terminal.serviceId, taskId: terminal.taskId }] : []
+      );
+    await Promise.all(runs.map((run) => this.#requestPrivateId(run)));
+    return this.#selectPrivateRun(previewId);
+  }
+
+  async #resolvePrivate(request: Request, previewId: string): Promise<PreviewTarget | null> {
+    const token = request.headers.get(PREVIEW_ACCESS_HEADER);
+    const instanceId = this.#remote.store.file.credentials?.instanceId;
+    const connectKey = this.#selectConnectKey();
+    if (!(token && instanceId && connectKey)) return null;
+    const claim = await verifyPreviewAccessToken(connectKey, token, { instanceId, previewId }, this.#now());
+    if (!(claim && this.#isAllowed(claim.userId))) return null;
+    const run = await this.#findPrivateRun(previewId);
+    return run ? { ...run, userId: claim.userId } : null;
+  }
+
+  #resolveTarget(request: Request, previewId: string): Promise<PreviewTarget | null> {
+    const share = this.#resolveShare(previewId);
+    if (!share) return this.#resolvePrivate(request, previewId);
+    if (!isKey(request.headers.get(PREVIEW_KEY_HEADER), share.key)) return Promise.resolve(null);
+    return Promise.resolve({ serviceId: share.serviceId, taskId: share.taskId, userId: null });
   }
 
   #resolveShare(previewId: string): PreviewShareTarget | null {
@@ -293,20 +425,25 @@ export class Previews implements PreviewEffects, PreviewLinks {
 
   async answer(request: Request, url: URL): Promise<PreviewAnswer> {
     const parsed = parsePreviewTunnelPath(url.pathname);
-    const share = parsed ? this.#resolveShare(parsed.previewId) : null;
-    if (!(parsed && share && isKey(request.headers.get(PREVIEW_KEY_HEADER), share.key)))
-      return { kind: 'response', response: respondPage('gone', 404) };
-    const run = selectServiceTerminal(this.#services.snapshot(), share.serviceId, share.taskId);
+    if (!parsed) return { kind: 'response', response: respondPage('gone', 404) };
+    const target = await this.#resolveTarget(request, parsed.previewId);
+    if (!target) return { kind: 'response', response: respondPage('gone', 404) };
+    const run = selectServiceTerminal(this.#services.snapshot(), target.serviceId, target.taskId);
     if (!(run?.status === 'running' && run.port))
       return { kind: 'response', response: respondPage('stopped', 503) };
     const path = `${parsed.path}${url.search}`;
     const headers = resolveForwardHeaders(request.headers, run.port);
     if (isUpgrade(request)) {
       for (const name of SOCKET_HEADERS) delete headers[name];
-      const target = `ws://localhost:${run.port}${path}`;
       return {
         kind: 'upgrade',
-        upgrade: { previewId: parsed.previewId, target, headers, protocols: listProtocols(request) },
+        upgrade: {
+          previewId: parsed.previewId,
+          userId: target.userId,
+          target: `ws://localhost:${run.port}${path}`,
+          headers,
+          protocols: listProtocols(request),
+        },
       };
     }
     return {
@@ -342,7 +479,7 @@ export class Previews implements PreviewEffects, PreviewLinks {
       protocols: upgrade.protocols,
     });
     upstream.binaryType = 'arraybuffer';
-    const live: LiveSocket = { previewId: upgrade.previewId, peer, upstream };
+    const live: LiveSocket = { previewId: upgrade.previewId, userId: upgrade.userId, peer, upstream };
     const pending: (string | Uint8Array)[] = [];
     this.#sockets.add(live);
     upstream.onopen = () => {

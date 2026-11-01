@@ -24,6 +24,7 @@ import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
 import { SkillsGroup } from '@/components/settings/skills.tsx';
 import { SlackGroup } from '@/components/settings/slack.tsx';
+import { TeamsGroup } from '@/components/settings/teams.tsx';
 import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
@@ -37,6 +38,7 @@ import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
 import type { PolicyActions } from '@/lib/remote/policies.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SlackLinkedPage } from '../remote/slack.tsx';
+import { TeamJoinPage } from '../remote/team-join.tsx';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
 import {
@@ -47,6 +49,14 @@ import {
   SAMPLE_MACS,
 } from './sample-remote.ts';
 import { createSampleSlack } from './sample-slack.ts';
+import {
+  createSampleTeamActions,
+  createSampleTeams,
+  openSampleJoinMachines,
+  requestSampleTeamJoin,
+  SAMPLE_TEAM_JOIN_DASHBOARD,
+  SAMPLE_TEAM_LINK,
+} from './sample-teams.ts';
 import { createSampleVersions } from './sample-versions.ts';
 import {
   acknowledgeSample,
@@ -392,6 +402,8 @@ export function SettingsSpecimens() {
   const [remoteActions] = React.useState(() => createSampleRemoteActions());
   const [machines] = React.useState(() => createSampleMachineServices(now));
   const [slack] = React.useState(() => createSampleSlack(now));
+  const [teams] = React.useState(() => createSampleTeams(now));
+  const [teamActions] = React.useState(createSampleTeamActions);
   const settings = createSettings();
   return (
     <>
@@ -419,6 +431,24 @@ export function SettingsSpecimens() {
           </div>
         </Specimen>
       ))}
+      {teams.scenes.map((scene) => (
+        <Specimen key={scene.label} label={scene.label}>
+          <div className='w-full max-w-xl'>
+            <TeamsGroup state={teams.state} snapshot={scene.snapshot} failure={null} actions={teamActions} />
+          </div>
+        </Specimen>
+      ))}
+      <Specimen label='TeamJoinPage · on app.shinsa.dev, a team link opened after sign-in'>
+        <div className='w-full max-w-sm'>
+          <TeamJoinPage
+            link={SAMPLE_TEAM_LINK}
+            dashboard={SAMPLE_TEAM_JOIN_DASHBOARD}
+            teamKeys={{ selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() }}
+            openMachines={openSampleJoinMachines}
+            request={requestSampleTeamJoin}
+          />
+        </div>
+      </Specimen>
       <Specimen label='MachinesSettings · in Shinsa Cloud: your machines and one shared with you, three in this dashboard'>
         <div className='w-full max-w-xl'>
           <RemoteServicesContext.Provider value={machines}>

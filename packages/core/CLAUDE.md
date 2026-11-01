@@ -294,7 +294,12 @@ src/
 │                    live channel are remote/shares.ts (ShareLink, serializeShareUrl, parseShareUrl,
 │                    ShareLiveView, SHARE_FILE_TYPES and the share paths) and
 │                    remote/share-channel.ts (the hello and welcome HMACs with the link's key,
-│                    deriveShareSessionKey, the ShareMessage the machine alone sends)
+│                    deriveShareSessionKey, the ShareMessage the machine alone sends); teams.ts lists a team's
+│                    tasks (listTeamTasks: every open task of its projects and the 50 last finished, each a
+│                    redacted listing with its owner and machine; isTeamTask), decide/teams.ts puts a project in a
+│                    team (project.add_to_team, project.remove_from_team, human-only), and remote/teams.ts is the
+│                    join link with the key in its fragment, the team hello and welcome with the view bound into
+│                    the session key, and the team feed types (docs/engine.md → Teams)
 ├── slack/           The Slack bot, shared by the engine and the hosted Worker: the forwarded mention and its parser
 │                    (contract.ts: SlackMention, parseSlackMention, SLACK_LIMITS, SLACK_ENGINE_EVENTS_PATH), the
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as

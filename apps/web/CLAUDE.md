@@ -37,7 +37,8 @@ src/
 │   │                    the workspace and what happens next, or why it failed), fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
 │   │                    device, the benefits card and Check again), share.tsx (/share/t/<token>#<key>: a
-│   │                    shared task, live, read-only and without sign-in, docs/engine.md → Sharing a task)
+│   │                    shared task, live, read-only and without sign-in, docs/engine.md → Sharing a task),
+│   │                    team-join.tsx (/share/team#…: the team key kept in this browser, then the request to join)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -148,6 +149,15 @@ src/
     │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
     │                    components/task/share-dialog.tsx is Share task and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows
+    ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
+    │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
+    │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the
+    │                    browser's team keys in IndexedDB), join-machines.ts (the join page's projects from your own
+    │                    machines, and joining and sharing them there), channel.ts (a team channel from the browser with its own
+    │                    key, and the engine relay of one task), feeds.ts (teammates' tasks for the focused team,
+    │                    merged from the machines and the browser, without machines the dashboard reaches);
+    │                    components/teams/ (the new team dialog, the shared projects dropdown, the team rows on All tasks and Home),
+    │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
     │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which

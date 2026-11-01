@@ -31,7 +31,7 @@ function expectEveryDot(rows: HTMLElement[], colors: Record<string, string>) {
   }
 }
 
-const COLORS: Record<string, string> = { Superwall: 'blue', Basket: 'green', 'All work': 'gray' };
+const COLORS: Record<string, string> = { Superwall: 'blue', Basket: 'green', 'Your work': 'gray' };
 
 beforeEach(() => {
   startFakeServer();

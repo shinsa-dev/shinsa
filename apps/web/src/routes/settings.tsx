@@ -21,6 +21,7 @@ import { ScheduleSettings } from '@/components/settings/schedules.tsx';
 import { SharingSettings } from '@/components/settings/sharing.tsx';
 import { SlackSettings } from '@/components/settings/slack.tsx';
 import { StatisticsRange, StatisticsSettings } from '@/components/settings/stats/index.tsx';
+import { TeamsSettings } from '@/components/settings/teams.tsx';
 import { UpdateSettings } from '@/components/settings/updates.tsx';
 import { LimitSettings } from '@/components/settings/usage.tsx';
 import { VersionSettings } from '@/components/settings/versions.tsx';
@@ -74,6 +75,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <NotificationSettings />
           <ContextSettings settings={state.settings} />
           {isRemoteBuild() ? <MachinesSettings /> : <RemoteAccessSettings />}
+          {!isRemoteBuild() && <TeamsSettings state={state} />}
           {!isRemoteBuild() && <SharingSettings settings={state.settings} />}
           <SlackSettings />
           <UpdateSettings />

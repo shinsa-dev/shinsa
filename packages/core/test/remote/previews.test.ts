@@ -1,18 +1,25 @@
 import { describe, expect, test } from 'bun:test';
 import { parseBase32, serializeBase32, serializeBase64Url } from '../../src/remote/bytes.ts';
+import { createConnectToken } from '../../src/remote/connect-token.ts';
 import {
+  createPreviewAccessToken,
   isPreviewId,
   isPreviewKey,
+  PREVIEW_ACCESS_TTL_MS,
   PREVIEW_ID_BYTES,
   PREVIEW_KEY_BYTES,
+  PREVIEW_OPEN_TTL_MS,
   parsePreviewHost,
   parsePreviewLabel,
   parsePreviewTunnelPath,
   parsePreviewUrl,
   resolvePreviewOrigin,
   resolvePreviewTunnelPath,
+  resolvePrivatePreviewId,
+  resolvePrivatePreviewUrl,
   serializePreviewLabel,
   serializePreviewUrl,
+  verifyPreviewAccessToken,
 } from '../../src/remote/previews.ts';
 
 const PREVIEW_ID = serializeBase64Url(new Uint8Array(PREVIEW_ID_BYTES).fill(7));
@@ -101,5 +108,100 @@ describe('the tunnel path', () => {
     expect(parsePreviewTunnelPath(`/__preview/${PREVIEW_ID}`)).toEqual({ previewId: PREVIEW_ID, path: '/' });
     expect(parsePreviewTunnelPath('/__preview/short/x')).toBeNull();
     expect(parsePreviewTunnelPath(`/share/${PREVIEW_ID}`)).toBeNull();
+  });
+});
+
+const CONNECT_KEY = serializeBase64Url(new Uint8Array(32).fill(3));
+
+const OTHER_KEY = serializeBase64Url(new Uint8Array(32).fill(4));
+
+const NOW = 1_000_000;
+
+describe('a private preview', () => {
+  test('has an id derived from the connect key, the service and the task, stable for the same run', async () => {
+    const run = { serviceId: 'web', taskId: 'task-1' };
+    const id = await resolvePrivatePreviewId(CONNECT_KEY, run);
+    expect(isPreviewId(id)).toBe(true);
+    expect(await resolvePrivatePreviewId(CONNECT_KEY, run)).toBe(id);
+    expect(await resolvePrivatePreviewId(OTHER_KEY, run)).not.toBe(id);
+    expect(await resolvePrivatePreviewId(CONNECT_KEY, { serviceId: 'web', taskId: null })).not.toBe(id);
+    expect(await resolvePrivatePreviewId(CONNECT_KEY, { serviceId: 'api', taskId: 'task-1' })).not.toBe(id);
+    await expect(resolvePrivatePreviewId('', run)).rejects.toThrow('The connect key is not valid.');
+  });
+
+  test('keeps the local page, query and fragment on its own origin', () => {
+    expect(resolvePrivatePreviewUrl(ADDRESS, 'http://localhost:4123/tasks/SW-17?tab=a#top')).toBe(
+      `${resolvePreviewOrigin(ADDRESS)}/tasks/SW-17?tab=a#top`
+    );
+    expect(resolvePrivatePreviewUrl(ADDRESS, 'http://localhost:4123', 'http://localhost:5195')).toBe(
+      `${resolvePreviewOrigin(ADDRESS, 'http://localhost:5195')}/`
+    );
+  });
+});
+
+describe('a preview access token', () => {
+  const claim = { ...ADDRESS, userId: 'u1', expiresAt: NOW + PREVIEW_ACCESS_TTL_MS };
+
+  test('opens its own preview for its account until it expires', async () => {
+    const token = await createPreviewAccessToken(CONNECT_KEY, claim);
+    expect(await verifyPreviewAccessToken(CONNECT_KEY, token, ADDRESS, NOW)).toEqual(claim);
+    expect(await verifyPreviewAccessToken(CONNECT_KEY, token, ADDRESS, claim.expiresAt)).toBeNull();
+  });
+
+  test('is refused for another preview, another machine, another key or a longer life than allowed', async () => {
+    const token = await createPreviewAccessToken(CONNECT_KEY, claim);
+    const other = serializeBase64Url(new Uint8Array(PREVIEW_ID_BYTES).fill(8));
+    expect(
+      await verifyPreviewAccessToken(CONNECT_KEY, token, { ...ADDRESS, previewId: other }, NOW)
+    ).toBeNull();
+    expect(
+      await verifyPreviewAccessToken(CONNECT_KEY, token, { ...ADDRESS, instanceId: 'other' }, NOW)
+    ).toBeNull();
+    expect(await verifyPreviewAccessToken(OTHER_KEY, token, ADDRESS, NOW)).toBeNull();
+    expect(await verifyPreviewAccessToken(CONNECT_KEY, token, ADDRESS, NOW, PREVIEW_OPEN_TTL_MS)).toBeNull();
+    const open = await createPreviewAccessToken(CONNECT_KEY, {
+      ...claim,
+      expiresAt: NOW + PREVIEW_OPEN_TTL_MS,
+    });
+    expect(
+      await verifyPreviewAccessToken(CONNECT_KEY, open, ADDRESS, NOW, PREVIEW_OPEN_TTL_MS)
+    ).not.toBeNull();
+  });
+
+  test('is refused when tampered with, malformed, or a connect token', async () => {
+    const token = await createPreviewAccessToken(CONNECT_KEY, claim);
+    const [payload, signature] = token.split('.');
+    const forged = serializeBase64Url(new TextEncoder().encode(JSON.stringify({ ...claim, u: 'u2' })));
+    expect(await verifyPreviewAccessToken(CONNECT_KEY, `${forged}.${signature}`, ADDRESS, NOW)).toBeNull();
+    expect(await verifyPreviewAccessToken(CONNECT_KEY, `${token}.x`, ADDRESS, NOW)).toBeNull();
+    expect(await verifyPreviewAccessToken(CONNECT_KEY, payload as string, ADDRESS, NOW)).toBeNull();
+    expect(await verifyPreviewAccessToken(CONNECT_KEY, '!.!', ADDRESS, NOW)).toBeNull();
+    expect(await verifyPreviewAccessToken('', token, ADDRESS, NOW)).toBeNull();
+    const connect = await createConnectToken(CONNECT_KEY, {
+      instanceId: ADDRESS.instanceId,
+      userId: 'u1',
+      expiresAt: NOW + 1,
+    });
+    expect(await verifyPreviewAccessToken(CONNECT_KEY, connect, ADDRESS, NOW)).toBeNull();
+    await expect(createPreviewAccessToken('', claim)).rejects.toThrow('The connect key is not valid.');
+  });
+
+  test('is refused when its signed payload is not a claim', async () => {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new Uint8Array(32).fill(3),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const sign = async (payload: Uint8Array<ArrayBuffer>) => {
+      const signed = new Uint8Array([...new TextEncoder().encode('shinsa-preview-access\n'), ...payload]);
+      const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, signed));
+      return `${serializeBase64Url(payload)}.${serializeBase64Url(signature)}`;
+    };
+    const text = (value: string) => new TextEncoder().encode(value);
+    for (const payload of [text('not json'), text('{"i":"x","p":"y"}'), Uint8Array.from([0xff, 0xfe])]) {
+      expect(await verifyPreviewAccessToken(CONNECT_KEY, await sign(payload), ADDRESS, NOW)).toBeNull();
+    }
   });
 });

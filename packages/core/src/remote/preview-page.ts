@@ -62,8 +62,8 @@ export const PREVIEW_PAGES: Readonly<Record<PreviewPageKind, PreviewPage>> = {
 };
 
 const PREVIEW_PAGE_STYLE = [
-  ':root{color-scheme:light dark;--primary:oklch(.6 .215 256);--background:oklch(1 0 0);--bg-2:oklch(.973 .001 286.38);--bg-3:oklch(.955 .002 247.84);--bg-4:oklch(.928 .003 264.54);--fg-2:oklch(.543 .009 278.5);--fg-3:oklch(.443 .008 277);--fg-4:oklch(.21 .008 274.53)}',
-  '@media (prefers-color-scheme:dark){:root{--primary:oklch(.62 .2 256);--background:oklch(.174 .004 285.97);--bg-2:oklch(.228 .006 285.93);--bg-3:oklch(.257 .006 286);--bg-4:oklch(.299 .007 285.96);--fg-2:oklch(.655 .009 286.15);--fg-3:oklch(.787 .007 286.24);--fg-4:oklch(.946 .001 286.37)}}',
+  ':root{color-scheme:light dark;--primary:oklch(.6 .215 256);--background:oklch(1 0 0);--bg-2:oklch(.973 .001 286.38);--bg-3:oklch(.955 .002 247.84);--bg-4:oklch(.928 .003 264.54);--fg-2:oklch(.543 .009 278.5);--fg-3:oklch(.443 .008 277);--fg-4:oklch(.21 .008 274.53);--bg-1:oklch(1 0 0);--control-shadow:0 1px 1px oklch(0 0 0/.1),0 0 0 1px oklch(0 0 0/.08),inset 0 1px 0 oklch(1 0 0/.16);--control-shadow-elevated:0 0 0 1px var(--bg-3);--control-shadow-elevated-hover:0 0 0 1px var(--bg-4);--outline:var(--background);--outline-pressed:var(--bg-1)}',
+  '@media (prefers-color-scheme:dark){:root{--primary:oklch(.62 .2 256);--background:oklch(.174 .004 285.97);--bg-2:oklch(.228 .006 285.93);--bg-3:oklch(.257 .006 286);--bg-4:oklch(.299 .007 285.96);--fg-2:oklch(.655 .009 286.15);--fg-3:oklch(.787 .007 286.24);--fg-4:oklch(.946 .001 286.37);--bg-1:oklch(.197 .004 286.03);--control-shadow-elevated:inset 0 0 0 1px var(--bg-3);--control-shadow-elevated-hover:inset 0 0 0 1px var(--bg-4);--outline:var(--bg-3);--outline-pressed:var(--bg-4)}}',
   '*{box-sizing:border-box}',
   'body{margin:0;min-height:100dvh;display:flex;flex-direction:column;background:var(--background);color:var(--fg-3);font-family:"ABC Areal",ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:-.02em;-webkit-font-smoothing:antialiased}',
   'header{display:flex;align-items:center;height:44px;padding:0 20px}',
@@ -82,12 +82,15 @@ const PREVIEW_PAGE_STYLE = [
   'p{margin:0;max-width:28rem;font-size:13px;line-height:1.2;color:var(--fg-2);text-wrap:pretty}',
   '.cta{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:22px;padding-top:22px;border-top:1px solid var(--bg-3);width:min(22rem,100%)}',
   '.cta p{font-size:12px}',
-  '.actions{display:flex;gap:6px}',
-  '.actions a{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:8px;font-size:13px;font-weight:500;text-decoration:none;color:var(--fg-4);background:var(--bg-2);box-shadow:inset 0 0 0 1px var(--bg-4)}',
-  '.actions a:hover{background:var(--bg-3)}',
-  '.actions a.primary{color:#fff;background:var(--primary);box-shadow:none}',
-  '.actions a.primary:hover{background:color-mix(in oklch,var(--primary) 88%,black)}',
-  '.actions a:focus-visible{outline:2px solid color-mix(in oklch,var(--primary) 40%,transparent);outline-offset:2px}',
+  '.actions{display:flex;gap:8px}',
+  '.actions a{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;height:26px;padding:0 10px;border-radius:7px;corner-shape:superellipse(1.125);font-size:13px;line-height:1.2;font-weight:500;white-space:nowrap;text-decoration:none;color:var(--fg-4);outline:none;-webkit-user-select:none;user-select:none}',
+  '.actions a::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;corner-shape:superellipse(1.125);pointer-events:none;background:var(--outline);box-shadow:var(--control-shadow-elevated)}',
+  '.actions a:hover::before{box-shadow:var(--control-shadow-elevated-hover)}',
+  '.actions a:active::before{inset:.5px 1px;background:var(--outline-pressed)}',
+  '.actions a.primary{color:#fff}',
+  '.actions a.primary::before{background:var(--primary);box-shadow:var(--control-shadow)}',
+  '.actions a.primary:hover::before,.actions a.primary:active::before{background:color-mix(in oklch,var(--primary) 80%,transparent)}',
+  '.actions a:focus-visible::before{box-shadow:var(--control-shadow-elevated),0 0 0 3px color-mix(in oklch,var(--primary) 30%,transparent)}',
 ].join('');
 
 export function serializePreviewPage(kind: PreviewPageKind) {

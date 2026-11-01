@@ -1,5 +1,6 @@
 import {
   DEVELOPMENT_VERSION,
+  NO_TEAM_FEED,
   type RemoteInstance,
   type RemoteSnapshot,
   resolveEngineInfo,
@@ -77,6 +78,7 @@ export function createSampleRemote(now: number) {
         requestedAt: now - 60_000,
       },
     ],
+    teams: [],
   };
   return [
     {
@@ -202,6 +204,9 @@ export function createSampleMachineServices(now: number): RemoteServices {
       removeInstance: refuse,
       leaveInstance: refuse,
       acceptInvite: refuse,
+      listTeams: () => Promise.resolve([]),
+      joinTeam: refuse,
+      previewTeam: refuse,
       readPair: refuse,
       approvePair: refuse,
       signOut: refuse,
@@ -217,6 +222,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
       writeDevice: refuse,
       removeDevice: refuse,
     },
+    teamKeys: { selectTeamKey: () => Promise.resolve(null), writeTeamKey: refuse },
     worker: {} as ServiceWorkerContainer,
   };
 }
@@ -245,6 +251,8 @@ export function createStaticConnection(state: ShinsaState): ShinsaConnection {
     subscribeRemote: quiet,
     selectRemote: none,
     replaceRemote: () => undefined,
+    subscribeTeams: quiet,
+    selectTeams: () => NO_TEAM_FEED,
     selectMachine: none,
     listMachines: () => NO_MACHINES,
     listUnreachableMachines: () => NO_UNREACHABLE_MACHINES,

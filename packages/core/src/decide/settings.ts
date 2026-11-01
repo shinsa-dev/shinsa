@@ -238,6 +238,7 @@ export function writeProject(decider: Decider, command: CommandOf<'project.write
     description,
     folders,
     ...(existing?.watchSources ? { watchSources: existing.watchSources } : {}),
+    ...(existing?.teamIds ? { teamIds: existing.teamIds } : {}),
   };
   if (existing && isSameValue(project, existing)) return;
   decider.emit({ type: 'project.written', project });
@@ -252,7 +253,7 @@ export function removeProject(decider: Decider, command: CommandOf<'project.remo
     }
   }
   if (decider.state.focus.projectId === command.projectId) {
-    decider.emit({ type: 'focus.changed', focus: { projectId: null, until: null } });
+    decider.emit({ type: 'focus.changed', focus: { projectId: null, teamId: null, until: null } });
     decider.run({ kind: 'briefing.request', projectId: null });
   }
   removeProjectMemory(decider, command.projectId);
@@ -262,7 +263,11 @@ export function removeProject(decider: Decider, command: CommandOf<'project.remo
 
 export function changeFocus(decider: Decider, command: CommandOf<'focus.change'>) {
   assertProject(decider, command.projectId);
-  const focus = { projectId: command.projectId, until: command.until };
+  const teamId = command.teamId ?? null;
+  if (command.projectId && teamId) {
+    throw new DomainError('focus_refused', 'Focus on a project or on a team, not both at once.');
+  }
+  const focus = { projectId: command.projectId, teamId, until: command.until };
   if (isSameValue(focus, decider.state.focus)) return;
   decider.emit({ type: 'focus.changed', focus });
   decider.run({ kind: 'briefing.request', projectId: command.projectId });

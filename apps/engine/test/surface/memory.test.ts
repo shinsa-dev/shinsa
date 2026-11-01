@@ -3,7 +3,7 @@ import { createFakeClient, findSpec, runSpec } from './fixtures.ts';
 
 const PROJECTS = {
   projects: [{ id: 'project-1', name: 'Work', color: 'blue', key: 'WK', folders: [], repos: [] }],
-  focus: { projectId: null, until: null },
+  focus: { projectId: null, teamId: null, until: null },
 };
 
 describe('shinsa memory', () => {

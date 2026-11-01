@@ -16,11 +16,35 @@ export const ROW_INSET =
 
 export const SETTING_ROW = `flex min-h-10 items-center gap-4 py-1 ${ROW_INSET}`;
 
+export const SETTINGS_SUBHEADING = `mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 first:mt-0 first:border-t-0 first:pt-1.5 ${ROW_INSET}`;
+
 export const SETTINGS_SHELF = `${INSET} flex flex-col divide-y divide-border bg-bg-a1 [--shelf-edge:1px] [--input-hover:var(--bg-4)] [--input:var(--bg-3)]`;
 
 export const TOKEN_TEXT = 'shrink-0 text-2xs text-fg-2 tabular-nums';
 
 const BLOCK_HEADER = 'flex h-8 items-center gap-1.5 pr-1.5 pl-2';
+
+export function SettingsSection({
+  title,
+  action,
+  description,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={resolveSectionId(title)} className='flex scroll-mt-6 flex-col gap-1'>
+      <SectionLabel action={action} className='px-1'>
+        {title}
+      </SectionLabel>
+      {children}
+      {description && <p className='px-1 pt-1 text-2xs text-fg-2'>{description}</p>}
+    </section>
+  );
+}
 
 export function SettingsGroup({
   title,
@@ -36,13 +60,9 @@ export function SettingsGroup({
   children: React.ReactNode;
 }) {
   return (
-    <section id={resolveSectionId(title)} className='flex scroll-mt-6 flex-col gap-1'>
-      <SectionLabel action={action} className='px-1'>
-        {title}
-      </SectionLabel>
+    <SettingsSection title={title} action={action} description={description}>
       <SettingsCard className={className}>{children}</SettingsCard>
-      {description && <p className='px-1 pt-1 text-2xs text-fg-2'>{description}</p>}
-    </section>
+    </SettingsSection>
   );
 }
 

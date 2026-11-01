@@ -64,10 +64,12 @@ describe('the share handshake', () => {
     const hello = await createShareHello('s', KEY, client.publicKey);
     expect(await verifyShareHello('!', hello)).toBe(false);
     expect(await verifyShareHello(KEY, { ...hello, proof: '!' })).toBe(false);
-    await expect(createShareHello('s', '', client.publicKey)).rejects.toThrow('The share key is not valid.');
+    await expect(createShareHello('s', '', client.publicKey)).rejects.toThrow(
+      'The channel key is not valid.'
+    );
     const keys = { share: 's', clientEphemeral: 'x', serverEphemeral: 'y' };
     await expect(deriveShareSessionKey(KEY, keys, client.privateKey, 'x')).rejects.toThrow(
-      'A share handshake key is not valid.'
+      'A channel handshake key is not valid.'
     );
   });
 });

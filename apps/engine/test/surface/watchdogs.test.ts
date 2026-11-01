@@ -25,7 +25,7 @@ const PROJECTS = {
     },
     { id: 'project-2', name: 'Home', color: 'green', key: 'HOME', description: '', folders: [], repos: [] },
   ],
-  focus: { projectId: null, until: null },
+  focus: { projectId: null, teamId: null, until: null },
 };
 
 function createClient(detail = WATCHED) {
