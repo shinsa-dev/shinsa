@@ -5,6 +5,12 @@
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_"],
   "words": [
     "cfargotunnel",
+    "addexclusion",
+    "APFS",
+    "EEXIST",
+    "isexcluded",
+    "tmutil",
+    "xattr",
     "ECDH",
     "HKDF",
     "gtimeout",

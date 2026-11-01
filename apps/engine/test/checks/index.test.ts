@@ -102,6 +102,15 @@ describe('running a check', () => {
     expect(Number(run.output)).toBe(Math.min(19, own + 10));
   });
 
+  test('a check gets the variables it is given over the quiet defaults', async () => {
+    const dir = createDir();
+    const run = await runCheck(checkOf('echo "$CI $TURBO_CACHE_DIR"'), dir, {
+      ...OPTIONS,
+      env: { TURBO_CACHE_DIR: '/shared/turbo' },
+    });
+    expect(run.output).toBe('1 /shared/turbo');
+  });
+
   test('the checks of a round run at once, in the checkout, each keeping its id and label', async () => {
     const dir = createDir();
     const marker = join(dir, 'started');

@@ -1,7 +1,8 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { APP_IDENTITY, REMOTE_APP_ORIGIN } from '@shinsa/core';
 import { BUNDLE, resolveBundlePath, type ShinsaBundle } from '../instance/bundle.ts';
+import { log } from '../log/index.ts';
 import { type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
 import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
 
@@ -14,6 +15,9 @@ export interface ServerConfig {
   dataDir: string;
   databasePath: string;
   worktreesDir: string;
+  checkBasesDir: string;
+  scratchDir: string;
+  cachesDir: string;
   evidenceDir: string;
   attachmentsDir: string;
   transcriptsDir: string;
@@ -36,6 +40,12 @@ export interface ServerConfig {
 }
 
 const DATABASE_FILE = 'shinsa.sqlite';
+const NEVER_INDEX_MARKER = '.metadata_never_index';
+const BACKUP_EXCLUSION = {
+  name: 'com.apple.metadata:com_apple_backup_excludeItem',
+  value:
+    '62706c69737430305f1011636f6d2e6170706c652e6261636b75706408000000000000010100000000000000010000000000000000000000000000001c',
+};
 
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -80,6 +90,9 @@ function resolveDataPaths(dataDir: string, env: Env) {
     dataDir,
     databasePath: join(dataDir, DATABASE_FILE),
     worktreesDir: env.SHINSA_WORKTREES_DIR || join(dataDir, 'worktrees'),
+    checkBasesDir: join(dataDir, 'check-bases'),
+    scratchDir: join(dataDir, 'scratch'),
+    cachesDir: join(dataDir, 'caches'),
     evidenceDir: join(dataDir, 'evidence'),
     attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),
@@ -121,8 +134,30 @@ export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): S
   };
 }
 
-export function prepareDataDir(config: ServerConfig) {
-  for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir]) {
+function excludeFromBackups(dir: string, platform: NodeJS.Platform) {
+  const marker = join(dir, NEVER_INDEX_MARKER);
+  if (existsSync(marker)) return;
+  writeFileSync(marker, '');
+  const xattr = platform === 'darwin' ? Bun.which('xattr', { PATH: process.env.PATH ?? '' }) : null;
+  if (!xattr) return;
+  const result = Bun.spawnSync([xattr, '-wx', BACKUP_EXCLUSION.name, BACKUP_EXCLUSION.value, dir], {
+    stdout: 'ignore',
+    stderr: 'pipe',
+  });
+  if (!result.success) {
+    log.warn('[Config] Could not exclude a folder from Time Machine', {
+      dir,
+      error: result.stderr.toString().trim(),
+    });
+  }
+}
+
+export function prepareDataDir(config: ServerConfig, platform = process.platform) {
+  for (const dir of [config.dataDir, config.evidenceDir, config.transcriptsDir]) {
     mkdirSync(dir, { recursive: true });
+  }
+  for (const dir of [config.worktreesDir, config.checkBasesDir, config.scratchDir, config.cachesDir]) {
+    mkdirSync(dir, { recursive: true });
+    excludeFromBackups(dir, platform);
   }
 }
