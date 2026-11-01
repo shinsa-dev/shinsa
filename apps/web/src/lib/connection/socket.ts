@@ -115,7 +115,7 @@ export const NO_UNREACHABLE_MACHINES: UnreachableMachine[] = [];
 
 export const NO_MACHINE_ACCESS: MachineAccess[] = [];
 
-export const UPDATE_ENGINE_MESSAGE = 'Update Shinsa to use this.';
+const UPDATE_ENGINE_MESSAGE = 'Update Shinsa to use this.';
 
 const BASELINE_COMMANDS = resolveEngineCommands(null);
 

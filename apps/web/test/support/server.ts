@@ -4,7 +4,6 @@ import {
   type ChatEntry,
   type ChatEvent,
   type ClientMessage,
-  type EngineInfo,
   resolveEngineInfo,
   type ServerMessage,
   type ShinsaState,
@@ -115,12 +114,6 @@ export function pushState(state: ShinsaState) {
   act(() => {
     push({ type: 'state', state: state && serializeState(state) });
     if (!connection.selectEngine()) push({ type: 'engine', engine: resolveEngineInfo('1.0.0') });
-  });
-}
-
-export function pushEngine(engine: EngineInfo) {
-  act(() => {
-    push({ type: 'engine', engine });
   });
 }
 
