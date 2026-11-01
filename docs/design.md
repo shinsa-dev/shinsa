@@ -3003,7 +3003,7 @@ Only these, and they win over anything below:
       shows none, nor one whose filer is gone, and Forked from leaves out the task the fact already names.
 42. **A toast is one short line** (since 2026-10-31; `lib/connection/commands.ts`, `scripts/lint-toast.ts`). A toast
     says what just happened in a few words and never wraps at the toaster's 420px: "Request declined.", "Device
-    revoked.", "Kai Lane joined.", "Couldn’t reach Shinsa.". At most 40 characters, counting an inserted name or
+    revoked.", "Kai joined.", "Couldn’t reach Shinsa.". At most 40 characters, counting an inserted name or
     count as 12; no description line under it, and no consequence the screen already shows. The one second line is a
     running update's progress, clipped to one line. An error toast is the server's message, so a `DomainError` a
     command or request from the web can return is one short sentence too ("This task is finished."); what an agent
@@ -3013,6 +3013,21 @@ Only these, and they win over anything below:
     `sendCommandWithToast` call must be a literal, a template, a constant or a function returning one (followed across
     imports and destructuring), a `done` or `sent` value (checked where it is written), or a server message
     (`error.message`, `describeFailure(error)`), which the clip covers.
+
+43. **A person is a first name in a user tag** (since 2026-11-01; `components/people/user-tag.tsx`,
+    `lib/remote/users.ts`). Three rules hold wherever Shinsa names someone. A person is their first name, capitalized
+    ("Kai", `resolveFirstName`), and their login only when no name is known. A login never has an `@` in front, in a
+    label, a row, a sentence, a toast, a doc or a test. And every mention is a `UserTag`: a 14px avatar in front of the
+    first name, part of the name the way a task chip has its tile, with a clear gap after the word before it ("Shared
+    by Kai"); hovering it opens the one user card, clicking it opens their GitHub profile. A row that lists a person
+    (Settings → Remote access and Teams, the hand-off in Share task) and the user card itself are `UserIdentity`: the
+    26px avatar, then one line "Full Name login" (the name in medium weight, the login grey, no `@`) over a
+    description, the row's detail ("Joined 3d ago", "Asked 1h ago", "Owner") or View on GitHub in the card, which is
+    only as wide as its content, up to 256px. An avatar is the GitHub photo only when the person has one, otherwise
+    their capitalized initial in the grey circle, at every size. A sentence built in `lib/` that names someone is a
+    `Mention` (text and people), drawn by `MentionText`; where a hover card cannot go (a tooltip, a toast, a confirm
+    title, a name inside a clickable header) it is the plain first name (`describeMentionText`: "Remove Kai?", "Kai
+    joined."). No other avatar or name layout exists.
 
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
+import { describeMentionText } from '@/lib/remote/users.ts';
 import {
   canHandOff,
   closeHandoffRemoveConfirm,
@@ -59,17 +60,22 @@ describe('handing a task off', () => {
     expect(resolveHandoffView(createTask({ id: 't1', handoff: { ...HANDED, guest: KAI } }))).toMatchObject({
       at: 5,
     });
-    expect(describeHandoffClaim(KAI)).toBe('Kai Lane is working on this task');
-    expect(describeHandoffClaim({ ...KAI, name: null })).toBe('kai is working on this task');
+    expect(describeHandoffClaim(KAI)).toEqual([{ user: KAI }, ' is working on this task']);
+    expect(describeMentionText(describeHandoffClaim(KAI))).toBe('Kai is working on this task');
+    expect(describeMentionText(describeHandoffClaim({ ...KAI, name: null }))).toBe(
+      'kai is working on this task'
+    );
     expect(describeHandoffBanner({ kind: 'off' })).toBeNull();
-    expect(describeHandoffBanner({ kind: 'linking' })).toBe('Making the hand-off link.');
-    expect(describeHandoffBanner({ kind: 'failed', message: 'Remote access is off.' })).toBe(
-      'The hand-off link couldn’t be made. Remote access is off.'
-    );
-    expect(describeHandoffBanner({ kind: 'ready', url: 'https://x' })).toContain('first GitHub account');
-    expect(describeHandoffBanner({ kind: 'claimed', guest: KAI, at: 9 })).toBe(
-      'Kai Lane is working on this task. It stays yours.'
-    );
+    expect(describeHandoffBanner({ kind: 'linking' })).toEqual(['Making the hand-off link.']);
+    expect(describeHandoffBanner({ kind: 'failed', message: 'Remote access is off.' })).toEqual([
+      'The hand-off link couldn’t be made. Remote access is off.',
+    ]);
+    expect(describeHandoffBanner({ kind: 'ready', url: 'https://x' })?.[0]).toContain('first GitHub account');
+    expect(describeHandoffBanner({ kind: 'claimed', guest: KAI, at: 9 })).toEqual([
+      { user: KAI },
+      ' is working on this task',
+      '. It stays yours.',
+    ]);
   });
 
   it('marks a task handed off or waiting on its link, and names who has it on each side', () => {
@@ -84,9 +90,9 @@ describe('handing a task off', () => {
     ).toBe(false);
     expect(isTaskHandedOff(ready)).toBe(true);
     expect(isTaskHandedOff(claimed)).toBe(true);
-    expect(describeHandoffMark(claimed, null)).toBe('Handed to Kai Lane');
+    expect(describeHandoffMark(claimed, null)).toBe('Handed to Kai');
     expect(describeHandoffMark(ready, null)).toBe('Hand-off link not opened yet');
-    expect(describeHandoffMark(claimed, LEE)).toBe('Handed to you by Lee Park');
+    expect(describeHandoffMark(claimed, LEE)).toBe('Handed to you by Lee');
     expect(resolveHandoffFact(ready, null)).toBeNull();
     expect(resolveHandoffFact(claimed, null)).toMatchObject({ verb: 'Handed to', user: KAI });
     expect(resolveHandoffFact(claimed, LEE)).toMatchObject({ verb: 'Handed to you by', user: LEE });
@@ -101,7 +107,7 @@ describe('handing a task off', () => {
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.hand_off', taskId: 't' }],
       [{ type: 'handoff.remove', taskId: 't' }, 'The hand-off link is off.'],
-      [{ type: 'handoff.remove', taskId: 't' }, 'Kai Lane no longer has this task.'],
+      [{ type: 'handoff.remove', taskId: 't' }, 'Kai no longer has this task.'],
     ]);
     spies.restore();
   });

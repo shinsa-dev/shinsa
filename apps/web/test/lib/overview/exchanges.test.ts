@@ -153,8 +153,12 @@ describe('describeSentLabel and describeRequestLabel', () => {
     expect(describeSentLabel()).toBe('What you sent');
     expect(describeSentLabel('Kai')).toBe('What Kai sent');
     expect(describeSentLabel('The owner')).toBe('What the owner sent');
-    expect(describeRequestLabel()).toBe('Your request');
-    expect(describeRequestLabel('Kai')).toBe('Kai’s request');
-    expect(describeRequestLabel('The owner')).toBe('The owner’s request');
+    const kai = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    expect(describeRequestLabel()).toEqual(['Your', ' request']);
+    expect(describeRequestLabel({ name: 'Kai', user: kai })).toEqual([
+      { user: kai, label: 'Kai’s' },
+      ' request',
+    ]);
+    expect(describeRequestLabel({ name: 'The owner', user: null })).toEqual(['The owner’s', ' request']);
   });
 });

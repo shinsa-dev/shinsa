@@ -1,6 +1,7 @@
 import type { TeamFeedTask, TeamViewTarget } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import * as React from 'react';
+import { MentionText } from '@/components/people/user-tag.tsx';
 import { SharedTaskPage } from '@/components/share/shared-task-page.tsx';
 import { TaskGlyph } from '@/components/status/glyphs.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
@@ -11,6 +12,7 @@ import { useSharedView } from '@/hooks/use-shared-view.ts';
 import { useTeamFeed } from '@/lib/connection/socket.ts';
 import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
+import { type Mention, resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
 import { SHARED_READ_ONLY_NOTE } from '@/lib/share/page.ts';
 import {
   openLocalTeamView,
@@ -117,13 +119,21 @@ function useHeldTeamTask(target: TeamViewTarget) {
   }, [feed, target]);
 }
 
+function describeHeldTask(entry: TeamFeedTask): Mention {
+  const owner = entry.owner ? resolveSharedProfile(entry.owner, entry.ownerProfile) : null;
+  return [
+    owner ? { user: owner, label: `${resolveFirstName(owner)}’s` } : `${describeTeamTaskOwner(entry)}’s`,
+    ' machine is offline, and this machine kept only the task’s summary. The full task opens once their machine is back.',
+  ];
+}
+
 function HeldTeamTask({ entry, heldAt }: { entry: TeamFeedTask; heldAt: number }) {
   const state = React.useMemo(() => resolveTeamTaskState(entry), [entry]);
   return (
     <EmptyState
       icon='IconCloudSimpleDisconnected'
       title={entry.task.title}
-      description={`${describeTeamTaskOwner(entry)}’s machine is offline, and this machine kept only the task’s summary. The full task opens once their machine is back.`}
+      description={<MentionText mention={describeHeldTask(entry)} />}
     >
       <span className='flex items-center gap-1.5 text-xs'>
         <TaskGlyph state={state} task={entry.task} />

@@ -20,7 +20,8 @@ import { InAppLink } from '@/components/links/link.tsx';
 import { AgentReplyBlock } from '@/components/overview/agent-reply.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
 import { PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
-import { useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
+import { MentionText } from '@/components/people/user-tag.tsx';
+import { useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -42,7 +43,7 @@ import { selectPlanRevision } from '@/lib/overview/plan-version.ts';
 import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeReportedFindings, readReportedFindings } from '@/lib/review/findings.ts';
 import { resolveReviewPath } from '@/lib/review/places.ts';
-import { describeOwnerInSentence } from '@/lib/share/page.ts';
+import { resolveOwnerMention, resolveOwnerPossessive } from '@/lib/share/page.ts';
 import { describeSteps } from '@/lib/tasks/shapes.ts';
 import {
   describeSuggestionDetail,
@@ -58,7 +59,7 @@ function Card({
   children,
 }: {
   icon: IconName;
-  title: string;
+  title: React.ReactNode;
   meta?: React.ReactNode;
   children?: React.ReactNode;
 }) {
@@ -228,14 +229,16 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
   const context = readString(args, 'context');
   const choices = readStrings(args, 'choices');
   const answer = resolveAskAnswer(call);
-  const owner = useReadOnlyOwnerName();
+  const owner = useReadOnlyOwner();
   return (
     <Card
       icon='IconBubbleQuestion'
       title={
-        delegated
-          ? 'Asked the agent that delegated it'
-          : `Asked ${owner ? describeOwnerInSentence(owner) : 'you'}`
+        delegated ? (
+          'Asked the agent that delegated it'
+        ) : (
+          <MentionText mention={['Asked ', owner ? resolveOwnerMention(owner) : 'you']} />
+        )
       }
       meta={resolveAskMeta(call, delegated)}
     >
@@ -255,7 +258,11 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
       {answer !== null && (
         <div className='flex gap-2 border-border border-t pt-2.5 text-xs'>
           <span className='shrink-0 text-fg-2'>
-            {delegated ? 'Its answer' : owner ? `${owner}’s answer` : 'Your answer'}
+            {delegated ? (
+              'Its answer'
+            ) : (
+              <MentionText mention={[resolveOwnerPossessive(owner, true), ' answer']} />
+            )}
           </span>
           <div className='flex min-w-0 flex-1 flex-col gap-2'>
             {answer.text && (

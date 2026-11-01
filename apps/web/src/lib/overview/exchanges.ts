@@ -1,6 +1,5 @@
 import {
   type AgentReply,
-  capitalise,
   type Gate,
   type Iteration,
   type ReplyOutcome,
@@ -11,7 +10,8 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { formatCount } from '@/lib/format/count.ts';
-import { describeOwnerInSentence, describeOwnerPossessive } from '@/lib/share/page.ts';
+import type { Mention } from '@/lib/remote/users.ts';
+import { describeOwnerInSentence, resolveOwnerPossessive, type SharedOwner } from '@/lib/share/page.ts';
 
 export type AnsweredIteration = Iteration & { reply: AgentReply; repliedAt: number };
 
@@ -99,6 +99,6 @@ export function describeSentLabel(owner: string | null = null) {
   return `What ${owner === null ? 'you' : describeOwnerInSentence(owner)} sent`;
 }
 
-export function describeRequestLabel(owner: string | null = null) {
-  return `${capitalise(describeOwnerPossessive(owner))} request`;
+export function describeRequestLabel(owner: SharedOwner | null = null): Mention {
+  return [resolveOwnerPossessive(owner, true), ' request'];
 }

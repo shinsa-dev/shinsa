@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { describeMentionText } from '@/lib/remote/users.ts';
 import {
   canEnrollDevices,
   describeAcceptOutcome,
@@ -21,7 +22,7 @@ describe('remote access words', () => {
       NOW
     );
     expect(off).toMatchObject({ label: 'Off', tone: 'neutral' });
-    expect(off.detail).toContain('sign in with GitHub');
+    expect(describeMentionText(off.detail)).toContain('sign in with GitHub');
     const pairing = describeRemoteStatus(
       createRemoteSnapshot({
         paired: false,
@@ -34,10 +35,10 @@ describe('remote access words', () => {
       NOW
     );
     expect(pairing).toMatchObject({ label: 'Waiting for sign-in', tone: 'amber' });
-    expect(pairing.detail).toContain('K7PQ');
+    expect(describeMentionText(pairing.detail)).toContain('K7PQ');
     expect(describeRemoteStatus(createRemoteSnapshot({ enabled: false }), NOW)).toMatchObject({
       label: 'Paused',
-      detail: 'Signed in as mona. Resume to reach this machine again.',
+      detail: ['Signed in as mona.', ' Resume to reach this machine again.'],
     });
     expect(describeRemoteStatus(createRemoteSnapshot({ status: 'revoked' }), NOW)).toMatchObject({
       label: 'Removed',
@@ -46,14 +47,28 @@ describe('remote access words', () => {
     expect(describeRemoteStatus(createRemoteSnapshot(), NOW)).toEqual({
       label: 'Connected',
       tone: 'green',
-      detail: 'Signed in as mona. Open it in Shinsa Cloud.',
+      detail: ['Signed in as mona.', ' Open it in Shinsa Cloud.'],
     });
     expect(describeRemoteStatus(createRemoteSnapshot({ owner: null, status: 'starting' }), NOW)).toEqual({
       label: 'Connecting',
       tone: 'amber',
-      detail: 'Signed in. Open it in Shinsa Cloud.',
+      detail: ['Signed in.', ' Open it in Shinsa Cloud.'],
     });
     expect(describeRemoteStatus(createRemoteSnapshot({ status: 'off' }), NOW).label).toBe('Not connected');
+  });
+
+  it('names the signed-in owner as a person once their profile is known', () => {
+    const mona = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+    const detail = describeRemoteStatus(
+      createRemoteSnapshot({ access: { owner: mona, members: [] } }),
+      NOW
+    ).detail;
+    expect(detail).toEqual(['Signed in as ', { user: mona }, '.', ' Open it in Shinsa Cloud.']);
+    expect(describeMentionText(detail)).toBe('Signed in as Mona. Open it in Shinsa Cloud.');
+    const other = { owner: { ...mona, login: 'lee' }, members: [] };
+    expect(describeRemoteStatus(createRemoteSnapshot({ access: other }), NOW).detail[0]).toBe(
+      'Signed in as mona.'
+    );
   });
 
   it('says when a device was added or last used', () => {
@@ -105,8 +120,12 @@ describe('remote access words', () => {
       lastSeenAt: null,
       userId: '7',
     };
-    expect(describeDeviceDetail(device, access, NOW)).toMatch(/^Added .* · Added by kai$/);
-    expect(describeDeviceDetail({ ...device, userId: null }, access, NOW)).not.toContain('Added by');
+    const detail = describeDeviceDetail(device, access, NOW);
+    expect(detail.at(-1)).toEqual({ user: kai });
+    expect(describeMentionText(detail)).toMatch(/^Added .* · Added by kai$/);
+    expect(describeMentionText(describeDeviceDetail({ ...device, userId: null }, access, NOW))).not.toContain(
+      'Added by'
+    );
     expect(describeMemberSince(access.members[0] ?? { user: kai, addedAt: 0 }, NOW)).toStartWith('Joined ');
   });
 

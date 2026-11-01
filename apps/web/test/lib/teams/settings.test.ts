@@ -45,15 +45,19 @@ describe('Settings → Teams', () => {
 
   it('says who owns a team, how many are in it, and when a request waits', () => {
     const team = createTeam({ createdAt: NOW - 2 * 86_400_000 });
-    expect(describeTeamEntry(createTeamEntry({ team }), NOW)).toBe('You own it · 2 people · Made 2d ago');
+    expect(describeTeamEntry(createTeamEntry({ team }), NOW)).toEqual([
+      'You own it · 2 people · Made 2d ago',
+    ]);
     const alone = createTeam({ owner: KAI, role: 'member', members: [], createdAt: NOW - 2 * 86_400_000 });
-    expect(describeTeamEntry(createTeamEntry({ team: alone }), NOW)).toBe(
-      'Owned by Kai · 1 person · Made 2d ago'
-    );
+    expect(describeTeamEntry(createTeamEntry({ team: alone }), NOW)).toEqual([
+      'Owned by ',
+      { user: KAI },
+      ' · 1 person · Made 2d ago',
+    ]);
     expect(describeTeamFacts(alone, NOW)).toBe('1 person · Made 2d ago');
-    expect(describeTeamEntry(createTeamEntry({ team: null }), NOW)).toBe(
-      'You asked to join. The team’s owner has not answered yet.'
-    );
+    expect(describeTeamEntry(createTeamEntry({ team: null }), NOW)).toEqual([
+      'You asked to join. The team’s owner has not answered yet.',
+    ]);
   });
 
   it('asks for the team link only on a machine in the team without its key', () => {

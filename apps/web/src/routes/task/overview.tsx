@@ -131,6 +131,7 @@ function ActivityPanel({
             key={`${entry.at}-${entry.kind}-${entries.length - index}`}
             entry={entry}
             state={state}
+            task={task}
             onOpenRun={onOpenRun}
           />
         ))}

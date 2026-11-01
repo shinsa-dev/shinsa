@@ -55,6 +55,7 @@ import {
   type RemoteTeam,
   type RemoteUser,
   type Repo,
+  resolveFirstName,
   resolveKeyFingerprint,
   resolvePreviewTunnelPath,
   resolveTaskProject,
@@ -795,19 +796,19 @@ async function createPreviewHandoffs(studio: Awaited<ReturnType<typeof startMach
   const at = (task: Task) => `http://${HOST}:${studio.machine.port}/tasks/${task.handle}`;
   return [
     {
-      label: `${claimed.handle}, handed off to @${GUEST.login}: its banner, its facts and Activity with their message`,
+      label: `${claimed.handle}, handed off to ${resolveFirstName(GUEST)}: its banner, its facts and Activity with their message`,
       url: at(claimed),
     },
     { label: `${waiting.handle}, with a hand-off link no one opened yet`, url: at(waiting) },
     {
-      label: `${waiting.handle}'s hand-off link, signed in as @${GUEST.login} (open it in a private window)`,
+      label: `${waiting.handle}'s hand-off link, signed in as ${resolveFirstName(GUEST)} (open it in a private window)`,
       url: resolveClaimAs(claim),
     },
     {
-      label: `A fresh hand-off link for ${waiting.handle} each time, signed in as @${GUEST.login} (takes it back from whoever holds it first)`,
+      label: `A fresh hand-off link for ${waiting.handle} each time, signed in as ${resolveFirstName(GUEST)} (takes it back from whoever holds it first)`,
       url: `${ORIGIN}${SANDBOX_PATH}/handoff/${waiting.handle}`,
     },
-    { label: `Sign in as @${USER.login} again`, url: `${ORIGIN}${SANDBOX_PATH}/as/${USER.login}` },
+    { label: `Sign in as ${resolveFirstName(USER)} again`, url: `${ORIGIN}${SANDBOX_PATH}/as/${USER.login}` },
   ];
 }
 

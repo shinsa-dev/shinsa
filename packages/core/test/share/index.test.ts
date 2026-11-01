@@ -162,6 +162,8 @@ function withPullRequest(task: Task, state: 'open' | 'merged' | 'closed'): Task 
   };
 }
 
+const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+
 describe('what a shared task shows', () => {
   test('keeps the plan, the reports, the review, the checks and the pull request whole, and never the private parts', () => {
     const harness = createHarness();
@@ -251,6 +253,24 @@ describe('what a shared task shows', () => {
           comments: [],
           undelivered: { text: 'x', reason: 'y' },
         },
+        {
+          at: 7,
+          actor: 'shinsa',
+          kind: 'stage',
+          text: 'Handed this task to Kai',
+          detail: null,
+          evidenceId: null,
+          person: KAI,
+        },
+        {
+          at: 8,
+          actor: 'you',
+          kind: 'stage',
+          text: 'Approved the plan',
+          detail: null,
+          evidenceId: null,
+          byGuest: 'kai',
+        },
       ],
     };
     expect(resolveSharedTask(harness.state, task, CONTEXT).task.activity).toEqual([
@@ -266,6 +286,26 @@ describe('what a shared task shows', () => {
         gateType: 'review',
         onBehalf: true,
         round: 2,
+      },
+      {
+        at: 7,
+        actor: 'shinsa',
+        kind: 'stage',
+        text: 'Handed this task to Kai',
+        detail: null,
+        evidenceId: null,
+        runId: null,
+        person: KAI,
+      },
+      {
+        at: 8,
+        actor: 'you',
+        kind: 'stage',
+        text: 'Approved the plan',
+        detail: null,
+        evidenceId: null,
+        runId: null,
+        byGuest: 'kai',
       },
     ]);
   });

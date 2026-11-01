@@ -23,6 +23,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { MentionText } from '@/components/people/user-tag.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import {
@@ -33,7 +34,7 @@ import {
 import { formatSince } from '@/lib/format/time.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isRemoteBuild, resolveOnMachineUrl, THIS_MACHINE } from '@/lib/remote/mode.ts';
-import { describeUserName } from '@/lib/remote/users.ts';
+import { resolveFirstName } from '@/lib/remote/users.ts';
 import {
   canEnrollDevices,
   describeAcceptOutcome,
@@ -216,7 +217,9 @@ function StatusRow({
           <span className='min-w-0 truncate text-fg-2'>{snapshot.machineName}</span>
           <span className={cn('shrink-0', TONE_TEXT[status.tone])}>{status.label}</span>
         </div>
-        <Truncate className='text-2xs text-fg-2'>{status.detail}</Truncate>
+        <Truncate className='text-2xs text-fg-2'>
+          <MentionText mention={status.detail} />
+        </Truncate>
       </div>
       <StatusActions snapshot={snapshot} actions={actions} onRemove={onRemove} />
     </div>
@@ -290,7 +293,9 @@ function DeviceRow({
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
         <span className='truncate text-fg-4 text-xs'>{device.name}</span>
-        <span className='truncate text-2xs text-fg-2'>{describeDeviceDetail(device, snapshot.access)}</span>
+        <span className='truncate text-2xs text-fg-2'>
+          <MentionText mention={describeDeviceDetail(device, snapshot.access)} />
+        </span>
       </div>
       <Button variant='secondary' size='sm' onClick={onRevoke}>
         Revoke
@@ -355,7 +360,7 @@ function RemoteDialogs({
       />
     );
   if (value?.kind === 'member') {
-    const name = describeUserName(value.user);
+    const name = resolveFirstName(value.user);
     return (
       <ConfirmDialog
         control={dialog.control}

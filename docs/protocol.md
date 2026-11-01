@@ -92,7 +92,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | receipt | The stored answer to a command id, so a repeat is answered and never applied twice | `CommandReceipt` (engine) | not shown |
 | on your behalf | A user command an agent's management tool sent for you from its task, recorded with the acting task | `onBehalf`, `byTask`, `OnBehalfAction` | "‹handle› agent (on your behalf)" |
 | hand-off | A task given to someone by a link: the first GitHub account to open it steers that one task on your machine | `TaskHandoff`, `task.hand_off` | Hand off, "took this task over" |
-| guest | The account a task was handed to, and its device, scoped to that task | `TaskGuest`, `GuestActor`, `byGuest`, `role: 'guest'` | "@login", "A task handed to you by …" |
+| guest | The account a task was handed to, and its device, scoped to that task | `TaskGuest`, `GuestActor`, `byGuest`, `role: 'guest'` | "Kai" as a user tag, "A task handed to you by …" |
 | message kind | What the classifier read a message to be: feedback on the current round (a follow-up on a finished one), a message that needs nothing (thanks, "ok"), new work for the task (a new round), or work for another task (a split-off) | `MessageKind` (`feedback`, `acknowledge`, `new_round`, `separate_task`) | not shown |
 | split-off | A suggested task saying something you asked for in this chat belongs in a task of its own; you make it a task or keep it here, which sends it to this task now | `TaskSuggestion.splitOff` | "Make it a task", "Keep it here" |
 
@@ -998,8 +998,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `preview.shared`, `preview.unshared` | you shared a service run by link or changed how long (`serviceId`, `limit`, `endsAt`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when the task settled, whatever its limit, `expired`; each adds an activity entry) |
 | `preview.recorded`, `preview.failed` | the engine made the preview's link (`url`, null when unchanged), or could not (`detail`) |
 | `task.handed_off`, `handoff.removed` | you handed a task off, or took it back (`guest`, null when no one had claimed it); each adds an activity entry |
-| `handoff.recorded`, `handoff.failed`, `handoff.claimed` | the engine made the hand-off link (`url`), or could not (`detail`), or an account took the task over (`guest`; adds an activity entry, "Handed this task to @login") |
-| `handoff.left` | the guest left the machine at app.shinsa.dev, so the task is no longer handed off (`guest`; adds an activity entry, "@login gave this task back") |
+| `handoff.recorded`, `handoff.failed`, `handoff.claimed` | the engine made the hand-off link (`url`), or could not (`detail`), or an account took the task over (`guest`; adds an activity entry, "Handed this task to Kai", with the guest as `Activity.person`) |
+| `handoff.left` | the guest left the machine at app.shinsa.dev, so the task is no longer handed off (`guest`; adds an activity entry, "Kai gave this task back", with the guest as `Activity.person`) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.retitled` | an accepted plan named the work anew (`round`, `title`): the round takes the title, and the task too when it is round 1; activity “Renamed to …” |

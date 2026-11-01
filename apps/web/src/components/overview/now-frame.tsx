@@ -2,10 +2,14 @@ import type { ShinsaState, Task } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { CARD, CARD_FOOTER } from '@/components/layout/surface/card.ts';
+import { MentionText } from '@/components/people/user-tag.tsx';
 import { StatusText } from '@/components/status/text.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
+import type { Mention } from '@/lib/remote/users.ts';
 import { resolveRoundCount } from '@/lib/tasks/rounds.ts';
+
+const NOW_TITLE = 'font-medium text-fg-4 text-sm leading-tighter';
 
 export function NowFrame({
   eyebrow,
@@ -15,7 +19,7 @@ export function NowFrame({
   footer,
 }: {
   eyebrow: React.ReactNode;
-  title: string;
+  title: string | Mention;
   action?: React.ReactNode;
   children?: React.ReactNode;
   footer?: React.ReactNode;
@@ -27,7 +31,13 @@ export function NowFrame({
         <div className='flex items-start gap-3'>
           <div className='flex min-w-0 flex-1 flex-col gap-px'>
             <span className='text-2xs text-fg-2'>{eyebrow}</span>
-            <InlineMarkdown text={title} className='font-medium text-fg-4 text-sm leading-tighter' />
+            {typeof title === 'string' ? (
+              <InlineMarkdown text={title} className={NOW_TITLE} />
+            ) : (
+              <span className={NOW_TITLE}>
+                <MentionText mention={title} />
+              </span>
+            )}
           </div>
           {action && !readOnly && <div className='flex shrink-0 items-center gap-1.5'>{action}</div>}
         </div>

@@ -189,6 +189,16 @@ export const SAMPLE_MACS: RemoteInstance[] = [
     owner: SAMPLE_PARTNER,
     role: 'member',
   },
+  {
+    id: 'h2k5',
+    name: 'Kai’s MacBook',
+    fingerprint: '07ad 3c91 e58b 64f2 1d0e',
+    online: true,
+    lastSeenAt: null,
+    createdAt: 0,
+    owner: SAMPLE_MEMBER,
+    role: 'guest',
+  },
 ];
 
 export function createSampleMachineServices(now: number): RemoteServices {
@@ -196,7 +206,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
   const macs = SAMPLE_MACS.map((mac) =>
     mac.online ? { ...mac, lastSeenAt: now } : { ...mac, lastSeenAt: now - 26 * HOUR_MS }
   );
-  const added = new Set(['k3x9', 'p7m2', 'v9q1']);
+  const added = new Set(['k3x9', 'p7m2', 'v9q1', 'h2k5']);
   return {
     dashboard: {
       readSession: refuse,

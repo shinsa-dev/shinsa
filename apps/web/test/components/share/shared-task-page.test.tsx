@@ -102,7 +102,15 @@ describe('the owner on a shared task page', () => {
       cancelledFrom: 'planning',
       stageReason: 'cancelled by you',
     });
-    expect(screen.getByText('Cancelled at Plan: Kai cancelled the task.')).toBeTruthy();
+    expect(screen.getByText(/cancelled the task\./).textContent).toBe(
+      'Cancelled at Plan: KKai cancelled the task.'
+    );
+    expect(
+      screen
+        .getByText(/cancelled the task\./)
+        .querySelector('a')
+        ?.getAttribute('href')
+    ).toBe('https://github.com/kai');
     cancelled.unmount();
     const fixing = renderShared('kai', 'mona', {
       stage: 'fixing',
@@ -117,7 +125,7 @@ describe('the owner on a shared task page', () => {
         },
       ],
     });
-    expect(screen.getByText('Kai’s request')).toBeTruthy();
+    expect(document.body.textContent).toContain('KKai’s request');
     expect(screen.queryByText('Your request')).toBeNull();
     fixing.unmount();
   });

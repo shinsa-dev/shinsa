@@ -185,7 +185,9 @@ describe('Settings → Remote access', () => {
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     expect(screen.getByText(/^Kai iPhone · Asked/)).toBeTruthy();
     expect(screen.getByText('Chrome on Mac')).toBeTruthy();
-    expect(screen.queryByText('mona')).toBeNull();
+    expect(screen.getAllByText('mona').map((name) => name.closest('a')?.getAttribute('href'))).toEqual([
+      'https://github.com/mona',
+    ]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[0] as HTMLElement);
     await waitFor(() => expect(actions.acceptRequest).toHaveBeenCalledWith('r1'));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Kai joined.'));
@@ -206,11 +208,20 @@ describe('Settings → Remote access', () => {
     );
     expect(screen.getByText('People who can reach this machine')).toBeTruthy();
     expect(screen.getByText('You')).toBeTruthy();
-    expect(screen.queryByText('mona')).toBeNull();
+    expect(
+      screen
+        .getByText(/^Signed in as/)
+        .querySelector('a')
+        ?.getAttribute('href')
+    ).toBe('https://github.com/mona');
+    expect(screen.getAllByText('mona')).toHaveLength(1);
     expect(screen.getByText('Owner')).toBeTruthy();
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     expect(screen.getByText('kai')).toBeTruthy();
-    expect(screen.getByText(/Added by Kai$/)).toBeTruthy();
+    const added = screen.getByText(/· Added by$/).parentElement;
+    expect(added?.textContent).toEndWith('Added by Kai');
+    expect(added?.querySelector('a')?.getAttribute('href')).toBe('https://github.com/kai');
+    expect(added?.querySelector('img')?.getAttribute('src')).toBe('https://avatars.example/kai');
     fireEvent.click(screen.getAllByRole('button', { name: 'Remove' }).at(-1) as HTMLElement);
     fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
     await waitFor(() => expect(actions.removeMember).toHaveBeenCalledWith('7'));

@@ -2,14 +2,14 @@ import type { AccessRequest, RemoteAccess, RemoteDevice, RemoteMember, RemoteSna
 import { encode } from 'uqr';
 import { formatSince, formatUntil } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
-import { resolveFirstName, selectDeviceMember } from '@/lib/remote/users.ts';
+import { type Mention, resolveFirstName, selectDeviceMember } from '@/lib/remote/users.ts';
 
 export const REMOTE_ACCESS_SECTION = 'Remote access';
 
 export interface RemoteStatusView {
   label: string;
   tone: Tone;
-  detail: string;
+  detail: Mention;
 }
 
 const STATUS_VIEW: Record<RemoteSnapshot['status'], Omit<RemoteStatusView, 'detail'>> = {
@@ -20,28 +20,37 @@ const STATUS_VIEW: Record<RemoteSnapshot['status'], Omit<RemoteStatusView, 'deta
   revoked: { label: 'Removed', tone: 'red' },
 };
 
+function describeOwnerSignIn(snapshot: RemoteSnapshot): Mention {
+  if (!snapshot.owner) return ['Signed in.'];
+  const user = snapshot.access?.owner;
+  if (user?.login.toLowerCase() !== snapshot.owner.toLowerCase()) return [`Signed in as ${snapshot.owner}.`];
+  return ['Signed in as ', { user }, '.'];
+}
+
 export function describeRemoteStatus(snapshot: RemoteSnapshot, now = Date.now()): RemoteStatusView {
   if (snapshot.pairing)
     return {
       label: 'Waiting for sign-in',
       tone: 'amber',
-      detail: `Sign in with GitHub and approve code ${snapshot.pairing.claimCode}. ${formatUntil('The code expires', snapshot.pairing.expiresAt, now)}.`,
+      detail: [
+        `Sign in with GitHub and approve code ${snapshot.pairing.claimCode}. ${formatUntil('The code expires', snapshot.pairing.expiresAt, now)}.`,
+      ],
     };
   if (!snapshot.paired)
     return {
       label: 'Off',
       tone: 'neutral',
-      detail: 'Turn it on to sign in with GitHub. This machine then shows up in Shinsa Cloud.',
+      detail: ['Turn it on to sign in with GitHub. This machine then shows up in Shinsa Cloud.'],
     };
-  const owner = snapshot.owner ? `Signed in as ${snapshot.owner}.` : 'Signed in.';
+  const owner = describeOwnerSignIn(snapshot);
   if (snapshot.status === 'revoked')
     return {
       ...STATUS_VIEW.revoked,
-      detail: 'This machine was removed in Shinsa Cloud. Remove it here, then turn remote access on again.',
+      detail: ['This machine was removed in Shinsa Cloud. Remove it here, then turn remote access on again.'],
     };
   if (!snapshot.enabled)
-    return { label: 'Paused', tone: 'neutral', detail: `${owner} Resume to reach this machine again.` };
-  return { ...STATUS_VIEW[snapshot.status], detail: `${owner} Open it in Shinsa Cloud.` };
+    return { label: 'Paused', tone: 'neutral', detail: [...owner, ' Resume to reach this machine again.'] };
+  return { ...STATUS_VIEW[snapshot.status], detail: [...owner, ' Open it in Shinsa Cloud.'] };
 }
 
 export function describeDeviceSeen(device: RemoteDevice, now = Date.now()) {
@@ -49,10 +58,14 @@ export function describeDeviceSeen(device: RemoteDevice, now = Date.now()) {
   return formatSince('Last used', device.lastSeenAt, now);
 }
 
-export function describeDeviceDetail(device: RemoteDevice, access: RemoteAccess | null, now = Date.now()) {
+export function describeDeviceDetail(
+  device: RemoteDevice,
+  access: RemoteAccess | null,
+  now = Date.now()
+): Mention {
   const member = selectDeviceMember(access, device);
   const seen = describeDeviceSeen(device, now);
-  return member ? `${seen} · Added by ${resolveFirstName(member)}` : seen;
+  return member ? [`${seen} · Added by `, { user: member }] : [seen];
 }
 
 export function describeMemberSince(member: RemoteMember, now = Date.now()) {

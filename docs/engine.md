@@ -1045,8 +1045,9 @@ its request and plan goal (`TEAMMATE_TEXT_LIMIT`, 280 characters): what a teamma
 A pick of one is sent with `task.triage` as `duplicateOfTeammate` (its team, machine, task id, handle, title and
 owner: `TeammateOwner`, their login, name and avatar from the listing's `ownerProfile` or the team's member) and
 recorded as `TaskDuplicate.teammate`, with `of` holding the teammate's task id. A person is named by first name,
-never `@login` (`resolveFirstName`): the stage reason and activity read "duplicate of Kai’s KAI-12 …", and the
-"Duplicate of" fact shows Kai as a user tag (`UserTag`, the user card on hover) beside the task, which opens its
+never `@login` (`resolveFirstName`): the stage reason and activity read "duplicate of Kai’s KAI-12 …", the activity
+line carrying Kai as `Activity.person` and the cancelled now card reading `TaskDuplicate.teammate.owner`, so both
+tag Kai, and the "Duplicate of" fact shows Kai as a user tag (`UserTag`, the user card on hover) beside the task, which opens its
 read-only team view (`/teams/<team>/<machine>/<task>`), in the local app and on app.shinsa.dev alike. A teammate's
 listing carries no share link, so none is stored or built. Nothing is written to the teammate's machine: the
 duplicate travels in this machine's own team listing (`TaskDuplicate` is in the shared status fields), so on the
@@ -3395,6 +3396,19 @@ online, and the last list of it their own machine kept while it is not (Offline 
   command and both project team commands are human-only.
 
 
+## Naming people
+
+Wherever the engine, core or the command line names a GitHub account, the same three rules hold
+as on screen (`docs/design.md`, 43). A person is their first name ("Kai", core's `resolveFirstName`), the login only
+when no name is known; a login never has an `@` in front; and on a page each mention is a user tag with the user card.
+So activity reads "Handed this task to Kai" and "Kai gave this task back", carrying the guest as `Activity.person`
+so the page tags them (the web finds the name as a whole word, at the start or end first, never inside another
+word), a shared or team page keeps `person` and `byGuest` on each entry so it tags them too, a guest's actions show Kai as their actor, a guest's message reaches the agent as "From Kai,
+who the human handed this task to:", the task detail an agent reads names them the same way, and `shinsa remote
+status` and `shinsa teams list` print "Kai Lane (kai)" (the login alone when no name is known), with errors naming
+the login bare ("kai has no access to this machine."). `--login` still accepts `@kai`. Slack's own mentions keep
+their `@`: they are Slack names, not logins.
+
 ## Handing off a task
 
 A task you cannot work on any more can be handed to someone else by a link, `https://app.shinsa.dev/claim#<instance>.<machine
@@ -3453,8 +3467,9 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
     a path that only appears in some text never counts. Anything else is 403 `handoff_scope`. So a guest uploads
     no attachment and edits no file in Code: both write to your disk.
 - **Logged as theirs.** Everything a guest sends runs with `DecideContext.guest`, and each event it causes carries
-  `byGuest` (the login), which activity shows as `@login` ("Handed this task to @kai" for the claim). A guest's message
-  goes to the agent at once, without the message classifier, prefixed "From @kai, who the human handed this task to:",
+  `byGuest` (the login), which activity shows as the guest's first name in a user tag, Kai (the claim reads "Handed
+  this task to Kai", its entry carrying the guest as `Activity.person` so the page tags them). A guest's message
+  goes to the agent at once, without the message classifier, prefixed "From Kai, who the human handed this task to:",
   so the agent knows who wrote it; the task's request and chat show it without the prefix.
 - **Their dashboard** (`lib/remote/fleet.ts`, `lib/remote/machines.ts`). app.shinsa.dev lists the machine for the
   account with `role: 'guest'`, and the fleet joins it after your own machines, so settings, accounts and the machine a
@@ -3470,14 +3485,14 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   never changes a live share, and picking a preset again shows the share as before. With it, Share for goes, the
   description says the task stays yours, and the footer has Hand off; while the link is made, a busy button; then
   Turn off link, Copy hand-off link and Done; a failure with its reason, Remove and Try again; once claimed, their
-  avatar, name, `@login` and when they opened the link, "<name> is working on this task. It stays yours…", with
+  `UserIdentity` (avatar, "Kai Lane kai", no `@`) and when they opened the link, "<name> is working on this task. It stays yours…", with
   Remove, which asks first and names who lost the task in its toast.
 - **Where it shows.** A hand-off has the handshake icon (`HANDOFF_ICON`, `IconHandshake`) everywhere. Its banner on
   your task page (`HandoffBanner` in `components/task/sharing-banner.tsx`), apart from the sharing banner and below it
   when the task is shared too, says who is working on it with Remove only, or that the first GitHub account to open the
   link can, with Copy hand-off link and Turn off link; Manage stays on the sharing banner. The task's title in the task
   list, Home and the Needs you queue carries the hand-off mark beside the share mark (`SharedMark`, `hasShareMark`:
-  "Handed to Kai Lane", "Hand-off link not opened yet"), and its facts row says "Handed to <name>"
+  "Handed to Kai", "Hand-off link not opened yet"), and its facts row says "Handed to <name>"
   (`resolveHandoffFact`). On the guest's side the same mark and fact say "Handed to you by <owner>", from the
   machine's owner app.shinsa.dev lists (`MachineView.handedBy`).
 - **Taking it back.** `handoff.remove` emits `handoff.removed` and queues `handoff.revoke`, which turns the link off at
@@ -3485,7 +3500,7 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   (`/__remote/machine/guests/remove`) unless they still hold another task here, so app.shinsa.dev stops listing the
   machine for them. Each heartbeat answers the machine's guests too, and a guest who left (Leave in their Settings →
   Machines) loses their devices on the next one, and each task they held is given back: the engine sends
-  `handoff.leave`, which emits `handoff.left` ("@kai gave this task back") and queues `handoff.revoke`, so Share task
+  `handoff.leave`, which emits `handoff.left` ("Kai gave this task back") and queues `handoff.revoke`, so Share task
   can hand it off again. A heartbeat whose answer was read before a claim here added its guest keeps the guests the
   machine has, so a claim that lands while a heartbeat is out is never taken for a leave. Pausing remote access ends every channel, a guest's included; removing it or pairing again forgets every
   guest and hand-off link.

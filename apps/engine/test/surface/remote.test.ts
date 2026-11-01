@@ -73,10 +73,10 @@ describe('shinsa remote', () => {
         'Open it in Shinsa Cloud at https://app.shinsa.dev.',
         'Added devices:',
         '  iPhone (last used 2026-10-30T00:00:00.000Z) dev-1',
-        '  iPad (never used, added by @kai) dev-2',
+        '  iPad (never used, added by Kai Lane (kai)) dev-2',
         'Members:',
-        '  Kai Lane (@kai)',
-        '  @lee',
+        '  Kai Lane (kai)',
+        '  lee',
       ].join('\n')
     );
     const paused = await runSpec(
@@ -130,7 +130,7 @@ describe('shinsa remote', () => {
     ]);
     const status = await runSpec(fake, ['remote', 'status']);
     expect(status.text).toContain('Invite link: https://app.shinsa.dev/enroll#k3x9.key.secret.invite');
-    expect(status.text).toContain('  r1 Kai Lane (@kai) asks to add Kai iPhone');
+    expect(status.text).toContain('  r1 Kai Lane (kai) asks to add Kai iPhone');
     const none = createFakeClient({ '/api/remote/link/create': ON });
     expect((await runSpec(none, ['remote', 'link'])).text).toContain('No link was made.');
   });
@@ -152,7 +152,7 @@ describe('shinsa remote', () => {
       'No access request matches nobody'
     );
     const many = createFakeClient({ '/api/remote': twice });
-    await expect(runSpec(many, ['remote', 'accept', 'kai'])).rejects.toThrow('@kai asked more than once');
+    await expect(runSpec(many, ['remote', 'accept', 'kai'])).rejects.toThrow('kai asked more than once');
   });
 
   test('removes a member by their GitHub login', async () => {
@@ -160,10 +160,10 @@ describe('shinsa remote', () => {
     await runSpec(fake, ['remote', 'remove-member', '@Kai']);
     expect(fake.posts).toEqual([{ path: '/api/remote/members/remove', body: { userId: '7' } }]);
     await expect(runSpec(fake, ['remote', 'remove-member', 'nobody'])).rejects.toThrow(
-      '@nobody has no access to this machine.'
+      'nobody has no access to this machine.'
     );
     const off = createFakeClient({ '/api/remote': OFF });
-    await expect(runSpec(off, ['remote', 'remove-member', 'kai'])).rejects.toThrow('@kai has no access');
+    await expect(runSpec(off, ['remote', 'remove-member', 'kai'])).rejects.toThrow('kai has no access');
   });
 
   test('gives agents only the status, never pairing, devices or turning it off', () => {
