@@ -1,7 +1,6 @@
 import {
   describeFeedbackLeaks,
   FEEDBACK_LIMITS,
-  FEEDBACK_REPOSITORY,
   type Feedback,
   isFeedbackFileable,
   isFeedbackWaiting,
