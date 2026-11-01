@@ -88,14 +88,63 @@ describe('forks', () => {
 
 describe('duplicates', () => {
   it('finds the task a duplicate repeats, if it is still known', () => {
-    const original = createTask({ id: 'o' });
+    const original = createTask({ id: 'o', handle: 'SW-4', title: 'Add the export' });
     const copy = createTask({ id: 'c', stage: 'cancelled', duplicate: { of: 'o', by: 'you', why: null } });
     const state = createShinsaState({ tasks: [original, copy] });
-    expect(selectDuplicateOriginal(state, copy)).toBe(original);
+    expect(selectDuplicateOriginal(state, copy)).toEqual({
+      owner: null,
+      handle: 'SW-4',
+      title: 'Add the export',
+      path: '/tasks/SW-4',
+    });
     expect(selectDuplicateOriginal(state, original)).toBeNull();
     expect(
       selectDuplicateOriginal(state, { ...copy, duplicate: { of: 'gone', by: 'you', why: null } })
     ).toBeNull();
+  });
+
+  it('links a teammate’s original to its read-only team view, named with its owner', () => {
+    const teammate = {
+      teamId: 'core',
+      machineId: 'kai',
+      taskId: 't 1',
+      handle: 'KAI-12',
+      title: 'Add dark mode',
+      owner: 'kai',
+    };
+    const copy = createTask({ id: 'c', duplicate: { of: 't 1', by: 'shinsa', why: null, teammate } });
+    const state = createShinsaState({ tasks: [copy] });
+    expect(selectDuplicateOriginal(state, copy)).toEqual({
+      owner: '@kai’s',
+      handle: 'KAI-12',
+      title: 'Add dark mode',
+      path: '/teams/core/kai/t%201',
+    });
+    expect(
+      selectDuplicateOriginal(state, {
+        ...copy,
+        duplicate: {
+          of: 't 1',
+          by: 'shinsa',
+          why: null,
+          teammate: { ...teammate, owner: null, handle: null },
+        },
+      })
+    ).toEqual({ owner: null, handle: null, title: 'Add dark mode', path: '/teams/core/kai/t%201' });
+  });
+
+  it('never counts a teammate’s duplicate as kept over a local task with the same id', () => {
+    const local = createTask({ id: 'same' });
+    const teammate = {
+      teamId: 'core',
+      machineId: 'kai',
+      taskId: 'same',
+      handle: null,
+      title: 'X',
+      owner: null,
+    };
+    const copy = createTask({ id: 'c', duplicate: { of: 'same', by: 'shinsa', why: null, teammate } });
+    expect(listDuplicates(createShinsaState({ tasks: [local, copy] }), local)).toEqual([]);
   });
 
   it('lists the tasks closed as duplicates of a task, oldest first', () => {
@@ -119,6 +168,20 @@ describe('duplicates', () => {
     );
     expect(describeDuplicateHint({ of: 'o', by: 'shinsa', why: 'Both add the export.' })).toBe(
       'Shinsa closed this as a duplicate: Both add the export.'
+    );
+    const teammate = {
+      teamId: 'core',
+      machineId: 'kai',
+      taskId: 't',
+      handle: null,
+      title: 'X',
+      owner: 'kai',
+    };
+    expect(describeDuplicateHint({ of: 't', by: 'shinsa', why: null, teammate })).toBe(
+      'Shinsa closed this as a duplicate of a teammate’s task, which you can only view.'
+    );
+    expect(describeDuplicateHint({ of: 't', by: 'shinsa', why: 'Both add dark mode.', teammate })).toBe(
+      'Shinsa closed this as a duplicate of a teammate’s task, which you can only view. Both add dark mode.'
     );
   });
 });

@@ -1035,6 +1035,23 @@ of any duplicate and starts it again: one that never ran an agent (what triage c
 keeping what it waits on; one that did starts a fresh round with the same request (`restartInNewRound`: a new
 round, a new branch and an empty plan), since its cancel removed its worktree and closed its pull request.
 
+**Teammates' duplicates.** When the task's project is in a team (Teams, below), `duplicate_of` also offers the
+open tasks of every such team, read from this machine's team feeds (`TeamFeeds`, the same data
+`GET /api/teams/tasks?open=true` serves, read in the engine, so it takes no extra request and no token;
+`triage/team.ts`, `resolveTeammateCheck`). Each is offered under a key of its own (`teammate-1`, …), never its id,
+so a teammate's id never reaches a local lookup, and each shows only its owner, handle, stage, title and the start of
+its request and plan goal (`TEAMMATE_TEXT_LIMIT`, 280 characters): what a teammate shares, never their chats.
+A pick of one is sent with `task.triage` as `duplicateOfTeammate` (its team, machine, task id, handle, title and
+owner) and recorded as `TaskDuplicate.teammate`, with `of` holding the teammate's task id; its "Duplicate of" fact
+reads "@kai’s KAI-12 …" and opens that task's read-only team view (`/teams/<team>/<machine>/<task>`), in the local
+app and on app.shinsa.dev alike. A teammate's listing carries no share link, so none is stored or built; nothing is
+written to the teammate's machine, so their task shows no Kept over. A team machine that is not live (offline,
+refused or still connecting) has sent no tasks, so triage goes on with what it could read and records those machines
+in `triageDecisions.duplicate.unreached`; the task's activity says once whose were not compared ("Could not check
+@kai’s Studio for duplicates"). With no answer from the model nothing is recorded, since no check ran. Not a
+duplicate works as for a local duplicate. A task without a project, or whose project is in no team, is triaged as
+before. Closing a task by hand as a teammate's duplicate is not offered: the picker lists local tasks only.
+
 ## Steps and gates
 
 The steps and gates are a typed schema in core, not a list of names: `packages/core/src/domain/steps.ts` defines every
@@ -3184,8 +3201,9 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   then every 5 minutes (at once when the key changes), since a teammate's machine learns a new member only at its next
   heartbeat, and a wrong key never calls a teammate more often than that. It accepts a teammate's machine only if it
   answers the welcome with the team key. The cache is in memory, never in the log. It serves:
-  - `GET /api/teams/tasks` (`?team=<id>` for one team, `?open=true` for unfinished tasks only), the read API triage
-    uses for its team-wide duplicate check: `{ machines, tasks }`, each task a `TeamFeedTask` (a `TeamTask` with its
+  - `GET /api/teams/tasks` (`?team=<id>` for one team, `?open=true` for unfinished tasks only), the same data
+    triage reads in the engine for its team-wide duplicate check (A task's path → Teammates' duplicates):
+    `{ machines, tasks }`, each task a `TeamFeedTask` (a `TeamTask` with its
     team and machine). It only reads; your own devices reach it over the sealed channel like any API route, and the
     tunnel has no route to it.
   - the socket message `teams` (`TeamFeedSnapshot`), sent on connect and on every change, so a page never polls.

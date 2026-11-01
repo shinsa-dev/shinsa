@@ -388,12 +388,13 @@ function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
     <Hint label={describeDuplicateHint(task.duplicate)}>
       <button
         type='button'
-        onClick={() => navigate(resolveTaskPath(original))}
+        onClick={() => navigate(original.path)}
         className={cn(FACT, FACT_INTERACTIVE, 'max-w-80')}
       >
         <Icon size='sm' name='IconSquareBehindSquare2' />
         <span className='flex min-w-0'>
           <span className='shrink-0 whitespace-pre'>Duplicate of </span>
+          {original.owner && <span className='shrink-0 whitespace-pre'>{original.owner} </span>}
           {original.handle && (
             <span className='shrink-0 whitespace-pre tabular-nums'>{original.handle} </span>
           )}

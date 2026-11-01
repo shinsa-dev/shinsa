@@ -419,6 +419,30 @@ describe('a duplicate', () => {
     expect(window.location.pathname).toBe('/tasks/SW-1');
   });
 
+  it('names a teammate’s original with its owner and opens its read-only team view', () => {
+    const copy = createTask({
+      id: 'c',
+      handle: 'SW-3',
+      stage: 'cancelled',
+      duplicate: {
+        of: 'kai-task',
+        by: 'shinsa',
+        why: null,
+        teammate: {
+          teamId: 'core',
+          machineId: 'kai',
+          taskId: 'kai-task',
+          handle: 'KAI-12',
+          title: 'Add dark mode',
+          owner: 'kai',
+        },
+      },
+    });
+    renderFacts(copy);
+    fireEvent.click(screen.getByRole('button', { name: /Duplicate of @kai’s KAI-12 Add dark mode/ }));
+    expect(window.location.pathname).toBe('/teams/core/kai/kai-task');
+  });
+
   it('shows on the task it duplicates which task was closed in favour of it', () => {
     const original = createTask({ id: 'o', handle: 'SW-1', title: 'Add dark mode' });
     const copy = createTask({

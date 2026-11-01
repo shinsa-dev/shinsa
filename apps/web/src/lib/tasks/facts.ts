@@ -1,6 +1,8 @@
 import type { ShinsaState, SourceReport, Task } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
 import { formatMoment, formatSince } from '@/lib/format/time.ts';
+import { resolveTeamTaskPath } from '@/lib/teams/feeds.ts';
+import { resolveTaskPath } from '@/router.ts';
 
 export function describeStarted(task: Task, now = Date.now()) {
   const verb = task.stage === 'waiting_on_tasks' ? 'Added' : 'Started';
@@ -22,18 +24,51 @@ export function listForkSources(state: ShinsaState, task: Task) {
   return source ? [source] : [];
 }
 
-export function selectDuplicateOriginal(state: ShinsaState, task: Task) {
-  return task.duplicate ? (state.tasks[task.duplicate.of] ?? null) : null;
+export interface DuplicateOriginalLink {
+  owner: string | null;
+  handle: string | null;
+  title: string;
+  path: string;
+}
+
+export function selectDuplicateOriginal(state: ShinsaState, task: Task): DuplicateOriginalLink | null {
+  const duplicate = task.duplicate;
+  if (!duplicate) return null;
+  const { teammate } = duplicate;
+  if (teammate) {
+    return {
+      owner: teammate.owner ? `@${teammate.owner}’s` : null,
+      handle: teammate.handle,
+      title: teammate.title,
+      path: resolveTeamTaskPath({
+        teamId: teammate.teamId,
+        instanceId: teammate.machineId,
+        taskId: teammate.taskId,
+      }),
+    };
+  }
+  const original = state.tasks[duplicate.of];
+  if (!original) return null;
+  return {
+    owner: null,
+    handle: original.handle ?? null,
+    title: original.title,
+    path: resolveTaskPath(original),
+  };
 }
 
 export function listDuplicates(state: ShinsaState, task: Task) {
   return Object.values(state.tasks)
-    .filter((candidate) => candidate.duplicate?.of === task.id)
+    .filter((candidate) => candidate.duplicate?.of === task.id && !candidate.duplicate.teammate)
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
 export function describeDuplicateHint(duplicate: NonNullable<Task['duplicate']>) {
   if (duplicate.by === 'you') return 'You closed this as a duplicate.';
+  if (duplicate.teammate) {
+    const reason = duplicate.why ? ` ${duplicate.why}` : '';
+    return `Shinsa closed this as a duplicate of a teammate’s task, which you can only view.${reason}`;
+  }
   return duplicate.why
     ? `Shinsa closed this as a duplicate: ${duplicate.why}`
     : 'Shinsa closed this as a duplicate.';
