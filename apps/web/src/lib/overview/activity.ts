@@ -1,5 +1,5 @@
 import type { Activity, ShinsaState, Task } from '@shinsa/core';
-import { type Mention, resolveFirstName, resolveGuestProfile } from '@/lib/remote/users.ts';
+import { type Mention, resolveGuestProfile, resolvePersonMention } from '@/lib/remote/users.ts';
 import { resolveOwnerPossessive, type SharedOwner } from '@/lib/share/page.ts';
 import { type Glyph, resolvePauseGlyph } from '@/lib/tasks/status.ts';
 
@@ -75,14 +75,8 @@ export function resolveActivityActor(
 }
 
 export function resolveActivityText(entry: Activity): string | Mention {
-  const person = entry.person;
-  if (!person) return entry.text;
-  const name = resolveFirstName(person);
-  const at = entry.text.indexOf(name);
-  if (at < 0) return entry.text;
-  const before = entry.text.slice(0, at);
-  const after = entry.text.slice(at + name.length);
-  return [...(before ? [before] : []), { user: person }, ...(after ? [after] : [])];
+  if (!entry.person) return entry.text;
+  return resolvePersonMention(entry.text, entry.person) ?? entry.text;
 }
 
 export function resolveOverviewSummary(task: Task) {

@@ -1045,8 +1045,9 @@ its request and plan goal (`TEAMMATE_TEXT_LIMIT`, 280 characters): what a teamma
 A pick of one is sent with `task.triage` as `duplicateOfTeammate` (its team, machine, task id, handle, title and
 owner: `TeammateOwner`, their login, name and avatar from the listing's `ownerProfile` or the team's member) and
 recorded as `TaskDuplicate.teammate`, with `of` holding the teammate's task id. A person is named by first name,
-never `@login` (`resolveFirstName`): the stage reason and activity read "duplicate of Kai’s KAI-12 …", and the
-"Duplicate of" fact shows Kai as a user tag (`UserTag`, the user card on hover) beside the task, which opens its
+never `@login` (`resolveFirstName`): the stage reason and activity read "duplicate of Kai’s KAI-12 …", the activity
+line carrying Kai as `Activity.person` and the cancelled now card reading `TaskDuplicate.teammate.owner`, so both
+tag Kai, and the "Duplicate of" fact shows Kai as a user tag (`UserTag`, the user card on hover) beside the task, which opens its
 read-only team view (`/teams/<team>/<machine>/<task>`), in the local app and on app.shinsa.dev alike. A teammate's
 listing carries no share link, so none is stored or built. Nothing is written to the teammate's machine: the
 duplicate travels in this machine's own team listing (`TaskDuplicate` is in the shared status fields), so on the
@@ -3392,7 +3393,8 @@ Wherever the engine, core or the command line names a GitHub account, the same t
 as on screen (`docs/design.md`, 43). A person is their first name ("Kai", core's `resolveFirstName`), the login only
 when no name is known; a login never has an `@` in front; and on a page each mention is a user tag with the user card.
 So activity reads "Handed this task to Kai" and "Kai gave this task back", carrying the guest as `Activity.person`
-so the page tags them, a guest's actions show Kai as their actor, a guest's message reaches the agent as "From Kai,
+so the page tags them (the web finds the name as a whole word, at the start or end first, never inside another
+word), a shared or team page keeps `person` and `byGuest` on each entry so it tags them too, a guest's actions show Kai as their actor, a guest's message reaches the agent as "From Kai,
 who the human handed this task to:", the task detail an agent reads names them the same way, and `shinsa remote
 status` and `shinsa teams list` print "Kai Lane (kai)" (the login alone when no name is known), with errors naming
 the login bare ("kai has no access to this machine."). `--login` still accepts `@kai`. Slack's own mentions keep

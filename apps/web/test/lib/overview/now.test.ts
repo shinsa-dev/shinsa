@@ -121,6 +121,35 @@ describe('resolveNowTitle', () => {
       'cancelled after a failure',
       '.',
     ]);
+    const original = {
+      teamId: 'team',
+      machineId: 'm',
+      taskId: 'k12',
+      handle: 'KAI-12',
+      title: 'Dark mode',
+      owner: KAI,
+    };
+    const duplicated = {
+      ...closed,
+      stageReason: 'duplicate of Kai’s KAI-12 “Dark mode”',
+      duplicate: { of: 'k12', by: 'shinsa' as const, why: null, teammate: original },
+    };
+    expect(resolveNowTitle(duplicated, [], null, undefined)).toEqual([
+      'Cancelled at Merge: ',
+      'duplicate of ',
+      { user: KAI },
+      '’s KAI-12 “Dark mode”',
+      '.',
+    ]);
+    const unnamed = {
+      ...duplicated,
+      duplicate: { ...duplicated.duplicate, teammate: { ...original, owner: null } },
+    };
+    expect(resolveNowTitle(unnamed, [], null, undefined)).toEqual([
+      'Cancelled at Merge: ',
+      'duplicate of Kai’s KAI-12 “Dark mode”',
+      '.',
+    ]);
     const silent = { ...closed, stageReason: '' };
     expect(resolveNowTitle(silent, [], null, undefined)).toBe('Cancelled at Merge.');
   });

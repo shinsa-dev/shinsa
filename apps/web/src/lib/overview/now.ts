@@ -18,7 +18,7 @@ import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { resolveSteps, selectCancelledStep } from '@/lib/overview/progress.ts';
-import type { Mention } from '@/lib/remote/users.ts';
+import { type Mention, resolvePersonMention } from '@/lib/remote/users.ts';
 import { resolveOwnerMention, resolveOwnerPossessive, type SharedOwner } from '@/lib/share/page.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 import { describeConflict } from '@/lib/tasks/now.ts';
@@ -56,17 +56,20 @@ const CANCEL_REASON: Record<string, string> = {
   'pull request closed': 'the pull request was closed without merging',
 };
 
-function describeCancelReason(reason: string, owner: SharedOwner | null): Mention {
+function describeCancelReason(task: Task, owner: SharedOwner | null): Mention {
+  const reason = task.stageReason;
   if (reason === 'cancelled by you')
     return [owner === null ? 'you' : resolveOwnerMention(owner), ' cancelled the task'];
   const known = CANCEL_REASON[reason] ?? reason;
-  return known ? [known] : [];
+  if (!known) return [];
+  const original = task.duplicate?.teammate?.owner;
+  return (original ? resolvePersonMention(known, original) : null) ?? [known];
 }
 
 function describeCancelled(task: Task, owner: SharedOwner | null): string | Mention {
   const step = selectCancelledStep(resolveSteps(resolveTaskProgress(task)));
   if (!step) return SETTLED_TITLE.cancelled ?? '';
-  const reason = describeCancelReason(task.stageReason, owner);
+  const reason = describeCancelReason(task, owner);
   if (reason.length === 0) return `Cancelled at ${step.label}.`;
   return [`Cancelled at ${step.label}: `, ...reason, '.'];
 }

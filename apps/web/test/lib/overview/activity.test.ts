@@ -140,8 +140,8 @@ describe('activity marks', () => {
     });
     const guest = { id: 'u1', login: 'kai', name: 'Kai Lane', avatarUrl: 'k.png' };
     const handed = createTask({ id: 't', handoff: { at: 1, url: null, guest, claimedAt: 1 } });
-    expect(resolveActivityActor(state, { ...entry, byGuest: 'KAI' }, null, handed).mention).toEqual([
-      { user: guest },
+    expect(resolveActivityActor(state, { ...entry, byGuest: 'kai' }, null, handed).mention).toEqual([
+      { user: { login: 'kai', name: 'Kai Lane', avatarUrl: 'k.png' } },
     ]);
     const person = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
     const back = createTask({
@@ -164,6 +164,25 @@ describe('activity marks', () => {
       ' gave this task back',
     ]);
     expect(resolveActivityText({ ...line, text: 'Someone else', person })).toBe('Someone else');
+    const ha = { login: 'ha', name: 'Ha Nguyen', avatarUrl: null };
+    expect(resolveActivityText({ ...line, text: 'Handed this task to Ha', person: ha })).toEqual([
+      'Handed this task to ',
+      { user: ha },
+    ]);
+    const ask = { login: 'ask', name: null, avatarUrl: null };
+    expect(resolveActivityText({ ...line, text: 'Handed this task to ask', person: ask })).toEqual([
+      'Handed this task to ',
+      { user: ask },
+    ]);
+    const dot = { login: 'k.i', name: null, avatarUrl: null };
+    expect(resolveActivityText({ ...line, text: 'Kai and kxi gave k.i a task', person: dot })).toEqual([
+      'Kai and kxi gave ',
+      { user: dot },
+      ' a task',
+    ]);
+    expect(
+      resolveActivityText({ ...line, text: 'Closed as a duplicate of Kai’s KAI-12 “Kai”', person })
+    ).toEqual(['Closed as a duplicate of ', { user: person }, '’s KAI-12 “Kai”']);
   });
 
   it('names the task whose agent acted on your behalf, and links to it', () => {
