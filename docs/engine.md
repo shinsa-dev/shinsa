@@ -5999,8 +5999,13 @@ run. Codes: `body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`
 
 Every page holds one WebSocket on `/ws` (`apps/engine/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
-`docs/protocol.md` → The socket). On connect the server sends the state without the runs' prompts (`serializeState`), the
-accounts, `surfaces`, `engine` (what it speaks, Remote access → What each machine speaks, above), `terminals` (Terminals, above) and `remote` (Remote access, above); then every change of state goes to every socket as a patch, every change of the accounts,
+`docs/protocol.md` → The socket). On connect the server sends the small messages first, `surfaces`, `engine` (what it
+speaks, Remote access → What each machine speaks, above), the accounts, `terminals` (Terminals, above), `remote` (Remote
+access, above), `teams` and `resources`, and the state without the runs' prompts (`serializeState`) last: a state grows
+with the log (tens of MB on a long-used machine), and nothing it holds up may keep the page from learning what the engine
+speaks. Each socket queues up to 128 MB (`SOCKET_BACKPRESSURE_LIMIT_BYTES`, Bun's `backpressureLimit`, 16 MB by
+default) before Bun drops a frame; a send Bun drops (`socket.send` returns 0) is logged and closes that socket, so the
+page reconnects and reads everything again instead of missing a message without a sign. Then every change of state goes to every socket as a patch, every change of the accounts,
 the terminals and remote access whole, and a transcript only to the sockets following its run. Each terminal has a socket of
 its own on `/ws/terminals/<id>`. The page's
 first message on each socket is `hello` with its surface, `desktop` in the Mac app (it has `window.shinsaDesktop`)
