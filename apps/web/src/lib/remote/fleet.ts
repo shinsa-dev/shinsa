@@ -32,6 +32,7 @@ export interface FleetMember {
   id: string;
   name: string;
   current?: boolean;
+  online?: boolean;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
 }
@@ -155,8 +156,8 @@ function waitForMachines(settle: () => void) {
   return () => clearTimeout(timer);
 }
 
-function isSettled(input: Snapshot, reachable: boolean | undefined) {
-  return !reachable || input.state !== null;
+function isSettled(input: Snapshot, reachable: boolean | undefined, online: boolean | undefined) {
+  return !reachable || online === false || input.state !== null;
 }
 
 function isReachable(entry: FleetEntry) {
@@ -293,7 +294,10 @@ export class Fleet implements ShinsaConnection {
     this.#inputs = inputs;
     this.#engines = engines;
     const reachable = engines.map(isEngineProtocolMatch);
-    if (!this.#settled && inputs.every((input, index) => isSettled(input, reachable[index]))) {
+    if (
+      !this.#settled &&
+      inputs.every((input, index) => isSettled(input, reachable[index], this.#entries[index]?.member.online))
+    ) {
       this.#settled = true;
       this.#stopWaitingForMachines();
     }

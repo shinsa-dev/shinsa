@@ -324,6 +324,27 @@ describe('waiting for every machine before showing the state', () => {
     expect(fleet.snapshot().state).not.toBeNull();
   });
 
+  it('does not wait for a machine the dashboard lists as offline, and merges it in once it answers', () => {
+    const studio = createMember('m1', 'Studio');
+    const laptop = createMember('m2', 'Laptop');
+    const fleet = new Fleet(
+      [studio.member, { ...laptop.member, online: false }],
+      [],
+      null,
+      () => () => undefined
+    );
+    studio.connection.push({
+      state: createWire(1, { tasks: { 'task-studio': createTask({ id: 'task-studio' }) } }),
+      status: 'open',
+    });
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+    laptop.connection.push({
+      state: createWire(1, { tasks: { 'task-laptop': createTask({ id: 'task-laptop' }) } }),
+      status: 'open',
+    });
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {}).sort()).toEqual(['task-laptop', 'task-studio']);
+  });
+
   it('stops waiting for a machine on another engine protocol', () => {
     const { fleet, laptop } = createWaitingFleet();
     laptop.connection.engine = { ...resolveEngineInfo('0.9.0'), protocol: ENGINE_PROTOCOL - 1 };

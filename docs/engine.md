@@ -2834,7 +2834,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`replaceConnection`). Its state is every machine's state merged (`mergeFleetStates`: tasks, runs, gates, projects,
   repositories, evidence, schedules, memories and usage side by side, keyed by their ids; settings and focus from the
   first machine), and it remembers which machine owns each id. The page keeps its loading spinner ("Connecting to your
-  machines") until every machine has sent its state, turned out outdated or been removed, or until `FLEET_WAIT_MS`
+  machines") until every machine has sent its state, turned out outdated or been removed, or is listed offline on the dashboard (`FleetMember.online`), or until `FLEET_WAIT_MS`
   (10 s) pass (a channel that fails keeps its machine waited for, since its connection tries again), so Home never first shows one machine's tasks with another machine's focus; a machine
   that answers later merges in as it connects. A command goes to the machine that owns an id it names
   (`resolveCommandOwner`), a request to the machine that owns an id in its path or query (`resolveRequestOwner`), a

@@ -79,6 +79,7 @@ export function createFleetMember(
     id: instance.id,
     name: instance.name,
     current: device.onMachine === true,
+    online: instance.online,
     connection,
     fetch: (request) => link.fetch(request),
   };

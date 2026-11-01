@@ -97,7 +97,7 @@ describe('a machine in the dashboard', () => {
         return new Connection({ openSocket, retry: () => undefined });
       },
     });
-    expect(member).toMatchObject({ id: 'k3x9', name: 'Studio' });
+    expect(member).toMatchObject({ id: 'k3x9', name: 'Studio', online: true });
     const answer = await member.fetch(new Request('https://shinsa.dev/api/health'));
     expect(await answer.text()).toBe('from Studio');
     const socket = sockets[0]?.();
