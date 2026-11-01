@@ -2750,8 +2750,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   tasks and their task capacity, and, once its engine reports them (How busy each machine is, below), a line of meters
   for CPU, memory and disk ("CPU 42%", "Memory 12 of 32 GB", "Disk 120 GB free", each with a bar toned as it fills,
   `listResourceGauges` in `lib/remote/resources.ts`), or "No reading yet." until then. What one task uses is on the
-  task itself: hovering its machine in the task's facts row adds its agent, services and checks (CPU and memory each,
-  or Idle) and its worktree's size under "The machine this task runs on" (`listTaskUseLines`). Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
+  task itself: its machine in the task's facts row opens a card like Branch's and Checks' (`FactPopover`), headed by
+  the machine's name with its CPU, memory and free disk (`describeMachineResources`; "The machine this task runs on"
+  before its first reading), then "What this task uses": its agent, services and checks (CPU and memory each, or Idle)
+  and its worktree's size (`listTaskUseLines`). Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
   lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
   it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The
   machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
@@ -2807,7 +2809,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   passed over while another has room; among the rest, when every machine reports its resources, the most headroom first,
   the smaller of its free CPU and free memory in steps of 5 % (`resolveResourceHeadroom`), so a busy machine is passed
   over for a quiet one and two near-equal ones are not told apart by noise; then, or when any machine reports none (an older engine), open
-  tasks over its task capacity, ties to the one with fewer open tasks). The router reads each machine's CPU, memory and
+  tasks over its task capacity, ties to the one with fewer open tasks). Capacity holds over the router too: an answer
+  naming a machine at its task capacity while another has room is set aside for that same fallback
+  (`resolveRoutedPlacement`). The router reads each machine's CPU, memory and
   free disk as `describeResourceSummary` words them, so a policy such as "Heavy builds go to the machine with the most
   memory free." can be followed too. Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole

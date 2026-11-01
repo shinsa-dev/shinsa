@@ -11,6 +11,7 @@ import {
   resolveMachineLoad,
   resolvePlacement,
   resolveProjectMachine,
+  resolveRoutedPlacement,
   serializePlacementPrompt,
 } from '../../src/remote/placement.ts';
 import type { ResourceSummary } from '../../src/remote/resources.ts';
@@ -147,6 +148,17 @@ describe('placement', () => {
     const busy = machine('busy', ['building'], { capacity: 4, resources: use(95, 30) });
     expect(resolvePlacement([full, busy], null)).toBe('busy');
     expect(resolvePlacement([full, busy], 'p')).toBe('full');
+  });
+
+  test('the router’s answer stands unless it names a full machine while another has room', () => {
+    const full = machine('full', ['building'], { capacity: 1 });
+    const roomy = machine('roomy', ['building'], { capacity: 4 });
+    const alsoFull = machine('also', ['building'], { capacity: 1 });
+    expect(resolveRoutedPlacement([full, roomy], 'roomy', 'full')).toBe('roomy');
+    expect(resolveRoutedPlacement([full, roomy], 'full', 'roomy')).toBe('roomy');
+    expect(resolveRoutedPlacement([full, alsoFull], 'full', 'also')).toBe('full');
+    expect(resolveRoutedPlacement([full, roomy], null, 'roomy')).toBe('roomy');
+    expect(resolveRoutedPlacement([full, roomy], 'gone', null)).toBeNull();
   });
 
   test('when a machine reports no resources, room alone decides as before', () => {

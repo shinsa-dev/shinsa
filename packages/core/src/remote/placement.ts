@@ -81,6 +81,17 @@ export function resolvePlacement(machines: PlacementMachine[], projectId: string
   return best?.id ?? null;
 }
 
+export function resolveRoutedPlacement(
+  machines: PlacementMachine[],
+  answered: string | null,
+  fallback: string | null
+) {
+  const loads = machines.map(resolveMachineLoad);
+  const chosen = loads.find((load) => load.id === answered);
+  if (!chosen) return fallback;
+  return chosen.full && loads.some((load) => !load.full) ? fallback : chosen.id;
+}
+
 export interface PlacementProject {
   name: string;
   description: string;

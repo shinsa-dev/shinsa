@@ -119,6 +119,7 @@ export {
   resolveMachineLoad,
   resolvePlacement,
   resolveProjectMachine,
+  resolveRoutedPlacement,
   serializePlacementPrompt,
 } from './placement.ts';
 export {

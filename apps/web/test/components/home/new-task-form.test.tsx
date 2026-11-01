@@ -71,7 +71,7 @@ afterEach(() => {
   stopFakeServer();
 });
 
-function connectTwoMachines() {
+function connectTwoMachines(studioCapacity = 4) {
   const local = connection;
   const sent: [string, string | null | undefined][] = [];
   const studio = { id: 'studio', name: 'Studio', current: false };
@@ -82,7 +82,7 @@ function connectTwoMachines() {
         tasks: { a: { stage: 'building' as const } },
         projects: { p1: { name: 'Superwall', description: '' }, p2: { name: 'Paywalls', description: '' } },
         repos: {},
-        settings: { taskCapacity: 4 },
+        settings: { taskCapacity: studioCapacity },
       },
     },
     {
@@ -161,6 +161,19 @@ describe('NewTaskForm with several machines', () => {
     await pick('Machine', /Build box/, 'Build box');
     expect(combobox('Project').textContent).toBe('No project');
     expect(await listOptions('Project')).toEqual(['No project']);
+  });
+
+  it('sends the task where there is room when the router names a full machine', async () => {
+    const sent = connectTwoMachines(1);
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(Response.json({ answer: { machineId: 'studio', reason: 'Studio runs reviews.' } }))
+    ) as unknown as typeof globalThis.fetch;
+    renderForm();
+    fireEvent.change(field(), { target: { value: 'Review the build' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(sent).toEqual([['task.create', 'box']]));
+    globalThis.fetch = realFetch;
   });
 
   it('warns when the router could not be asked, and still places the task', async () => {
