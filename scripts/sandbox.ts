@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ServerWebSocket } from 'bun';
 import { isPreviewHost, PREVIEW_COOKIE, respondPreview } from '../apps/cloud/src/previews.ts';
@@ -570,6 +570,13 @@ function respondShareConnect(match: RegExpExecArray, machines: Machine[]) {
   return Response.json(answer);
 }
 
+function findRemoteStylesheet() {
+  const html = readFileSync(join(REMOTE_WEB, 'index.html'), 'utf8');
+  const href = /<link rel="stylesheet"[^>]*href="([^"]+\.css)"/.exec(html)?.[1];
+  if (!href) throw new Error('The remote build has no stylesheet.');
+  return href;
+}
+
 function respondStatic(pathname: string) {
   const relative = pathname.replace(/^\/+/, '');
   const file = Bun.file(join(REMOTE_WEB, relative));
@@ -800,7 +807,7 @@ async function main() {
   const machines = [studio.machine, laptop.machine];
   const shares = await createPreviewShares(studio);
   const { preview, shared } = await createServicePreview(studio);
-  const page = serializeSandboxPage(listSandboxSections(machines, shares, preview));
+  const page = serializeSandboxPage(listSandboxSections(machines, shares, preview), findRemoteStylesheet());
   const world = createPreviewWorld(machines);
   Bun.serve<TunnelData>({
     port: PORT,

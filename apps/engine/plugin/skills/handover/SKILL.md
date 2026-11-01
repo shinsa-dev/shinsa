@@ -65,7 +65,11 @@ disagrees. You built it and know why it is the way it is, so you write the expla
   ```
 
 - **testing.manual** starts from where to go (the preview URL, the local preview you attached, or the command that starts the app and its local URL),
-  then one concrete step each, then the edge cases worth trying (an empty field, a narrow window, a second tab). An
+  then one concrete step each, then the edge cases worth trying (an empty field, a narrow window, a second tab).
+  Every step that happens on a screen gives the full, direct URL of that exact screen as its `url` target
+  (`http://127.0.0.1:52105/tasks/SW-24?tab=review`), never a start page, an index or "open the app and go to…".
+  Cover each case worth trying as its own step with its own link: the main path, each state it can be in, and the
+  edge cases, so the human never has to find a screen themselves. An
   `expect` is concrete enough to tell pass from fail; "it works" is not a result. Link a file in an action as
   `[duplicate.ts](shinsa://file/src/paywalls/duplicate.ts#L12-L20)`. Leave `manual` empty only when
   nothing can be tried by hand, and say so in `automated`.
