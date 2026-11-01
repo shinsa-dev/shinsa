@@ -2983,6 +2983,12 @@ Only these, and they win over anything below:
     - **Fork into a new task** is a task action (the task menu, an All tasks row's menu, ⌘K) on every task but a cancelled
       one. It opens a dialog with one field, what the new task should do, and Fork; the facts row then shows Forked
       from and Forked into (`IconFork`) like Unblocks.
+    - **Who filed it** is one fact when you did not (`resolveFiledByFact` in `lib/tasks/facts.ts`, `FiledByFact`):
+      "Filed by SW-122 ‹title›" (`IconAgents`) when another task's agent filed it with `create_task`, "Split from
+      SW-122 ‹title›" (`IconSplit`) for a task `split_task` made, "Filed by “‹watchdog›”" (`IconRadar`), opening the
+      shipped task it watches, and "Filed by “‹automation›”" or, with no report, "Started by “‹automation›”"
+      (`IconCalendarClock`), opening the automation. Its tooltip says who filed it in a sentence. A task you filed
+      shows none, nor one whose filer is gone, and Forked from leaves out the task the fact already names.
 42. **A toast is one short line** (since 2026-10-31; `lib/connection/commands.ts`, `scripts/lint-toast.ts`). A toast
     says what just happened in a few words and never wraps at the toaster's 420px: "Request declined.", "Device
     revoked.", "Kai Lane joined.", "Couldn’t reach Shinsa.". At most 40 characters, counting an inserted name or

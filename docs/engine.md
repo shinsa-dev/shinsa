@@ -338,7 +338,8 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
 - **Forking from the web.** Fork into a new task (the task menu, an All tasks row's menu and ⌘K, on every task but a
   cancelled one, a finished one included) opens a dialog for the new task's request (`ForkDialog`, `lib/tasks/fork.ts`),
   sent as `task.create` with the source's repository and project. The Overview's facts show Forked from and Forked
-  into, and a watchdog that finds an issue forks the task it watches (Watchdogs, below).
+  into (and Filed by, Split from or Started by when an agent, a split or an automation made the task), and a
+  watchdog that finds an issue forks the task it watches (Watchdogs, below).
 
 ### Who is who
 
@@ -1640,7 +1641,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   task (`fork_from` naming any other is refused, `fork_watchdog`), so the fix starts from this conversation and goes
   through every gate; it takes the task's repository unless one is named, and its priority. The filed task keeps
   `Task.sourceReport` with `scheduleId: null` and the `watchdogId`, `createdBy {kind: 'watchdog'}`, and its request
-  quotes the report ("Reported in <server> …"); its Reported in fact names the watchdog and opens the shipped task.
+  quotes the report ("Reported in <server> …"); its Filed by fact names the watchdog and opens the shipped task, and its Reported in card holds the report.
   The check ends with `report_read {summary}` (`PURPOSE_HAND_OVERS.watch`). One that filed nothing is healthy and
   kept (`watchdog.checked`, the last 20), and the next one is due an interval later; when that would fall past the
   window, the watchdog passes. One that filed or linked a report trips it (`tripped`, `forkTaskIds` the forks it
@@ -2184,8 +2185,8 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
   (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog
   check. The home never shows as a task page: `/tasks/<home>` replaces itself with the watch's page,
-  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the
-  automation, a link to the report (an http or https link only, since an agent wrote it) and Open the watch.
+  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Filed by “<automation>”", which opens the watch, and "Reported in <server>", whose card
+  has the report, its author and time and a link to the report (an http or https link only, since an agent wrote it).
 - **Agents set automations up.** Settings → Automations has no form: you ask for a schedule, a trigger or a watch
   in the home chat or any task, and its agent writes it (`set_schedule`, `schedules_write`); the page lists them,
   pauses, resumes and deletes them. A new watch an agent writes is a suggested watch for you to accept (below).
