@@ -6186,7 +6186,8 @@ Every page holds one WebSocket on `/ws` (`apps/engine/src/http/socket.ts`, the w
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
 `docs/protocol.md` → The socket). On connect the server sends the small messages first, `surfaces`, `engine` (what it
 speaks, Remote access → What each machine speaks, above), the accounts, `terminals` (Terminals, above), `remote` (Remote
-access, above), `teams` and `resources`, and the state without the runs' prompts (`serializeState`) last: a state grows
+access, above), `teams` and `resources`, and the state without the runs' prompts and with settled tasks as summaries
+(`serializeViewState`, below) last: a state grows
 with the log (tens of MB on a long-used machine), and nothing it holds up may keep the page from learning what the engine
 speaks. Each socket queues up to 128 MB (`SOCKET_BACKPRESSURE_LIMIT_BYTES`, Bun's `backpressureLimit`, 16 MB by
 default) before Bun drops a frame; a send Bun drops (`socket.send` returns 0) is logged and closes that socket, so the
@@ -6215,6 +6216,29 @@ says hello counts as no desktop.
   patch it already has (`to` below its `seq`, or at it for a patch that moved the position). A patch whose `from` and
   `to` are equal changes the state without an event (a new Home guide, The briefing) and is applied like any other. A patch copies only what it changes: every entry, list and record
   it leaves alone keeps its identity, so a component that selects one task does not render again when another changes.
+- **Settled tasks as summaries.** Most of a long-used machine's state is the history of settled tasks (done, merged,
+  cancelled) that no page shows on load: on a machine with 162 tasks, 151 of them settled, the state on connect went
+  from 23.5 MB to 7.0 MB. So the state on connect and after `state.sync` holds each settled task as a summary
+  (`serializeViewState`, `summarizeTask` in core's `protocol/summaries.ts`): the task marked `summarized: true`, with its
+  plan, report, coverage, phase reports, findings, overlaps, plan history and iterations emptied and only two entries of
+  its activity kept, the last and the newest agent entry (what Home reads); its evidence and closed gates left out (an
+  open gate stays, so a Post-merge gate still reaches the queue); and its runs slimmed (`summarizeRun`: no summary,
+  feedback, compactions, continuations or failure, and only the last attempt, without its handoff), keeping the usage
+  and meters Settings → Stats, cost and the usage rate read. What a list, Home, ⌘K, dependencies, onboarding, a pull
+  request link's preview and Stats read comes out the same from a summary. Each socket keeps its view, the ids of the
+  tasks it holds as summaries (`listSummarizedTasks` on connect and `state.sync`), and every patch goes through
+  `resolveViewPatch` for it: a patch that touches none of them is the shared one, sent as one payload to every socket
+  like that; one that does is rewritten for that socket, a summarized task's entries changed as summaries; and a
+  summarized task that reopens or is removed leaves the view, its task, runs, gates and evidence sent whole in that
+  patch. A task that settles while a page is connected stays whole on it until the page connects again. Opening a
+  task's page (`useTaskDetail`) or hovering it (`prefetchTask`) on a summarized task sends `task.detail { taskId }`
+  once per connection; the server takes the task out of that socket's view and answers `task.detail { detail }`
+  (`resolveTaskDetail`: the task, its runs, gates and evidence, and the log position), which the page queues in order
+  with patches and applies with `applyTaskDetail`, asking for the state again (`state.sync`) when the position is not
+  its own; the task page shows "Reading the task" until it arrives. On the remote dashboard `Fleet` sends it to the
+  task's machine. A command the page guesses on a summarized task is decided on the summary and corrected by the
+  server's patch as any guess is. The share and team projections, the HTTP routes, the CLI and `read_task` read the
+  engine's state and are unchanged.
 - **Runs without their prompts.** A run's `prompt` and `rolePrompt` stay in the event log and in the engine's state,
   where recovery, a usage resume and a resumed session's brief read them, and never go to the page: the state on
   connect, after `state.sync` and in every patch holds each run as a `WireRun` (`serializeRun`), which leaves them out

@@ -77,6 +77,8 @@ describe('the /ui remote access samples', () => {
     expect(fleet.members.map((member) => member.name)).toEqual(['Studio', 'Laptop']);
     expect(fleet.selectTranscript('run')).toEqual([]);
     fleet.watchTranscript('run')();
+    fleet.requestTaskDetail('task');
+    fleet.watchTaskDetail('task')();
     fleet.subscribe(() => undefined)();
     expect(fleet.selectAccounts()).toBeNull();
     fleet.replaceAccounts(null as never);

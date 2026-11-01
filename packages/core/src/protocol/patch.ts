@@ -48,7 +48,7 @@ function resolveValueChange(previous: unknown, next: unknown): ValueChange {
   return { put: next };
 }
 
-function resolveEntryChange(previous: unknown, next: unknown): EntryChange | null {
+export function resolveEntryChange(previous: unknown, next: unknown): EntryChange | null {
   if (previous === next) return null;
   if (next === undefined) return { remove: true };
   if (!isFields(previous) || !isFields(next)) return { put: next };

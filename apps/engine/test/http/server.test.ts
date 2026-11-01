@@ -639,6 +639,25 @@ describe('the socket', () => {
     await engine.dispatch({ type: 'project.write', project: { name: 'After close', color: 'blue' } });
   });
 
+  test('a page gets settled tasks as summaries and reads one in full when it asks', async () => {
+    const { base, engine } = await start();
+    await engine.dispatch({ type: 'task.create', request: 'Drop the old tabs', repoId: null });
+    const taskId = Object.keys(engine.state.tasks)[0] ?? '';
+    await engine.dispatch({ type: 'task.cancel', taskId });
+    const client = connect(base);
+    await client.opened;
+    await until('the state', () => client.messages.some((message) => message.type === 'state'));
+    const first = client.messages.find((message) => message.type === 'state');
+    expect(first?.type === 'state' && first.state.tasks[taskId]?.summarized).toBe(true);
+    client.socket.send(JSON.stringify({ type: 'task.detail', taskId }));
+    await until('the detail', () => client.messages.some((message) => message.type === 'task.detail'));
+    const detail = client.messages.find((message) => message.type === 'task.detail');
+    expect(detail?.type === 'task.detail' && detail.detail.task).toEqual(
+      JSON.parse(JSON.stringify(engine.state.tasks[taskId]))
+    );
+    client.socket.close();
+  });
+
   test('a state over 16 MB still reaches the page with every connect message before it', async () => {
     const { base, engine } = await start();
     const request = 'x'.repeat(1024 * 1024);

@@ -4,10 +4,13 @@ import {
   type ChatEntry,
   type ChatEvent,
   type ClientMessage,
+  listSummarizedTasks,
   resolveEngineInfo,
+  resolveTaskDetail,
   type ServerMessage,
   type ShinsaState,
   serializeState,
+  serializeViewState,
   type TeamFeedSnapshot,
   type UserCommand,
 } from '@shinsa/core';
@@ -50,6 +53,8 @@ interface FakeServer {
   commands: UserCommand[];
   held: boolean;
   pending: string[];
+  state: ShinsaState | null;
+  details: string[];
   receive: (message: ClientMessage) => void;
 }
 
@@ -58,7 +63,10 @@ const server: FakeServer = {
   commands: [],
   held: false,
   pending: [],
+  state: null,
+  details: [],
   receive(message) {
+    if (message.type === 'task.detail') server.details.push(message.taskId);
     if (message.type !== 'command') return;
     server.commands.push(message.command);
     if (server.held) server.pending.push(message.id);
@@ -90,6 +98,8 @@ export function startFakeServer() {
   server.commands = [];
   server.held = false;
   server.pending = [];
+  server.state = null;
+  server.details = [];
   return server;
 }
 
@@ -116,6 +126,25 @@ export function pushState(state: ShinsaState) {
     push({ type: 'state', state: state && serializeState(state) });
     if (!connection.selectEngine()) push({ type: 'engine', engine: resolveEngineInfo('1.0.0') });
   });
+}
+
+export function pushViewState(state: ShinsaState) {
+  server.state = state;
+  act(() => {
+    push({ type: 'state', state: serializeViewState(state, listSummarizedTasks(state)) });
+    if (!connection.selectEngine()) push({ type: 'engine', engine: resolveEngineInfo('1.0.0') });
+  });
+}
+
+export function answerTaskDetails() {
+  const { state } = server;
+  const ids = server.details;
+  server.details = [];
+  act(() => {
+    if (!state) return;
+    for (const taskId of ids) push({ type: 'task.detail', detail: resolveTaskDetail(state, taskId) });
+  });
+  return ids;
 }
 
 export function clearAccounts() {
