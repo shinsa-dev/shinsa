@@ -2867,8 +2867,9 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
 - **Watching teammates** (`remote/team-feeds.ts`, `TeamFeeds`). Each machine watches, for each team whose key it
   holds, every machine of that team but itself (your other machines too, so the local app shows your team work
   everywhere), each over a list channel opened with its machine token. An offline machine is left alone and shows no
-  tasks; a dropped channel opens again after 1, 2, 5, 10, then every 30 seconds; a refused one stops until the team
-  or the key changes, so a wrong key does not keep calling a teammate. It accepts a teammate's machine only if it
+  tasks; a dropped channel opens again after 1, 2, 5, 10, then every 30 seconds; a refused one tries again after 1, 2,
+  then every 5 minutes (at once when the key changes), since a teammate's machine learns a new member only at its next
+  heartbeat, and a wrong key never calls a teammate more often than that. It accepts a teammate's machine only if it
   answers the welcome with the team key. The cache is in memory, never in the log. It serves:
   - `GET /api/teams/tasks` (`?team=<id>` for one team, `?open=true` for unfinished tasks only), the read API triage
     uses for its team-wide duplicate check: `{ machines, tasks }`, each task a `TeamFeedTask` (a `TeamTask` with its

@@ -462,7 +462,12 @@ function respondStatic(pathname: string) {
   });
 }
 
-function respondIndex(machines: Machine[], shares: PreviewShare[], teamTask: string | null) {
+function respondIndex(
+  machines: Machine[],
+  teammate: Machine,
+  shares: PreviewShare[],
+  teamTask: string | null
+) {
   const links = [
     ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
     [
@@ -505,6 +510,10 @@ function respondIndex(machines: Machine[], shares: PreviewShare[], teamTask: str
           ],
         ]
       : []),
+    [
+      `${teammate.name}'s own app: Settings, Teams. Take Paywalls out of ${TEAM.name}, and Kai's tasks leave Studio's list at once`,
+      `http://${HOST}:${teammate.port}/settings`,
+    ],
     [
       `The team's join link, which gives this browser the team key so the dashboard opens Kai's tasks too`,
       resolveTeamJoinUrl({ teamId: TEAM.id, invite: TEAM_INVITE, key: TEAM_KEY }, ORIGIN),
@@ -723,7 +732,8 @@ async function main() {
     hostname: HOST,
     async fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname === '/__preview') return respondIndex(machines, shares, teamTaskPath);
+      if (url.pathname === '/__preview')
+        return respondIndex(machines, teammate.machine, shares, teamTaskPath);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);

@@ -305,13 +305,16 @@ describe('watching teammates’ machines', () => {
     feeds.stop();
   });
 
-  test('stops trying when the machine refuses it, and starts over with a new key', async () => {
-    const { feeds, laptop, waits } = setUp({ watcherKey: OTHER_KEY });
+  test('tries a refusing machine again only after a long wait, and at once with a new key', async () => {
+    const { feeds, laptop, sockets, waits } = setUp({ watcherKey: OTHER_KEY });
     feeds.start();
     await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'refused', TEAM_GONE_REASON]]);
+    expect(waits).toHaveLength(1);
     laptop.publish();
-    expect(waits).toEqual([]);
+    expect(sockets).toHaveLength(1);
+    waits.shift()?.();
+    await until('it is refused again', () => sockets.length === 2 && waits.length === 1);
     laptop.store.upsertTeamKey(createKey());
     laptop.publish();
     await until('it is live with the new key', () => feeds.snapshot().tasks.length === 2);
@@ -324,6 +327,20 @@ describe('watching teammates’ machines', () => {
     feeds.start();
     await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'refused', TEAM_FEED_REFUSED]]);
+    feeds.stop();
+  });
+
+  test('a new member refused before the teammate’s machine heard of them gets in on the next try', async () => {
+    const { feeds, plane, waits } = setUp();
+    plane.answers.set(CONNECT_PATH, () => Response.json({ error: { code: 'not_found' } }, { status: 404 }));
+    feeds.start();
+    await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
+    plane.answers.set(CONNECT_PATH, () =>
+      Response.json({ url: 'wss://t-inst1.shinsa.dev/team?token=t', expiresAt: 1 })
+    );
+    waits.shift()?.();
+    await until('it is live', () => feeds.snapshot().tasks.length === 2);
+    expect(listMachineStatus(feeds)).toEqual([['inst1', 'live', null]]);
     feeds.stop();
   });
 

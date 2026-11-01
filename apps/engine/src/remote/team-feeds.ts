@@ -36,6 +36,8 @@ export const TEAM_VIEW_GONE = 'This task is not shown to your team any more.';
 
 const TEAM_RETRY_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 
+const TEAM_REFUSED_RETRY_MS = [60_000, 120_000, 300_000];
+
 const POLICY_VIOLATION = 1008;
 
 const NORMAL_CLOSE = 1000;
@@ -202,7 +204,7 @@ export class TeamFeeds {
       feed.tasks = [];
       return;
     }
-    if (feed.stop || feed.cancelWait || feed.status === 'refused') return;
+    if (feed.stop || feed.cancelWait) return;
     this.#connect(feed);
   }
 
@@ -238,14 +240,10 @@ export class TeamFeeds {
         feed.stop = null;
         if (!this.#isCurrent(feed)) return;
         feed.tasks = [];
-        if (end.gone) {
-          this.#mark(feed, 'refused', end.reason);
-          this.#publish();
-          return;
-        }
-        this.#mark(feed, 'offline', end.reason);
+        this.#mark(feed, end.gone ? 'refused' : 'offline', end.reason);
         this.#publish();
-        const delay = TEAM_RETRY_MS[Math.min(feed.attempt, TEAM_RETRY_MS.length - 1)] as number;
+        const steps = end.gone ? TEAM_REFUSED_RETRY_MS : TEAM_RETRY_MS;
+        const delay = steps[Math.min(feed.attempt, steps.length - 1)] as number;
         feed.attempt += 1;
         feed.cancelWait = this.#wait(delay, () => {
           feed.cancelWait = null;

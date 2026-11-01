@@ -227,7 +227,7 @@ describe('pages', () => {
     renderMenu();
     await pressCommandK();
     await type('switch focus');
-    await choose(/^Switch focus project/);
+    await choose(/^Switch focus/);
     expect(
       screen
         .getAllByRole('option')

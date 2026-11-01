@@ -60,9 +60,10 @@ import { listVersionSections } from '@/lib/command/versions.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useExtensions } from '@/lib/connection/extensions.ts';
-import { useConnection } from '@/lib/connection/socket.ts';
+import { useConnection, useRemoteSnapshot } from '@/lib/connection/socket.ts';
 import { useTerminals } from '@/lib/connection/terminals.ts';
 import { useVersions } from '@/lib/connection/versions.ts';
+import { listFocusTeams } from '@/lib/focus.ts';
 import { describeNewTask } from '@/lib/new-task.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { listRecentTaskIds, recordRecentTask } from '@/lib/preferences/recent-tasks.ts';
@@ -404,6 +405,7 @@ export function CommandMenu() {
   const { state } = useConnection();
   const open = useCommandMenuOpen();
   const route = useRoute();
+  const focusTeams = listFocusTeams(useRemoteSnapshot());
   const registered = useRegisteredSections();
   const theme = useThemePreference();
   const layout = useLayoutPreference();
@@ -527,7 +529,7 @@ export function CommandMenu() {
 
   const sections = [
     ...registered,
-    ...listGlobalSections(state, route, theme, layout),
+    ...listGlobalSections(state, route, theme, layout, focusTeams),
     ...listAccountSections(accounts),
     ...listScheduleSections(state),
     ...(open ? listServiceSections(state, terminals, Date.now()) : []),
