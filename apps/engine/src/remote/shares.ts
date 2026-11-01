@@ -1,13 +1,17 @@
 import { statSync } from 'node:fs';
 import { extname } from 'node:path';
 import {
+  type ChatEntry,
   DomainError,
+  hasShareGroup,
   isShareId,
   parseShareUrl,
   parseUnifiedDiff,
   type Repo,
+  redactTranscript,
   resolveSharedTask,
   resolveSharePreset,
+  resolveShareTranscriptFile,
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARE_FILE_BYTES,
@@ -57,6 +61,11 @@ export interface ShareGitHub {
   readFile: (repo: Repo, ref: string, path: string) => Promise<string>;
 }
 
+export interface ShareTranscripts {
+  listEntries: (runId: string) => ChatEntry[];
+  subscribe: (listener: (runId: string) => void) => () => void;
+}
+
 export interface SharedCode {
   files: Record<string, string>;
 }
@@ -75,6 +84,7 @@ export interface SharesOptions {
   engine: Engine;
   remote: Remote;
   evidence: EvidenceStore;
+  transcripts: ShareTranscripts;
   github?: ShareGitHub;
   now?: () => number;
   random?: (bytes: number) => Uint8Array<ArrayBuffer>;
@@ -115,10 +125,22 @@ function createTextFile(id: string, version: string, bytes: Uint8Array<ArrayBuff
   return { id, version, type: 'text/plain', read: async () => bytes };
 }
 
+function encodeTranscript(entries: ChatEntry[]) {
+  const encoder = new TextEncoder();
+  let kept = entries;
+  let bytes = encoder.encode(JSON.stringify(kept));
+  while (bytes.byteLength > SHARE_FILE_BYTES && kept.length > 0) {
+    kept = kept.slice(Math.ceil(kept.length / 4));
+    bytes = encoder.encode(JSON.stringify(kept));
+  }
+  return bytes;
+}
+
 export class Shares implements ShareEffects, ShareLinks {
   readonly #engine: Engine;
   readonly #remote: Remote;
   readonly #evidence: EvidenceStore;
+  readonly #transcripts: ShareTranscripts;
   readonly #github: ShareGitHub;
   readonly #now: () => number;
   readonly #random: (bytes: number) => Uint8Array<ArrayBuffer>;
@@ -131,12 +153,20 @@ export class Shares implements ShareEffects, ShareLinks {
     this.#engine = options.engine;
     this.#remote = options.remote;
     this.#evidence = options.evidence;
+    this.#transcripts = options.transcripts;
     this.#github = options.github ?? GITHUB;
     this.#now = options.now ?? Date.now;
     this.#random = options.random ?? createRandom;
     this.#pairedAs = this.#selectInstanceId();
     options.remote.subscribe(() => this.#syncRemote());
     options.engine.subscribe(() => this.#syncChannels());
+    options.transcripts.subscribe((runId) => this.#pushTranscript(runId));
+  }
+
+  #pushTranscript(runId: string) {
+    const taskId = this.#engine.state.runs[runId]?.taskId;
+    if (!taskId) return;
+    for (const channel of this.#channels) if (channel.taskId === taskId) void channel.push();
   }
 
   #selectInstanceId() {
@@ -230,6 +260,7 @@ export class Shares implements ShareEffects, ShareLinks {
     const files = [
       ...(await this.#listEvidenceFiles(shared)),
       ...(await this.#listLiveCodeFiles(shared, task, repo)),
+      ...this.#listTranscriptFiles(shared),
     ];
     const listed = Object.fromEntries(files.map((file) => [file.id, file.id]));
     const view: ShareLiveView = {
@@ -247,14 +278,32 @@ export class Shares implements ShareEffects, ShareLinks {
   }
 
   #resolveShared(task: Task) {
-    const repo = task.repoId ? (this.#engine.state.repos[task.repoId] ?? null) : null;
+    const preset = task.share?.preset ?? resolveSharePreset(this.#engine.state.settings);
+    const people = hasShareGroup(preset, 'people');
+    const repo = people && task.repoId ? (this.#engine.state.repos[task.repoId] ?? null) : null;
     const shared = resolveSharedTask(this.#engine.state, task, {
-      preset: task.share?.preset ?? resolveSharePreset(this.#engine.state.settings),
-      owner: this.#remote.store.file.owner,
-      machine: this.#remote.snapshot().machineName,
+      preset,
+      owner: people ? this.#remote.store.file.owner : null,
+      machine: people ? this.#remote.snapshot().machineName : null,
       repository: resolveRepositoryName(repo),
     });
     return { shared, repo };
+  }
+
+  #listTranscriptFiles(shared: SharedTask) {
+    if (!hasShareGroup(shared.preset, 'live')) return [];
+    return shared.runs.flatMap((run) => this.#resolveTranscriptFile(run.id) ?? []);
+  }
+
+  #resolveTranscriptFile(runId: string): LiveFile | null {
+    const count = this.#transcripts.listEntries(runId).length;
+    if (count === 0) return null;
+    return {
+      id: resolveShareTranscriptFile(runId),
+      version: String(count),
+      type: 'text/plain',
+      read: async () => encodeTranscript(redactTranscript(this.#transcripts.listEntries(runId))),
+    };
   }
 
   async #listEvidenceFiles(shared: SharedTask) {

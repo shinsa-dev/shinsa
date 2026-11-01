@@ -3,6 +3,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type Bytes,
+  CHAT_PROTOCOL_VERSION,
+  type ChatEntry,
+  type ChatEvent,
   createFrameOpener,
   createShareHello,
   decodeText,
@@ -18,6 +21,7 @@ import {
   SHARE_FILE_BYTES,
   type ShareLiveView,
   type ShareMessage,
+  type SharePreset,
   type ShinsaState,
   serializeBase64Url,
   serializeShareUrl,
@@ -32,11 +36,12 @@ import {
   SHARE_REMOTE_CHANGED,
   type ShareGitHub,
   Shares,
+  type ShareTranscripts,
 } from '../../src/remote/shares.ts';
 import { EffectError } from '../../src/runtime/failures.ts';
 import { EvidenceStore } from '../../src/store/evidence.ts';
 import { createTempDir, until } from '../helpers/index.ts';
-import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
+import { createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
 
 const CREDENTIALS = {
@@ -107,6 +112,30 @@ function createEvidence(overrides: Partial<Evidence>): Evidence {
   };
 }
 
+interface FakeTranscripts extends ShareTranscripts {
+  runs: Map<string, ChatEntry[]>;
+  record: (runId: string, event: ChatEvent) => void;
+}
+
+function createTranscripts(): FakeTranscripts {
+  const listeners = new Set<(runId: string) => void>();
+  const transcripts: FakeTranscripts = {
+    runs: new Map(),
+    listEntries: (runId) => [...(transcripts.runs.get(runId) ?? [])],
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    record: (runId, event) => {
+      const entries = transcripts.runs.get(runId) ?? [];
+      entries.push({ ...event, v: CHAT_PROTOCOL_VERSION, id: `e${entries.length}`, at: 1 } as ChatEntry);
+      transcripts.runs.set(runId, entries);
+      for (const listener of listeners) listener(runId);
+    },
+  };
+  return transcripts;
+}
+
 function shareTask(overrides: Partial<Task> = {}) {
   return createTask({
     repoId: 'repo-1',
@@ -131,6 +160,7 @@ interface SetUp {
   github?: FakeGitHub;
   patch?: (state: ShinsaState) => void;
   now?: () => number;
+  transcripts?: FakeTranscripts;
 }
 
 function setUp(options: SetUp = {}) {
@@ -161,16 +191,18 @@ function setUp(options: SetUp = {}) {
     options.patch?.(state);
   });
   const github = options.github ?? createGitHub();
+  const transcripts = options.transcripts ?? createTranscripts();
   let fill = 7;
   const publisher = new Shares({
     engine: stub.engine,
     remote,
     evidence: new EvidenceStore(evidenceDir),
+    transcripts,
     github,
     random: (bytes) => new Uint8Array(bytes).fill(fill++),
     ...(options.now ? { now: options.now } : {}),
   });
-  return { plane, stub, publisher, github, remote };
+  return { plane, stub, publisher, github, remote, transcripts };
 }
 
 function sha256(text: string) {
@@ -246,11 +278,14 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
   return viewer;
 }
 
-function sharedSetUp(options: SetUp = {}) {
+function sharedSetUp(options: SetUp & { preset?: SharePreset } = {}) {
   return setUp({
     ...options,
     patch: (state) => {
-      state.tasks['task-1'] = shareTask({ share: { ...SHARING, url: SHARE_URL } });
+      state.tasks['task-1'] = shareTask({
+        share: { ...SHARING, preset: options.preset ?? 'full', url: SHARE_URL },
+      });
+      state.runs['run-1'] = createRun();
       options.patch?.(state);
     },
   });
@@ -289,7 +324,12 @@ describe('making a share link', () => {
 
   test('a key and an id come from the system random source by default', async () => {
     const { stub, remote } = setUp();
-    const shares = new Shares({ engine: stub.engine, remote, evidence: new EvidenceStore(createTempDir()) });
+    const shares = new Shares({
+      engine: stub.engine,
+      remote,
+      evidence: new EvidenceStore(createTempDir()),
+      transcripts: createTranscripts(),
+    });
     await shares.link('task-1', CONTEXT);
     const link = parseShareUrl((stub.dispatched[0] as { url: string }).url);
     expect(link?.key).toHaveLength(43);
@@ -575,5 +615,73 @@ describe('what a link shows', () => {
       SHARE_DIFF_FILE,
     ]);
     expect(github.fileReads).toEqual([]);
+  });
+});
+
+describe('a share by preset', () => {
+  test('a status share names no one, no machine and no repository, and reads no code or evidence', async () => {
+    const { publisher, github } = sharedSetUp({ preset: 'status' });
+    const live = await publisher.resolveLive('task-1');
+    expect(live.view.shared).toMatchObject({
+      preset: 'status',
+      owner: null,
+      machine: null,
+      repository: null,
+      repo: null,
+      code: false,
+      evidence: [],
+      runs: [],
+    });
+    expect(live.files).toEqual([]);
+    expect(github.diffReads).toBe(0);
+  });
+
+  test('a full share streams no transcript', async () => {
+    const transcripts = createTranscripts();
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    const { publisher } = sharedSetUp({ transcripts });
+    const live = await publisher.resolveLive('task-1');
+    expect(Object.keys(live.view.files)).not.toContain('transcript-run-1');
+  });
+
+  test('an everything share streams each run without your turns, and again as it grows', async () => {
+    const transcripts = createTranscripts();
+    transcripts.record('run-1', {
+      type: 'user',
+      from: 'shinsa',
+      text: 'Build phase 1. sk-0000',
+      attachments: [],
+    });
+    transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'Reading.' });
+    transcripts.record('run-2', { type: 'agent', phase: 'interim', text: 'Another task.' });
+    const { publisher } = sharedSetUp({ preset: 'everything', transcripts });
+    const viewer = await openViewer(publisher);
+    await until('the viewer reads the transcript', () => 'transcript-run-1' in viewer.files());
+    expect(viewer.views()[0]?.files['transcript-run-1']).toEqual({ version: '2', type: 'text/plain' });
+    const first = JSON.parse(viewer.files()['transcript-run-1'] ?? '[]') as ChatEntry[];
+    expect(first.map((entry) => entry.type)).toEqual(['agent']);
+    expect(viewer.files()['transcript-run-1']).not.toContain('sk-0000');
+    const sent = viewer.messages.length;
+    transcripts.record('run-2', { type: 'agent', phase: 'final', text: 'Not this task.' });
+    transcripts.record('unknown', { type: 'agent', phase: 'final', text: 'No run.' });
+    await Bun.sleep(0);
+    expect(viewer.messages.length).toBe(sent);
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    await until('the viewer reads it again', () =>
+      viewer.messages.some((message) => message.t === 'file' && message.version === '3')
+    );
+    const grown = JSON.parse(viewer.files()['transcript-run-1'] ?? '[]') as ChatEntry[];
+    expect(grown.map((entry) => (entry.type === 'agent' ? entry.text : ''))).toEqual(['Reading.', 'Done.']);
+  });
+
+  test('a run with no transcript yet streams nothing, and one past the size a file carries keeps its latest entries', async () => {
+    const transcripts = createTranscripts();
+    const { publisher } = sharedSetUp({ preset: 'everything', transcripts });
+    expect(Object.keys((await publisher.resolveLive('task-1')).view.files)).not.toContain('transcript-run-1');
+    transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'x'.repeat(SHARE_FILE_BYTES) });
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    const file = (await publisher.resolveLive('task-1')).files.find((item) => item.id === 'transcript-run-1');
+    const kept = JSON.parse(decodeText((await file?.read()) as Bytes)) as ChatEntry[];
+    expect(kept.map((entry) => (entry.type === 'agent' ? entry.text : ''))).toEqual(['Done.']);
   });
 });
