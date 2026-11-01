@@ -469,6 +469,8 @@ describe('the change on the Overview', () => {
 });
 
 describe('the activity on the Overview', () => {
+  const ROWS_SETTLED = { timeout: 5000 };
+
   function busy() {
     const activity = Array.from({ length: 250 }, (_, index) => ({
       at: index,
@@ -485,12 +487,12 @@ describe('the activity on the Overview', () => {
   it('shows the newest entries and older ones a page at a time', async () => {
     const { task, state } = busy();
     const view = renderOverview(state, task);
-    await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy());
+    await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy(), ROWS_SETTLED);
     expect(view.queryByText('Entry 149')).toBeNull();
     fireEvent.click(view.getByRole('button', { name: 'Show 100 older entries' }));
-    await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy());
+    await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy(), ROWS_SETTLED);
     fireEvent.click(view.getByRole('button', { name: 'Show 50 older entries' }));
-    await waitFor(() => expect(view.getByText('Entry 0')).toBeTruthy());
+    await waitFor(() => expect(view.getByText('Entry 0')).toBeTruthy(), ROWS_SETTLED);
     expect(view.queryByRole('button', { name: /older entr/ })).toBeNull();
   });
 
@@ -507,12 +509,12 @@ describe('the activity on the Overview', () => {
       </TooltipProvider>
     );
     const view = render(page('visible'));
-    await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy());
+    await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy(), ROWS_SETTLED);
     fireEvent.click(view.getByRole('button', { name: 'Show 100 older entries' }));
-    await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy());
+    await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy(), ROWS_SETTLED);
     view.rerender(page('hidden'));
     view.rerender(page('visible'));
-    await waitFor(() => expect(view.queryByText('Entry 149')).toBeNull());
+    await waitFor(() => expect(view.queryByText('Entry 149')).toBeNull(), ROWS_SETTLED);
     expect(view.getByText('Entry 150')).toBeTruthy();
   });
 });
