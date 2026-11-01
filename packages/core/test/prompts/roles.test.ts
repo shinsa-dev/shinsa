@@ -93,16 +93,20 @@ describe('what a prompt says about the work it builds on', () => {
     if (!rootTask || !middleTask || !topTask) throw new Error('missing task');
     const prompt = describeRound(middleTask, null, [], 0, bundle);
     expect(prompt).toContain(
-      'This task is in a bundle of 3 tasks that merge together as one GitHub stack, from the bottom: "Root work", "Middle work", this task, "Top work".'
+      'This task is in a bundle of 3 tasks that merge together as one GitHub stack, starting with the one into the default branch: "Root work", "Middle work", this task, "Top work".'
     );
     expect(prompt).toContain('It is stacked on "Root work": your worktree starts from its branch');
     expect(prompt).toContain('tell that task with `tasks_message`');
     expect(prompt).toContain('"Top work" is stacked on this task.');
+    expect(prompt).toContain('it gets no merge gate of its own');
+    expect(prompt).not.toContain('root of the bundle');
     const rootPrompt = resolvePlanningPrompt(rootTask, null, [], null, bundle);
     expect(rootPrompt).not.toContain('It is stacked on');
     expect(rootPrompt).toContain('"Middle work" is stacked on this task.');
+    expect(rootPrompt).toContain('This task is the root of the bundle');
     const merged = [{ ...rootTask, stage: 'merged' as const, pullRequest: null }, middleTask, topTask];
     expect(describeRound(topTask, null, [], 0, merged)).not.toContain('"Top work" is stacked');
+    expect(describeRound(middleTask, null, [], 0, merged)).toContain('This task is the root of the bundle');
     expect(describeRound(topTask, null, [], 0)).not.toContain('bundle');
   });
 

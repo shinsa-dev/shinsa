@@ -154,8 +154,8 @@ describe('the steps around the merge', () => {
 });
 
 describe('the bundle on the merge gate', () => {
-  it('lists every task below the top as a row that ticks itself once that task is ready', () => {
-    const root = createTask({ id: 'root', title: 'Add the schema', stage: 'merged' });
+  it('lists every task above the root as a row that ticks itself once that task is ready', () => {
+    const root = createTask({ id: 'root', title: 'Add the schema', stage: 'awaiting_merge', waitsOn: [] });
     const middle = createTask({
       id: 'middle',
       title: 'Add the API',
@@ -164,19 +164,10 @@ describe('the bundle on the merge gate', () => {
       bundleReady: { commit: 'a' },
       pullRequest: createPullRequest({ number: 41 }),
     });
-    const below = createTask({ id: 'below', title: 'Add the model', stage: 'shipping', stacksOn: 'middle' });
-    const top = createTask({ id: 'top', stage: 'awaiting_merge', stacksOn: 'below', waitsOn: [] });
-    const waits = listMergeWaits(createShinsaState({ tasks: [root, middle, below, top] }), top);
+    const above = createTask({ id: 'above', title: 'Add the screen', stage: 'shipping', stacksOn: 'middle' });
+    const merged = createTask({ id: 'merged', stage: 'merged', stacksOn: 'above' });
+    const waits = listMergeWaits(createShinsaState({ tasks: [root, middle, above, merged] }), root);
     expect(waits).toEqual([
-      {
-        key: 'bundle:below',
-        taskId: 'below',
-        kind: 'bundle',
-        title: '[Add the model](shinsa://task/below) merges with this one',
-        detail: null,
-        command: null,
-        done: false,
-      },
       {
         key: 'bundle:middle',
         taskId: 'middle',
@@ -186,15 +177,24 @@ describe('the bundle on the merge gate', () => {
         command: null,
         done: true,
       },
+      {
+        key: 'bundle:above',
+        taskId: 'above',
+        kind: 'bundle',
+        title: '[Add the screen](shinsa://task/above) merges with this one',
+        detail: null,
+        command: null,
+        done: false,
+      },
     ]);
-    const [open, ready] = waits;
+    const [ready, open] = waits;
     if (!(open && ready)) throw new Error('no waits');
     expect(resolveWaitBlock(open)).toBe(
       'Ticks itself once that task is ready and its steps before the merge are ticked'
     );
     expect(resolveWaitBlock(ready)).toBe('That task is ready to merge');
     expect(MERGE_WAIT_KIND.bundle.label).toBe('Bundle');
-    const state = createShinsaState({ tasks: [root, middle, below, top] });
+    const state = createShinsaState({ tasks: [root, middle, above] });
     const stepped = withSteps({
       id: 'middle',
       title: 'Add the API',
@@ -202,10 +202,10 @@ describe('the bundle on the merge gate', () => {
       stacksOn: 'root',
       bundleReady: { commit: 'a' },
     });
-    const held = listMergeWaits(createShinsaState({ tasks: [root, stepped, below, top] }), top)[1];
+    const held = listMergeWaits(createShinsaState({ tasks: [root, stepped, above] }), root)[0];
     expect(held?.done).toBe(false);
     expect(held?.detail).toBe('Tick its 2 steps before the merge on that task first.');
-    expect(resolveMergeLabel(state, top, 'Merge')).toBe('Merge 2 pull requests');
+    expect(resolveMergeLabel(state, root, 'Merge')).toBe('Merge 2 pull requests');
     expect(
       resolveMergeLabel(
         state,

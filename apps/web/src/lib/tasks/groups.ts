@@ -15,7 +15,7 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
-import { isMergingWithBundle, selectBundleTop } from '@/lib/tasks/bundles.ts';
+import { isMergingWithBundle, selectBundleRoot } from '@/lib/tasks/bundles.ts';
 
 export type TaskGroupKey =
   | 'merge'
@@ -116,8 +116,8 @@ function resolveGroupWithin(state: ShinsaState, task: Task, seen: ReadonlySet<st
   if (gate && isHeldInBacklog(state, gate)) return 'backlog';
   if (gate) return resolveGateGroup(gate);
   const next = new Set(seen).add(task.id);
-  const top = isWaitingForBundle(state, task) ? selectBundleTop(state, task) : null;
-  if (top && !next.has(top.id) && !top.bundleReady) return resolveGroupWithin(state, top, next);
+  const root = isWaitingForBundle(state, task) ? selectBundleRoot(state, task) : null;
+  if (root && !next.has(root.id)) return resolveGroupWithin(state, root, next);
   const anchor = selectGroupAnchor(state, task, next);
   if (anchor) return resolveGroupWithin(state, anchor, next);
   return task.backlog ? 'backlog' : 'working';

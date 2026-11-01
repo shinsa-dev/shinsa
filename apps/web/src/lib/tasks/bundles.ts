@@ -84,9 +84,8 @@ export function describeBundleCount(rows: BundleRow[]) {
   return `${countReady(rows)}/${rows.length}`;
 }
 
-export function selectBundleTop(state: ShinsaState, task: Task) {
-  const open = resolveBundle(state, task).filter((member) => !isTaskSettled(member));
-  return open.at(-1) ?? null;
+export function selectBundleRoot(state: ShinsaState, task: Task) {
+  return resolveBundle(state, task).find((member) => !isTaskSettled(member)) ?? null;
 }
 
 export function listStackChoices(state: ShinsaState, task: Task | null) {
@@ -125,15 +124,15 @@ export function describeBundleNote(state: ShinsaState, rows: BundleRow[]) {
   if (rows.every((row) => row.state === 'merged' || row.state === 'cancelled')) {
     return `The bundle merged into ${branch}.`;
   }
-  const top = rows.filter((row) => row.state !== 'merged' && row.state !== 'cancelled').at(-1)?.task;
-  return `Number 1 targets ${branch} and each one after it builds on the one before. Once every task is ready, approving “${top?.title}” merges them all into ${branch}, from the last back to number 1.`;
+  const root = rows.find((row) => row.state !== 'merged' && row.state !== 'cancelled')?.task;
+  return `Number 1 targets ${branch} and each one after it builds on the one before. Once every task is ready and the whole bundle merges into ${branch} without conflicts, approving “${root?.title}” merges them all, from the last back to number 1.`;
 }
 
 export function describeBundleWait(state: ShinsaState, task: Task) {
   if (isMergingWithBundle(state, task)) return 'Merging with its bundle';
   if (!task.bundleReady) return null;
-  const top = selectBundleTop(state, task);
-  if (!top || top.id === task.id) return null;
-  if (hasMergeGate(state, top)) return `Merges when you approve the bundle on “${top.title}”`;
-  return `Merges with its bundle once “${top.title}” is ready`;
+  const root = selectBundleRoot(state, task);
+  if (!root || root.id === task.id) return null;
+  if (hasMergeGate(state, root)) return `Merges when you approve the bundle on “${root.title}”`;
+  return `Merges with its bundle once “${root.title}” is ready`;
 }

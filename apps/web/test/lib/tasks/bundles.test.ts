@@ -8,7 +8,7 @@ import {
   listBundleRows,
   listStackChoices,
   resolveBundleMemberState,
-  selectBundleTop,
+  selectBundleRoot,
   stackOnTask,
   toggleStack,
   unstackTask,
@@ -57,16 +57,16 @@ describe('the members of a bundle', () => {
     ]);
     expect(describeBundleProgress(rows)).toBe('1 of 3 ready');
     expect(describeBundleNote(state, rows)).toBe(
-      'Number 1 targets main and each one after it builds on the one before. Once every task is ready, approving “Add the screen” merges them all into main, from the last back to number 1.'
+      'Number 1 targets main and each one after it builds on the one before. Once every task is ready and the whole bundle merges into main without conflicts, approving “Add the schema” merges them all, from the last back to number 1.'
     );
-    expect(selectBundleTop(state, root)?.id).toBe('top');
+    expect(selectBundleRoot(state, top)?.id).toBe('root');
   });
 
   it('has no rows for a task outside any bundle', () => {
     const lone = createTask({ id: 'lone' });
     const state = createShinsaState({ tasks: [lone] });
     expect(listBundleRows(state, lone)).toEqual([]);
-    expect(selectBundleTop(state, lone)).toBeNull();
+    expect(selectBundleRoot(state, lone)).toBeNull();
   });
 
   it('reads each state a member can be in', () => {
@@ -180,19 +180,20 @@ describe('stack commands', () => {
 });
 
 describe('describeBundleWait', () => {
-  it('says what a ready task waits for: the top task getting ready, then your approval, then the merge', () => {
-    const root = createTask({ id: 'root', stage: 'shipping', bundleReady: READY });
-    const top = createTask({ id: 'top', title: 'Add the screen', stage: 'building', stacksOn: 'root' });
+  it('says what a ready task above waits for: the root getting ready, then your approval on it, then the merge', () => {
+    const root = createTask({ id: 'root', title: 'Add the schema', stage: 'fixing' });
+    const top = createTask({ id: 'top', stage: 'shipping', stacksOn: 'root', bundleReady: READY });
     const working = createShinsaState({ tasks: [root, top] });
-    expect(describeBundleWait(working, root)).toBe('Merges with its bundle once “Add the screen” is ready');
+    expect(describeBundleWait(working, top)).toBe('Merges with its bundle once “Add the schema” is ready');
     const gated = createShinsaState({
-      tasks: [root, { ...top, stage: 'awaiting_merge' }],
-      gates: [createGate({ id: 'm', taskId: 'top', type: 'merge' })],
+      tasks: [{ ...root, stage: 'awaiting_merge' }, top],
+      gates: [createGate({ id: 'm', taskId: 'root', type: 'merge' })],
     });
-    expect(describeBundleWait(gated, root)).toBe('Merges when you approve the bundle on “Add the screen”');
-    const mergingRoot = createTask({ id: 'root', stage: 'awaiting_merge' });
-    const merging = createShinsaState({ tasks: [mergingRoot, { ...top, stage: 'awaiting_merge' }] });
-    expect(describeBundleWait(merging, mergingRoot)).toBe('Merging with its bundle');
+    expect(describeBundleWait(gated, top)).toBe('Merges when you approve the bundle on “Add the schema”');
+    const mergingTop = createTask({ id: 'top', stage: 'awaiting_merge', stacksOn: 'root' });
+    const merging = createShinsaState({ tasks: [{ ...root, stage: 'awaiting_merge' }, mergingTop] });
+    expect(describeBundleWait(merging, mergingTop)).toBe('Merging with its bundle');
+    expect(describeBundleWait(working, { ...root, bundleReady: READY })).toBeNull();
   });
 
   it('says nothing for a task that is not ready or has nothing open above it', () => {

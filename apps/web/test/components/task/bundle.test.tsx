@@ -58,7 +58,7 @@ describe('the Bundle item in the task toolbar', () => {
         .getByRole('link', { name: 'Add the schema' })
         .getAttribute('href')
     ).toBe('/tasks/SW-1');
-    expect(screen.getByText(/merges them all into main, from the last back to number 1/)).toBeTruthy();
+    expect(screen.getByText(/merges them all, from the last back to number 1/)).toBeTruthy();
   });
 
   it('shows nothing for a task outside any bundle', () => {

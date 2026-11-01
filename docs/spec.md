@@ -1106,9 +1106,15 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   things: the next task starts sooner; a flaw a later task finds in the root is fixed in the root's still-open pull
   request instead of a follow-up on top of a merged one (the stacked task's agent messages the task below); and each
   pull request's diff is small and builds on the one before, for you and for review bots.
-- **Ready, then one merge.** A task below never gets its own merge gate: it shows Ready, merges with its bundle, and
-  keeps fixing CI, comments and conflicts. The top task gets one merge gate for the whole bundle once every task below
-  is ready, listing each pull request; approving merges them top down and every task ends merged. The task
+- **Ready, then one merge, on the root.** A stacked task never gets its own merge gate: it shows Ready, merges with
+  its bundle, and keeps fixing CI, comments and conflicts. The root, the task whose pull request targets main, owns
+  the merge: one merge gate for the whole bundle once every task above is ready, listing each pull request; approving
+  merges them from the last back to the root and every task ends merged.
+- **Our own stack, not GitHub's.** Shinsa runs the bundle itself rather than through GitHub's stack API, which gives
+  it the control: it decides when each task is ready, holds the one gate, checks every task's pre-merge steps and,
+  since GitHub checks a pull request only against its own base, merges the whole bundle into main in git before the
+  gate opens and again before the merge. A branch that would conflict with main is brought up to date bottom up, a
+  conflict going to that task's agent, so a bundle never merges halfway because of a conflict. The task
   toolbar's Bundle item ("Bundle 2/3") lists each task in order with its state and pull request, a queue row carries
   the same count, and All tasks nests each task under the one below, as it now nests every waiting task under the
   task it waits on instead of filing it in a section of its own.

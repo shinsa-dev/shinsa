@@ -198,7 +198,9 @@ src/
 │                        the latest from the npm registry (registry.ts), each program's own updater, found from
 │                        where its binary lives (updaters.ts), /api/versions with the streamed update
 │                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
-├── git/                 refs (assertRefName, slugify), conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
+├── git/                 refs (assertRefName, slugify), bundle.ts (checkBundleMerge: a bundle merged into the default
+│                        branch with git merge-tree, no working tree, and the lowest branch behind its base on a
+│                        conflict), conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
 │                        resolveCommitType from a branch, serializeConventionalSubject: the commit and pull request
 │                        subjects), repo, worktree, commit, diff, push.ts (runPush, pushBranch and
 │                        PushError: a failed push typed as hook, network, non_fast_forward or other by
@@ -341,8 +343,10 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   worktree is never reset to the default branch (only its uncommitted scratch edits are dropped), a push goes to the
   task's branch, which a stacked round has changed to its own, a pull request opens on the round's base
   (`resolveRoundBase`, the task below's branch for a task in a bundle), and a merge merges the stack below the task's
-  pull request top down (`listStackedPullRequests`), reading each first, then each task of its bundle below it
-  (`pull_request.merge`'s `bundle`, `docs/engine.md` → Bundles).
+  pull request top down (`listStackedPullRequests`), reading each first; a bundle's root merges the tasks above it
+  from the top down, then itself (`pull_request.merge`'s `bundle`), after `checkBundleMerge` (`git/bundle.ts`) has
+  merged the whole bundle into the default branch in git, which the watch also runs on the root and records
+  (`bundle.record_check`, `docs/engine.md` → Bundles).
 - **The pull request watch reads, core decides**: the server dispatches a read only when `evaluatePullRequestWatch`
   (core) says it matters, and syncs of one task queue behind each other (`docs/engine.md` → The pull request watch).
 - **The HTTP surface is for this machine only.** Every route goes through `http/guard.ts` (what it checks, and the

@@ -52,6 +52,7 @@ import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import {
+  recordBundleCheck,
   recordClosedPullRequests,
   recordHookFailure,
   recordPullRequest,
@@ -272,6 +273,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordPushRetry(decider, command);
     case 'pull_request.record_update_conflict':
       return recordUpdateConflict(decider, command);
+    case 'bundle.record_check':
+      return recordBundleCheck(decider, command);
     case 'pull_request.record_hook_failure':
       return recordHookFailure(decider, command);
     case 'pull_request.read_failed':

@@ -1,5 +1,6 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
+  type BundleConflict,
   hasStep,
   isTaskSettled,
   type MergeQueueEntry,
@@ -28,6 +29,7 @@ import {
   holdInBundle,
   keepsBundleReady,
   startBundleMerge,
+  startBundleUpdate,
 } from './bundles.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { applyEditsApproval } from './edits.ts';
@@ -449,6 +451,36 @@ export function recordPushRetry(decider: Decider, command: CommandOf<'pull_reque
     'shipping',
     `${RETRYING_STEP[step]} again in ${delay}, attempt ${attempt + 1} of ${attempts}: ${detail}`
   );
+}
+
+function isSameBundleConflict(a: BundleConflict | null, b: BundleConflict | null) {
+  return a?.taskId === b?.taskId && a?.behindTaskId === b?.behindTaskId && a?.base === b?.base;
+}
+
+export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.record_check'>) {
+  const task = decider.task(command.taskId);
+  if (isTaskSettled(task) || !isShipping(task) || isMerging(decider, task)) return;
+  const { conflict } = command;
+  const changed = !isSameBundleConflict(task.bundleConflict ?? null, conflict);
+  if (changed) decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });
+  if (!conflict) {
+    if (changed) recheckPullRequest(decider, task.id);
+    return;
+  }
+  if (!conflict.behindTaskId) {
+    if (!changed) return;
+    decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
+    const conflicting = decider.state.tasks[conflict.taskId]?.title ?? 'A task';
+    decider.fail(
+      task.id,
+      `The bundle conflicts with ${conflict.base}`,
+      `“${conflicting}” conflicts with ${conflict.base} once the bundle merges, and every branch in the bundle already has the one below it. Resolve the conflict in that task or on GitHub, then retry.`
+    );
+    return;
+  }
+  holdInBundle(decider, decider.task(task.id), task.pullRequest?.headSha ?? null);
+  const behind = startBundleUpdate(decider, conflict);
+  if (behind) requestPush(decider, behind);
 }
 
 export function recordUpdateConflict(

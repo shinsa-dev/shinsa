@@ -426,7 +426,7 @@ describe('describeTaskCounts', () => {
 });
 
 describe('the tasks of a bundle in All tasks', () => {
-  it('lists a ready task with the task on top of its bundle, each one nested under the one below', () => {
+  it('lists a ready task with the root of its bundle, each one nested under the one below', () => {
     const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });
     const top = createTask({ id: 'top', stage: 'building', stacksOn: 'root', priority: 'urgent' });
     const other = createTask({ id: 'other', stage: 'building', priority: 'high' });
@@ -440,13 +440,15 @@ describe('the tasks of a bundle in All tasks', () => {
 
   it('lists a bundle at its merge gate from its root, the tasks above nested in order', () => {
     const root = createTask({ id: 'root', stage: 'awaiting_merge' });
-    const middle = createTask({ id: 'middle', stage: 'awaiting_merge', stacksOn: 'root' });
-    const top = createTask({ id: 'top', stage: 'awaiting_merge', stacksOn: 'middle' });
+    const ready = { commit: 'a' };
+    const middle = createTask({ id: 'middle', stage: 'shipping', stacksOn: 'root', bundleReady: ready });
+    const top = createTask({ id: 'top', stage: 'shipping', stacksOn: 'middle', bundleReady: ready });
     const state = createShinsaState({
       tasks: [top, middle, root],
-      gates: [createGate({ id: 'm', taskId: 'top', type: 'merge' })],
+      gates: [createGate({ id: 'm', taskId: 'root', type: 'merge' })],
     });
     expect(resolveTaskGroup(state, root)).toBe('merge');
+    expect(resolveTaskGroup(state, top)).toBe('merge');
     const merge = listTaskGroupSections(state, '', 'merge')[0]?.entries.map(
       ({ task, depth }) => `${task.id}:${depth}`
     );

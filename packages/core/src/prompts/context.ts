@@ -69,13 +69,17 @@ export function describeBundle(task: Task, bundle: Task[]) {
   if (index < 0) return '';
   const below = bundle[index - 1];
   const above = bundle[index + 1];
+  const stacked = below && below.stage !== 'merged';
   return [
-    `This task is in a bundle of ${bundle.length} tasks that merge together as one GitHub stack, from the bottom: ${bundle.map((member) => describeBundleMember(member, task)).join(', ')}.`,
-    below && below.stage !== 'merged'
-      ? `It is stacked on "${below.title}": your worktree starts from its branch ${below.branch ?? ''} and your pull request is based on that branch. Build on its work; do not redo or undo it. When you find a flaw in it, tell that task with \`tasks_message\` so its agent fixes it in its own pull request, which is still open.`
+    `This task is in a bundle of ${bundle.length} tasks that merge together as one GitHub stack, starting with the one into the default branch: ${bundle.map((member) => describeBundleMember(member, task)).join(', ')}.`,
+    stacked
+      ? `It is stacked on "${below.title}": your worktree starts from its branch ${below.branch ?? ''} and your pull request is based on that branch. Build on its work; do not redo or undo it. When you find a flaw in it, tell that task with \`tasks_message\` so its agent fixes it in its own pull request, which is still open. Once your pull request is clean this task is ready and merges with the bundle; it gets no merge gate of its own.`
+      : '',
+    !stacked && above
+      ? 'This task is the root of the bundle: its pull request targets the default branch and holds the one merge gate for the whole bundle, which opens once every task above is ready and the whole bundle merges into the default branch without conflicts.'
       : '',
     above
-      ? `"${above.title}" is stacked on this task. Once your pull request is clean this task is ready and merges with the bundle; it gets no merge gate of its own. Keep fixing CI, review comments and conflicts as usual: the task above takes in what you push.`
+      ? `"${above.title}" is stacked on this task. Keep fixing CI, review comments and conflicts as usual: the task above takes in what you push.`
       : '',
   ]
     .filter(Boolean)

@@ -79,7 +79,7 @@ export function selectStackParent(state: Pick<ShinsaState, 'tasks'>, task: Task)
   return task.stacksOn ? (state.tasks[task.stacksOn] ?? null) : null;
 }
 
-export function selectStackedOnThis(state: ShinsaState, taskId: string) {
+export function selectStackedOnThis(state: Pick<ShinsaState, 'tasks'>, taskId: string) {
   return (
     Object.values(state.tasks).find(
       (task) => task.stacksOn === taskId && !isTaskSettled(task) && hasStep(task, 'pull_request')
@@ -144,6 +144,20 @@ export function listBundleBelow(state: Pick<ShinsaState, 'tasks'>, task: Task) {
     parent = selectStackParent(state, parent);
   }
   return below;
+}
+
+export function listBundleAbove(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  const above: Task[] = [];
+  let child = selectStackedOnThis(state, task.id);
+  while (child && child.id !== task.id && !above.includes(child)) {
+    above.push(child);
+    child = selectStackedOnThis(state, child.id);
+  }
+  return above;
+}
+
+export function resolveBundleRoot(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  return listBundleBelow(state, task).at(-1) ?? task;
 }
 
 function selectStackedChild(state: Pick<ShinsaState, 'tasks'>, task: Task) {

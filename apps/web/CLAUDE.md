@@ -253,7 +253,7 @@ src/
     │                    Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
     │                    rounds, a round's track and pull request, how a round ships), status and tone per task (Resolving conflicts on a conflict fix),
     │                    task groups and chains, bundles (bundles.ts: a bundle's rows and their states, the Stack on another task
-    │                    choices core accepts, the now card's wait and note; groups.ts lists a ready task with its top),
+    │                    choices core accepts, the now card's wait and note; groups.ts lists a ready task with its root),
     │                    next action, the now line,
     │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the

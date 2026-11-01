@@ -1,6 +1,7 @@
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
   BacklogCause,
+  BundleConflict,
   BundleReady,
   ConfigProblem,
   DeliveringStep,
@@ -133,6 +134,7 @@ type EventBody =
   | { type: 'task.stack_changed'; taskId: string; stacksOn: string | null; by?: 'you' | 'shinsa' }
   | { type: 'task.stack_based'; taskId: string; base: string | null }
   | { type: 'task.bundle_ready'; taskId: string; ready: BundleReady | null }
+  | { type: 'task.bundle_conflict'; taskId: string; conflict: BundleConflict | null }
   | { type: 'task.backlog_changed'; taskId: string; backlog: boolean; cause: BacklogCause }
   | { type: 'task.snooze_changed'; taskId: string; snoozed: boolean }
   | { type: 'task.noted'; taskId: string; note: string; runId?: string | null }

@@ -403,6 +403,12 @@ export interface BundleReady {
   commit: string | null;
 }
 
+export interface BundleConflict {
+  taskId: string;
+  behindTaskId: string | null;
+  base: string;
+}
+
 export interface BundlePullRequest {
   taskId: string;
   number: number;
@@ -453,6 +459,7 @@ export interface Task {
   stacksOn?: string | null;
   stackBase?: string | null;
   bundleReady?: BundleReady | null;
+  bundleConflict?: BundleConflict | null;
   note: string | null;
   origin: string | null;
   createdAt: number;

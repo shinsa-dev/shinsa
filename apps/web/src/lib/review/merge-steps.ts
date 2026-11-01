@@ -2,7 +2,7 @@ import {
   type ChecklistItem,
   isTaskComplete,
   isTaskSettled,
-  listBundleBelow,
+  listBundleAbove,
   listMergeSteps,
   type MergeStepKind,
   type MergeStepTiming,
@@ -47,8 +47,8 @@ export function countOpenSteps(task: Task, when: MergeStepTiming) {
 }
 
 export function resolveMergeLabel(state: Pick<ShinsaState, 'tasks'>, task: Task, fallback: string) {
-  const below = listBundleBelow(state, task).filter((member) => member.pullRequest).length;
-  if (below > 0) return `Merge ${below + 1} pull requests`;
+  const above = listBundleAbove(state, task).filter((member) => member.pullRequest).length;
+  if (above > 0) return `Merge ${above + 1} pull requests`;
   return task.pullRequest ? `Merge #${task.pullRequest.number}` : fallback;
 }
 
@@ -97,16 +97,16 @@ function linkTask(task: Task) {
 }
 
 function listBundleWaits(state: Pick<ShinsaState, 'tasks'>, task: Task): MergeWaitView[] {
-  return listBundleBelow(state, task).map((below) => {
-    const open = countOpenSteps(below, 'pre_merge');
+  return listBundleAbove(state, task).map((above) => {
+    const open = countOpenSteps(above, 'pre_merge');
     return {
-      key: `bundle:${below.id}`,
-      taskId: below.id,
+      key: `bundle:${above.id}`,
+      taskId: above.id,
       kind: 'bundle',
-      title: `${linkTask(below)} merges with this one`,
+      title: `${linkTask(above)} merges with this one`,
       detail: open === 0 ? null : `Tick its ${formatSteps(open)} before the merge on that task first.`,
       command: null,
-      done: (Boolean(below.bundleReady) || isTaskComplete(below)) && open === 0,
+      done: (Boolean(above.bundleReady) || isTaskComplete(above)) && open === 0,
     };
   });
 }

@@ -16,6 +16,7 @@ import {
   isOverBudget,
   isTaskSettled,
   listActiveRuns,
+  listBundleAbove,
   listBundleBelow,
   listMissingEvidence,
   listOpenBlockers,
@@ -1093,13 +1094,22 @@ function listBundleDrives(state: ShinsaState, open: Task[], random: Random): Shi
         pullRequest: chance(random, 0.97) ? clean : pullRequest,
       };
     });
+  const checks: ShinsaCommand[] = members
+    .filter((task) => !task.stacksOn && chance(random, 0.1))
+    .map((task) => ({
+      type: 'bundle.record_check',
+      taskId: task.id,
+      conflict: chance(random, 0.5)
+        ? null
+        : { taskId: task.id, behindTaskId: chance(random, 0.8) ? task.id : null, base: 'main' },
+    }));
   const approvals: ShinsaCommand[] = listOpenGates(state)
     .filter((gate) => ids.has(gate.taskId) && isDecisionGate(gate))
     .map((gate) => ({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null }));
   const steps = [...listAgentCommands(state, random), ...listSystemCommands(state, random)].filter(
     (command) => ids.has(resolveCommandTask(state, command) ?? '')
   );
-  return [...reads, ...approvals, ...steps];
+  return [...reads, ...checks, ...approvals, ...steps];
 }
 
 function selectBundleCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
@@ -1138,12 +1148,13 @@ function assertBundleInvariants(state: ShinsaState, task: Task, gates: Gate[], c
   expect(stacked.length, context).toBeLessThanOrEqual(1);
   if (task.stacksOn) expect(isDependencyOf(state, task.id, task.stacksOn), context).toBe(false);
   const merge = gates.some((gate) => gate.type === 'merge');
-  if (stacked.length > 0) expect(merge, context).toBe(false);
+  if (listBundleBelow(state, task).length > 0) expect(merge, context).toBe(false);
   if (merge) {
     expect(
-      listBundleBelow(state, task).every((below) => below.bundleReady),
+      listBundleAbove(state, task).every((above) => above.bundleReady),
       context
     ).toBe(true);
+    expect(task.bundleConflict ?? null, context).toBeNull();
   }
   if (task.bundleReady) {
     expect(['shipping', 'awaiting_merge'], context).toContain(task.stage);

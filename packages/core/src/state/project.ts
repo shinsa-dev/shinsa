@@ -329,6 +329,10 @@ function applyBundleReady(state: ShinsaState, event: EventOf<'task.bundle_ready'
   updateTask(state, event.taskId, event.at, { bundleReady: event.ready });
 }
 
+function applyBundleConflict(state: ShinsaState, event: EventOf<'task.bundle_conflict'>) {
+  updateTask(state, event.taskId, event.at, { bundleConflict: event.conflict });
+}
+
 const BACKLOG_LEFT: Record<BacklogCause, string> = {
   you: 'Removed from the backlog',
   started: 'Started building from the backlog',
@@ -811,6 +815,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.bundle_ready':
       applyBundleReady(state, event);
+      break;
+    case 'task.bundle_conflict':
+      applyBundleConflict(state, event);
       break;
     case 'task.backlog_changed':
       applyBacklogChanged(state, event);

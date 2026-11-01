@@ -1447,40 +1447,72 @@ describe('merging a bundle of tasks', () => {
   }
 
   const BUNDLE: BundlePullRequest[] = [
+    { taskId: 'task-3', number: 9 },
     { taskId: 'task-2', number: 8 },
-    { taskId: 'task-3', number: 7 },
   ];
 
-  async function setupBundle() {
-    const { repo } = await createGitRepo();
-    return setup((state) => {
-      state.repos['repo-1'] = createRepo(repo);
+  async function commitBranch(path: string, branch: string, from: string, files: Record<string, string>) {
+    await git(path, 'checkout', '-q', '-B', branch, from);
+    writeFiles(path, files);
+    await git(path, 'add', '-A');
+    await git(path, 'commit', '-q', '-m', `feat: ${branch}`);
+    await git(path, 'push', '-q', '-f', 'origin', branch);
+  }
+
+  async function setupBundle(stage: Task['stage'] = 'awaiting_merge') {
+    const created = await createGitRepo({ files: { 'top.txt': 'start\n' } });
+    await commitBranch(created.path, 'feat/root', 'main', { 'root.txt': 'root\n' });
+    await commitBranch(created.path, 'feat/middle', 'feat/root', { 'middle.txt': 'middle\n' });
+    await commitBranch(created.path, 'feat/top', 'feat/middle', { 'top.txt': 'top\n' });
+    const ready = { commit: null };
+    const result = setup((state) => {
+      state.repos['repo-1'] = createRepo(created.repo);
       state.tasks['task-1'] = createTask({
         id: 'task-1',
-        branch: 'feat/top',
-        stage: 'awaiting_merge',
-        pullRequest: { ...PULL, number: 9, base: 'feat/middle' },
+        title: 'Root',
+        branch: 'feat/root',
+        stage,
+        bundleReady: ready,
+        pullRequest: PULL,
       });
       state.tasks['task-2'] = createTask({
         id: 'task-2',
+        title: 'Middle',
         branch: 'feat/middle',
-        stage: 'awaiting_merge',
+        stage,
+        stacksOn: 'task-1',
+        stackBase: 'feat/root',
+        bundleReady: ready,
         pullRequest: { ...PULL, number: 8, base: 'feat/root' },
       });
       state.tasks['task-3'] = createTask({
         id: 'task-3',
-        branch: 'feat/root',
-        stage: 'awaiting_merge',
-        pullRequest: PULL,
+        title: 'Top',
+        branch: 'feat/top',
+        stage,
+        stacksOn: 'task-2',
+        stackBase: 'feat/middle',
+        bundleReady: ready,
+        pullRequest: { ...PULL, number: 9, base: 'feat/middle' },
       });
     });
+    return { ...result, created };
+  }
+
+  async function moveMain(origin: string, root: string, files: Record<string, string>) {
+    const other = join(root, 'other');
+    await git(root, 'clone', '-q', origin, other);
+    writeFiles(other, files);
+    await git(other, 'add', '-A');
+    await git(other, 'commit', '-q', '-m', 'feat: move main');
+    await git(other, 'push', '-q', 'origin', 'main');
   }
 
   function listMerged(calls: string[][]) {
     return calls.filter((call) => call[0] === 'pr' && call[1] === 'merge').map((call) => call[2]);
   }
 
-  test('merges the top task’s pull request, then each task’s below it top down, recording each one', async () => {
+  test('the root merges the bundle from the last pull request back to its own, recording each one', async () => {
     const readGitHub = useFakeGitHub(bundlePulls({ 8: { state: 'MERGED' } }));
     const { runner, dispatched } = await setupBundle();
     await runner.apply(
@@ -1488,15 +1520,15 @@ describe('merging a bundle of tasks', () => {
       createContext()
     );
     expect(listMerged(readGitHub().calls)).toEqual(['9', '7']);
-    expect(records(dispatched).map((record) => [record.taskId, record.pullRequest.state])).toEqual([
-      ['task-1', 'merged'],
-      ['task-2', 'merged'],
-      ['task-3', 'merged'],
-    ]);
+    expect(
+      records(dispatched)
+        .filter((record) => record.pullRequest.state === 'merged')
+        .map((record) => record.taskId)
+    ).toEqual(['task-3', 'task-2', 'task-1']);
   });
 
-  test('a top whose head moved is recorded and merges nothing below it', async () => {
-    const readGitHub = useFakeGitHub(bundlePulls({ 9: { head: 'main' } }));
+  test('a root whose head moved is recorded and merges nothing', async () => {
+    const readGitHub = useFakeGitHub(bundlePulls({ 7: { head: 'main' } }));
     const { runner, dispatched } = await setupBundle();
     await runner.apply(
       { kind: 'pull_request.merge', taskId: 'task-1', headSha: 'c0ffee0', bundle: BUNDLE },
@@ -1506,32 +1538,69 @@ describe('merging a bundle of tasks', () => {
     expect(records(dispatched).map((record) => record.taskId)).toEqual(['task-1']);
   });
 
-  test('a task below that GitHub leaves open fails the merge, and the failure goes to the first task not merged', async () => {
+  test('a branch that conflicts with the default branch once the bundle merges stops the merge before anything merges', async () => {
+    const readGitHub = useFakeGitHub(bundlePulls());
+    const { runner, created } = await setupBundle();
+    await moveMain(created.origin, created.root, { 'top.txt': 'main\n' });
+    await expect(
+      runner.apply(
+        { kind: 'pull_request.merge', taskId: 'task-1', headSha: null, bundle: BUNDLE },
+        createContext()
+      )
+    ).rejects.toThrow('“Top” conflicts with main once the bundle merges, so nothing was merged.');
+    expect(listMerged(readGitHub().calls)).toEqual([]);
+  });
+
+  test('a task above that GitHub leaves open fails the merge, and the failure goes to the root', async () => {
     useFakeGitHub(bundlePulls());
     useFailingGh('pr merge 8', 0);
-    const { runner, dispatched, update } = await setupBundle();
+    const { runner, dispatched } = await setupBundle();
     const effect = { kind: 'pull_request.merge' as const, taskId: 'task-1', headSha: null, bundle: BUNDLE };
     await expect(runner.apply(effect, createContext())).rejects.toThrow(
       'GitHub still shows the pull request as open after merging it.'
     );
-    update((state) => {
-      const top = state.tasks['task-1'];
-      if (top) state.tasks['task-1'] = { ...top, stage: 'merged' };
-    });
     await runner.reportExhausted(effect, 'GitHub refused.', 'merge-key');
     expect(dispatched.at(-1)).toMatchObject({
       type: 'effect.fail',
-      taskId: 'task-2',
+      taskId: 'task-1',
       detail: 'GitHub refused.',
     });
-    update((state) => {
-      for (const id of ['task-2', 'task-3']) {
-        const task = state.tasks[id];
-        if (task) state.tasks[id] = { ...task, stage: 'merged' };
-      }
+  });
+
+  test('a sync of the root checks that the whole bundle merges into the default branch', async () => {
+    useFakeGitHub(bundlePulls());
+    const { runner, dispatched, created } = await setupBundle('shipping');
+    await runner.syncPullRequest('task-1', true);
+    expect(dispatched.find((command) => command.type === 'bundle.record_check')).toEqual({
+      type: 'bundle.record_check',
+      taskId: 'task-1',
+      conflict: null,
     });
-    await runner.reportExhausted(effect, 'GitHub refused.', 'merge-key-2');
-    expect(dispatched.at(-1)).toMatchObject({ type: 'effect.fail', taskId: 'task-1' });
+    await moveMain(created.origin, created.root, { 'top.txt': 'main\n' });
+    await runner.syncPullRequest('task-1', true);
+    expect(dispatched.filter((command) => command.type === 'bundle.record_check').at(-1)).toEqual({
+      type: 'bundle.record_check',
+      taskId: 'task-1',
+      conflict: { taskId: 'task-3', behindTaskId: 'task-1', base: 'main' },
+    });
+    await runner.syncPullRequest('task-2', true);
+    expect(dispatched.filter((command) => command.type === 'bundle.record_check')).toHaveLength(2);
+  });
+
+  test('a bundle check that cannot read a branch logs it and records nothing', async () => {
+    useFakeGitHub(bundlePulls());
+    const { runner, dispatched, created } = await setupBundle('shipping');
+    await git(created.path, 'push', '-q', 'origin', '--delete', 'feat/top');
+    const warn = spyOn(log, 'warn');
+    try {
+      await runner.syncPullRequest('task-1', true);
+      expect(warn.mock.calls.map((call) => call[0])).toContain(
+        '[Watch] Could not check that the bundle merges into the default branch'
+      );
+    } finally {
+      warn.mockRestore();
+    }
+    expect(dispatched.some((command) => command.type === 'bundle.record_check')).toBe(false);
   });
 });
 

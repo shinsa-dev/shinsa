@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  type BundleConflict,
   type CheckEvidence,
   type Coverage,
   evaluatePullRequestWatch,
@@ -8,6 +9,8 @@ import {
   isSamePullRequest,
   isSamePullRequestWatch,
   isTaskSettled,
+  listBundleAbove,
+  listBundleBelow,
   listStackedPullRequests,
   listTaskChecks,
   needsRepository,
@@ -35,6 +38,8 @@ import { listCheckFailures } from '../checks/failures.ts';
 import { type BaseComparison, CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../checks/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
 import {
+  type BundleBranch,
+  checkBundleMerge,
   hasPrePushHook,
   PushError,
   removeIsolatedWorktrees,
@@ -312,16 +317,10 @@ export class EffectRunner {
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
     const title = FAILURE_TITLE[effect.kind];
     if (!title || !('taskId' in effect) || effect.taskId === null) return;
-    const taskId = effect.kind === 'pull_request.merge' ? this.#resolveMergeFailure(effect) : effect.taskId;
     await this.#engine.dispatch(
-      { type: 'effect.fail', taskId, title, detail: error },
+      { type: 'effect.fail', taskId: effect.taskId, title, detail: error },
       { id: `${key}:effect.fail` }
     );
-  }
-
-  #resolveMergeFailure(effect: MergeEffect) {
-    const members = [effect.taskId, ...(effect.bundle ?? []).map((member) => member.taskId)];
-    return members.find((id) => this.#engine.state.tasks[id]?.stage !== 'merged') ?? effect.taskId;
   }
 
   async recover() {
@@ -374,12 +373,45 @@ export class EffectRunner {
       return null;
     }
     if (!read || signal.aborted) return null;
+    await this.#checkBundle(repo, task, read.pullRequest, signal);
     const ci = await this.#resolveCi(repo, read.pullRequest, signal);
     if (force || hasPullRequestNews(task, read, ci)) {
       await this.#syncConflictBase(repo, taskId, read.pullRequest, signal);
       await this.#recordRead(taskId, read, ci);
     }
     return read.pullRequest;
+  }
+
+  #listBundleBranches(repo: Repo, root: Task): BundleBranch[] {
+    const state = this.#engine.state;
+    const above = listBundleAbove(state, root);
+    if (listBundleBelow(state, root).length > 0 || above.length === 0 || !root.branch) return [];
+    if (!above.every((member) => member.bundleReady && member.branch)) return [];
+    return [
+      { taskId: root.id, branch: root.branch, base: repo.defaultBranch },
+      ...above.map((member) => ({
+        taskId: member.id,
+        branch: member.branch ?? '',
+        base: resolveRoundBase(member) ?? repo.defaultBranch,
+      })),
+    ];
+  }
+
+  async #checkBundle(repo: Repo, task: Task, pullRequest: PullRequest, signal: AbortSignal) {
+    const branches = this.#listBundleBranches(repo, task);
+    if (pullRequest.state !== 'open' || branches.length === 0) return;
+    let conflict: BundleConflict | null;
+    try {
+      conflict = await checkBundleMerge(repo, branches, signal);
+    } catch (error) {
+      log.warn('[Watch] Could not check that the bundle merges into the default branch', {
+        taskId: task.id,
+        error: describeError(error),
+      });
+      return;
+    }
+    if (!signal.aborted)
+      await this.#engine.dispatch({ type: 'bundle.record_check', taskId: task.id, conflict });
   }
 
   async #syncConflictBase(repo: Repo, taskId: string, pullRequest: PullRequest, signal: AbortSignal) {
@@ -800,10 +832,38 @@ export class EffectRunner {
   }
 
   async #merge(effect: MergeEffect, context: EffectContext) {
-    if (!(await this.#mergeTask(effect.taskId, effect.headSha, context.signal))) return;
-    for (const member of effect.bundle ?? []) {
+    const bundle = effect.bundle ?? [];
+    if (bundle.length === 0) {
+      await this.#mergeTask(effect.taskId, effect.headSha, context.signal);
+      return;
+    }
+    if ((await this.#isRootMoved(effect.taskId, effect.headSha, context.signal)) || context.signal.aborted)
+      return;
+    await this.#assertBundleMerges(effect.taskId, context.signal);
+    for (const member of bundle) {
       if (!(await this.#mergeTask(member.taskId, null, context.signal))) return;
     }
+    await this.#mergeTask(effect.taskId, null, context.signal);
+  }
+
+  async #isRootMoved(taskId: string, headSha: string | null, signal: AbortSignal) {
+    const { task, repo } = this.#requireTask(taskId);
+    const current = await readPullRequest(repo, task, signal);
+    const moved = Boolean(
+      current && needsMerge(current.pullRequest) && isHeadMoved(headSha, current.pullRequest)
+    );
+    if (moved && current) await this.#recordFreshRead(repo, taskId, current, signal);
+    return moved;
+  }
+
+  async #assertBundleMerges(taskId: string, signal: AbortSignal) {
+    const { task, repo } = this.#requireTask(taskId);
+    const conflict = await checkBundleMerge(repo, this.#listBundleBranches(repo, task), signal);
+    if (!conflict) return;
+    const title = this.#engine.state.tasks[conflict.taskId]?.title ?? 'A task';
+    throw new Error(
+      `“${title}” conflicts with ${repo.defaultBranch} once the bundle merges, so nothing was merged. Retry to bring the bundle up to date first.`
+    );
   }
 
   async #mergeTask(taskId: string, headSha: string | null, signal: AbortSignal) {

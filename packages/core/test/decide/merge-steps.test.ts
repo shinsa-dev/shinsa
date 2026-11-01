@@ -144,21 +144,34 @@ describe('the steps around the merge', () => {
     expect(harness.task(taskId).stageReason).toBe('merging');
   });
 
-  test('the bundle merges only once every task below has ticked its steps before the merge', () => {
-    const { harness, taskId: root } = reachMergeGate([SECRET]);
+  test('the root merges the bundle only once every task above has ticked its steps before the merge', () => {
+    const harness = createHarness();
+    const root = createTask(harness, { request: 'Root' });
     const top = createTask(harness, { request: 'Top', stacksOn: root });
+    reachShipping(harness, root);
+    harness.send({ type: 'pull_request.record', taskId: root, pullRequest: pullRequest({ number: 42 }) });
     expect(harness.task(root).bundleReady).toBeTruthy();
     readyWorktree(harness, top);
-    reachShipping(harness, top);
-    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 43 }) });
-    expect(harness.openGate(top).type).toBe('merge');
-    expect(refusal(() => approve(harness, top))).toEqual({
-      code: 'merge_steps_open',
-      message: `Tick the 1 pre-merge step of “${harness.task(root).title}” first: it merges with this bundle.`,
+    handOver(harness, top, [SECRET]);
+    harness.send({ type: 'checks.record', taskId: top, results: PASSING });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(top).id,
+      summary: null,
+      findings: [],
     });
-    tick(harness, root, SECRET);
     approve(harness, top);
-    expect(harness.task(top).stage).toBe('awaiting_merge');
+    pushed(harness, top);
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 43 }) });
+    harness.send({ type: 'pull_request.record', taskId: root, pullRequest: pullRequest({ number: 42 }) });
+    expect(harness.openGate(root).type).toBe('merge');
+    expect(refusal(() => approve(harness, root))).toEqual({
+      code: 'merge_steps_open',
+      message: 'Tick the 1 pre-merge step of “Top” first: it merges with this bundle.',
+    });
+    tick(harness, top, SECRET);
+    approve(harness, root);
+    expect(harness.task(root).stage).toBe('awaiting_merge');
   });
 
   test('a step ticks and unticks, and ticking it again changes nothing', () => {
