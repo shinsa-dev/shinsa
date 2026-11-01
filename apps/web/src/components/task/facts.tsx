@@ -41,7 +41,7 @@ import { useReadOnly, useReadOnlyOwnerName } from '@/components/task/read-only.t
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
-import { useMachine, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
+import { useConnection, useMachine, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
 import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
@@ -67,7 +67,6 @@ import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
 import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
 import { resolveTriageWhy } from '@/lib/tasks/triage.ts';
-import { resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
 import { navigate, resolveAutomationPath, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
 function FactPopover({
@@ -485,16 +484,17 @@ function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
 }
 
 function TeammateKeptOverFacts({ task }: { task: Task }) {
+  const { state } = useConnection();
   const feed = useTeamFeed();
-  return listTeammateDuplicates(feed, task).map((entry) => (
+  return listTeammateDuplicates(state, feed, task).map(({ key, handle, title, path, listing }) => (
     <TeammateTaskFact
-      key={`${entry.instanceId} ${entry.task.id}`}
+      key={key}
       icon='IconSquareBehindSquare2'
       verb='Kept over'
-      owner={entry.owner ? resolveSharedProfile(entry.owner, entry.ownerProfile) : null}
-      handle={entry.task.handle ?? null}
-      title={entry.task.title}
-      path={resolveTeamTaskPath(resolveTeamTaskTarget(entry))}
+      owner={listing?.owner ? resolveSharedProfile(listing.owner, listing.ownerProfile) : null}
+      handle={handle}
+      title={title}
+      path={path}
       hint={null}
     />
   ));

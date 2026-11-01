@@ -12,6 +12,7 @@ import {
   resolveReportFact,
   selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
+import { resolveTaskPath } from '@/router.ts';
 import { createSchedule } from '../../support/schedules.ts';
 import { createShinsaState, createTask, NOW } from '../../support/state.ts';
 
@@ -183,7 +184,68 @@ describe('duplicates', () => {
         { ...entry('plain', NOW), task: createTask({ id: 'plain' }) },
       ],
     };
-    expect(listTeammateDuplicates(feed, original).map((item) => item.task.id)).toEqual(['early', 'late']);
+    const links = listTeammateDuplicates(null, feed, original);
+    expect(links.map((link) => link.key)).toEqual(['kai early', 'kai late']);
+    expect(links[0]?.path).toBe('/teams/core/kai/early');
+    expect(links[0]?.listing?.owner).toBe('kai');
+  });
+
+  it('lists your own tasks closed as duplicates of a teammate’s task you view, before the feed’s copy of them', () => {
+    const original = createTask({ id: 'kai-task' });
+    const duplicate = (id: string, createdAt: number) =>
+      createTask({
+        id,
+        handle: `SW-${createdAt}`,
+        createdAt,
+        duplicate: {
+          of: 'kai-task',
+          by: 'shinsa',
+          why: null,
+          teammate: {
+            teamId: 'core',
+            machineId: 'kai',
+            taskId: 'kai-task',
+            handle: 'PAY-1',
+            title: 'X',
+            owner: null,
+          },
+        },
+      });
+    const mine = duplicate('mine', 2);
+    const local = createShinsaState({ tasks: [mine, createTask({ id: 'plain' })] });
+    const feed = {
+      machines: [],
+      tasks: [
+        {
+          task: mine,
+          gates: [],
+          project: null,
+          repo: null,
+          owner: 'mona',
+          machine: 'Studio',
+          teamId: 'core',
+          instanceId: 'studio',
+        },
+        {
+          task: duplicate('theirs', 1),
+          gates: [],
+          project: null,
+          repo: null,
+          owner: 'lee',
+          machine: 'Desk',
+          teamId: 'core',
+          instanceId: 'desk',
+        },
+      ],
+    };
+    const links = listTeammateDuplicates(local, feed, original);
+    expect(links.map((link) => [link.key, link.path, link.listing?.owner ?? null])).toEqual([
+      ['desk theirs', '/teams/core/desk/theirs', 'lee'],
+      ['mine', resolveTaskPath(mine), null],
+    ]);
+    expect(listTeammateDuplicates(local, { machines: [], tasks: [] }, createTask({ id: 'other' }))).toEqual(
+      []
+    );
   });
 
   it('lists the tasks closed as duplicates of a task, oldest first', () => {

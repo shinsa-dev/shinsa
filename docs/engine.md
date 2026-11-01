@@ -1050,7 +1050,9 @@ read-only team view (`/teams/<team>/<machine>/<task>`), in the local app and on 
 listing carries no share link, so none is stored or built. Nothing is written to the teammate's machine: the
 duplicate travels in this machine's own team listing (`TaskDuplicate` is in the shared status fields), so on the
 teammate's machine their task shows "Kept over Mona’s SW-3 …" (`listTeammateDuplicates` over the team feed),
-opening the duplicate's read-only team view. Every other machine of the project's teams (`RemoteTeam.machines`,
+opening the duplicate's read-only team view. Its read-only team view shows the same fact to everyone in the team: it
+lists this machine's own tasks closed in its favour (opening them here) beside the team feed's, matched on the task id
+the shared view carries without its `shared-` prefix (`resolveSourceTaskId`). Every other machine of the project's teams (`RemoteTeam.machines`,
 this machine left out) with neither a live feed nor a kept copy of its list (refused, still connecting, offline with
 no copy, or no feed at all while remote access is off or paused or the team key is missing) has sent no tasks, so
 triage goes on with what it could read and records those machines in `triageDecisions.duplicate.unreached`; the

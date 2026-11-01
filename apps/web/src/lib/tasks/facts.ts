@@ -1,7 +1,15 @@
-import type { ShinsaState, SourceReport, Task, TeamFeedSnapshot, TeammateOwner } from '@shinsa/core';
+import type {
+  ShinsaState,
+  SourceReport,
+  Task,
+  TeamFeedSnapshot,
+  TeamFeedTask,
+  TeammateOwner,
+} from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
 import { formatMoment, formatSince } from '@/lib/format/time.ts';
-import { resolveTeamTaskPath } from '@/lib/teams/feeds.ts';
+import { resolveSourceTaskId } from '@/lib/share/view.ts';
+import { resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
 import { resolveTaskPath } from '@/router.ts';
 
 export function describeStarted(task: Task, now = Date.now()) {
@@ -63,10 +71,35 @@ export function listDuplicates(state: ShinsaState, task: Task) {
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export function listTeammateDuplicates(feed: TeamFeedSnapshot, task: Task) {
-  return feed.tasks
-    .filter((entry) => entry.task.duplicate?.teammate?.taskId === task.id)
-    .sort((a, b) => a.task.createdAt - b.task.createdAt);
+export interface KeptOverTeammateLink {
+  key: string;
+  handle: string | null;
+  title: string;
+  path: string;
+  listing: TeamFeedTask | null;
+}
+
+export function listTeammateDuplicates(local: ShinsaState | null, feed: TeamFeedSnapshot, task: Task) {
+  const id = resolveSourceTaskId(task.id);
+  const isKeptOver = (candidate: Task) => candidate.duplicate?.teammate?.taskId === id;
+  const own = Object.values(local?.tasks ?? {})
+    .filter(isKeptOver)
+    .map((candidate) => ({ task: candidate, listing: null }));
+  const known = new Set(own.map((entry) => entry.task.id));
+  const shared = feed.tasks
+    .filter((listing) => isKeptOver(listing.task) && !known.has(listing.task.id))
+    .map((listing) => ({ task: listing.task, listing }));
+  return [...own, ...shared]
+    .sort((a, b) => a.task.createdAt - b.task.createdAt)
+    .map(
+      ({ task: duplicate, listing }): KeptOverTeammateLink => ({
+        key: listing ? `${listing.instanceId} ${duplicate.id}` : duplicate.id,
+        handle: duplicate.handle ?? null,
+        title: duplicate.title,
+        path: listing ? resolveTeamTaskPath(resolveTeamTaskTarget(listing)) : resolveTaskPath(duplicate),
+        listing,
+      })
+    );
 }
 
 export function describeDuplicateHint(

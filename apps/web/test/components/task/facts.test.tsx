@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { resolveSharedTaskId } from '@/lib/share/view.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createPartialCoverage } from '../../support/coverage.ts';
@@ -546,6 +547,40 @@ describe('a duplicate', () => {
     expect(screen.getByRole('link', { name: /Christo’s/ })).toBeTruthy();
     fireEvent.click(link);
     expect(window.location.pathname).toBe('/teams/core/studio/c');
+  });
+
+  it('shows on a teammate’s task you view read-only which of your own tasks was kept over', () => {
+    const original = createTask({ id: 'kai-task', handle: 'PAY-1', title: 'Duplicate a paywall' });
+    const mine = createTask({
+      id: 'mine',
+      handle: 'SW-83',
+      title: 'Add paywall duplication',
+      stage: 'cancelled',
+      duplicate: {
+        of: 'kai-task',
+        by: 'shinsa',
+        why: null,
+        teammate: {
+          teamId: 'core',
+          machineId: 'kai',
+          taskId: 'kai-task',
+          handle: 'PAY-1',
+          title: 'Duplicate a paywall',
+          owner: null,
+        },
+      },
+    });
+    pushState(createShinsaState({ tasks: [mine] }));
+    const viewed = { ...original, id: resolveSharedTaskId(original.id) };
+    const shared = createShinsaState({ tasks: [viewed] });
+    render(
+      <TooltipProvider>
+        <TaskFacts state={shared} task={viewed} />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('Kept over')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'SW-83 Add paywall duplication' }));
+    expect(window.location.pathname).toBe('/tasks/SW-83');
   });
 
   it('shows on the task it duplicates which task was closed in favour of it', () => {

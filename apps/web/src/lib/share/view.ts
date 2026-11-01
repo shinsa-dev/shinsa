@@ -33,6 +33,10 @@ export function resolveSharedTaskId(taskId: string) {
   return `${SHARED_TASK_PREFIX}${taskId}`;
 }
 
+export function resolveSourceTaskId(taskId: string) {
+  return taskId.startsWith(SHARED_TASK_PREFIX) ? taskId.slice(SHARED_TASK_PREFIX.length) : taskId;
+}
+
 function resolveSharedEvidence(item: Evidence, taskId: string, source: SharedSource): Evidence | null {
   if (!item.uri.startsWith(SHARED_EVIDENCE_PREFIX)) return { ...item, taskId };
   const url = source.resolveFileUrl(item.uri.slice(SHARED_EVIDENCE_PREFIX.length));

@@ -1130,7 +1130,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Across a team.** When the project is in a team, triage also compares the request with teammates' open tasks,
   using only what they share (title, request and plan goal). A duplicate of one reads "Duplicate of Kai’s KAI-12 …",
   Kai by first name with their user card on hover, and opens that task's read-only team view; on Kai's machine their
-  task shows Kept over with yours. A teammate's machine that cannot be read is not compared, and the task's activity
+  task shows Kept over with yours, and so does its read-only view, for you and for everyone else in the team. A teammate's machine that cannot be read is not compared, and the task's activity
   says whose. Not a duplicate works the same.
 
 ### Replies on the Overview, not in the chat (2026-10-31)
