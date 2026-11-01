@@ -41,7 +41,6 @@ import {
   describeDeviceDetail,
   describeMemberSince,
   describeRemoteStatus,
-  hasThisDevice,
   LINK_COPY,
   REMOTE_ACCESS_SECTION,
   resolveQrImage,
@@ -353,11 +352,7 @@ function RemoteDialogs({
         control={dialog.control}
         link={snapshot?.link ?? null}
         canEnroll={canEnroll}
-        added={hasThisDevice(snapshot, {
-          remote: isRemoteBuild(),
-          userAgent: navigator.userAgent,
-          touch: navigator.maxTouchPoints > 1,
-        })}
+        added={isRemoteBuild()}
         actions={actions}
       />
     );

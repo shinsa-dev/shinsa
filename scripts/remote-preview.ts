@@ -225,6 +225,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     origin: config.previewOrigin,
   });
   terminals.applyRemoteUrls((info, service) => previews.resolveRemoteUrl(info, service));
+  previews.subscribe(() => terminals.syncRemoteUrls());
   const http = startServer({
     engine,
     config,

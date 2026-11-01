@@ -2769,9 +2769,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   which asks first), the access requests waiting for an answer (yours as the device's name and when you asked, anyone
   else's with their GitHub avatar, name and login, the device's name and when, and Decline and Accept), and Invite
   link (only while it is on: `canEnrollDevices`). It opens the link's dialog: Make link when there is none, else the
-  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you, left out when that
-  browser already has a key (`hasThisDevice`: always through remote access; on the machine, an owner's device named as
-  this browser would name itself). Every toast here is
+  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you, left out through remote
+  access, which this browser reaches only with its key (on the machine's own page the key, kept for app.shinsa.dev,
+  cannot be read, and a device's name does not tell two browsers apart). Every toast here is
   a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). That link
   carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine

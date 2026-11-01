@@ -2,7 +2,6 @@ import type { AccessRequest, RemoteAccess, RemoteDevice, RemoteMember, RemoteSna
 import { encode } from 'uqr';
 import { formatSince, formatUntil } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
-import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import { describeUserName, selectDeviceMember } from '@/lib/remote/users.ts';
 
 export const REMOTE_ACCESS_SECTION = 'Remote access';
@@ -58,18 +57,6 @@ export function describeDeviceDetail(device: RemoteDevice, access: RemoteAccess 
 
 export function describeMemberSince(member: RemoteMember, now = Date.now()) {
   return formatSince('Joined', member.addedAt, now);
-}
-
-export function hasThisDevice(
-  snapshot: RemoteSnapshot | null,
-  browser: { remote: boolean; userAgent: string; touch: boolean }
-) {
-  if (browser.remote) return true;
-  const ownerId = snapshot?.access?.owner.id ?? null;
-  const name = resolveDeviceName(browser.userAgent, browser.touch, null);
-  return (snapshot?.devices ?? []).some(
-    (device) => device.name === name && (device.userId === null || device.userId === ownerId)
-  );
 }
 
 export function canEnrollDevices(snapshot: RemoteSnapshot | null) {

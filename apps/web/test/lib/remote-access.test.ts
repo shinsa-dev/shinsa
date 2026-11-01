@@ -7,7 +7,6 @@ import {
   describeDeviceSeen,
   describeMemberSince,
   describeRemoteStatus,
-  hasThisDevice,
   LINK_COPY,
   resolveQrImage,
 } from '@/lib/remote-access.ts';
@@ -131,32 +130,5 @@ describe('remote access words', () => {
     expect(size).toBeGreaterThanOrEqual(21);
     expect(image).toContain('fill="#fff"');
     expect(image).toMatch(/<path d="M0 0h1v1h-1z(M\d+ \d+h1v1h-1z)+" fill="#000"\/>/);
-  });
-});
-
-describe('whether this browser already has a key', () => {
-  const SAFARI =
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
-  const local = { remote: false, userAgent: SAFARI, touch: false };
-  const device = (name: string, userId: string | null) => ({
-    publicKey: name,
-    name,
-    enrolledAt: 1,
-    lastSeenAt: null,
-    userId,
-  });
-
-  it('is always true through remote access, which needs a key to reach the machine', () => {
-    expect(hasThisDevice(null, { ...local, remote: true })).toBe(true);
-  });
-
-  it('finds the owner device named after this browser, and nobody else’s', () => {
-    const name = 'Safari on Mac';
-    expect(hasThisDevice(createRemoteSnapshot({ devices: [device(name, null)] }), local)).toBe(true);
-    expect(hasThisDevice(createRemoteSnapshot({ devices: [device(name, 'someone')] }), local)).toBe(false);
-    expect(hasThisDevice(createRemoteSnapshot({ devices: [device('Chrome on Windows', null)] }), local)).toBe(
-      false
-    );
-    expect(hasThisDevice(null, local)).toBe(false);
   });
 });
