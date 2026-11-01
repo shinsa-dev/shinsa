@@ -6,6 +6,7 @@ import { TEAM_ICON } from '@/components/focus/menu.tsx';
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { UserTag } from '@/components/people/user-tag.tsx';
 import { WideSection } from '@/components/queue/queue.tsx';
 import { TaskGlyph } from '@/components/status/glyphs.tsx';
 import { StatusText, TaskMeta } from '@/components/status/text.tsx';
@@ -17,8 +18,10 @@ import { useMachines, useRemoteSnapshot, useTeamFeed } from '@/lib/connection/so
 import { type FocusTeam, listFocusTeams, selectFocusTeam } from '@/lib/focus.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
 import { createDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
+import { resolveSharedProfile } from '@/lib/remote/users.ts';
 import {
   describeTeamTaskOwner,
+  describeTeamTaskPlace,
   listOpenTeamFeedTasks,
   listTeamFeedTasks,
   matchesTeamTaskSearch,
@@ -51,12 +54,27 @@ function openTeamTask(entry: TeamFeedTask) {
   navigate(resolveTeamTaskPath(resolveTeamTaskTarget(entry)));
 }
 
+function OwnerName({ entry }: { entry: TeamFeedTask }) {
+  if (!entry.owner) return describeTeamTaskOwner(entry);
+  return <UserTag user={resolveSharedProfile(entry.owner, entry.ownerProfile)} />;
+}
+
 function OwnerMark({ entry }: { entry: TeamFeedTask }) {
+  const mark = <Icon size='sm' name={TEAM_ICON} className='shrink-0' />;
+  if (entry.owner)
+    return (
+      <span className='inline-flex min-w-0 items-center gap-1.5 text-fg-2'>
+        <Hint label={describeTeamTaskPlace(entry)}>{mark}</Hint>
+        <Truncate>
+          <OwnerName entry={entry} />
+        </Truncate>
+      </span>
+    );
   const owner = describeTeamTaskOwner(entry);
   return (
     <Hint label={entry.machine ? `${owner} on ${entry.machine}, read-only` : `${owner}, read-only`}>
       <span className='inline-flex min-w-0 items-center gap-1.5 text-fg-2'>
-        <Icon size='sm' name={TEAM_ICON} className='shrink-0' />
+        {mark}
         <Truncate>{owner}</Truncate>
       </span>
     </Hint>
@@ -132,10 +150,11 @@ function TeamTaskHomeRow({ entry }: { entry: TeamFeedTask }) {
       title={entry.task.title}
       meta={
         <>
-          {describeTeamTaskOwner(entry)} · <TaskMeta state={state} task={entry.task} />
+          <OwnerName entry={entry} /> · <TaskMeta state={state} task={entry.task} />
         </>
       }
       trailing={<TimeAgo at={entry.task.updatedAt} compact />}
+      holdsLinks
       onClick={() => openTeamTask(entry)}
     />
   );

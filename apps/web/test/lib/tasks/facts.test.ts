@@ -114,6 +114,12 @@ describe('duplicates', () => {
 
   it('says who closed it, and why when Shinsa did', () => {
     expect(describeDuplicateHint({ of: 'o', by: 'you', why: null })).toBe('You closed this as a duplicate.');
+    expect(describeDuplicateHint({ of: 'o', by: 'you', why: null }, 'Kai')).toBe(
+      'Kai closed this as a duplicate.'
+    );
+    expect(describeDuplicateHint({ of: 'o', by: 'shinsa', why: null }, 'Kai')).toBe(
+      'Shinsa closed this as a duplicate.'
+    );
     expect(describeDuplicateHint({ of: 'o', by: 'shinsa', why: null })).toBe(
       'Shinsa closed this as a duplicate.'
     );

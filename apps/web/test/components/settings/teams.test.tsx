@@ -120,7 +120,7 @@ describe('Settings → Teams', () => {
     const actions = renderOwnedTeam();
     expect(screen.getByText('Platform')).toBeTruthy();
     expect(screen.getByText('Asking to join')).toBeTruthy();
-    expect(screen.getByText('@bob')).toBeTruthy();
+    expect(screen.getByText('bob')).toBeTruthy();
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
     await waitFor(() => expect(actions.acceptRequest).toHaveBeenCalledWith('team1', BOB.id));

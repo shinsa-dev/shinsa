@@ -1,11 +1,12 @@
 import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
+import { UserTag } from '@/components/people/user-tag.tsx';
 import { ReadOnlyProvider } from '@/components/task/read-only.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useTaskView } from '@/hooks/use-task-view.ts';
 import { enterReadOnly } from '@/lib/connection/read-only.ts';
-import { describeSharedBy, listSharedTabs } from '@/lib/share/page.ts';
+import { describeSharedBy, describeSharedFrom, listSharedTabs, resolveOwnerName } from '@/lib/share/page.ts';
 import type { SharedView } from '@/lib/share/view.ts';
 import { resolveTaskTab } from '@/lib/tasks/tabs.ts';
 import { useSearchParam } from '@/router.ts';
@@ -24,6 +25,7 @@ export function SharedTaskPage({
   const taskView = useTaskView(state, task.id);
   React.useEffect(() => enterReadOnly(), []);
   const tabs = listSharedTabs(task, shared);
+  const owner = resolveOwnerName(shared, viewer);
   const page = {
     ...taskView,
     tabs,
@@ -33,12 +35,22 @@ export function SharedTaskPage({
   };
   return (
     <ReadOnlyProvider
+      owner={owner}
       note={
         <p className='flex items-center gap-1.5 text-2xs text-fg-2'>
           <Icon size='sm' name='IconEyeOpen' />
           <span>{note}</span>
           <span>·</span>
-          <span className='truncate'>{describeSharedBy(shared, viewer)}</span>
+          <span className='truncate'>
+            {owner?.user ? (
+              <>
+                Shared by <UserTag user={owner.user} label={owner.name} />
+                {describeSharedFrom(shared)}
+              </>
+            ) : (
+              describeSharedBy(shared, viewer)
+            )}
+          </span>
           <span>·</span>
           <TimeAgo at={view.updatedAt} />
         </p>

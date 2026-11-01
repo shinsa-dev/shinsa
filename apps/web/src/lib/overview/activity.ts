@@ -1,4 +1,5 @@
 import type { Activity, ShinsaState, Task } from '@shinsa/core';
+import { describeOwnerPossessive } from '@/lib/share/page.ts';
 import { type Glyph, resolvePauseGlyph } from '@/lib/tasks/status.ts';
 
 const ACTIVITY_GLYPH: Record<Activity['kind'], Glyph> = {
@@ -50,11 +51,18 @@ export interface ActivityActor {
   taskId: string | null;
 }
 
-export function resolveActivityActor(state: ShinsaState, entry: Activity): ActivityActor {
-  if (!entry.onBehalf) return { label: ACTOR_LABEL[entry.actor], taskId: null };
+export function resolveActivityActor(
+  state: ShinsaState,
+  entry: Activity,
+  owner: string | null = null
+): ActivityActor {
+  if (!entry.onBehalf) {
+    return { label: entry.actor === 'you' && owner ? owner : ACTOR_LABEL[entry.actor], taskId: null };
+  }
+  const behalf = `on ${describeOwnerPossessive(owner)} behalf`;
   const by = entry.byTask ? state.tasks[entry.byTask] : undefined;
-  if (!by) return { label: 'Shinsa (on your behalf)', taskId: null };
-  return { label: `${by.handle ?? `“${by.title}”`} agent (on your behalf)`, taskId: by.id };
+  if (!by) return { label: `Shinsa (${behalf})`, taskId: null };
+  return { label: `${by.handle ?? `“${by.title}”`} agent (${behalf})`, taskId: by.id };
 }
 
 export function resolveOverviewSummary(task: Task) {

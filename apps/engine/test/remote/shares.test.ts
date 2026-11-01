@@ -48,6 +48,8 @@ import { createGitRepo, createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
 
+const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: 'https://avatars.example/mona' };
+
 const CREDENTIALS = {
   instanceId: 'inst1',
   machineToken: 'machine-token',
@@ -174,7 +176,15 @@ function setUp(options: SetUp = {}) {
   const dir = createTempDir();
   const path = join(dir, 'remote.json');
   if (options.paired ?? true)
-    writeFileSync(path, JSON.stringify({ credentials: CREDENTIALS, enabled: true, owner: 'mona' }));
+    writeFileSync(
+      path,
+      JSON.stringify({
+        credentials: CREDENTIALS,
+        enabled: true,
+        owner: 'mona',
+        access: { owner: MONA, members: [] },
+      })
+    );
   const remote = new Remote({
     path,
     control: new ControlClient({ origin: plane.origin }),
@@ -374,6 +384,7 @@ describe('a share link opened live', () => {
     const [view] = viewer.views();
     expect(view?.shared).toMatchObject({
       owner: 'mona',
+      ownerProfile: { name: 'Mona Lisa', avatarUrl: 'https://avatars.example/mona' },
       machine: 'Studio',
       repository: 'acme/app',
       code: true,
@@ -553,7 +564,7 @@ describe('what a link shows', () => {
     const { view } = await publisher.resolveLive('task-1');
     expect(Object.keys(view.files)).toEqual(['shot-1', SHARE_DIFF_FILE, SHARE_CODE_FILE]);
     expect(view.shared.evidence.map((item) => item.id)).toEqual(['shot-1']);
-    expect(view.shared).toMatchObject({ owner: null, machine: 'Studio', code: true });
+    expect(view.shared).toMatchObject({ owner: null, ownerProfile: null, machine: 'Studio', code: true });
     expect(await readLiveFile(publisher, SHARE_DIFF_FILE)).toBe(DIFF);
     expect(plane.calls).toEqual([]);
   });
