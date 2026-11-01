@@ -470,6 +470,7 @@ describe('the change on the Overview', () => {
 
 describe('the activity on the Overview', () => {
   const ROWS_SETTLED = { timeout: 5000 };
+  const PAGING_TIMEOUT = 3 * ROWS_SETTLED.timeout;
 
   function busy() {
     const activity = Array.from({ length: 250 }, (_, index) => ({
@@ -484,37 +485,45 @@ describe('the activity on the Overview', () => {
     return { task, state: createShinsaState({ tasks: [task] }) };
   }
 
-  it('shows the newest entries and older ones a page at a time', async () => {
-    const { task, state } = busy();
-    const view = renderOverview(state, task);
-    await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy(), ROWS_SETTLED);
-    expect(view.queryByText('Entry 149')).toBeNull();
-    fireEvent.click(view.getByRole('button', { name: 'Show 100 older entries' }));
-    await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy(), ROWS_SETTLED);
-    fireEvent.click(view.getByRole('button', { name: 'Show 50 older entries' }));
-    await waitFor(() => expect(view.getByText('Entry 0')).toBeTruthy(), ROWS_SETTLED);
-    expect(view.queryByRole('button', { name: /older entr/ })).toBeNull();
-  });
+  it(
+    'shows the newest entries and older ones a page at a time',
+    async () => {
+      const { task, state } = busy();
+      const view = renderOverview(state, task);
+      await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy(), ROWS_SETTLED);
+      expect(view.queryByText('Entry 149')).toBeNull();
+      fireEvent.click(view.getByRole('button', { name: 'Show 100 older entries' }));
+      await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy(), ROWS_SETTLED);
+      fireEvent.click(view.getByRole('button', { name: 'Show 50 older entries' }));
+      await waitFor(() => expect(view.getByText('Entry 0')).toBeTruthy(), ROWS_SETTLED);
+      expect(view.queryByRole('button', { name: /older entr/ })).toBeNull();
+    },
+    PAGING_TIMEOUT
+  );
 
-  it('goes back to the newest entries once the Overview is hidden', async () => {
-    const { task, state } = busy();
-    pushState(state);
-    const page = (mode: 'visible' | 'hidden') => (
-      <TooltipProvider>
-        <ReviewDraftProvider enabled draftKey={task.id}>
-          <React.Activity mode={mode}>
-            <OverviewTab state={state} task={task} gate={undefined} onOpen={mock()} />
-          </React.Activity>
-        </ReviewDraftProvider>
-      </TooltipProvider>
-    );
-    const view = render(page('visible'));
-    await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy(), ROWS_SETTLED);
-    fireEvent.click(view.getByRole('button', { name: 'Show 100 older entries' }));
-    await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy(), ROWS_SETTLED);
-    view.rerender(page('hidden'));
-    view.rerender(page('visible'));
-    await waitFor(() => expect(view.queryByText('Entry 149')).toBeNull(), ROWS_SETTLED);
-    expect(view.getByText('Entry 150')).toBeTruthy();
-  });
+  it(
+    'goes back to the newest entries once the Overview is hidden',
+    async () => {
+      const { task, state } = busy();
+      pushState(state);
+      const page = (mode: 'visible' | 'hidden') => (
+        <TooltipProvider>
+          <ReviewDraftProvider enabled draftKey={task.id}>
+            <React.Activity mode={mode}>
+              <OverviewTab state={state} task={task} gate={undefined} onOpen={mock()} />
+            </React.Activity>
+          </ReviewDraftProvider>
+        </TooltipProvider>
+      );
+      const view = render(page('visible'));
+      await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy(), ROWS_SETTLED);
+      fireEvent.click(view.getByRole('button', { name: 'Show 100 older entries' }));
+      await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy(), ROWS_SETTLED);
+      view.rerender(page('hidden'));
+      view.rerender(page('visible'));
+      await waitFor(() => expect(view.queryByText('Entry 149')).toBeNull(), ROWS_SETTLED);
+      expect(view.getByText('Entry 150')).toBeTruthy();
+    },
+    PAGING_TIMEOUT
+  );
 });

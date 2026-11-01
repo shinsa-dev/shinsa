@@ -3,6 +3,7 @@ import type { PhaseReport } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { render, screen } from '@testing-library/react';
 import { MergeStepsPanel } from '@/components/review/merge-steps.tsx';
+import { ReadOnlyProvider } from '@/components/task/read-only.tsx';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { createTask } from '../../support/state.ts';
 
@@ -24,16 +25,16 @@ const REPORT = {
 
 const TASK = createTask({ id: 't', handle: 'SW-7', phaseReports: [REPORT] });
 
-function renderPanel(readOnly?: boolean) {
+function renderPanel(readOnly = false) {
+  const panel = (
+    <MergeStepsPanel
+      persistId={createDisclosureId('task', 't', 'review', 'panel', 'pre_merge')}
+      task={TASK}
+      when='pre_merge'
+    />
+  );
   return render(
-    <TooltipProvider>
-      <MergeStepsPanel
-        persistId={createDisclosureId('task', 't', 'review', 'panel', 'pre_merge')}
-        task={TASK}
-        when='pre_merge'
-        {...(readOnly === undefined ? {} : { readOnly })}
-      />
-    </TooltipProvider>
+    <TooltipProvider>{readOnly ? <ReadOnlyProvider>{panel}</ReadOnlyProvider> : panel}</TooltipProvider>
   );
 }
 
