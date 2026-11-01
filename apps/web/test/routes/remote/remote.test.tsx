@@ -16,7 +16,7 @@ import {
   replaceConnection,
   type Snapshot,
 } from '@/lib/connection/socket.ts';
-import type { DashboardClient } from '@/lib/remote/dashboard.ts';
+import { type DashboardClient, DashboardError } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
@@ -213,6 +213,22 @@ describe('the remote dashboard', () => {
     expect(local).toBeInstanceOf(Connection);
   });
 
+  it('drops a machine from the dashboard and forgets its key once Shinsa Cloud no longer knows it', async () => {
+    const devices = createDevices(DEVICE);
+    const view = renderRoot('/tasks', {
+      devices,
+      dashboard: createDashboard({
+        requestConnect: () => Promise.reject(new DashboardError('not_found', 'No such machine.', 404)),
+      }),
+    });
+    expect(await screen.findByText('The app')).toBeTruthy();
+    connection.start();
+    await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
+    expect((connection as Fleet).members).toEqual([]);
+    expect(connection.listUnreachableMachines()).toEqual([]);
+    view.unmount();
+  });
+
   it('says to update Shinsa when every machine runs a protocol this page cannot work with', async () => {
     const outdated = spyOn(Fleet.prototype, 'isEveryMachineOutdated').mockReturnValue(true);
     renderRoot('/tasks', { devices: createDevices(DEVICE) });
@@ -339,18 +355,30 @@ describe('the page after connecting Slack', () => {
 });
 
 describe('the machines in Settings', () => {
-  it('lists every machine with whether it is in this dashboard, and removes one', async () => {
+  it('lists every machine with whether it is in this dashboard, and removes one from the dashboard at once', async () => {
     const devices = createDevices(DEVICE);
-    render(
-      <RemoteServicesContext.Provider
-        value={{ dashboard: createDashboard(), devices, teamKeys: createTeamKeys(), worker: createWorker() }}
-      >
-        <MachinesSettings />
-      </RemoteServicesContext.Provider>
-    );
-    expect(await screen.findByText(/In this dashboard/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
+    const dropped: string[] = [];
+    replaceConnection({ ...connection, removeMachine: (id) => dropped.push(id) });
+    try {
+      render(
+        <RemoteServicesContext.Provider
+          value={{
+            dashboard: createDashboard(),
+            devices,
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
+        >
+          <MachinesSettings />
+        </RemoteServicesContext.Provider>
+      );
+      expect(await screen.findByText(/In this dashboard/)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+      await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
+      expect(dropped).toEqual(['k3x9']);
+    } finally {
+      replaceConnection(null);
+    }
   });
 
   it('names the task handed to you on a machine, and leaves it instead of removing it', async () => {

@@ -20,6 +20,7 @@ import {
 } from '@shinsa/core';
 import type { ShinsaConnection, Snapshot } from '@/lib/connection/socket.ts';
 import {
+  FLEET_WAIT_MS,
   Fleet,
   type FleetMember,
   listSharedHandles,
@@ -70,6 +71,14 @@ class FakeConnection implements ShinsaConnection {
     this.watched.push(runId);
     return () => undefined;
   };
+  readonly details: string[] = [];
+  requestTaskDetail = (taskId: string) => {
+    this.details.push(`request ${taskId}`);
+  };
+  watchTaskDetail = (taskId: string) => {
+    this.details.push(`watch ${taskId}`);
+    return () => undefined;
+  };
   subscribeAccounts = (listener: () => void) => this.signal.subscribe(listener);
   selectAccounts = () => this.accounts;
   replaceAccounts = (accounts: AccountsSnapshot | null) => {
@@ -99,6 +108,7 @@ class FakeConnection implements ShinsaConnection {
   listMachines = () => [];
   listUnreachableMachines = () => [];
   listMachineAccess = () => [];
+  removeMachine = () => undefined;
   selectEngine = () => this.engine;
   command = (command: UserCommand) => {
     this.commands.push(command);
@@ -115,6 +125,7 @@ class FakeConnection implements ShinsaConnection {
 function createMember(id: string, name: string) {
   const connection = new FakeConnection();
   const requests: string[] = [];
+  const closed: string[] = [];
   const member: FleetMember = {
     id,
     name,
@@ -123,8 +134,9 @@ function createMember(id: string, name: string) {
       requests.push(new URL(request.url).pathname);
       return Promise.resolve(new Response(name));
     },
+    close: () => closed.push(id),
   };
-  return { member, connection, requests };
+  return { member, connection, requests, closed };
 }
 
 function createFleet() {
@@ -293,6 +305,147 @@ describe('merging the state of several machines', () => {
   });
 });
 
+function createWaitingFleet() {
+  const studio = createMember('m1', 'Studio');
+  const laptop = createMember('m2', 'Laptop');
+  const deadline: { settle: () => void; stopped: number; started: number } = {
+    settle: () => undefined,
+    stopped: 0,
+    started: 0,
+  };
+  const fleet = new Fleet([studio.member, laptop.member], [], null, (settle) => {
+    deadline.settle = settle;
+    deadline.started += 1;
+    return () => {
+      deadline.stopped += 1;
+    };
+  });
+  fleet.start();
+  studio.connection.push({
+    state: createWire(1, { tasks: { 'task-studio': createTask({ id: 'task-studio' }) } }),
+    status: 'open',
+  });
+  return { fleet, studio, laptop, deadline };
+}
+
+describe('waiting for every machine before showing the state', () => {
+  it('shows nothing while one machine is still connecting, then every machine’s tasks at once', () => {
+    const { fleet, laptop, deadline } = createWaitingFleet();
+    expect(fleet.snapshot().state).toBeNull();
+    expect(fleet.snapshot().status).toBe('open');
+    laptop.connection.push({
+      state: createWire(1, { tasks: { 'task-laptop': createTask({ id: 'task-laptop' }) } }),
+      status: 'open',
+    });
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {}).sort()).toEqual(['task-laptop', 'task-studio']);
+    expect(deadline.stopped).toBe(1);
+  });
+
+  it('keeps waiting for a machine whose connection failed, while it tries again', () => {
+    const { fleet, laptop, deadline } = createWaitingFleet();
+    laptop.connection.push({ state: null, status: 'closed' });
+    expect(fleet.snapshot().state).toBeNull();
+    laptop.connection.push({ state: null, status: 'connecting' });
+    expect(fleet.snapshot().state).toBeNull();
+    deadline.settle();
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+    laptop.connection.push({ state: null, status: 'closed' });
+    expect(fleet.snapshot().state).not.toBeNull();
+  });
+
+  it('does not wait for a machine the dashboard lists as offline, and merges it in once it answers', () => {
+    const studio = createMember('m1', 'Studio');
+    const laptop = createMember('m2', 'Laptop');
+    const fleet = new Fleet(
+      [studio.member, { ...laptop.member, online: false }],
+      [],
+      null,
+      () => () => undefined
+    );
+    studio.connection.push({
+      state: createWire(1, { tasks: { 'task-studio': createTask({ id: 'task-studio' }) } }),
+      status: 'open',
+    });
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+    laptop.connection.push({
+      state: createWire(1, { tasks: { 'task-laptop': createTask({ id: 'task-laptop' }) } }),
+      status: 'open',
+    });
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {}).sort()).toEqual(['task-laptop', 'task-studio']);
+  });
+
+  it('stops waiting for a machine on another engine protocol', () => {
+    const { fleet, laptop } = createWaitingFleet();
+    laptop.connection.engine = { ...resolveEngineInfo('0.9.0'), protocol: ENGINE_PROTOCOL - 1 };
+    laptop.connection.push({ state: null, status: 'open' });
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+  });
+
+  it('stops waiting for a machine removed from the fleet', () => {
+    const { fleet } = createWaitingFleet();
+    expect(fleet.snapshot().state).toBeNull();
+    fleet.removeMember('m2');
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+  });
+
+  it('shows the machines that answered once the deadline passes, and tells its listeners', () => {
+    const { fleet, laptop, deadline } = createWaitingFleet();
+    expect(fleet.snapshot().state).toBeNull();
+    let heard = 0;
+    fleet.subscribe(() => {
+      heard += 1;
+    });
+    deadline.settle();
+    expect(heard).toBe(1);
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+    deadline.settle();
+    expect(heard).toBe(1);
+    laptop.connection.push({
+      state: createWire(1, { tasks: { 'task-laptop': createTask({ id: 'task-laptop' }) } }),
+      status: 'open',
+    });
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {}).sort()).toEqual(['task-laptop', 'task-studio']);
+  });
+
+  it('starts the deadline once, and stops it when the fleet closes', () => {
+    const { fleet, deadline } = createWaitingFleet();
+    fleet.start();
+    expect(deadline.started).toBe(1);
+    fleet.close();
+    expect(deadline.stopped).toBe(1);
+  });
+
+  it('waits ten seconds by default before showing the machines that answered', () => {
+    const studio = createMember('m1', 'Studio');
+    const laptop = createMember('m2', 'Laptop');
+    const timers: { run: () => void; ms: number | undefined }[] = [];
+    const cleared: unknown[] = [];
+    const realSet = globalThis.setTimeout;
+    const realClear = globalThis.clearTimeout;
+    globalThis.setTimeout = ((run: () => void, ms?: number) => {
+      timers.push({ run, ms });
+      return timers.length;
+    }) as unknown as typeof setTimeout;
+    globalThis.clearTimeout = ((id: unknown) => {
+      cleared.push(id);
+    }) as typeof clearTimeout;
+    try {
+      const fleet = new Fleet([studio.member, laptop.member]);
+      fleet.start();
+      studio.connection.push({ state: createWire(1), status: 'open' });
+      expect(timers.map((timer) => timer.ms)).toEqual([FLEET_WAIT_MS]);
+      expect(FLEET_WAIT_MS).toBe(10_000);
+      expect(fleet.snapshot().state).toBeNull();
+      timers[0]?.run();
+      expect(fleet.snapshot().state).not.toBeNull();
+      expect(cleared).toEqual([1]);
+    } finally {
+      globalThis.setTimeout = realSet;
+      globalThis.clearTimeout = realClear;
+    }
+  });
+});
+
 describe('sending to the machine that owns it', () => {
   it('finds the owner of a command from any id it names, at any depth', () => {
     const owners = new Map([
@@ -326,6 +479,10 @@ describe('sending to the machine that owns it', () => {
     expect(studio.connection.commands.map((command) => command.type)).toEqual(['settings.change']);
     fleet.watchTranscript('run-laptop')();
     expect(laptop.connection.watched).toEqual(['run-laptop']);
+    fleet.requestTaskDetail('task-laptop');
+    fleet.watchTaskDetail('task-laptop')();
+    expect(laptop.connection.details).toEqual(['request task-laptop', 'watch task-laptop']);
+    expect(studio.connection.details).toEqual([]);
     laptop.connection.transcript = [{ kind: 'note' } as unknown as ChatEntry];
     expect(fleet.selectTranscript('run-laptop')).toHaveLength(1);
     expect(await (await fleet.fetch(new Request('https://shinsa.dev/api/tasks/task-laptop'))).text()).toBe(
@@ -382,6 +539,42 @@ describe('sending to the machine that owns it', () => {
 
   it('reports no resources while no machine is reachable', () => {
     expect(new Fleet([]).selectResources()).toBeNull();
+  });
+
+  it('drops a removed machine’s tasks at once, closes it and does not list it as unreachable', () => {
+    const { fleet, studio, laptop } = createFleet();
+    const unreachable = new Fleet([studio.member], [{ id: 'm3', name: 'Build box' }]);
+    let published = 0;
+    fleet.subscribe(() => {
+      published += 1;
+    });
+    let remotePublished = 0;
+    fleet.subscribeRemote(() => {
+      remotePublished += 1;
+    });
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {}).sort()).toEqual(['task-laptop', 'task-studio']);
+    fleet.removeMachine('m2');
+    expect(published).toBe(1);
+    expect(remotePublished).toBe(1);
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+    expect(fleet.members.map((member) => member.id)).toEqual(['m1']);
+    expect(fleet.listUnreachableMachines()).toEqual([]);
+    expect(laptop.closed).toEqual(['m2']);
+    expect(studio.closed).toEqual([]);
+    fleet.removeMachine('m2');
+    expect(laptop.closed).toEqual(['m2']);
+    expect(unreachable.listUnreachableMachines()).toEqual([{ id: 'm3', name: 'Build box' }]);
+    unreachable.removeMachine('m3');
+    expect(unreachable.listUnreachableMachines()).toEqual([]);
+  });
+
+  it('closes a machine that no longer accepts this browser, and every machine when the fleet closes', () => {
+    const { fleet, studio, laptop } = createFleet();
+    fleet.removeMember('m2');
+    expect(laptop.closed).toEqual(['m2']);
+    fleet.close();
+    expect(studio.closed).toEqual(['m1']);
+    expect(laptop.closed).toEqual(['m2']);
   });
 
   it('keeps the account’s machines this device cannot reach, to show them disabled', () => {
@@ -471,6 +664,8 @@ describe('sending to the machine that owns it', () => {
     fleet.replaceAccounts(null);
     fleet.replaceTerminals({ terminals: [] } as unknown as TerminalsSnapshot);
     fleet.watchTranscript('run')();
+    fleet.requestTaskDetail('task');
+    fleet.watchTaskDetail('task')();
   });
 
   it('merges every machine’s teammates’ tasks with the browser’s own, kept until one of them changes', () => {

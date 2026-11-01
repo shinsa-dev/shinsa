@@ -1,10 +1,15 @@
-import type { Run } from '../domain/index.ts';
+import type { Run, Task } from '../domain/index.ts';
 import { type FixFocus, resolveFixFocus } from '../prompts/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 
 export type WireRun = Omit<Run, 'prompt' | 'rolePrompt'> & { fixFocus?: FixFocus };
 
-export type WireState = Omit<ShinsaState, 'runs'> & { runs: Record<string, WireRun> };
+export type WireTask = Task & { summarized?: true };
+
+export type WireState = Omit<ShinsaState, 'runs' | 'tasks'> & {
+  tasks: Record<string, WireTask>;
+  runs: Record<string, WireRun>;
+};
 
 const WIRE_RUNS = new WeakMap<object, WireRun>();
 

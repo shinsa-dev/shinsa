@@ -3,6 +3,7 @@ import { isTaskLive } from '../../src/decide/liveness.ts';
 import {
   applyEvent,
   applyStatePatch,
+  applyTaskDetail,
   type ConfigProblem,
   createState,
   DomainError,
@@ -22,6 +23,7 @@ import {
   listOpenBlockers,
   listOpenGates,
   listPendingDependencies,
+  listSummarizedTasks,
   listTaskChecks,
   type PlanDocument,
   type PullRequest,
@@ -35,7 +37,9 @@ import {
   resolveCurrentRound,
   resolveQueue,
   resolveStatePatch,
+  resolveTaskDetail,
   resolveTaskPipeline,
+  resolveViewPatch,
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
@@ -43,6 +47,7 @@ import {
   type StatePatch,
   selectCheckoutHolder,
   serializeState,
+  serializeViewState,
   type Task,
   type WireState,
 } from '../../src/index.ts';
@@ -1327,6 +1332,33 @@ function freezeState<T>(value: T): T {
   return value;
 }
 
+interface ViewClient {
+  summarized: ReadonlySet<string>;
+  client: WireState;
+}
+
+function connectView(state: ShinsaState): ViewClient {
+  const summarized = listSummarizedTasks(state);
+  return {
+    summarized,
+    client: JSON.parse(JSON.stringify(serializeViewState(state, summarized))) as WireState,
+  };
+}
+
+function assertSameView(state: ShinsaState, view: ViewClient, context: string) {
+  const fresh = JSON.parse(JSON.stringify(serializeViewState(state, view.summarized)));
+  if (!Bun.deepEquals(view.client, fresh))
+    throw new Error(`${context}: the view patches drifted from a fresh view`);
+}
+
+function openDetail(state: ShinsaState, view: ViewClient): ViewClient {
+  const [taskId] = view.summarized;
+  if (taskId === undefined) return view;
+  const detail = JSON.parse(JSON.stringify(resolveTaskDetail(state, taskId)));
+  const client = applyTaskDetail(view.client, detail) ?? createState();
+  return { client, summarized: new Set([...view.summarized].filter((id) => id !== taskId)) };
+}
+
 function simulate(
   seed: number,
   steps: number,
@@ -1364,6 +1396,7 @@ function simulate(
   const log: ShinsaEvent[] = [{ type: 'repo.registered', repo: state.repos.repo!, seq: 1, at: 0 }];
   let client = JSON.parse(JSON.stringify(serializeState(state))) as WireState;
   let replayed = JSON.parse(JSON.stringify(state)) as ShinsaState;
+  let view = connectView(state);
   let counter = 0;
   let outageCounter = 0;
   const apply = (
@@ -1389,8 +1422,14 @@ function simulate(
       replayed = applyEvent(replayed, stamped);
     }
     state = freezeState(decision.state);
-    const patch = JSON.parse(JSON.stringify(resolveStatePatch(prior, state, decision.changes))) as StatePatch;
+    const shared = resolveStatePatch(prior, state, decision.changes);
+    const patch = JSON.parse(JSON.stringify(shared)) as StatePatch;
     client = applyStatePatch(client, patch) ?? createState();
+    const viewed = resolveViewPatch(shared, prior, state, view.summarized);
+    view = {
+      summarized: viewed.summarized,
+      client: applyStatePatch(view.client, JSON.parse(JSON.stringify(viewed.patch))) ?? createState(),
+    };
     assertSameChanges(state, [replayed], decision.changes, command.type);
     assertSameChanges(serializeState(state), [client], decision.changes, command.type);
     try {
@@ -1413,8 +1452,14 @@ function simulate(
       const onBehalf = sideStream === 'on_behalf' || sideCommand.type === 'schedule.write';
       apply(step, now, sideCommand, () => `${seed}-${sideStream}-${++outageCounter}`, onBehalf);
     }
+    if (step % 13 === 12) view = openDetail(state, view);
+    if (step % 40 === 39) {
+      assertSameView(state, view, `seed ${seed}, step ${step}`);
+      view = connectView(state);
+    }
     observe(state);
   }
+  assertSameView(state, view, `seed ${seed}, end`);
   expect(replayEventLog(log).state).toEqual(state);
   expect(client).toEqual(JSON.parse(JSON.stringify(serializeState(state))));
   return state;

@@ -117,7 +117,7 @@ describe('a machine in the dashboard', () => {
     });
     const device: EnrolledDevice = { instanceId: STUDIO.id, machineKey: mac.machineKey, keys, enrolledAt: 1 };
     const sockets: (() => WebSocket)[] = [];
-    const { member, close } = createFleetMember(STUDIO, device, {
+    const member = createFleetMember(STUDIO, device, {
       dashboard: {
         requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
       },
@@ -128,7 +128,7 @@ describe('a machine in the dashboard', () => {
         return new Connection({ openSocket, retry: () => undefined });
       },
     });
-    expect(member).toMatchObject({ id: 'k3x9', name: 'Studio' });
+    expect(member).toMatchObject({ id: 'k3x9', name: 'Studio', online: true });
     expect(member.guest).toBeUndefined();
     const handed = createFleetMember({ ...STUDIO, role: 'guest' }, device, {
       dashboard: { requestConnect: () => Promise.reject(new Error('unused')) },
@@ -136,14 +136,14 @@ describe('a machine in the dashboard', () => {
       createConnection: () =>
         new Connection({ openSocket: () => new WebSocket('ws://x'), retry: () => undefined }),
     });
-    expect(handed.member.guest).toBe(true);
-    expect(handed.member.handedBy).toEqual(STUDIO.owner);
+    expect(handed.guest).toBe(true);
+    expect(handed.handedBy).toEqual(STUDIO.owner);
     handed.close();
     const answer = await member.fetch(new Request('https://shinsa.dev/api/health'));
     expect(await answer.text()).toBe('from Studio');
     const socket = sockets[0]?.();
     await waitFor(() => expect(socket?.readyState).toBe(1));
-    close();
+    member.close();
     await waitFor(() => expect(socket?.readyState).toBe(3));
   });
 
@@ -151,7 +151,7 @@ describe('a machine in the dashboard', () => {
     const mac = await FakeMac.create({ enrolled: [] });
     const device = await createDevice(mac.machineKey);
     const refused: string[] = [];
-    const { member } = createFleetMember(STUDIO, device, {
+    const member = createFleetMember(STUDIO, device, {
       dashboard: {
         requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
       },
