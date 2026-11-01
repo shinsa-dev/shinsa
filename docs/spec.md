@@ -284,14 +284,14 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
   section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
   its own.
-- **Feedback.** A Feedback button in the header (Desk) and the rail (Shelf), and Send feedback on Shinsa in ⌘K,
-  open the feedback sheet. You write a note in your own words; your agent rewrites it as a public GitHub issue on
-  `shinsa-dev/shinsa` without your projects, repositories, files, branches, names, code or links, and you read it
-  before it opens. A check in core refuses an issue that still holds an email, a home folder path, a token or key, a
-  link elsewhere or one of your project, repository, branch, task or account names, and shows what it found. Agents
-  report what in Shinsa got in their way with `report_feedback`; a report waits in the same sheet, marked as from an
-  agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); the button's count is
-  what waits for you (`docs/engine.md` → Feedback).
+- **Feedback.** A Feedback button beside Settings in the header (Desk) and the rail (Shelf), and Send feedback on
+  Shinsa in ⌘K, open the feedback dialog. You write a note in your own words; your agent rewrites it as a public
+  GitHub issue on `shinsa-dev/shinsa` without your projects, repositories, files, branches, names, code or links, and
+  you read it before it opens. A check in core refuses an issue that still holds an email, a home folder path, a token
+  or key, a link elsewhere or one of your project, repository, branch, task or account names, and shows what it found.
+  Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same dialog, marked as
+  from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); the button's
+  count is what waits for you (`docs/engine.md` → Feedback).
 - **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
   questions: the folders that hold your repositories (found on this machine, with their
   repository counts), the default model, the merge method, plan approval, your Claude accounts and

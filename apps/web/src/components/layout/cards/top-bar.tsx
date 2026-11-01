@@ -45,17 +45,16 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
         </ErrorBoundary>
         {route.name !== 'onboarding' && (
           <>
-            <ErrorBoundary size='icon' resetKey={resetKey}>
-              <FeedbackButton state={state} />
-            </ErrorBoundary>
             <NavButton
               page='settings'
               label='Settings'
               icon='IconSettingsGear4'
               activeIcon='IconSettingsGear4Filled'
               iconOnly
-              className='me-0.5'
             />
+            <ErrorBoundary size='icon' resetKey={resetKey}>
+              <FeedbackButton state={state} className='me-0.5' />
+            </ErrorBoundary>
             <ErrorBoundary size='icon' resetKey={resetKey}>
               <UsageMenu state={state} />
             </ErrorBoundary>

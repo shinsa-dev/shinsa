@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetTitle } from '@shinsa/ui/components/sheet';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
-import { FeedbackSheet } from '@/components/feedback/sheet.tsx';
+import { FeedbackDialog } from '@/components/feedback/dialog.tsx';
 import type { LayoutPreference } from '@/lib/preferences/layout.ts';
 import { useRailWidth } from '@/lib/preferences/rail-width.ts';
 import { CardsTopBar } from './cards/top-bar.tsx';
@@ -49,7 +49,7 @@ export function AppFrame({
         {children}
       </main>
       <ErrorBoundary size='silent'>
-        <FeedbackSheet state={state} />
+        <FeedbackDialog state={state} />
       </ErrorBoundary>
     </div>
   );

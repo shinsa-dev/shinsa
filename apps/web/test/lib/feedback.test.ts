@@ -140,7 +140,7 @@ describe('validation', () => {
   });
 });
 
-describe('the sheet’s open state', () => {
+describe('the dialog’s open state', () => {
   it('opens from anywhere and every reader sees it', () => {
     const { result } = renderHook(() => useFeedbackOpen());
     expect(result.current).toBe(false);

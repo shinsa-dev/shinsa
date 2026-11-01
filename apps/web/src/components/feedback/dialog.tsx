@@ -1,17 +1,17 @@
 import type { Feedback, ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import {
+  Dialog,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@shinsa/ui/components/dialog';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Field, FieldError } from '@shinsa/ui/components/field';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
-import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@shinsa/ui/components/sheet';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import { Textarea } from '@shinsa/ui/components/textarea';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -314,7 +314,7 @@ function FiledEntry({ entry }: { entry: Feedback }) {
 export function FeedbackPanel({ state, actions }: { state: ShinsaState; actions: FeedbackActions }) {
   const groups = listFeedbackGroups(state);
   return (
-    <div className='flex flex-col gap-5 pb-4'>
+    <div className='flex flex-col gap-5'>
       <NoteForm actions={actions} />
       <section className={SECTION}>
         <h3 className={SECTION_HEADING}>Waiting for you</h3>
@@ -345,7 +345,7 @@ export function FeedbackPanel({ state, actions }: { state: ShinsaState; actions:
   );
 }
 
-export function FeedbackSheet({
+export function FeedbackDialog({
   state,
   actions = FEEDBACK_ACTIONS,
 }: {
@@ -354,16 +354,17 @@ export function FeedbackSheet({
 }) {
   const open = useFeedbackOpen();
   return (
-    <Sheet open={open} onOpenChange={updateFeedbackOpen}>
-      <SheetContent side='right' className='w-full gap-0 sm:max-w-md'>
-        <SheetHeader className='gap-1'>
-          <SheetTitle>Feedback on Shinsa</SheetTitle>
-          <SheetDescription>{FEEDBACK_INTRO}</SheetDescription>
-        </SheetHeader>
-        <SheetBody>
+    <Dialog open={open} onOpenChange={updateFeedbackOpen}>
+      <DialogContent>
+        <DialogHeader className='px-6'>
+          <DialogTitle>Feedback on Shinsa</DialogTitle>
+          <DialogDescription>{FEEDBACK_INTRO}</DialogDescription>
+        </DialogHeader>
+        <DialogCloseButton />
+        <div className='w-full'>
           <FeedbackPanel state={state} actions={actions} />
-        </SheetBody>
-      </SheetContent>
-    </Sheet>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

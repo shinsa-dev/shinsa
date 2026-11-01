@@ -67,11 +67,6 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
               <ServicesMenu state={state} variant='rail' onNavigate={onNavigate} />
             </ErrorBoundary>
           )}
-          {route.name !== 'onboarding' && (
-            <ErrorBoundary size='inline' resetKey={resetKey}>
-              <FeedbackButton state={state} variant='rail' onNavigate={onNavigate} />
-            </ErrorBoundary>
-          )}
           <NavItem
             label='Settings'
             icon='IconSettingsGear4'
@@ -79,6 +74,11 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
             active={route.name === 'settings'}
             onClick={() => go('/settings')}
           />
+          {route.name !== 'onboarding' && (
+            <ErrorBoundary size='inline' resetKey={resetKey}>
+              <FeedbackButton state={state} variant='rail' onNavigate={onNavigate} />
+            </ErrorBoundary>
+          )}
         </HoverHighlight>
       </div>
       {route.name !== 'onboarding' && (

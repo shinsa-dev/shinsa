@@ -1,6 +1,8 @@
 import type { ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
+import { cn } from '@shinsa/ui/lib/utils';
+import { NAV_ICON_NUDGE } from '@/components/layout/nav-button.tsx';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import {
@@ -16,10 +18,12 @@ import {
 export function FeedbackButton({
   state,
   variant = 'bar',
+  className,
   onNavigate,
 }: {
   state: ShinsaState;
   variant?: 'bar' | 'rail';
+  className?: string;
   onNavigate?: () => void;
 }) {
   const open = useFeedbackOpen();
@@ -44,8 +48,8 @@ export function FeedbackButton({
       <Button
         variant='secondary'
         size='sm'
-        icon={icon}
-        className={open ? 'text-fg-4' : 'text-fg-3'}
+        icon={{ name: icon, className: NAV_ICON_NUDGE }}
+        className={cn(open ? 'text-fg-4' : 'text-fg-3', className)}
         onClick={press}
       >
         Feedback

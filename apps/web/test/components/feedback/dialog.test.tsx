@@ -3,7 +3,7 @@ import type { Feedback } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { FeedbackButton } from '@/components/feedback/button.tsx';
-import { FeedbackPanel, FeedbackSheet } from '@/components/feedback/sheet.tsx';
+import { FeedbackDialog, FeedbackPanel } from '@/components/feedback/dialog.tsx';
 import { type FeedbackActions, isFeedbackOpen, openFeedback } from '@/lib/feedback.ts';
 import { createFeedback } from '../../support/feedback.ts';
 import { createProject, createShinsaState, createTask } from '../../support/state.ts';
@@ -165,13 +165,13 @@ describe('FeedbackPanel', () => {
   });
 });
 
-describe('FeedbackSheet and FeedbackButton', () => {
+describe('FeedbackDialog and FeedbackButton', () => {
   it('opens from the header button, says what happens to your note and shows the waiting count', async () => {
     const state = stateWith([createFeedback({ id: 'f1' }), createFeedback({ id: 'f2', status: 'failed' })]);
     render(
       <TooltipProvider>
         <FeedbackButton state={state} />
-        <FeedbackSheet state={state} actions={createActions()} />
+        <FeedbackDialog state={state} actions={createActions()} />
       </TooltipProvider>
     );
     const button = screen.getByRole('button', { name: /Feedback/ });

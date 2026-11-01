@@ -1862,7 +1862,7 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   drafted `title` (120) and `body` (6,000), its `source` (`human` or `agent`, with the agent's task and run), its
   `status` (`drafting`, `draft`, `filing`, `filed` or `failed`, with the `failure` shown to you) and, once filed, the
   `issue` (number and link). `feedback.recorded` carries the whole entry, `feedback.removed` forgets it.
-- **Writing.** `feedback.write` (the sheet, `shinsa feedback write`) records a note as `drafting` and runs
+- **Writing.** `feedback.write` (the dialog, `shinsa feedback write`) records a note as `drafting` and runs
   `feedback.draft`; with `feedbackId` it rewrites an entry that is not busy or filed and drafts it again. The
   `feedback.draft` effect (replay-safe) is a quick call on your account (`createFeedbackDrafter`,
   `feedback/draft.ts`): its fixed system prompt says the issue is public, to describe only what Shinsa did and what
@@ -1876,7 +1876,7 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   `localhost` and the repository itself, and every private word: `listPrivateWords` reads them from the state, the
   names and keys of your projects and their folders, each repository's name, path and remote owner and name, every
   task's handle, branch and worktree, the account emails tasks and runs used, and the user names in those paths. Words
-  match whole, case-insensitively, from two letters; "Shinsa" and `shinsa-dev` are allowed. The sheet shows what it
+  match whole, case-insensitively, from two letters; "Shinsa" and `shinsa-dev` are allowed. The dialog shows what it
   finds on each draft (`describeFeedbackLeaks`) and keeps Open issue off until you edit it out.
 - **Editing** (`feedback.update`) changes the title and body of an entry that waits for you (a draft, or one that
   failed with a draft). **Dismissing** (`feedback.dismiss`) forgets an entry, refused while it is being opened.
@@ -1892,12 +1892,12 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   delegated agent), when Shinsa itself got in their way: a tool that refused what it should take, a limit or a rule
   that blocked sound work, a step that made no sense, a missing tool; never the task or its code. Its description says the human reads each report before anything is public. A note already known,
   whatever its case, is dropped; a task reports at most 3 and at most 10 agent reports wait at once
-  (`feedback_full`). The report is recorded in its task's activity and drafted like yours; it waits in the sheet,
+  (`feedback_full`). The report is recorded in its task's activity and drafted like yours; it waits in the dialog,
   marked as from an agent with a link to its task. There is no setting to open one without you.
-- **Where you see it.** A Feedback button in the Desk header and a Feedback row in the Shelf rail, with a count of the
-  drafts and failures waiting for you, open the feedback sheet: what happens to a note, the note field, Waiting for
-  you and Opened on GitHub. ⌘K has Send feedback on Shinsa; `shinsa feedback list|write|edit|file|dismiss` is the
-  same from the command line (`GET /api/feedback`).
+- **Where you see it.** A Feedback button right of Settings in the Desk header and a Feedback row under Settings in
+  the Shelf rail, with a count of the drafts and failures waiting for you, open the feedback dialog: what happens to a
+  note, the note field, Waiting for you and Opened on GitHub. ⌘K has Send feedback on Shinsa; `shinsa feedback
+  list|write|edit|file|dismiss` is the same from the command line (`GET /api/feedback`).
 
 ### Setup verification
 
