@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { RemoteAccess, RemoteDevice } from '@shinsa/core';
 import {
+  describeMentionText,
   describeUserHandle,
   describeUserName,
   resolveFirstName,
@@ -50,6 +51,14 @@ describe('a GitHub user on screen', () => {
   it('stands in for a missing avatar with the first letter of what it shows', () => {
     expect(resolveUserInitial(NAMED)).toBe('K');
     expect(resolveUserInitial(BARE)).toBe('M');
+  });
+
+  it('reads a mention as plain text by first name, or by the label it was given', () => {
+    expect(describeMentionText(['Shared by ', { user: NAMED }, '.'])).toBe('Shared by Kai.');
+    expect(describeMentionText([{ user: BARE }, ' and ', { user: NAMED, label: 'Kai’s' }, ' task'])).toBe(
+      'mona and Kai’s task'
+    );
+    expect(describeMentionText([])).toBe('');
   });
 
   it('finds the member who added a device, never the owner or a stranger', () => {

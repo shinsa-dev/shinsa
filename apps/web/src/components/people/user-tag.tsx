@@ -7,6 +7,7 @@ import { InfoPopover } from '@/components/overlays/info-popover.tsx';
 import {
   describeUserHandle,
   describeUserName,
+  type Mention,
   resolveFirstName,
   resolveGitHubProfileUrl,
   resolveUserInitial,
@@ -18,7 +19,7 @@ const USER_TAG =
 
 const USER_AVATAR = {
   row: 'size-6.5',
-  inline: 'relative -top-px ms-0.5 me-1 inline-grid size-4 align-middle',
+  inline: 'relative -top-px ms-0.5 me-1 inline-grid size-3.5 align-middle',
 } as const;
 
 const USER_INITIAL = { row: undefined, inline: 'scale-75' } as const;
@@ -110,5 +111,16 @@ export function UserTag({
     >
       <UserCard user={user} />
     </InfoPopover>
+  );
+}
+
+export function MentionText({ mention }: { mention: Mention }) {
+  return mention.map((part, index) =>
+    typeof part === 'string' ? (
+      part
+    ) : (
+      // biome-ignore lint/suspicious/noArrayIndexKey: one sentence can name the same person twice
+      <UserTag key={index} user={part.user} label={part.label} />
+    )
   );
 }

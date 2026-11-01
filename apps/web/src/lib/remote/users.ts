@@ -1,8 +1,18 @@
-export { resolveFirstName } from '@shinsa/core';
+import {
+  type RemoteAccess,
+  type RemoteDevice,
+  type RemoteUser,
+  resolveFirstName,
+  type SharedPerson,
+} from '@shinsa/core';
 
-import type { RemoteAccess, RemoteDevice, RemoteUser, SharedPerson } from '@shinsa/core';
+export { resolveFirstName };
 
 export type UserProfile = Pick<RemoteUser, 'login' | 'name' | 'avatarUrl'>;
+
+export type MentionPart = string | { user: UserProfile; label?: string };
+
+export type Mention = readonly MentionPart[];
 
 export function describeUserName(user: Pick<RemoteUser, 'login' | 'name'>) {
   return user.name ?? user.login;
@@ -22,6 +32,12 @@ export function resolveGitHubProfileUrl(user: Pick<RemoteUser, 'login'>) {
 
 export function resolveUserInitial(user: Pick<RemoteUser, 'login' | 'name'>) {
   return describeUserName(user).slice(0, 1).toUpperCase();
+}
+
+export function describeMentionText(mention: Mention) {
+  return mention
+    .map((part) => (typeof part === 'string' ? part : (part.label ?? resolveFirstName(part.user))))
+    .join('');
 }
 
 export function selectDeviceMember(access: RemoteAccess | null, device: RemoteDevice) {
