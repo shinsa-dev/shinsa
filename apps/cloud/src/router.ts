@@ -23,7 +23,7 @@ import {
   respondRequesterFind,
 } from './members.ts';
 import { respondPairApprove, respondPairPoll, respondPairStart, respondPairView } from './pairing.ts';
-import { isPreviewHost, respondPreview } from './previews.ts';
+import { isPreviewHost, respondPreview, respondPreviewOpen } from './previews.ts';
 import {
   resolveCallbackFailureLocation,
   respondSession,
@@ -122,6 +122,11 @@ const ROUTES: Route[] = [
     method: 'POST',
     pattern: new RegExp(`^${REMOTE_PATHS.instances}/${SEGMENT}/connect$`),
     respond: (request, _url, match, world) => respondConnect(request, match[1] ?? '', world),
+  },
+  {
+    method: 'GET',
+    pattern: exact(REMOTE_PATHS.previewOpen),
+    respond: (request, url, _match, world) => respondPreviewOpen(request, url, world),
   },
   {
     method: 'POST',
