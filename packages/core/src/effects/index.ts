@@ -31,7 +31,9 @@ export type ShinsaEffect =
   | { kind: 'delegation.reply'; runId: string; questionId: string }
   | { kind: 'slack.evaluate'; mention: SlackMention }
   | { kind: 'slack.status'; taskId: string; thread: SlackThreadRef }
-  | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost };
+  | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost }
+  | { kind: 'feedback.draft'; feedbackId: string }
+  | { kind: 'feedback.file'; feedbackId: string };
 
 export type ShinsaEffectKind = ShinsaEffect['kind'];
 
@@ -61,6 +63,8 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'slack.evaluate': 'replay_safe',
   'slack.status': 'replay_safe',
   'slack.post': 'replay_safe',
+  'feedback.draft': 'replay_safe',
+  'feedback.file': 'process_bound',
 };
 
 function listEffectKinds(recovery: EffectRecovery) {
@@ -105,6 +109,9 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.projectId ?? '*'}:${seq}`;
     case 'watch.suggest':
       return `${effect.kind}:${effect.projectId}:${effect.server}:${seq}`;
+    case 'feedback.draft':
+    case 'feedback.file':
+      return `${effect.kind}:${effect.feedbackId}:${seq}`;
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':
@@ -125,6 +132,9 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return 'briefing';
     case 'watch.suggest':
       return `suggest:${effect.projectId}`;
+    case 'feedback.draft':
+    case 'feedback.file':
+      return `feedback:${effect.feedbackId}`;
     case 'run.execute':
     case 'run.wake':
       return `run:${effect.runId}`;

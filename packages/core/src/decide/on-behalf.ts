@@ -9,6 +9,7 @@ type HumanOnlyType =
   | 'memory.write'
   | 'memory.accept'
   | 'memory.remove'
+  | 'feedback.file'
   | 'watch_suggestion.accept';
 
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
@@ -17,6 +18,7 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'memory.write',
   'memory.accept',
   'memory.remove',
+  'feedback.file',
   'watch_suggestion.accept',
 ]);
 
@@ -118,6 +120,10 @@ const DESCRIPTIONS: Descriptions = {
     `Connected ${command.server} to a watchdog of ${quoteTask(state, command.taskId)}`,
   'watch_source.write': (state, command) =>
     `Saved ${command.server} as a data source of ${state.projects[command.projectId]?.name ?? 'a project'}`,
+  'feedback.write': (_state, command) =>
+    command.feedbackId ? 'Rewrote a note of feedback on Shinsa' : 'Wrote feedback on Shinsa',
+  'feedback.update': () => 'Changed a feedback issue that waits for you',
+  'feedback.dismiss': () => 'Dismissed feedback on Shinsa',
   'watch_source.remove': (state, command) =>
     `Removed ${command.server} from the data sources of ${state.projects[command.projectId]?.name ?? 'a project'}`,
 };

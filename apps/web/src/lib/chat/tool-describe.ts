@@ -248,6 +248,8 @@ function describeShinsaMessage(
     }
     case 'remember':
       return plain('IconLightbulbGlow', 'Proposed a rule to remember:', readString(args, 'text'));
+    case 'report_feedback':
+      return plain('IconBubbleText', 'Reported feedback on Shinsa:', readString(args, 'feedback'));
     case 'delegation_answer':
       return plain('IconBubbleText', 'Answered a delegated agent:', readString(args, 'answer'));
     case 'request_secret':
@@ -426,6 +428,8 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   wait_for: () => 'scheduled a check-in',
   suggest_tasks: () => 'suggested tasks',
   remember: (count) => (count === 1 ? 'proposed a rule to remember' : `proposed ${count} rules to remember`),
+  report_feedback: (count) =>
+    count === 1 ? 'reported feedback on Shinsa' : `reported ${count} things about Shinsa`,
   answer: () => 'handed over the answer',
   report_diagnosis: () => 'reported the diagnosis',
   submit_report: () => 'wrote the report',

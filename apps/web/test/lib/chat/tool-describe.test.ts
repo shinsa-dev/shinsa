@@ -46,7 +46,7 @@ describe('isHandover', () => {
   });
 
   it('keeps evidence, task lookups, notes and other tools in the work', () => {
-    for (const name of ['attach_evidence', 'find_tasks', 'note'] as const) {
+    for (const name of ['attach_evidence', 'find_tasks', 'note', 'report_feedback'] as const) {
       expect(isHandover({ kind: 'shinsa', name, args: {} })).toBe(false);
     }
     expect(isHandover({ kind: 'other', name: 'ask', args: {} })).toBe(false);
@@ -263,6 +263,9 @@ describe('describeTool', () => {
     expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }] })).toBe('Suggested 1 task');
     expect(shinsa('remember', { text: 'Keep plans short.' })).toBe(
       'Proposed a rule to remember: Keep plans short.'
+    );
+    expect(shinsa('report_feedback', { feedback: 'The plan tool refused a valid phase.' })).toBe(
+      'Reported feedback on Shinsa: The plan tool refused a valid phase.'
     );
     expect(shinsa('answer', { answer: 'Here.' })).toBe('Handed over the answer');
     expect(shinsa('report_diagnosis', { diagnosis: 'It leaks.' })).toBe('Reported the diagnosis');
@@ -481,6 +484,10 @@ describe('resolveGroupPhrase', () => {
     expect([phrase('remember', 1), phrase('remember', 2)]).toEqual([
       'Proposed a rule to remember',
       'Proposed 2 rules to remember',
+    ]);
+    expect([phrase('report_feedback', 1), phrase('report_feedback', 2)]).toEqual([
+      'Reported feedback on Shinsa',
+      'Reported 2 things about Shinsa',
     ]);
     expect(phrase('read_task', 2)).toBe('Read 2 tasks');
     expect([phrase('list_repository_work', 1), phrase('list_repository_work', 2)]).toEqual([
