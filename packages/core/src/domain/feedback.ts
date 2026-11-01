@@ -27,7 +27,8 @@ export const FEEDBACK_REPOSITORY = 'shinsa-dev/shinsa';
 export const FEEDBACK_LIMITS = {
   note: 4_000,
   title: 120,
-  body: 6_000,
+  body: 12_000,
+  draft: 10_000,
   failure: 2_000,
   agentWaiting: 10,
   perTask: 3,

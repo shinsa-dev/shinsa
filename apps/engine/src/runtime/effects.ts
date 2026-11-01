@@ -35,6 +35,7 @@ import { listCheckFailures } from '../checks/failures.ts';
 import { type BaseComparison, CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../checks/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
 import type { FeedbackDrafter } from '../feedback/draft.ts';
+import { listFeedbackEnvironment, resolveFeedbackMachine } from '../feedback/environment.ts';
 import { FeedbackEffects } from '../feedback/index.ts';
 import {
   hasPrePushHook,
@@ -56,6 +57,8 @@ import {
   retargetPullRequest,
   writePullRequestBlock,
 } from '../github/index.ts';
+import { BUNDLE } from '../instance/bundle.ts';
+import { createServerInstance, type ServerInstance } from '../instance/install.ts';
 import { describeError, log } from '../log/index.ts';
 import {
   createLoginResolver,
@@ -80,6 +83,7 @@ export interface EffectRunnerOptions {
   triage: TriageResolver;
   wordWatch?: WatchWriter;
   draftFeedback?: FeedbackDrafter;
+  instance?: Pick<ServerInstance, 'version' | 'commit'>;
   timeZone?: string;
   findRepository?: RepositoryFinder;
   resolveLogin?: LoginResolver;
@@ -200,7 +204,14 @@ export class EffectRunner {
     this.#feedback = new FeedbackEffects(
       engine,
       config.dataDir,
-      options.draftFeedback ?? (() => Promise.resolve(null))
+      options.draftFeedback ?? (() => Promise.resolve(null)),
+      (state, entry) =>
+        listFeedbackEnvironment(
+          state,
+          entry,
+          options.instance ?? createServerInstance(),
+          resolveFeedbackMachine(Boolean(BUNDLE))
+        )
     );
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);

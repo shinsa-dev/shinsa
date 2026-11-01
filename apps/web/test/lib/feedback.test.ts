@@ -152,8 +152,8 @@ describe('validation', () => {
     expect(validateFeedbackIssue('', 'Body')).toBe('The issue needs a title and a description.');
     expect(validateFeedbackIssue('Title', ' ')).toBe('The issue needs a title and a description.');
     expect(validateFeedbackIssue('x'.repeat(121), 'Body')).toBe('Keep the title to 120 characters.');
-    expect(validateFeedbackIssue('Title', 'x'.repeat(6_001))).toBe(
-      'Keep the description to 6000 characters.'
+    expect(validateFeedbackIssue('Title', 'x'.repeat(12_001))).toBe(
+      'Keep the description to 12000 characters.'
     );
     expect(validateFeedbackIssue('Title', 'Body')).toBeNull();
   });

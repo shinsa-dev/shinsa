@@ -1,6 +1,7 @@
-import { listFeedback, listPrivateWords } from '@shinsa/core';
+import { type Feedback, listFeedback, listPrivateWords, type ShinsaState } from '@shinsa/core';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
 import type { FeedbackDrafter } from './draft.ts';
+import { serializeFeedbackEnvironment } from './environment.ts';
 import { fileFeedbackIssue } from './file.ts';
 
 export const NO_DRAFT = 'Your agent could not draft this issue. Write the note again to try once more.';
@@ -8,24 +9,30 @@ export const NO_DRAFT = 'Your agent could not draft this issue. Write the note a
 export const STOPPED_WHILE_FILING =
   'Shinsa stopped while it was opening this issue on GitHub. Check the issues on GitHub before you open it again.';
 
+export type FeedbackEnvironment = (state: ShinsaState, entry: Feedback) => string[];
+
 export class FeedbackEffects {
   readonly #engine: Engine;
   readonly #cwd: string;
   readonly #drafter: FeedbackDrafter;
+  readonly #environment: FeedbackEnvironment;
 
-  constructor(engine: Engine, cwd: string, drafter: FeedbackDrafter) {
+  constructor(engine: Engine, cwd: string, drafter: FeedbackDrafter, environment: FeedbackEnvironment) {
     this.#engine = engine;
     this.#cwd = cwd;
     this.#drafter = drafter;
+    this.#environment = environment;
   }
 
   async draft(feedbackId: string, context: EffectContext) {
     const entry = this.#engine.state.feedback[feedbackId];
     if (entry?.status !== 'drafting') return;
+    const environment = this.#environment(this.#engine.state, entry);
     const draft = await this.#drafter({
       source: entry.source,
       note: entry.note,
       privateWords: listPrivateWords(this.#engine.state),
+      context: environment,
     });
     if (context.signal.aborted) return;
     if (!draft) {
@@ -33,7 +40,12 @@ export class FeedbackEffects {
       return;
     }
     await this.#engine.dispatch(
-      { type: 'feedback.record_draft', feedbackId, title: draft.title, body: draft.body },
+      {
+        type: 'feedback.record_draft',
+        feedbackId,
+        title: draft.title,
+        body: `${draft.body}\n\n${serializeFeedbackEnvironment(environment)}`,
+      },
       { id: `${context.key}:feedback.record_draft` }
     );
   }

@@ -241,6 +241,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
       draftFeedback: createFeedbackDrafter(quick.write),
+      instance,
       resolveLogin,
       roots,
       services: terminals,

@@ -789,7 +789,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `memory.accept` | keeps a rule an agent proposed | `memory keep` | **human** |
 | `memory.remove` | forgets a rule, or dismisses a proposal | `memory remove` | **human** |
 | `feedback.write` | records a note on Shinsa (`note`, at most 4,000 characters) and drafts it as an issue; with `feedbackId`, rewrites one that is neither busy nor filed and drafts it again (`feedback_invalid`, `feedback_busy`, `feedback_filed`) | `feedback write` | agent |
-| `feedback.update` | changes the `title` (120) and `body` (6,000) of a draft that waits for you (`feedback_not_draft`) | `feedback edit` | agent |
+| `feedback.update` | changes the `title` (120) and `body` (12,000) of a draft that waits for you (`feedback_not_draft`) | `feedback edit` | agent |
 | `feedback.file` | opens a draft as a public issue with your GitHub login, after the privacy check passes on its text as it is (`feedback_private` names each leak) | `feedback file` | **human** |
 | `feedback.dismiss` | forgets an entry, refused while it is being opened | `feedback dismiss` | agent |
 | `monitor.check_in_now` | fires a monitor's next check-in now | `tasks check-in-now` | agent |

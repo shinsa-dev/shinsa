@@ -15,6 +15,7 @@ const INPUT = {
   source: 'human' as const,
   note: 'The plan tab hides my changes.',
   privateWords: ['paywall-next', 'SW'],
+  context: ['Shinsa: 1.2.0, the Mac app'],
 };
 
 describe('drafting feedback as a public issue', () => {
@@ -32,18 +33,27 @@ describe('drafting feedback as a public issue', () => {
       [
         'From: the person using Shinsa, through its feedback button.',
         'Private words: paywall-next, SW',
+        'Context:',
+        '- Shinsa: 1.2.0, the Mac app',
         'Feedback:',
         'The plan tab hides my changes.',
       ].join('\n')
     );
     expect(calls[0]?.system).toContain('The issue is public');
-    expect(calls[0]?.system).toContain('### Steps to reproduce');
+    for (const heading of [
+      '### Summary',
+      '### Where in Shinsa',
+      '### Steps to reproduce',
+      '### Acceptance criteria',
+    ])
+      expect(calls[0]?.system).toContain(heading);
+    expect(calls[0]?.system).toContain('Never write an Environment section');
     expect(calls[0]?.system).toContain('Never be vague');
     expect(calls[0]?.schema).toMatchObject({ required: ['title', 'body'] });
   });
 
   test('says an agent sent it and that there are no private words when there are none', () => {
-    const prompt = describeFeedbackPrompt({ source: 'agent', note: 'x', privateWords: [] });
+    const prompt = describeFeedbackPrompt({ source: 'agent', note: 'x', privateWords: [], context: [] });
     expect(prompt).toContain('From: a coding agent working in Shinsa');
     expect(prompt).toContain('Private words: none');
   });
@@ -54,7 +64,7 @@ describe('drafting feedback as a public issue', () => {
     expect(await draft({ title: '  ', body: 'Body.' })).toBeNull();
     expect(await draft({ title: 3, body: 'Body.' })).toBeNull();
     expect(await draft({ title: 'x'.repeat(FEEDBACK_LIMITS.title + 1), body: 'Body.' })).toBeNull();
-    expect(await draft({ title: 'Title', body: 'x'.repeat(FEEDBACK_LIMITS.body + 1) })).toBeNull();
+    expect(await draft({ title: 'Title', body: 'x'.repeat(FEEDBACK_LIMITS.draft + 1) })).toBeNull();
     expect(await draft({ title: 'Title', body: 7 })).toBeNull();
   });
 });

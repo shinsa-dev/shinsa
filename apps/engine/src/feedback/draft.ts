@@ -11,6 +11,7 @@ export interface FeedbackDraftInput {
   source: FeedbackSource;
   note: string;
   privateWords: readonly string[];
+  context: readonly string[];
 }
 
 export type FeedbackDrafter = (input: FeedbackDraftInput) => Promise<FeedbackDraft | null>;
@@ -24,9 +25,18 @@ const SYSTEM = [
   'Never write a project, repository, file, folder, branch, task title, task handle, person, company, email, account, URL, code, command output, token, key or number that identifies them. Replace each with a generic word, such as “a repository” or “a task”.',
   'Never quote the feedback. Leave out anything that is not about Shinsa itself.',
   'Never write any of the private words listed with the feedback, in any form.',
-  'The issue must be detailed enough that a maintainer who never saw the feedback can reproduce and fix it without asking a question. Never be vague: name the exact screen, button, command, step, gate or agent tool, the exact state the task was in, what Shinsa showed or did, and what it should have done instead. Carry over every concrete Shinsa detail the feedback gives, rewritten generically; never invent one it does not give.',
+  'The issue must be detailed enough that a maintainer, or a coding agent that turns issues into tasks, can reproduce and fix it without asking a question. Never be vague: name the exact screen, button, command, step, gate or agent tool, the exact state the task was in, what Shinsa showed or did, and what it should have done instead. Carry over every concrete Shinsa detail the feedback gives, rewritten generically; never invent one it does not give.',
   `Write \`title\`, one sentence-case line of at most ${FEEDBACK_LIMITS.title} characters that names the specific problem or wish, never a vague one such as “Bug in tasks”.`,
-  'Write `body` in GitHub markdown under these level 3 headings, in order: `### What happened` (what Shinsa did, where, and in which state), `### What should happen` (the expected behaviour), `### Steps to reproduce` (a numbered list from a generic starting point; write “Not given in the feedback.” when it gives none), `### Why it matters` (what it blocked or cost), and `### Suggested change` (a concrete change to Shinsa, only when the feedback implies one; leave the heading out otherwise).',
+  'Write `body` in GitHub markdown under these level 3 headings, always in this order and always all of them:',
+  '`### Summary`: one or two sentences on the problem or wish.',
+  '`### Where in Shinsa`: the screen, page, dialog, step, gate, setting, `shinsa` command or agent tool involved, and the state the task was in. Use the context lines given with the feedback.',
+  '`### What happened`: what Shinsa did or showed, in detail, including any message it gave, rewritten without private details.',
+  '`### What should happen`: the expected behaviour, precise enough to test.',
+  '`### Steps to reproduce`: a numbered list from a generic starting point, such as “Open a task waiting for review”.',
+  '`### Why it matters`: what it blocked, cost or made harder, and how often.',
+  '`### Suggested change`: a concrete change to Shinsa, the screens or parts it touches.',
+  '`### Acceptance criteria`: a markdown task list (`- [ ] …`) of two to five checks a fix must pass, each one observable.',
+  'When the feedback gives nothing for a section, write “Not given in the feedback.” under its heading; never drop a heading. Never write an Environment section: Shinsa adds it.',
   'Plain words, complete sentences, no em dashes, no headings other than these.',
 ].join('\n');
 
@@ -51,7 +61,7 @@ function readTitle(value: unknown) {
 function readBody(value: unknown) {
   if (typeof value !== 'string') return null;
   const body = value.trim();
-  return body.length > 0 && body.length <= FEEDBACK_LIMITS.body ? body : null;
+  return body.length > 0 && body.length <= FEEDBACK_LIMITS.draft ? body : null;
 }
 
 export function describeFeedbackPrompt(input: FeedbackDraftInput) {
@@ -59,6 +69,8 @@ export function describeFeedbackPrompt(input: FeedbackDraftInput) {
   return [
     SOURCE_LINES[input.source],
     `Private words: ${words.length > 0 ? words.join(', ') : 'none'}`,
+    'Context:',
+    ...input.context.map((line) => `- ${line}`),
     'Feedback:',
     input.note,
   ].join('\n');

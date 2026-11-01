@@ -1859,7 +1859,7 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
 ```
 
 - **An entry** is a `Feedback` in `state.feedback`: the note (at most 4,000 characters, `FEEDBACK_LIMITS`), the
-  drafted `title` (120) and `body` (6,000), its `source` (`human` or `agent`, with the agent's task and run), its
+  drafted `title` (120) and `body` (12,000), its `source` (`human` or `agent`, with the agent's task and run), its
   `status` (`drafting`, `draft`, `filing`, `filed` or `failed`, with the `failure` shown to you) and, once filed, the
   `issue` (number and link). `feedback.recorded` carries the whole entry, `feedback.removed` forgets it.
 - **Writing.** `feedback.write` (the feedback popover, `shinsa feedback write`) records a note as `drafting` and runs
@@ -1867,12 +1867,19 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   `feedback.draft` effect (replay-safe) is a quick call on your account (`createFeedbackDrafter`, `feedback/draft.ts`):
   its fixed system prompt says the issue is public, to describe only what Shinsa did and what should change, and to
   replace every project, repository, file, branch, task, person, account, link, code and number with a generic word. It
-  asks for an issue a maintainer can act on without asking anything: a specific title, and a body under What happened,
-  What should happen, Steps to reproduce, Why it matters and, when the note implies one, Suggested change, naming the
-  exact screen, command, step, gate or tool. The user prompt carries the note and the private words below (at most 200),
-  never the system prompt (Caching, below). The answer is `feedback.record_draft`; no answer, an error or a title or
-  body it cannot use (empty, or over its limit) is `feedback.record_failure` ("write the note again"). Your note itself
-  is never posted.
+  asks for an issue a maintainer, or an automation that turns issues into tasks, can act on without asking anything: a
+  specific title, and a body under one fixed template, every heading always there (Summary, Where in Shinsa, What
+  happened, What should happen, Steps to reproduce, Why it matters, Suggested change, and Acceptance criteria as a task
+  list; "Not given in the feedback." under one the note gives nothing for), naming the exact screen, command, step, gate
+  or tool. The user prompt carries the note, the private words below (at most 200) and the environment lines, never the
+  system prompt (Caching, below). The engine then appends an `### Environment` section the model never writes
+  (`listFeedbackEnvironment`, `feedback/environment.ts`): the Shinsa version and commit and whether it is the Mac app,
+  the system and architecture, the Bun version, the default agent's provider and model, who sent it and, for an
+  agent's report, the kind of task, its stage, the agent's role and step and its provider and model; never a task's
+  title or anything else the privacy check refuses. You read it in the draft with the rest. The answer is
+  `feedback.record_draft` (the model's body at most 10,000 characters, `FEEDBACK_LIMITS.draft`); no answer, an error or
+  a title or body it cannot use (empty, or over its limit) is `feedback.record_failure` ("write the note again"). Your
+  note itself is never posted.
 - **The privacy check** (`listFeedbackLeaks`, pure, in core) refuses an email, a folder path (under `/Users`, `/home`,
   `/root`, `/Volumes`, `/private`, `/var`, `/tmp`, `/opt`, `/mnt`, `/srv`, `/data`, `/workspace` or `/Library`, or on
   a drive such as `C:\`; `~/` names no one), a known token or key shape (private key blocks, `sk-`, `ghp_`,

@@ -32,7 +32,11 @@ async function createWorld(drafter: FeedbackDrafter) {
   await engine.dispatch({ type: 'project.write', project: { name: 'Paywalls', color: 'blue', key: 'PW' } });
   await engine.dispatch({ type: 'feedback.write', feedbackId: null, note: 'The plan tab hides my changes.' });
   const feedbackId = Object.keys(engine.state.feedback)[0] ?? '';
-  return { engine, feedbackId, effects: new FeedbackEffects(engine, dir, drafter) };
+  return {
+    engine,
+    feedbackId,
+    effects: new FeedbackEffects(engine, dir, drafter, () => ['Shinsa: 1.2.0, the Mac app']),
+  };
 }
 
 const DRAFT = { title: 'Plan tab hides changes', body: 'The plan tab hides the changes a round made.' };
@@ -45,9 +49,17 @@ describe('feedback effects', () => {
       return Promise.resolve(DRAFT);
     });
     await world.effects.draft(world.feedbackId, createContext().context);
-    expect(inputs[0]).toMatchObject({ source: 'human', note: 'The plan tab hides my changes.' });
+    expect(inputs[0]).toMatchObject({
+      source: 'human',
+      note: 'The plan tab hides my changes.',
+      context: ['Shinsa: 1.2.0, the Mac app'],
+    });
     expect(inputs[0]?.privateWords).toEqual(expect.arrayContaining(['Paywalls', 'PW']));
-    expect(world.engine.state.feedback[world.feedbackId]).toMatchObject({ status: 'draft', ...DRAFT });
+    expect(world.engine.state.feedback[world.feedbackId]).toMatchObject({
+      status: 'draft',
+      title: DRAFT.title,
+      body: `${DRAFT.body}\n\n### Environment\n\n- Shinsa: 1.2.0, the Mac app`,
+    });
     await world.effects.draft(world.feedbackId, createContext().context);
     expect(inputs).toHaveLength(1);
   });

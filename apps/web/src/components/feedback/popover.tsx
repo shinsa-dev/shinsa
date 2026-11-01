@@ -3,12 +3,13 @@ import { Button } from '@shinsa/ui/components/button';
 import { Field, FieldError } from '@shinsa/ui/components/field';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Spinner } from '@shinsa/ui/components/spinner';
-import { Textarea } from '@shinsa/ui/components/textarea';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CompactSection, CompactSections } from '@/components/layout/compact-section.tsx';
 import { LIST_ROW, LIST_ROW_LINES, LIST_ROW_META, LIST_ROW_TITLE } from '@/components/layout/list-row.tsx';
+import { ICON_SLOT } from '@/components/layout/surface/card.ts';
+import { Hint } from '@/components/overlays/hint.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
   describeFeedbackFiled,
@@ -16,6 +17,7 @@ import {
   describeFeedbackPreview,
   describeFeedbackRowMeta,
   FEEDBACK_AGENTS_NOTE,
+  FEEDBACK_HINT,
   FEEDBACK_ICON,
   FEEDBACK_INTRO,
   type FeedbackActions,
@@ -48,38 +50,52 @@ function NoteForm({ actions }: { actions: FeedbackActions }) {
 
   return (
     <form
-      className='flex flex-col gap-1.5'
+      className='flex flex-col gap-1'
       onSubmit={(event) => {
         event.preventDefault();
         void send();
       }}
     >
       <Field data-invalid={error ? true : undefined}>
-        <Textarea
-          rows={3}
-          value={note}
-          aria-label='Your feedback'
-          aria-invalid={error ? true : undefined}
-          placeholder='What got in your way, or what you wish Shinsa did'
-          className='resize-none'
-          onKeyDown={(event) => {
-            if (isSubmitKey(event)) {
-              event.preventDefault();
-              void send();
-            }
-          }}
-          onChange={(event) => {
-            setNote(event.target.value);
-            setError(null);
-          }}
-        />
+        <div
+          data-invalid={error ? true : undefined}
+          className='corner-superellipse/1.125 flex flex-col rounded-lg bg-input backdrop-blur-md data-[invalid]:ring-1 data-[invalid]:ring-red-4'
+        >
+          <textarea
+            rows={2}
+            value={note}
+            aria-label='Your feedback'
+            aria-invalid={error ? true : undefined}
+            placeholder='What got in your way, or what you wish Shinsa did'
+            className='field-sizing-content max-h-40 min-h-12 w-full resize-none bg-transparent px-2.5 pt-1.5 text-fg-4 text-xs outline-none placeholder:text-fg-2'
+            onKeyDown={(event) => {
+              if (isSubmitKey(event)) {
+                event.preventDefault();
+                void send();
+              }
+            }}
+            onChange={(event) => {
+              setNote(event.target.value);
+              setError(null);
+            }}
+          />
+          <div className='flex items-center justify-end p-1'>
+            <Hint label={FEEDBACK_HINT}>
+              <Button
+                type='submit'
+                size='icon-sm'
+                variant={note.trim() || busy ? 'primary' : 'secondary'}
+                aria-label='Draft issue'
+                disabled={!note.trim()}
+                loading={busy}
+              >
+                {!busy && <Icon name='IconArrowUp' />}
+              </Button>
+            </Hint>
+          </div>
+        </div>
         {error && <FieldError>{error}</FieldError>}
       </Field>
-      <div className='flex items-center justify-end'>
-        <Button type='submit' size='sm' disabled={!note.trim()} loading={busy}>
-          Draft issue
-        </Button>
-      </div>
     </form>
   );
 }
@@ -89,7 +105,7 @@ function RowIcon({ state, entry }: { state: ShinsaState; entry: Feedback }) {
   return (
     <span
       className={cn(
-        'grid h-5 shrink-0 place-items-center',
+        ICON_SLOT,
         glyph.kind === 'icon' && glyph.tone !== 'neutral' ? TONE_TEXT[glyph.tone] : 'text-fg-3'
       )}
     >
@@ -148,7 +164,7 @@ function FiledRow({ state, entry }: { state: ShinsaState; entry: Feedback }) {
           <TimeAgo at={entry.updatedAt} text={(now) => describeFeedbackFiled(entry, now)} />
         </span>
       </span>
-      <span className='grid h-5 shrink-0 place-items-center text-fg-2 opacity-0 group-hover/issue:opacity-100 group-active/issue:opacity-100'>
+      <span className='grid size-5 shrink-0 place-items-center text-fg-2 opacity-0 group-hover/issue:opacity-100 group-active/issue:opacity-100'>
         <Icon size='sm' name='IconArrowUpRight' />
       </span>
     </a>
