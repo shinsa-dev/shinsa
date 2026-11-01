@@ -37,9 +37,9 @@ export function resolveShareLimit(settings: Settings): ShareLimit {
   return settings.shareLimit ?? DEFAULT_SHARE_LIMIT;
 }
 
-export type SharePreset = 'default' | 'status';
+export type SharePreset = 'default' | 'status' | 'everything';
 
-export const SHARE_PRESETS: readonly SharePreset[] = ['default', 'status'];
+export const SHARE_PRESETS: readonly SharePreset[] = ['default', 'status', 'everything'];
 
 const DEFAULT_SHARE_PRESET: SharePreset = 'default';
 

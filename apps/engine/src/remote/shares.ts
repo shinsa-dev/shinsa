@@ -330,16 +330,19 @@ export class Shares implements ShareEffects, ShareLinks {
 
   #listTranscriptFiles(shared: SharedTask) {
     if (!hasShareGroup(shared.preset, 'live')) return [];
-    return shared.runs.flatMap((run) => this.#listTranscriptPages(run.id));
+    const messages = hasShareGroup(shared.preset, 'messages');
+    return shared.runs.flatMap((run) => this.#listTranscriptPages(run.id, messages));
   }
 
-  #listTranscriptPages(runId: string): LiveFile[] {
+  #listTranscriptPages(runId: string, messages: boolean): LiveFile[] {
     const count = this.#transcripts.listEntries(runId).length;
+    const scope = messages ? 'messages' : 'agents';
     return Array.from({ length: countShareTranscriptPages(count) }, (_, page) => ({
       id: resolveShareTranscriptFile(runId, page),
-      version: String(Math.min(count - page * SHARE_TRANSCRIPT_PAGE, SHARE_TRANSCRIPT_PAGE)),
+      version: `${scope}:${Math.min(count - page * SHARE_TRANSCRIPT_PAGE, SHARE_TRANSCRIPT_PAGE)}`,
       type: 'text/plain',
-      read: async () => encodeTranscript(redactTranscriptPage(this.#transcripts.listEntries(runId), page)),
+      read: async () =>
+        encodeTranscript(redactTranscriptPage(this.#transcripts.listEntries(runId), page, messages)),
     }));
   }
 

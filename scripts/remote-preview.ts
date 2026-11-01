@@ -11,6 +11,7 @@ import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
 import { ShareClock } from '../apps/engine/src/remote/share-clock.ts';
+import { createShareDescriber } from '../apps/engine/src/remote/share-describe.ts';
 import { type ShareGitHub, Shares } from '../apps/engine/src/remote/shares.ts';
 import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
@@ -51,7 +52,11 @@ const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-re
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
 const USER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
-const PLACE = createPlacementAsker(createQuickCalls(new ProviderRegistry(), createSettings).classify);
+const QUICK = createQuickCalls(new ProviderRegistry(), createSettings);
+
+const PLACE = createPlacementAsker(QUICK.classify);
+
+const DESCRIBE = createShareDescriber(QUICK.write);
 
 const LAPTOP_TASKS = [
   {
@@ -196,6 +201,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
   });
   engine.onEffect(async (effect, context) => {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
+    if (effect.kind === 'share.describe') await describePreviewShare(engine, effect.taskId, context.key);
   });
   engine.start();
   new ShareClock(engine).start();
@@ -209,6 +215,14 @@ async function startMachine(id: string, name: string, dataDir: string) {
     publicKey: key.publicKey,
   };
   return { machine, engine, evidence };
+}
+
+async function describePreviewShare(engine: Engine, taskId: string, key: string) {
+  const task = engine.state.tasks[taskId];
+  if (!task?.share) return;
+  const description = await DESCRIBE(task);
+  if (!description) return;
+  await engine.dispatch({ type: 'share.describe', taskId, description }, { id: `${key}:share.describe` });
 }
 
 async function seedLaptop(engine: Engine, dataDir: string) {

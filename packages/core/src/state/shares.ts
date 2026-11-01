@@ -5,7 +5,7 @@ import { record, updateTask } from './write.ts';
 
 type ShareEvent = Extract<
   ShinsaEvent,
-  { type: 'task.shared' | 'task.unshared' | 'share.recorded' | 'share.failed' }
+  { type: 'task.shared' | 'task.unshared' | 'share.recorded' | 'share.failed' | 'share.described' }
 >;
 
 const SHARE_ENDED: Record<ShareEnd, { actor: ActivityActor; text: string }> = {
@@ -42,6 +42,12 @@ function applyFailed(state: ShinsaState, event: EventOf<'share.failed'>) {
   updateTask(state, event.taskId, event.at, { share: { ...share, failure: event.detail } });
 }
 
+function applyDescribed(state: ShinsaState, event: EventOf<'share.described'>) {
+  const share = state.tasks[event.taskId]?.share;
+  if (!share) return;
+  updateTask(state, event.taskId, event.at, { share: { ...share, description: event.description } });
+}
+
 export function applyShareEvent(state: ShinsaState, event: ShareEvent) {
   switch (event.type) {
     case 'task.shared':
@@ -55,6 +61,9 @@ export function applyShareEvent(state: ShinsaState, event: ShareEvent) {
       return;
     case 'share.failed':
       applyFailed(state, event);
+      return;
+    case 'share.described':
+      applyDescribed(state, event);
       return;
   }
 }

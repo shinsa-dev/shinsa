@@ -20,6 +20,30 @@ function entry(event: ChatEvent): ChatEntry {
 const SECRET = 'sk-live-0000';
 
 describe('a shared transcript', () => {
+  test('keeps your own turns, without attachments, only when asked to, and never the prompts Shinsa sends', () => {
+    const shared = redactTranscript(
+      [
+        entry({ type: 'user', from: 'shinsa', text: `Build phase 1. ${SECRET}`, attachments: [] }),
+        entry({
+          type: 'user',
+          from: 'you',
+          text: 'Try the left pane.',
+          attachments: [{ kind: 'image', name: 'a.png', url: '/api/attachments/a.png' } as never],
+        }),
+      ],
+      0,
+      true
+    );
+    expect(shared).toHaveLength(1);
+    expect(shared[0]).toMatchObject({
+      type: 'user',
+      from: 'you',
+      text: 'Try the left pane.',
+      attachments: [],
+    });
+    expect(JSON.stringify(shared)).not.toContain(SECRET);
+  });
+
   test('keeps the agent output and tool calls, never your turns or the prompts Shinsa sends', () => {
     const shared = redactTranscript([
       entry({ type: 'user', from: 'shinsa', text: `Build phase 1. ${SECRET}`, attachments: [] }),

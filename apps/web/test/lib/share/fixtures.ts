@@ -83,6 +83,7 @@ export function createSharedTask(overrides: Partial<SharedTask> = {}): SharedTas
     owner: 'mona',
     machine: 'Studio',
     repository: 'acme/app',
+    description: null,
     code: true,
     ...overrides,
   };

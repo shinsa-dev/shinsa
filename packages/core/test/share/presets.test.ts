@@ -59,7 +59,10 @@ function share(harness: Harness, taskId: string, preset: SharePreset) {
 
 describe('share presets', () => {
   test('each preset is a list of field groups, and Default holds every group Status has and the live output', () => {
-    expect(SHARE_PRESETS).toEqual(['default', 'status']);
+    expect(SHARE_PRESETS).toEqual(['default', 'status', 'everything']);
+    expect(SHARE_PRESET_GROUPS.default.every((group) => hasShareGroup('everything', group))).toBe(true);
+    expect(hasShareGroup('everything', 'messages')).toBe(true);
+    expect(hasShareGroup('default', 'messages')).toBe(false);
     expect(SHARE_PRESET_GROUPS.status.every((group) => hasShareGroup('default', group))).toBe(true);
     expect(hasShareGroup('default', 'live')).toBe(true);
     expect(hasShareGroup('status', 'live')).toBe(false);
@@ -67,7 +70,7 @@ describe('share presets', () => {
     expect(hasShareGroup('status', 'code')).toBe(false);
   });
 
-  test('Status keeps the title, the plan’s goal as its description, where the task stands and its headline, and no request, who or where', () => {
+  test('Status keeps the title, the written description, where the task stands and its headline, and no request, who or where', () => {
     const harness = createHarness();
     const taskId = reachPullRequest(harness);
     const task = harness.task(taskId);
@@ -116,7 +119,7 @@ describe('share presets', () => {
     });
     expect(status.task.plan?.body).toBe('');
     expect(status.task.plan?.document).toEqual({
-      goal: task.plan?.document?.goal ?? '',
+      goal: '',
       phases: (task.plan?.document?.phases ?? []).map((phase) => ({ title: phase.title, detail: '' })),
       behaviour: [],
       approach: '',
@@ -203,5 +206,49 @@ describe('share presets', () => {
     const full = resolveSharedTask(harness.state, task, context('default')).task;
     expect(full.proposal).toMatchObject({ request: 'Change it.', why: 'Because.' });
     expect(full.rounds?.[0]?.outcome?.goal).toBe('Ship it.');
+  });
+
+  test('the written description goes to every preset, without links Status may not carry', () => {
+    const harness = createHarness();
+    const taskId = reachPullRequest(harness);
+    harness.send({ type: 'task.share', taskId });
+    expect(share(harness, taskId, 'status').description).toBeNull();
+    harness.send({
+      type: 'share.describe',
+      taskId,
+      description: 'Tab groups did not scroll on [scroll.ts](shinsa://file/src/scroll.ts).',
+    });
+    expect(share(harness, taskId, 'status').description).toBe('Tab groups did not scroll on scroll.ts.');
+    expect(share(harness, taskId, 'default').description).toContain('shinsa://file/src/scroll.ts');
+  });
+
+  test('only Everything keeps your messages in the activity; questions and answers stay private', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const task = {
+      ...harness.task(taskId),
+      activity: [
+        {
+          at: 1,
+          actor: 'you' as const,
+          kind: 'message' as const,
+          text: 'Try the left pane.',
+          detail: null,
+          evidenceId: null,
+        },
+        {
+          at: 2,
+          actor: 'you' as const,
+          kind: 'answer' as const,
+          text: 'Use the token.',
+          detail: null,
+          evidenceId: null,
+        },
+      ],
+    };
+    const kinds = (preset: SharePreset) =>
+      resolveSharedTask(harness.state, task, context(preset)).task.activity.map((entry) => entry.kind);
+    expect(kinds('everything')).toEqual(['message']);
+    expect(kinds('default')).toEqual([]);
   });
 });

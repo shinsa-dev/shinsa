@@ -16,7 +16,8 @@ export type ShareGroup =
   | 'activity'
   | 'code'
   | 'runs'
-  | 'live';
+  | 'live'
+  | 'messages';
 
 const STATUS_GROUPS: readonly ShareGroup[] = ['identity', 'description', 'progress', 'summary'];
 
@@ -36,9 +37,12 @@ const DEFAULT_GROUPS: readonly ShareGroup[] = [
   'live',
 ];
 
+const EVERYTHING_GROUPS: readonly ShareGroup[] = [...DEFAULT_GROUPS, 'messages'];
+
 export const SHARE_PRESET_GROUPS: Readonly<Record<SharePreset, readonly ShareGroup[]>> = {
   default: DEFAULT_GROUPS,
   status: STATUS_GROUPS,
+  everything: EVERYTHING_GROUPS,
 };
 
 export function hasShareGroup(preset: SharePreset, group: ShareGroup) {

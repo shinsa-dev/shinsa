@@ -39,10 +39,10 @@ function redactNotice(notice: ChatNotice): ChatNotice {
   return notice.kind === 'compaction' ? { ...notice, summary: null } : notice;
 }
 
-function redactEntry(entry: ChatEntry, privateCalls: Set<string>): ChatEntry | null {
+function redactEntry(entry: ChatEntry, privateCalls: Set<string>, messages: boolean): ChatEntry | null {
   switch (entry.type) {
     case 'user':
-      return null;
+      return messages && entry.from === 'you' ? { ...entry, attachments: [] } : null;
     case 'tool_call':
       if (!isPrivateTool(entry.tool)) return { ...entry, tool: redactTool(entry.tool) };
       privateCalls.add(entry.callId);
@@ -58,15 +58,15 @@ function redactEntry(entry: ChatEntry, privateCalls: Set<string>): ChatEntry | n
   }
 }
 
-export function redactTranscript(entries: readonly ChatEntry[], from = 0): ChatEntry[] {
+export function redactTranscript(entries: readonly ChatEntry[], from = 0, messages = false): ChatEntry[] {
   const privateCalls = new Set<string>();
   return entries.flatMap((entry, index) => {
-    const redacted = redactEntry(entry, privateCalls);
+    const redacted = redactEntry(entry, privateCalls, messages);
     return redacted && index >= from ? [redacted] : [];
   });
 }
 
-export function redactTranscriptPage(entries: readonly ChatEntry[], page: number) {
+export function redactTranscriptPage(entries: readonly ChatEntry[], page: number, messages = false) {
   const end = (page + 1) * SHARE_TRANSCRIPT_PAGE;
-  return redactTranscript(entries.slice(0, end), page * SHARE_TRANSCRIPT_PAGE);
+  return redactTranscript(entries.slice(0, end), page * SHARE_TRANSCRIPT_PAGE, messages);
 }

@@ -210,7 +210,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
 | `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
-| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `preset` what it shows (`SharePreset`: `default`, `status`, each a list of `ShareGroup`s in `SHARE_PRESET_GROUPS`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is (`docs/engine.md` → Sharing a task) |
+| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `preset` what it shows (`SharePreset`: `default`, `status`, `everything`, each a list of `ShareGroup`s in `SHARE_PRESET_GROUPS`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is; `description` the summary the writer wrote of what the task addresses when sharing started (`share.describe`) (`docs/engine.md` → Sharing a task) |
 
 **Lifecycle and scheduling**
 
@@ -899,6 +899,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `share.record` | `share.link` effect | the link the engine made (`url`, null when it kept the one recorded); clears the last failure |
 | `share.fail` | `share.link` effect, when it gives up; the engine, when the machine is paired again | the reason (`detail`), kept on `TaskShare.failure` for Share task; opens no gate |
 | `share.expire` | `ShareClock`, at `TaskShare.endsAt` | ends a share whose time ran out (`task.unshared`, `reason: 'expired'`); nothing before it |
+| `share.describe` | `share.describe` effect | the description the writer wrote (`description`, trimmed), kept on `TaskShare.description` (`share.described`); ignored once the task is no longer shared, empty or unchanged |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
 | `pull_request.record_push` | open and push effects | records a pushed commit |
 | `pull_request.record_step` | open and push effects | `step`: `{ kind: 'updating', base }`, `{ kind: 'pushing', hook }` or `{ kind: 'opening' }`; sets the stage reason while the task ships with a push pending |
@@ -951,6 +952,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `preset`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
 | `share.recorded`, `share.failed` | the engine made the link (`url`, null when unchanged), or could not (`detail`) |
+| `share.described` | the writer described a shared task (`description`) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.retitled` | an accepted plan named the work anew (`round`, `title`): the round takes the title, and the task too when it is round 1; activity “Renamed to …” |
@@ -1062,6 +1064,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
 | `pull_request.close` | replay_safe | `task:<id>` | `pull_request.record_closed`; queued by `settleTask` only on a cancel, with `numbers`, the task's open pull request and its open stacked ones; `gh pr close <n> --comment …` for each, the branch kept; a failed close is reported, never thrown |
 | `share.link` | replay_safe | `share:<id>` | `share.record`, or `share.fail` when it gives up: makes a share id and a key for this machine's instance, unless a link to it is recorded; not paired fails at once (`SHARE_NOT_PAIRED`) |
+| `share.describe` | replay_safe | `share:<id>` | `share.describe`, or nothing when the writer gave nothing: one writer quick call over the task's title and request, without attachments, when sharing starts (`remote/share-describe.ts`) |
 | `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |

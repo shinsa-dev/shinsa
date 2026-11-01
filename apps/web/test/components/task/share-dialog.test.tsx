@@ -104,6 +104,24 @@ describe('the share dialog', () => {
     expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull();
   });
 
+  it('stays open on a shared task and changes what it shares and how long at once, keeping the link', async () => {
+    showTask({ share: { ...SHARING, url: URL } });
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Default');
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy();
+    await choose('Share as', /^Everything/);
+    await choose('Share for', /^24 hours/);
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.share', taskId: 'source', preset: 'everything' },
+        { type: 'task.share', taskId: 'source', limit: 'day' },
+      ])
+    );
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('stops a share whose link failed once you confirm', async () => {
     showTask({ share: { ...SHARING, url: null, failure: 'Remote access was removed.' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Stop sharing' }));
@@ -142,15 +160,14 @@ describe('the sharing banner', () => {
     rerender(<SharingBanner task={createTask({ id: 'source' })} />);
     expect(screen.queryByText('Anyone with the link can watch this task.')).toBeNull();
   });
-  it('shows what the link shares and changes it at once, keeping the link', async () => {
-    const task = createTask({ id: 'source', share: { ...SHARING, url: URL } });
-    pushState(createShinsaState({ tasks: [task] }));
-    render(<SharingBanner task={task} />);
-    expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Default');
-    await choose('Share as', /^Status/);
-    await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'task.share', taskId: 'source', preset: 'status' }])
+  it('names what the link shares and opens the dialog to change it', async () => {
+    showTask({ share: { ...SHARING, preset: 'status', url: URL } });
+    act(() => closeShareDialog());
+    render(
+      <SharingBanner task={createTask({ id: 'source', share: { ...SHARING, preset: 'status', url: URL } })} />
     );
+    fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Status' }));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
   });
 
   it('says how soon a timed share ends, never a date for an hour away', () => {

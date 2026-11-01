@@ -388,7 +388,7 @@ Every task agent's tool: `tasks_cancel`. Sends `task.cancel`.
 Share a task by a link that reads it live from this machine: read-only, without its chat.
 
 ```
-shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--preset <default|status>] [--json]
+shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--preset <default|status|everything>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.share`.

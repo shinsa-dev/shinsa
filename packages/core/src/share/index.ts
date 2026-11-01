@@ -41,6 +41,7 @@ export interface SharedTask {
   owner: string | null;
   machine: string | null;
   repository: string | null;
+  description: string | null;
   code: boolean;
 }
 
@@ -101,9 +102,9 @@ function redactPlan(plan: Plan): Plan {
   };
 }
 
-function redactPlanPhases(document: PlanDocument, grants: Grants): PlanDocument {
+function redactPlanPhases(document: PlanDocument): PlanDocument {
   return {
-    goal: grants('description') ? document.goal : '',
+    goal: '',
     phases: document.phases.map((phase) => ({ title: phase.title, detail: '' })),
     behaviour: [],
     approach: '',
@@ -114,11 +115,11 @@ function redactPlanPhases(document: PlanDocument, grants: Grants): PlanDocument 
   };
 }
 
-function redactProgressPlan(plan: Plan, grants: Grants): Plan {
+function redactProgressPlan(plan: Plan): Plan {
   return {
     version: plan.version,
     body: '',
-    document: plan.document ? redactPlanPhases(plan.document, grants) : null,
+    document: plan.document ? redactPlanPhases(plan.document) : null,
     proposedAt: plan.proposedAt,
     changeSummary: null,
     changes: [],
@@ -130,7 +131,7 @@ function redactProgressPlan(plan: Plan, grants: Grants): Plan {
 function resolveSharedPlan(plan: Plan | null, grants: Grants) {
   if (!plan) return null;
   if (grants('plan')) return redactPlan(plan);
-  return grants('progress') ? redactProgressPlan(plan, grants) : null;
+  return grants('progress') ? redactProgressPlan(plan) : null;
 }
 
 function resolveSharedReport(report: WorkReport | null, grants: Grants): WorkReport | null {
@@ -195,9 +196,13 @@ function redactRound(round: Round, grants: Grants): Round {
   };
 }
 
-function redactActivity(activity: readonly Activity[]): Activity[] {
+function isSharedActivity(entry: Activity, grants: Grants) {
+  return !PRIVATE_ACTIVITY.has(entry.kind) || (entry.kind === 'message' && grants('messages'));
+}
+
+function redactActivity(activity: readonly Activity[], grants: Grants): Activity[] {
   return activity
-    .filter((entry) => !PRIVATE_ACTIVITY.has(entry.kind))
+    .filter((entry) => isSharedActivity(entry, grants))
     .map((entry) => ({
       at: entry.at,
       actor: entry.actor,
@@ -272,7 +277,7 @@ function createBlankTask(task: Task, grants: Grants): Task {
   };
 }
 
-const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task) => Partial<Task>>> = {
+const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants) => Partial<Task>>> = {
   identity: (task) => ({ handle: task.handle ?? null, title: task.title, size: task.size }),
   requests: (task) => ({ request: splitMessageAttachments(task.request).text }),
   progress: (task) => ({
@@ -308,8 +313,8 @@ const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task) => Partial<Task
     carriedMergeSteps: task.carriedMergeSteps ?? [],
     watchdogs: (task.watchdogs ?? []).map((watchdog) => ({ ...watchdog })),
   }),
-  activity: (task) => ({
-    activity: redactActivity(task.activity),
+  activity: (task, grants) => ({
+    activity: redactActivity(task.activity, grants),
     monitor: task.monitor ? { ...task.monitor } : null,
     suggestions: (task.suggestions ?? []).map((suggestion) => ({ ...suggestion })),
     usageWait: task.usageWait ? { ...task.usageWait, account: null } : null,
@@ -317,7 +322,7 @@ const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task) => Partial<Task
 };
 
 function redactTask(task: Task, preset: SharePreset, grants: Grants): Task {
-  const parts = SHARE_PRESET_GROUPS[preset].map((group) => TASK_GROUP_FIELDS[group]?.(task) ?? {});
+  const parts = SHARE_PRESET_GROUPS[preset].map((group) => TASK_GROUP_FIELDS[group]?.(task, grants) ?? {});
   return Object.assign(createBlankTask(task, grants), ...parts);
 }
 
@@ -476,6 +481,7 @@ export function resolveSharedTask(state: ShinsaState, task: Task, context: Share
     owner: people ? context.owner : null,
     machine: people ? context.machine : null,
     repository: people ? context.repository : null,
+    description: grants('description') ? scrubText(task.share?.description ?? '', links) || null : null,
     code: grants('code') && hasSharedCode(task, context.repository),
   };
 }

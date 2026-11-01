@@ -22,7 +22,7 @@ export const UNSHARE_TITLE = 'Stop sharing';
 export const SHARING_NOTE = 'Anyone with the link can watch this task.';
 
 export const SHARE_DESCRIPTION =
-  'Anyone with the link can watch this task live and read-only while this machine is online. Your messages to its agents never leave it.';
+  'Anyone with the link can watch it live, read-only, while this machine is online.';
 
 export const UNSHARE_DESCRIPTION = 'The link stops working at once, for everyone who has it.';
 
@@ -33,7 +33,7 @@ export const SHARED_MARK_LABEL = 'Shared by link';
 export const SHARING_SECTION = 'Sharing';
 
 export const SHARING_SECTION_DESCRIPTION =
-  'What a task you share by link shows and how long it stays shared, unless you pick otherwise when you share it.';
+  'What a shared task shows and for how long, unless you pick otherwise.';
 
 export const SHARE_LIMIT_SETTING = 'Share tasks for';
 
@@ -42,18 +42,9 @@ export const SHARE_PRESET_TITLE = 'Share as';
 export const SHARE_PRESET_SETTING = 'Share tasks as';
 
 export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: string; icon: IconName }[] = [
-  {
-    value: 'default',
-    label: 'Default',
-    hint: 'The whole task and the agents’ live output, without your messages',
-    icon: 'IconListBullets',
-  },
-  {
-    value: 'status',
-    label: 'Status',
-    hint: 'Title, description, phases and the latest update, with no names or code',
-    icon: 'IconProgress75',
-  },
+  { value: 'default', label: 'Default', hint: 'The task and its agents’ live work', icon: 'IconListBullets' },
+  { value: 'status', label: 'Status', hint: 'A short summary, no names or code', icon: 'IconProgress75' },
+  { value: 'everything', label: 'Everything', hint: 'Default and your messages', icon: 'IconEyeOpen' },
 ];
 
 export function describeSharePreset(preset: SharePreset) {
@@ -164,6 +155,18 @@ export function changeSharePreset(task: Task, preset: SharePreset) {
     { type: 'task.share', taskId: task.id, preset },
     `Sharing as ${describeSharePreset(preset).toLowerCase()}.`
   );
+}
+
+const SHARE_LIMIT_TOAST: Record<ShareLimit, string> = {
+  until_done: 'Sharing until the task is done.',
+  hour: 'Sharing for 1 hour.',
+  day: 'Sharing for 24 hours.',
+  week: 'Sharing for 7 days.',
+  none: 'Sharing until you stop it.',
+};
+
+export function changeShareLimit(task: Task, limit: ShareLimit) {
+  return sendCommandWithToast({ type: 'task.share', taskId: task.id, limit }, SHARE_LIMIT_TOAST[limit]);
 }
 
 export function unshareTask(task: Task) {

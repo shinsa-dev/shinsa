@@ -3,6 +3,7 @@ import type { Task } from '@shinsa/core';
 import { resolveStatusCard, resolveStatusLatest } from '@/lib/share/status.ts';
 import { createRound } from '../../support/rounds.ts';
 import { createTask } from '../../support/state.ts';
+import { createSharedTask } from './fixtures.ts';
 
 function report(headline: string) {
   return { headline, sections: [], checks: [], judgementCalls: [], walkthrough: null } as NonNullable<
@@ -11,9 +12,10 @@ function report(headline: string) {
 }
 
 describe('the status card', () => {
-  it('shows the title, the stage in its words and tone, and no description before a plan', () => {
+  it('shows the title, the stage in its words and tone, and no description before one is written', () => {
     const card = resolveStatusCard(
-      createTask({ id: 't', title: 'Fix export', request: 'Exports fail on Safari.', stage: 'building' })
+      createTask({ id: 't', title: 'Fix export', request: 'Exports fail on Safari.', stage: 'building' }),
+      createSharedTask()
     );
     expect(card).toEqual({
       title: 'Fix export',
@@ -23,14 +25,15 @@ describe('the status card', () => {
     });
   });
 
-  it('describes the task by its plan’s goal', () => {
-    const task = createTask({ id: 't' });
+  it('describes the task by the summary written when it was shared, never its request or plan', () => {
+    const task = createTask({ id: 't', request: 'Exports fail on Safari.' });
     const plan = {
       version: 1,
       body: '',
-      document: { goal: 'Exports work on Safari.' },
+      document: { goal: 'Make exports work.' },
     } as unknown as Task['plan'];
-    expect(resolveStatusCard({ ...task, plan }).description).toBe('Exports work on Safari.');
+    const shared = createSharedTask({ description: 'Exports now work on Safari.' });
+    expect(resolveStatusCard({ ...task, plan }, shared).description).toBe('Exports now work on Safari.');
   });
 
   it('takes the latest update from the report, the result, the summary, then the last round that had one', () => {

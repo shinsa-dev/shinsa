@@ -622,7 +622,13 @@ describe('what a link shows', () => {
     transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'Editing.' });
     await publisher.resolveLive('task-1');
     expect(reads).toHaveLength(1);
-    transcripts.record('run-1', { type: 'tool_result', callId: 'c1', status: 'ok', output: 'ok', images: [] });
+    transcripts.record('run-1', {
+      type: 'tool_result',
+      callId: 'c1',
+      status: 'ok',
+      output: 'ok',
+      images: [],
+    });
     const { view } = await publisher.resolveLive('task-1');
     expect(reads).toHaveLength(2);
     expect(view.files[SHARE_DIFF_FILE]?.version).toBe('working:5:1');
@@ -787,7 +793,7 @@ describe('a share by preset', () => {
     expect(builds).toBe(0);
   });
 
-  test('an everything share sends a full page of a transcript once, and only its last page as it grows', async () => {
+  test('a default share sends a full page of a transcript once, and only its last page as it grows', async () => {
     const transcripts = createTranscripts();
     for (let index = 0; index <= SHARE_TRANSCRIPT_PAGE; index += 1) {
       transcripts.record('run-1', { type: 'agent', phase: 'interim', text: `Step ${index}` });
@@ -798,7 +804,8 @@ describe('a share by preset', () => {
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
     await until('the viewer reads the last page again', () =>
       viewer.messages.some(
-        (message) => message.t === 'file' && message.id === 'transcript-run-1-1' && message.version === '2'
+        (message) =>
+          message.t === 'file' && message.id === 'transcript-run-1-1' && message.version === 'agents:2'
       )
     );
     const sends = viewer.messages.filter(
@@ -812,7 +819,7 @@ describe('a share by preset', () => {
     ]);
   });
 
-  test('an everything share streams each run without your turns, and again as it grows', async () => {
+  test('a default share streams each run without your turns, and again as it grows', async () => {
     const transcripts = createTranscripts();
     transcripts.record('run-1', {
       type: 'user',
@@ -825,7 +832,10 @@ describe('a share by preset', () => {
     const { publisher } = sharedSetUp({ preset: 'default', transcripts });
     const viewer = await openViewer(publisher);
     await until('the viewer reads the transcript', () => 'transcript-run-1-0' in viewer.files());
-    expect(viewer.views()[0]?.files['transcript-run-1-0']).toEqual({ version: '2', type: 'text/plain' });
+    expect(viewer.views()[0]?.files['transcript-run-1-0']).toEqual({
+      version: 'agents:2',
+      type: 'text/plain',
+    });
     const first = JSON.parse(viewer.files()['transcript-run-1-0'] ?? '[]') as ChatEntry[];
     expect(first.map((entry) => entry.type)).toEqual(['agent']);
     expect(viewer.files()['transcript-run-1-0']).not.toContain('sk-0000');
@@ -836,10 +846,30 @@ describe('a share by preset', () => {
     expect(viewer.messages.length).toBe(sent);
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
     await until('the viewer reads it again', () =>
-      viewer.messages.some((message) => message.t === 'file' && message.version === '3')
+      viewer.messages.some((message) => message.t === 'file' && message.version === 'agents:3')
     );
     const grown = JSON.parse(viewer.files()['transcript-run-1-0'] ?? '[]') as ChatEntry[];
     expect(grown.map((entry) => (entry.type === 'agent' ? entry.text : ''))).toEqual(['Reading.', 'Done.']);
+  });
+
+  test('an everything share streams your own turns too, never the prompts Shinsa sends', async () => {
+    const transcripts = createTranscripts();
+    transcripts.record('run-1', {
+      type: 'user',
+      from: 'shinsa',
+      text: 'Build phase 1. sk-0000',
+      attachments: [],
+    });
+    transcripts.record('run-1', { type: 'user', from: 'you', text: 'Try the left pane.', attachments: [] });
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    const { publisher } = sharedSetUp({ preset: 'everything', transcripts });
+    const file = (await publisher.resolveLive('task-1')).files.find(
+      (item) => item.id === 'transcript-run-1-0'
+    );
+    expect(file?.version).toBe('messages:3');
+    const shared = JSON.parse(decodeText((await file?.read()) as Bytes)) as ChatEntry[];
+    expect(shared.map((entry) => entry.type)).toEqual(['user', 'agent']);
+    expect(JSON.stringify(shared)).not.toContain('sk-0000');
   });
 
   test('a run with no transcript yet streams nothing, and one past the size a file carries keeps its latest entries', async () => {

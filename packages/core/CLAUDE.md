@@ -273,7 +273,8 @@ src/
 │                    the share presets (SharePreset in domain/settings.ts: default, status), each a list
 │                    of field groups (SHARE_PRESET_GROUPS, hasShareGroup), and resolveSharedTask copies only the
 │                    fields of the groups its context's preset grants (TASK_GROUP_FIELDS)
-│                    (decide/shares.ts: task.share and task.unshare, human-only, and the share.link effect;
+│                    (decide/shares.ts: task.share and task.unshare, human-only, the share.link effect and,
+│                    when sharing starts, share.describe, recorded by share.describe on TaskShare.description;
 │                    how long, ShareLimit and the shareLimit setting, as what, the preset and the sharePreset
 │                    setting, both changed in place on a running share, ended by syncShares when a task shared
 │                    until_done settles and by share.expire;

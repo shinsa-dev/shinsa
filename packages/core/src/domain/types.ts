@@ -526,6 +526,7 @@ export interface TaskShare {
   preset: SharePreset;
   endsAt: number | null;
   failure?: string | null;
+  description?: string | null;
 }
 
 export type ShareEnd = 'you' | 'done' | 'expired';

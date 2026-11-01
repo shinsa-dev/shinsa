@@ -46,6 +46,7 @@ import {
 } from './remote/index.ts';
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
 import { ShareClock } from './remote/share-clock.ts';
+import { createShareDescriber } from './remote/share-describe.ts';
 import { Shares } from './remote/shares.ts';
 import {
   createDiscoverer,
@@ -245,6 +246,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
+      describeShare: createShareDescriber(quick.write),
       resolveLogin,
       roots,
       services: terminals,

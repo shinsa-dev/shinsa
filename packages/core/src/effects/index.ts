@@ -30,6 +30,7 @@ export type ShinsaEffect =
   | { kind: 'delegation.steer'; runId: string; generation: number }
   | { kind: 'delegation.reply'; runId: string; questionId: string }
   | { kind: 'share.link'; taskId: string }
+  | { kind: 'share.describe'; taskId: string }
   | { kind: 'slack.evaluate'; mention: SlackMention }
   | { kind: 'slack.status'; taskId: string; thread: SlackThreadRef }
   | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost };
@@ -60,6 +61,7 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'delegation.steer': 'process_bound',
   'delegation.reply': 'process_bound',
   'share.link': 'replay_safe',
+  'share.describe': 'replay_safe',
   'slack.evaluate': 'replay_safe',
   'slack.status': 'replay_safe',
   'slack.post': 'replay_safe',
@@ -118,6 +120,7 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
     case 'pull_request.watch':
     case 'pull_request.close':
     case 'share.link':
+    case 'share.describe':
       return `${effect.kind}:${effect.taskId}:${seq}`;
   }
 }
@@ -143,6 +146,7 @@ export function resolveEffectLane(effect: ShinsaEffect) {
     case 'pull_request.watch':
       return `side:${effect.taskId}`;
     case 'share.link':
+    case 'share.describe':
       return `share:${effect.taskId}`;
     case 'slack.evaluate':
       return `slack:${resolveSlackThreadKey(effect.mention)}`;

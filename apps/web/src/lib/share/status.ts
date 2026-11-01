@@ -1,4 +1,4 @@
-import { resolveTaskRounds, type Task } from '@shinsa/core';
+import { resolveTaskRounds, type SharedTask, type Task } from '@shinsa/core';
 import { STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
@@ -27,11 +27,11 @@ export function resolveStatusLatest(task: Task) {
   return task.report?.headline || task.result?.body || task.summary || resolveRoundsLatest(task);
 }
 
-export function resolveStatusCard(task: Task): StatusCard {
+export function resolveStatusCard(task: Task, shared: SharedTask): StatusCard {
   return {
     title: task.title,
     stage: { label: STAGE_LABEL[task.stage], tone: STAGE_TONE[task.stage] },
-    description: task.plan?.document?.goal || null,
+    description: shared.description,
     latest: resolveStatusLatest(task) || null,
   };
 }

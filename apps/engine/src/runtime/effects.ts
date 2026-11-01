@@ -55,6 +55,7 @@ import {
   writePullRequestBlock,
 } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
+import type { ShareDescriber } from '../remote/share-describe.ts';
 import type { ShareEffects } from '../remote/shares.ts';
 import {
   createLoginResolver,
@@ -78,6 +79,7 @@ import { resolveShippingError } from './failures.ts';
 export interface EffectRunnerOptions {
   triage: TriageResolver;
   wordWatch?: WatchWriter;
+  describeShare?: ShareDescriber;
   timeZone?: string;
   findRepository?: RepositoryFinder;
   resolveLogin?: LoginResolver;
@@ -156,6 +158,7 @@ export class EffectRunner {
   readonly #briefings: Briefings;
   readonly #triageTask: TriageResolver;
   readonly #wordWatch: WatchWriter;
+  readonly #describeShare: ShareDescriber;
   readonly #timeZone: string;
   readonly #findRepository: RepositoryFinder;
   readonly #resolveLogin: LoginResolver;
@@ -189,6 +192,7 @@ export class EffectRunner {
     this.#briefings = briefings;
     this.#triageTask = options.triage;
     this.#wordWatch = options.wordWatch ?? (() => Promise.resolve({ name: null, text: null }));
+    this.#describeShare = options.describeShare ?? (() => Promise.resolve(null));
     this.#timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     this.#findRepository = options.findRepository ?? (() => Promise.resolve(null));
     this.#resolveLogin = options.resolveLogin ?? createLoginResolver(config.userHome);
@@ -248,6 +252,8 @@ export class EffectRunner {
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
       case 'share.link':
         return this.#shares.link(effect.taskId, context);
+      case 'share.describe':
+        return this.#writeShareDescription(effect.taskId, context);
       case 'slack.evaluate':
         return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':
@@ -274,6 +280,17 @@ export class EffectRunner {
         timeZone: this.#timeZone,
       },
       { id: `${context.key}:watch_suggestion.record` }
+    );
+  }
+
+  async #writeShareDescription(taskId: string, context: EffectContext) {
+    const task = this.#engine.state.tasks[taskId];
+    if (!task?.share) return;
+    const description = await this.#describeShare(task);
+    if (!description) return;
+    await this.#engine.dispatch(
+      { type: 'share.describe', taskId, description },
+      { id: `${context.key}:share.describe` }
     );
   }
 

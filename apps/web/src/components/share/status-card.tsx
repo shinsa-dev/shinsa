@@ -26,7 +26,7 @@ function StatusSection({ title, children }: { title: string; children: React.Rea
 }
 
 export function StatusCardPage({ view }: { view: SharedView }) {
-  const card = resolveStatusCard(view.task);
+  const card = resolveStatusCard(view.task, view.shared);
   return (
     <PageScroll>
       <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex max-w-xl flex-col gap-3 pb-10')}>

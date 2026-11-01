@@ -10,6 +10,7 @@ import {
 } from '@shinsa/ui/components/dialog';
 import { Field, FieldLabel } from '@shinsa/ui/components/field';
 import * as React from 'react';
+import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { useNow } from '@/hooks/use-now.ts';
@@ -17,6 +18,8 @@ import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
+  changeShareLimit,
+  changeSharePreset,
   closeShareDialog,
   closeUnshareConfirm,
   listShareLimitItems,
@@ -133,6 +136,17 @@ function ShareActions({
       </Button>
     );
   }
+  if (view.kind === 'shared') {
+    return (
+      <>
+        <Button variant='secondary' onClick={() => openUnshareConfirm(task.id)}>
+          {UNSHARE_TITLE}
+        </Button>
+        <CopyLinkButton url={view.url} />
+        <Button onClick={closeShareDialog}>Done</Button>
+      </>
+    );
+  }
   if (view.kind === 'failed') {
     return (
       <>
@@ -152,6 +166,15 @@ function ShareActions({
   );
 }
 
+function CopyLinkButton({ url }: { url: string }) {
+  const { copied, copy } = useCopyText(url);
+  return (
+    <Button variant='secondary' onClick={copy}>
+      {copied ? 'Copied' : 'Copy link'}
+    </Button>
+  );
+}
+
 function ShareContent({ task }: { task: Task }) {
   const { snapshot } = useRemoteAccess();
   const settings = useShinsaSelector((state) => state.settings);
@@ -159,13 +182,22 @@ function ShareContent({ task }: { task: Task }) {
   const live = selectLiveShare(task, now);
   const view = resolveShareView(task, snapshot, now);
   const shared = view.kind === 'shared';
+  const openedShared = React.useRef(shared);
   React.useEffect(() => {
-    if (shared) closeShareDialog();
+    if (shared && !openedShared.current) closeShareDialog();
   }, [shared]);
   const [picked, setPicked] = React.useState<ShareLimit | null>(null);
   const limit = picked ?? live?.limit ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
   const [pickedPreset, setPickedPreset] = React.useState<SharePreset | null>(null);
   const preset = pickedPreset ?? resolveSharePresetChoice(task, settings);
+  const pickLimit = (next: ShareLimit) => {
+    if (shared) void changeShareLimit(task, next);
+    else setPicked(next);
+  };
+  const pickPreset = (next: SharePreset) => {
+    if (shared) void changeSharePreset(task, next);
+    else setPickedPreset(next);
+  };
   return (
     <>
       <DialogHeader>
@@ -175,8 +207,8 @@ function ShareContent({ task }: { task: Task }) {
       <ShareBody view={view} />
       {view.kind !== 'unpaired' && (
         <>
-          <SharePresetRow preset={preset} onChange={setPickedPreset} />
-          <ShareLimitRow task={task} limit={limit} onChange={setPicked} />
+          <SharePresetRow preset={shared && live ? live.preset : preset} onChange={pickPreset} />
+          <ShareLimitRow task={task} limit={shared && live ? live.limit : limit} onChange={pickLimit} />
         </>
       )}
       <DialogFooter>

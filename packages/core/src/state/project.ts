@@ -1020,6 +1020,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.unshared':
     case 'share.recorded':
     case 'share.failed':
+    case 'share.described':
       applyShareEvent(state, event);
       break;
     case 'slack.thread_linked':

@@ -377,6 +377,41 @@ describe('suggesting a watch', () => {
   });
 });
 
+describe('describing a shared task', () => {
+  test('writes the description of a shared task and records it under an id the effect decides', async () => {
+    const asked: string[] = [];
+    const { runner, dispatched, commandIds } = setup(
+      withTask({ share: { at: 1, url: null, limit: 'until_done', preset: 'status', endsAt: null } }),
+      {
+        describeShare: (task) => {
+          asked.push(task.id);
+          return Promise.resolve('Tab groups now scroll sideways.');
+        },
+      }
+    );
+    const context = createContext();
+    await runner.apply({ kind: 'share.describe', taskId: 'task-1' }, context);
+    expect(asked).toEqual(['task-1']);
+    expect(dispatched).toEqual([
+      { type: 'share.describe', taskId: 'task-1', description: 'Tab groups now scroll sideways.' },
+    ]);
+    expect(commandIds).toEqual([`${context.key}:share.describe`]);
+  });
+
+  test('records nothing for a task no longer shared, or when nothing was written', async () => {
+    const unshared = setup(withTask({ share: null }), {
+      describeShare: () => Promise.resolve('Unused.'),
+    });
+    await unshared.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
+    expect(unshared.dispatched).toEqual([]);
+    const silent = setup(
+      withTask({ share: { at: 1, url: null, limit: 'until_done', preset: 'default', endsAt: null } })
+    );
+    await silent.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
+    expect(silent.dispatched).toEqual([]);
+  });
+});
+
 describe('triage', () => {
   test('a settled, unknown or already triaged task is left alone', async () => {
     const { runner, dispatched } = setup((state) => {

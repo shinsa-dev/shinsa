@@ -117,7 +117,7 @@ describe('the shared page on app.shinsa.dev', () => {
     expect((await screen.findAllByText(/const ttl = 24/)).length).toBeGreaterThan(0);
   });
 
-  it('a Status link shows a small status card with the plan’s goal, and no request, names, tabs or code', async () => {
+  it('a Status link shows a small status card with its written description, and no request, plan, names, tabs or code', async () => {
     const machine = connect();
     const view = liveView({
       preset: 'status',
@@ -132,13 +132,18 @@ describe('the shared page on app.shinsa.dev', () => {
     });
     const task = view.shared.task;
     const plan = { version: 1, body: '', document: { goal: 'Keys rotate every week.', phases: [] } } as never;
-    view.shared = { ...view.shared, task: { ...task, request: 'Rotate the API keys weekly.', plan } };
+    view.shared = {
+      ...view.shared,
+      description: 'Keys now rotate every week.',
+      task: { ...task, request: 'Rotate the API keys weekly.', plan },
+    };
     view.files = {};
     await open(machine, view);
     expect(screen.getByText('Status')).toBeTruthy();
     expect(screen.getByText('Changes to review')).toBeTruthy();
     expect(screen.getByText('Rotating a key keeps the old one for a day.')).toBeTruthy();
-    expect(screen.getByText('Keys rotate every week.')).toBeTruthy();
+    expect(screen.getByText('Keys now rotate every week.')).toBeTruthy();
+    expect(screen.queryByText('Keys rotate every week.')).toBeNull();
     expect(screen.queryByText('Rotate the API keys weekly.')).toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByText(/Shared by/)).toBeNull();

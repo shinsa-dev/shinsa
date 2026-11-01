@@ -29,6 +29,28 @@ describe('sharing a task', () => {
     expect(links(harness, taskId)).toBe(1);
   });
 
+  test('asks once for a written description when sharing starts, and keeps the one written', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const describes = () =>
+      harness.effectsOf('share.describe').filter((effect) => effect.taskId === taskId).length;
+    harness.send({ type: 'task.share', taskId });
+    expect(describes()).toBe(1);
+    harness.send({ type: 'task.share', taskId, preset: 'status' });
+    expect(describes()).toBe(1);
+    harness.send({ type: 'share.describe', taskId, description: '  Tab groups did not scroll.  ' });
+    expect(harness.task(taskId).share?.description).toBe('Tab groups did not scroll.');
+    expect(
+      harness.send({ type: 'share.describe', taskId, description: 'Tab groups did not scroll.' }).events
+    ).toEqual([]);
+    expect(harness.send({ type: 'share.describe', taskId, description: ' ' }).events).toEqual([]);
+    harness.send({ type: 'task.unshare', taskId });
+    expect(harness.send({ type: 'share.describe', taskId, description: 'Late.' }).events).toEqual([]);
+    expect(harness.send({ type: 'share.describe', taskId: 'missing', description: 'Late.' }).events).toEqual(
+      []
+    );
+  });
+
   test('a change to the task asks for nothing, since open links read it live', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
@@ -140,7 +162,7 @@ describe('stopping sharing', () => {
     harness.send({ type: 'task.share', taskId });
     const decision = harness.send({ type: 'task.unshare', taskId });
     expect(decision.cancellations).toEqual([
-      { taskId, kinds: ['share.link'], reason: 'The task is no longer shared.' },
+      { taskId, kinds: ['share.link', 'share.describe'], reason: 'The task is no longer shared.' },
     ]);
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({ text: 'Stopped sharing this task' });
     expect(harness.send({ type: 'task.unshare', taskId }).events).toEqual([]);
