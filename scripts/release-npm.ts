@@ -185,7 +185,7 @@ export function runReleaseNpm(argv: string[], env: Record<string, string | undef
     );
   }
   const tag = resolveDistTag(env.RELEASE_CHANNEL);
-  const packages = writeNpmPackages(archivesDir, outDir, version);
+  const packages = writeNpmPackages(archivesDir, resolve(outDir), version);
   return `${publishNpmPackages(packages, { version, tag, dryRun, run }).join('\n')}\n`;
 }
 
