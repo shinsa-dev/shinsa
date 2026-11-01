@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { RemoteSnapshot } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -41,11 +41,14 @@ function createActions() {
   } satisfies TeamActions;
 }
 
-const toasts = spyOnToasts();
+let toasts: ReturnType<typeof spyOnToasts>;
+
+beforeEach(() => {
+  toasts = spyOnToasts();
+});
 
 afterEach(() => {
-  toasts.success.mockClear();
-  toasts.error.mockClear();
+  toasts.restore();
 });
 
 async function settle() {
