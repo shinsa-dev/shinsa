@@ -12,6 +12,7 @@ import {
   isCrashing,
   isOnOtherPort,
   isSpawnRefused,
+  isStandaloneAgent,
   listEngineVariables,
   parseEngineAction,
   parseLaunchdJob,
@@ -185,5 +186,24 @@ describe('the status screen', () => {
       expect(parseEngineAction(`shinsa://engine/${action}`)).toBe(action as never);
     expect(parseEngineAction('shinsa://engine/format-disk')).toBeNull();
     expect(parseEngineAction('shinsa://task/SW-1')).toBeNull();
+  });
+});
+
+describe('a standalone engine’s LaunchAgent', () => {
+  const appProgram = '/Applications/Shinsa.app/Contents/Resources/engine/bin/shinsa';
+
+  it('is one whose program is not this app’s engine', () => {
+    const standalone = serializeEngineAgent({ path: '/Users/me/.local/share/shinsa/bin/shinsa' });
+    expect(isStandaloneAgent(standalone, appProgram)).toBe(true);
+  });
+
+  it('is not the app’s own fallback agent, even when its path needs escaping', () => {
+    expect(isStandaloneAgent(serializeEngineAgent({ path: appProgram }), appProgram)).toBe(false);
+    const escaped = '/Users/me/A & B/Shinsa.app/Contents/Resources/engine/bin/shinsa';
+    expect(isStandaloneAgent(serializeEngineAgent({ path: escaped }), escaped)).toBe(false);
+  });
+
+  it('is not a file that names no program', () => {
+    expect(isStandaloneAgent('<plist><dict></dict></plist>', appProgram)).toBe(false);
   });
 });

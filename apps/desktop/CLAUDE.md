@@ -91,7 +91,9 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   opened yet: `bunx electron-builder --mac dmg --arm64 --publish never --prepackaged release/mac-arm64/Shinsa.app
   -c.mac.identity=null -c.extraMetadata.version=0.0.1-test.1 -c.directories.output=/tmp/shinsa-dmg`.
 - **Logic in `lib/`, Electron in `main/`.** Anything that decides goes in `lib/` with a test; `main/` wires it.
-- **The engine is the app's to run.** Packaged, the app removes the old `shinsa service` LaunchAgent once
+- **The engine is the app's to run.** Packaged, the app first boots out and deletes a standalone engine's LaunchAgent
+  (`~/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` running a program other than its own, written by a
+  `shinsa start` from npm or the install script, `isStandaloneAgent`), since it holds the label the app's job needs. It removes the old `shinsa service` LaunchAgent once
   (`studio.overclock.shinsa`, so two engines never share a data folder), then registers the bundle's job with
   `app.setLoginItemSettings({ type: 'agentService' })` (`SMAppService`). macOS's records can say enabled while launchd
   has no job, so the app checks `launchctl print`, registers again when it is missing, and where registration is

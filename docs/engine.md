@@ -4986,7 +4986,9 @@ without the app, with no window: you reach it from your other devices through re
   job alone, and replaces a stale one (`bootout`, write, `bootstrap`). Sharing the app's label means only one engine
   job is ever loaded, so two engines never meet on 7446: with the app's job loaded (`isAppJob`: a bundle id or a
   program inside an `.app`) the start refuses with `engine_beside_app`, and installing the app later replaces the
-  agent with its own. `shinsa stop` and `shinsa restart` act only on a job this `shinsa` wrote, refusing the app's
+  agent with its own: on its first launch it boots out an agent at that path whose program is not its own engine
+  (`isStandaloneAgent`) and deletes the plist, before it checks the engine's health or registers its job, so the
+  label is free when it does. `shinsa stop` and `shinsa restart` act only on a job this `shinsa` wrote, refusing the app's
   with `engine_not_this_app` and another standalone copy's with `engine_not_this_install`, which `shinsa start` from
   this copy takes over. `shinsa open` uses the browser there, since there is no app to open. To take it away:
   `launchctl bootout gui/$(id -u)/studio.overclock.shinsa.engine`, then delete the plist.
