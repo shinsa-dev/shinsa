@@ -171,7 +171,7 @@ src/
 │                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts),
 │                        the routes for the webhook URL and secrets (routes.ts), the Schedules service (index.ts)
 ├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
-│                        credentials, the enrolled devices, who has access), control.ts (ControlClient for app.shinsa.dev: pairing, heartbeat, invites, members; RevokedError),
+│                        credentials, the enrolled devices, who has access), control.ts (ControlClient for app.shinsa.dev: pairing, heartbeat, invites, members, hand-offs, guests; RevokedError),
 │                        cloudflared.ts (the pinned release, checked by SHA-256, installed under data/bin), connector.ts
 │                        (cloudflared with the token in its environment), supervisor.ts (TunnelSupervisor: heartbeat,
 │                        health pings, restarts and back-off, revocation), guard.ts (what the tunnel may reach),
@@ -188,9 +188,11 @@ src/
 │                        share-describe.ts (the writer quick call that describes a shared task for the
 │                        share.describe effect),
 │                        share-channel.ts (ShareChannel: the tunnel's /share channel, the hello checked against
-│                        the link's key, sealed frames out, nothing read after the hello), index.ts (Remote: wires
-│                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
-│                        resolveRequestOrigin)
+│                        the link's key, sealed frames out, nothing read after the hello), handoffs.ts (Handoffs:
+│                        the handoff.link and handoff.revoke effects and the claim recorded as handoff.claim),
+│                        guest-routes.ts (isGuestRoute: the reads of its one task a guest's channel may make),
+│                        index.ts (Remote: wires them, pairing, pausing, removing, enrolling, a hand-off's link,
+│                        claim and removal, the stable webhook URL, markRemoteRequest and resolveRequestOrigin)
 ├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
 │                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
 │                        slack.mention, and a question's choice clicked in Slack as slack.answer

@@ -10,6 +10,7 @@ import { ConfigStore, resolveConfig } from '../apps/engine/src/config/index.ts';
 import { normalizeRemote } from '../apps/engine/src/git/repo.ts';
 import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
+import { Handoffs } from '../apps/engine/src/remote/handoffs.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
 import { Previews } from '../apps/engine/src/remote/previews.ts';
@@ -37,9 +38,9 @@ import {
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   type RemoteInstance,
+  type RemoteMember,
   type RemoteUser,
   type Repo,
-  resolveClaimUrl,
   resolveKeyFingerprint,
   resolvePreviewTunnelPath,
   SHARE_CHANNEL_PATH,
@@ -62,6 +63,9 @@ const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-re
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
 const USER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+const GUEST: RemoteUser = { id: 'preview-guest', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+const AS_COOKIE = 'shinsa_preview_as';
+const GUEST_MACHINES = new Set<string>();
 const QUICK = createQuickCalls(new ProviderRegistry(), createSettings);
 
 const PLACE = createPlacementAsker(QUICK.classify);
@@ -209,6 +213,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     services: terminals,
     origin: config.previewOrigin,
   });
+  const handoffs = new Handoffs({ engine, remote });
   const http = startServer({
     engine,
     config,
@@ -237,6 +242,8 @@ async function startMachine(id: string, name: string, dataDir: string) {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
     if (effect.kind === 'share.describe') await describePreviewShare(engine, effect.taskId, context.key);
     if (effect.kind === 'preview.link') await previews.link(effect.taskId, effect.serviceId, context);
+    if (effect.kind === 'handoff.link') await handoffs.link(effect.taskId, context);
+    if (effect.kind === 'handoff.revoke') await handoffs.revoke(effect.taskId, effect.guestId);
   });
   engine.start();
   new ShareClock(engine).start();
@@ -286,10 +293,12 @@ async function seedLaptop(engine: Engine, dataDir: string) {
   }
 }
 
-function listInstances(machines: Machine[]): Promise<RemoteInstance[]> {
+function listInstances(machines: Machine[], user: RemoteUser): Promise<RemoteInstance[]> {
   const now = Date.now();
+  const guest = user.id === GUEST.id;
+  const listed = guest ? machines.filter((machine) => GUEST_MACHINES.has(machine.id)) : machines;
   return Promise.all(
-    machines.map(async (machine) => ({
+    listed.map(async (machine) => ({
       id: machine.id,
       name: machine.name,
       fingerprint: await resolveKeyFingerprint(machine.publicKey),
@@ -297,7 +306,7 @@ function listInstances(machines: Machine[]): Promise<RemoteInstance[]> {
       lastSeenAt: now,
       createdAt: now - 7 * 24 * 60 * 60 * 1000,
       owner: USER,
-      role: 'owner',
+      role: guest ? 'guest' : 'owner',
     }))
   );
 }
@@ -442,36 +451,46 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
   return shares.filter((share): share is PreviewShare => Boolean(share));
 }
 
-const PREVIEW_GUEST = { id: 'preview-guest', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+function waitForHandoffLink(engine: Engine, taskId: string) {
+  return new Promise<string>((done) => {
+    const read = () =>
+      engine.state.tasks[taskId]?.handoff?.url ?? engine.state.tasks[taskId]?.handoff?.failure;
+    const now = read();
+    if (now) return done(now);
+    const stop = engine.subscribe(() => {
+      const url = read();
+      if (!url) return;
+      stop();
+      done(url);
+    });
+  });
+}
 
 async function createPreviewHandoffs(studio: Awaited<ReturnType<typeof startMachine>>) {
   const { engine } = studio;
   const [claimed, waiting] = Object.values(engine.state.tasks).filter(
-    (task) => task.handle && task.repoId && !task.share && !task.watchHome && !isTaskSettled(task)
+    (task) =>
+      task.handle && task.repoId && !task.share && !task.backlog && !task.watchHome && !isTaskSettled(task)
   );
   if (!(claimed && waiting)) return [];
   await engine.dispatch({ type: 'task.hand_off', taskId: claimed.id });
-  await engine.dispatch({ type: 'handoff.claim', taskId: claimed.id, guest: PREVIEW_GUEST });
+  await engine.dispatch({ type: 'handoff.claim', taskId: claimed.id, guest: GUEST });
   await engine.dispatch(
     { type: 'task.message', taskId: claimed.id, text: 'I have this from here. Keep going with the plan.' },
-    { guest: { taskId: claimed.id, login: PREVIEW_GUEST.login } }
+    { guest: { taskId: claimed.id, login: GUEST.login } }
   );
   await engine.dispatch({ type: 'task.hand_off', taskId: waiting.id });
-  await engine.dispatch({
-    type: 'handoff.record',
-    taskId: waiting.id,
-    url: resolveClaimUrl(
-      { instanceId: studio.machine.id, machineKey: 'preview', secret: 'preview', invite: 'preview' },
-      ORIGIN
-    ),
-  });
+  const claim = await waitForHandoffLink(engine, waiting.id);
   const at = (task: Task) => `http://${HOST}:${studio.machine.port}/tasks/${task.handle}`;
   return [
     [
-      `${claimed.handle}, handed off to @${PREVIEW_GUEST.login} (Share task shows them, Activity their message)`,
+      `${claimed.handle}, handed off to @${GUEST.login} (Share task shows them, Activity their message)`,
       at(claimed),
     ],
     [`${waiting.handle}, with a hand-off link no one opened yet (Share task)`, at(waiting)],
+    [`Sign in as @${GUEST.login}, the person a task is handed to`, `${ORIGIN}/__preview/as/${GUEST.login}`],
+    [`${waiting.handle}'s hand-off link, to claim as @${GUEST.login} in a fresh browser profile`, claim],
+    [`Sign in as @${USER.login} again`, `${ORIGIN}/__preview/as/${USER.login}`],
   ];
 }
 
@@ -654,11 +673,11 @@ function listPreviewLinks(machines: Machine[], shares: PreviewShare[], preview: 
   ];
 }
 
-async function createConnect(machine: Machine): Promise<ConnectResponse> {
+async function createConnect(machine: Machine, user: RemoteUser = USER): Promise<ConnectResponse> {
   const expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS;
   const token = await createConnectToken(machine.connectKey, {
     instanceId: machine.id,
-    userId: USER.id,
+    userId: user.id,
     expiresAt,
   });
   return {
@@ -667,8 +686,8 @@ async function createConnect(machine: Machine): Promise<ConnectResponse> {
   };
 }
 
-async function respondConnect(machine: Machine) {
-  return Response.json(await createConnect(machine));
+async function respondConnect(machine: Machine, user: RemoteUser) {
+  return Response.json(await createConnect(machine, user));
 }
 
 function respondNativeSignIn(url: URL) {
@@ -686,42 +705,77 @@ function respondNativeSignIn(url: URL) {
 
 const INVITES = new Map<string, string>();
 
-function respondInviteCreate(request: Request, machines: Machine[]) {
+const HANDOFFS = new Map<string, string>();
+
+function respondInviteCreate(request: Request, machines: Machine[], tokens: Map<string, string>) {
   const bearer = (request.headers.get('authorization') ?? '').replace(/^Bearer preview-/, '');
   const machine = machines.find((entry) => entry.id === bearer);
   if (!machine) return Response.json({ error: { code: 'revoked', message: 'Not paired.' } }, { status: 401 });
   const token = crypto.randomUUID().replaceAll('-', '');
-  INVITES.set(token, machine.id);
+  tokens.set(token, machine.id);
   const answer: InviteCreateResponse = { token };
   return Response.json(answer);
 }
 
-async function respondInviteAccept(request: Request, machines: Machine[]) {
+async function respondInviteAccept(
+  request: Request,
+  machines: Machine[],
+  user: RemoteUser,
+  tokens: Map<string, string>,
+  code: string
+) {
   const { token } = (await request.json()) as { token?: string };
-  const machine = machines.find((entry) => entry.id === INVITES.get(token ?? ''));
+  const machine = machines.find((entry) => entry.id === tokens.get(token ?? ''));
   if (!machine)
     return Response.json(
-      {
-        error: {
-          code: 'invite_invalid',
-          message: 'This invite link was turned off. Ask the machine’s owner for a new one.',
-        },
-      },
+      { error: { code, message: 'This link was turned off. Ask the machine’s owner for a new one.' } },
       { status: 404 }
     );
   const answer: InviteAcceptResponse = {
     instanceId: machine.id,
     name: machine.name,
     owner: USER,
-    user: USER,
-    connect: await createConnect(machine),
+    user,
+    connect: await createConnect(machine, user),
   };
   return Response.json(answer);
 }
 
+async function respondGuestChange(request: Request, add: boolean) {
+  const bearer = (request.headers.get('authorization') ?? '').replace(/^Bearer preview-/, '');
+  const { userId } = (await request.json()) as { userId?: string };
+  if (userId !== GUEST.id) return Response.json({ ok: true });
+  if (!add) {
+    GUEST_MACHINES.delete(bearer);
+    return Response.json({ ok: true });
+  }
+  GUEST_MACHINES.add(bearer);
+  const member: RemoteMember = { user: GUEST, addedAt: Date.now() };
+  return Response.json(member);
+}
+
+async function respondRequester(request: Request) {
+  const { userId } = (await request.json()) as { userId?: string };
+  return Response.json(userId === GUEST.id ? GUEST : USER);
+}
+
+function readPreviewUser(request: Request) {
+  const cookie = request.headers.get('cookie') ?? '';
+  return cookie.includes(`${AS_COOKIE}=${GUEST.login}`) ? GUEST : USER;
+}
+
+function respondSignInAs(login: string) {
+  const user = login === GUEST.login ? GUEST : USER;
+  return new Response(null, {
+    status: 302,
+    headers: { location: REMOTE_PATHS.app, 'set-cookie': `${AS_COOKIE}=${user.login}; Path=/; SameSite=Lax` },
+  });
+}
+
 async function respondDashboard(request: Request, url: URL, machines: Machine[]) {
   const { pathname } = url;
-  if (pathname === REMOTE_PATHS.session) return Response.json({ user: USER });
+  const user = readPreviewUser(request);
+  if (pathname === REMOTE_PATHS.session) return Response.json({ user });
   if (pathname === REMOTE_PATHS.signIn && url.searchParams.get('client') === REMOTE_NATIVE_CLIENT)
     return respondNativeSignIn(url);
   if (pathname === REMOTE_PATHS.signInToken && request.method === 'POST') {
@@ -731,7 +785,7 @@ async function respondDashboard(request: Request, url: URL, machines: Machine[])
   if (pathname === REMOTE_PATHS.signIn)
     return Response.redirect(`${ORIGIN}${url.searchParams.get('return') ?? REMOTE_PATHS.app}`, 302);
   if (pathname === REMOTE_PATHS.signOut) return Response.json({});
-  if (pathname === REMOTE_PATHS.instances) return Response.json(await listInstances(machines));
+  if (pathname === REMOTE_PATHS.instances) return Response.json(await listInstances(machines, user));
   if (pathname.startsWith(`${REMOTE_PATHS.pairs}/`)) {
     const [studio] = machines;
     if (pathname.endsWith('/approve')) return Response.json({ instanceId: studio?.id, name: studio?.name });
@@ -744,12 +798,27 @@ async function respondDashboard(request: Request, url: URL, machines: Machine[])
     });
   }
   const machine = machines.find((entry) => pathname.startsWith(`${REMOTE_PATHS.instances}/${entry.id}/`));
-  if (machine && pathname.endsWith('/connect') && request.method === 'POST') return respondConnect(machine);
+  if (machine && pathname.endsWith('/connect') && request.method === 'POST')
+    return respondConnect(machine, user);
   if (machine && (pathname.endsWith('/remove') || pathname.endsWith('/leave'))) return Response.json({});
-  if (pathname === REMOTE_PATHS.machineInvites) return respondInviteCreate(request, machines);
-  if (pathname === REMOTE_PATHS.inviteAccept) return respondInviteAccept(request, machines);
-  if (pathname === REMOTE_PATHS.machineRequester) return Response.json(USER);
-  if (pathname === REMOTE_PATHS.machineInviteRemove || pathname === REMOTE_PATHS.machineMemberRemove)
+  return respondAccess(request, pathname, machines, user);
+}
+
+function respondAccess(request: Request, pathname: string, machines: Machine[], user: RemoteUser) {
+  if (pathname === REMOTE_PATHS.machineInvites) return respondInviteCreate(request, machines, INVITES);
+  if (pathname === REMOTE_PATHS.inviteAccept)
+    return respondInviteAccept(request, machines, user, INVITES, 'invite_invalid');
+  if (pathname === REMOTE_PATHS.machineHandoffs) return respondInviteCreate(request, machines, HANDOFFS);
+  if (pathname === REMOTE_PATHS.handoffAccept)
+    return respondInviteAccept(request, machines, user, HANDOFFS, 'handoff_invalid');
+  if (pathname === REMOTE_PATHS.machineGuestAdd) return respondGuestChange(request, true);
+  if (pathname === REMOTE_PATHS.machineGuestRemove) return respondGuestChange(request, false);
+  if (pathname === REMOTE_PATHS.machineRequester) return respondRequester(request);
+  if (
+    pathname === REMOTE_PATHS.machineInviteRemove ||
+    pathname === REMOTE_PATHS.machineMemberRemove ||
+    pathname === REMOTE_PATHS.machineHandoffRemove
+  )
     return Response.json({ ok: true });
   return Response.json({ error: { code: 'not_found', message: 'No such endpoint.' } }, { status: 404 });
 }
@@ -791,7 +860,6 @@ async function main() {
   await seedLaptop(laptop.engine, laptopData);
   const machines = [studio.machine, laptop.machine];
   const shares = await createPreviewShares(studio);
-  const handoffs = await createPreviewHandoffs(studio);
   const shared = await createServicePreview(studio);
   const preview = shared?.preview ?? null;
   const demo = shared?.demo ?? null;
@@ -806,6 +874,8 @@ async function main() {
       if (DEMO_TOGGLE.test(url.pathname)) return toggleDemoService(demo, url);
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
+      const as = /^\/__preview\/as\/([a-z]+)$/.exec(url.pathname);
+      if (as) return respondSignInAs(as[1] ?? '');
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) return respondEnroll(enrolling, url);
@@ -835,6 +905,7 @@ async function main() {
       },
     },
   });
+  const handoffs = await createPreviewHandoffs(studio);
   for (const [label, url] of [...listPreviewLinks(machines, shares, preview), ...handoffs])
     console.info(`${label}: ${url}`);
 }

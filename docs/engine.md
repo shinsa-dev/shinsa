@@ -3081,6 +3081,79 @@ projection and channel will serve teams.
   the link is missing; an agent has no tool to share or stop sharing.
 
 
+## Handing off a task
+
+A task you cannot work on any more can be handed to someone else by a link, `https://app.shinsa.dev/claim#<instance>.<machine
+key>.<secret>.<hand-off token>`. The first GitHub account to open it takes the task over: from then on it reaches that
+one task on your machine through remote access, as you do, from its own dashboard on app.shinsa.dev, until you take it
+back. The task keeps running on your machine, in its worktree, sessions and accounts; nothing moves. Sharing (above) is
+for watching; a hand-off is for steering. Teams are another matter (LOC-78).
+
+- **Handing off is yours alone.** `task.hand_off` and `handoff.remove` (Hand off in Share task, `shinsa tasks
+  hand-off|hand-off-remove`) are human-only: their surface specs are `humanOnly`, and core refuses them on your behalf
+  (`human_only`). An automation's home and a finished task are refused (`handoff_refused`). `task.hand_off` emits
+  `task.handed_off` (`TaskHandoff`: `at`, `url` null, `guest` null) and queues `handoff.link`; again on a failed link it
+  asks for the link once more, and otherwise does nothing.
+- **The link** (`apps/engine/src/remote/handoffs.ts`, `Remote.createHandoff`). Remote access must be on (else the link
+  fails at once with "Turn on remote access in Settings → General to hand off this task…", kept on
+  `TaskHandoff.failure` for Share task's Try again). The engine asks app.shinsa.dev for a hand-off token
+  (`POST /__remote/machine/handoffs`, `apps/cloud/CLAUDE.md` → Guests), makes a secret, keeps both with the task's id in
+  `remote.json` (`handoffs`), and records the URL with `handoff.record`. It is the enroll link's fragment with a
+  hand-off token in place of the invite token; app.shinsa.dev never learns which task it is for. One link a task.
+- **The claim** (`routes/remote/claim.tsx`, `lib/remote/enroll.ts`). The page keeps the fragment through GitHub
+  sign-in, says what taking over gives, and claims only when Take over this task is pressed, so opening the link by
+  mistake spends nothing. It sends `POST /__remote/handoffs/accept`, which answers a connect token for that account,
+  makes a new device key and opens the sealed channel with the link's proof, as enrolling does. The machine finds the
+  hand-off whose secret proves it (`#matchHandoff`) and, with no request to accept: dispatches `handoff.claim` with the
+  account (`TaskGuest`: id, login, name, avatar), which core refuses for a second account ("Someone else already took
+  this task over. Ask for a new link."); then adds the account as a guest at app.shinsa.dev
+  (`/__remote/machine/guests/add`), adds the browser as a device with the task's id (`RemoteDevice.taskId`), turns the
+  link off there and here, and answers `welcome`. The claim is recorded on the machine first, so two accounts racing
+  for one link cannot both get in; a failed step after it leaves the same account free to open the link again. Once
+  claimed, the link is gone: no second browser and no second person can use it. A browser that already reaches the
+  machine does not claim, and one browser takes at most one handed task per machine.
+- **One task, on the engine.** A device with a task is a guest (`GuestActor`: `taskId`, `login`), and its channel's hub
+  socket is scoped to that task (`apps/engine/src/http/socket.ts`):
+  - **State.** It gets `resolveScopedState` (core's `remote/scope.ts`): that task alone, its runs, gates and evidence,
+    its repository and project, nothing else (no other task, schedule, memory, setting or focus); the task without its
+    share, previews or hand-off link, and every account, the task's, a run's, an attempt's, a gate's or a usage wait's,
+    without its email. Patches are worked out over the scoped state (`resolveScopedPatch`), and the socket gets no
+    accounts, terminals or remote snapshot, nor a transcript of another task's run.
+  - **Commands.** Its `engine` hello lists only `SCOPED_COMMANDS`, so the UI hides the rest. Every command it sends is
+    checked by `resolveScopedRefusal` before `decide` (`dispatchUserCommand`, `handoff_scope`): only commands that act
+    on its task by `taskId`, a run or a gate (a message, a gate answer, retry, snooze, priority, a round, a merge step,
+    a suggestion and the like); never another task, a share, a hand-off, a setting, an account, a schedule or a new
+    task, nor a secret or sign-in gate ("Only the owner of the task can answer this, on their machine.") or a retry on
+    a chosen account. Merges and operations are the guest's to approve, as yours are. What stays at the keyboard
+    (Remote access → What stays at the keyboard) stays there too.
+  - **Requests.** HTTP inside its channel reaches only `isGuestRoute` (`remote/guest-routes.ts`): `GET` of
+    `/api/health`, `/api/tasks/<its id>` and its `blob`, `chat`, `diff`, `paths`, `raw`, `refs`, `search` and `tree`, and
+    an evidence or attachment file its task or evidence names; anything else is 403 `handoff_scope`. So a guest uploads
+    no attachment and edits no file in Code: both write to your disk.
+- **Logged as theirs.** Everything a guest sends runs with `DecideContext.guest`, and each event it causes carries
+  `byGuest` (the login), which activity shows as `@login` ("Handed this task to @kai" for the claim). A guest's message
+  goes to the agent at once, without the message classifier, prefixed "From @kai, who the human handed this task to:",
+  so the agent knows who wrote it; the task's request and chat show it without the prefix.
+- **Their dashboard** (`lib/remote/fleet.ts`, `lib/remote/machines.ts`). app.shinsa.dev lists the machine for the
+  account with `role: 'guest'`, and the fleet joins it after your own machines, so settings, accounts and the machine a
+  command goes to by default still come from yours. It is left out of New task's machine picker, routing policies and
+  task capacity, and a command it does not list is refused with "This stays with the owner of the task…" rather than
+  asking to update Shinsa. Settings → Machines reads "A task handed to you by <owner> · In this dashboard · <task
+  title>", with Leave; a browser that reaches only handed machines leaves Slack out of Settings, since Slack links a
+  machine of its own. The task stays there once done, until you take it back or they leave.
+- **Share task** (`components/task/share-dialog.tsx`, `lib/share/handoff.ts`) has a Hand off section on an open task
+  (and on any task someone still holds) while remote access is on and the machine speaks `task.hand_off`: Hand off;
+  while the link is made, a busy button; then Copy hand-off link and Turn off link; a failure with its reason, Try
+  again and Remove; once claimed, their avatar, name, `@login` and when they took it over, with Remove, which asks
+  first and names who lost the task in its toast.
+- **Taking it back.** `handoff.remove` emits `handoff.removed` and queues `handoff.revoke`, which turns the link off at
+  app.shinsa.dev, forgets every device of that task and closes their channels at once, then removes the guest there
+  (`/__remote/machine/guests/remove`) unless they still hold another task here, so app.shinsa.dev stops listing the
+  machine for them. Each heartbeat answers the machine's guests too, and a guest who left loses their devices on the
+  next one. Pausing remote access ends every channel, a guest's included; removing it or pairing again forgets every
+  guest and hand-off link.
+- **Agents read it, never change it.** An agent has no tool to hand off or take back a task.
+
 ## Sharing a preview
 
 A task's run of a service can be shared at an address of its own, `https://<label>.shinsa.page/?key=<key>`, so a
