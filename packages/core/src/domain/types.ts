@@ -2,7 +2,7 @@ import type { PlanChange } from '../report/plan-changes.ts';
 import type {
   CarriedMergeStep,
   CodeSpot,
-  FixReply,
+  AgentReply,
   JudgementCall,
   PlanDocument,
   ReportCheck,
@@ -514,7 +514,7 @@ export interface Iteration {
   id: string;
   round: number;
   requests: IterationRequest[];
-  reply: FixReply | null;
+  reply: AgentReply | null;
   runId: string | null;
   repliedAt: number | null;
 }

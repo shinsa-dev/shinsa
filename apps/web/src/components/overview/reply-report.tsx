@@ -1,4 +1,4 @@
-import type { FixReply, Iteration, ReplyOutcome, Task } from '@shinsa/core';
+import type { AgentReply, Iteration, ReplyOutcome, Task } from '@shinsa/core';
 import { ChecklistMark } from '@shinsa/ui/components/checklist';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
@@ -31,7 +31,7 @@ function PointGlyph({ outcome }: { outcome: ReplyOutcome }) {
   return <Icon size='sm' name={glyph.icon} aria-label={glyph.label} className={glyph.className} />;
 }
 
-function PointList({ reply }: { reply: FixReply }) {
+function PointList({ reply }: { reply: AgentReply }) {
   return (
     <ul className='flex flex-col gap-2'>
       {reply.points.map((point) => (

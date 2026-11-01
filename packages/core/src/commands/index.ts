@@ -36,9 +36,9 @@ import type {
   ShippingStepKind,
 } from '../domain/pull-requests.ts';
 import type {
+  AgentReply,
   CheckChangeHandOver,
   CodeSpot,
-  FixReply,
   JudgementCall,
   LinkedEvidenceKind,
   PlanDocument,
@@ -154,13 +154,20 @@ export type UserCommand =
   | ShareUserCommand;
 
 type AgentCommand =
-  | { type: 'agent.propose_plan'; runId: string; document: PlanDocument; changeSummary?: string | null }
+  | {
+      type: 'agent.propose_plan';
+      runId: string;
+      document: PlanDocument;
+      changeSummary?: string | null;
+      reply?: AgentReply | null;
+    }
   | {
       type: 'agent.complete_phase';
       runId: string;
       summary: string;
       spots: CodeSpot[];
       judgementCalls: JudgementCall[];
+      reply?: AgentReply | null;
       walkthrough?: ReportWalkthrough | null;
       checkChanges?: CheckChangeHandOver[];
       treeHash?: string | null;
@@ -170,7 +177,7 @@ type AgentCommand =
       type: 'agent.complete_fix';
       runId: string;
       summary: string;
-      reply?: FixReply | null;
+      reply?: AgentReply | null;
       walkthrough?: ReportWalkthroughRevision | null;
       checks?: string[];
       checkChanges?: CheckChangeHandOver[];
@@ -242,6 +249,7 @@ type AgentCommand =
       runId: string;
       step: DeliveringStep;
       body: string;
+      reply?: AgentReply | null;
       proposal?: ChangeProposalInput | null;
     }
   | ({ type: 'agent.reshape'; runId: string; reason: string } & (

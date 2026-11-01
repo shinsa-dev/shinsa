@@ -176,6 +176,7 @@ function approveMerge(decider: Decider, gate: Gate) {
 
 function reviseWork(decider: Decider, gate: Gate, response: string | null, comments: ReviewComment[]) {
   if (gate.type === 'plan') {
+    requestIteration(decider, gate.taskId, response, comments.length);
     startPlanning(decider, gate.taskId, response ?? 'Revise the plan.');
     return;
   }

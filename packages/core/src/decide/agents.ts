@@ -72,6 +72,7 @@ export function assertEvidence(decider: Decider, task: Task, handOver: string) {
 export function proposePlan(decider: Decider, command: CommandOf<'agent.propose_plan'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'propose_plan');
   assertPlanRules(task, command.document);
+  answerIteration(decider, task, run.id, command.reply ?? null, 'propose_plan');
   const changeSummary = command.changeSummary?.trim() || null;
   const body = serializePlanMarkdown(command.document);
   decider.emit({
@@ -99,6 +100,7 @@ export function completePhase(decider: Decider, command: CommandOf<'agent.comple
   const index = run.phaseIndex ?? resolveCurrentPhase(task);
   if (isLastPhase(task, index)) assertEvidence(decider, task, 'complete the last phase');
   const changes = resolveCheckChanges(decider, task, command.checkChanges ?? [], index + 1);
+  answerIteration(decider, task, run.id, command.reply ?? null, 'complete_phase');
   recordTree(decider, task.id, command.treeHash);
   decider.emit({
     type: 'phase.completed',
@@ -252,7 +254,7 @@ export function completeFix(decider: Decider, command: CommandOf<'agent.complete
   assertEvidenceAccounted(decider, task, run, command.files ?? [], command.evidenceKept ?? []);
   const done = new Set(task.phaseReports.map((report) => report.index)).size;
   const changes = resolveCheckChanges(decider, task, command.checkChanges ?? [], done);
-  answerIteration(decider, task, run.id, command.reply ?? null);
+  answerIteration(decider, task, run.id, command.reply ?? null, 'complete_fix');
   recordTree(decider, task.id, command.treeHash);
   decider.emit({ type: 'task.noted', taskId: task.id, note: command.summary, runId: run.id });
   if (command.walkthrough) {

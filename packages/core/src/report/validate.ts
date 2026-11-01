@@ -18,6 +18,7 @@ import {
 import type { EvidenceItemKind } from '../domain/types.ts';
 import { createTesting, isWebUrl, MANUAL_TEST_TARGETS, parseTestFile } from './testing.ts';
 import type {
+  AgentReply,
   Attention,
   CheckChangeAction,
   CheckChangeHandOver,
@@ -27,7 +28,6 @@ import type {
   EvidenceRemovalHandOver,
   EvidenceSource,
   FixHandOver,
-  FixReply,
   JudgementAlternative,
   JudgementCall,
   ManualTestStep,
@@ -690,6 +690,7 @@ export function validatePhaseHandOver(input: Record<string, unknown>): Validatio
     summary: reader.text(input.summary, 'summary', PROTOCOL_LIMITS.phaseSummary),
     spots: readSpots(reader, input.spots, 'spots'),
     judgementCalls: readJudgementCalls(reader, input.judgement_calls),
+    reply: readReply(reader, input.reply),
     walkthrough: readWalkthrough(reader, input.walkthrough),
     checkChanges: readCheckChanges(reader, input.check_changes),
   });
@@ -707,7 +708,7 @@ function readReplyPoints(reader: Reader, input: unknown): ReplyPoint[] {
   });
 }
 
-function readReply(reader: Reader, input: unknown): FixReply | null {
+function readReply(reader: Reader, input: unknown): AgentReply | null {
   if (input === undefined || input === null) return null;
   const record = reader.record(input, 'reply');
   return {
@@ -892,8 +893,9 @@ export function validatePlanHandOver(input: Record<string, unknown>): Validation
     'change_summary',
     PROTOCOL_LIMITS.changeSummary
   );
+  const reply = readReply(reader, input.reply);
   if (!plan.ok) return { ok: false, errors: [...plan.errors, ...reader.errors] };
-  return reader.result({ document: plan.value, changeSummary });
+  return reader.result({ document: plan.value, changeSummary, reply });
 }
 
 function readChoices(reader: Reader, input: Record<string, unknown>) {
@@ -1097,6 +1099,12 @@ function readProposal(reader: Reader, value: unknown): ChangeProposalInput | nul
   };
 }
 
+export interface DeliveryHandOver {
+  body: string;
+  reply: AgentReply | null;
+  proposal: ChangeProposalInput | null;
+}
+
 const DELIVERY_FIELD: Record<DeliveringStep, { field: string; limit: number; proposes: boolean }> = {
   answer: { field: 'answer', limit: SHAPE_LIMITS.answer, proposes: true },
   investigate: { field: 'diagnosis', limit: SHAPE_LIMITS.diagnosis, proposes: true },
@@ -1107,11 +1115,12 @@ const DELIVERY_FIELD: Record<DeliveringStep, { field: string; limit: number; pro
 export function validateDelivery(
   step: DeliveringStep,
   input: Record<string, unknown>
-): Validation<{ body: string; proposal: ChangeProposalInput | null }> {
+): Validation<DeliveryHandOver> {
   const reader = new Reader();
   const { field, limit, proposes } = DELIVERY_FIELD[step];
   return reader.result({
     body: reader.text(input[field], field, limit),
+    reply: readReply(reader, input.reply),
     proposal: proposes ? readProposal(reader, input.propose_change) : null,
   });
 }

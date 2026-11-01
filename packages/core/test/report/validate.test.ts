@@ -56,6 +56,7 @@ describe('validatePhaseHandOver', () => {
       judgementCalls: [
         { title: 'Keep the cache', call: 'Kept the cache', reason: 'It is hot.', file: null, line: null },
       ],
+      reply: null,
       walkthrough: null,
       checkChanges: [],
     });
@@ -66,6 +67,7 @@ describe('validatePhaseHandOver', () => {
       summary: 'Done.',
       spots: [],
       judgementCalls: [],
+      reply: null,
       walkthrough: null,
       checkChanges: [],
     });
@@ -112,6 +114,7 @@ describe('validatePhaseHandOver', () => {
           alternatives: [{ option: 'Cache by path', rejected: 'A path changes under an agent.' }],
         },
       ],
+      reply: null,
       walkthrough: {
         approach: 'Read once, keep it.',
         flow: 'read → cache → render',
@@ -1063,7 +1066,7 @@ describe('the shape hand-overs', () => {
   test('an answer is delivered with its field and limit, and can carry a proposed change', () => {
     expect(validateDelivery('answer', { answer: ' It retries. ' })).toEqual({
       ok: true,
-      value: { body: 'It retries.', proposal: null },
+      value: { body: 'It retries.', reply: null, proposal: null },
     });
     expect(validateDelivery('answer', { answer: 'x'.repeat(8_001) })).toEqual({
       ok: false,
@@ -1076,7 +1079,7 @@ describe('the shape hand-overs', () => {
       })
     ).toEqual({
       ok: true,
-      value: { body: 'Yes.', proposal: { request: 'Stream it.', why: 'Memory.' } },
+      value: { body: 'Yes.', reply: null, proposal: { request: 'Stream it.', why: 'Memory.' } },
     });
     expect(
       validateDelivery('answer', { answer: 'Yes.', propose_change: { request: '', why: 'x'.repeat(241) } })
@@ -1092,7 +1095,7 @@ describe('the shape hand-overs', () => {
   test('a diagnosis, a report and an outcome each have their field and limit; an outcome proposes nothing', () => {
     expect(validateDelivery('investigate', { diagnosis: 'The cache.', propose_change: null })).toEqual({
       ok: true,
-      value: { body: 'The cache.', proposal: null },
+      value: { body: 'The cache.', reply: null, proposal: null },
     });
     expect(validateDelivery('research', { report: 'x'.repeat(40_001) })).toEqual({
       ok: false,
@@ -1100,7 +1103,7 @@ describe('the shape hand-overs', () => {
     });
     expect(
       validateDelivery('operate', { outcome: 'Ran it.', propose_change: { request: 'More.', why: 'Why.' } })
-    ).toEqual({ ok: true, value: { body: 'Ran it.', proposal: null } });
+    ).toEqual({ ok: true, value: { body: 'Ran it.', reply: null, proposal: null } });
   });
 
   test('a reshape names one of the inquiry shapes and why', () => {

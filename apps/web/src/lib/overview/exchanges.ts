@@ -1,5 +1,5 @@
 import {
-  type FixReply,
+  type AgentReply,
   type Gate,
   type Iteration,
   type ReplyOutcome,
@@ -10,7 +10,7 @@ import {
 import type { IconName } from '@shinsa/ui/components/icon';
 import { formatCount } from '@/lib/format/count.ts';
 
-export type AnsweredIteration = Iteration & { reply: FixReply; repliedAt: number };
+export type AnsweredIteration = Iteration & { reply: AgentReply; repliedAt: number };
 
 export type Exchange =
   | { kind: 'request'; key: string; at: number; iteration: AnsweredIteration }
@@ -79,7 +79,7 @@ export function describeRequestText(iteration: Iteration) {
   return note ? `${said}\nAnd ${note}.` : said;
 }
 
-export function describeOutcomes(reply: FixReply) {
+export function describeOutcomes(reply: AgentReply) {
   return OUTCOME_ORDER.flatMap((outcome) => {
     const count = reply.points.filter((point) => point.outcome === outcome).length;
     return count > 0 ? [`${count} ${OUTCOME_COUNT[outcome]}`] : [];

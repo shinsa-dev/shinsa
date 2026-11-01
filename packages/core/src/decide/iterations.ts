@@ -1,6 +1,15 @@
 import { DomainError, resolveCurrentRound, selectOpenIteration, type Task } from '../domain/index.ts';
-import type { FixReply } from '../report/types.ts';
+import type { AgentReply } from '../report/types.ts';
 import type { Decider } from './decider.ts';
+
+export type ReplyingHandOver =
+  | 'propose_plan'
+  | 'complete_phase'
+  | 'complete_fix'
+  | 'answer'
+  | 'report_diagnosis'
+  | 'submit_report'
+  | 'report_outcome';
 
 export function requestIteration(decider: Decider, taskId: string, text: string | null, comments: number) {
   const task = decider.task(taskId);
@@ -14,19 +23,25 @@ export function requestIteration(decider: Decider, taskId: string, text: string 
   });
 }
 
-export function answerIteration(decider: Decider, task: Task, runId: string, reply: FixReply | null) {
+export function answerIteration(
+  decider: Decider,
+  task: Task,
+  runId: string,
+  reply: AgentReply | null,
+  tool: ReplyingHandOver
+) {
   const open = selectOpenIteration(task);
   if (!open && reply) {
     throw new DomainError(
       'reply_unasked',
-      'Leave `reply` out: it answers a request the human sent, and this fix answers none.'
+      `Leave \`reply\` out: it answers a message the human sent, and this \`${tool}\` answers none.`
     );
   }
   if (!open) return;
   if (!reply) {
     throw new DomainError(
       'reply_required',
-      'This fix answers a request the human sent, so `reply` is required: a headline, each point they raised with its outcome and a note, and what they do now. Call `complete_fix` again with it.'
+      `This \`${tool}\` answers a message the human sent, so \`reply\` is required: a headline, each point they raised with its outcome and a note, and what they do now. Call \`${tool}\` again with it.`
     );
   }
   decider.emit({ type: 'iteration.answered', taskId: task.id, iterationId: open.id, reply, runId });

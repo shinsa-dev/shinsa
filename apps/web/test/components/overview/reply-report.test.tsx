@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { FixReply, Iteration, ShinsaState, Task } from '@shinsa/core';
+import type { AgentReply, Iteration, ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render } from '@testing-library/react';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
@@ -7,7 +7,7 @@ import { OverviewTab } from '@/routes/task/overview.tsx';
 import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createGate, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
-const REPLY: FixReply = {
+const REPLY: AgentReply = {
   headline: 'Slack is under Remote access now.',
   points: [
     { ask: 'Move Slack to General', outcome: 'done', note: 'Right below Remote access.' },

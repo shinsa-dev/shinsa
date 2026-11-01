@@ -12,6 +12,7 @@ import {
   PLAN,
   proposePlan,
   pullRequest,
+  REPLY,
   reachReviewGate,
   registerRepo,
 } from '../harness.ts';
@@ -408,6 +409,7 @@ describe('plan revisions', () => {
       runId: harness.activeRun(taskId).id,
       document: { ...PLAN, title: 'Fix the overflow on narrow screens' },
       changeSummary: 'Renamed it.',
+      reply: REPLY,
     });
     expect(harness.openGate(taskId).title).toBe('Fix the overflow on narrow screens');
   });
@@ -427,6 +429,7 @@ describe('plan revisions', () => {
       runId: harness.activeRun(taskId).id,
       document: { ...PLAN, phases: [...PLAN.phases, { title: 'Add a test', detail: 'Cover the overflow.' }] },
       changeSummary: '  Added a test phase, as asked.  ',
+      reply: REPLY,
     });
     const task = harness.task(taskId);
     expect(task.plan).toMatchObject({
@@ -451,6 +454,7 @@ describe('plan revisions', () => {
       runId: harness.activeRun(taskId).id,
       document: { ...PLAN, goal: 'Something else.' },
       changeSummary: '   ',
+      reply: REPLY,
     });
     expect(harness.task(taskId).plan).toMatchObject({ changeSummary: null, changes: [{ kind: 'goal' }] });
     const revised = harness

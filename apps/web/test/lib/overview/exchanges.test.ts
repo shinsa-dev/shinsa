@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { FixReply, Iteration } from '@shinsa/core';
+import type { AgentReply, Iteration } from '@shinsa/core';
 import {
   describeOutcomes,
   describeRequestText,
@@ -9,7 +9,7 @@ import {
 } from '@/lib/overview/exchanges.ts';
 import { createGate, createTask } from '../../support/state.ts';
 
-const REPLY: FixReply = {
+const REPLY: AgentReply = {
   headline: 'Moved it.',
   points: [
     { ask: 'Move it', outcome: 'done', note: 'Under Remote access.' },
@@ -116,7 +116,7 @@ describe('describeRequestText', () => {
 describe('describeOutcomes', () => {
   it('counts each outcome the reply has, in a fixed order', () => {
     expect(describeOutcomes(REPLY)).toBe('2 done · 1 answered · 1 not changed');
-    expect(describeOutcomes({ ...REPLY, points: [REPLY.points[2] as FixReply['points'][number]] })).toBe(
+    expect(describeOutcomes({ ...REPLY, points: [REPLY.points[2] as AgentReply['points'][number]] })).toBe(
       '1 answered'
     );
   });
