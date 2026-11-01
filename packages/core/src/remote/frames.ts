@@ -6,6 +6,18 @@ const NONCE_BYTES = 12;
 
 const FRAME_LABEL = encodeText('shinsa-remote-frame-v1');
 
+export const CHANNEL_COMPRESSION = 'deflate-raw';
+
+export type ChannelCompression = typeof CHANNEL_COMPRESSION;
+
+const COMPRESS_FROM_BYTES = 16 * 1024;
+
+const MAX_INFLATED_BYTES = 256 * 1024 * 1024;
+
+const PLAIN_HEADER = 0;
+
+const DEFLATED_HEADER = 1;
+
 export class FrameError extends Error {
   constructor(message: string) {
     super(message);
@@ -37,21 +49,74 @@ function createInOrder<T>(step: (input: Bytes) => Promise<T>) {
   };
 }
 
-export function createFrameSealer(key: CryptoKey) {
+async function readStream(stream: ReadableStream<Uint8Array>, limit: number): Promise<Bytes> {
+  const chunks: Bytes[] = [];
+  let size = 0;
+  const reader = stream.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return concatBytes(...chunks);
+    size += value.length;
+    if (size > limit) {
+      await reader.cancel();
+      throw new FrameError('A frame inflates past the limit.');
+    }
+    chunks.push(value as Bytes);
+  }
+}
+
+function deflate(plain: Bytes) {
+  const stream = new Blob([plain]).stream().pipeThrough(new CompressionStream(CHANNEL_COMPRESSION));
+  return readStream(stream, Number.POSITIVE_INFINITY);
+}
+
+async function inflate(deflated: Bytes, limit: number) {
+  const stream = new Blob([deflated]).stream().pipeThrough(new DecompressionStream(CHANNEL_COMPRESSION));
+  try {
+    return await readStream(stream, limit);
+  } catch (error) {
+    if (error instanceof FrameError) throw error;
+    throw new FrameError('A frame failed to inflate.');
+  }
+}
+
+async function packFrame(plain: Bytes, compression: ChannelCompression | null): Promise<Bytes> {
+  if (!compression) return plain;
+  if (plain.length >= COMPRESS_FROM_BYTES) {
+    const deflated = await deflate(plain);
+    if (deflated.length < plain.length) return concatBytes(Uint8Array.of(DEFLATED_HEADER) as Bytes, deflated);
+  }
+  return concatBytes(Uint8Array.of(PLAIN_HEADER) as Bytes, plain);
+}
+
+function unpackFrame(packed: Bytes, compression: ChannelCompression | null, limit: number): Promise<Bytes> {
+  if (!compression) return Promise.resolve(packed);
+  const body = packed.slice(1);
+  if (packed[0] === PLAIN_HEADER) return Promise.resolve(body);
+  if (packed[0] === DEFLATED_HEADER) return inflate(body, limit);
+  return Promise.reject(new FrameError('A frame has a header this side does not know.'));
+}
+
+export function createFrameSealer(key: CryptoKey, compression: ChannelCompression | null = null) {
   let next = 0;
   return createInOrder(async (plain) => {
+    const packed = await packFrame(plain, compression);
     const counter = serializeCounter(next);
     next += 1;
     const sealed = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: resolveNonce(counter), additionalData: FRAME_LABEL },
       key,
-      plain
+      packed
     );
     return concatBytes(counter, new Uint8Array(sealed));
   });
 }
 
-export function createFrameOpener(key: CryptoKey) {
+export function createFrameOpener(
+  key: CryptoKey,
+  compression: ChannelCompression | null = null,
+  maxInflatedBytes = MAX_INFLATED_BYTES
+) {
   let next = 0;
   let broken = false;
   async function open(frame: Bytes): Promise<Bytes> {
@@ -61,18 +126,22 @@ export function createFrameOpener(key: CryptoKey) {
     const counter = frame.slice(0, COUNTER_BYTES);
     if (new DataView(counter.buffer).getBigUint64(0) !== BigInt(next))
       throw new FrameError('A frame arrived out of order.');
+    let packed: Bytes;
     try {
-      const plain = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: resolveNonce(counter), additionalData: FRAME_LABEL },
-        key,
-        frame.slice(COUNTER_BYTES)
+      packed = new Uint8Array(
+        await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: resolveNonce(counter), additionalData: FRAME_LABEL },
+          key,
+          frame.slice(COUNTER_BYTES)
+        )
       );
-      next += 1;
-      broken = false;
-      return new Uint8Array(plain);
     } catch {
       throw new FrameError('A frame failed to open.');
     }
+    const plain = await unpackFrame(packed, compression, maxInflatedBytes);
+    next += 1;
+    broken = false;
+    return plain;
   }
   return createInOrder(open);
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { CHANNEL_BODY_CHUNK_BYTES, serializeBase64Url, serializePublicKey } from '@shinsa/core';
+import {
+  CHANNEL_BODY_CHUNK_BYTES,
+  CHANNEL_COMPRESSION,
+  serializeBase64Url,
+  serializePublicKey,
+} from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
 import { ChannelError, openRemoteChannel } from '@/lib/remote/channel.ts';
 import { createKeyPair, FakeMac, type FakeMacOptions } from './fake-mac.ts';
@@ -69,6 +74,32 @@ describe('the sealed channel to a machine', () => {
     expect(channel.isClosed).toBe(true);
     expect(mac.last.closedWith).toEqual({ code: 1000, reason: undefined });
     await expect(channel.sendSocket('late')).rejects.toThrow('closed');
+  });
+
+  it('offers compression and deflates large frames both ways once the machine takes it', async () => {
+    const { mac, opening } = await connect();
+    const channel = await opening;
+    expect(JSON.parse(mac.last.sentText[0] ?? '{}')).toMatchObject({ compression: [CHANNEL_COMPRESSION] });
+    const state = JSON.stringify({ tasks: Array.from({ length: 4000 }, (_, id) => ({ id })) });
+    const heard: string[] = [];
+    channel.subscribeSocket((data) => heard.push(data));
+    await channel.sendSocket(state);
+    await waitFor(() => expect(heard).toEqual([`echo:${state}`]));
+    expect(mac.socketMessages).toEqual([state]);
+    expect(mac.last.frameSizes.at(-1)).toBeLessThan(state.length / 4);
+    channel.close();
+  });
+
+  it('keeps plain frames with a machine that does not answer the offer', async () => {
+    const { mac, opening } = await connect({ plainFrames: true });
+    const channel = await opening;
+    const state = JSON.stringify({ tasks: Array.from({ length: 4000 }, (_, id) => ({ id })) });
+    const heard: string[] = [];
+    channel.subscribeSocket((data) => heard.push(data));
+    await channel.sendSocket(state);
+    await waitFor(() => expect(heard).toEqual([`echo:${state}`]));
+    expect(mac.last.frameSizes.at(-1)).toBeGreaterThan(state.length);
+    channel.close();
   });
 
   it('enrolls a new device with the one-time secret, and refuses one without it', async () => {

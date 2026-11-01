@@ -1,5 +1,6 @@
 import {
   type Bytes,
+  CHANNEL_COMPRESSION,
   type ChannelHeaders,
   type ChannelMessage,
   createClientHello,
@@ -283,7 +284,8 @@ export async function openRemoteChannel(options: ChannelOptions): Promise<Remote
     options.device.publicKey,
     ephemeral.publicKey,
     enroll,
-    options.name ?? null
+    options.name ?? null,
+    [CHANNEL_COMPRESSION]
   );
   const socket = (options.openSocket ?? openBrowserSocket)(options.url);
   const channel = new RemoteChannel(socket, async (opened, text) => {
@@ -305,7 +307,10 @@ export async function openRemoteChannel(options: ChannelOptions): Promise<Remote
       devicePrivateKey: options.device.privateKey,
       clientEphemeralPrivateKey: ephemeral.privateKey,
     });
-    opened.attach(createFrameSealer(session.send), createFrameOpener(session.receive));
+    opened.attach(
+      createFrameSealer(session.send, welcome.compression),
+      createFrameOpener(session.receive, welcome.compression)
+    );
     await opened.send({ t: 'ready' });
   });
   await awaitOpen(socket);
