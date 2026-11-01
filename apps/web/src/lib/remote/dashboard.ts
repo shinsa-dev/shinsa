@@ -82,6 +82,8 @@ export function createDashboardClient(fetchApi: Fetch = (input, init) => fetch(i
     removeInstance: (instanceId: string) => call<{ ok: true }>(resolveInstanceRemovePath(instanceId), 'POST'),
     leaveInstance: (instanceId: string) => call<{ ok: true }>(resolveInstanceLeavePath(instanceId), 'POST'),
     acceptInvite: (token: string) => call<InviteAcceptResponse>(REMOTE_PATHS.inviteAccept, 'POST', { token }),
+    acceptHandoff: (token: string) =>
+      call<InviteAcceptResponse>(REMOTE_PATHS.handoffAccept, 'POST', { token }),
     listTeams: () => call<RemoteTeam[]>(REMOTE_PATHS.teams),
     joinTeam: (invite: string) => call<TeamJoinResponse>(REMOTE_PATHS.teamJoin, 'POST', { invite }),
     previewTeam: (invite: string) => call<TeamPreviewResponse>(REMOTE_PATHS.teamPreview, 'POST', { invite }),

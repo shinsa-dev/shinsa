@@ -1,3 +1,4 @@
+import type { RemoteInstance } from '@shinsa/core';
 import { ChannelError, type ChannelOptions, openRemoteChannel, type RemoteChannel } from './channel.ts';
 import type { DashboardClient } from './dashboard.ts';
 import { createDeviceKeys, type DeviceStore, type EnrolledDevice } from './devices.ts';
@@ -118,4 +119,46 @@ export async function requestWaitingAnswer(
     await options.devices.removeDevice(device.instanceId);
     return 'declined';
   }
+}
+
+export interface ClaimOptions {
+  dashboard: Pick<DashboardClient, 'acceptHandoff'>;
+  devices: Pick<DeviceStore, 'writeDevice'>;
+  name: string;
+  now?: () => number;
+  createKeys?: () => Promise<CryptoKeyPair>;
+  openChannel?: (options: ChannelOptions) => Promise<RemoteChannel>;
+}
+
+export async function claimHandoff(input: EnrollInput, options: ClaimOptions): Promise<EnrolledDevice> {
+  const device: EnrolledDevice = {
+    instanceId: input.instanceId,
+    machineKey: input.machineKey,
+    keys: await (options.createKeys ?? createDeviceKeys)(),
+    enrolledAt: (options.now ?? Date.now)(),
+  };
+  const accepted = await options.dashboard.acceptHandoff(input.invite);
+  const channel = await (options.openChannel ?? openRemoteChannel)({
+    url: accepted.connect.url,
+    machineKey: input.machineKey,
+    device: device.keys,
+    enrollSecret: input.secret,
+    name: options.name,
+  });
+  channel.close();
+  await options.devices.writeDevice(device);
+  return device;
+}
+
+export type ClaimStanding = { kind: 'ready' } | { kind: 'added' | 'busy'; machine: string };
+
+export function resolveClaimStanding(
+  input: EnrollInput,
+  instances: RemoteInstance[],
+  device: EnrolledDevice | null
+): ClaimStanding {
+  const instance = instances.find((entry) => entry.id === input.instanceId);
+  if (!(instance && device && !device.waiting && device.machineKey === input.machineKey))
+    return { kind: 'ready' };
+  return { kind: instance.role === 'guest' ? 'busy' : 'added', machine: instance.name };
 }

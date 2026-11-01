@@ -4,6 +4,7 @@ import type { Repo, ShinsaEffect, ShinsaEventInput } from '@shinsa/core';
 import { ConfigStore, type ServerConfig } from '../../src/config/index.ts';
 import type { CommandRunner } from '../../src/onboarding/index.ts';
 import { Onboarding } from '../../src/onboarding/index.ts';
+import type { HandoffEffects } from '../../src/remote/handoffs.ts';
 import type { PreviewEffects } from '../../src/remote/previews.ts';
 import type { ShareEffects } from '../../src/remote/shares.ts';
 import { Roots } from '../../src/repos/index.ts';
@@ -170,4 +171,9 @@ export const NO_SHARES: ShareEffects = {
 
 export const NO_PREVIEWS: PreviewEffects = {
   link: () => Promise.reject(new Error('This test shares no preview.')),
+};
+
+export const NO_HANDOFFS: HandoffEffects = {
+  link: () => Promise.reject(new Error('This test hands off no task.')),
+  revoke: () => Promise.reject(new Error('This test hands off no task.')),
 };

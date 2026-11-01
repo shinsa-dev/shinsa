@@ -10,7 +10,14 @@ import type {
   UserCommand,
   WireState,
 } from '@shinsa/core';
-import { createState, ENGINE_PROTOCOL, NO_TEAM_FEED, resolveEngineInfo } from '@shinsa/core';
+import {
+  createState,
+  ENGINE_PROTOCOL,
+  NO_TEAM_FEED,
+  resolveEngineInfo,
+  resolveScopedEngineInfo,
+  SCOPE_MESSAGES,
+} from '@shinsa/core';
 import type { ShinsaConnection, Snapshot } from '@/lib/connection/socket.ts';
 import {
   Fleet,
@@ -264,6 +271,17 @@ describe('merging the state of several machines', () => {
     expect(fleet.selectMachine('t')).toBeNull();
   });
 
+  it('shows the machine of a task handed to you even when it is the only one, with who handed it', () => {
+    const studio = createMember('m1', 'Studio');
+    const lee = { id: 'u1', login: 'lee', name: 'Lee Park', avatarUrl: null };
+    const fleet = new Fleet([{ ...studio.member, guest: true, handedBy: lee }]);
+    studio.connection.push({
+      state: createWire(1, { tasks: { t: createTask({ id: 't' }) } }),
+      status: 'open',
+    });
+    expect(fleet.selectMachine('t')).toMatchObject({ id: 'm1', guest: true, handedBy: lee });
+  });
+
   it('shows a task’s machine once the account has another machine, even one this device cannot reach', () => {
     const studio = createMember('m1', 'Studio');
     const fleet = new Fleet([studio.member], [{ id: 'm2', name: 'Laptop' }]);
@@ -486,5 +504,32 @@ describe('sending to the machine that owns it', () => {
     expect(fleet.selectTeams().machines.map((entry) => entry.instanceId)).toEqual(['p7m2', 'q1']);
     expect(published).toBe(2);
     expect(new Fleet([laptop.member]).selectTeams()).toBe(NO_TEAM_FEED);
+  });
+});
+
+describe('a machine that handed you one task', () => {
+  it('comes after your own machines, is marked as handed, and refuses what it does not let you send', async () => {
+    const handed = createMember('m3', 'Mona’s Studio');
+    const own = createMember('m1', 'Studio');
+    const LEE = { id: 'u1', login: 'lee', name: 'Lee Park', avatarUrl: null };
+    const fleet = new Fleet([{ ...handed.member, guest: true, handedBy: LEE }, own.member]);
+    const handedTask = createTask({ id: 'task-handed', title: 'Handed over' });
+    handed.connection.engine = resolveScopedEngineInfo('1.2.0');
+    handed.connection.push({
+      state: createWire(2, { tasks: { [handedTask.id]: handedTask } }),
+      status: 'open',
+    });
+    own.connection.push({ state: createWire(3), status: 'open' });
+    expect(fleet.members.map((member) => member.id)).toEqual(['m1', 'm3']);
+    expect(fleet.listMachines().map((machine) => [machine.id, machine.guest ?? false])).toEqual([
+      ['m1', false],
+      ['m3', true],
+    ]);
+    expect(fleet.selectMachine('task-handed')).toMatchObject({ id: 'm3', guest: true, handedBy: LEE });
+    expect(fleet.command({ type: 'task.share', taskId: 'task-handed', limit: 'day' })).rejects.toThrow(
+      SCOPE_MESSAGES.command
+    );
+    await fleet.command({ type: 'task.message', taskId: 'task-handed', text: 'Go on.' });
+    expect(handed.connection.commands.map((command) => command.type)).toEqual(['task.message']);
   });
 });

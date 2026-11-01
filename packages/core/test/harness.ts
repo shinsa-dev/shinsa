@@ -4,6 +4,7 @@ import {
   type ConfigProblem,
   createState,
   decide,
+  type GuestActor,
   listActiveRuns,
   listOpenGates,
   type PlanDocument,
@@ -34,7 +35,10 @@ export function createHarness() {
   const effects: ShinsaEffect[] = [];
   const events: ShinsaEvent[] = [];
 
-  function send(command: ShinsaCommand, options: { onBehalf?: boolean; byTask?: string | null } = {}) {
+  function send(
+    command: ShinsaCommand,
+    options: { onBehalf?: boolean; byTask?: string | null; guest?: GuestActor | null } = {}
+  ) {
     clock += 1;
     const decision = decide(state, command, { now: clock, newId: () => `id${++counter}`, ...options });
     for (const event of decision.events) {

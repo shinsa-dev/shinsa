@@ -26,11 +26,13 @@ export {
 export {
   type ConnectResponse,
   type EnrollFragment,
+  type HandoffRemoveRequest,
   type HeartbeatRequest,
   type HeartbeatResponse,
   type InviteAcceptRequest,
   type InviteAcceptResponse,
   type InviteCreateResponse,
+  MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
   type MachineCredentials,
   type MemberRequest,
@@ -58,6 +60,7 @@ export {
   type RemoteRole,
   type RemoteSession,
   type RemoteUser,
+  resolveClaimUrl,
   resolveEnrollUrl,
   resolveInstanceConnectPath,
   resolveInstanceLeavePath,
@@ -179,6 +182,15 @@ export {
   resolveResourceSummary,
   type TaskResources,
 } from './resources.ts';
+export {
+  resolveScopedEngineInfo,
+  resolveScopedPatch,
+  resolveScopedRefusal,
+  resolveScopedState,
+  SCOPE_MESSAGES,
+  SCOPE_REFUSAL_CODE,
+  SCOPED_COMMANDS,
+} from './scope.ts';
 export {
   createShareHello,
   createShareWelcome,

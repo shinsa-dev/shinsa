@@ -131,6 +131,8 @@ const GATED_COMMANDS: EngineCommand[] = [
   'project.remove_from_team',
   'preview.share',
   'preview.unshare',
+  'task.hand_off',
+  'handoff.remove',
 ];
 
 describe('ENGINE_BASELINE_COMMANDS', () => {

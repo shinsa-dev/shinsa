@@ -9,7 +9,7 @@ import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { resolveHomeSectionId, resolvePreview } from '@/lib/home.ts';
-import { isTaskShared } from '@/lib/share/dialog.ts';
+import { hasShareMark } from '@/lib/share/dialog.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 export function RecentlyFinished({ state, finished }: { state: ShinsaState; finished: Task[] }) {
@@ -25,7 +25,7 @@ export function RecentlyFinished({ state, finished }: { state: ShinsaState; fini
           key={task.id}
           leading={<TaskGlyph state={state} task={task} />}
           title={task.title}
-          mark={isTaskShared(task) && <SharedMark task={task} />}
+          mark={hasShareMark(task) && <SharedMark task={task} />}
           meta={
             <>
               <TaskHandlePrefix task={task} />
@@ -53,7 +53,7 @@ export function RecentConversations({ conversations }: { conversations: { task: 
           key={task.id}
           leading={<StatusTile icon='IconBubbleText' tone='neutral' />}
           title={task.title}
-          mark={isTaskShared(task) && <SharedMark task={task} />}
+          mark={hasShareMark(task) && <SharedMark task={task} />}
           meta={
             <>
               <TaskHandlePrefix task={task} />
