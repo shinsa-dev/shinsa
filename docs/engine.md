@@ -2854,7 +2854,8 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   shared", so a guess learns nothing. A stopped run gets "The service is not running" (503, or 502 when the dev
   server refuses the connection), and the link works again the moment the service starts; an offline machine gets the
   Worker's "The machine is offline". Each is one self-contained page in the app's look, the Shinsa mark and an empty
-  state, light or dark with the device (`serializePreviewPage`, `PREVIEW_PAGES`); the stopped and offline ones reload
+  state, light or dark with the device, ending with a line about Shinsa, Download Shinsa (the canary) and Learn more
+  (`serializePreviewPage`, `PREVIEW_PAGES`); the stopped and offline ones reload
   every `PREVIEW_RETRY_SECONDS` (10), so the preview comes back on its own. The engine marks its own pages with `x-shinsa-preview-page`
   (`PREVIEW_PAGE_HEADER`), so the Worker tells a stopped service from a tunnel that does not answer.
   Stop sharing, a time limit running out (`ShareClock`, `preview.expire`) and turning remote access off close every
@@ -2863,9 +2864,11 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
-- **To try it without a deploy**, `bun scripts/remote-preview.ts` shares a demo service of a Studio task on
-  `http://<label>.localhost:5195` with the Worker's own code (its start page links it, and stops and starts the
-  service).
+- **To try it without a deploy**, `bun scripts/remote-preview.ts` runs a real service on Studio for one of its tasks
+  (`scripts/remote-preview-demo.ts`, a small dev server with live updates) and shares it on
+  `http://<label>.localhost:5195` with the Worker's own code. Its start page links the task in Studio's own app, with
+  no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the preview, stopping and
+  starting the service, and a link that no longer works.
 
 ## Slack
 

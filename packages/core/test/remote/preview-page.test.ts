@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  PREVIEW_DOWNLOAD,
   PREVIEW_GONE,
+  PREVIEW_LEARN,
   PREVIEW_OFFLINE,
   PREVIEW_PAGES,
+  PREVIEW_PITCH,
   PREVIEW_RETRY_SECONDS,
   PREVIEW_STOPPED,
   serializePreviewPage,
@@ -27,6 +30,17 @@ describe('the preview page', () => {
       expect(page).toContain(`<p>${description}</p>`);
       expect(page).toContain(`<meta http-equiv="refresh" content="${PREVIEW_RETRY_SECONDS}">`);
       expect(page).toContain(`<title>${PREVIEW_PAGES[kind].title} · Shinsa</title>`);
+    }
+  });
+
+  test('every page ends with a way to download Shinsa or read about it', () => {
+    for (const kind of ['gone', 'stopped', 'offline'] as const) {
+      const page = serializePreviewPage(kind);
+      expect(page).toContain(`<div class="cta"><p>${PREVIEW_PITCH}</p>`);
+      expect(page).toContain(
+        `<a class="primary" href="https://shinsa.dev/download/canary">${PREVIEW_DOWNLOAD}</a>`
+      );
+      expect(page).toContain(`<a href="https://shinsa.dev">${PREVIEW_LEARN}</a>`);
     }
   });
 

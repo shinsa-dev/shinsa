@@ -12,6 +12,15 @@ export const PREVIEW_RETRY_SECONDS = 10;
 
 const SHINSA_SITE = 'https://shinsa.dev';
 
+const SHINSA_DOWNLOAD = 'https://shinsa.dev/download/canary';
+
+export const PREVIEW_PITCH =
+  'Shinsa hands coding work to agents and shares what they build, like this preview, with your team.';
+
+export const PREVIEW_DOWNLOAD = 'Download Shinsa';
+
+export const PREVIEW_LEARN = 'Learn more';
+
 const SHINSA_MARK =
   '<svg viewBox="0 0 365 365" fill="currentColor" aria-hidden="true"><path d="M365 131.088C365 154.197 342.028 170.637 318.919 170.637C237.025 170.637 170.637 237.025 170.637 318.919C170.637 342.028 154.197 365 131.088 365H58.4C37.9581 365 27.7371 365 19.9293 361.022C13.0614 357.522 7.47764 351.939 3.97826 345.071C0 337.263 0 327.042 0 306.6V233.911C0 210.802 22.9719 194.363 46.0813 194.363C127.975 194.363 194.363 127.975 194.363 46.0813C194.363 22.972 210.803 0 233.912 0H306.6C327.042 0 337.263 0 345.071 3.97826C351.939 7.47764 357.522 13.0614 361.022 19.9293C365 27.7371 365 37.9581 365 58.4V131.088Z"/><path d="M318.919 204.856C322.081 204.856 325.213 204.985 328.31 205.237C335.924 205.858 339.732 206.169 346.895 210.348C351.769 213.192 358.978 221.013 361.416 226.102C365 233.581 365 239.914 365 252.581V306.6C365 327.042 365 337.263 361.022 345.071C357.522 351.939 351.939 357.522 345.071 361.022C337.263 365 327.042 365 306.6 365H252.581C239.914 365 233.581 365 226.102 361.416C221.013 358.978 213.192 351.769 210.348 346.895C206.169 339.732 205.858 335.924 205.237 328.31C204.985 325.213 204.856 322.081 204.856 318.919C204.856 255.924 255.924 204.856 318.919 204.856Z"/><path d="M112.419 0C125.086 0 131.419 0 138.898 3.58359C143.988 6.02224 151.808 13.2309 154.652 18.1053C158.831 25.2683 159.142 29.0757 159.763 36.6903C160.015 39.7872 160.144 42.9192 160.144 46.0813C160.144 109.076 109.076 160.144 46.0813 160.144C42.9191 160.144 39.787 160.015 36.69 159.762C29.0752 159.141 25.2678 158.831 18.1049 154.652C13.2305 151.807 6.02212 143.987 3.58351 138.898C0 131.419 0 125.085 0 112.418V58.4C0 37.9581 0 27.7371 3.97826 19.9293C7.47764 13.0614 13.0614 7.47764 19.9293 3.97826C27.7371 0 37.9581 0 58.4 0H112.419Z"/></svg>';
 
@@ -53,8 +62,8 @@ export const PREVIEW_PAGES: Readonly<Record<PreviewPageKind, PreviewPage>> = {
 };
 
 const PREVIEW_PAGE_STYLE = [
-  ':root{color-scheme:light dark;--background:oklch(1 0 0);--bg-2:oklch(.973 .001 286.38);--bg-3:oklch(.955 .002 247.84);--bg-4:oklch(.928 .003 264.54);--fg-2:oklch(.543 .009 278.5);--fg-3:oklch(.443 .008 277);--fg-4:oklch(.21 .008 274.53)}',
-  '@media (prefers-color-scheme:dark){:root{--background:oklch(.174 .004 285.97);--bg-2:oklch(.228 .006 285.93);--bg-3:oklch(.257 .006 286);--bg-4:oklch(.299 .007 285.96);--fg-2:oklch(.655 .009 286.15);--fg-3:oklch(.787 .007 286.24);--fg-4:oklch(.946 .001 286.37)}}',
+  ':root{color-scheme:light dark;--primary:oklch(.6 .215 256);--background:oklch(1 0 0);--bg-2:oklch(.973 .001 286.38);--bg-3:oklch(.955 .002 247.84);--bg-4:oklch(.928 .003 264.54);--fg-2:oklch(.543 .009 278.5);--fg-3:oklch(.443 .008 277);--fg-4:oklch(.21 .008 274.53)}',
+  '@media (prefers-color-scheme:dark){:root{--primary:oklch(.62 .2 256);--background:oklch(.174 .004 285.97);--bg-2:oklch(.228 .006 285.93);--bg-3:oklch(.257 .006 286);--bg-4:oklch(.299 .007 285.96);--fg-2:oklch(.655 .009 286.15);--fg-3:oklch(.787 .007 286.24);--fg-4:oklch(.946 .001 286.37)}}',
   '*{box-sizing:border-box}',
   'body{margin:0;min-height:100dvh;display:flex;flex-direction:column;background:var(--background);color:var(--fg-3);font-family:"ABC Areal",ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:-.02em;-webkit-font-smoothing:antialiased}',
   'header{display:flex;align-items:center;height:44px;padding:0 20px}',
@@ -71,6 +80,14 @@ const PREVIEW_PAGE_STYLE = [
   'h1{margin:0;font-size:14px;font-weight:500;line-height:1.25;color:var(--fg-4);text-wrap:balance}',
   '.text{display:flex;flex-direction:column;gap:1px}',
   'p{margin:0;max-width:28rem;font-size:13px;line-height:1.2;color:var(--fg-2);text-wrap:pretty}',
+  '.cta{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:22px;padding-top:22px;border-top:1px solid var(--bg-3);width:min(22rem,100%)}',
+  '.cta p{font-size:12px}',
+  '.actions{display:flex;gap:6px}',
+  '.actions a{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:8px;font-size:13px;font-weight:500;text-decoration:none;color:var(--fg-4);background:var(--bg-2);box-shadow:inset 0 0 0 1px var(--bg-4)}',
+  '.actions a:hover{background:var(--bg-3)}',
+  '.actions a.primary{color:#fff;background:var(--primary);box-shadow:none}',
+  '.actions a.primary:hover{background:color-mix(in oklch,var(--primary) 88%,black)}',
+  '.actions a:focus-visible{outline:2px solid color-mix(in oklch,var(--primary) 40%,transparent);outline-offset:2px}',
 ].join('');
 
 export function serializePreviewPage(kind: PreviewPageKind) {
@@ -87,7 +104,10 @@ export function serializePreviewPage(kind: PreviewPageKind) {
     `<header><a href="${SHINSA_SITE}"><span>${SHINSA_MARK}</span>Shinsa</a></header>`,
     '<main><div class="media" aria-hidden="true"><i></i><i></i>',
     `<b><svg viewBox="0 0 24 24" fill="none">${page.icon}</svg></b></div>`,
-    `<div class="text"><h1>${page.title}</h1><p>${page.description}</p></div></main>`,
+    `<div class="text"><h1>${page.title}</h1><p>${page.description}</p></div>`,
+    `<div class="cta"><p>${PREVIEW_PITCH}</p><div class="actions">`,
+    `<a class="primary" href="${SHINSA_DOWNLOAD}">${PREVIEW_DOWNLOAD}</a>`,
+    `<a href="${SHINSA_SITE}">${PREVIEW_LEARN}</a></div></div></main>`,
     '</body></html>',
   ].join('');
 }

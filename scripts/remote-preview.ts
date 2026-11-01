@@ -12,12 +12,13 @@ import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
-import { type PreviewServices, Previews } from '../apps/engine/src/remote/previews.ts';
+import { Previews } from '../apps/engine/src/remote/previews.ts';
 import { ShareClock } from '../apps/engine/src/remote/share-clock.ts';
 import { type ShareGitHub, Shares } from '../apps/engine/src/remote/shares.ts';
 import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
+import { Terminals } from '../apps/engine/src/terminals/index.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,
@@ -47,7 +48,6 @@ import {
   serializeBase64Url,
   serializeShareUrl,
   type Task,
-  type TerminalsSnapshot,
 } from '../packages/core/src/index.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -55,7 +55,6 @@ const PORT = Number(Bun.env.PORT ?? 5195);
 const HOST = '127.0.0.1';
 const ORIGIN = `http://${HOST}:${PORT}`;
 const PREVIEW_ZONE = `http://localhost:${PORT}`;
-const DEMO_SERVICE = 'demo-web';
 const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-remote-preview-${PORT}`);
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
@@ -103,88 +102,12 @@ interface ServicePreview {
 }
 
 interface DemoService {
-  port: number;
-  running: boolean;
-  taskId: string | null;
+  terminals: Terminals;
+  serviceId: string;
+  taskId: string;
 }
 
-const DEMO_PAGE = `<!doctype html><meta charset="utf-8"><title>Demo dev server</title>
-<body style="font:15px system-ui;margin:40px;max-width:560px">
-<h1 style="font-size:18px">Demo dev server</h1>
-<p>This page comes from a service on the Studio machine, through its tunnel.</p>
-<p>Host it saw: <code id="host"></code></p>
-<p>Live updates: <strong id="ticks">connecting…</strong></p>
-<script>
-document.getElementById('host').textContent = HOST_SEEN;
-const socket = new WebSocket(location.origin.replace('http', 'ws') + '/live');
-socket.onmessage = (event) => { document.getElementById('ticks').textContent = event.data; };
-socket.onclose = () => { document.getElementById('ticks').textContent = 'disconnected'; };
-</script></body>`;
-
-function startDemoService(): DemoService {
-  let ticks = 0;
-  const server = Bun.serve({
-    port: 0,
-    hostname: 'localhost',
-    fetch(request, bunServer) {
-      if (new URL(request.url).pathname === '/live' && bunServer.upgrade(request)) return undefined;
-      const host = JSON.stringify(request.headers.get('host') ?? '');
-      return new Response(DEMO_PAGE.replace('HOST_SEEN', host), {
-        headers: { 'content-type': 'text/html; charset=utf-8' },
-      });
-    },
-    websocket: {
-      open(socket) {
-        socket.subscribe('ticks');
-      },
-      message() {},
-    },
-  });
-  setInterval(() => {
-    ticks += 1;
-    server.publish('ticks', String(ticks));
-  }, 1000);
-  return { port: server.port ?? 0, running: true, taskId: null };
-}
-
-function createDemoServices(demo: DemoService): PreviewServices {
-  return {
-    snapshot: (): TerminalsSnapshot => ({
-      services: [
-        {
-          id: DEMO_SERVICE,
-          projectId: 'demo',
-          name: 'web',
-          cwd: '/tmp',
-          command: 'bun dev',
-          env: {},
-          previewUrl: 'http://localhost:{port}/',
-          portVariable: 'PORT',
-        },
-      ],
-      terminals: demo.taskId
-        ? [
-            {
-              id: 'demo-run',
-              projectId: 'demo',
-              name: null,
-              title: null,
-              cwd: '/tmp',
-              place: 'worktree',
-              taskId: demo.taskId,
-              serviceId: DEMO_SERVICE,
-              port: demo.port,
-              status: demo.running ? 'running' : 'exited',
-              exitCode: demo.running ? null : 0,
-              startedAt: Date.now(),
-              endedAt: null,
-            },
-          ]
-        : [],
-      home: '/tmp',
-    }),
-  };
-}
+const DEMO_COMMAND = `bun ${join(ROOT, 'scripts/remote-preview-demo.ts')}`;
 
 const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
 
@@ -235,7 +158,7 @@ function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
   );
 }
 
-async function startMachine(id: string, name: string, dataDir: string, demo: DemoService) {
+async function startMachine(id: string, name: string, dataDir: string) {
   const connectKey = serializeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   writeRemoteFile(dataDir, id, connectKey);
   const config = resolveConfig({
@@ -264,6 +187,7 @@ async function startMachine(id: string, name: string, dataDir: string, demo: Dem
     openUrl: () => Promise.resolve(),
   });
   const evidence = new EvidenceStore(config.evidenceDir);
+  const terminals = new Terminals({ dataDir, home: config.userHome, version: 'preview' });
   const shares = new Shares({
     engine,
     remote,
@@ -273,7 +197,7 @@ async function startMachine(id: string, name: string, dataDir: string, demo: Dem
   const previews = new Previews({
     engine,
     remote,
-    services: createDemoServices(demo),
+    services: terminals,
     origin: config.previewOrigin,
   });
   const http = startServer({
@@ -298,6 +222,7 @@ async function startMachine(id: string, name: string, dataDir: string, demo: Dem
     place: PLACE,
     shares,
     previews,
+    terminals,
   });
   engine.onEffect(async (effect, context) => {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
@@ -314,7 +239,7 @@ async function startMachine(id: string, name: string, dataDir: string, demo: Dem
     connectKey,
     publicKey: key.publicKey,
   };
-  return { machine, engine, evidence };
+  return { machine, engine, evidence, terminals };
 }
 
 async function seedLaptop(engine: Engine, dataDir: string) {
@@ -453,21 +378,39 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
 }
 
 async function createServicePreview(
-  studio: Awaited<ReturnType<typeof startMachine>>,
-  demo: DemoService
-): Promise<ServicePreview | null> {
-  const { engine } = studio;
-  const task = Object.values(engine.state.tasks).find((entry) => entry.repoId && !isTaskSettled(entry));
-  if (!task) return null;
-  demo.taskId = task.id;
-  await engine.dispatch({ type: 'preview.share', taskId: task.id, serviceId: DEMO_SERVICE, limit: 'none' });
+  studio: Awaited<ReturnType<typeof startMachine>>
+): Promise<{ preview: ServicePreview; demo: DemoService } | null> {
+  const { engine, terminals } = studio;
+  const task = Object.values(engine.state.tasks).find(
+    (entry) => entry.repoId && entry.projectId && !isTaskSettled(entry)
+  );
+  if (!task?.projectId) return null;
+  const service = terminals.addService(task.projectId, {
+    name: 'web',
+    cwd: ROOT,
+    command: DEMO_COMMAND,
+    env: {},
+    previewUrl: 'http://localhost:{port}/',
+    portVariable: 'PORT',
+  });
+  const demo: DemoService = { terminals, serviceId: service.id, taskId: task.id };
+  startDemoService(demo);
+  await engine.dispatch({ type: 'preview.share', taskId: task.id, serviceId: service.id, limit: 'none' });
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    const preview = engine.state.tasks[task.id]?.previews?.find((entry) => entry.serviceId === DEMO_SERVICE);
-    if (preview?.url) return { url: preview.url, handle: task.handle ?? task.id, port: studio.machine.port };
+    const preview = engine.state.tasks[task.id]?.previews?.find((entry) => entry.serviceId === service.id);
+    if (preview?.url)
+      return {
+        preview: { url: preview.url, handle: task.handle ?? task.id, port: studio.machine.port },
+        demo,
+      };
     if (preview?.failure) throw new Error(`Sharing the demo preview failed: ${preview.failure}`);
     await Bun.sleep(100);
   }
   throw new Error('Sharing the demo preview did not finish.');
+}
+
+function startDemoService(demo: DemoService) {
+  demo.terminals.startService(demo.serviceId, { cwd: ROOT, place: 'worktree', taskId: demo.taskId });
 }
 
 function createPreviewWorld(machines: Machine[]): CloudWorld {
@@ -517,8 +460,9 @@ async function respondEnroll(machine: Machine, url: URL) {
 
 const DEMO_TOGGLE = /^\/__preview\/demo\/(start|stop)$/;
 
-function toggleDemoService(demo: DemoService, url: URL) {
-  demo.running = url.pathname.endsWith('/start');
+async function toggleDemoService(demo: DemoService | null, url: URL) {
+  if (demo && url.pathname.endsWith('/start')) startDemoService(demo);
+  if (demo && url.pathname.endsWith('/stop')) await demo.terminals.stopService(demo.serviceId, demo.taskId);
   return Response.redirect(`${ORIGIN}/__preview`, 302);
 }
 
@@ -568,6 +512,21 @@ function respondStatic(pathname: string) {
 
 function respondIndex(machines: Machine[], shares: PreviewShare[], preview: ServicePreview | null) {
   const links = [
+    ...(preview
+      ? [
+          [
+            `${preview.handle} on Studio's own app, no sign-in: its Services, Share preview and Stop sharing`,
+            `http://${HOST}:${preview.port}/tasks/${preview.handle}`,
+          ],
+          [
+            `The shared preview of ${preview.handle}'s web service, with live updates over a WebSocket`,
+            preview.url,
+          ],
+          ['Stop the web service (the preview then says it is not running)', '/__preview/demo/stop'],
+          ['Start the web service again', '/__preview/demo/start'],
+          ['A preview link that no longer works', `http://${'a'.repeat(32)}.localhost:${PORT}/`],
+        ]
+      : []),
     ['Sign in (the stand-in is always signed in, so this shows the dashboard)', REMOTE_PATHS.app],
     [
       'Sign in as the iPhone app does (answers shinsa://signed-in?code=preview, which the token path takes)',
@@ -593,20 +552,6 @@ function respondIndex(machines: Machine[], shares: PreviewShare[], preview: Serv
       ],
     ]),
     ['A share link that no longer works', serializeShareUrl(ORIGIN, createShareLink('studio'))],
-    ...(preview
-      ? [
-          [
-            `A shared preview of ${preview.handle}'s demo service, with live updates over a WebSocket`,
-            preview.url,
-          ],
-          ['Stop the demo service (the preview then says it is not running)', '/__preview/demo/stop'],
-          ['Start the demo service again', '/__preview/demo/start'],
-          [
-            `${preview.handle} on Studio, to stop sharing the preview`,
-            `http://${HOST}:${preview.port}/tasks/${preview.handle}`,
-          ],
-        ]
-      : []),
     ...machines.map((machine) => [
       `${machine.name}'s own app on the machine: Settings, Remote access`,
       `http://${HOST}:${machine.port}/settings`,
@@ -751,22 +696,19 @@ async function main() {
   rmSync(PREVIEW_DIR, { recursive: true, force: true });
   const studioData = seedStudio();
   const laptopData = prepareLaptop();
-  const demo = startDemoService();
-  const studio = await startMachine('studio', 'Studio', studioData, demo);
-  const laptop = await startMachine('laptop', 'Laptop', laptopData, {
-    port: 0,
-    running: false,
-    taskId: null,
-  });
+  const studio = await startMachine('studio', 'Studio', studioData);
+  const laptop = await startMachine('laptop', 'Laptop', laptopData);
   await seedLaptop(laptop.engine, laptopData);
   const machines = [studio.machine, laptop.machine];
   const shares = await createPreviewShares(studio);
-  const preview = await createServicePreview(studio, demo);
+  const shared = await createServicePreview(studio);
+  const preview = shared?.preview ?? null;
+  const demo = shared?.demo ?? null;
   const world = createPreviewWorld(machines);
   Bun.serve<TunnelData>({
     port: PORT,
     hostname: HOST,
-    async fetch(request, server) {
+    fetch(request, server) {
       const url = new URL(request.url);
       if (isPreviewHost(url.host, PREVIEW_ZONE))
         return respondPreviewHost(request, url, machines, world, server);
