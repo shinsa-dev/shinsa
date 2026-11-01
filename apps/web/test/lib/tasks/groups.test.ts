@@ -94,16 +94,35 @@ describe('resolveTaskGroup', () => {
     ).toBe('duplicate');
   });
 
-  it('separates tasks waiting on another task from tasks agents are working on', () => {
+  it('files a task waiting on another task with that task, so it can sit right under it', () => {
     const base = createTask({ id: 'base' });
     const blocked = waiting('blocked', ['base']);
     const merging = createTask({ id: 'merging', stage: 'shipping', waitsOn: ['base'] });
     const released = waiting('released', ['gone']);
-    const state = createShinsaState({ tasks: [base, blocked, merging, released] });
+    const reviewed = createTask({ id: 'reviewed' });
+    const after = waiting('after', ['reviewed']);
+    const state = createShinsaState({
+      tasks: [base, blocked, merging, released, reviewed, after],
+      gates: [createGate({ id: 'g', taskId: 'reviewed', type: 'review' })],
+    });
     expect(resolveTaskGroup(state, base)).toBe('working');
-    expect(resolveTaskGroup(state, blocked)).toBe('waiting');
-    expect(resolveTaskGroup(state, merging)).toBe('waiting');
+    expect(resolveTaskGroup(state, blocked)).toBe('working');
+    expect(resolveTaskGroup(state, merging)).toBe('working');
     expect(resolveTaskGroup(state, released)).toBe('working');
+    expect(resolveTaskGroup(state, after)).toBe('review');
+  });
+
+  it('follows a snoozed or backlog parent, and stops at a loop', () => {
+    const snoozed = createTask({ id: 'snoozed', snoozed: { at: NOW } });
+    const shelved = createTask({ id: 'shelved', backlog: { at: NOW } });
+    const loopA = waiting('loop-a', ['loop-b']);
+    const loopB = waiting('loop-b', ['loop-a']);
+    const state = createShinsaState({
+      tasks: [snoozed, shelved, waiting('one', ['snoozed']), waiting('two', ['shelved']), loopA, loopB],
+    });
+    expect(resolveTaskGroup(state, state.tasks.one as Task)).toBe('snoozed');
+    expect(resolveTaskGroup(state, state.tasks.two as Task)).toBe('backlog');
+    expect(resolveTaskGroup(state, loopA)).toBe('working');
   });
 });
 
@@ -119,7 +138,6 @@ describe('TASK_GROUPS', () => {
       'Answered',
       'Paused',
       'In progress',
-      'Waiting on another task',
       'Snoozed',
       'Backlog',
       'Done',
@@ -141,7 +159,6 @@ describe('TASK_GROUPS', () => {
     expect(TASK_GROUP.plan.tone).toBe('purple');
     expect(TASK_GROUP.merge.tone).toBe('green');
     expect(TASK_GROUP.working.tone).toBe('blue');
-    expect(TASK_GROUP.waiting.tone).toBe('neutral');
   });
 });
 
@@ -356,8 +373,7 @@ describe('listTaskGroupSections', () => {
       answer: [],
       answered: [],
       paused: [],
-      working: ['high', 'old', 'new'],
-      waiting: ['waiter', 'next:1'],
+      working: ['high', 'old', 'waiter:1', 'next:2', 'new'],
       backlog: [],
       snoozed: [],
       done: ['done', 'merged'],
@@ -372,8 +388,8 @@ describe('listTaskGroupSections', () => {
 
   it('matches the search against title, request and branch, ignoring case and spaces around it', () => {
     expect(ids('working', '  WORK ')).toEqual({ working: ['high', 'old', 'new'] });
-    expect(ids('waiting', 'oauth')).toEqual({ waiting: ['waiter'] });
-    expect(ids('waiting', 'feat/next')).toEqual({ waiting: ['next'] });
+    expect(ids('working', 'oauth')).toEqual({ working: ['waiter'] });
+    expect(ids('working', 'feat/next')).toEqual({ working: ['next'] });
     expect(ids(null, 'nothing like this').working).toEqual([]);
   });
 });
@@ -406,5 +422,44 @@ describe('describeTaskCounts', () => {
     });
     expect(describeTaskCounts(state)).toBe('2 open · 2 done');
     expect(describeTaskCounts(createShinsaState({}))).toBe('0 open · 0 done');
+  });
+});
+
+describe('the tasks of a bundle in All tasks', () => {
+  it('lists a ready task with the root of its bundle, each one nested under the one below', () => {
+    const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });
+    const top = createTask({ id: 'top', stage: 'building', stacksOn: 'root', priority: 'urgent' });
+    const other = createTask({ id: 'other', stage: 'building', priority: 'high' });
+    const state = createShinsaState({ tasks: [root, top, other] });
+    expect(resolveTaskGroup(state, root)).toBe('working');
+    const working = listTaskGroupSections(state, '', 'working')[0]?.entries.map(
+      ({ task, depth }) => `${task.id}:${depth}`
+    );
+    expect(working).toEqual(['other:0', 'root:0', 'top:1']);
+  });
+
+  it('lists a bundle at its merge gate from its root, the tasks above nested in order', () => {
+    const root = createTask({ id: 'root', stage: 'awaiting_merge' });
+    const ready = { commit: 'a' };
+    const middle = createTask({ id: 'middle', stage: 'shipping', stacksOn: 'root', bundleReady: ready });
+    const top = createTask({ id: 'top', stage: 'shipping', stacksOn: 'middle', bundleReady: ready });
+    const state = createShinsaState({
+      tasks: [top, middle, root],
+      gates: [createGate({ id: 'm', taskId: 'root', type: 'merge' })],
+    });
+    expect(resolveTaskGroup(state, root)).toBe('merge');
+    expect(resolveTaskGroup(state, top)).toBe('merge');
+    const merge = listTaskGroupSections(state, '', 'merge')[0]?.entries.map(
+      ({ task, depth }) => `${task.id}:${depth}`
+    );
+    expect(merge).toEqual(['root:0', 'middle:1', 'top:2']);
+  });
+
+  it('keeps a ready task on its own when nothing open is above it', () => {
+    const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });
+    const state = createShinsaState({
+      tasks: [root, createTask({ id: 'top', stage: 'cancelled', stacksOn: 'root' })],
+    });
+    expect(resolveTaskGroup(state, root)).toBe('working');
   });
 });

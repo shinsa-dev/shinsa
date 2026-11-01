@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { TASK_PRIORITIES, TASK_SHAPES, type TaskShape } from '@shinsa/core';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
-import { World } from './harness.ts';
+import { AGENT_REPLY, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
@@ -98,7 +98,7 @@ describe('the shapes a task can take', () => {
       pullRequest: null,
     });
     w.agents.queue('answerer', async (agent) => {
-      await agent.call('answer', { answer: 'And b.txt holds the second one.' });
+      await agent.call('answer', { answer: 'And b.txt holds the second one.', reply: AGENT_REPLY });
     });
     await w.engine.dispatch({ type: 'task.message', taskId, text: 'And the second greeting?' });
     await w.until(
@@ -106,6 +106,10 @@ describe('the shapes a task can take', () => {
       () => w.task(taskId).result?.body === 'And b.txt holds the second one.'
     );
     await w.untilStage(taskId, 'answered');
+    expect(w.task(taskId).iterations?.at(-1)).toMatchObject({
+      requests: [{ text: 'And the second greeting?' }],
+      reply: { headline: AGENT_REPLY.headline },
+    });
     const [first, second] = w.agents.of('answerer');
     expect(first?.cwd).toBe(w.state.repos[w.repoId]?.path ?? '');
     expect(second?.resume).toBe(first?.sessionId ?? '');

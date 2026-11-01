@@ -3,3 +3,6 @@
 /open
   X-Robots-Tag: noindex, nofollow, noarchive
   Referrer-Policy: no-referrer
+/install
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300

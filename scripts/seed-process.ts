@@ -279,12 +279,9 @@ const RATE_LIMIT_REVISED: PlanDocument = {
     'A sliding token bucket in Redis keyed by app id, sized from the app’s billing plan, checked in the API middleware.',
 };
 
-const RATE_LIMIT_SUMMARY = 'Limits now come from the app’s billing plan instead of one global number.';
-
-function createPlanHandover(document: PlanDocument, changeSummary?: string): ChatTool {
+function createPlanHandover(document: PlanDocument): ChatTool {
   const { goal, phases } = document;
-  const args = changeSummary ? { goal, phases, change_summary: changeSummary } : { goal, phases };
-  return { kind: 'shinsa', name: 'propose_plan', args };
+  return { kind: 'shinsa', name: 'propose_plan', args: { goal, phases } };
 }
 
 const ESCALATED_FINDINGS: ReviewFinding[] = [
@@ -579,7 +576,7 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
           purpose: 'plan',
           minutes: 4,
           summary: 'Revised the plan to read limits from the billing plan.',
-          handover: createPlanHandover(RATE_LIMIT_REVISED, RATE_LIMIT_SUMMARY),
+          handover: createPlanHandover(RATE_LIMIT_REVISED),
         },
       ],
       timed: createWeeklyRun(
@@ -595,8 +592,6 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
           taskId: 'task-rate-limit',
           body: RATE_LIMIT_REVISED.goal,
           document: RATE_LIMIT_REVISED,
-          changeSummary: RATE_LIMIT_SUMMARY,
-          feedback: 'Enterprise apps need higher limits than free ones.',
         },
       ],
       gate: {

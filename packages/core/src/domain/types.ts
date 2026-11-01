@@ -1,8 +1,8 @@
 import type { PlanChange } from '../report/plan-changes.ts';
 import type {
+  AgentReply,
   CarriedMergeStep,
   CodeSpot,
-  FixReply,
   JudgementCall,
   PlanDocument,
   ReportCheck,
@@ -283,9 +283,7 @@ export interface Plan {
   body: string;
   document: PlanDocument | null;
   proposedAt: number;
-  changeSummary?: string | null;
   changes?: PlanChange[];
-  feedback?: string | null;
   approvedAt?: number | null;
 }
 
@@ -400,6 +398,21 @@ export interface TaskOverlap {
   untold: string[];
 }
 
+export interface BundleReady {
+  commit: string | null;
+}
+
+export interface BundleConflict {
+  taskId: string;
+  behindTaskId: string | null;
+  base: string;
+}
+
+export interface BundlePullRequest {
+  taskId: string;
+  number: number;
+}
+
 export interface Task {
   id: string;
   handle?: string | null;
@@ -442,6 +455,10 @@ export interface Task {
   pullRequestWatch?: PullRequestWatch | null;
   pullRequestReadFailures?: number;
   waitsOn: string[];
+  stacksOn?: string | null;
+  stackBase?: string | null;
+  bundleReady?: BundleReady | null;
+  bundleConflict?: BundleConflict | null;
   note: string | null;
   origin: string | null;
   createdAt: number;
@@ -514,7 +531,7 @@ export interface Iteration {
   id: string;
   round: number;
   requests: IterationRequest[];
-  reply: FixReply | null;
+  reply: AgentReply | null;
   runId: string | null;
   repliedAt: number | null;
 }

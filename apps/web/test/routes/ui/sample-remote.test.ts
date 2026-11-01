@@ -74,7 +74,7 @@ describe('the /ui remote access samples', () => {
     expect(single.listMachines()).toEqual([]);
     expect(single.listUnreachableMachines()).toEqual([]);
     expect(single.listMachineAccess()).toEqual([]);
-    await expect(fleet.command({ type: 'focus.clear' } as never)).rejects.toThrow(REFUSED);
+    await expect(fleet.command({ type: 'focus.change', projectId: null } as never)).rejects.toThrow(REFUSED);
     await expect(fleet.fetch(new Request('http://mac/api/tasks'))).rejects.toThrow('Nothing is sent.');
     fleet.close();
   });

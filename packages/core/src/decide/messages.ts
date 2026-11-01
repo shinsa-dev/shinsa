@@ -3,6 +3,7 @@ import {
   DomainError,
   type Gate,
   isAgentQuestion,
+  isReplyingRun,
   isTaskClosed,
   isTaskResting,
   isTaskSettled,
@@ -18,7 +19,7 @@ import {
   type TaskStage,
 } from '../domain/index.ts';
 import type { EventOf } from '../events/index.ts';
-import { resolveHumanFixPrompt } from '../prompts/index.ts';
+import { describeReplyInstruction, resolveHumanFixPrompt } from '../prompts/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates, listRunningRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
@@ -158,7 +159,12 @@ function restartStep(decider: Decider, task: Task, text: string) {
       startOperation(decider, task.id, text);
       return;
     default:
-      startPhase(decider, task.id, resolveCurrentPhase(task), `\n\nThe human added: ${text}`);
+      startPhase(
+        decider,
+        task.id,
+        resolveCurrentPhase(task),
+        `\n\nThe human added: ${text}\n${describeReplyInstruction('complete_phase')}`
+      );
   }
 }
 
@@ -167,10 +173,11 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
     case 'kept':
       return;
     case 'steer':
-      if (delivery.run.purpose === 'fix') requestIteration(decider, task.id, text, 0);
+      if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, text, 0);
       decider.run({ kind: 'run.steer', runId: delivery.run.id, text });
       return;
     case 'wake':
+      if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, text, 0);
       queueMessageForWake(decider, delivery.run, text);
       return;
     case 'retry':
@@ -184,17 +191,21 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
       decider.run({ kind: 'question.resolve', gateId: delivery.gate.id });
       return;
     case 'follow_up':
+      requestIteration(decider, task.id, text, 0);
       if (acceptsFollowUp(task)) followUpInquiry(decider, task.id, text);
       else answerFollowUp(decider, task.id, text);
       return;
     case 'decline_proposal':
+      requestIteration(decider, task.id, text, 0);
       followUpInquiry(decider, task.id, text);
       return;
     case 'revise_plan':
       decider.withdrawGates(task.id, (gate) => gate.type === 'plan');
+      requestIteration(decider, task.id, text, 0);
       startPlanning(decider, task.id, text);
       return;
     case 'restart_step':
+      requestIteration(decider, task.id, text, 0);
       restartStep(decider, task, text);
       return;
     case 'operation_notes':

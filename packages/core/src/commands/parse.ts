@@ -96,6 +96,8 @@ const MAX_PATH = 1_024;
 
 const MAX_NOTE = 2_000;
 
+const MAX_FEEDBACK = 20_000;
+
 const MAX_STEP_KEY = 120;
 
 function refuse(message: string): never {
@@ -390,6 +392,7 @@ function readTaskCreate(fields: Fields): UserCommand {
     ...(fields.planFirst === undefined ? {} : { planFirst: readBoolean(fields, 'planFirst') }),
     ...(fields.origin === undefined ? {} : { origin: readNullableText(fields, 'origin') }),
     ...(fields.waitsOn === undefined ? {} : { waitsOn: readList(fields, 'waitsOn', readId) }),
+    ...(fields.stacksOn === undefined ? {} : { stacksOn: readId(fields, 'stacksOn') }),
     ...(fields.mode === undefined ? {} : { mode: readChoice(fields, 'mode', MODES) }),
     ...(fields.account === undefined ? {} : { account: readAccount(fields, 'account') }),
     ...(fields.forkOf === undefined ? {} : { forkOf: readId(fields, 'forkOf') }),
@@ -426,6 +429,14 @@ function readTaskWaitOn(fields: Fields): UserCommand {
     type: 'task.wait_on',
     taskId: readId(fields, 'taskId'),
     waitsOn: readList(fields, 'waitsOn', readId),
+  };
+}
+
+function readTaskStackOn(fields: Fields): UserCommand {
+  return {
+    type: 'task.stack_on',
+    taskId: readId(fields, 'taskId'),
+    stacksOn: readNullableId(fields, 'stacksOn'),
   };
 }
 
@@ -651,6 +662,23 @@ function readMemoryWrite(fields: Fields): UserCommand {
   };
 }
 
+function readFeedbackWrite(fields: Fields): UserCommand {
+  return {
+    type: 'feedback.write',
+    feedbackId: readNullableId(fields, 'feedbackId'),
+    note: readText(fields, 'note', MAX_FEEDBACK),
+  };
+}
+
+function readFeedbackUpdate(fields: Fields): UserCommand {
+  return {
+    type: 'feedback.update',
+    feedbackId: readId(fields, 'feedbackId'),
+    title: readText(fields, 'title', MAX_FEEDBACK),
+    body: readText(fields, 'body', MAX_FEEDBACK),
+  };
+}
+
 const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'repo.update': (fields) => ({
     type: 'repo.update',
@@ -665,6 +693,7 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'task.create': readTaskCreate,
   'task.prioritize': readTaskPrioritize,
   'task.wait_on': readTaskWaitOn,
+  'task.stack_on': readTaskStackOn,
   'task.move_to_backlog': (fields) => ({ type: 'task.move_to_backlog', taskId: readId(fields, 'taskId') }),
   'task.remove_from_backlog': (fields) => ({
     type: 'task.remove_from_backlog',
@@ -732,6 +761,10 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'memory.write': readMemoryWrite,
   'memory.accept': (fields) => ({ type: 'memory.accept', memoryId: readId(fields, 'memoryId') }),
   'memory.remove': (fields) => ({ type: 'memory.remove', memoryId: readId(fields, 'memoryId') }),
+  'feedback.write': readFeedbackWrite,
+  'feedback.update': readFeedbackUpdate,
+  'feedback.file': (fields) => ({ type: 'feedback.file', feedbackId: readId(fields, 'feedbackId') }),
+  'feedback.dismiss': (fields) => ({ type: 'feedback.dismiss', feedbackId: readId(fields, 'feedbackId') }),
   'task.share': (fields) => ({
     type: 'task.share',
     taskId: readId(fields, 'taskId'),

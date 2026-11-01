@@ -11,6 +11,7 @@ const { resetAgentProviders } = await import('@/lib/connection/models.ts');
 const { resetRemoteAccess } = await import('@/lib/connection/remote-access.ts');
 const { resetSlack } = await import('@/lib/connection/slack.ts');
 const { connection } = await import('@/lib/connection/socket.ts');
+const { resetFeedbackOpen } = await import('@/lib/feedback.ts');
 const { resetEvidenceTexts } = await import('@/lib/evidence/texts.ts');
 const { resetDisclosures } = await import('@/lib/preferences/disclosure.ts');
 const { resetSharedTranscripts } = await import('@/lib/share/transcripts.ts');
@@ -28,6 +29,7 @@ afterEach(() => {
   resetSharedTranscripts();
   resetTaskDrafts();
   resetEvidenceTexts();
+  resetFeedbackOpen();
   resetAgentProviders();
   resetRemoteAccess();
   resetSlack();

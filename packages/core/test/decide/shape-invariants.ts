@@ -29,7 +29,7 @@ import {
   validatePlanRules,
   validateVerification,
 } from '../../src/index.ts';
-import { IMPACT, PLAN } from '../harness.ts';
+import { IMPACT, PLAN, resolveOwedReply } from '../harness.ts';
 
 function resolveStageStep(stage: TaskStage): PipelineStep | null {
   return PIPELINE_ORDER.find((step) => STEP_SCHEMA[step].stages.includes(stage)) ?? null;
@@ -104,7 +104,16 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
     if (isDelegatedRun(run)) return [];
     const proposal = chance(random, 0.5) ? PROPOSAL : null;
     if (run.role === 'answerer')
-      return [{ type: 'agent.deliver', runId: run.id, step: 'answer', body: 'Because.', proposal }];
+      return [
+        {
+          type: 'agent.deliver',
+          runId: run.id,
+          step: 'answer',
+          body: 'Because.',
+          proposal,
+          ...resolveOwedReply(state, run.id),
+        },
+      ];
     if (run.purpose === 'plan' && (combined || chance(random, 0.5))) {
       return [
         {
@@ -128,7 +137,14 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
     const delivering = run.purpose === 'operate' ? 'operator' : run.role;
     if (delivering === 'investigator' || delivering === 'researcher' || delivering === 'operator') {
       return [
-        { type: 'agent.deliver', runId: run.id, step: DELIVERING[delivering], body: 'Found it.', proposal },
+        {
+          type: 'agent.deliver',
+          runId: run.id,
+          step: DELIVERING[delivering],
+          body: 'Found it.',
+          proposal,
+          ...resolveOwedReply(state, run.id),
+        },
       ];
     }
     return [];
@@ -160,11 +176,23 @@ function listProgressCommands(state: ShinsaState, random: Random): ShinsaCommand
   const runs = listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
     if (run.purpose === 'plan')
       return [
-        { type: 'agent.propose_plan', runId: run.id, document: resolveOperationPlan(state, run.taskId) },
+        {
+          type: 'agent.propose_plan',
+          runId: run.id,
+          document: resolveOperationPlan(state, run.taskId),
+          ...resolveOwedReply(state, run.id),
+        },
       ];
     if (run.purpose === 'build') {
       return [
-        { type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] },
+        {
+          type: 'agent.complete_phase',
+          runId: run.id,
+          summary: 'Done.',
+          spots: [],
+          judgementCalls: [],
+          ...resolveOwedReply(state, run.id),
+        },
       ];
     }
     if (run.role === 'reviewer')

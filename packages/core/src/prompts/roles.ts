@@ -27,6 +27,7 @@ import { resolveRepoCoverage } from '../test-coverage/setting.ts';
 import {
   describeApprovedPlan,
   describeBases,
+  describeBundle,
   describeDismissedFindings,
   describeEarlierWork,
   describeGoal,
@@ -45,6 +46,7 @@ import {
   resolveLaterMessages,
   resolveRequest,
 } from './context.ts';
+import { describeOwedReply } from './replies.ts';
 import { resolveHouseRules } from './rules.ts';
 import { describePlanParameters, describeStepCatalog, describeStepRules } from './steps.ts';
 import { describeWatchdogGuide, describeWatchdogsForReview, type WatchdogDefaults } from './watchdogs.ts';
@@ -115,7 +117,13 @@ function describeReshapeNote(task: Task) {
   ].join('\n');
 }
 
-export function resolvePlanningPrompt(task: Task, repo: Repo | null, bases: Task[], feedback: string | null) {
+export function resolvePlanningPrompt(
+  task: Task,
+  repo: Repo | null,
+  bases: Task[],
+  feedback: string | null,
+  bundle: Task[] = []
+) {
   return [
     resolveHouseRules('agent'),
     '',
@@ -126,6 +134,7 @@ export function resolvePlanningPrompt(task: Task, repo: Repo | null, bases: Task
     describeRounds(task),
     describeRepository(repo),
     describeBases(bases),
+    describeBundle(task, bundle),
     '',
     'The human asked for:',
     resolveRequest(task),
@@ -137,9 +146,7 @@ export function resolvePlanningPrompt(task: Task, repo: Repo | null, bases: Task
       ? ['', describeReshapeNote(task)].join('\n')
       : '',
     feedback ? ['', 'Feedback on the previous plan:', feedback, '', task.plan?.body ?? ''].join('\n') : '',
-    feedback
-      ? 'This is a revision: say in `change_summary` what you changed and why, in one or two sentences.'
-      : '',
+    describeOwedReply(task, 'propose_plan'),
     '',
     'Read the code you need to understand the change, then call `propose_plan`.',
     `The \`phases\` split the work into ${PROTOCOL_LIMITS.minPlanPhases} to ${PROTOCOL_LIMITS.planPhases} phases, in order. You build them one after another in this conversation, and Shinsa commits each one when you hand it over,`,
@@ -256,7 +263,13 @@ function joinLines(lines: string[]) {
     .join('\n');
 }
 
-export function describeRound(task: Task, repo: Repo | null, bases: Task[], before: number) {
+export function describeRound(
+  task: Task,
+  repo: Repo | null,
+  bases: Task[],
+  before: number,
+  bundle: Task[] = []
+) {
   return [
     joinLines([
       `Your role: the agent for this task, in one conversation across all of its rounds. You planned this round and you carry it out yourself: ${describeRoundJob(task)}`,
@@ -265,6 +278,7 @@ export function describeRound(task: Task, repo: Repo | null, bases: Task[], befo
       describeRounds(task),
       describeRepository(repo),
       describeBases(bases),
+      describeBundle(task, bundle),
     ]),
     joinLines(['The human asked for:', resolveRequest(task), resolveLaterMessages(task)]),
     joinLines([
@@ -453,6 +467,7 @@ export function resolveResearcherPrompt(task: Task, repo: Repo | null, followUp:
     resolveRequest(task),
     followUp ? ['', 'The human followed up:', followUp].join('\n') : '',
     describeEarlierWork(task),
+    describeOwedReply(task, 'submit_report'),
     '',
     `Read the code and anything else you need, then call \`submit_report\` with \`report\`: markdown, at most ${SHAPE_LIMITS.report} characters.`,
     'Lead with the conclusion or recommendation in one paragraph, then the comparison or findings, then the evidence (files and lines as shinsa:// links, sources as links).',
@@ -474,6 +489,7 @@ export function resolveInvestigatorPrompt(task: Task, repo: Repo | null, followU
     'The human asked:',
     resolveRequest(task),
     followUp ? ['', 'The human followed up:', followUp].join('\n') : '',
+    describeOwedReply(task, 'report_diagnosis'),
     '',
     'Reproduce the problem first. You may run anything, add logging or write a failing test to narrow it down: this worktree is scratch and nothing you change in it ships. Shinsa resets it before any fix is built.',
     `When you know the cause, or have ruled out what you can, call \`report_diagnosis\` with \`diagnosis\`: markdown, at most ${SHAPE_LIMITS.diagnosis} characters.`,
@@ -522,6 +538,7 @@ export function resolveOperationInstruction(task: Task, guidance: string | null)
     'Now run the operation in the plan, step by step, and report how it went.',
     describeOperation(task),
     guidance ? ['', 'Guidance from the human:', guidance].join('\n') : '',
+    describeOwedReply(task, 'report_outcome'),
     '',
     'Run only what the plan says. Check each step before the next; stop and ask with `ask` when a step fails or would do more than the plan says.',
     `Then call \`report_outcome\` with \`outcome\`: markdown, at most ${SHAPE_LIMITS.outcome} characters: what ran, what changed, anything left to do or undo.`,
@@ -548,6 +565,7 @@ export function resolveAnswererPrompt(task: Task, repo: Repo | null, followUp: s
     'The question:',
     resolveRequest(task),
     followUp ? ['', 'The human followed up:', followUp].join('\n') : '',
+    describeOwedReply(task, 'answer'),
     '',
     `Call \`answer\` with your answer in markdown (at most ${SHAPE_LIMITS.answer} characters): lead with the answer itself, then the evidence (files and lines as shinsa:// links).`,
     describeWhatFollows(task) ?? PROPOSAL_RULE,

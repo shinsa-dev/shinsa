@@ -97,9 +97,7 @@ function redactPlan(plan: Plan): Plan {
     body: plan.document ? serializePlanMarkdown(plan.document) : plan.body,
     document: plan.document,
     proposedAt: plan.proposedAt,
-    changeSummary: plan.changeSummary ?? null,
     changes: plan.changes ?? [],
-    feedback: null,
     approvedAt: plan.approvedAt ?? null,
   };
 }
@@ -123,9 +121,7 @@ function redactProgressPlan(plan: Plan): Plan {
     body: '',
     document: plan.document ? redactPlanPhases(plan.document) : null,
     proposedAt: plan.proposedAt,
-    changeSummary: null,
     changes: [],
-    feedback: null,
     approvedAt: plan.approvedAt ?? null,
   };
 }

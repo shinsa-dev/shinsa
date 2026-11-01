@@ -19,13 +19,13 @@ import { PriorityChoices, TaskActionItems } from '@/components/task/action-items
 import { DependencyItems } from '@/components/task/dependency-items.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { useMachine } from '@/lib/connection/socket.ts';
+import { useEngineCommands, useMachine } from '@/lib/connection/socket.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectProject } from '@/lib/projects.ts';
 import { resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
-import type { TaskGroupKey } from '@/lib/tasks/groups.ts';
+import { isHeldByTasks } from '@/lib/tasks/groups.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
@@ -43,6 +43,7 @@ export const FILED_COLUMNS =
 const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13'];
 
 function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
+  const commands = useEngineCommands(task.id);
   return (
     <DropdownMenuContent className='min-w-48'>
       <DropdownMenuItem icon={TASK_ACTION.open.icon} onClick={() => navigate(resolveTaskPath(task))}>
@@ -56,7 +57,7 @@ function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
           <DependencyItems state={state} task={task} />
         </>
       )}
-      {listTaskActions(task).length > 0 && <DropdownMenuSeparator />}
+      {listTaskActions(task, commands).length > 0 && <DropdownMenuSeparator />}
       <TaskActionItems task={task} />
     </DropdownMenuContent>
   );
@@ -107,21 +108,19 @@ function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
   );
 }
 
-function RowStatus({ state, task, group }: { state: ShinsaState; task: Task; group: TaskGroupKey }) {
-  if (group === 'waiting') return <WaitsOnLinks waitsOn={listWaitsOn(state, task)} />;
+function RowStatus({ state, task }: { state: ShinsaState; task: Task }) {
+  if (isHeldByTasks(state, task)) return <WaitsOnLinks waitsOn={listWaitsOn(state, task)} />;
   return <StatusText state={state} task={task} className='truncate text-xs' />;
 }
 
 export const TaskListRow = React.memo(function TaskListRowItem({
   state,
   task,
-  group,
   depth,
   columns = TASK_LIST_COLUMNS,
 }: {
   state: ShinsaState;
   task: Task;
-  group: TaskGroupKey;
   depth: number;
   columns?: string;
 }) {
@@ -167,7 +166,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
         )}
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
           <KindMark state={state} task={task} />
-          <RowStatus state={state} task={task} group={group} />
+          <RowStatus state={state} task={task} />
         </span>
         <span className='max-md:hidden'>
           <PullRequestBadge task={task} />

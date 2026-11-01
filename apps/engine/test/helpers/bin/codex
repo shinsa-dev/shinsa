@@ -239,6 +239,13 @@ function nextItemId(turn: Turn) {
   return `${turn.id}-item-${turn.items}`;
 }
 
+const REPLY_REQUIRED = '`reply` is required';
+
+const AGENT_REPLY = {
+  headline: 'Made the change you asked for.',
+  points: [{ ask: 'The change', outcome: 'done', note: 'It is in.' }],
+};
+
 async function callTool(turn: Turn, name: string, toolArgs: Json) {
   const client = await connect(turn.thread);
   const id = nextItemId(turn);
@@ -264,6 +271,9 @@ async function callTool(turn: Turn, name: string, toolArgs: Json) {
     },
   });
   log({ tool: name, isError, content: outcome.content });
+  if (isError && JSON.stringify(outcome.content).includes(REPLY_REQUIRED)) {
+    return callTool(turn, name, { ...toolArgs, reply: AGENT_REPLY });
+  }
   return null;
 }
 

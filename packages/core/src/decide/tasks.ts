@@ -31,8 +31,8 @@ import {
   isStartingFromBacklog,
   releaseInquiryFromBacklog,
 } from './backlog.ts';
-import { type Decider, quoteTitles } from './decider.ts';
-import { changeDependencies, resolveDependencies } from './dependencies.ts';
+import { type Decider, describeWaiting } from './decider.ts';
+import { changeDependencies, changeStack, resolveDependencies, resolveStackParent } from './dependencies.ts';
 import { closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
@@ -71,13 +71,16 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   const request = command.request.trim();
   if (request.length === 0) throw new DomainError('intent_required', 'Describe what you want done.');
   assertRepo(decider, command.repoId);
-  const waitsOn = resolveDependencies(decider, null, command.waitsOn ?? []);
+  const stacksOn = command.stacksOn
+    ? resolveStackParent(decider, null, command.stacksOn, command.repoId)
+    : null;
+  const waitsOn = resolveDependencies(decider, null, command.waitsOn ?? []).filter((id) => id !== stacksOn);
   const projectId = resolveCreatedProject(decider, command);
   if (command.forkOf !== undefined) decider.task(command.forkOf);
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
     shape: command.mode === undefined && lineage.shape === undefined,
-    start: command.waitsOn === undefined,
+    start: command.waitsOn === undefined && stacksOn === null,
     priority: command.priority === undefined,
   };
   decider.emit({
@@ -95,14 +98,9 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     ...(command.forkOf ? { forkOf: command.forkOf } : {}),
     ...lineage,
   });
-  if (waitsOn.length > 0) {
-    decider.emit({
-      type: 'task.waits_on_changed',
-      taskId,
-      waitsOn,
-      by: lineage.createdBy ? 'shinsa' : 'you',
-    });
-  }
+  const by = lineage.createdBy ? 'shinsa' : 'you';
+  if (waitsOn.length > 0) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
+  if (stacksOn) changeStack(decider, taskId, stacksOn, by);
   if (command.backlog) addToBacklog(decider, taskId);
   decider.run({ kind: 'task.triage', taskId });
   return taskId;
@@ -114,6 +112,7 @@ function inferDependencies(decider: Decider, taskId: string, ids: string[]) {
     return (
       dependency !== undefined &&
       id !== taskId &&
+      id !== decider.state.tasks[taskId]?.stacksOn &&
       !isTaskSettled(dependency) &&
       !isDependencyOf(decider.state, taskId, id)
     );
@@ -263,7 +262,7 @@ export function readyWorktree(decider: Decider, command: CommandOf<'worktree.rea
   }
   const pending = listPendingDependencies(decider.state, task);
   if (pending.length > 0) {
-    decider.stage(task.id, 'waiting_on_tasks', `waiting for ${quoteTitles(pending)} to finish`);
+    decider.stage(task.id, 'waiting_on_tasks', describeWaiting(decider.state, task, pending));
     return;
   }
   if (isStartingFromBacklog(task)) {

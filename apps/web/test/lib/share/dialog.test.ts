@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { createSettings, HOUR_MS } from '@shinsa/core';
+import { createSettings, HOUR_MS, USER_COMMAND_TYPES } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import {
   changeSharePreset,
@@ -24,6 +24,8 @@ import { listTaskActions, runTaskAction } from '@/lib/tasks/actions.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createTask } from '../../support/state.ts';
+
+const ALL_COMMANDS: ReadonlySet<string> = new Set(USER_COMMAND_TYPES);
 
 afterEach(() => {
   closeShareDialog();
@@ -128,8 +130,8 @@ describe('stopping sharing', () => {
   it('asks first, from the task’s action', () => {
     const { result } = renderHook(() => useUnshareConfirm());
     const task = createTask({ id: 't', share: { ...SHARING, url: null } });
-    expect(listTaskActions(task).flat()).toContain('unshare');
-    expect(listTaskActions(createTask({ id: 't' })).flat()).not.toContain('unshare');
+    expect(listTaskActions(task, ALL_COMMANDS).flat()).toContain('unshare');
+    expect(listTaskActions(createTask({ id: 't' }), ALL_COMMANDS).flat()).not.toContain('unshare');
     act(() => runTaskAction(task, 'unshare'));
     expect(result.current).toBe('t');
     act(() => openUnshareConfirm('u'));
@@ -146,8 +148,8 @@ describe('a share whose time ran out', () => {
     expect(selectLiveShare(createTask({ id: 'u' }))).toBeNull();
     expect(resolveShareView(task, PAIRED, HOUR_MS - 1)).toEqual({ kind: 'shared', url });
     expect(resolveShareView(task, PAIRED, HOUR_MS)).toEqual({ kind: 'off' });
-    expect(listTaskActions(task, HOUR_MS - 1).flat()).toContain('unshare');
-    expect(listTaskActions(task, HOUR_MS).flat()).not.toContain('unshare');
+    expect(listTaskActions(task, ALL_COMMANDS, HOUR_MS - 1).flat()).toContain('unshare');
+    expect(listTaskActions(task, ALL_COMMANDS, HOUR_MS).flat()).not.toContain('unshare');
   });
 });
 

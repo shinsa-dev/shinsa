@@ -827,17 +827,45 @@ describe('resolveTurns', () => {
     }
   });
 
-  it('keeps words written before a hand-over in the fold when nothing follows it', () => {
+  it('shows the words written before any hand-over as the reply when nothing follows it', () => {
+    for (const [name, key] of [
+      ['propose_plan', 'goal'],
+      ['complete_phase', 'summary'],
+      ['complete_fix', 'summary'],
+      ['answer', 'answer'],
+      ['report_diagnosis', 'diagnosis'],
+      ['submit_report', 'report'],
+      ['report_outcome', 'outcome'],
+    ] as const) {
+      const items = resolveTimeline(
+        [
+          createBrief('Look into it.', 1),
+          createCallEntry('0', commandTool('ls'), 2),
+          createAgentEntry('Yes, I found the task behind it.', 'interim', 3),
+          createCallEntry('1', shinsaTool(name, { [key]: 'Cause: the feed moved.' }), 4),
+        ],
+        []
+      );
+      const [turn] = resolveTurns(items, finished, 500);
+      expect(turn?.reply?.text).toBe('Yes, I found the task behind it.');
+      expect(turn?.work.map((item) => item.kind)).toEqual(['instructions', 'tools']);
+    }
+  });
+
+  it('shows the words before a whole-reply hand-over, folding the restatement after it', () => {
     const items = resolveTimeline(
       [
-        createAgentEntry('Looking at the projects', 'interim', 1),
-        createCallEntry('1', shinsaTool('complete_phase', { summary: 'Done.' }), 2),
+        createAgentEntry('I wrote the report from reading the code.', 'interim', 1),
+        createCallEntry('1', shinsaTool('submit_report', { report: 'Recommendation: a workspace host.' }), 2),
+        createAgentEntry('Recommendation: a workspace host.', 'final', 3),
       ],
       []
     );
     const [turn] = resolveTurns(items, finished, 500);
-    expect(turn?.reply).toBeNull();
-    expect(turn?.work.map((item) => item.kind)).toEqual(['agent']);
+    expect(turn?.reply?.text).toBe('I wrote the report from reading the code.');
+    expect(turn?.work.map((item) => item.kind === 'agent' && item.text)).toEqual([
+      'Recommendation: a workspace host.',
+    ]);
   });
 
   it('shows the answer written before a fix hand-over as the reply, never Claude Code’s empty-turn filler', () => {

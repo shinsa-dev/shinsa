@@ -381,6 +381,16 @@ describe('the task commands', () => {
       'It no longer waits on other tasks.',
     ],
     [
+      ['tasks', 'stack-on', 'fix', 'search'],
+      { type: 'task.stack_on', taskId: 'task-123', stacksOn: 'task-456' },
+      'Stacked. It starts once the task below is ready to merge.',
+    ],
+    [
+      ['tasks', 'unstack', 'fix'],
+      { type: 'task.stack_on', taskId: 'task-123', stacksOn: null },
+      'It is no longer in a bundle.',
+    ],
+    [
       ['tasks', 'move-to-backlog', 'fix'],
       { type: 'task.move_to_backlog', taskId: 'task-123' },
       'Moved to the backlog.',

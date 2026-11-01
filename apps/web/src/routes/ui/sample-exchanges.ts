@@ -1,4 +1,4 @@
-import type { FixReply, Gate, Iteration, ShinsaState, Task } from '@shinsa/core';
+import type { AgentReply, Gate, Iteration, ShinsaState, Task } from '@shinsa/core';
 import { createSampleGate, createSampleState, createSampleTask, HOUR, MINUTE } from './samples.ts';
 
 export interface ExchangesScene {
@@ -30,7 +30,7 @@ const STATUS_HEADLINE =
 const STATUS_NEXT =
   'Restart the engine on this branch and mention the bot again. The status message should appear as a line of steps. To see the thread status, turn on Agents & AI Apps in the Slack app first.';
 
-const SETTINGS_REPLY_REPORT: FixReply = {
+const SETTINGS_REPLY_REPORT: AgentReply = {
   headline: SETTINGS_HEADLINE,
   points: [
     {
@@ -57,7 +57,7 @@ const SETTINGS_REPLY_REPORT: FixReply = {
   next: SETTINGS_NEXT,
 };
 
-const STATUS_REPLY_REPORT: FixReply = {
+const STATUS_REPLY_REPORT: AgentReply = {
   headline: STATUS_HEADLINE,
   points: [
     {
@@ -74,7 +74,7 @@ const STATUS_REPLY_REPORT: FixReply = {
   next: STATUS_NEXT,
 };
 
-function answered(id: string, text: string, reply: FixReply, at: number, repliedAt: number): Iteration {
+function answered(id: string, text: string, reply: AgentReply, at: number, repliedAt: number): Iteration {
   return { id, round: 1, requests: [{ text, comments: 0, at }], reply, runId: null, repliedAt };
 }
 
@@ -98,10 +98,6 @@ export function createExchangesScene(now: number): ExchangesScene {
       body: '',
       document: null,
       proposedAt: now - 6 * HOUR,
-      changeSummary:
-        'The bot is one Slack app on app.shinsa.dev on the Events API, reaching each machine over its tunnel.',
-      feedback:
-        'Use the Events API on app.shinsa.dev instead of Socket Mode, so one shared bot works for everyone.',
       approvedAt: now - 5 * HOUR,
     },
   });

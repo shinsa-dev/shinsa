@@ -1,4 +1,4 @@
-import { isTaskSettled, type ShinsaState, type Task } from '@shinsa/core';
+import { canChangeStack, isTaskSettled, type ShinsaState, type Task } from '@shinsa/core';
 import {
   DropdownMenuCheckboxItem,
   DropdownMenuGroup,
@@ -11,6 +11,7 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import { BUNDLE_ICON, listStackChoices, STACK_LABEL, toggleStack, unstackTask } from '@/lib/tasks/bundles.ts';
 import {
   clearDependencies,
   describeWaitsOnHeading,
@@ -52,6 +53,43 @@ export function DependencyItems({ state, task }: { state: ShinsaState; task: Tas
       {task.waitsOn.length > 0 && (
         <DropdownMenuItem icon='IconCrossMedium' onClick={() => void clearDependencies(task)}>
           Stop waiting
+        </DropdownMenuItem>
+      )}
+      <StackItems state={state} task={task} />
+    </>
+  );
+}
+
+function StackItems({ state, task }: { state: ShinsaState; task: Task }) {
+  const choices = listStackChoices(state, task);
+  return (
+    <>
+      {choices.length > 0 && (
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Icon name={BUNDLE_ICON} />
+            {STACK_LABEL}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className='max-h-80 max-w-80 overflow-y-auto'>
+            {choices.map((choice) => {
+              const icon = resolveTaskMenuIcon(state, choice);
+              return (
+                <DropdownMenuCheckboxItem
+                  key={choice.id}
+                  checked={task.stacksOn === choice.id}
+                  onCheckedChange={() => void toggleStack(task, choice)}
+                >
+                  <Icon name={icon.name} className={icon.className} />
+                  <Truncate>{choice.title}</Truncate>
+                </DropdownMenuCheckboxItem>
+              );
+            })}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      )}
+      {task.stacksOn && canChangeStack(task) && (
+        <DropdownMenuItem icon='IconCrossMedium' onClick={() => void unstackTask(task)}>
+          Take out of the bundle
         </DropdownMenuItem>
       )}
     </>

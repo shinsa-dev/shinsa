@@ -170,6 +170,7 @@ not chat text.
   its plan and builds it in the same conversation (`docs/engine.md` → Agents, Task shapes).
 - **Ordering.** A task that depends on nothing starts at once, on its own agent, however many
   others are running; one that depends on others waits, costing nothing, until they have merged.
+  One stacked on another as a bundle starts once that one is ready to merge, and the bundle merges as one.
   Priority and what a decision unblocks only decide how high it sits in Needs you (`docs/engine.md`
   → Scheduling).
 - **The pull request loop.** CI failures, review-bot comments and conflicts go back to the task’s agent until
@@ -284,6 +285,18 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
   section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
   its own.
+- **Feedback.** A Feedback button beside Settings in the header (Desk), the rail (Shelf) and Shelf’s bar in a narrow window, and Send feedback on
+  Shinsa in ⌘K, open the feedback popover: the note field, with Draft issue inside it, and one row per entry, its title and who it is from;
+  clicking one opens it in a dialog to read in full, edit, dismiss or open. You write a note in your own words; your agent rewrites it as a public
+  GitHub issue on `shinsa-dev/shinsa` without your projects, repositories, files, branches, names, code or links, and
+  you read it before it opens under your GitHub account. Every issue follows one detailed template (summary, where in
+  Shinsa, what happened, what should happen, steps, why it matters, a suggested change, acceptance criteria) and ends
+  with an Environment section Shinsa adds itself (version, system, runtime, agent model, and for an agent's report the
+  kind of task and its stage), so an automation reading the issues can act on them. A check in core refuses an issue that still holds an email, a folder path, a token
+  or key, a link elsewhere or one of your project, repository, branch, task or account names, and shows what it found.
+  Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same popover, marked as
+  from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); an opened
+  issue's row shows who sent it and, once it is closed on GitHub, Closed. The button's count is what waits for you (`docs/engine.md` → Feedback).
 - **Setup.** Your first task, on first run (and from Settings → General → Setup later), with a fixed list of
   steps you pass like gates: the folders that hold your repositories (found on this machine, with their
   repository counts), the projects for them, the default model, the merge method and plan approval, signing in
@@ -376,8 +389,10 @@ app registers, so it keeps working when the window is closed or the app quit, an
 notifications, `shinsa://` links, the `shinsa` command and its own updates (`docs/plans/app-plan.md`,
 `docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
 On an always-on Linux server the same engine runs headless as a systemd user service that `shinsa start` sets up,
-set up over SSH and reached through remote access (`docs/engine.md` → Run on a server). Planned, not built: a
-published package and install script for it.
+set up over SSH and reached through remote access (`docs/engine.md` → Run on a server); on a Mac mini without the
+app, `shinsa start` runs it as its own launchd job. Every release publishes that engine on its own for Linux x64,
+arm64 and Apple Silicon: `curl -fsSL https://shinsa.dev/install | sh` or `npm i -g shinsa` (`docs/release.md` → The
+engine on its own).
 Planned, not built: signing with a Developer ID, other providers (Cursor), and dev-server and
 simulator previews per worktree.
 Remote access: Settings → General → Remote access pairs this machine with app.shinsa.dev through GitHub sign-in and adds
@@ -1110,6 +1125,44 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
   pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
   cards).
+
+### Bundles (2026-11-01)
+
+- **A stack of pull requests, as tasks.** A task can stack on another (Stack on another task… in the composer's When
+  to start, the Waits on menu, `•••`, ⌘K, `shinsa tasks stack-on`, `create_task`'s `stack_on_this`): it waits until
+  that task is ready to merge, not merged, then branches off its branch, and its pull request targets that branch, so
+  GitHub shows the stack. A bundle is one line in one repository (`docs/engine.md` → Bundles).
+- **Why not just wait.** The only difference from a dependency is that the bundle merges together. That buys three
+  things: the next task starts sooner; a flaw a later task finds in the root is fixed in the root's still-open pull
+  request instead of a follow-up on top of a merged one (the stacked task's agent messages the task below); and each
+  pull request's diff is small and builds on the one before, for you and for review bots.
+- **Ready, then one merge, on the root.** A stacked task never gets its own merge gate: it shows Ready, merges with
+  its bundle, and keeps fixing CI, comments and conflicts. The root, the task whose pull request targets main, owns
+  the merge: one merge gate for the whole bundle once every task above is ready, listing each pull request; approving
+  merges them from the last back to the root and every task ends merged.
+- **Our own stack, not GitHub's.** Shinsa runs the bundle itself rather than through GitHub's stack API, which gives
+  it the control: it decides when each task is ready, holds the one gate, checks every task's pre-merge steps and,
+  since GitHub checks a pull request only against its own base, merges the whole bundle into main in git before the
+  gate opens and again before the merge. A branch that would conflict with main is brought up to date bottom up, a
+  conflict going to that task's agent, so a bundle never merges halfway because of a conflict. The task
+  toolbar's Bundle item ("Bundle 2/3") lists each task in order with its state and pull request, a queue row carries
+  the same count, and All tasks nests each task under the one below, as it now nests every waiting task under the
+  task it waits on instead of filing it in a section of its own.
+- **Stack or wait.** Both stay first-class: stack the next piece of one feature that should ship with it and may
+  still change it; wait when the earlier piece should ship on its own, needs to be live first, or lives in another
+  repository. Agents get the same rule in `create_task`.
+- **Not yet.** Bundles that branch, GitHub's own stack API (chained bases already show as a stack), triage inferring
+  a bundle and `split_task` splitting into one.
+
+### Feedback (2026-11-01)
+
+- **Why.** Feedback on Shinsa had no way in but a chat with the person who builds it, and agents, who meet its
+  rough edges first, had no way to say so. Every issue is public, so the first rule is that nothing private leaves.
+- **Two passes.** A quick call rewrites the note as a generic issue, told your private words; then a pure check in
+  core (`listFeedbackLeaks`) refuses what still names you, again at the moment you open it, after your edits.
+- **Your click.** Agents propose with `report_feedback`, like memory rules; nothing opens an issue but you, with no
+  setting to change that. Feedback is an entry, not a task: no worktree, no pipeline. Issue-scoped tasks,
+  automations over the issues and shared task views are later work.
 
 ## 11. Open questions
 

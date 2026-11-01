@@ -6,16 +6,20 @@ import type { LineComment } from '@/lib/review/draft.ts';
 import * as secrets from '@/lib/secrets.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnCommands } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
+let engine: ReturnType<typeof spyOnEngine>;
 
 beforeEach(() => {
   spies = spyOnCommands();
+  engine = spyOnEngine();
 });
 
 afterEach(() => {
   spies.restore();
+  engine.mockRestore();
 });
 
 const PULL_REQUEST = {
@@ -595,6 +599,36 @@ describe('waiting on other tasks', () => {
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.wait_on', taskId: 't1', waitsOn: [] }, 'No longer waiting.'],
     ] as never);
+  });
+
+  it('stacks the task on another as a bundle and takes it out again', () => {
+    const { state, task } = setup(
+      createTask({ id: 't1', stage: 'planning', stacksOn: 't2' }),
+      [],
+      [createTask({ id: 't2', title: 'Add the API' }), createTask({ id: 't3', title: 'Write the schema' })]
+    );
+    const all = sections(state, task);
+    const stack = find(all, 'task.t1.stack.on');
+    if (stack.kind !== 'choice') throw new Error('Expected a choice');
+    expect(stack).toMatchObject({ label: 'Stack on another task…', hint: 'Add the API', value: ['t2'] });
+    expect(stack.options.map((option) => option.value).sort()).toEqual(['t2', 't3']);
+    pick(stack, 't3');
+    pick(stack, 'gone');
+    run(find(all, 'task.t1.stack.off'));
+    expect(spies.sent.mock.calls).toEqual([
+      [{ type: 'task.stack_on', taskId: 't1', stacksOn: 't3' }, 'Stacked on “Write the schema”.'],
+      [{ type: 'task.stack_on', taskId: 't1', stacksOn: null }, 'Taken out of the bundle.'],
+    ] as never);
+  });
+
+  it('offers no stacking once the task builds', () => {
+    const { state, task } = setup(
+      createTask({ id: 't1', stage: 'building', stacksOn: 'gone' }),
+      [],
+      [createTask({ id: 't2' })]
+    );
+    const ids = sections(state, task).flatMap((entry) => entry.commands.map((command) => command.id));
+    expect(ids.filter((id) => id.includes('.stack.'))).toEqual([]);
   });
 
   it('offers nothing about waiting on a finished task', () => {

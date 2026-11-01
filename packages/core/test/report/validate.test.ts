@@ -6,6 +6,7 @@ import {
   validateDelivery,
   validateEvidence,
   validateEvidenceRemoval,
+  validateFeedbackReport,
   validateFixHandOver,
   validateMemoryProposal,
   validatePhaseHandOver,
@@ -56,6 +57,7 @@ describe('validatePhaseHandOver', () => {
       judgementCalls: [
         { title: 'Keep the cache', call: 'Kept the cache', reason: 'It is hot.', file: null, line: null },
       ],
+      reply: null,
       walkthrough: null,
       checkChanges: [],
     });
@@ -66,6 +68,7 @@ describe('validatePhaseHandOver', () => {
       summary: 'Done.',
       spots: [],
       judgementCalls: [],
+      reply: null,
       walkthrough: null,
       checkChanges: [],
     });
@@ -112,6 +115,7 @@ describe('validatePhaseHandOver', () => {
           alternatives: [{ option: 'Cache by path', rejected: 'A path changes under an agent.' }],
         },
       ],
+      reply: null,
       walkthrough: {
         approach: 'Read once, keep it.',
         flow: 'read → cache → render',
@@ -835,7 +839,7 @@ describe('validateReview', () => {
 });
 
 describe('validatePlanHandOver', () => {
-  test('keeps the plan and an optional change summary', () => {
+  test('keeps the plan and the reply it may carry', () => {
     const plan = {
       goal: 'Ship it.',
       phases: [
@@ -850,17 +854,21 @@ describe('validatePlanHandOver', () => {
       questions: [],
     };
     const first = validatePlanHandOver(plan);
-    expect(first.ok && first.value.changeSummary).toBeNull();
-    const revised = validatePlanHandOver({ ...plan, change_summary: ' Added a phase. ' });
-    expect(revised.ok && revised.value.changeSummary).toBe('Added a phase.');
-    expect(validatePlanHandOver({ ...plan, change_summary: 'x'.repeat(241) })).toEqual({
-      ok: false,
-      errors: ['change_summary is 241 characters; the limit is 240.'],
+    expect(first.ok && first.value.reply).toBeNull();
+    const reply = {
+      headline: 'Added the phase you asked for.',
+      points: [{ ask: 'Add a phase', outcome: 'done' as const, note: 'Phase two now covers it.' }],
+    };
+    const revised = validatePlanHandOver({ ...plan, change_summary: 'Ignored.', reply });
+    expect(revised.ok && revised.value).toEqual({
+      document: expect.objectContaining({ goal: 'Ship it.' }),
+      reply: { ...reply, next: null },
     });
-    const broken = validatePlanHandOver({ ...plan, goal: '', change_summary: 'x'.repeat(241) });
+    const broken = validatePlanHandOver({ ...plan, goal: '', reply: { points: [] } });
     expect(broken.ok ? [] : broken.errors).toEqual([
       'goal is required.',
-      'change_summary is 241 characters; the limit is 240.',
+      'reply.headline is required.',
+      'reply.points needs at least 1 item.',
     ]);
   });
 });
@@ -1059,11 +1067,24 @@ describe('validateMemoryProposal', () => {
   });
 });
 
+describe('validateFeedbackReport', () => {
+  test('reads the feedback, trimmed, within its limit', () => {
+    expect(validateFeedbackReport({ feedback: ' The plan tool refused a phase. ' })).toEqual({
+      ok: true,
+      value: { note: 'The plan tool refused a phase.' },
+    });
+    expect(validateFeedbackReport({ feedback: 'x'.repeat(4001) })).toEqual({
+      ok: false,
+      errors: ['feedback is 4001 characters; the limit is 4000.'],
+    });
+  });
+});
+
 describe('the shape hand-overs', () => {
   test('an answer is delivered with its field and limit, and can carry a proposed change', () => {
     expect(validateDelivery('answer', { answer: ' It retries. ' })).toEqual({
       ok: true,
-      value: { body: 'It retries.', proposal: null },
+      value: { body: 'It retries.', reply: null, proposal: null },
     });
     expect(validateDelivery('answer', { answer: 'x'.repeat(8_001) })).toEqual({
       ok: false,
@@ -1076,7 +1097,7 @@ describe('the shape hand-overs', () => {
       })
     ).toEqual({
       ok: true,
-      value: { body: 'Yes.', proposal: { request: 'Stream it.', why: 'Memory.' } },
+      value: { body: 'Yes.', reply: null, proposal: { request: 'Stream it.', why: 'Memory.' } },
     });
     expect(
       validateDelivery('answer', { answer: 'Yes.', propose_change: { request: '', why: 'x'.repeat(241) } })
@@ -1092,7 +1113,7 @@ describe('the shape hand-overs', () => {
   test('a diagnosis, a report and an outcome each have their field and limit; an outcome proposes nothing', () => {
     expect(validateDelivery('investigate', { diagnosis: 'The cache.', propose_change: null })).toEqual({
       ok: true,
-      value: { body: 'The cache.', proposal: null },
+      value: { body: 'The cache.', reply: null, proposal: null },
     });
     expect(validateDelivery('research', { report: 'x'.repeat(40_001) })).toEqual({
       ok: false,
@@ -1100,7 +1121,7 @@ describe('the shape hand-overs', () => {
     });
     expect(
       validateDelivery('operate', { outcome: 'Ran it.', propose_change: { request: 'More.', why: 'Why.' } })
-    ).toEqual({ ok: true, value: { body: 'Ran it.', proposal: null } });
+    ).toEqual({ ok: true, value: { body: 'Ran it.', reply: null, proposal: null } });
   });
 
   test('a reshape names one of the inquiry shapes and why', () => {
