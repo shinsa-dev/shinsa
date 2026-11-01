@@ -179,7 +179,14 @@ src/
 │                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
 │                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
 │                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the
-│                        classifier reads every machine's policies with a new task's request and names its machine), index.ts (Remote: wires
+│                        classifier reads every machine's policies with a new task's request and names its machine),
+│                        shares.ts (Shares: the share.link effect, which makes a link's id and key; the live
+│                        view of a shared task, its evidence files by hash and its pull request's diff and changed
+│                        files whole; every open link, pushed on each state change and ended when sharing stops or
+│                        remote access goes off, and a link whose time ran out refused),
+│                        share-clock.ts (ShareClock: share.expire when a share's time runs out),
+│                        share-channel.ts (ShareChannel: the tunnel's /share channel, the hello checked against
+│                        the link's key, sealed frames out, nothing read after the hello), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
 ├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
@@ -229,7 +236,9 @@ src/
 │                        check's describeWorkspaceProblem)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create with its body, retarget,
-│                        merge (only the approved head, `--match-head-commit`), the repository's numeric id, a user
+│                        merge (only the approved head, `--match-head-commit`), the repository's numeric id,
+│                        a pull request's diff (`gh pr diff`) and a file at a commit (readRepoFile), what a shared
+│                        task's Code tab shows, a user
 │                        attachment upload and rewriting the description's block (writePullRequestBlock);
 │                        description.ts: PullRequestDescriptions (uploads the evidence GitHub cannot reach, reads
 │                        the notes, builds the body with core's serializePullRequestMarkdown); ci.ts: whether a

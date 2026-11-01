@@ -55,6 +55,7 @@ import {
   writePullRequestBlock,
 } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
+import type { ShareEffects } from '../remote/shares.ts';
 import {
   createLoginResolver,
   type LoginResolver,
@@ -84,6 +85,7 @@ export interface EffectRunnerOptions {
   watchIntervalMs?: number;
   workspaces?: Workspaces;
   services?: TaskServices;
+  shares: ShareEffects;
   slack?: Slack;
 }
 
@@ -161,6 +163,7 @@ export class EffectRunner {
   readonly #watchIntervalMs: number;
   readonly #workspaces: Workspaces;
   readonly #services: TaskServices | null;
+  readonly #shares: ShareEffects;
   readonly #slack: Slack | null;
   readonly #evidence: EvidenceStore;
   readonly #descriptions: PullRequestDescriptions;
@@ -192,6 +195,7 @@ export class EffectRunner {
     this.#roots = options.roots ?? { listRoots: () => Promise.resolve(config.roots) };
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
     this.#services = options.services ?? null;
+    this.#shares = options.shares;
     this.#slack = options.slack ?? null;
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);
@@ -242,6 +246,8 @@ export class EffectRunner {
         return this.#runs.deliver(effect.runId, effect.generation);
       case 'delegation.reply':
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
+      case 'share.link':
+        return this.#shares.link(effect.taskId, context);
       case 'slack.evaluate':
         return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':
@@ -310,6 +316,13 @@ export class EffectRunner {
   }
 
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
+    if (effect.kind === 'share.link') {
+      await this.#engine.dispatch(
+        { type: 'share.fail', taskId: effect.taskId, detail: error },
+        { id: `${key}:share.fail` }
+      );
+      return;
+    }
     const title = FAILURE_TITLE[effect.kind];
     if (!title || !('taskId' in effect) || effect.taskId === null) return;
     await this.#engine.dispatch(

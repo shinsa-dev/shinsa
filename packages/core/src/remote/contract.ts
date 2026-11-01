@@ -25,6 +25,8 @@ export const REMOTE_PATHS = {
   pairs: '/__remote/pairs',
   hooks: '/hooks/',
   signInToken: '/__remote/sign-in/token',
+  shares: '/__remote/shares',
+  sharePage: '/share/t',
   machineInvites: '/__remote/machine/invites',
   machineInviteRemove: '/__remote/machine/invites/remove',
   machineRequester: '/__remote/machine/requesters/find',

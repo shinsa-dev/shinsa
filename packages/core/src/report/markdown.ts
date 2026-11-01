@@ -30,8 +30,12 @@ function describePhaseNumbers(phases: number[]) {
   return `${phases.length === 1 ? 'phase' : 'phases'} ${phases.join(', ')}`;
 }
 
+function describeCheckCommand(command: string) {
+  return command ? `: \`${command}\`` : '';
+}
+
 function describePlanCheck(check: PlanCheck) {
-  return `${check.label}: \`${check.command}\` (${describePhaseNumbers(check.phases)})`;
+  return `${check.label}${describeCheckCommand(check.command)} (${describePhaseNumbers(check.phases)})`;
 }
 
 export const CHECK_NOTE: Record<CheckNote, string> = {
@@ -41,7 +45,7 @@ export const CHECK_NOTE: Record<CheckNote, string> = {
 
 function describeReportCheck(check: ReportCheck) {
   const note = check.note ? ` (${CHECK_NOTE[check.note]})` : '';
-  return `${CHECK_MARK[check.outcome]} ${check.label}: \`${check.command}\`${note}`;
+  return `${CHECK_MARK[check.outcome]} ${check.label}${describeCheckCommand(check.command)}${note}`;
 }
 
 export function serializePlanMarkdown(plan: PlanDocument) {

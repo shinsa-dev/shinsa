@@ -67,6 +67,7 @@ import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
 import type { MemoryEventBody } from './memory.ts';
 import type { ScheduleEventBody } from './schedules.ts';
+import type { ShareEventBody } from './shares.ts';
 import type { SlackEventBody } from './slack.ts';
 import type { WatchdogEventBody } from './watchdogs.ts';
 
@@ -106,6 +107,7 @@ type EventBody =
   | SlackEventBody
   | WatchdogEventBody
   | MemoryEventBody
+  | ShareEventBody
   | {
       type: 'task.triaged';
       taskId: string;

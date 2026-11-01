@@ -13,6 +13,7 @@ import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/service
 import { EnrollPage } from './enroll.tsx';
 import { FleetApp } from './fleet.tsx';
 import { PairPage } from './pair.tsx';
+import { SharePage } from './share.tsx';
 import { RemoteLoading, RemoteShell, SignInPrompt } from './shell.tsx';
 import { SlackLinkedPage } from './slack.tsx';
 
@@ -73,6 +74,7 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
       case 'slack':
         return <SlackLinkedPage search={location.search} />;
       case 'app':
+      case 'share':
         return null;
     }
   })();
@@ -81,6 +83,13 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
       {inner}
     </RemoteShell>
   );
+  if (view.kind === 'share') {
+    return (
+      <RemoteShell session={session} dashboard={services.dashboard} wide>
+        <SharePage link={view.link} />
+      </RemoteShell>
+    );
+  }
   if (view.kind === 'app' && session?.user && !failure)
     return (
       <RemoteServicesContext.Provider value={services}>

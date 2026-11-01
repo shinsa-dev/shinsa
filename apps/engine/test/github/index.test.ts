@@ -8,6 +8,8 @@ import {
   mergePullRequest,
   type PullRequestDetails,
   readPullRequest,
+  readPullRequestDiff,
+  readRepoFile,
   resolveCheckRuns,
   resolveCheckRunsState,
   resolveChecks,
@@ -48,6 +50,8 @@ interface FakePull {
 }
 
 interface FakeExtra {
+  diffs?: Record<string, string>;
+  contents?: Record<string, string>;
   mergeQueue?: boolean;
   failReads?: number;
   repositoryId?: number;
@@ -556,6 +560,30 @@ function createFailingGraphql() {
   );
   return dir;
 }
+
+describe('what a shared task reads from GitHub', () => {
+  test('reads a pull request’s diff from GitHub, not from the worktree', async () => {
+    const github = useFakeGitHub([], { diffs: { '7': 'diff --git a/x b/x' } });
+    const repo = createRepo({ path: createTempDir() });
+    expect(await readPullRequestDiff(repo, 7)).toBe('diff --git a/x b/x');
+    expect(github.read().calls).toContainEqual(['pr', 'diff', '7']);
+    await expect(readPullRequestDiff(repo, 8)).rejects.toThrow('no pull requests found');
+  });
+
+  test('reads a file at a commit through GitHub, whole and as it is', async () => {
+    const github = useFakeGitHub([], { contents: { 'src/my file.ts@abc': 'one\ntwo\n' } });
+    const repo = createRepo({ path: createTempDir() });
+    expect(await readRepoFile(repo, 'abc', 'src/my file.ts')).toBe('one\ntwo\n');
+    expect(github.read().calls).toContainEqual([
+      'api',
+      'repos/acme/app/contents/src/my%20file.ts?ref=abc',
+      '--jq',
+      '.content',
+    ]);
+    await expect(readRepoFile(repo, 'abc', 'missing.ts')).rejects.toThrow('Not Found');
+    await expect(readRepoFile({ ...repo, remote: null }, 'abc', 'a.ts')).rejects.toThrow('no GitHub remote');
+  });
+});
 
 describe('the description on GitHub', () => {
   test('reads the repository id once through gh, and refuses a repository without a GitHub remote', async () => {

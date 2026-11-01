@@ -35,7 +35,16 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
 4. **Each machine dials out through its own Cloudflare tunnel.** `cloudflared` runs with a token for that machine's
    named tunnel; no inbound port is ever opened.
 5. **The hosted web app is the same web app.** `apps/web` built in remote mode and served by the Worker; it talks to
-   your local engine and holds no state of its own. Nothing is copied to the cloud.
+   your local engine and holds no state of its own. Nothing is copied to the cloud, shared tasks included: a task you
+   share is read live from the machine, by read-only remote access to that one task. Its link
+   (`app.shinsa.dev/share/t/‹token›#‹key›`, one opaque token rather than a readable machine or task name) opens a channel through the machine's tunnel that is sealed with
+   the key in the link's fragment, which no server sees; the machine pushes the task down it the moment it changes and
+   reads nothing back. A link shows what its owner sees on its Overview, Review and Code: the request, plan, phase
+   reports, walkthrough, review, checks with their output, evidence, activity, notes, gates without their answers, who
+   worked and when, the pull request whole, its diff and its changed files whole from GitHub, for a private repository
+   too, on the owner's own task page with every control taken away. Chats, transcripts, tool calls, live agent output,
+   messages to agents, gate answers, attachments and accounts never leave the machine. The same projection and channel
+   will serve teams (`docs/engine.md` → Sharing a task).
 6. **End to end encrypted, with each device enrolled at the machine.** Cloudflare terminates TLS at its edge, so TLS alone
    would let it read chat, gate answers and code. Every byte between an enrolled browser and the engine is sealed
    with keys only those two hold. A browser is trusted once: it asks for access through a link the machine shows, and
@@ -53,6 +62,9 @@ browser on app.shinsa.dev ──HTTPS──► Worker (apps/cloud, D1)   sign-in
         ▼                                  ▼
 t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── the engine
         sealed frames only                                    (127.0.0.1)
+
+anyone with a share link ──wss, sealed with the link's key──► t-‹instance›.shinsa.dev/share
+        the machine pushes one task, reads nothing back; app.shinsa.dev stores nothing
 ```
 
 ## Risks
@@ -77,6 +89,11 @@ t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── 
   test runs as local and as remote.
 - **`cloudflared` is a downloaded binary**, so it is pinned and checksummed rather than whatever the package fetches.
 - **Metadata stays visible**: when you use Shinsa, from where, and how much.
+- **A share link is a key.** Whoever holds the link reads the task, live, for as long as it is shared; Stop sharing
+  ends every open link at once. app.shinsa.dev and Cloudflare never see the key (it is in the fragment) and carry
+  only sealed frames, but the trusted-origin risk above applies: altered code on app.shinsa.dev could read a page's
+  key. Check output and text an agent wrote are shown as written. A share ends by itself when the task is done, by
+  default, or when its time runs out, and the task's page shows a banner for as long as it lasts.
 
 ## Later
 

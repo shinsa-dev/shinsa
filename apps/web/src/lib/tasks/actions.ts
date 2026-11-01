@@ -4,6 +4,13 @@ import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { openTaskTerminal } from '@/lib/connection/terminals.ts';
 import { openWorktree } from '@/lib/connection/worktree.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
+import {
+  openShareDialog,
+  openUnshareConfirm,
+  SHARE_TITLE,
+  selectLiveShare,
+  UNSHARE_TITLE,
+} from '@/lib/share/dialog.ts';
 import { DUPLICATE_TITLE, openDuplicateDialog, startNotDuplicate } from '@/lib/tasks/duplicate.ts';
 import { FORK_TITLE, openForkDialog } from '@/lib/tasks/fork.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
@@ -16,6 +23,8 @@ export type TaskActionKey =
   | 'terminal'
   | 'finder'
   | 'fork'
+  | 'share'
+  | 'unshare'
   | 'moveToBacklog'
   | 'removeFromBacklog'
   | 'snooze'
@@ -34,6 +43,8 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   terminal: { label: 'Open a terminal', icon: 'IconConsole' },
   finder: { label: 'Show in Finder', icon: 'IconFolder1' },
   fork: { label: FORK_TITLE, icon: 'IconFork' },
+  share: { label: SHARE_TITLE, icon: 'IconShareOs' },
+  unshare: { label: UNSHARE_TITLE, icon: 'IconEyeSlash' },
   moveToBacklog: { label: 'Move to the backlog', icon: 'IconArchive' },
   removeFromBacklog: { label: 'Remove from the backlog', icon: 'IconInboxEmpty' },
   snooze: { label: 'Snooze', icon: 'IconClockSnooze' },
@@ -45,7 +56,7 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   cancel: { label: 'Cancel task', icon: 'IconCircleX' },
 };
 
-export function listTaskActions(task: Task): TaskActionKey[][] {
+export function listTaskActions(task: Task, now = Date.now()): TaskActionKey[][] {
   const links: TaskActionKey[] = [];
   if (task.pullRequest) links.push('pullRequest');
   if (task.branch) links.push('branch');
@@ -54,7 +65,17 @@ export function listTaskActions(task: Task): TaskActionKey[][] {
     ? listSettledActions(task)
     : ['restart', 'complete', 'duplicate', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
-  return [links, worktree, fork, listLaterActions(task), lifecycle].filter((group) => group.length > 0);
+  const share = listShareActions(task, now);
+  return [links, worktree, [...fork, ...share], listLaterActions(task), lifecycle].filter(
+    (group) => group.length > 0
+  );
+}
+
+function listShareActions(task: Task, now: number): TaskActionKey[] {
+  const live = selectLiveShare(task, now);
+  if (live?.url && !live.failure) return ['unshare'];
+  const share: TaskActionKey[] = task.watchHome ? [] : ['share'];
+  return live ? [...share, 'unshare'] : share;
 }
 
 function listSettledActions(task: Task): TaskActionKey[] {
@@ -88,6 +109,12 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
       return;
     case 'fork':
       openForkDialog(task.id);
+      return;
+    case 'share':
+      openShareDialog(task.id);
+      return;
+    case 'unshare':
+      openUnshareConfirm(task.id);
       return;
     case 'moveToBacklog':
       void sendCommandWithToast({ type: 'task.move_to_backlog', taskId: task.id }, 'Moved to the backlog.');

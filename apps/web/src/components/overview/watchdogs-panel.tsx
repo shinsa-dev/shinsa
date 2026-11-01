@@ -6,6 +6,7 @@ import * as React from 'react';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { InfoHeader, InfoPopover } from '@/components/overlays/info-popover.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -87,6 +88,7 @@ function WatchdogRow({
   watchdog: Watchdog;
   now: number;
 }) {
+  const readOnly = useReadOnly();
   const { busy, run } = useBusy<'stop'>();
   const status = WATCHDOG_STATUS[watchdog.status];
   const active = isWatchdogActive(watchdog);
@@ -116,7 +118,7 @@ function WatchdogRow({
           </div>
           <Markdown text={describeWatchdogSummary(state, watchdog, now)} className='text-fg-3 text-xs' />
         </div>
-        {active && (
+        {active && !readOnly && (
           <Button
             variant='secondary'
             size='sm'
@@ -127,7 +129,7 @@ function WatchdogRow({
           </Button>
         )}
       </div>
-      {watchdog.status === 'needs_source' && <SourceRequest task={task} watchdog={watchdog} />}
+      {watchdog.status === 'needs_source' && !readOnly && <SourceRequest task={task} watchdog={watchdog} />}
     </li>
   );
 }

@@ -16,6 +16,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { selectReadOnlyRefusal } from './read-only.ts';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 
@@ -505,6 +506,8 @@ export function useTranscript(runId: string | null) {
 }
 
 export function sendCommand(command: UserCommand, machineId?: string | null) {
+  const refusal = selectReadOnlyRefusal();
+  if (refusal) return Promise.reject(refusal);
   return connection.command(command, machineId);
 }
 

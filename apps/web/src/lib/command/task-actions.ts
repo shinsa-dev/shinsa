@@ -19,6 +19,8 @@ const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   terminal: ['worktree', 'shell', 'command line'],
   finder: ['worktree', 'files', 'folder', 'reveal'],
   fork: ['handoff', 'copy', 'follow-up', 'new task'],
+  share: ['link', 'public', 'teammate', 'publish'],
+  unshare: ['link', 'private', 'revoke', 'unshare'],
   moveToBacklog: ['later', 'park', 'schedule', 'not now'],
   removeFromBacklog: ['backlog', 'remove', 'plan to approve', 'needs you'],
   snooze: ['hide', 'later', 'not now', 'put aside', 'pause'],

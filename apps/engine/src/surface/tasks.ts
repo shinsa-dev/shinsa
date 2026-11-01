@@ -4,6 +4,8 @@ import {
   type MessageKind,
   ROUND_SHIPPINGS,
   type RoundShipping,
+  SHARE_LIMITS,
+  type ShareLimit,
   TASK_PRIORITIES,
   type TaskDiff,
 } from '@shinsa/core';
@@ -445,6 +447,43 @@ export const TASK_SPECS: SurfaceSpec[] = [
       taskId: await findTaskId(client, readValue(values, 'task')),
     }),
     done: () => 'Cancelled.',
+  }),
+  defineCommand({
+    path: ['tasks', 'share'],
+    summary: 'Share a task by a link that reads it live from this machine: read-only, without its chat.',
+    command: 'task.share',
+    humanOnly: true,
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'until',
+        kind: 'choice',
+        choices: SHARE_LIMITS,
+        description:
+          'How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it). Left out, the shareLimit setting.',
+      },
+    ],
+    build: async (values, client) => {
+      const limit = readValue(values, 'until');
+      return {
+        type: 'task.share',
+        taskId: await findTaskId(client, readValue(values, 'task')),
+        ...(limit ? { limit: limit as ShareLimit } : {}),
+      };
+    },
+    done: () => 'Shared. Its link shows on the task in a moment.',
+  }),
+  defineCommand({
+    path: ['tasks', 'unshare'],
+    summary: 'Stop sharing a task. Its link stops working.',
+    command: 'task.unshare',
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.unshare',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'No longer shared.',
   }),
   defineCommand({
     path: ['tasks', 'duplicate'],

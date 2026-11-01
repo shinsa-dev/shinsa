@@ -4,6 +4,7 @@ import type { Repo, ShinsaEffect, ShinsaEventInput } from '@shinsa/core';
 import { ConfigStore, type ServerConfig } from '../../src/config/index.ts';
 import type { CommandRunner } from '../../src/onboarding/index.ts';
 import { Onboarding } from '../../src/onboarding/index.ts';
+import type { ShareEffects } from '../../src/remote/shares.ts';
 import { Roots } from '../../src/repos/index.ts';
 import type { Engine } from '../../src/runtime/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
@@ -161,3 +162,7 @@ export function createTestTerminal(
     startProgress,
   };
 }
+
+export const NO_SHARES: ShareEffects = {
+  link: () => Promise.reject(new Error('This test shares no task.')),
+};
