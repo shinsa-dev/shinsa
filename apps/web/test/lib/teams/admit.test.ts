@@ -3,7 +3,7 @@ import { type RemoteInstance, type RemoteTeam, resolveKeyFingerprint } from '@sh
 import type { ChannelOptions, RemoteChannel } from '@/lib/remote/channel.ts';
 import type { EnrolledDevice } from '@/lib/remote/devices.ts';
 import { describeMachine } from '@/lib/remote/machines.ts';
-import { admitTeamMachines, readTeamMachineKey } from '@/lib/teams/admit.ts';
+import { admitTeamMachines, readTeamMachineGrant } from '@/lib/teams/admit.ts';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/channel.ts';
 import { createKeyPair } from '../remote/fake-mac.ts';
 import { TEAM_KEY } from './machine.ts';
@@ -39,14 +39,18 @@ const TEAM: RemoteTeam = {
   createdAt: 1,
 };
 
-function sendView(machineKey: string | undefined) {
+const GRANT = 'grant-secret';
+
+function sendView(machineKey: string | undefined, grant: string | null = GRANT) {
   return (_target: TeamChannelTarget, handlers: TeamChannelHandlers) => {
-    handlers.onMessage({ t: 'view', data: JSON.stringify({ tasks: [], machineKey, updatedAt: 1 }) });
+    handlers.onMessage({ t: 'view', data: JSON.stringify({ tasks: [], machineKey, grant, updatedAt: 1 }) });
     return () => undefined;
   };
 }
 
-function setUp(options: { refuse?: boolean; teams?: RemoteTeam[]; key?: string | null } = {}) {
+function setUp(
+  options: { refuse?: boolean; teams?: RemoteTeam[]; key?: string | null; grant?: string | null } = {}
+) {
   const written: EnrolledDevice[] = [];
   const opened: ChannelOptions[] = [];
   const admit = {
@@ -68,7 +72,7 @@ function setUp(options: { refuse?: boolean; teams?: RemoteTeam[]; key?: string |
           : { teamId: 'team1', name: 'Platform', key: options.key ?? TEAM_KEY, joinedAt: 1 }
       ),
     name: 'Kai’s Mac',
-    openTeam: sendView(MACHINE_KEY),
+    openTeam: sendView(MACHINE_KEY, options.grant === undefined ? GRANT : options.grant),
     openChannel: (channel: ChannelOptions) => {
       opened.push(channel);
       if (options.refuse) return Promise.reject(new Error('refused'));
@@ -81,13 +85,13 @@ function setUp(options: { refuse?: boolean; teams?: RemoteTeam[]; key?: string |
 }
 
 describe('adding this browser to a teammate’s machine', () => {
-  it('adds a machine shared with you through the team key, pinned to the key the team channel sends', async () => {
+  it('adds a machine with the grant only its owner’s machine sends you, pinned to the key the team channel sends', async () => {
     const instance = createInstance({ fingerprint: await resolveKeyFingerprint(MACHINE_KEY) });
     const { admit, written, opened } = setUp();
     const [row] = await admitTeamMachines([describeMachine(instance, null)], admit);
     expect(row?.device).toMatchObject({ instanceId: 'studio', machineKey: MACHINE_KEY, enrolledAt: 5 });
     expect(written).toHaveLength(1);
-    expect(opened[0]).toMatchObject({ machineKey: MACHINE_KEY, enrollSecret: TEAM_KEY, name: 'Kai’s Mac' });
+    expect(opened[0]).toMatchObject({ machineKey: MACHINE_KEY, enrollSecret: GRANT, name: 'Kai’s Mac' });
   });
 
   it('leaves a machine alone when its key does not match the fingerprint app.shinsa.dev lists', async () => {
@@ -100,10 +104,15 @@ describe('adding this browser to a teammate’s machine', () => {
     expect(written).toEqual([]);
   });
 
-  it('writes nothing when the machine refuses, when this browser has no key, or when no team lists it', async () => {
+  it('writes nothing when the machine refuses or sends no grant, this browser has no key, or no team lists it', async () => {
     const fingerprint = await resolveKeyFingerprint(MACHINE_KEY);
     const row = describeMachine(createInstance({ fingerprint }), null);
-    for (const options of [{ refuse: true }, { key: null }, { teams: [{ ...TEAM, machines: [] }] }]) {
+    for (const options of [
+      { refuse: true },
+      { key: null },
+      { grant: null },
+      { teams: [{ ...TEAM, machines: [] }] },
+    ]) {
       const { admit, written } = setUp(options);
       expect((await admitTeamMachines([row], admit))[0]?.device).toBeNull();
       expect(written).toEqual([]);
@@ -142,17 +151,17 @@ describe('adding this browser to a teammate’s machine', () => {
     expect(await admitTeamMachines(rows, failing)).toBe(rows);
   });
 
-  it('reads the machine key from the first view, or nothing when the channel ends first', async () => {
+  it('reads the machine key and grant from the first view, or nothing without both or when the channel ends first', async () => {
     const target: TeamChannelTarget = {
       teamId: 'team1',
       instanceId: 'studio',
       key: TEAM_KEY,
       view: { kind: 'list' },
     };
-    expect(await readTeamMachineKey(target, sendView('k'))).toBe('k');
-    expect(await readTeamMachineKey(target, sendView(undefined))).toBeNull();
+    expect(await readTeamMachineGrant(target, sendView('k'))).toEqual({ machineKey: 'k', grant: GRANT });
+    expect(await readTeamMachineGrant(target, sendView(undefined))).toBeNull();
     let stopped = 0;
-    const ended = await readTeamMachineKey(target, (_target, handlers) => {
+    const ended = await readTeamMachineGrant(target, (_target, handlers) => {
       setTimeout(() => {
         handlers.onMessage({ t: 'closed', reason: 'gone' });
         handlers.onEnd({ reason: 'gone', gone: true });

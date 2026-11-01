@@ -130,6 +130,7 @@ export interface TeamKeys {
 export interface TeamListView {
   tasks: TeamTask[];
   machineKey: string;
+  grant?: string;
   updatedAt: number;
 }
 

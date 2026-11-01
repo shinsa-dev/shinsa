@@ -335,7 +335,14 @@ export class Teams implements TeamLinks {
       machine: this.#remote.snapshot().machineName,
     });
     const { publicKey } = await this.#store.resolveMachineKey();
-    return { view: { tasks, machineKey: publicKey, updatedAt: this.#now() }, files: [] };
+    const grant = this.#store.selectGrant(subject.userId);
+    const view = {
+      tasks,
+      machineKey: publicKey,
+      ...(grant?.teamId === subject.teamId ? { grant: grant.secret } : {}),
+      updatedAt: this.#now(),
+    };
+    return { view, files: [] };
   }
 
   #syncChannels() {

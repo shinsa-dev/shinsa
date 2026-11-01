@@ -22,3 +22,9 @@ export function resolveLocalOnlyRoute(method: string, pathname: string) {
   const writes = method !== 'GET' && method !== 'HEAD';
   return LOCAL_ONLY_ROUTES.some((route) => route.pattern.test(pathname) && (writes || !route.writesOnly));
 }
+
+const OWNER_ONLY_PATHS: ReadonlySet<string> = new Set(['/api/remote/teams/join']);
+
+export function isOwnerOnlyRoute(method: string, pathname: string) {
+  return method === 'POST' && OWNER_ONLY_PATHS.has(pathname);
+}

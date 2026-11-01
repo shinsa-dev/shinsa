@@ -19,19 +19,26 @@ export interface TeamAdmitOptions {
   now?: () => number;
 }
 
-export function readTeamMachineKey(target: TeamChannelTarget, open: OpenTeam = openTeamChannel) {
-  return new Promise<string | null>((resolve) => {
+interface TeamMachineGrant {
+  machineKey: string;
+  grant: string;
+}
+
+export function readTeamMachineGrant(target: TeamChannelTarget, open: OpenTeam = openTeamChannel) {
+  return new Promise<TeamMachineGrant | null>((resolve) => {
     let done = false;
     let stop: (() => void) | null = null;
-    const finish = (key: string | null) => {
+    const finish = (found: TeamMachineGrant | null) => {
       if (done) return;
       done = true;
-      resolve(key);
+      resolve(found);
       stop?.();
     };
     stop = open(target, {
       onMessage: (message) => {
-        if (message.t === 'view') finish((JSON.parse(message.data) as TeamListView).machineKey ?? null);
+        if (message.t !== 'view') return;
+        const view = JSON.parse(message.data) as Partial<TeamListView>;
+        finish(view.machineKey && view.grant ? { machineKey: view.machineKey, grant: view.grant } : null);
       },
       onEnd: () => finish(null),
     });
@@ -68,12 +75,12 @@ async function admitMachine(row: MachineRow, teams: RemoteTeam[], options: TeamA
     if (!team.machines.some((machine) => machine.id === row.instance.id)) continue;
     const stored = await options.selectTeamKey(team.id);
     if (!stored) continue;
-    const machineKey = await readTeamMachineKey(
+    const found = await readTeamMachineGrant(
       { teamId: team.id, instanceId: row.instance.id, key: stored.key, view: { kind: 'list' } },
       options.openTeam
     );
-    if (!(machineKey && (await resolveKeyFingerprint(machineKey)) === row.instance.fingerprint)) continue;
-    const device = await enroll(row, machineKey, stored.key, options);
+    if (!(found && (await resolveKeyFingerprint(found.machineKey)) === row.instance.fingerprint)) continue;
+    const device = await enroll(row, found.machineKey, found.grant, options);
     if (device) return device;
   }
   return null;

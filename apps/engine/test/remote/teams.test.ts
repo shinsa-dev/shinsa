@@ -44,6 +44,8 @@ const BOB = { id: '9', login: 'bob', name: null, avatarUrl: null };
 
 const TEAM_KEY = serializeBase64Url(new Uint8Array(32).fill(3));
 
+const GRANT_SECRET = serializeBase64Url(new Uint8Array(32).fill(8));
+
 const OTHER_KEY = serializeBase64Url(new Uint8Array(32).fill(4));
 
 const LIST: TeamView = { kind: 'list' };
@@ -199,6 +201,17 @@ describe('a team view of this machine', () => {
     expect(view?.tasks[0]).toMatchObject({ owner: 'mona', machine: 'Studio', project: { id: 'p1' } });
     expect(view?.updatedAt).toBe(50);
     expect(view?.machineKey).toBe((await remote.store.resolveMachineKey()).publicKey);
+    expect(view?.grant).toBeUndefined();
+  });
+
+  test('sends a grant’s secret only to the teammate it was given to, in that team', async () => {
+    const { teams } = setUp({
+      file: { grants: [{ userId: KAI.id, teamId: 'team1', secret: GRANT_SECRET }] },
+    });
+    const [kai] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
+    const [mona] = (await openViewer(teams, MONA.id, LIST)).views() as TeamListView[];
+    expect(kai?.grant).toBe(GRANT_SECRET);
+    expect(mona?.grant).toBeUndefined();
   });
 
   test('a task view streams the task the way a share link does', async () => {
@@ -494,19 +507,22 @@ describe('machine access for a teammate', () => {
       body: { userId: KAI.id },
     });
     expect(remote.snapshot().access?.members).toEqual([{ user: KAI, addedAt: 9 }]);
-    expect(remote.store.file.grants).toEqual([{ userId: KAI.id, teamId: 'team1' }]);
-    expect((await knock(remote, KAI.id, TEAM_KEY)).type).toBe('welcome');
+    const [grant] = remote.store.file.grants;
+    expect(grant).toMatchObject({ userId: KAI.id, teamId: 'team1' });
+    expect((await knock(remote, KAI.id, TEAM_KEY)).type).toBe('refused');
+    expect((await knock(remote, KAI.id, grant?.secret ?? '')).type).toBe('welcome');
     expect(remote.snapshot().devices).toMatchObject([{ name: 'Kai’s browser', userId: KAI.id }]);
   });
 
-  test('a wrong key, someone else, or a teammate who left gets no device added', async () => {
+  test('a wrong secret, someone else, or a teammate who left gets no device added', async () => {
     const { remote, plane } = setUp();
     plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => Response.json({ user: KAI, addedAt: 9 }));
     await remote.grantTeammate(KAI.id, 'team1');
+    const secret = remote.store.file.grants[0]?.secret ?? '';
     expect((await knock(remote, KAI.id, OTHER_KEY)).type).toBe('refused');
-    expect((await knock(remote, BOB.id, TEAM_KEY)).type).toBe('refused');
+    expect((await knock(remote, BOB.id, secret)).type).toBe('refused');
     remote.store.recordTeams([createTeam({ members: [] })]);
-    expect((await knock(remote, KAI.id, TEAM_KEY)).type).toBe('refused');
+    expect((await knock(remote, KAI.id, secret)).type).toBe('refused');
     expect(remote.snapshot().devices).toEqual([]);
   });
 

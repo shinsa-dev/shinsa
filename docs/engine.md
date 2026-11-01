@@ -2824,7 +2824,8 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads their
   projects over the sealed channel (`lib/teams/join-machines.ts`) and asks which to share, one or more being required;
   Ask to join then sends each machine with a pick `POST /api/remote/teams/join { url }` (the one team route the
-  dashboard may call, since it only stores a key you already hold) and `project.add_to_team` for each pick, so the key
+  dashboard may call, and only from a device of the machine's owner: a member's device is refused with `not_owner`,
+  since joining your account to a team and sharing your projects is yours alone, `Remote.openChannel`) and `project.add_to_team` for each pick, so the key
   and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
   on each of your machines; one without the key asks for the link right in the team's card, with the projects to
   share beside it (or `shinsa teams join <url>`), which stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
@@ -2836,14 +2837,16 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   in Settings → Teams (`shinsa teams grant <team> --login`, `POST /api/remote/members/grant { teamId, userId }`,
   `Remote.grantTeammate`) makes them a member of this machine at once, with no invite and no request
   (`/__remote/machine/members/add`, which app.shinsa.dev allows for an account that shares a team with the machine's
-  owner, `sharesTeam`), and records the grant in `remote.json` (`grants: { userId, teamId }`). Their browser then adds
-  itself: the hosted dashboard, finding a machine shared with them that this browser has no key for
-  (`admitTeamMachines`, `lib/teams/admit.ts`), reads the machine's public key from that team's channel
-  (`TeamListView.machineKey`, sealed with the team key, so app.shinsa.dev cannot swap it), checks it against the
-  fingerprint app.shinsa.dev lists, and opens the sealed channel with an enroll proof made with the team key in place
-  of an invite secret. The machine admits the device without asking (`AccessAnswer` `admitted`) only while the
-  account is a member here, holds a grant, is still in that team and the proof checks against the team's key; any
-  other proof falls back to the invite link. Removing the member under Remote access, or their leaving the
+  owner, `sharesTeam`), and records the grant in `remote.json` (`grants: { userId, teamId, secret }`, a fresh 32-byte
+  secret per grant). Their browser then adds itself: the hosted dashboard, finding a machine shared with them that
+  this browser has no key for (`admitTeamMachines`, `lib/teams/admit.ts`), reads the machine's public key and the
+  grant's secret from that team's channel (`TeamListView.machineKey` and `grant`, sealed with the team key, so
+  app.shinsa.dev cannot swap or read them; `grant` goes only to the channel of the account it was given to, in that
+  team), checks the key against the fingerprint app.shinsa.dev lists, and opens the sealed channel with an enroll
+  proof made with the grant's secret in place of an invite secret. The team key alone, which every member and anyone
+  removed since still holds, adds no device. The machine admits the device without asking (`AccessAnswer`
+  `admitted`) only while the account is a member here, holds a grant, is still in that team and the proof checks
+  against the grant's secret; any other proof falls back to the invite link. Removing the member under Remote access, or their leaving the
   machine's members, drops the grant and their devices.
 - **Which projects a team sees is yours alone.** `Project.teamIds` lists the teams a project is in, written by
   `project.add_to_team` and `project.remove_from_team` (`decide/teams.ts`; the project's team picker in Settings →
@@ -2912,7 +2915,8 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
 - **Machines you already reach.** A teammate who also made you a member of a machine (Remote access → members) shows
   that machine's tasks as your own, with full control, through the dashboard's sealed channel; team rows from a
   machine the dashboard reaches are left out (`listTeamFeedTasks`), so no task appears twice. The hosted dashboard
-  merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`), keeping the freshest
+  merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`, `HostedTeamFeeds`,
+  which retries as `TeamFeeds` does: a refused channel again after 1, 2, then every 5 minutes), keeping the freshest
   copy of each task.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
   change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and

@@ -555,6 +555,32 @@ describe('the sealed channel over the tunnel', () => {
     expect(await channel.closed).toBe(1008);
   });
 
+  test('lets only the machine’s owner join a team from it, never a member', async () => {
+    const { remote, port } = await start({ access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] } });
+    const machine = await remote.store.resolveMachineKey();
+    const statusFor = async (userId: string) => {
+      const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+        userId,
+        device: await addDevice(remote, userId),
+      });
+      expect(await channel.next()).toEqual({ t: 'ready' });
+      await channel.send({
+        t: 'request',
+        id: 'j',
+        method: 'POST',
+        path: '/api/remote/teams/join',
+        headers: [['content-type', 'application/json']],
+      });
+      await channel.send({ t: 'end', id: 'j' });
+      for (;;) {
+        const message = await channel.next();
+        if (message.t === 'response') return message.status;
+      }
+    };
+    expect(await statusFor(KAI.id)).toBe(403);
+    expect(await statusFor(OWNER.id)).not.toBe(403);
+  });
+
   test('closes every channel when remote access stops', async () => {
     const { remote, port, connectors } = await start();
     remote.start();

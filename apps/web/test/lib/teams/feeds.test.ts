@@ -89,6 +89,7 @@ describe('the hosted dashboard’s team feeds', () => {
   function createHosted(options: { keys?: Record<string, string>; failing?: boolean } = {}) {
     const opened: { target: TeamChannelTarget; handlers: TeamChannelHandlers; stopped: boolean }[] = [];
     const waits: (() => void)[] = [];
+    const delays: number[] = [];
     const team = createTeam({
       machines: [
         { id: 'p7m2', name: 'Studio', userId: '7', online: true, lastSeenAt: 1 },
@@ -110,12 +111,13 @@ describe('the hosted dashboard’s team feeds', () => {
           entry.stopped = true;
         };
       },
-      wait: (_ms, run) => {
+      wait: (ms, run) => {
+        delays.push(ms);
         waits.push(run);
         return () => undefined;
       },
     });
-    return { feeds, opened, waits };
+    return { feeds, opened, waits, delays };
   }
 
   it('watches each online machine of every team this browser holds a key for, and publishes its list', async () => {
@@ -145,8 +147,8 @@ describe('the hosted dashboard’s team feeds', () => {
     expect(published).toBe(2);
   });
 
-  it('tries again after a drop and stops trying once the machine refuses', async () => {
-    const { feeds, opened, waits } = createHosted();
+  it('tries again after a drop, and a minute after a refusal, since the machine may not know a new member yet', async () => {
+    const { feeds, opened, waits, delays } = createHosted();
     await feeds.start();
     opened[0]?.handlers.onEnd({ reason: 'Offline.', gone: false });
     expect(feeds.snapshot().machines[0]).toMatchObject({ status: 'offline', reason: 'Offline.' });
@@ -154,7 +156,11 @@ describe('the hosted dashboard’s team feeds', () => {
     expect(opened).toHaveLength(2);
     opened[1]?.handlers.onEnd({ reason: 'Not in the team.', gone: true });
     expect(feeds.snapshot().machines[0]).toMatchObject({ status: 'refused', reason: 'Not in the team.' });
-    expect(waits).toEqual([]);
+    expect(delays).toEqual([1_000, 120_000]);
+    waits.shift()?.();
+    expect(opened).toHaveLength(3);
+    opened[2]?.handlers.onMessage({ t: 'view', data: '{"tasks":[]}' });
+    expect(feeds.snapshot().machines[0]?.status).toBe('live');
   });
 
   it('opens nothing without a key or when app.shinsa.dev cannot list the teams, and stops every channel', async () => {

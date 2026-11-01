@@ -79,13 +79,14 @@ describe('remote.json', () => {
           },
           'nope',
         ],
+        grants: [{ userId: '7', teamId: 't1', secret: 'g1' }, { userId: '8', teamId: 't1' }, 'nope'],
       })
     );
     expect(readRemoteFile(path)).toEqual({
       version: 1,
       teams: [],
       teamKeys: [],
-      grants: [],
+      grants: [{ userId: '7', teamId: 't1', secret: 'g1' }],
       machine: { publicKey: 'p', privateKey: 'k' },
       credentials: CREDENTIALS,
       owner: 'mona',

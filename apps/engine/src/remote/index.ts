@@ -19,6 +19,7 @@ import { resolveBrowserCommand } from '../shell/browser.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
 import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
 import { ControlClient, ControlError } from './control.ts';
+import { isOwnerOnlyRoute } from './local-only.ts';
 import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
 import { listTeamEntries, RemoteStore, type StoredLink } from './store.ts';
 import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
@@ -340,9 +341,15 @@ export class Remote {
     const grant = this.store.selectGrant(userId);
     if (!(grant && this.store.file.access?.members.some((member) => member.user.id === userId))) return false;
     const team = this.store.selectTeam(grant.teamId);
-    const stored = this.store.selectTeamKey(grant.teamId);
     const inTeam = team?.owner.id === userId || team?.members.some((member) => member.user.id === userId);
-    if (!(inTeam && stored && (await verifyEnrollProof(stored.key, proof, keys)))) return false;
+    if (
+      !(
+        inTeam &&
+        this.store.selectTeamKey(grant.teamId) &&
+        (await verifyEnrollProof(grant.secret, proof, keys))
+      )
+    )
+      return false;
     this.store.upsertDevice({
       publicKey: keys.device,
       name: name ?? 'Browser',
@@ -369,7 +376,11 @@ export class Remote {
       const member = await this.#requestMemberAddition(credentials.machineToken, userId);
       this.#recordAccess({ ...access, members: [...access.members, member] });
     }
-    this.store.writeGrant({ userId, teamId });
+    this.store.writeGrant({
+      userId,
+      teamId,
+      secret: serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES))),
+    });
     this.#publish();
   }
 
@@ -525,6 +536,7 @@ export class Remote {
   openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string) {
     const channel = new RemoteChannel(peer, {
       ...parts,
+      respond: (request) => this.#respondAs(request, parts, userId),
       resolveMachineKey: () => this.store.resolveMachineKey(),
       isEnrolled: (device) => this.#admits(device, userId),
       requestAccess: (proof, keys, name) => this.#requestAccess(proof, keys, name, userId),
@@ -534,6 +546,18 @@ export class Remote {
     });
     this.#channels.add(channel);
     return channel;
+  }
+
+  #respondAs(request: Request, parts: ChannelParts, userId: string) {
+    const path = new URL(request.url).pathname;
+    if (isOwnerOnlyRoute(request.method, path) && this.store.file.access?.owner.id !== userId)
+      return Promise.resolve(
+        Response.json(
+          { error: { code: 'not_owner', message: 'Only this machine’s owner can join a team from it.' } },
+          { status: 403 }
+        )
+      );
+    return parts.respond(request);
   }
 
   closeChannel(channel: RemoteChannel) {

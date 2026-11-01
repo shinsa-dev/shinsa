@@ -42,6 +42,7 @@ export interface RemoteFile {
 export interface TeamGrant {
   userId: string;
   teamId: string;
+  secret: string;
 }
 
 export interface StoredTeamKey {
@@ -196,7 +197,8 @@ function readGrants(value: unknown): TeamGrant[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     if (!(isFields(entry) && typeof entry.userId === 'string' && typeof entry.teamId === 'string')) return [];
-    return [{ userId: entry.userId, teamId: entry.teamId }];
+    if (typeof entry.secret !== 'string') return [];
+    return [{ userId: entry.userId, teamId: entry.teamId, secret: entry.secret }];
   });
 }
 

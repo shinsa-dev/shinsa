@@ -23,6 +23,8 @@ import type { StoredTeamKey } from './join.ts';
 
 const FEED_RETRY_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 
+const FEED_REFUSED_RETRY_MS = [60_000, 120_000, 300_000];
+
 const MACHINE_RANK: Record<TeamFeedMachine['status'], number> = {
   live: 0,
   connecting: 1,
@@ -220,8 +222,8 @@ export class HostedTeamFeeds implements TeamFeedSource {
         feed.tasks = [];
         this.#mark(feed, end.gone ? 'refused' : 'offline', end.reason);
         this.#publish();
-        if (end.gone) return;
-        const delay = FEED_RETRY_MS[Math.min(feed.attempt, FEED_RETRY_MS.length - 1)] as number;
+        const steps = end.gone ? FEED_REFUSED_RETRY_MS : FEED_RETRY_MS;
+        const delay = steps[Math.min(feed.attempt, steps.length - 1)] as number;
         feed.attempt += 1;
         const cancel = wait(delay, () => {
           if (this.#started && feed.stop === cancel) this.#connect(feed);
