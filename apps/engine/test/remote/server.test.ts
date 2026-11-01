@@ -1328,6 +1328,22 @@ describe('handing off a task', () => {
     expect(engine.state.tasks[taskId]?.handoff?.guest).toBeNull();
   });
 
+  test('a member who takes a task over stays a member, and the next heartbeat keeps the task with them', async () => {
+    const { remote, engine, port, plane, taskId, machine } = await startHandoff();
+    const access = { ...ACCESS, members: [GUEST_MEMBER] };
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...access, guests: [] }));
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    const secret = readClaim(engine, taskId)?.secret ?? '';
+    const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id });
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineGuestAdd)).toBe(false);
+    expect(remote.store.file.guests).toEqual([]);
+    await remote.supervisor.requestHeartbeat();
+    expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('kai');
+    expect(remote.snapshot().devices).toMatchObject([{ userId: KAI.id, taskId }]);
+  });
+
   test('a heartbeat Shinsa Cloud answered before a claim landed keeps the guest it just added', async () => {
     const { remote, engine, port, plane, taskId, machine } = await startHandoff();
     plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));

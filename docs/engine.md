@@ -3107,7 +3107,8 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   hand-off whose secret proves it (`#matchHandoff`) and, with no request to accept: dispatches `handoff.claim` with the
   account (`TaskGuest`: id, login, name, avatar), which core refuses for a second account ("Someone else already took
   this task over. Ask for a new link."); then adds the account as a guest at app.shinsa.dev
-  (`/__remote/machine/guests/add`), adds the browser as a device with the task's id (`RemoteDevice.taskId`), turns the
+  (`/__remote/machine/guests/add`), unless it is the machine's owner or a member, who stay what they are and are never
+  counted as a guest who left; adds the browser as a device with the task's id (`RemoteDevice.taskId`), turns the
   link off there and here, and answers `welcome`. The claim is recorded on the machine first, so two accounts racing
   for one link cannot both get in; a failed step after it leaves the same account free to open the link again. Once
   claimed, the link is gone: no second browser and no second person can use it. A browser that already reaches the

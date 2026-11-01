@@ -402,9 +402,11 @@ export class Remote {
     if (!this.#claimer) return { kind: 'refused', reason: HANDOFF_UNAVAILABLE };
     const refusal = await this.#claimer(handoff.taskId, user);
     if (refusal) return { kind: 'refused', reason: refusal };
-    const guest = await this.#addGuest(user.id);
-    if (typeof guest === 'string') return { kind: 'refused', reason: guest };
-    this.#updateGuests((guests) => [...guests.filter((entry) => entry.user.id !== user.id), guest]);
+    if (!this.#hasAccess(user.id)) {
+      const guest = await this.#addGuest(user.id);
+      if (typeof guest === 'string') return { kind: 'refused', reason: guest };
+      this.#updateGuests((guests) => [...guests.filter((entry) => entry.user.id !== user.id), guest]);
+    }
     this.store.upsertDevice({
       publicKey: device,
       name: name ?? 'Browser',
@@ -434,7 +436,7 @@ export class Remote {
     const handedMore = devices.some((device) => device.userId === guestId && device.taskId);
     if (handedMore || !guests.some((guest) => guest.user.id === guestId)) return;
     if (credentials) await this.control.requestGuestRemoval(credentials.machineToken, guestId);
-    this.#updateGuests((guests) => guests.filter((guest) => guest.user.id !== guestId));
+    this.#updateGuests((current) => current.filter((guest) => guest.user.id !== guestId));
   }
 
   #selectLogin(userId: string | null) {
@@ -578,18 +580,23 @@ export class Remote {
     });
   }
 
+  #hasAccess(userId: string) {
+    const { access } = this.store.file;
+    if (!access) return false;
+    return access.owner.id === userId || access.members.some((member) => member.user.id === userId);
+  }
+
   #recordAccess(access: RemoteAccess, guests: RemoteMember[] = this.store.file.guests) {
     const before = this.store.file;
     const changed =
       JSON.stringify(access) !== JSON.stringify(before.access) ||
       JSON.stringify(guests) !== JSON.stringify(before.guests);
     if (changed) this.store.update((file) => ({ ...file, access, guests }));
-    const listed = new Set(guests.map((guest) => guest.user.id));
+    const allowed = new Set([access.owner.id, ...access.members.map((member) => member.user.id)]);
+    const listed = new Set([...allowed, ...guests.map((guest) => guest.user.id)]);
     const left = before.guests.map((guest) => guest.user.id).filter((id) => !listed.has(id));
     if (left.length > 0) this.#leaver?.(left);
-    const allowed = new Set([access.owner.id, ...access.members.map((member) => member.user.id)]);
-    const handed = new Set([...allowed, ...guests.map((guest) => guest.user.id)]);
-    const removed = new Set(this.store.removeDevicesOutside(allowed, handed));
+    const removed = new Set(this.store.removeDevicesOutside(allowed, listed));
     this.#closeChannels((channel) => channel.device !== null && removed.has(channel.device));
     if (changed || removed.size > 0) this.#publish();
   }
