@@ -1,126 +1,67 @@
-'use client';
-
-import { resolveShimmerTiming } from '@shinsa/ui/lib/shimmer';
-import { countVisibleChars } from '@shinsa/ui/lib/truncate';
+import { resolveShimmerDuration } from '@shinsa/ui/lib/shimmer';
 import { cn } from '@shinsa/ui/lib/utils';
-import { motion, useReducedMotion, type Variants } from 'motion/react';
-import { type ComponentProps, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ComponentProps, CSSProperties } from 'react';
 
-const useMeasureEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
-
-function selectClipBox(element: HTMLElement): HTMLElement {
-  let box: HTMLElement | null = element;
-  while (box) {
-    if (window.getComputedStyle(box).overflowX !== 'visible') return box;
-    box = box.parentElement;
-  }
-  return element;
-}
-
-/**
- * How many leading characters of the line are on screen: a line cut off by
- * its own box or an ancestor's sweeps only those, so one cycle never spends
- * its time on characters behind the ellipsis.
- */
-function useVisibleLength(length: number) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [visible, setVisible] = useState(length);
-
-  useMeasureEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    const clip = selectClipBox(element);
-    const update = () => {
-      const chars = [...element.querySelectorAll<HTMLElement>('[data-char]')];
-      const rights = chars.map((char) => char.getBoundingClientRect().right);
-      setVisible(countVisibleChars(rights, clip.getBoundingClientRect().right));
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(clip);
-    return () => observer.disconnect();
-  }, [length]);
-
-  return { ref, visible: Math.min(visible, length) };
-}
-
-export type ShimmeringTextProps = Omit<ComponentProps<typeof motion.span>, 'children'> & {
+export type ShimmeringTextProps = Omit<ComponentProps<'span'>, 'children'> & {
   /** The text to render with the shimmering effect. */
   text: string;
   /**
-   * Duration in seconds for one shimmer cycle.
+   * Seconds the band takes to cross a short line; a long line is crossed at
+   * a steady pace per character instead.
    * @defaultValue 1
    */
   duration?: number;
   /**
-   * Pause the shimmer (e.g. when the hero leaves the viewport).
+   * Hold the text still.
    * @defaultValue false
    */
   paused?: boolean;
 };
 
+/**
+ * A line of text with a band of brighter colour sweeping across it, for work
+ * in progress. The text renders once; a copy of it in the brighter colour
+ * shows through a band that crosses the line (`shimmer-window` and
+ * `shimmer-copy` in globals.css). The band crosses the positioned box the
+ * line sits in, so a line cut off by its own box ends its sweep at the
+ * ellipsis, and a parent that truncates can make itself that box with
+ * `relative` while the text takes `static`. The sweep is clipped to that box,
+ * so it never adds to a parent's scroll width and a `Truncate` around it still
+ * sees only the text.
+ */
 export function ShimmeringText({
   text,
   duration = 1,
   paused = false,
   className,
+  style,
   ...props
 }: ShimmeringTextProps) {
-  const reducedMotion = useReducedMotion();
-  const stopped = paused || reducedMotion === true;
-  const { ref, visible } = useVisibleLength(text.length);
-
-  const createCharVariants = useCallback(
-    (charIndex: number): Variants => {
-      const { stagger, rest } = resolveShimmerTiming(visible, duration);
-      return {
-        running: {
-          color: ['var(--color)', 'var(--shimmering-color)', 'var(--color)'],
-          transition: {
-            duration,
-            repeat: Number.POSITIVE_INFINITY,
-            repeatType: 'loop',
-            repeatDelay: rest,
-            delay: charIndex * stagger,
-            ease: 'easeInOut',
-          },
-        },
-        stopped: {
-          color: 'var(--color)',
-          transition: {
-            duration: duration * 0.5,
-            ease: 'easeOut',
-          },
-        },
-      };
-    },
-    [duration, visible]
-  );
+  const timing = {
+    '--shimmer-duration': `${resolveShimmerDuration(text.length, duration)}s`,
+  } as CSSProperties;
 
   return (
-    <motion.span
-      ref={ref}
+    <span
+      data-slot='shimmering-text'
+      data-paused={paused || undefined}
       className={cn(
-        'inline-flex select-none items-center leading-none',
+        'relative inline-block select-none whitespace-nowrap',
         '[--color:var(--muted-foreground)] [--shimmering-color:var(--foreground)]',
+        '[color:var(--color)]',
         className
       )}
+      style={{ ...timing, ...style }}
       {...props}
     >
-      {text.split('').map((char, index) => (
-        <motion.span
-          animate={stopped || index >= visible ? 'stopped' : 'running'}
-          aria-hidden
-          data-char=''
-          className='inline-block whitespace-pre leading-none'
-          initial='stopped'
-          key={`${visible}-${index}`}
-          variants={createCharVariants(index)}
-        >
-          {char}
-        </motion.span>
-      ))}
-      <span className='sr-only'>{text}</span>
-    </motion.span>
+      {text}
+      {!paused && (
+        <span aria-hidden className='pointer-events-none absolute inset-0 overflow-clip motion-reduce:hidden'>
+          <span className='shimmer-window block size-full overflow-hidden'>
+            <span className='shimmer-copy block truncate [color:var(--shimmering-color)]'>{text}</span>
+          </span>
+        </span>
+      )}
+    </span>
   );
 }

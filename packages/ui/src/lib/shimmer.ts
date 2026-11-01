@@ -1,14 +1,19 @@
 /** Seconds the band takes to move from one character to the next on a long line. */
 export const SHIMMER_STEP = 0.05;
 
+/** The most characters a sweep is timed for: about as many as one line shows. */
+export const SHIMMER_LONGEST = 80;
+
+/** The share of a cycle the band spends crossing the line; the rest is still. */
+export const SHIMMER_SWEEP = 0.66;
+
 /**
- * How one pass of the shimmer is timed over the `visible` characters. A short
- * line is crossed in `duration`; a long one at `SHIMMER_STEP` a character, so
- * the band keeps moving until it reaches the last visible character and the
- * next pass starts as it fades, instead of crossing in `duration` and then
- * sitting still while the rest of the cycle runs out.
+ * Seconds one cycle of the shimmer takes over a line of `length` characters.
+ * A short line is crossed in `duration`; a long one at `SHIMMER_STEP` a
+ * character, up to `SHIMMER_LONGEST`, since the characters behind the ellipsis
+ * are not crossed. The cycle adds the rest between sweeps.
  */
-export function resolveShimmerTiming(visible: number, duration: number) {
-  if (visible === 0) return { stagger: 0, rest: 0 };
-  return { stagger: Math.max(duration / visible, SHIMMER_STEP), rest: visible * SHIMMER_STEP };
+export function resolveShimmerDuration(length: number, duration: number): number {
+  const sweep = Math.max(duration, Math.min(length, SHIMMER_LONGEST) * SHIMMER_STEP);
+  return Math.round((sweep / SHIMMER_SWEEP) * 1000) / 1000;
 }
