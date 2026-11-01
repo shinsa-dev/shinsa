@@ -52,6 +52,7 @@ import {
   SHARE_GONE_REASON,
   ShareChannel,
 } from './share-channel.ts';
+import { resolveOwnerProfile } from './store.ts';
 
 export const SHARE_NOT_PAIRED =
   'Turn on remote access in Settings → General to share this task. Its link works once this machine is paired.';
@@ -355,6 +356,7 @@ export class Shares implements ShareEffects, ShareLinks {
     const shared = resolveSharedTask(this.#engine.state, task, {
       preset,
       owner: people ? this.#remote.store.file.owner : null,
+      ownerProfile: people ? resolveOwnerProfile(this.#remote.store.file) : null,
       machine: people ? this.#remote.snapshot().machineName : null,
       repository: resolveRepositoryName(repo),
     });

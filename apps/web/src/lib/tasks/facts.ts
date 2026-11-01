@@ -32,8 +32,11 @@ export function listDuplicates(state: ShinsaState, task: Task) {
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export function describeDuplicateHint(duplicate: NonNullable<Task['duplicate']>) {
-  if (duplicate.by === 'you') return 'You closed this as a duplicate.';
+export function describeDuplicateHint(
+  duplicate: NonNullable<Task['duplicate']>,
+  owner: string | null = null
+) {
+  if (duplicate.by === 'you') return `${owner ?? 'You'} closed this as a duplicate.`;
   return duplicate.why
     ? `Shinsa closed this as a duplicate: ${duplicate.why}`
     : 'Shinsa closed this as a duplicate.';

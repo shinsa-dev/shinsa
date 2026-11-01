@@ -24,9 +24,15 @@ import { resolveTaskProject } from '../state/queries.ts';
 import { hasShareGroup, SHARE_PRESET_GROUPS, type ShareGroup } from './presets.ts';
 import { resolveShareUpdate, type ShareUpdate } from './update.ts';
 
+export interface SharedPerson {
+  name: string | null;
+  avatarUrl: string | null;
+}
+
 export interface SharedTaskContext {
   preset: SharePreset;
   owner: string | null;
+  ownerProfile: SharedPerson | null;
   machine: string | null;
   repository: string | null;
 }
@@ -40,6 +46,7 @@ export interface SharedTask {
   repo: Repo | null;
   project: Project | null;
   owner: string | null;
+  ownerProfile?: SharedPerson | null;
   machine: string | null;
   repository: string | null;
   description: string | null;
@@ -505,6 +512,7 @@ export function resolveSharedTask(state: ShinsaState, task: Task, context: Share
     repo: repo ? redactRepo(repo) : null,
     project: project ? redactProject(project) : null,
     owner: people ? context.owner : null,
+    ownerProfile: people ? context.ownerProfile : null,
     machine: people ? context.machine : null,
     repository: people ? context.repository : null,
     description: grants('description') ? scrubText(task.share?.description ?? '', links) || null : null,

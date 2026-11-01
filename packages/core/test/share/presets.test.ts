@@ -24,7 +24,13 @@ const REQUEST =
   'Fix the scroll in tab groups\n\n<attachments>\n<attachment kind="image" display_name="shot.png" path="/data/attachments/01b/shot.png" url="/api/attachments/01b/shot.png" />\n</attachments>';
 
 function context(preset: SharePreset): SharedTaskContext {
-  return { preset, owner: 'mona', machine: 'Studio', repository: 'superwall/paywall-next' };
+  return {
+    preset,
+    owner: 'mona',
+    ownerProfile: { name: 'Mona Lisa', avatarUrl: null },
+    machine: 'Studio',
+    repository: 'superwall/paywall-next',
+  };
 }
 
 function reachPullRequest(harness: Harness) {
@@ -78,6 +84,7 @@ describe('share presets', () => {
     expect(status).toMatchObject({
       preset: 'status',
       owner: null,
+      ownerProfile: null,
       machine: null,
       repository: null,
       repo: null,
@@ -170,7 +177,13 @@ describe('share presets', () => {
     const harness = createHarness();
     const taskId = reachPullRequest(harness);
     const full = share(harness, taskId, 'standard');
-    expect(full).toMatchObject({ preset: 'standard', owner: 'mona', machine: 'Studio', code: true });
+    expect(full).toMatchObject({
+      preset: 'standard',
+      owner: 'mona',
+      ownerProfile: { name: 'Mona Lisa', avatarUrl: null },
+      machine: 'Studio',
+      code: true,
+    });
     expect(full.task.pullRequest?.state).toBe('open');
     expect(full.task.plan?.document?.approach).toBe(harness.task(taskId).plan?.document?.approach);
     expect(full.evidence).toHaveLength(1);

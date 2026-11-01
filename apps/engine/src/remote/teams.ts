@@ -31,6 +31,7 @@ import { ControlError } from './control.ts';
 import type { Remote } from './index.ts';
 import { createChannelEphemeral, type HelloAnswer, type LiveShare, ShareChannel } from './share-channel.ts';
 import type { Shares, ShareTranscripts } from './shares.ts';
+import { resolveOwnerProfile } from './store.ts';
 import type { TeamFeeds } from './team-feeds.ts';
 
 export const TEAM_GONE_REASON = 'This task is no longer shown to the team, or you are no longer in it.';
@@ -357,6 +358,7 @@ export class Teams implements TeamLinks {
     if (subject.view.kind === 'task') return this.#shares.resolveLive(subject.view.taskId, TEAM_SHARE_PRESET);
     const tasks = listTeamTasks(this.#engine.state, subject.teamId, {
       owner: this.#store.file.owner,
+      ownerProfile: resolveOwnerProfile(this.#store.file),
       machine: this.#remote.snapshot().machineName,
     });
     const { publicKey } = await this.#store.resolveMachineKey();

@@ -1,5 +1,6 @@
 import {
   type AgentReply,
+  capitalise,
   type Gate,
   type Iteration,
   type ReplyOutcome,
@@ -10,6 +11,7 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { formatCount } from '@/lib/format/count.ts';
+import { describeOwnerInSentence, describeOwnerPossessive } from '@/lib/share/page.ts';
 
 export type AnsweredIteration = Iteration & { reply: AgentReply; repliedAt: number };
 
@@ -91,4 +93,12 @@ export function describeOutcomes(reply: AgentReply) {
     const count = reply.points.filter((point) => point.outcome === outcome).length;
     return count > 0 ? [`${count} ${OUTCOME_COUNT[outcome]}`] : [];
   }).join(' · ');
+}
+
+export function describeSentLabel(owner: string | null = null) {
+  return `What ${owner === null ? 'you' : describeOwnerInSentence(owner)} sent`;
+}
+
+export function describeRequestLabel(owner: string | null = null) {
+  return `${capitalise(describeOwnerPossessive(owner))} request`;
 }

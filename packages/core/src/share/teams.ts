@@ -3,7 +3,7 @@ import { isTaskSettled } from '../domain/stages.ts';
 import type { Gate, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
-import { resolveSharedListing, type SharedListing } from './index.ts';
+import { resolveSharedListing, type SharedListing, type SharedPerson } from './index.ts';
 
 export const TEAM_SETTLED_LIMIT = 50;
 
@@ -11,10 +11,13 @@ export const TEAM_SHARE_PRESET: SharePreset = 'standard';
 
 export interface TeamTaskContext {
   owner: string | null;
+  ownerProfile: SharedPerson | null;
   machine: string | null;
 }
 
-export interface TeamTask extends SharedListing, TeamTaskContext {}
+export interface TeamTask extends SharedListing, Omit<TeamTaskContext, 'ownerProfile'> {
+  ownerProfile?: SharedPerson | null;
+}
 
 export function listTeamProjectIds(state: ShinsaState, teamId: string) {
   return Object.values(state.projects)
@@ -52,6 +55,7 @@ export function listTeamTasks(state: ShinsaState, teamId: string, context: TeamT
   return listTeamTaskSubjects(state, teamId).map((task) => ({
     ...resolveSharedListing(state, task, gates.get(task.id) ?? [], TEAM_SHARE_PRESET),
     owner: context.owner,
+    ownerProfile: context.ownerProfile,
     machine: context.machine,
   }));
 }

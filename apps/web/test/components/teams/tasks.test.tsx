@@ -62,7 +62,7 @@ describe('teammates’ tasks', () => {
     expect(working.textContent).toContain('My own task');
     expect(working.textContent).toContain('Add the billing page');
     expect(working.textContent).toContain('paywalls');
-    expect(working.textContent).toContain('@kai');
+    expect(working.textContent).toContain('kai');
     expect(working.textContent).toContain('You');
     fireEvent.click(screen.getByText('Add the billing page'));
     expect(location.pathname).toBe('/teams/team1/p7m2/kai-task');

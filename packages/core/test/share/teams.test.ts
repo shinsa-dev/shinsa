@@ -9,7 +9,11 @@ import {
   registerRepo,
 } from '../harness.ts';
 
-const CONTEXT = { owner: 'octocat', machine: 'Studio' };
+const CONTEXT = {
+  owner: 'octocat',
+  ownerProfile: { name: 'Octo Cat', avatarUrl: 'https://avatars.example/octocat' },
+  machine: 'Studio',
+};
 
 function teamRepo(harness: Harness, name: string, projectName: string) {
   const repoId = registerRepo(harness, name, projectName);
@@ -31,7 +35,12 @@ describe('the team task list', () => {
     expect(isTeamTask(harness.state, harness.task(inTeam), 'team-2')).toBe(false);
     const [listed, ...rest] = listTeamTasks(harness.state, 'team-1', CONTEXT);
     expect(rest).toEqual([]);
-    expect(listed).toMatchObject({ owner: 'octocat', machine: 'Studio', project: { id: shared.projectId } });
+    expect(listed).toMatchObject({
+      owner: 'octocat',
+      ownerProfile: { name: 'Octo Cat', avatarUrl: 'https://avatars.example/octocat' },
+      machine: 'Studio',
+      project: { id: shared.projectId },
+    });
     expect(listed?.task).toMatchObject({ id: inTeam, worktreePath: null, note: null, waitsOn: [] });
     expect(listed?.task).not.toHaveProperty('share');
     expect(listed?.project).toMatchObject({ description: '', folders: [] });

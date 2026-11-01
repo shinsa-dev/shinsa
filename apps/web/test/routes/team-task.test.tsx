@@ -99,7 +99,7 @@ describe('a teammate’s task while their machine is offline', () => {
         data: serializeShareMessage({ t: 'closed', reason: 'The teammate’s machine is offline.' }),
       })
     );
-    await waitFor(() => expect(screen.getByText(/@kai’s machine is offline/)).toBeDefined());
+    await waitFor(() => expect(screen.getByText(/kai’s machine is offline/)).toBeDefined());
     expect(screen.getByText('Add the billing page')).toBeDefined();
     expect(screen.getByText('Offline')).toBeDefined();
   });

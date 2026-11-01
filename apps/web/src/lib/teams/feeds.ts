@@ -16,6 +16,7 @@ import {
   type TeamViewTarget,
   verifyTeamSnapshot,
 } from '@shinsa/core';
+import { resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
 import { waitFor } from '@/lib/share/live.ts';
 import { createSignal } from '@/lib/signal.ts';
 import {
@@ -119,9 +120,13 @@ export function resolveTeamTaskTarget(task: TeamFeedTask): TeamViewTarget {
   return { teamId: task.teamId, instanceId: task.instanceId, taskId: task.task.id };
 }
 
-export function describeTeamTaskOwner(task: Pick<TeamFeedTask, 'owner' | 'machine'>) {
-  if (task.owner) return `@${task.owner}`;
+export function describeTeamTaskOwner(task: Pick<TeamFeedTask, 'owner' | 'machine' | 'ownerProfile'>) {
+  if (task.owner) return resolveFirstName(resolveSharedProfile(task.owner, task.ownerProfile));
   return task.machine ?? 'A teammate';
+}
+
+export function describeTeamTaskPlace(task: Pick<TeamFeedTask, 'machine'>) {
+  return task.machine ? `On ${task.machine}, read-only` : 'Read-only';
 }
 
 export interface TeamFeedSource {
