@@ -26,7 +26,7 @@ function openRelay() {
 }
 
 describe('a teammate’s task in the local app', () => {
-  it('opens the engine’s relay and shows the task read-only, without its chat', async () => {
+  it('opens the engine’s relay and shows the task read-only, with the standard preset’s chat', async () => {
     const sockets = openRelay();
     expect(screen.getByText('Opening the team task')).toBeDefined();
     expect(sockets[0]?.url).toEndWith('/api/teams/view?team=team1&machine=p7m2&task=kai-task');
@@ -41,7 +41,7 @@ describe('a teammate’s task in the local app', () => {
     );
     await waitFor(() => expect(screen.getAllByText('Add the billing page').length).toBeGreaterThan(0));
     expect(screen.getByText('Read-only')).toBeDefined();
-    expect(screen.queryByRole('tab', { name: /Chat/ })).toBeNull();
+    expect(screen.getByRole('tab', { name: /Chat/ })).toBeDefined();
   });
 
   it('says the task is no longer shown to the team once its machine stops showing it', async () => {
