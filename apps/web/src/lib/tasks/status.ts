@@ -13,6 +13,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { STAGE_ICON, STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { describePostMergeStatus, describePreMergeStatus } from '@/lib/review/merge-steps.ts';
+import { BUNDLE_MERGING_STATUS, BUNDLE_READY_STATUS, isMergingWithBundle } from '@/lib/tasks/bundles.ts';
 import { resolveTaskGroup, TASK_GROUP } from '@/lib/tasks/groups.ts';
 import { isWatchedTask } from '@/lib/tasks/watchdogs.ts';
 
@@ -122,6 +123,8 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (gate && isHeldInBacklog(state, gate))
     return { label: TASK_GROUP.backlog.title, tone: TASK_GROUP.backlog.tone };
   if (gate) return resolveGateStatus(gate);
+  if (task.bundleReady && task.stage === 'shipping') return BUNDLE_READY_STATUS;
+  if (isMergingWithBundle(state, task)) return BUNDLE_MERGING_STATUS;
   if (task.duplicate) return DUPLICATE;
   if (isWatchedTask(task)) return WATCHING;
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;

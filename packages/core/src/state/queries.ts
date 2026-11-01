@@ -74,7 +74,7 @@ export function listOpenBlockers(state: ShinsaState, task: Task) {
   return listDependencies(state, task).filter((dependency) => !isTaskSettled(dependency));
 }
 
-export function selectStackParent(state: ShinsaState, task: Task) {
+export function selectStackParent(state: Pick<ShinsaState, 'tasks'>, task: Task) {
   return task.stacksOn ? (state.tasks[task.stacksOn] ?? null) : null;
 }
 
@@ -96,7 +96,7 @@ function isInBundle(task: Task) {
   return !isTaskComplete(task) && task.stage !== 'cancelled';
 }
 
-export function listBundleBelow(state: ShinsaState, task: Task) {
+export function listBundleBelow(state: Pick<ShinsaState, 'tasks'>, task: Task) {
   const below: Task[] = [];
   let parent = selectStackParent(state, task);
   while (parent && isInBundle(parent) && !below.includes(parent)) {
@@ -106,12 +106,12 @@ export function listBundleBelow(state: ShinsaState, task: Task) {
   return below;
 }
 
-function selectStackedChild(state: ShinsaState, task: Task) {
+function selectStackedChild(state: Pick<ShinsaState, 'tasks'>, task: Task) {
   const children = Object.values(state.tasks).filter((child) => child.stacksOn === task.id);
   return children.find((child) => !isTaskSettled(child)) ?? children.find(isTaskComplete) ?? null;
 }
 
-export function resolveBundle(state: ShinsaState, task: Task) {
+export function resolveBundle(state: Pick<ShinsaState, 'tasks'>, task: Task) {
   const bundle: Task[] = [task];
   let parent = selectStackParent(state, task);
   while (parent && !bundle.includes(parent)) {

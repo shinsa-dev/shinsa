@@ -408,3 +408,33 @@ describe('describeTaskCounts', () => {
     expect(describeTaskCounts(createShinsaState({}))).toBe('0 open · 0 done');
   });
 });
+
+describe('the tasks of a bundle in All tasks', () => {
+  it('lists a ready task with the task on top of its bundle, together and bottom first', () => {
+    const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });
+    const top = createTask({ id: 'top', stage: 'building', stacksOn: 'root', priority: 'urgent' });
+    const other = createTask({ id: 'other', stage: 'building', priority: 'high' });
+    const state = createShinsaState({ tasks: [root, top, other] });
+    expect(resolveTaskGroup(state, root)).toBe('working');
+    const working = listTaskGroupSections(state, '', 'working')[0]?.entries.map(({ task }) => task.id);
+    expect(working).toEqual(['root', 'top', 'other']);
+  });
+
+  it('lists the tasks merging with the bundle under the top task’s merge gate', () => {
+    const root = createTask({ id: 'root', stage: 'awaiting_merge' });
+    const top = createTask({ id: 'top', stage: 'awaiting_merge', stacksOn: 'root' });
+    const state = createShinsaState({
+      tasks: [root, top],
+      gates: [createGate({ id: 'm', taskId: 'top', type: 'merge' })],
+    });
+    expect(resolveTaskGroup(state, root)).toBe('merge');
+  });
+
+  it('keeps a ready task on its own when nothing open is above it', () => {
+    const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });
+    const state = createShinsaState({
+      tasks: [root, createTask({ id: 'top', stage: 'cancelled', stacksOn: 'root' })],
+    });
+    expect(resolveTaskGroup(state, root)).toBe('working');
+  });
+});

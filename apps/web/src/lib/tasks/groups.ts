@@ -1,5 +1,6 @@
 import {
   compareTasks,
+  type Gate,
   isAgentQuestion,
   isDependencyOf,
   isHeldInBacklog,
@@ -7,12 +8,14 @@ import {
   isTaskSettled,
   isWatchHome,
   listWaitsOn,
+  resolveBundle,
   type ShinsaState,
   selectLeadGate,
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
+import { isMergingWithBundle, selectBundleTop } from '@/lib/tasks/bundles.ts';
 
 export type TaskGroupKey =
   | 'merge'
@@ -85,6 +88,21 @@ export const TASK_GROUP = Object.fromEntries(TASK_GROUPS.map((group) => [group.k
   TaskGroup
 >;
 
+function resolveGateGroup(gate: Gate): TaskGroupKey {
+  if (isPausingGate(gate)) return 'paused';
+  if (gate.type === 'proposal') return 'change';
+  if (gate.type === 'operation') return 'operation';
+  if (isAgentQuestion(gate)) return 'answer';
+  if (gate.type === 'result') return 'answered';
+  if (gate.type === 'merge') return 'merge';
+  if (gate.type === 'review') return 'review';
+  return 'plan';
+}
+
+function isWaitingForBundle(state: ShinsaState, task: Task) {
+  return Boolean(task.bundleReady) || isMergingWithBundle(state, task);
+}
+
 export function resolveTaskGroup(state: ShinsaState, task: Task): TaskGroupKey {
   if (task.duplicate) return 'duplicate';
   if (task.stage === 'cancelled') return 'cancelled';
@@ -92,16 +110,9 @@ export function resolveTaskGroup(state: ShinsaState, task: Task): TaskGroupKey {
   if (task.snoozed) return 'snoozed';
   const gate = selectLeadGate(state, task);
   if (gate && isHeldInBacklog(state, gate)) return 'backlog';
-  if (gate) {
-    if (isPausingGate(gate)) return 'paused';
-    if (gate.type === 'proposal') return 'change';
-    if (gate.type === 'operation') return 'operation';
-    if (isAgentQuestion(gate)) return 'answer';
-    if (gate.type === 'result') return 'answered';
-    if (gate.type === 'merge') return 'merge';
-    if (gate.type === 'review') return 'review';
-    return 'plan';
-  }
+  if (gate) return resolveGateGroup(gate);
+  const top = isWaitingForBundle(state, task) ? selectBundleTop(state, task) : null;
+  if (top && top.id !== task.id && !top.bundleReady) return resolveTaskGroup(state, top);
   if (listWaitsOn(state, task).length > 0) return 'waiting';
   return task.backlog ? 'backlog' : 'working';
 }
@@ -174,12 +185,27 @@ export function selectTaskGroup(value: string | null) {
   return TASK_GROUPS.find((group) => group.key === value) ?? null;
 }
 
+function orderBundles(state: ShinsaState, tasks: Task[]): Task[] {
+  const inGroup = new Set(tasks.map((task) => task.id));
+  const placed = new Set<string>();
+  const ordered: Task[] = [];
+  for (const task of tasks) {
+    if (placed.has(task.id)) continue;
+    const members = resolveBundle(state, task).filter((member) => inGroup.has(member.id));
+    for (const member of members.length > 0 ? members : [task]) {
+      placed.add(member.id);
+      ordered.push(member);
+    }
+  }
+  return ordered;
+}
+
 function orderTaskGroup(state: ShinsaState, key: TaskGroupKey, tasks: Task[]): ChainEntry[] {
   if (key === 'waiting') return orderChains(state, tasks);
   const sorted =
     key === 'done' || key === 'duplicate' || key === 'cancelled'
       ? tasks.slice().sort((a, b) => b.stageChangedAt - a.stageChangedAt)
-      : tasks.slice().sort(compareTasks);
+      : orderBundles(state, tasks.slice().sort(compareTasks));
   return sorted.map((task) => ({ task, depth: 0 }));
 }
 

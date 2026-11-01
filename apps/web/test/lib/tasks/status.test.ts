@@ -441,3 +441,16 @@ describe('a duplicate', () => {
     expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconSquareBehindSquare2', tone: 'neutral' });
   });
 });
+
+describe('a task in a bundle', () => {
+  it('is ready in green, merging with its bundle, with no merge gate of its own', () => {
+    const ready = createTask({ id: 'r', stage: 'shipping', bundleReady: { commit: 'a' } });
+    const merging = createTask({ id: 'm', stage: 'awaiting_merge', stacksOn: 'r' });
+    const state = createShinsaState({ tasks: [ready, merging] });
+    expect(resolveTaskStatus(state, ready)).toEqual({
+      label: 'Ready, merges with its bundle',
+      tone: 'green',
+    });
+    expect(resolveTaskStatus(state, merging)).toEqual({ label: 'Merging with its bundle', tone: 'green' });
+  });
+});

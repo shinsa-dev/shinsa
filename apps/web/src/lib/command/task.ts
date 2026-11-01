@@ -19,6 +19,14 @@ import { type Command, type CommandSection, type MenuPage, RANK } from '@/lib/co
 import { listTaskActionCommands } from '@/lib/command/task-actions.ts';
 import type { LineComment } from '@/lib/review/draft.ts';
 import {
+  BUNDLE_ICON,
+  canChangeStack,
+  listStackChoices,
+  STACK_LABEL,
+  toggleStack,
+  unstackTask,
+} from '@/lib/tasks/bundles.ts';
+import {
   clearDependencies,
   listDependencyChoices,
   resolveDependencyLabel,
@@ -78,6 +86,48 @@ function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
       icon: 'IconCrossMedium',
       keywords: ['wait', 'dependency', 'start now', 'unblock', 'remove'],
       run: () => void clearDependencies(task),
+    });
+  }
+  return [...commands, ...listStackCommands(state, task)];
+}
+
+function listStackCommands(state: ShinsaState, task: Task): Command[] {
+  const id = `task.${task.id}.stack`;
+  const parent = task.stacksOn ? state.tasks[task.stacksOn] : undefined;
+  const hint = parent ? { hint: parent.title } : {};
+  const choices = listStackChoices(state, task);
+  const commands: Command[] = [];
+  if (choices.length > 0) {
+    commands.push({
+      kind: 'choice',
+      id: `${id}.on`,
+      label: `${STACK_LABEL}…`,
+      ...hint,
+      icon: BUNDLE_ICON,
+      keywords: ['stack', 'bundle', 'stacked pull request', 'depends', 'builds on'],
+      heading: 'Stacks on',
+      value: task.stacksOn ? [task.stacksOn] : [],
+      options: choices.map((choice) => ({
+        value: choice.id,
+        label: choice.title,
+        icon: resolveTaskMenuIcon(state, choice),
+        keywords: [choice.branch ?? ''],
+      })),
+      pick: (value) => {
+        const chosen = state.tasks[value];
+        if (chosen) void toggleStack(task, chosen);
+      },
+    });
+  }
+  if (task.stacksOn && canChangeStack(task)) {
+    commands.push({
+      kind: 'run',
+      id: `${id}.off`,
+      label: 'Take out of the bundle',
+      ...hint,
+      icon: 'IconCrossMedium',
+      keywords: ['unstack', 'bundle', 'stack', 'remove'],
+      run: () => void unstackTask(task),
     });
   }
   return commands;

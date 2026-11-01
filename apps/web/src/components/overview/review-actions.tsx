@@ -1,4 +1,4 @@
-import type { Gate, Task } from '@shinsa/core';
+import type { Gate, ShinsaState, Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
@@ -10,10 +10,10 @@ import {
   resolveVerdictAnswer,
   resolveVerdictDraft,
 } from '@/lib/overview/verdicts.ts';
-import { describeMergeBlock } from '@/lib/review/merge-steps.ts';
+import { describeMergeBlock, resolveMergeLabel } from '@/lib/review/merge-steps.ts';
 import { replyToGate, resolveApprovalReply } from '@/lib/tasks/gates.ts';
 
-export function ReviewActions({ task, gate }: { task: Task; gate: Gate }) {
+export function ReviewActions({ state, task, gate }: { state: ShinsaState; task: Task; gate: Gate }) {
   const { busy, run } = useBusy<'merge' | 'decide'>();
   const draft = useReviewDraft();
   if (gate.type === 'merge') {
@@ -26,7 +26,7 @@ export function ReviewActions({ task, gate }: { task: Task; gate: Gate }) {
         disabled={blocked !== null}
         onClick={() => void run('merge', () => replyToGate(gate, resolveApprovalReply(task, gate, 'merge')))}
       >
-        {task.pullRequest ? `Merge #${task.pullRequest.number}` : 'Merge'}
+        {resolveMergeLabel(state, task, 'Merge')}
       </Button>
     );
     if (!blocked) return button;

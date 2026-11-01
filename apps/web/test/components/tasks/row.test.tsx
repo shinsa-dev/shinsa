@@ -72,6 +72,7 @@ describe('the row context menu', () => {
       'Low',
       'Wait for another task',
       'Stop waiting',
+      'Stack on another task',
       'Copy branch name',
       'Open in editor',
       'Open a terminal',

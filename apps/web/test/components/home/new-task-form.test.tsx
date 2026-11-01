@@ -274,13 +274,14 @@ describe('NewTaskForm', () => {
     expect(await listOptions('Project')).toEqual(['No project', 'Basket', 'Superwall']);
   });
 
-  it('offers four ways to start, each with its hint', async () => {
+  it('offers five ways to start, each with its hint', async () => {
     pushProjects('p1');
     renderForm();
     expect(await listOptions('When to start')).toEqual([
       'Auto startNow, or after work it builds on',
       'Start nowNow, even if related work is open',
       'After another task…When the tasks you pick finish',
+      'Stack on another task…When it is ready to merge, as one bundle',
       'BacklogPlans now, builds when you start it',
     ]);
   });
@@ -335,6 +336,22 @@ describe('NewTaskForm', () => {
         projectId: null,
         waitsOn: ['basket'],
       },
+    ]);
+  });
+
+  it('stacks the new task on one open task as a bundle', async () => {
+    pushProjects(null);
+    renderForm();
+    fireEvent.click(combobox('When to start'));
+    const stack = await screen.findByRole('option', { name: /Stack on another task/ });
+    fireEvent.pointerDown(stack, { pointerType: 'mouse' });
+    fireEvent.click(stack);
+    fireEvent.click(await screen.findByRole('option', { name: /Fix the schema/ }));
+    await waitFor(() => expect(combobox('When to start').textContent).toBe('Stacked on Fix the schema'));
+    fireEvent.change(field(), { target: { value: 'Add the screen on the new schema' } });
+    await send('Add');
+    expect(listSentCommands()).toEqual([
+      { type: 'task.create', request: 'Add the screen on the new schema', repoId: null, stacksOn: 'base' },
     ]);
   });
 

@@ -32,6 +32,7 @@ import {
   SHAPE_PIPELINES,
   serializePlanMarkdown,
 } from '../packages/core/src/index.ts';
+import { listBundleTasks } from './seed-bundles.ts';
 import { createCodeSample, listCodeTasks } from './seed-code.ts';
 import { writeCodeTranscripts } from './seed-code-transcripts.ts';
 import { listDelegationTasks, writeDelegationTranscripts } from './seed-delegation.ts';
@@ -5304,6 +5305,7 @@ function listTasks(repos: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
     ...listTriggerTasks({ paywall, kanna }),
     ...listRoundTasks({ paywall }, worktrees.rounds),
     ...listMergeStepTasks({ paywall, kanna }),
+    ...listBundleTasks({ paywall }),
     ...listHistoryTasks(paywall),
   ];
 }
