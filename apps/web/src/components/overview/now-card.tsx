@@ -42,7 +42,7 @@ import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { selectShownReply, selectWorkingRequest } from '@/lib/overview/exchanges.ts';
+import { type AnsweredIteration, selectShownReply, selectWorkingRequest } from '@/lib/overview/exchanges.ts';
 import {
   describeAgentReviewFact,
   describeFollowUpNote,
@@ -199,6 +199,14 @@ export function PausedCard({
   );
 }
 
+function ShownReply({ task, iteration }: { task: Task; iteration: AnsweredIteration }) {
+  return (
+    <div className='border-border border-b pb-3'>
+      <ReplyReport task={task} iteration={iteration} />
+    </div>
+  );
+}
+
 export function PlanCard({
   state,
   task,
@@ -237,7 +245,7 @@ export function PlanCard({
         </FooterNote>
       }
     >
-      {reply && <ReplyReport task={task} iteration={reply} />}
+      {reply && <ShownReply task={task} iteration={reply} />}
       <PlanList task={task} />
     </NowFrame>
   );
@@ -279,7 +287,7 @@ export function ChangeCard({
         </FooterNote>
       }
     >
-      {reply && <ReplyReport task={task} iteration={reply} />}
+      {reply && <ShownReply task={task} iteration={reply} />}
       {task.result && <Markdown text={task.result.body} className='text-fg-4 text-xs' />}
       {change.why && <Markdown text={change.why} className='text-fg-3 text-xs' />}
       {change.request && <InsetNote label={change.requestLabel} text={change.request} />}
@@ -347,7 +355,7 @@ function ReviewCard({
       }
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
     >
-      {reply && <ReplyReport task={task} iteration={reply} />}
+      {reply && <ShownReply task={task} iteration={reply} />}
       {gate.escalation ? (
         <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>
       ) : (
@@ -499,7 +507,7 @@ export function ResultCard({
         </FooterNote>
       }
     >
-      {reply && <ReplyReport task={task} iteration={reply} />}
+      {reply && <ShownReply task={task} iteration={reply} />}
       <Markdown text={result.body} className='text-fg-4 text-xs' />
     </NowFrame>
   );
