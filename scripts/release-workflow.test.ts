@@ -18,7 +18,7 @@ interface WorkflowJob {
 }
 
 interface Workflow {
-  jobs: Record<'mac' | 'linux' | 'downloads' | 'status', WorkflowJob>;
+  jobs: Record<'mac' | 'linux' | 'downloads' | 'npm' | 'status', WorkflowJob>;
 }
 
 const workflow = Bun.YAML.parse(
@@ -129,10 +129,51 @@ describe('the engine archives', () => {
 
   it('moves the downloads only once every engine is in the release, and reports the Linux job', () => {
     expect(workflow.jobs.downloads.needs).toEqual(['trigger', 'mac', 'linux']);
-    expect(workflow.jobs.status.needs).toEqual(['trigger', 'mac', 'linux', 'downloads']);
+    expect(workflow.jobs.status.needs).toEqual(['trigger', 'mac', 'linux', 'downloads', 'npm']);
     const report = findStep('Report the release on the commit', 'status');
     expect(report.step.env?.LINUX).toBe(expression('needs.linux.result'));
-    expect(report.step.run).toContain('case "$TRIGGER/$MAC/$LINUX/$DOWNLOADS" in');
+    expect(report.step.run).toContain('case "$TRIGGER/$MAC/$LINUX/$DOWNLOADS/$NPM" in');
     expect(report.step.run).toContain('but the Linux engines were not added');
+  });
+});
+
+describe('the npm packages', () => {
+  const npm = workflow.jobs.npm;
+  const token = findStep('Check for an npm token', 'npm');
+  const download = findStep('Download the engines', 'npm');
+  const publish = findStep('Publish to npm', 'npm');
+
+  it('publishes once every engine is in the release', () => {
+    expect(npm.needs).toEqual(['trigger', 'mac', 'linux']);
+    expect(token.index).toBe(0);
+    expect(download.index).toBeLessThan(publish.index);
+  });
+
+  it('skips every step with a notice when there is no NPM_TOKEN', () => {
+    expect(token.step.env?.NPM_TOKEN).toBe(expression('secrets.NPM_TOKEN'));
+    expect(token.step.run).toContain('::notice::No NPM_TOKEN secret');
+    for (const step of npm.steps.slice(1)) {
+      expect(step.if).toBe("steps.token.outputs.present == 'true'");
+    }
+  });
+
+  it('repacks the release’s own archives at its version and channel', () => {
+    expect(download.step.run).toBe(
+      `gh release download "$TAG" --pattern 'shinsa-*.tar.gz' --pattern 'shinsa-*.tar.gz.sha256' --dir release-engine`
+    );
+    expect(download.step.env?.TAG).toBe(expression('needs.mac.outputs.tag'));
+    expect(publish.step.run).toBe('bun scripts/release-npm.ts release-engine npm-packages');
+    expect(publish.step.env).toEqual({
+      NODE_AUTH_TOKEN: expression('secrets.NPM_TOKEN'),
+      SHINSA_VERSION: expression('needs.mac.outputs.version'),
+      RELEASE_CHANNEL: expression('needs.mac.outputs.channel'),
+    });
+  });
+
+  it('reports npm apart from the downloads', () => {
+    const report = findStep('Report the release on the commit', 'status');
+    expect(report.step.env?.NPM).toBe(expression('needs.npm.result'));
+    expect(report.step.run).toContain('but npm was not updated');
+    expect(report.step.run).toContain('but neither the downloads nor npm were updated');
   });
 });

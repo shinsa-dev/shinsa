@@ -316,8 +316,51 @@ jobs:
           RELEASE_TAG: ${{ needs.mac.outputs.tag }}
         run: bun scripts/release-upload.ts
 
+  npm:
+    needs: [trigger, mac, linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check for an npm token
+        id: token
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No NPM_TOKEN secret, so the engine was not published to npm."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.present == 'true'
+        with:
+          ref: ${{ needs.trigger.outputs.sha }}
+      - uses: oven-sh/setup-bun@v2
+        if: steps.token.outputs.present == 'true'
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v4
+        if: steps.token.outputs.present == 'true'
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Download the engines
+        if: steps.token.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.mac.outputs.tag }}
+        run: gh release download "$TAG" --pattern 'shinsa-*.tar.gz' --pattern 'shinsa-*.tar.gz.sha256' --dir release-engine
+      - name: Publish to npm
+        if: steps.token.outputs.present == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          SHINSA_VERSION: ${{ needs.mac.outputs.version }}
+          RELEASE_CHANNEL: ${{ needs.mac.outputs.channel }}
+        run: bun scripts/release-npm.ts release-engine npm-packages
+
   status:
-    needs: [trigger, mac, linux, downloads]
+    needs: [trigger, mac, linux, downloads, npm]
     if: ${{ always() && (needs.trigger.result == 'failure' || needs.trigger.outputs.build == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -334,12 +377,15 @@ jobs:
           MAC: ${{ needs.mac.result }}
           LINUX: ${{ needs.linux.result }}
           DOWNLOADS: ${{ needs.downloads.result }}
+          NPM: ${{ needs.npm.result }}
         run: |
-          case "$TRIGGER/$MAC/$LINUX/$DOWNLOADS" in
-            success/success/success/success) state=success description="Published $TAG" ;;
+          case "$TRIGGER/$MAC/$LINUX/$DOWNLOADS/$NPM" in
+            success/success/success/success/success) state=success description="Published $TAG" ;;
             failure/*) state=failure description="Could not decide whether to build the $CHANNEL release" ;;
-            */cancelled/* | */*/cancelled/* | */*/*/cancelled) state=error description="Cancelled" ;;
-            */success/success/*) state=failure description="Published $TAG, but the downloads were not updated" ;;
+            *cancelled*) state=error description="Cancelled" ;;
+            */success/success/success/*) state=failure description="Published $TAG, but npm was not updated" ;;
+            */success/success/*/success) state=failure description="Published $TAG, but the downloads were not updated" ;;
+            */success/success/*) state=failure description="Published $TAG, but neither the downloads nor npm were updated" ;;
             */success/*) state=failure description="Published $TAG, but the Linux engines were not added" ;;
             *) state=failure description="The $CHANNEL release failed to build" ;;
           esac
