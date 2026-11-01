@@ -4,6 +4,7 @@ import {
   canOpenFeedback,
   countFeedbackWaiting,
   describeFeedbackCount,
+  describeFeedbackFiled,
   describeFeedbackIssue,
   describeFeedbackSource,
   describeFeedbackStatus,
@@ -95,6 +96,14 @@ describe('describeFeedbackStatus', () => {
 
   it('names an opened issue by its number', () => {
     expect([describeFeedbackIssue(FILED), describeFeedbackIssue(DRAFT)]).toEqual(['#42', null]);
+  });
+
+  it('says when an issue opened, and that it came from an agent’s report', () => {
+    const now = FILED.updatedAt + 2 * 60 * 60 * 1000;
+    expect(describeFeedbackFiled({ ...FILED, source: 'human' }, now)).toBe('Opened 2h ago');
+    expect(describeFeedbackFiled({ ...FILED, source: 'agent' }, now)).toBe(
+      'Opened 2h ago from an agent’s report'
+    );
   });
 });
 

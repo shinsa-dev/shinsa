@@ -37,6 +37,8 @@ describe('drafting feedback as a public issue', () => {
       ].join('\n')
     );
     expect(calls[0]?.system).toContain('The issue is public');
+    expect(calls[0]?.system).toContain('### Steps to reproduce');
+    expect(calls[0]?.system).toContain('Never be vague');
     expect(calls[0]?.schema).toMatchObject({ required: ['title', 'body'] });
   });
 

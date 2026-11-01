@@ -44,6 +44,8 @@ const PUBLIC_WORDS: ReadonlySet<string> = new Set(['shinsa', 'shinsa-dev', FEEDB
 
 const MIN_PRIVATE_WORD = 2;
 
+const KEY_WORD_LENGTH = 4;
+
 const PUBLIC_HOSTS: ReadonlySet<string> = new Set(['shinsa.dev', 'localhost', '127.0.0.1']);
 
 const PUBLIC_URL_PREFIXES = [`https://github.com/${FEEDBACK_REPOSITORY}`];
@@ -89,11 +91,25 @@ export function isPrivateWord(word: string) {
   return trimmed.length >= MIN_PRIVATE_WORD && !PUBLIC_WORDS.has(trimmed.toLowerCase());
 }
 
-function resolveWordPattern(words: readonly string[]) {
-  const unique = [...new Set(words.map((word) => word.trim()).filter(isPrivateWord))];
-  if (unique.length === 0) return null;
-  const alternatives = unique.sort((left, right) => right.length - left.length).map(escapePattern);
-  return new RegExp(`(?<![A-Za-z0-9_])(?:${alternatives.join('|')})(?![A-Za-z0-9_])`, 'gi');
+function isKeyWord(word: string) {
+  return word.length <= KEY_WORD_LENGTH && /[A-Z]/.test(word) && word === word.toUpperCase();
+}
+
+function resolveWordPattern(words: readonly string[], flags: string) {
+  if (words.length === 0) return null;
+  const alternatives = [...words].sort((left, right) => right.length - left.length).map(escapePattern);
+  return new RegExp(`(?<![A-Za-z0-9_])(?:${alternatives.join('|')})(?![A-Za-z0-9_])`, flags);
+}
+
+function listWordPatterns(privateWords: readonly string[]) {
+  const unique = [...new Set(privateWords.map((word) => word.trim()).filter(isPrivateWord))];
+  return [
+    resolveWordPattern(unique.filter(isKeyWord), 'g'),
+    resolveWordPattern(
+      unique.filter((word) => !isKeyWord(word)),
+      'gi'
+    ),
+  ].filter((pattern) => pattern !== null);
 }
 
 interface Match extends FeedbackLeak {
@@ -108,14 +124,25 @@ function listMatches(text: string, kind: FeedbackLeakKind, pattern: RegExp, keep
   return matches;
 }
 
+function listWordMatches(text: string, privateWords: readonly string[]) {
+  const found = listWordPatterns(privateWords)
+    .flatMap((pattern) => listMatches(text, 'private_word', pattern))
+    .sort((left, right) => left.index - right.index || right.text.length - left.text.length);
+  let end = 0;
+  return found.filter((match) => {
+    if (match.index < end) return false;
+    end = match.index + match.text.length;
+    return true;
+  });
+}
+
 export function listFeedbackLeaks(text: string, privateWords: readonly string[]): FeedbackLeak[] {
   const matches = [
     ...PATTERNS.flatMap(({ kind, pattern }) => listMatches(text, kind, pattern)),
     ...listMatches(text, 'secret', LONG_RUN, isOpaque),
     ...listMatches(text, 'url', URL_PATTERN, (url) => !isPublicUrl(url)),
   ];
-  const words = resolveWordPattern(privateWords);
-  if (words) matches.push(...listMatches(text, 'private_word', words));
+  matches.push(...listWordMatches(text, privateWords));
   const seen = new Set<string>();
   const leaks: FeedbackLeak[] = [];
   for (const match of matches.sort((left, right) => left.index - right.index)) {

@@ -129,7 +129,7 @@ export const PROCESS_TOOL_SPECS = {
       type: 'object',
       properties: {
         feedback: limitedText(
-          'What Shinsa did, what you expected, and what you were doing then, in plain words. Leave out names, paths, code and anything private.',
+          'In detail: the Shinsa tool, step, gate or screen involved, what you called or did, exactly what Shinsa did or answered, what you expected instead, and what it blocked. Name Shinsa’s own parts precisely; leave out the task’s names, paths, code and anything private.',
           FEEDBACK_LIMITS.note
         ),
       },

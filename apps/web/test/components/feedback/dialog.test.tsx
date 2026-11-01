@@ -179,7 +179,7 @@ describe('FeedbackDialog and FeedbackButton', () => {
     fireEvent.click(button);
     expect(isFeedbackOpen()).toBe(true);
     await waitFor(() => expect(screen.getByText('Feedback on Shinsa')).toBeTruthy());
-    expect(screen.getByText(/public GitHub issue on shinsa-dev\/shinsa/)).toBeTruthy();
+    expect(screen.getByRole('dialog').textContent).toContain('public issue on shinsa-dev/shinsa, without anything private');
   });
 
   it('opens from the rail and lets the rail close', () => {

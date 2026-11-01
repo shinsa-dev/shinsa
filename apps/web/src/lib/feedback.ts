@@ -11,12 +11,16 @@ import {
 } from '@shinsa/core';
 import * as React from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
+import { formatSince } from '@/lib/format/time.ts';
 
 export const FEEDBACK_ICON = 'IconMegaphone';
 
 export const FEEDBACK_ACTIVE_ICON = 'IconMegaphoneFilled';
 
-export const FEEDBACK_INTRO = `Your agent rewrites your note as a public GitHub issue on ${FEEDBACK_REPOSITORY}, leaving out your projects, repositories, files, names and code. You read it before it opens, and Shinsa checks it again for anything private.`;
+export const FEEDBACK_INTRO = {
+  before: 'Your agent turns your note into a public issue on',
+  after: ', without anything private. You read it before it opens.',
+};
 
 export const FEEDBACK_HINT = 'Your agent turns it into a public GitHub issue that you read before it opens';
 
@@ -97,6 +101,11 @@ export function describeFeedbackStatus(entry: Feedback) {
     default:
       return null;
   }
+}
+
+export function describeFeedbackFiled(entry: Feedback, now: number) {
+  const opened = formatSince('Opened', entry.updatedAt, now);
+  return entry.source === 'agent' ? `${opened} from an agent’s report` : opened;
 }
 
 export function describeFeedbackIssue(entry: Feedback) {

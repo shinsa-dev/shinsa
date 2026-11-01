@@ -1,4 +1,4 @@
-import type { Feedback, ShinsaState } from '@shinsa/core';
+import { FEEDBACK_REPOSITORY, type Feedback, type ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
   Dialog,
@@ -17,13 +17,14 @@ import { Textarea } from '@shinsa/ui/components/textarea';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CARD, TONE_INSET } from '@/components/layout/surface/card.ts';
+import { InlineMark } from '@/components/links/link.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
-import { CheckMark } from '@/components/status/check-mark.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import {
   canOpenFeedback,
+  describeFeedbackFiled,
   describeFeedbackIssue,
   describeFeedbackSource,
   describeFeedbackStatus,
@@ -168,15 +169,18 @@ function IssueEditor({
 function EntrySource({ state, entry }: { state: ShinsaState; entry: Feedback }) {
   const source = describeFeedbackSource(state, entry);
   return (
-    <div className='flex min-w-0 items-center gap-1 text-2xs text-fg-2'>
-      <Icon size='sm' name={entry.source === 'agent' ? 'IconRobot' : 'IconUser'} />
-      <span className='shrink-0'>{source.label}</span>
-      {source.task && (
-        <span className='min-w-0 truncate'>
-          <TaskLink state={state} task={source.task} />
-        </span>
-      )}
-      <span className='ms-auto shrink-0'>
+    <div className='flex min-w-0 items-baseline gap-3 text-2xs text-fg-2'>
+      <p className='min-w-0 flex-1 truncate'>
+        <InlineMark icon={entry.source === 'agent' ? 'IconRobot' : 'IconUser'} />
+        {source.label}
+        {source.task && (
+          <>
+            {' '}
+            <TaskLink state={state} task={source.task} />
+          </>
+        )}
+      </p>
+      <span className='shrink-0'>
         <TimeAgo at={entry.updatedAt} />
       </span>
     </div>
@@ -302,11 +306,23 @@ function FiledEntry({ entry }: { entry: Feedback }) {
       href={entry.issue?.url}
       target='_blank'
       rel='noreferrer'
-      className='flex min-w-0 items-center gap-2 rounded-control px-1.5 py-1 text-xs hover:bg-bg-a1 active:bg-bg-a1'
+      data-feedback={entry.id}
+      className='group/issue corner-superellipse/1.125 flex min-w-0 items-start gap-2 rounded-item px-2 py-1.5 text-xs hover:bg-bg-a1 active:bg-bg-a1'
     >
-      <CheckMark />
-      <span className='min-w-0 flex-1 truncate text-fg-4'>{entry.title}</span>
-      <span className='shrink-0 text-fg-2 tabular-nums'>{describeFeedbackIssue(entry)}</span>
+      <span className='mt-px text-fg-3'>
+        <Icon size='sm' name='IconGithub' />
+      </span>
+      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+        <span className='truncate font-medium text-fg-4'>{entry.title}</span>
+        <span className='truncate text-2xs text-fg-2'>
+          <span className='tabular-nums'>{describeFeedbackIssue(entry)}</span>
+          {' · '}
+          <TimeAgo at={entry.updatedAt} text={(now) => describeFeedbackFiled(entry, now)} />
+        </span>
+      </span>
+      <span className='mt-px text-fg-2 opacity-0 group-hover/issue:opacity-100 group-active/issue:opacity-100'>
+        <Icon size='sm' name='IconArrowUpRight' />
+      </span>
     </a>
   );
 }
@@ -334,7 +350,7 @@ export function FeedbackPanel({ state, actions }: { state: ShinsaState; actions:
       {groups.filed.length > 0 && (
         <section className={SECTION}>
           <h3 className={SECTION_HEADING}>Opened on GitHub</h3>
-          <div className='flex flex-col gap-px'>
+          <div className='-mx-2 flex flex-col gap-px'>
             {groups.filed.map((entry) => (
               <FiledEntry key={entry.id} entry={entry} />
             ))}
@@ -358,7 +374,10 @@ export function FeedbackDialog({
       <DialogContent>
         <DialogHeader className='px-6'>
           <DialogTitle>Feedback on Shinsa</DialogTitle>
-          <DialogDescription>{FEEDBACK_INTRO}</DialogDescription>
+          <DialogDescription>
+            {FEEDBACK_INTRO.before} <span className='whitespace-nowrap'>{FEEDBACK_REPOSITORY}</span>
+            {FEEDBACK_INTRO.after}
+          </DialogDescription>
         </DialogHeader>
         <DialogCloseButton />
         <div className='w-full'>

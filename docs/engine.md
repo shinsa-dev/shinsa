@@ -1864,20 +1864,24 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   `issue` (number and link). `feedback.recorded` carries the whole entry, `feedback.removed` forgets it.
 - **Writing.** `feedback.write` (the dialog, `shinsa feedback write`) records a note as `drafting` and runs
   `feedback.draft`; with `feedbackId` it rewrites an entry that is not busy or filed and drafts it again. The
-  `feedback.draft` effect (replay-safe) is a quick call on your account (`createFeedbackDrafter`,
-  `feedback/draft.ts`): its fixed system prompt says the issue is public, to describe only what Shinsa did and what
-  should change, and to replace every project, repository, file, branch, task, person, account, link, code and number
-  with a generic word; the user prompt carries the note and the private words below (at most 200), never the system
-  prompt (Caching, below). The answer is `feedback.record_draft`; no answer, an error or a title or body it cannot use
-  (empty, or over its limit) is `feedback.record_failure` ("write the note again"). Your note itself is never posted.
+  `feedback.draft` effect (replay-safe) is a quick call on your account (`createFeedbackDrafter`, `feedback/draft.ts`):
+  its fixed system prompt says the issue is public, to describe only what Shinsa did and what should change, and to
+  replace every project, repository, file, branch, task, person, account, link, code and number with a generic word. It
+  asks for an issue a maintainer can act on without asking anything: a specific title, and a body under What happened,
+  What should happen, Steps to reproduce, Why it matters and, when the note implies one, Suggested change, naming the
+  exact screen, command, step, gate or tool. The user prompt carries the note and the private words below (at most 200),
+  never the system prompt (Caching, below). The answer is `feedback.record_draft`; no answer, an error or a title or
+  body it cannot use (empty, or over its limit) is `feedback.record_failure` ("write the note again"). Your note itself
+  is never posted.
 - **The privacy check** (`listFeedbackLeaks`, pure, in core) refuses an email, a home folder path (`/Users/…`,
   `/home/…`, `C:\Users\…`; `~/` names no one), a known token or key shape (private key blocks, `sk-`, `ghp_`,
-  `github_pat_`, `xox…`, AWS access keys, JWTs, `token=`) or a long run of letters and digits, a link outside `shinsa.dev`,
-  `localhost` and the repository itself, and every private word: `listPrivateWords` reads them from the state, the
-  names and keys of your projects and their folders, each repository's name, path and remote owner and name, every
-  task's handle, branch and worktree, the account emails tasks and runs used, and the user names in those paths. Words
-  match whole, case-insensitively, from two letters; "Shinsa" and `shinsa-dev` are allowed. The dialog shows what it
-  finds on each draft (`describeFeedbackLeaks`) and keeps Open issue off until you edit it out.
+  `github_pat_`, `xox…`, AWS access keys, JWTs, `token=`) or a long run of letters and digits, a link outside
+  `shinsa.dev`, `localhost` and the repository itself, and every private word: `listPrivateWords` reads them from the
+  state, the names and keys of your projects and their folders, each repository's name, path and remote owner and name,
+  every task's handle, branch and worktree, the account emails tasks and runs used, and the user names in those paths.
+  Words match whole from two letters, case-insensitively except a key of up to four capitals (`SW`, `PER`), which
+  matches only in capitals so it never blocks an ordinary word; "Shinsa" and `shinsa-dev` are allowed. The dialog shows
+  what it finds on each draft (`describeFeedbackLeaks`) and keeps Open issue off until you edit it out.
 - **Editing** (`feedback.update`) changes the title and body of an entry that waits for you (a draft, or one that
   failed with a draft). **Dismissing** (`feedback.dismiss`) forgets an entry, refused while it is being opened.
 - **Opening** (`feedback.file`) is yours alone: core refuses it on your behalf (`human_only`; Who can change Shinsa,

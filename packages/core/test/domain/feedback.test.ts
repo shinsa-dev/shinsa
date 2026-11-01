@@ -100,6 +100,13 @@ describe('listFeedbackLeaks', () => {
     ]);
   });
 
+  test('matches a short key only in capitals, so it never blocks an ordinary word', () => {
+    expect(listFeedbackLeaks('One menu per task, then PER and app.', ['PER', 'App'])).toEqual([
+      { kind: 'private_word', text: 'PER' },
+      { kind: 'private_word', text: 'app' },
+    ]);
+  });
+
   test('takes regex characters in a word literally', () => {
     expect(listFeedbackLeaks('The a.b project and aXb', ['a.b'])).toEqual([
       { kind: 'private_word', text: 'a.b' },
