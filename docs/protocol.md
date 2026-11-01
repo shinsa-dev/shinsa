@@ -210,7 +210,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
 | `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
-| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is (`docs/engine.md` → Sharing a task) |
+| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `preset` what it shows (`SharePreset`: `full`, `status`, `everything`, each a list of `ShareGroup`s in `SHARE_PRESET_GROUPS`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is (`docs/engine.md` → Sharing a task) |
 
 **Lifecycle and scheduling**
 
@@ -775,7 +775,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.unsnooze` | clears the snooze: the task shows where it is now; a task not snoozed records nothing | `tasks unsnooze` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
-| `task.share` | shares it by a link that reads it live from this machine (`share.link` makes it), for `limit` (the `shareLimit` setting when left out); again with another `limit` it changes how long and keeps the link; again on a failed share it asks for the link once more; an automation's home, or `until_done` on a finished task, is refused (`share_refused`) | `tasks share [--until]` | **human** |
+| `task.share` | shares it by a link that reads it live from this machine (`share.link` makes it), for `limit` and as `preset` (the `shareLimit` and `sharePreset` settings when left out); again with another `limit` or `preset` it changes how long or what it shows and keeps the link; again on a failed share it asks for the link once more; an automation's home, or `until_done` on a finished task, is refused (`share_refused`) | `tasks share [--until] [--preset]` | **human** |
 | `task.unshare` | stops sharing it: every open link ends at once and the link stops working | `tasks unshare` | **human** |
 | `task.mark_duplicate` | closes it as a duplicate of `duplicateOf`: `task.duplicated`, then the cancel's settle; refused for itself (`duplicate_of_itself`), a finished task (`task_settled`) or an original that is a duplicate (`duplicate_of_duplicate`) | `tasks duplicate --of` | agent |
 | `task.clear_duplicate` | starts a duplicate again (`task.duplicate_cleared`): one that never ran an agent through `startWork`, as if triage had not closed it; one that did in a fresh round with the same request (`round.queued`, `round.started`); refused for a task that is no duplicate (`not_duplicate`) | `tasks not-duplicate` | agent |
@@ -808,7 +808,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus | `focus set`, `focus clear` | agent |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit` (`HUMAN_ONLY_SETTINGS`) |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset` (`HUMAN_ONLY_SETTINGS`) |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -949,7 +949,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
 | `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
-| `task.shared`, `task.unshared` | you shared a task by link or changed how long (`limit`, `endsAt`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
+| `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `preset`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
 | `share.recorded`, `share.failed` | the engine made the link (`url`, null when unchanged), or could not (`detail`) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
@@ -1267,8 +1267,9 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 **Shared tasks** (`shares.ts` and `share-channel.ts` here, `share/` for the projection): `SharedTask` is `task` (a
 `Task` with every field not copied by name left empty), `gates` and `runs` (redacted), `evidence` (current evidence; a
 stored file's `uri` is `shared-evidence:<id>`, `SHARED_EVIDENCE_PREFIX`), `repo` and `project` (their records without
-path, folders or description), `owner`, `machine`, `repository` (its name) and `code` (`hasSharedCode`: a repository
-with an open or merged pull request), the same for a public or a private repository (`docs/engine.md` → Sharing a
+path, folders or description), `owner`, `machine`, `repository` (its name), `code` (`hasSharedCode`: a repository
+with an open or merged pull request) and `preset`, whose groups decide which of them are filled (a Status share has no
+owner, machine, repository, evidence or code), the same for a public or a private repository (`docs/engine.md` → Sharing a
 task has the table). A link is `ShareLink` (`instanceId`, `shareId` of `SHARE_ID_BYTES`, `key` of `SHARE_KEY_BYTES`),
 written `https://app.shinsa.dev/share/t/<token>#<key>`, the token the share id's bytes followed by the instance id's, as
 base64url (`serializeShareUrl`, `resolveSharePagePath`, `parseShareUrl`, `parseShareLocation`). Its channel is the tunnel's `SHARE_CHANNEL_PATH` (`/share?id=<share id>`,
@@ -1278,7 +1279,9 @@ derive one AES-GCM key (`deriveShareSessionKey`: HKDF over the ECDH and the key)
 sends, sealed frames of `ShareMessage`: `view` (a `ShareLiveView`: `shared`, `files`: each file id's `ShareFile`
 `{ version, type }`, `updatedAt`), `file`, `body` and `end` (a file in 256 KB chunks, one of `SHARE_FILE_TYPES`,
 `SHARE_FILE_BYTES` at most) and `closed` (the link ended, with the reason). A file's id is its evidence id, `diff`
-(`SHARE_DIFF_FILE`) or `code` (`SHARE_CODE_FILE`, `{ files: { <path>: <content at the head> } }`).
+(`SHARE_DIFF_FILE`), `code` (`SHARE_CODE_FILE`, `{ files: { <path>: <content at the head> } }`) or, for an
+Everything share, `transcript-<run id>` (`resolveShareTranscriptFile`: the run's `ChatEntry[]` after
+`redactTranscript`, versioned by its entry count).
 
 `MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
 `resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine

@@ -37,6 +37,7 @@ import {
   SHARE_KEY_BYTES,
   type ShareConnectResponse,
   type ShareLink,
+  type SharePreset,
   serializeBase64Url,
   serializeShareUrl,
   type Task,
@@ -300,13 +301,15 @@ async function normalizeSeedRemote(engine: Engine, repo: Repo) {
 async function createPreviewShare(
   studio: Awaited<ReturnType<typeof startMachine>>,
   task: Task,
-  label: string
+  label: string,
+  preset: SharePreset = 'full'
 ): Promise<PreviewShare | null> {
   const seeded = task.repoId ? studio.engine.state.repos[task.repoId] : undefined;
   if (!seeded) return null;
   await normalizeSeedRemote(studio.engine, seeded);
   const url = serializeShareUrl(ORIGIN, createShareLink(studio.machine.id));
-  if (!task.share) await studio.engine.dispatch({ type: 'task.share', taskId: task.id, limit: 'none' });
+  if (!task.share)
+    await studio.engine.dispatch({ type: 'task.share', taskId: task.id, limit: 'none', preset });
   await studio.engine.dispatch({ type: 'share.record', taskId: task.id, url });
   return { url, label, handle: task.handle ?? task.id, port: studio.machine.port };
 }
@@ -324,6 +327,10 @@ async function recordPushedHead(engine: Engine, task: Task) {
   return engine.state.tasks[task.id] ?? task;
 }
 
+function countRuns(engine: Engine, taskId: string) {
+  return Object.values(engine.state.runs).filter((run) => run.taskId === taskId).length;
+}
+
 async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachine>>) {
   const { engine } = studio;
   const tasks = Object.values(engine.state.tasks).filter((entry) => entry.report && entry.repoId);
@@ -335,12 +342,26 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
     (left, right) => countStoredEvidence(engine, right.id) - countStoredEvidence(engine, left.id)
   );
   const pushed = coded && (await recordPushedHead(engine, coded));
+  const taken = new Set([pushed?.id, evidenced?.id]);
+  const [talked] = tasks
+    .filter((entry) => !taken.has(entry.id))
+    .sort((left, right) => countRuns(engine, right.id) - countRuns(engine, left.id));
+  const status = tasks.find((entry) => !taken.has(entry.id) && entry.id !== talked?.id);
   const shares = [
     pushed &&
       (await createPreviewShare(studio, pushed, 'A shared task with an open pull request, with Code')),
     evidenced &&
       evidenced.id !== pushed?.id &&
       (await createPreviewShare(studio, evidenced, 'A shared task with its evidence')),
+    status &&
+      (await createPreviewShare(studio, status, 'A task shared as Status, the status card', 'status')),
+    talked &&
+      (await createPreviewShare(
+        studio,
+        talked,
+        'A task shared as Everything, with the agents’ live output in Chat',
+        'everything'
+      )),
   ];
   return shares.filter((share): share is PreviewShare => Boolean(share));
 }
