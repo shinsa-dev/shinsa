@@ -66,7 +66,7 @@ function EscalatedReview({ state, task, gate }: { state: ShinsaState; task: Task
 
 export function OverviewSpecimens() {
   const [now] = React.useState(Date.now);
-  const [{ state, tasks, gates, runs, usageWaits, monitor, results }] = React.useState(() =>
+  const [{ state, tasks, gates, runs, usageWaits, monitor, results, answered }] = React.useState(() =>
     createOverviewScene(now)
   );
   const ignore = () => undefined;
@@ -263,6 +263,17 @@ export function OverviewSpecimens() {
           {results.map((task) => (
             <ResultCard key={task.id} state={state} task={task} onOpen={acknowledgeSample} />
           ))}
+        </Card>
+      </Specimen>
+      <Specimen label='ResultCard · answered, waiting for you to read it and close the task'>
+        <Card>
+          <ResultCard
+            state={state}
+            task={answered.task}
+            gate={answered.gate}
+            onOpen={acknowledgeSample}
+            onReply={acknowledgeSample}
+          />
         </Card>
       </Specimen>
       <Specimen label='ResultPanel · a diagnosis kept under the work it led to'>

@@ -21,6 +21,7 @@ import {
   proposePlan,
   pullRequest,
   pushed,
+  REPLY,
   reachReviewGate,
   reachShipping,
   readInstruction,
@@ -50,7 +51,7 @@ describe('answering a gate', () => {
     const review = harness.openGate(taskId).id;
     expect(() =>
       harness.send({ type: 'gate.answer', gateId: review, decision: 'reply', response: 'ok' })
-    ).toThrow('Approve it, ask for changes or reject it.');
+    ).toThrow('Approve, ask for changes or reject.');
 
     const asking = createTask(harness, { request: 'Ask' });
     const runId = harness.activeRun(asking).id;
@@ -122,7 +123,13 @@ describe('answering a gate', () => {
     const run = harness.activeRun(taskId);
     expect(run).toMatchObject({ role: 'agent', purpose: 'fix' });
     expect(run.prompt).toContain('Dark mode.');
-    harness.send({ type: 'agent.complete_fix', runId: run.id, summary: 'Added dark mode.', checks: ['c1'] });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: run.id,
+      summary: 'Added dark mode.',
+      checks: ['c1'],
+      reply: REPLY,
+    });
     expect(harness.task(taskId).stage).toBe('checking');
     harness.send({ type: 'checks.record', taskId, results: [checkResult('c1', 'pass')] });
     expect(harness.activeRun(taskId).role).toBe('reviewer');
@@ -138,7 +145,12 @@ describe('answering a gate', () => {
       decision: 'revise',
       response: 'Fix the copy.',
     });
-    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Reworded.' });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Reworded.',
+      reply: REPLY,
+    });
     expect(harness.task(taskId).stage).toBe('reviewing');
     expect(harness.effectsOf('checks.run')).toHaveLength(1);
   });
@@ -206,7 +218,7 @@ describe('approving a plan', () => {
         response: null,
         planVersion: 3,
       })
-    ).toThrow('The plan changed to version 1 after you opened it.');
+    ).toThrow('The plan changed. Approve the new one.');
   });
 
   test('refuses an approval of a plan that is being revised or was replaced', () => {
@@ -214,11 +226,11 @@ describe('approving a plan', () => {
     harness.send({ type: 'task.message', taskId, text: 'Smaller, please.' });
     expect(() =>
       harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null })
-    ).toThrow('The planner is revising this plan.');
+    ).toThrow('The plan is being revised.');
     proposePlan(harness, taskId);
     expect(() =>
       harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null })
-    ).toThrow('The plan changed to version 2 after you opened it.');
+    ).toThrow('The plan changed. Approve the new one.');
     harness.send({ type: 'task.cancel', taskId });
     expect(() =>
       harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null })
@@ -285,7 +297,7 @@ describe('verdicts on review findings', () => {
         response: null,
         verdicts: [{ index: 0, verdict: 'fix', note: null }],
       })
-    ).toThrow('Approving ships the work as it is.');
+    ).toThrow('To fix findings, ask for changes.');
     harness.send({
       type: 'gate.answer',
       gateId: gate.id,
@@ -300,13 +312,15 @@ describe('verdicts on review findings', () => {
     const { harness, gate } = reviewWithFindings();
     const send = (verdicts: { index: number; verdict: 'fix' | 'dismiss'; note: null }[]) =>
       harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'revise', response: null, verdicts });
-    expect(() => send([{ index: 5, verdict: 'fix', note: null }])).toThrow('Each verdict must name');
+    expect(() => send([{ index: 5, verdict: 'fix', note: null }])).toThrow(
+      'Each verdict needs its own finding.'
+    );
     expect(() =>
       send([
         { index: 0, verdict: 'fix', note: null },
         { index: 0, verdict: 'dismiss', note: null },
       ])
-    ).toThrow('Each verdict must name');
+    ).toThrow('Each verdict needs its own finding.');
   });
 
   test('only review findings take verdicts, and an empty list is no verdict', () => {
@@ -370,7 +384,7 @@ describe('line comments with a request for changes', () => {
         response: null,
         comments: [comment],
       })
-    ).toThrow('Line comments go to the agent when you request changes.');
+    ).toThrow('Request changes to send line comments.');
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null, comments: [] });
     expect(harness.state.gates[gate.id]?.status).toBe('answered');
 
@@ -401,8 +415,8 @@ describe('line comments with a request for changes', () => {
           comments: [sent],
         })
       );
-    expect(send({ ...comment, endLine: 2 })).toBe('The comment on src/a.ts must end on a line after line 2.');
-    expect(send({ ...comment, text: ' ' })).toBe('The comment on src/a.ts has no words.');
+    expect(send({ ...comment, endLine: 2 })).toBe('A comment must end after its first line.');
+    expect(send({ ...comment, text: ' ' })).toBe('A line comment has no words.');
   });
 });
 

@@ -146,7 +146,7 @@ describe('the backlog', () => {
       reason: 'Ask.',
     });
     expect(() => harness.send({ type: 'task.move_to_backlog', taskId: question })).toThrow(
-      'Only work that builds or runs an operation waits in the backlog'
+      'Only builds and operations can wait'
     );
     const cancelled = createTask(harness);
     harness.send({ type: 'task.cancel', taskId: cancelled });

@@ -55,6 +55,7 @@ export {
   selectEvidenceItem,
 } from './evidence.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
+export { selectOpenIteration } from './iterations.ts';
 export {
   isMemoryOf,
   MEMORY_LIMITS,
@@ -65,6 +66,7 @@ export {
   resolveMemoryText,
 } from './memory.ts';
 export { ON_BEHALF_ACTION_LIMIT, type OnBehalfAction } from './on-behalf.ts';
+export { selectWelcomeTask, WELCOME_TASK } from './onboarding.ts';
 export {
   describeOverlaps,
   listNewOverlapPaths,
@@ -192,6 +194,12 @@ export {
   validateComposition,
   type WorkStep,
 } from './shapes.ts';
+export {
+  isSameSlackThread,
+  resolveSlackThreadKey,
+  type SlackThreadLink,
+  type SlackThreadRef,
+} from './slack.ts';
 export {
   compareTasks,
   hasArmedWait,

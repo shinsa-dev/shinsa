@@ -59,21 +59,18 @@ function assertWebhook(trigger: Extract<ScheduleTrigger, { kind: 'webhook' }>) {
   const signature = trigger.signature;
   if (signature) {
     if (!HEADER_NAME.test(signature.header) || signature.header.length > SCHEDULE_LIMITS.header) {
-      throw new DomainError('schedule_invalid', 'Name the signature header with letters, digits and dashes.');
+      throw new DomainError('schedule_invalid', 'Name the header with letters and dashes.');
     }
     if (signature.prefix.length > SCHEDULE_LIMITS.prefix) {
       throw new DomainError(
         'schedule_invalid',
-        `The signature prefix can be at most ${SCHEDULE_LIMITS.prefix} characters.`
+        `The prefix is at most ${SCHEDULE_LIMITS.prefix} characters.`
       );
     }
   }
   const replayKey = trigger.replayKey;
   if (replayKey !== null && (replayKey.length > SCHEDULE_LIMITS.replayKey || !PLACEHOLDER.test(replayKey))) {
-    throw new DomainError(
-      'schedule_invalid',
-      'The replay key must name a part of the request, such as {{headers.x-github-delivery}}.'
-    );
+    throw new DomainError('schedule_invalid', 'The key needs a {{…}} placeholder.');
   }
 }
 
@@ -81,13 +78,10 @@ function assertTrigger(trigger: ScheduleTrigger, now: number) {
   switch (trigger.kind) {
     case 'once':
       if (trigger.at < now - SCHEDULE_LIMITS.onceGraceMs) {
-        throw new DomainError(
-          'schedule_past',
-          'That time has already passed, so the schedule would never run.'
-        );
+        throw new DomainError('schedule_past', 'That time has already passed.');
       }
       if (trigger.at > now + SCHEDULE_LIMITS.maxInMinutes * MINUTE_MS) {
-        throw new DomainError('schedule_invalid', 'A schedule can run at most a year from now.');
+        throw new DomainError('schedule_invalid', 'Run it within a year from now.');
       }
       return;
     case 'interval':
@@ -100,19 +94,13 @@ function assertTrigger(trigger: ScheduleTrigger, now: number) {
       return;
     case 'daily':
       if (!parseTimeOfDay(trigger.time)) {
-        throw new DomainError(
-          'schedule_invalid',
-          `“${trigger.time}” is not a time of day. Use 24-hour HH:MM, such as 09:00.`
-        );
+        throw new DomainError('schedule_invalid', 'Use 24-hour HH:MM, such as 09:00.');
       }
       if (
         new Set(trigger.weekdays).size !== trigger.weekdays.length ||
         trigger.weekdays.some((day) => !Number.isInteger(day) || day < 0 || day > 6)
       ) {
-        throw new DomainError(
-          'schedule_invalid',
-          'Weekdays are different numbers from 0 (Sunday) to 6 (Saturday).'
-        );
+        throw new DomainError('schedule_invalid', 'Weekdays run from 0 (Sunday) to 6.');
       }
       return;
     case 'webhook':
@@ -123,10 +111,7 @@ function assertTrigger(trigger: ScheduleTrigger, now: number) {
 
 function assertTimeZone(timeZone: string) {
   if (!isTimeZone(timeZone)) {
-    throw new DomainError(
-      'time_zone_invalid',
-      `“${timeZone}” is not a time zone. Use a name such as Europe/Berlin.`
-    );
+    throw new DomainError('time_zone_invalid', 'Use a time zone such as Europe/Berlin.');
   }
 }
 
@@ -139,10 +124,7 @@ function resolveTarget(decider: Decider, input: ScheduleTargetInput, task: Task)
     throw new DomainError('task_not_found', `No task ${input.taskId}. find_tasks lists the tasks.`);
   assertNotWatchHome(target);
   if (isTaskClosed(target)) {
-    throw new DomainError(
-      'task_settled',
-      `“${target.title}” is closed, so a message would never be read. Start a new task on each run instead.`
-    );
+    throw new DomainError('task_settled', 'That task is closed.');
   }
   return { kind: 'task', taskId: target.id };
 }
@@ -170,10 +152,7 @@ function assertScheduleRoom(decider: Decider, task: Task | null) {
     (schedule) => schedule.createdBy.kind === 'agent' && schedule.createdBy.taskId === task?.id
   );
   if (own.length >= SCHEDULE_LIMITS.perTask || live.length >= SCHEDULE_LIMITS.live) {
-    throw new DomainError(
-      'schedule_limit',
-      'There are already as many schedules as Shinsa keeps. Delete one you no longer need first.'
-    );
+    throw new DomainError('schedule_limit', 'Too many schedules. Delete one first.');
   }
 }
 
@@ -196,10 +175,7 @@ function resolveText(command: ScheduleWrite, existing: Schedule | null) {
   const text = command.text?.trim() || existing?.text;
   if (!text) throw new DomainError('schedule_invalid', 'A schedule needs a message to send.');
   if (text.length > SCHEDULE_LIMITS.text) {
-    throw new DomainError(
-      'schedule_invalid',
-      `The message is ${text.length} characters; the limit is ${SCHEDULE_LIMITS.text}.`
-    );
+    throw new DomainError('schedule_invalid', `The message is over ${SCHEDULE_LIMITS.text} characters.`);
   }
   return text;
 }
@@ -352,13 +328,10 @@ function createDraft(
 function assertRunnable(schedule: Schedule) {
   if (!schedule.enabled) return;
   if (schedule.trigger.kind !== 'webhook' && schedule.nextRunAt === null) {
-    throw new DomainError('schedule_past', 'That time has already passed, so the schedule would never run.');
+    throw new DomainError('schedule_past', 'That time has already passed.');
   }
   if (schedule.maxRuns !== null && schedule.runCount >= schedule.maxRuns) {
-    throw new DomainError(
-      'schedule_invalid',
-      `It has already run ${schedule.runCount} times. Raise max_runs to run it again.`
-    );
+    throw new DomainError('schedule_invalid', 'It has used all its runs.');
   }
 }
 
@@ -430,10 +403,7 @@ function resolveUserTarget(decider: Decider, target: ScheduleTarget): ScheduleTa
   if (!task) throw new DomainError('task_not_found', `No task ${target.taskId}.`);
   assertNotWatchHome(task);
   if (isTaskClosed(task)) {
-    throw new DomainError(
-      'task_settled',
-      `“${task.title}” is closed, so a message would never be read. Start a new task on each run instead.`
-    );
+    throw new DomainError('task_settled', 'That task is closed.');
   }
   return target;
 }
@@ -459,10 +429,7 @@ function selectWrittenTarget(
   if (source) return resolveSourceTarget(decider, command, existing, source);
   if (command.target) return resolveUserTarget(decider, command.target);
   if (existing) return existing.target;
-  throw new DomainError(
-    'schedule_invalid',
-    'Say what it does: start a new task in a repository, or message a task.'
-  );
+  throw new DomainError('schedule_invalid', 'Pick a new task or a task to message.');
 }
 
 export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule.write'>) {
@@ -520,9 +487,8 @@ export function removeOwnSchedule(decider: Decider, command: CommandOf<'agent.de
 }
 
 function describeStopped(schedule: Schedule) {
-  if (schedule.stopped === 'target_gone')
-    return 'The task it messages is closed, so it cannot run again. Delete it.';
-  return 'It has finished its runs. Delete it, or ask an agent to set a new time.';
+  if (schedule.stopped === 'target_gone') return 'The task it messages is closed.';
+  return 'It has finished its runs.';
 }
 
 export function enableSchedule(decider: Decider, command: CommandOf<'schedule.enable'>) {
@@ -537,10 +503,7 @@ export function enableSchedule(decider: Decider, command: CommandOf<'schedule.en
   if (schedule.stopped !== null) throw new DomainError('schedule_finished', describeStopped(schedule));
   const nextRunAt = resolveNextRun(schedule.trigger, now, schedule.timeZone);
   if (schedule.trigger.kind !== 'webhook' && nextRunAt === null) {
-    throw new DomainError(
-      'schedule_past',
-      'Its time has passed, so it would never run again. Delete it instead.'
-    );
+    throw new DomainError('schedule_past', 'Its time has passed. Delete it.');
   }
   decider.emit({
     type: 'schedule.written',

@@ -10,7 +10,7 @@ import { SettingsCard } from '@/components/settings/group.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { TONE_SURFACE, type Tone } from '@/lib/format/tone.ts';
 import { type DashboardClient, describeSignInError, resolveSignInUrl } from '@/lib/remote/dashboard.ts';
-import { MACHINE_ICON } from '@/lib/remote/mode.ts';
+import { MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
 
 export function RemoteShell({
   session,
@@ -61,7 +61,7 @@ export function RemoteLoading({ label }: { label: string }) {
   );
 }
 
-const SIGN_IN_POINTS: { icon: IconName; title: string; detail: string }[] = [
+const SIGN_IN_POINTS: RemotePoint[] = [
   {
     icon: MACHINE_ICON,
     title: 'Every machine in one place',
@@ -79,10 +79,10 @@ const SIGN_IN_POINTS: { icon: IconName; title: string; detail: string }[] = [
   },
 ];
 
-export function RemoteBenefits() {
+export function RemoteBenefits({ points = SIGN_IN_POINTS }: { points?: RemotePoint[] }) {
   return (
     <SettingsCard className='w-full'>
-      {SIGN_IN_POINTS.map((point) => (
+      {points.map((point) => (
         <div key={point.title} className='flex gap-3 px-2.5 py-2'>
           <Icon name={point.icon} size='sm' className='mt-px shrink-0 text-fg-2' />
           <div className='flex min-w-0 flex-col gap-px'>
@@ -122,7 +122,7 @@ export function SignInPrompt({ returnPath, error }: { returnPath: string; error:
     <section className='flex flex-col items-center gap-6 pt-4'>
       <RemoteHero icon='IconGithub' title='Sign in to Shinsa'>
         Reach the Shinsa on your machine from any browser. Use the GitHub account you paired your machine
-        with.
+        with, or the one you were invited with.
       </RemoteHero>
       <RemoteBenefits />
       {error && (

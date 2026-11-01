@@ -1,7 +1,8 @@
-import type { RemoteDevice, RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
+import type { AccessRequest, RemoteAccess, RemoteDevice, RemoteMember, RemoteSnapshot } from '@shinsa/core';
 import { encode } from 'uqr';
 import { formatSince, formatUntil } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
+import { describeUserName, selectDeviceMember } from '@/lib/remote/users.ts';
 
 export const REMOTE_ACCESS_SECTION = 'Remote access';
 
@@ -12,7 +13,7 @@ export interface RemoteStatusView {
 }
 
 const STATUS_VIEW: Record<RemoteSnapshot['status'], Omit<RemoteStatusView, 'detail'>> = {
-  off: { label: 'Off', tone: 'neutral' },
+  off: { label: 'Not connected', tone: 'neutral' },
   starting: { label: 'Connecting', tone: 'amber' },
   connected: { label: 'Connected', tone: 'green' },
   reconnecting: { label: 'Reconnecting', tone: 'amber' },
@@ -30,17 +31,17 @@ export function describeRemoteStatus(snapshot: RemoteSnapshot, now = Date.now())
     return {
       label: 'Off',
       tone: 'neutral',
-      detail: 'Turn it on to sign in with GitHub. This machine then shows up at app.shinsa.dev.',
+      detail: 'Turn it on to sign in with GitHub. This machine then shows up in Shinsa Cloud.',
     };
   const owner = snapshot.owner ? `Signed in as ${snapshot.owner}.` : 'Signed in.';
   if (snapshot.status === 'revoked')
     return {
       ...STATUS_VIEW.revoked,
-      detail: 'This machine was removed at app.shinsa.dev. Remove it here, then turn remote access on again.',
+      detail: 'This machine was removed in Shinsa Cloud. Remove it here, then turn remote access on again.',
     };
   if (!snapshot.enabled)
     return { label: 'Paused', tone: 'neutral', detail: `${owner} Resume to reach this machine again.` };
-  return { ...STATUS_VIEW[snapshot.status], detail: `${owner} Open it at app.shinsa.dev.` };
+  return { ...STATUS_VIEW[snapshot.status], detail: `${owner} Open it in Shinsa Cloud.` };
 }
 
 export function describeDeviceSeen(device: RemoteDevice, now = Date.now()) {
@@ -48,44 +49,43 @@ export function describeDeviceSeen(device: RemoteDevice, now = Date.now()) {
   return formatSince('Last used', device.lastSeenAt, now);
 }
 
-export function selectEnrolledDevice(devices: RemoteDevice[], enrollment: RemoteEnrollment | null) {
-  if (!enrollment) return null;
-  return devices.find((device) => device.enrollmentId === enrollment.id) ?? null;
+export function describeDeviceDetail(device: RemoteDevice, access: RemoteAccess | null, now = Date.now()) {
+  const member = selectDeviceMember(access, device);
+  const seen = describeDeviceSeen(device, now);
+  return member ? `${seen} · Added by ${describeUserName(member)}` : seen;
 }
 
-export function isEnrollmentExpired(expiresAt: number, now = Date.now()) {
-  return expiresAt <= now;
+export function describeMemberSince(member: RemoteMember, now = Date.now()) {
+  return formatSince('Joined', member.addedAt, now);
 }
-
-export type EnrollmentState = 'live' | 'expired' | 'stopped';
 
 export function canEnrollDevices(snapshot: RemoteSnapshot | null) {
   return snapshot?.paired === true && snapshot.enabled && snapshot.status !== 'revoked';
 }
 
-export function resolveEnrollmentState(
-  enrollment: RemoteEnrollment | null,
-  stoppedId: string | null,
-  now = Date.now()
-): EnrollmentState {
-  if (enrollment && enrollment.id === stoppedId) return 'stopped';
-  if (enrollment && isEnrollmentExpired(enrollment.expiresAt, now)) return 'expired';
-  return 'live';
+export const LINK_COPY = {
+  title: 'Invite link',
+  intro:
+    'Make one link for your own devices and for other people. Whoever opens it signs in with GitHub and asks for access. Nothing opens until you accept.',
+  share:
+    'Open it on your own device, or share it. Whoever opens it signs in with GitHub and asks for access, which you accept here. Accepting someone else gives them full control. The link works until you turn it off.',
+};
+
+export function describeAccessRequest(request: AccessRequest, now = Date.now()) {
+  return `${request.deviceName} · ${formatSince('Asked', request.requestedAt, now)}`;
 }
 
-export function describeEnrollmentStep(enrollment: RemoteEnrollment | null, state: EnrollmentState) {
-  if (!enrollment)
-    return 'Name the device you are adding, a browser or a phone. Shinsa makes a one-time link for it.';
-  if (state === 'stopped')
-    return `Remote access stopped, so this link no longer works. Make a new one to add ${enrollment.name} once it is on again.`;
-  if (state === 'expired')
-    return `This link expired before a device used it. Make a new one to add ${enrollment.name}.`;
-  return 'Scan this on the phone, or open the link on the device you are adding, and sign in with GitHub.';
+function joinsMachine(request: AccessRequest, access: RemoteAccess | null) {
+  return (
+    access !== null &&
+    access.owner.id !== request.user.id &&
+    !access.members.some((member) => member.user.id === request.user.id)
+  );
 }
 
-export function describeEnrollmentExpiry(expiresAt: number, now = Date.now()) {
-  if (isEnrollmentExpired(expiresAt, now)) return 'This link expired. Make a new one.';
-  return `${formatUntil('It works once and expires', expiresAt, now)}.`;
+export function describeAcceptOutcome(request: AccessRequest, access: RemoteAccess | null) {
+  if (joinsMachine(request, access)) return `${describeUserName(request.user)} joined.`;
+  return `${request.deviceName} is added.`;
 }
 
 function resolveQrPath(text: string) {

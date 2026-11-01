@@ -3,8 +3,10 @@ export {
   concatBytes,
   decodeText,
   encodeText,
+  isSameSecret,
   parseBase64Url,
   serializeBase64Url,
+  serializeHex,
 } from './bytes.ts';
 export {
   CHANNEL_BODY_CHUNK_BYTES,
@@ -23,9 +25,15 @@ export {
 } from './connect-token.ts';
 export {
   type ConnectResponse,
+  type EnrollFragment,
   type HeartbeatRequest,
   type HeartbeatResponse,
+  type InviteAcceptRequest,
+  type InviteAcceptResponse,
+  type InviteCreateResponse,
+  MAX_INSTANCE_MEMBERS,
   type MachineCredentials,
+  type MemberRequest,
   type NativeSignInTokenRequest,
   type NativeSignInTokenResponse,
   type PairApproveResponse,
@@ -44,11 +52,15 @@ export {
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   REMOTE_TUNNEL_DOMAIN,
+  type RemoteAccess,
   type RemoteInstance,
+  type RemoteMember,
+  type RemoteRole,
   type RemoteSession,
   type RemoteUser,
   resolveEnrollUrl,
   resolveInstanceConnectPath,
+  resolveInstanceLeavePath,
   resolveInstancePath,
   resolveInstanceRemovePath,
   resolvePairApprovePath,
@@ -62,6 +74,7 @@ export {
   type ClientHello,
   createClientHello,
   createEnrollProof,
+  DEVICE_NAME_LIMIT,
   deriveClientSession,
   deriveServerSession,
   type HandshakeKeys,
@@ -145,9 +158,10 @@ export {
   serializeShareUrl,
 } from './shares.ts';
 export type {
+  AccessRequest,
   PairingView,
   RemoteDevice,
-  RemoteEnrollment,
+  RemoteLink,
   RemoteSnapshot,
   TunnelStatus,
 } from './status.ts';

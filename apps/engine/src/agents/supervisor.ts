@@ -240,6 +240,7 @@ export class RunSupervisor {
       manage: options.manage ?? null,
       workspaces: this.workspaces,
       services: options.services ?? null,
+      listServerNames: (run) => this.#listServerNames(run),
     });
     this.#manages = options.manage !== undefined;
     this.#deliveries = new Deliveries({
@@ -608,6 +609,17 @@ export class RunSupervisor {
       });
       return null;
     }
+  }
+
+  async #listServerNames(run: Run) {
+    const extensions = await this.#resolveExtensions(run, null);
+    if (!extensions) return [];
+    const names = [...extensions.servers, ...extensions.deferred].flatMap((server) => [
+      server.name,
+      server.claudeName,
+    ]);
+    const keys = names.map((name) => name.toLowerCase());
+    return names.filter((name, index) => keys.indexOf(name.toLowerCase()) === index);
   }
 
   async #attempt(turn: Turn, plan: TurnPlan) {

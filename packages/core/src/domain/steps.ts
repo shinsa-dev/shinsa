@@ -140,6 +140,12 @@ const INQUIRY_EXIT = 'The agent handed over its result; a proposed change waits 
 
 const NO_GATE: StepGate = { strength: 'none', types: [], when: null };
 
+const RESULT_GATE: StepGate = {
+  strength: 'hard',
+  types: ['result'],
+  when: 'The inquiry handed over and nothing follows it: the result waits for you to read and close it.',
+};
+
 export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
   answer: {
     step: 'answer',
@@ -149,7 +155,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     inputs: ['the request', 'the repository, read-only'],
     outputs: [{ name: 'the answer', tool: 'answer', evidence: false }],
     exit: INQUIRY_EXIT,
-    gate: NO_GATE,
+    gate: RESULT_GATE,
     placement: 'canonical',
     needs: [],
     worktree: false,
@@ -164,7 +170,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     inputs: ['the request', 'the repository, read-only'],
     outputs: [{ name: 'the report', tool: 'submit_report', evidence: false }],
     exit: INQUIRY_EXIT,
-    gate: NO_GATE,
+    gate: RESULT_GATE,
     placement: 'canonical',
     needs: [],
     worktree: false,
@@ -182,7 +188,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
       { name: 'what it reproduced', tool: 'attach_evidence', evidence: true },
     ],
     exit: INQUIRY_EXIT,
-    gate: NO_GATE,
+    gate: RESULT_GATE,
     placement: 'canonical',
     needs: [],
     worktree: true,
@@ -485,7 +491,7 @@ export interface SoftGateDefinition {
 
 export type GateDefinition = HardGateDefinition | SoftGateDefinition;
 
-const DECISION_REFUSAL = 'Approve it, ask for changes or reject it.';
+const DECISION_REFUSAL = 'Approve, ask for changes or reject.';
 
 const RETRY: GateChoice<GateDecision> = { decision: 'approve', does: 'Retries the step.' };
 
@@ -590,7 +596,7 @@ const HARD_GATES = {
       },
       { decision: 'reject', does: 'Keeps the task as its inquiry and finishes it.' },
     ],
-    refusal: 'Approve the proposal or keep the task as it is.',
+    refusal: 'Approve the proposal or keep the task.',
     pauses: false,
   },
   operation: {
@@ -615,7 +621,7 @@ const HARD_GATES = {
       },
       { decision: 'reject', does: 'Finishes the task without running the operation.' },
     ],
-    refusal: 'Run the operation or finish the task without it.',
+    refusal: 'Run the operation or finish without it.',
     pauses: false,
   },
   failure: {
@@ -635,7 +641,7 @@ const HARD_GATES = {
     title: 'Setup incomplete',
     shows: ['each setup problem', 'how to fix it'],
     decisions: [{ decision: 'approve', does: 'Verifies the setup again.' }, CANCEL],
-    refusal: 'Verify the setup again, or cancel the task.',
+    refusal: 'Verify the setup again, or cancel.',
     pauses: true,
   },
   post_merge: {
@@ -645,7 +651,7 @@ const HARD_GATES = {
     title: 'Post-merge',
     shows: ['each post-merge step the agent left for you', 'which are ticked'],
     decisions: [],
-    refusal: 'Tick each post-merge step once you did it; the gate closes with the last one.',
+    refusal: 'Tick each post-merge step once done.',
     pauses: false,
   },
   sign_in: {
@@ -657,6 +663,16 @@ const HARD_GATES = {
     decisions: [RETRY, RETRY_WITH, CANCEL],
     refusal: 'Sign in, retry or cancel the task.',
     pauses: true,
+  },
+  result: {
+    type: 'result',
+    strength: 'hard',
+    decidedBy: 'you',
+    title: 'Answered',
+    shows: ['the answer, report or diagnosis'],
+    decisions: [{ decision: 'approve', does: 'Closes the task: it moves to Done.' }],
+    refusal: 'Close the task once you have read the result.',
+    pauses: false,
   },
 } as const satisfies Record<GateType, HardGateDefinition>;
 

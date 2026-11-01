@@ -99,7 +99,7 @@ function cleanOutputLine(line: string) {
 
 function readProgramId(value: unknown): ProgramId {
   if (value === 'claude' || value === 'codex') return value;
-  throw new DomainError('program_invalid', 'Name the program to update: claude or codex.');
+  throw new DomainError('program_invalid', 'Update claude or codex.');
 }
 
 function describeRunFailure(label: string, result: CommandResult) {
@@ -203,18 +203,13 @@ export class Versions {
     const id = readProgramId(program);
     const { label, overrideEnv } = PROGRAMS[id];
     if (this.#options.inspect) {
-      throw createReadOnlyError(
-        `Shinsa is in inspect mode and only shows this data. Start it without SHINSA_INSPECT to update ${label}.`
-      );
+      throw createReadOnlyError();
     }
     if (this.#running.has(id)) throw new DomainError('update_running', `${label} is already updating.`);
     const { path, override } = (this.#options.locate ?? locateInstalledProgram)(id);
     if (!path) throw new DomainError('program_missing', `${label} is not installed.`);
     if (override) {
-      throw new DomainError(
-        'program_override',
-        `Shinsa runs ${override} for ${label} (${overrideEnv}), so update that program yourself.`
-      );
+      throw new DomainError('program_override', `Update ${label} yourself (${overrideEnv}).`);
     }
     this.#running.add(id);
     return (onLine) => this.#update(id, path, onLine).finally(() => this.#running.delete(id));

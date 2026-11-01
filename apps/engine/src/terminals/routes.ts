@@ -38,7 +38,7 @@ const SOCKET_PATH = /^\/ws\/terminals\/([A-Za-z0-9-]{1,64})$/;
 
 const CLOSED = 4404;
 
-const BROWSER_ONLY = 'Only Shinsa’s own page opens and types into your terminals.';
+const BROWSER_ONLY = 'Only Shinsa’s page opens terminals.';
 
 function readText(body: JsonObject, field: string, limit: number) {
   const value = body[field];
@@ -73,9 +73,8 @@ export function resolveTerminalStart(
   const place = places.find((each) => each.path === path);
   const homePlace: TerminalPlaceKind | null = places.length === 0 && path === home ? 'folder' : null;
   if (!(place || homePlace))
-    throw new DomainError('terminal_place_invalid', 'Open a terminal in one of the project’s folders.');
-  if (!isFolder(path))
-    throw new DomainError('terminal_place_missing', `The folder ${path} is not there anymore.`);
+    throw new DomainError('terminal_place_invalid', 'Pick one of the project’s folders.');
+  if (!isFolder(path)) throw new DomainError('terminal_place_missing', 'That folder is not there anymore.');
   return { projectId, cwd: path, place: place?.kind ?? 'folder', taskId: place?.taskId ?? null };
 }
 
@@ -105,15 +104,9 @@ function readEnv(body: JsonObject) {
   const env: Record<string, string> = {};
   for (const [key, each] of entries) {
     if (!isServiceEnvKey(key))
-      throw new DomainError(
-        'service_env_invalid',
-        `“${key}” is not a variable name: use letters, digits and _, not starting with a digit.`
-      );
+      throw new DomainError('service_env_invalid', `“${key}” is not a variable name.`);
     if (typeof each !== 'string' || each.length > SERVICE_LIMITS.envValue)
-      throw new DomainError(
-        'service_env_invalid',
-        `Give “${key}” a value of at most ${SERVICE_LIMITS.envValue} characters.`
-      );
+      throw new DomainError('service_env_invalid', `The value of “${key}” is too long.`);
     env[key] = each;
   }
   return env;
@@ -122,20 +115,14 @@ function readEnv(body: JsonObject) {
 function readPreviewUrl(body: JsonObject) {
   const url = readOptionalText(body, 'previewUrl', SERVICE_LIMITS.previewUrl)?.trim() || null;
   if (url !== null && !isServicePreviewUrl(url))
-    throw new DomainError(
-      'service_preview_invalid',
-      'Give the preview as an http or https URL, with {port} where the run’s port goes.'
-    );
+    throw new DomainError('service_preview_invalid', 'Put {port} in an http or https URL.');
   return url;
 }
 
 function readPortVariable(body: JsonObject) {
   const name = readOptionalText(body, 'portVariable', 200)?.trim() || SERVICE_PORT_VARIABLE;
   if (!isServiceEnvKey(name))
-    throw new DomainError(
-      'service_env_invalid',
-      `“${name}” is not a variable name: use letters, digits and _, not starting with a digit.`
-    );
+    throw new DomainError('service_env_invalid', `“${name}” is not a variable name.`);
   return name;
 }
 
@@ -148,12 +135,11 @@ export function readServiceInput(
   const name = readText(body, 'name', SERVICE_LIMITS.name).trim();
   if (!name) throw new DomainError('body_invalid', 'Give the service a name.');
   if (others.some((service) => service.name.toLowerCase() === name.toLowerCase()))
-    throw new DomainError('service_name_taken', `This project already has a service called “${name}”.`);
+    throw new DomainError('service_name_taken', 'Another service has that name.');
   const cwd = readText(body, 'path', 4096);
   if (!resolveServicePlace(places, cwd, home))
-    throw new DomainError('service_place_invalid', 'Run a service in one of the project’s folders.');
-  if (!isFolder(cwd))
-    throw new DomainError('terminal_place_missing', `The folder ${cwd} is not there anymore.`);
+    throw new DomainError('service_place_invalid', 'Pick one of the project’s folders.');
+  if (!isFolder(cwd)) throw new DomainError('terminal_place_missing', 'That folder is not there anymore.');
   const command = readText(body, 'command', SERVICE_LIMITS.command).trim();
   if (!command) throw new DomainError('body_invalid', 'Give the service a command to run.');
   return {
@@ -283,12 +269,10 @@ export function createTerminalRoutes(
     if (!run)
       throw new DomainError(
         'service_place_invalid',
-        taskId === null
-          ? 'This service’s folder is no longer in its project. Edit it to run it somewhere else.'
-          : `${service.name} cannot run for this task: its folder is not in the task’s repository, or the task has no worktree of its own.`
+        taskId === null ? 'Its folder is no longer in the project.' : 'It cannot run in this task.'
       );
     if (!isFolder(run.cwd))
-      throw new DomainError('terminal_place_missing', `The folder ${run.cwd} is not there anymore.`);
+      throw new DomainError('terminal_place_missing', 'That folder is not there anymore.');
     return run;
   };
   return [
@@ -333,10 +317,7 @@ export function createTerminalRoutes(
         const places = projectOf(projectId);
         const inputs = readServiceBatch(body, others(projectId, null), places, home);
         if (terminals.snapshot().services.length + inputs.length > SERVICE_LIMITS.services)
-          throw new DomainError(
-            'service_limit',
-            `Shinsa keeps ${SERVICE_LIMITS.services} services at most. Remove some to add these.`
-          );
+          throw new DomainError('service_limit', `Shinsa keeps ${SERVICE_LIMITS.services} services at most.`);
         const added = inputs.map((input) => terminals.addService(projectId, input));
         return { added, ...terminals.snapshot() };
       }),

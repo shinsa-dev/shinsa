@@ -7,7 +7,6 @@ import {
   describeMachineLoad,
   describeNewTask,
   describePlacementDone,
-  describePolicyFailure,
   hasMachineChoice,
   isProjectOnMachine,
   listNewTaskMachines,
@@ -72,17 +71,17 @@ describe('describeNewTask', () => {
     const started = {
       placeholder: 'Describe the work or ask a question. Shinsa decides what kind of task it is.',
       submit: 'Start',
-      done: 'Started. It comes back when it needs a decision.',
+      done: 'Task started.',
     };
     expect(describeNewTask('auto')).toEqual(started);
     expect(describeNewTask('now')).toEqual(started);
     expect(describeNewTask('after')).toMatchObject({
       submit: 'Add',
-      done: 'Added. It starts when the tasks it waits on are finished.',
+      done: 'Task added.',
     });
     expect(describeNewTask('backlog')).toMatchObject({
       submit: 'Add',
-      done: 'Added to the backlog. It plans now and builds when you start it.',
+      done: 'Added to the backlog.',
     });
   });
 });
@@ -292,7 +291,7 @@ describe('the machine a new task runs on', () => {
         asked.push(question);
         return Promise.resolve({ answer });
       })
-    ).toEqual({ answer, reason: answer.reason });
+    ).toEqual({ answer, failed: false });
     expect(asked).toEqual([
       {
         request: 'Run the benchmark',
@@ -310,22 +309,12 @@ describe('the machine a new task runs on', () => {
     ]);
     expect(
       await requestPolicyPlacement([studio, ruled], 'x', () => Promise.resolve({ answer: null }))
-    ).toEqual({
-      answer: null,
-      reason: '',
-    });
+    ).toEqual({ answer: null, failed: false });
     expect(
       await requestPolicyPlacement([studio, ruled], 'x', () =>
         Promise.reject(new Error('No Claude account is signed in.'))
       )
-    ).toEqual({
-      answer: null,
-      reason:
-        'Your routing policies were not read (No Claude account is signed in), so it went to the machine with the most room.',
-    });
-    expect(describePolicyFailure('timeout')).toBe(
-      'Your routing policies were not read (timeout), so it went to the machine with the most room.'
-    );
+    ).toEqual({ answer: null, failed: true });
   });
 
   it('asks the machine in front by POST /api/placement', async () => {
@@ -338,16 +327,14 @@ describe('the machine a new task runs on', () => {
     }) as unknown as typeof globalThis.fetch;
     const placed = await requestPolicyPlacement([studio, ruled], 'Run the benchmark');
     globalThis.fetch = realFetch;
-    expect(placed).toEqual({ answer, reason: answer.reason });
+    expect(placed).toEqual({ answer, failed: false });
     expect(posted).toEqual(['/api/placement']);
   });
 
-  it('says in the toast which machine took the task and why', () => {
-    expect(describePlacementDone('Started.', box, 'Benchmarks run there.')).toBe(
-      'Started. It runs on Build box. Benchmarks run there.'
-    );
-    expect(describePlacementDone('Started.', studio, '')).toBe('Started. It runs on This machine.');
-    expect(describePlacementDone('Started.', undefined, '')).toBe('Started.');
+  it('says in the toast which machine took the task', () => {
+    expect(describePlacementDone('Task started.', box)).toBe('Task started. Runs on Build box.');
+    expect(describePlacementDone('Task started.', studio)).toBe('Task started. Runs on This machine.');
+    expect(describePlacementDone('Task started.', undefined)).toBe('Task started.');
   });
 
   it('lists Automatic, with the policies’ hint when they decide, then each machine with its load', () => {

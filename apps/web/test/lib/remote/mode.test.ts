@@ -12,7 +12,7 @@ import {
   stashEnrollFragment,
 } from '@/lib/remote/mode.ts';
 
-const FRAGMENT = '#k3x9.machine-key.secret_1';
+const FRAGMENT = '#k3x9.machine-key.secret_1.tok';
 
 describe('the remote page’s mode', () => {
   it('calls the machine this device runs on This machine, and marks a link opened on it', () => {
@@ -33,6 +33,9 @@ describe('the remote page’s mode', () => {
   });
 
   it('shows the pair page, the enroll page, or the one dashboard of every machine, all at the root', () => {
+    expect(resolveRemoteView({ pathname: '/slack/linked', search: '?team=Acme', hash: '' })).toEqual({
+      kind: 'slack',
+    });
     expect(resolveRemoteView({ pathname: '/pair', search: '?code=K7PQ', hash: '' })).toEqual({
       kind: 'pair',
       claimCode: 'K7PQ',
@@ -67,12 +70,19 @@ describe('the remote page’s mode', () => {
     stashEnrollFragment(sessionStorage, '#broken');
     expect(selectEnrollFragment(sessionStorage, '')).toBeNull();
     stashEnrollFragment(sessionStorage, FRAGMENT);
-    const expected = { instanceId: 'k3x9', machineKey: 'machine-key', secret: 'secret_1', onMachine: false };
+    const expected = {
+      instanceId: 'k3x9',
+      machineKey: 'machine-key',
+      secret: 'secret_1',
+      invite: 'tok',
+      onMachine: false,
+    };
     expect(selectEnrollFragment(sessionStorage, '')).toEqual(expected);
-    expect(selectEnrollFragment(sessionStorage, '#a.b.c')).toEqual({
+    expect(selectEnrollFragment(sessionStorage, '#a.b.c.d')).toEqual({
       instanceId: 'a',
       machineKey: 'b',
       secret: 'c',
+      invite: 'd',
       onMachine: false,
     });
     stashEnrollFragment(sessionStorage, FRAGMENT, '?on=machine');

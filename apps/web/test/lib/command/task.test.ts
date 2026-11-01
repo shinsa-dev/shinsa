@@ -387,8 +387,10 @@ describe('the This task section', () => {
       'Show in Finder',
       'Fork into a new task',
       'Share task',
+      'Snooze',
       'Restart the current step',
       'Mark as done',
+      'Close as a duplicate',
       'Cancel task',
     ]);
   });
@@ -425,8 +427,10 @@ describe('the This task section', () => {
       'Message the agent',
       'Fork into a new task',
       'Share task',
+      'Snooze',
       'Restart the current step',
       'Mark as done',
+      'Close as a duplicate',
       'Cancel task',
     ]);
   });

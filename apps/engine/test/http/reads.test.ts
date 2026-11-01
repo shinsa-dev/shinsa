@@ -154,6 +154,17 @@ describe('GET /api/tasks', () => {
     ]);
   });
 
+  test('leaves a snoozed task out of what needs you, and marks it in every list', async () => {
+    const { read, engine, fixId } = await start();
+    await engine.dispatch({ type: 'task.snooze', taskId: fixId });
+    expect(titles((await read('/api/tasks?status=needs_you')).body)).toEqual([]);
+    const open = (await read('/api/tasks')).body.tasks as { title: string; snoozed: boolean }[];
+    expect(open.map((task) => [task.title, task.snoozed])).toEqual([
+      ['Fix the tab scroll', true],
+      ['Add search', false],
+    ]);
+  });
+
   test('filters by what needs you, what is settled, or shows all', async () => {
     const { read } = await start();
     expect(titles((await read('/api/tasks?status=needs_you')).body)).toEqual(['Fix the tab scroll']);

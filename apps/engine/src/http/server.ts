@@ -46,6 +46,7 @@ export interface HttpContext extends ApiContext {
 interface RemoteSocketData {
   kind: 'remote';
   channel: RemoteChannel | null;
+  userId: string;
 }
 
 interface ShareSocketData {
@@ -199,7 +200,8 @@ export function startServer(context: HttpContext) {
               send: (data) => socket.send(data),
               close: (code, reason) => socket.close(code, reason),
             },
-            { hub, respond: respondInsideChannel }
+            { hub, respond: respondInsideChannel },
+            socket.data.userId
           );
         },
         close: (socket) => {
@@ -242,7 +244,7 @@ export function startServer(context: HttpContext) {
     return new Response('Upgrade failed', { status: 400 });
   }
 
-  async function respondTunnel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+  function respondTunnel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
     const route = remote?.isEnabled ? resolveTunnelRoute(request, url) : null;
     if (route === 'health') return Response.json({ ok: true });
     if (route === 'hook' && context.schedules?.isWebhook(url.pathname)) {
@@ -250,12 +252,26 @@ export function startServer(context: HttpContext) {
       return context.schedules.handleWebhook(request, url);
     }
     if (route === 'share') return respondShareChannel(request, url, bunServer);
+    if (route === 'slack' && context.slack) {
+      if (config.inspect) return respondReadOnly();
+      return context.slack.handleTunnel(request, url);
+    }
     if (route !== 'channel' || !remote) return respondError('not_found', 'No such endpoint.', 404);
-    const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
+    return respondRemoteChannel(request, url, bunServer, remote);
+  }
+
+  async function respondRemoteChannel(
+    request: Request,
+    url: URL,
+    bunServer: Bun.Server<ServerSocketData>,
+    channelRemote: NonNullable<typeof remote>
+  ) {
+    const originRefusal = resolveChannelOriginRefusal(request, channelRemote.appOrigin);
     if (originRefusal) return respondError('forbidden', originRefusal, 403);
-    const claim = await remote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM));
+    const claim = await channelRemote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM));
     if (!claim) return respondError('unauthorized', 'The connect token is missing, wrong or expired.', 401);
-    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null } })) return undefined;
+    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null, userId: claim.userId } }))
+      return undefined;
     return new Response('Upgrade failed', { status: 400 });
   }
 

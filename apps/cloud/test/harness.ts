@@ -1,7 +1,16 @@
 import { Database as Sqlite } from 'bun:sqlite';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { REMOTE_APP_ORIGIN } from '@shinsa/core';
+import {
+  type MachineCredentials,
+  type PairPollResponse,
+  type PairStartResponse,
+  REMOTE_APP_ORIGIN,
+  REMOTE_KEY_ALGORITHM,
+  REMOTE_PATHS,
+  resolvePairApprovePath,
+  serializePublicKey,
+} from '@shinsa/core';
 import { createCodeChallenge } from '../src/crypto.ts';
 import type { Database, DatabaseStatement } from '../src/database.ts';
 import { createWorld, respond } from '../src/router.ts';
@@ -67,6 +76,10 @@ export const TEST_CONFIG: CloudConfig = {
   cloudflareApiToken: 'api-token',
   tunnelZone: 'shinsa.dev',
   maxInstances: 50,
+  slackClientId: 'slack-client',
+  slackClientSecret: 'slack-secret',
+  slackSigningSecret: 'slack-signing',
+  slackTokenKey: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8',
 };
 
 export interface Harness {
@@ -75,23 +88,30 @@ export interface Harness {
   calls: UpstreamCall[];
   handlers: UpstreamHandler[];
   clock: { now: number };
+  settle: () => Promise<void>;
   call: (path: string, init?: RequestInit & { session?: string; sameOrigin?: boolean }) => Promise<Response>;
   post: (
     path: string,
     body: unknown,
     options?: { session?: string; bearer?: string; sameOrigin?: boolean }
   ) => Promise<Response>;
-  signIn: (login?: string, id?: number) => Promise<string>;
+  signIn: (login?: string, id?: number, name?: string) => Promise<string>;
   signInNative: (login?: string, id?: number) => Promise<string>;
 }
 
 export const NATIVE_VERIFIER = 'native-verifier-that-is-long-enough-for-pkce-0123456789';
 
-const GITHUB_USERS = new Map<string, { id: number; login: string }>();
+interface GitHubTestUser {
+  id: number;
+  login: string;
+  name?: string;
+}
+
+const GITHUB_USERS = new Map<string, GitHubTestUser>();
 
 const GITHUB_CHALLENGES = new Map<string, string>();
 
-export function registerGitHubCode(code: string, user: { id: number; login: string }, challenge: string) {
+export function registerGitHubCode(code: string, user: GitHubTestUser, challenge: string) {
   GITHUB_USERS.set(code, user);
   GITHUB_CHALLENGES.set(code, challenge);
 }
@@ -102,6 +122,7 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
   const cloudflare = createCloudflareApi();
   const handlers: UpstreamHandler[] = [];
   const clock = { now: 1_800_000_000_000 };
+  const deferred: Promise<unknown>[] = [];
   const world = createWorld({
     db,
     assets: (request) => Promise.resolve(new Response(`asset ${new URL(request.url).pathname}`)),
@@ -138,6 +159,9 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
       return new Response('no upstream', { status: 404 });
     },
     now: () => clock.now,
+    defer: (work) => {
+      deferred.push(work);
+    },
     config: { ...TEST_CONFIG, ...config },
   });
 
@@ -167,9 +191,9 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
     });
   }
 
-  async function signIn(login = 'mona', id = 42) {
+  async function signIn(login = 'mona', id = 42, name?: string) {
     const code = `code-${login}-${id}`;
-    GITHUB_USERS.set(code, { id, login });
+    GITHUB_USERS.set(code, { id, login, ...(name ? { name } : {}) });
     const start = await call('/__remote/sign-in?return=/');
     const authorize = new URL(start.headers.get('location') ?? '');
     const state = authorize.searchParams.get('state') ?? '';
@@ -206,9 +230,44 @@ export function createHarness(config: Partial<CloudConfig> = {}): Harness {
     return ((await answer.json()) as { token: string }).token;
   }
 
-  return { db, world, calls, handlers, clock, call, post, signIn, signInNative };
+  async function settle() {
+    while (deferred.length > 0) await deferred.shift();
+  }
+
+  return { db, world, calls, handlers, clock, settle, call, post, signIn, signInNative };
 }
 
 export async function readJson<T>(response: Response) {
   return (await response.json()) as T;
+}
+
+export async function pairMachine(
+  harness: Harness,
+  session: string,
+  name = 'Studio',
+  auth: { session?: string; bearer?: string; sameOrigin?: boolean } = { session }
+) {
+  const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
+  const publicKey = await serializePublicKey(pair.publicKey);
+  const start = await readJson<PairStartResponse>(
+    await harness.post(REMOTE_PATHS.pairStart, { name, publicKey, version: '1' })
+  );
+  await harness.post(resolvePairApprovePath(start.claimCode), {}, auth);
+  const claimed = await readJson<PairPollResponse>(
+    await harness.post(REMOTE_PATHS.pairPoll, { claimCode: start.claimCode, pollSecret: start.pollSecret })
+  );
+  if (claimed.status !== 'claimed') throw new Error('Pairing was not claimed.');
+  return claimed.credentials;
+}
+
+export function heartbeat(
+  harness: Harness,
+  credentials: MachineCredentials,
+  localUrl = 'http://127.0.0.1:7446'
+) {
+  return harness.post(
+    REMOTE_PATHS.heartbeat,
+    { localUrl, version: '1' },
+    { bearer: credentials.machineToken, sameOrigin: false }
+  );
 }

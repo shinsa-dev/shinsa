@@ -55,8 +55,14 @@ GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `m
 6. In a second job (`downloads`, on Ubuntu, after the release is published), copies the release's disk image to the
    site's R2 bucket and points the download channels at it (`scripts/release-upload.ts`, below). It is its own job
    so that a failure there (a token without R2 access, an R2 outage) leaves the published release alone, and
-   Re-run failed jobs retries only the copy. After a canary, the same job removes the GitHub releases and tags of all
-   but the newest five canaries (`scripts/release-prune.ts`), even when the copy failed.
+   Re-run failed jobs retries only the copy. Nothing is ever deleted: every GitHub release and tag and every build in
+   R2 stays (How many are kept, below).
+7. Reports the release on the commit it built, as a commit status named `Release` linked to the run, so it shows
+   beside lint and test on GitHub and turns the commit red when it fails. Check runs of a `workflow_run` workflow
+   never count in the commit's status, so the jobs post it through the statuses API (`statuses: write`): the `mac`
+   job sets `pending` as it starts, and a closing `status` job (`if: always()`) sets `success` once the downloads are
+   updated, `failure` when the decision, the build or the downloads failed, or `error` when the run was cancelled,
+   such as a canary a newer merge replaced. A run that decides not to build posts nothing.
 
 ## Canary builds
 
@@ -83,11 +89,10 @@ the newest tested `main` is always what the Canary channel installs. The rules, 
 - **Loops.** The workflow pushes nothing itself: `gh release create` makes the tag through the API, a tag is not a
   push to `main`, and GitHub never starts a workflow from its own token's events.
 - **Notes.** The generated notes start at the previous canary's tag, so they list what this merge brought.
-- **How many are kept.** Five. GitHub's release feed, which electron-updater and the site's fallback read, lists only
-  the newest 10 releases, so a canary on every merge would push every beta and stable release out of it within ten
-  merges and leave the Beta channel with nothing to find. `scripts/release-prune.ts` deletes the older canary
-  releases with their tags (`gh release delete --cleanup-tag`), and `scripts/release-upload.ts` deletes their disk
-  images from R2. Only `vX.Y.Z-canary.N` tags are ever touched (`listStaleCanaries` in `scripts/release-version.ts`).
+- **How many are kept.** All of them. Every canary's GitHub release and tag stays, so its commit and the day it
+  shipped can always be found, and its disk image, zip and blockmap stay in R2 under `releases/<version>/`. The app
+  reads its updates from shinsa.dev, one file per channel, so the number of releases on GitHub never crowds a channel
+  out (Moving off GitHub's feed, below).
 
 ## Versions
 
@@ -139,21 +144,28 @@ app's `1.3.0` like any older engine.
 
 ## Channels and updates
 
-The app updates itself with electron-updater from the releases of `shinsa-dev/shinsa` (`apps/desktop/src/main/updater.ts`):
+The app updates itself with electron-updater from `https://shinsa.dev/updates` (`apps/desktop/src/main/updater.ts`),
+electron-updater's `generic` provider over the update files `scripts/release-upload.ts` writes to R2 (Downloads,
+below), not GitHub's release feed. GitHub's feed lists only the newest ten releases and tags, so reading it meant
+deleting old canaries to keep betas and stable releases on it; the files on shinsa.dev name one version per channel
+and never run out.
 
-- **Stable** (`channel = latest`, `allowPrerelease = false`) reads the release GitHub marks latest, which is never a
-  pre-release, and its `latest-mac.yml`: the newest stable release, never a beta.
-- **Beta** (`channel = beta`, `allowPrerelease = true`) reads the newest release that is a beta or stable release,
-  and its `beta-mac.yml`; electron-updater skips any other pre-release word, so a beta is never offered a canary. A stable release carries `beta-mac.yml` too, so Beta gets every stable release once it is newer:
-  on `3.0.1-beta.1`, a stable `4.0.0` is offered like any beta. "Newest" is the release published last (the feed's
-  order), not the highest version: a stable hotfix `4.0.1` published after `4.1.0-beta.1` is what Beta offers a
-  `4.0.0` until the next beta ships, while `4.1.0-beta.1` itself is not offered the lower `4.0.1`.
-  `apps/desktop/test/lib/update-feed.test.ts` runs electron-updater's own GitHub provider over such feeds.
-- **Canary** (`channel = canary`, `allowPrerelease = true`) reads the newest canary and its `canary-mac.yml`:
-  electron-updater's GitHub provider treats any pre-release word but `alpha` and `beta` as a channel of its own, so
-  a beta or stable release is never offered on Canary. Nothing is missed: a canary's version is the patch above the
-  newest beta or stable release (Versions, above), so the next merge after a release brings a canary above it.
-- All three read the same `github` feed (`UPDATE_FEED` in `apps/desktop/src/lib/update-channel.ts`).
+- **Stable** (`channel = latest`) reads `latest-mac.yml`: the newest stable release, never a beta.
+- **Beta** (`channel = beta`) reads `beta-mac.yml`: the newest beta or stable release by semver. A stable release
+  moves `beta-mac.yml` too once it is newer, so on `3.0.1-beta.1` a stable `4.0.0` is offered like any beta; a stable
+  hotfix `4.0.1` below a running `4.1.0-beta.1` leaves it alone, so Beta never moves back.
+- **Canary** (`channel = canary`) reads `canary-mac.yml`: the newest canary, and only canaries. Nothing is missed: a
+  canary's version is the patch above the newest beta or stable release (Versions, above), so the next merge after a
+  release brings a canary above it.
+- All three read the same feed (`UPDATE_FEED` in `apps/desktop/src/lib/update-channel.ts`, `publish` in
+  `electron-builder.shared.yml` and the bundled `resources/app-update.yml`, which `test/release/build.test.ts` keeps
+  equal). `useMultipleRangeRequest` is false: R2 answers one byte range per request, so the updater fetches the parts
+  of the zip a blockmap says changed one range at a time. Each file names its zip as
+  `<version>/Shinsa-mac-arm64.zip`, which the updater fetches from `shinsa.dev/updates/<version>/`, served from
+  `releases/<version>/` in the bucket (`apps/marketing/CLAUDE.md` → Deploy).
+  `apps/desktop/test/lib/update-feed.test.ts` runs electron-updater's own generic provider over such files.
+- A channel's file only moves when its download pointer moves (`resolveChannelUpdates`), so a release older by semver
+  than what a channel offers never takes it back.
 - `allowDowngrade` is false (electron-updater turns it on whenever `channel` is set, so the app sets it back), with
   one exception: going back from a beta or a canary when you switch to a channel below it. A version's channel is its pre-release word
   (`resolveReleaseChannel` in `packages/core`). Switching from Beta to Stable on a beta newer than the latest stable
@@ -169,11 +181,11 @@ The app updates itself with electron-updater from the releases of `shinsa-dev/sh
   update already handed to macOS's installer (Squirrel.Mac stages it for the next quit) is removed, its ShipIt job
   (`launchctl remove <bundle id>.ShipIt`) and its folder (`~/Library/Caches/<bundle id>.ShipIt`), before the new
   channel's check runs.
-- The update files: electron-builder writes `latest-mac.yml` and, for the `github` provider, never a file per channel
-  (`generateUpdatesFilesForAllChannels` and `detectUpdateChannel` do not apply to it), so the workflow derives them: a
+- The update files: electron-builder writes `latest-mac.yml` only, so the workflow derives the channel's own: a
   stable release uploads `latest-mac.yml` and a copy as `beta-mac.yml`, a beta uploads it as `beta-mac.yml` only and
-  a canary as `canary-mac.yml` only. The file names the zip by its plain name (`Shinsa-mac-arm64.zip`), which the
-  updater fetches from the same tag.
+  a canary as `canary-mac.yml` only, each naming the zip by its plain name (`Shinsa-mac-arm64.zip`). A build from
+  before the move to shinsa.dev still reads them from GitHub; `scripts/release-upload.ts` copies them to R2 with the
+  zip's path rewritten.
 - A new install starts on the channel of its own version (Canary for a canary, Beta for a beta, Stable otherwise);
   the choice is the app's own (Settings → General → Updates, ⌘K's Update channel), switching checks again at once,
   and every channel is offered. An old Shinsa Canary app (`studio.overclock.shinsa.canary`, from before canaries were
@@ -194,8 +206,13 @@ uploads it to `shinsa-releases/releases/<version>/Shinsa-mac-arm64.dmg`, then wr
 `channels/stable.json` (a stable release), `channels/beta.json` (a stable or beta release) and `channels/canary.json`
 (a canary only), each only when the release is not older by semver than what it points at, so a stable release moves
 Beta too once it is newer, a stable hotfix below a running beta leaves Beta alone, and a stable or beta release never
-moves Canary. Then it deletes the
-disk images of all but the newest five canaries from the bucket (`listStaleCanaryKeys`). The rules are `scripts/release-downloads.ts`, tested at 100%; the layout and how the
+moves Canary. Before any of that it also downloads the zip, its blockmap and the release's own update file
+(`latest-mac.yml`, `beta-mac.yml` or `canary-mac.yml`), checks the zip's size and SHA-512 against that file
+(`parseUpdateFile`, `assertUpdateZip`) and uploads both next to the disk image; then, for the same channels as the
+pointers, it writes `updates/<channel>-mac.yml` with every URL rewritten to `<version>/Shinsa-mac-arm64.zip`
+(`serializeUpdateFile`), the files the Mac app's updater reads at `shinsa.dev/updates`. The update files are written
+last, so none ever names a zip the bucket does not hold. Nothing in the bucket is ever deleted: every version's disk
+image, zip and blockmap stay under `releases/<version>/`. The rules are `scripts/release-downloads.ts`, tested at 100%; the layout and how the
 site serves it are `apps/marketing/CLAUDE.md` → Deploy. It talks to R2's S3 API with the `CLOUDFLARE_API_TOKEN` secret, the
 **Shinsa CI** account token of Overclock Studio, which needs only **Workers R2 Storage Bucket Item Read** and **Write**
 on `shinsa-releases`. The script asks Cloudflare for the token's id (`/accounts/<id>/tokens/verify`) and signs in with
@@ -211,6 +228,15 @@ there is none.
 Apple Silicon only. A universal or an extra x64 build would need an x64 engine (`SHINSA_ENGINE_TARGET=bun-darwin-x64`)
 per architecture in `extraResources`, roughly doubles the build and the download, and needs the updater files to name
 both zips; not worth it until someone asks for Intel.
+
+## Moving off GitHub's feed
+
+Apps built before `UPDATE_FEED` pointed at shinsa.dev read GitHub's release feed, which lists only the newest ten
+releases. Canary apps move with the next canary. Apps on `1.0.0-beta.1` to `1.0.0-beta.5` take a newer beta only
+while it is among those ten: once ten newer releases push it out, they find no update and need a reinstall from
+`shinsa.dev/download/beta`. Before the first beta on the new feed, copy the newest beta's update files to R2, so the
+Beta channel has a file before any app reads it: `CLOUDFLARE_API_TOKEN=… bun scripts/release-upload.ts v1.0.0-beta.5`
+(the next canary writes `canary-mac.yml`).
 
 ## Signing and notarization
 

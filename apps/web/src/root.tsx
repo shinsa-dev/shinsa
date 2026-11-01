@@ -11,6 +11,7 @@ import { OnboardingShell } from '@/components/onboarding/shell.tsx';
 import { EngineBanner } from '@/components/status/engine-banner.tsx';
 import { HealthBanner } from '@/components/status/health-banner.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
+import { DuplicateDialog } from '@/components/task/duplicate-dialog.tsx';
 import { ForkDialog } from '@/components/task/fork-dialog.tsx';
 import { ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
 import { useAttention } from '@/hooks/use-attention.ts';
@@ -184,6 +185,7 @@ function App({ route }: { route: PageRoute }) {
         <ForkDialog />
         <ShareDialog />
         <UnshareConfirm />
+        <DuplicateDialog />
       </ErrorBoundary>
     </>
   );

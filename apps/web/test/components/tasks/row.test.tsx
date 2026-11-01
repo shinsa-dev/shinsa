@@ -79,8 +79,10 @@ describe('the row context menu', () => {
       'Fork into a new task',
       'Share task',
       'Move to the backlog',
+      'Snooze',
       'Restart the current step',
       'Mark as done',
+      'Close as a duplicate',
       'Cancel task',
     ]);
   });

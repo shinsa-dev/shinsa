@@ -28,6 +28,7 @@ export interface FakeMacOptions {
   welcome?: (text: string) => string | null;
   refuseOpen?: boolean;
   tolerant?: boolean;
+  pendingDrops?: number;
 }
 
 interface Collecting {
@@ -44,6 +45,8 @@ export class FakeMac {
   readonly socketMessages: string[] = [];
   readonly aborted: string[] = [];
   readonly received: ChannelMessage[] = [];
+  readonly names: (string | null)[] = [];
+  pendingDrops = 0;
   readonly urls: string[] = [];
   sockets: FakeMacSocket[] = [];
   options: FakeMacOptions;
@@ -52,6 +55,7 @@ export class FakeMac {
     this.machine = machine;
     this.machineKey = machineKey;
     this.enrolled = new Set(options.enrolled ?? []);
+    this.pendingDrops = options.pendingDrops ?? 0;
     this.options = options;
   }
 
@@ -157,7 +161,16 @@ export class FakeMacSocket extends EventTarget {
       );
       return;
     }
-    if (redeemed) mac.enrolled.add(hello.device);
+    if (redeemed) {
+      mac.names.push(hello.name);
+      this.deliver(JSON.stringify({ type: 'pending' }));
+      if (mac.pendingDrops > 0) {
+        mac.pendingDrops -= 1;
+        setTimeout(() => this.drop('The tunnel dropped.'), 5);
+        return;
+      }
+      mac.enrolled.add(hello.device);
+    }
     const ephemeral = await createKeyPair();
     const serverEphemeral = await serializePublicKey(ephemeral.publicKey);
     const session = await deriveServerSession({

@@ -7,6 +7,7 @@ import type { DeviceStore, EnrolledDevice } from './devices.ts';
 import type { FleetMember } from './fleet.ts';
 import { RemoteLink, type RemoteLinkOptions } from './link.ts';
 import { resolveMachineLabel } from './mode.ts';
+import { describeUserName } from './users.ts';
 
 export interface MachineRow {
   instance: RemoteInstance;
@@ -14,6 +15,11 @@ export interface MachineRow {
   label: string;
   status: string;
   access: string;
+}
+
+function resolveDeviceAccess(device: EnrolledDevice | null) {
+  if (!device) return 'Not added on this device';
+  return device.waiting ? 'Waiting for an answer' : 'In this dashboard';
 }
 
 export function describeMachine(
@@ -24,7 +30,9 @@ export function describeMachine(
   const seen =
     instance.lastSeenAt === null ? 'Never connected' : formatSince('Last seen', instance.lastSeenAt, now);
   const current = device?.onMachine === true;
-  const access = device ? 'In this dashboard' : 'Not added on this device';
+  const added = resolveDeviceAccess(device);
+  const access =
+    instance.role === 'member' ? `Shared by ${describeUserName(instance.owner)} · ${added}` : added;
   return {
     instance,
     device,

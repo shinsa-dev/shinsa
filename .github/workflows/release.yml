@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  statuses: write
 
 jobs:
   trigger:
@@ -73,6 +74,16 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       channel: ${{ steps.version.outputs.channel }}
     steps:
+      - name: Mark the commit's release as pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.trigger.outputs.sha }}
+          CHANNEL: ${{ needs.trigger.outputs.channel }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$RELEASE_SHA" \
+            -f state=pending -f context=Release \
+            -f description="Building the $CHANNEL release" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.trigger.outputs.sha }}
@@ -255,14 +266,40 @@ jobs:
         with:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
-      - name: Serve the disk image from shinsa.dev
+      - name: Serve the downloads and updates from shinsa.dev
         env:
           GH_TOKEN: ${{ github.token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RELEASE_TAG: ${{ needs.mac.outputs.tag }}
         run: bun scripts/release-upload.ts
-      - name: Keep the last five canaries on GitHub
-        if: ${{ !cancelled() && needs.mac.outputs.channel == 'canary' }}
+
+  status:
+    needs: [trigger, mac, downloads]
+    if: ${{ always() && (needs.trigger.result == 'failure' || needs.trigger.outputs.build == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - name: Report the release on the commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bun scripts/release-prune.ts
+          RELEASE_SHA: ${{ needs.trigger.outputs.sha || github.event.workflow_run.head_sha || github.sha }}
+          CHANNEL: ${{ needs.trigger.outputs.channel || inputs.channel || 'canary' }}
+          TAG: ${{ needs.mac.outputs.tag }}
+          TRIGGER: ${{ needs.trigger.result }}
+          MAC: ${{ needs.mac.result }}
+          DOWNLOADS: ${{ needs.downloads.result }}
+        run: |
+          case "$TRIGGER/$MAC/$DOWNLOADS" in
+            success/success/success) state=success description="Published $TAG" ;;
+            failure/*) state=failure description="Could not decide whether to build the $CHANNEL release" ;;
+            */cancelled/* | */*/cancelled) state=error description="Cancelled" ;;
+            */success/*) state=failure description="Published $TAG, but the downloads were not updated" ;;
+            *) state=failure description="The $CHANNEL release failed to build" ;;
+          esac
+          echo "Release status for $RELEASE_SHA: $state ($description)"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$RELEASE_SHA" \
+            -f state="$state" -f context=Release \
+            -f description="$description" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

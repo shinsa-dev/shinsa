@@ -10,9 +10,11 @@ import {
   linkSession,
   PASSING,
   proposePlan,
+  REPLY,
   reachReviewGate,
   readInstruction,
   registerRepo,
+  resolveReply,
 } from '../harness.ts';
 
 const MANY_CHECKS = Array.from({ length: 24 }, (_, index) => `check ${index + 1}`);
@@ -314,6 +316,7 @@ describe('the automatic fix budget', () => {
       runId: harness.activeRun(taskId).id,
       summary: 'Renamed.',
       checks: ['r2'],
+      reply: REPLY,
     });
     harness.send({ type: 'checks.record', taskId, results: failing() });
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
@@ -341,6 +344,7 @@ describe('review rounds that escalate to you', () => {
       runId: harness.activeRun(taskId).id,
       summary: 'Fixed.',
       ...(treeHash ? { treeHash } : {}),
+      ...resolveReply(harness, harness.activeRun(taskId).id),
     });
   }
 

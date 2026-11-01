@@ -91,10 +91,7 @@ export function isHeldByYourDecision(state: ShinsaState, task: Task, pipeline: r
 export function queueRound(decider: Decider, taskId: string, input: RoundRequest) {
   const task = decider.task(taskId);
   if (listQueuedRounds(task).length >= ROUND_LIMITS.queued) {
-    throw new DomainError(
-      'rounds_full',
-      `This task already has ${ROUND_LIMITS.queued} rounds waiting to start. Let one start first.`
-    );
+    throw new DomainError('rounds_full', `${ROUND_LIMITS.queued} rounds already wait to start.`);
   }
   const number = resolveNextRoundNumber(task);
   decider.emit({
@@ -167,6 +164,25 @@ function startRound(decider: Decider, task: Task, round: Round) {
   startWork(decider, task.id);
 }
 
+export function restartInNewRound(decider: Decider, taskId: string) {
+  const task = decider.task(taskId);
+  const current = resolveCurrentRound(task);
+  decider.emit({
+    type: 'round.queued',
+    taskId,
+    round: {
+      number: resolveNextRoundNumber(task),
+      title: current.title,
+      request: current.request,
+      why: null,
+      shipping: DEFAULT_ROUND_SHIPPING,
+      pipeline: [...resolveTaskPipeline(task)],
+    },
+  });
+  const [next] = listQueuedRounds(decider.task(taskId));
+  if (next) startRound(decider, decider.task(taskId), next);
+}
+
 export function startQueuedRounds(decider: Decider) {
   for (const task of Object.values(decider.state.tasks)) {
     const [next] = listQueuedRounds(task);
@@ -179,10 +195,7 @@ function findChangingRound(task: Task, number: number) {
   const round = resolveTaskRounds(task).find((candidate) => candidate.number === number);
   if (!round) throw new DomainError('round_not_found', `This task has no round ${number}.`);
   if (canChangeRoundShipping(task, round)) return round;
-  throw new DomainError(
-    'round_shipped',
-    `Round ${number} has already gone to its pull request, so how it ships is set. Choose how the next round ships instead.`
-  );
+  throw new DomainError('round_shipped', `Round ${number} has already shipped.`);
 }
 
 export function changeRoundShipping(decider: Decider, command: CommandOf<'round.ship'>) {
@@ -215,10 +228,7 @@ export function findWaitingRound(task: Task, number: number) {
   const round = resolveTaskRounds(task).find((candidate) => candidate.number === number);
   if (!round) throw new DomainError('round_not_found', `This task has no round ${number}.`);
   if (round.status === 'waiting') return round;
-  throw new DomainError(
-    'round_started',
-    `Round ${number} has already started, so it can no longer be changed or removed. Send a message instead.`
-  );
+  throw new DomainError('round_started', `Round ${number} has already started.`);
 }
 
 export function updateRound(decider: Decider, command: CommandOf<'round.update'>) {

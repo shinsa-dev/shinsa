@@ -59,8 +59,8 @@ export function validateBaselineCommands(commands: readonly string[]) {
 }
 
 export function describeBaselineChange(repo: Pick<Repo, 'name'>, commands: readonly string[]) {
-  if (commands.length === 0) return `Nothing extra runs before review in ${repo.name}.`;
-  return `${formatCount(commands.length, 'command runs', 'commands run')} before every review in ${repo.name}.`;
+  if (commands.length === 0) return `No review commands in ${repo.name}.`;
+  return `${formatCount(commands.length, 'review command', 'review commands')} in ${repo.name}.`;
 }
 
 export function changeBaseline(repo: Repo, commands: readonly string[]) {

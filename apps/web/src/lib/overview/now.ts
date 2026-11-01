@@ -16,10 +16,8 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
 import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { resolveSteps, selectCancelledStep } from '@/lib/overview/progress.ts';
-import { describeChecksPassed } from '@/lib/tasks/checks.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 import { describeConflict } from '@/lib/tasks/now.ts';
 import { isPausedStatus, resolveTaskStatus } from '@/lib/tasks/status.ts';
@@ -97,7 +95,7 @@ const DELIVERING_STAGES: ReadonlySet<Task['stage']> = new Set(
 
 export function resolveResultPlace(state: ShinsaState, task: Task, gate: Gate | undefined): ResultPlace {
   if (!task.result) return 'hidden';
-  if (gate?.type === 'proposal') return 'now_card';
+  if (gate?.type === 'proposal' || gate?.type === 'result') return 'now_card';
   if (DELIVERING_STAGES.has(task.stage)) return 'hidden';
   if (gate) return 'panel';
   return resolveNowKind(state, task, gate) === 'result' ? 'now_card' : 'panel';
@@ -112,17 +110,8 @@ export function isTaskWatchable(state: ShinsaState, task: Task) {
   return status.tone !== 'neutral' || isPausedStatus(status);
 }
 
-export function describeReviewFacts(task: Task, merge: boolean) {
-  const checks = task.checkResults ?? [];
-  const findings = task.findings;
-  const facts = [
-    checks.length > 0 ? describeChecksPassed(checks) : null,
-    findings.length === 0
-      ? 'agent review found nothing'
-      : `agent review left ${formatCount(findings.length, 'note', 'notes')}`,
-    merge && task.pullRequest ? `PR #${task.pullRequest.number} is clean` : null,
-  ];
-  return capitalise(facts.filter(Boolean).join(' · '));
+export function describeAgentReviewFact(task: Task) {
+  return task.findings.length === 0 ? 'Agent review found nothing' : null;
 }
 
 function resolveFeedLine(entry: ChatEntry): { icon: IconName; label: string | null; text: string } | null {

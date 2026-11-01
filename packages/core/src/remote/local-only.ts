@@ -5,7 +5,7 @@ export type RequestOrigin = 'local' | 'remote';
 
 export const LOCAL_ONLY_CODE = 'local_only';
 
-export const LOCAL_ONLY_MESSAGE = 'This is only available on the machine Shinsa runs on. Finish it there.';
+export const LOCAL_ONLY_MESSAGE = 'Do this on the machine Shinsa runs on.';
 
 function touchesAny(patch: object, fields: readonly string[]) {
   return fields.some((field) => Object.hasOwn(patch, field));

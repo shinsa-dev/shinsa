@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import {
   DomainError,
+  type OnboardingCheck,
   type OnboardingFlow,
   type OnboardingProjectChoice,
   type OnboardingReply,
@@ -13,9 +14,10 @@ import { describeError, log } from '../log/index.ts';
 import type { ProjectRevision } from './revise.ts';
 import { PrivateFoldersError } from './roots.ts';
 import type { SetupPatch, StepDefinition, StepReadContext } from './steps.ts';
+import { listFailingChecks } from './welcome.ts';
 
 interface Draft {
-  version: 5;
+  version: 6;
   id: string;
   index: number;
   furthest: number;
@@ -25,9 +27,10 @@ interface Draft {
   access: string[];
   picked: string[];
   revision: ProjectRevision | null;
+  help: string | null;
 }
 
-type FlowContext = StepReadContext & {
+export type FlowContext = StepReadContext & {
   save: (patch: SetupPatch, commandId: string) => Promise<void>;
   createProjects: (choices: OnboardingProjectChoice[] | undefined, commandId: string) => Promise<void>;
 };
@@ -43,6 +46,8 @@ interface FlowOptions {
   ) => Promise<ProjectRevision>;
   isCompleted: () => boolean;
   complete: () => Promise<void>;
+  requestHelp: (checks: OnboardingCheck[]) => Promise<string | null>;
+  selectWelcome: () => string | null;
   readOnly?: boolean;
 }
 
@@ -54,13 +59,14 @@ function isDraft(value: unknown): value is Draft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<Draft>;
   return (
-    draft.version === 5 &&
+    draft.version === 6 &&
     typeof draft.id === 'string' &&
     typeof draft.index === 'number' &&
     typeof draft.furthest === 'number' &&
     typeof draft.saves === 'number' &&
     Array.isArray(draft.access) &&
     Array.isArray(draft.picked) &&
+    (draft.help === null || typeof draft.help === 'string') &&
     (draft.revision === null ||
       (typeof draft.revision === 'object' &&
         Array.isArray(draft.revision.projects) &&
@@ -113,6 +119,7 @@ function parseProjectChoices(value: unknown) {
 function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition[]): OnboardingReply {
   if (fields.type === 'restart') return { type: 'restart' };
   if (fields.type === 'open') return { type: 'open', stepId: parseStepId(fields.stepId, steps) };
+  if (fields.type === 'help') return { type: 'help', stepId: parseStepId(fields.stepId, steps) };
   if (fields.type === 'answer') {
     const stepId = parseStepId(fields.stepId, steps);
     const { values } = fields;
@@ -133,7 +140,7 @@ function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition
     const projects = parseProjectChoices(fields.projects);
     return { type: 'revise', stepId, text: fields.text, ...(projects ? { projects } : {}) };
   }
-  throw new DomainError('reply_invalid', 'Answer a step, open one or start again.');
+  throw new DomainError('reply_invalid', 'Answer a step, open one, ask for help or start again.');
 }
 
 export class OnboardingSetup {
@@ -149,6 +156,10 @@ export class OnboardingSetup {
     return this.#serial(async () => this.#present(this.#open()));
   }
 
+  selectHelp(): Promise<string | null> {
+    return this.#serial(async () => this.#open().help);
+  }
+
   reply(fields: JsonObject): Promise<OnboardingFlow> {
     return this.#serial(async () => {
       const reply = parseOnboardingReply(fields, this.#options.steps);
@@ -161,7 +172,11 @@ export class OnboardingSetup {
         return this.#present(draft);
       }
       if (index !== draft.index) {
-        throw new DomainError('step_stale', 'That step is no longer open. Answer the step on screen.');
+        throw new DomainError('step_stale', 'That step has closed.');
+      }
+      if (reply.type === 'help') {
+        await this.#help(draft, this.#options.steps[index] as StepDefinition);
+        return this.#present(draft);
       }
       if (reply.type === 'revise') {
         await this.#revise(draft, reply.stepId, reply.text, reply.projects);
@@ -192,7 +207,7 @@ export class OnboardingSetup {
 
   #start(): Draft {
     const draft: Draft = {
-      version: 5,
+      version: 6,
       id: Bun.randomUUIDv7(),
       index: 0,
       furthest: 0,
@@ -202,6 +217,7 @@ export class OnboardingSetup {
       access: [],
       picked: [],
       revision: null,
+      help: null,
     };
     this.#draft = draft;
     this.#write(draft);
@@ -210,7 +226,7 @@ export class OnboardingSetup {
 
   #assertReached(draft: Draft, index: number) {
     if (draft.index >= this.#options.steps.length) {
-      throw new DomainError('setup_finished', 'Setup is finished. Start it again from Settings.');
+      throw new DomainError('setup_finished', 'Setup is done. Restart it in Settings.');
     }
     if (!draft.revisit && index > draft.furthest) {
       throw new DomainError('step_unreached', 'Answer the steps before this one first.');
@@ -233,7 +249,7 @@ export class OnboardingSetup {
     projects: OnboardingProjectChoice[] | undefined
   ) {
     if (stepId !== 'projects') {
-      throw new DomainError('revise_invalid', 'Only the suggested projects can be changed in words.');
+      throw new DomainError('revise_invalid', 'Only suggested projects can change.');
     }
     try {
       draft.revision = await this.#options.reviseProjects(draft.revision, text, projects);
@@ -242,6 +258,20 @@ export class OnboardingSetup {
       if (!(error instanceof DomainError)) throw error;
       draft.problem = error.message;
     }
+    this.#write(draft);
+  }
+
+  async #help(draft: Draft, definition: StepDefinition) {
+    const context = this.#options.resolveContext(draft.revision);
+    const view = await definition.view(context, false, draft.picked);
+    const failing = listFailingChecks(view.checks);
+    if (failing.length === 0) {
+      throw new DomainError(
+        'help_unneeded',
+        'Every check on this step passes, so there is nothing to ask about.'
+      );
+    }
+    draft.help = await this.#options.requestHelp(failing);
     this.#write(draft);
   }
 
@@ -300,6 +330,7 @@ export class OnboardingSetup {
       index: draft.index,
       step: await this.#view(draft, definition, context),
       revisit: draft.revisit,
+      welcome: this.#options.selectWelcome(),
     };
   }
 
@@ -323,6 +354,7 @@ export class OnboardingSetup {
       conversation: definition.id === 'projects' ? (draft.revision?.turns ?? []) : [],
       problem: draft.problem,
       access: draft.access,
+      help: draft.help,
     };
   }
 }

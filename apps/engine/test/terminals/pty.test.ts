@@ -114,7 +114,7 @@ describe('pickFreePort', () => {
   });
 
   it('gives up when no port is free', () => {
-    expect(() => pickFreePort(null, new Set(), () => null)).toThrow('could not find a free port');
+    expect(() => pickFreePort(null, new Set(), () => null)).toThrow('No free port for the service.');
   });
 
   it('binds a free port on this machine, and no port another program listens on', () => {

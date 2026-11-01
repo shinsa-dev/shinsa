@@ -34,8 +34,10 @@ describe('task action commands', () => {
       ['run', 'Show in Finder', undefined],
       ['run', 'Fork into a new task', undefined],
       ['run', 'Share task', undefined],
+      ['run', 'Snooze', undefined],
       ['run', 'Restart the current step', undefined],
       ['run', 'Mark as done', undefined],
+      ['run', 'Close as a duplicate', undefined],
       ['page', 'Cancel task', undefined],
     ]);
   });

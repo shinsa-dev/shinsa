@@ -130,8 +130,5 @@ export function shareTask(task: Task, limit: ShareLimit) {
 }
 
 export function unshareTask(task: Task) {
-  return sendCommandWithToast(
-    { type: 'task.unshare', taskId: task.id },
-    'Stopped sharing. The link no longer opens this task.'
-  );
+  return sendCommandWithToast({ type: 'task.unshare', taskId: task.id }, 'Stopped sharing.');
 }

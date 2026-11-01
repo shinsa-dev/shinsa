@@ -412,6 +412,35 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa tasks duplicate
+
+Close a task as a duplicate of another. It is cancelled and links the task it duplicates.
+
+```
+shinsa tasks duplicate <task> --of <text> [--json]
+```
+
+Every task agent's tool: `tasks_duplicate`. Sends `task.mark_duplicate`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `--of` | text, required | The task it duplicates: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks not-duplicate
+
+Start a task closed as a duplicate again. One that already worked starts a fresh round.
+
+```
+shinsa tasks not-duplicate <task> [--json]
+```
+
+Every task agent's tool: `tasks_not_duplicate`. Sends `task.clear_duplicate`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks done
 
 Mark a task as done without merging it.
@@ -493,6 +522,34 @@ shinsa tasks remove-from-backlog <task> [--json]
 ```
 
 Every task agent's tool: `tasks_remove_from_backlog`. Sends `task.remove_from_backlog`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks snooze
+
+Snooze a task: it keeps its step and its work, and leaves Needs you and Home until you unsnooze it.
+
+```
+shinsa tasks snooze <task> [--json]
+```
+
+Every task agent's tool: `tasks_snooze`. Sends `task.snooze`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks unsnooze
+
+Unsnooze a task: it shows again where it was, in Needs you when it waits for you.
+
+```
+shinsa tasks unsnooze <task> [--json]
+```
+
+Every task agent's tool: `tasks_unsnooze`. Sends `task.unsnooze`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
@@ -2042,7 +2099,7 @@ Every task agent's tool: `sources_remove`. Sends `watch_source.remove`.
 
 #### shinsa remote status
 
-Show whether this machine can be reached from app.shinsa.dev, and its enrolled devices.
+Show whether this machine can be reached from Shinsa Cloud, and its enrolled devices.
 
 ```
 shinsa remote status [--json]
@@ -2082,7 +2139,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa remote remove
 
-Remove this machine from app.shinsa.dev and forget its tunnel and devices.
+Remove this machine from Shinsa Cloud and forget its tunnel and devices.
 
 ```
 shinsa remote remove [--json]
@@ -2090,19 +2147,67 @@ shinsa remote remove [--json]
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
-#### shinsa remote enroll
+#### shinsa remote link
 
-Make a one-time link that adds a device, a browser or a phone, to this machine.
+Show the reusable invite link that asks for access to this machine, making it if it is off.
 
 ```
-shinsa remote enroll <name> [--json]
+shinsa remote link [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+#### shinsa remote link-off
+
+Turn the invite link off, so nobody can ask for access with it any more.
+
+```
+shinsa remote link-off [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+#### shinsa remote accept
+
+Accept an access request: add its device, and make its account a member when it is not yours.
+
+```
+shinsa remote accept <request> [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<name>` | text, required | What to call the device, such as iPhone. |
+| `<request>` | text, required | The request’s id, or the GitHub login that asked, from `shinsa remote status`. |
+
+#### shinsa remote decline
+
+Decline an access request and forget it.
+
+```
+shinsa remote decline <request> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<request>` | text, required | The request’s id, or the GitHub login that asked, from `shinsa remote status`. |
+
+#### shinsa remote remove-member
+
+Take away someone’s remote access: forget the devices they added and close their open sessions.
+
+```
+shinsa remote remove-member <login> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<login>` | text, required | Their GitHub login, from `shinsa remote status`. |
 
 #### shinsa remote forget-device
 

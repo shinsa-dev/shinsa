@@ -25,11 +25,13 @@ import type { Decider } from './decider.ts';
 import { queueMessageForWake } from './delegations.ts';
 import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
+import { requestIteration } from './iterations.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
 import { assertTakesMessages, findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
 import {
   acceptsFollowUp,
   answerFollowUp,
+  closeResult,
   followUpInquiry,
   noteOperation,
   restartAnswer,
@@ -46,12 +48,12 @@ type StageEffect =
   | 'operation_notes'
   | 'request_changes'
   | 'send_back'
+  | 'follow_up'
   | 'fix';
 
 export type MessageEffect =
   | StageEffect
   | 'closed'
-  | 'follow_up'
   | 'steer'
   | 'wake'
   | 'retry'
@@ -61,7 +63,7 @@ export type MessageEffect =
 type Delivery =
   | { effect: 'steer' | 'wake'; run: Run }
   | { effect: 'retry' | 'verify_setup' | 'supersede_question'; gate: Gate }
-  | { effect: StageEffect | 'follow_up' };
+  | { effect: StageEffect };
 
 const FEEDBACK_ONLY_EFFECTS: ReadonlySet<MessageEffect> = new Set<MessageEffect>([
   'retry',
@@ -88,6 +90,7 @@ const STAGE_EFFECT: Record<TaskStage, StageEffect> = {
   watching: 'restart_step',
   awaiting_proposal: 'decline_proposal',
   awaiting_operation: 'operation_notes',
+  answered: 'follow_up',
   checking: 'fix',
   reviewing: 'fix',
   fixing: 'fix',
@@ -164,6 +167,7 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
     case 'kept':
       return;
     case 'steer':
+      if (delivery.run.purpose === 'fix') requestIteration(decider, task.id, text, 0);
       decider.run({ kind: 'run.steer', runId: delivery.run.id, text });
       return;
     case 'wake':
@@ -200,6 +204,7 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
     case 'send_back':
     case 'fix':
       decider.withdrawGates(task.id, (gate) => gate.type === 'review' || gate.type === 'merge');
+      requestIteration(decider, task.id, text, 0);
       startFix(decider, task.id, 'you', resolveHumanFixPrompt(text, []), null);
   }
 }
@@ -237,7 +242,12 @@ function recordMessages(
   for (const text of texts) decider.emit({ type: 'task.messaged', taskId, text, ...fields });
 }
 
+export function recordHeldMessage(decider: Decider, taskId: string, text: string) {
+  recordMessages(decider, taskId, [text], {});
+}
+
 function startNewWork(decider: Decider, task: Task, send: MessageSend, texts: string[], request: string) {
+  if (task.stage === 'answered' && !decider.context.onBehalf) closeResult(decider, task.id);
   const round = resolveNextRoundNumber(task);
   recordMessages(decider, task.id, texts, { kind: 'new_round', round });
   queueRound(decider, task.id, {
@@ -250,10 +260,7 @@ function startNewWork(decider: Decider, task: Task, send: MessageSend, texts: st
 
 export function assertNotWatchHome(task: Task) {
   if (!isWatchHome(task)) return;
-  throw new DomainError(
-    'watch_home',
-    'This is where a watch reads its integration, so it takes no messages. Change the watch in Settings → Automations.'
-  );
+  throw new DomainError('watch_home', 'A watch takes no messages.');
 }
 
 function assertMessageAccepted(state: ShinsaState, task: Task, text: string) {
@@ -274,6 +281,10 @@ function isRepeatedMessage(task: Task, text: string, now: number) {
   );
 }
 
+function isHeldForYou(state: ShinsaState, task: Task) {
+  return listOpenGates(state, task.id).some((gate) => gate.type !== 'result');
+}
+
 function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null) {
   const task = decider.task(send.taskId);
   const texts = send.texts.map((sent) => sent.trim()).filter((sent) => sent.length > 0);
@@ -282,11 +293,11 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
   if (isRepeatedMessage(task, text, decider.context.now)) return;
   const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
   const scheduled = scheduleId ? { scheduleId } : {};
-  if (sentForYou && listOpenGates(decider.state, task.id).length > 0) {
+  const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
+  if (sentForYou && isHeldForYou(decider.state, task)) {
     recordMessages(decider, task.id, texts, { ...scheduled, kept: true });
     return;
   }
-  const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
   if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
     const suggestionId = decider.context.newId();
     recordMessages(decider, task.id, texts, { kind, suggestionId });
@@ -327,7 +338,7 @@ export function keepSuggestion(decider: Decider, command: CommandOf<'suggestion.
   const suggestion = findOpenSuggestion(decider, command.taskId, command.suggestionId);
   const task = decider.task(command.taskId);
   assertTakesMessages(task);
-  const resting = isTaskResting(task);
+  const resting = isTaskResting(task) || task.stage === 'answered';
   decider.emit({
     type: 'suggestion.settled',
     taskId: task.id,

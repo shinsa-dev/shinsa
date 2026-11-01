@@ -2,18 +2,15 @@ import type { UserCommand } from '@shinsa/core';
 import { toast } from '@shinsa/ui/components/sonner';
 import { sendCommand } from '@/lib/connection/socket.ts';
 
-export type Done = string | { title: string; description: string };
-
 export function describeFailure(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function confirmDone(done: Done) {
-  if (typeof done === 'string') toast.success(done);
-  else toast.success(done.title, { description: done.description });
+export function confirmDone(done: string) {
+  toast.success(done);
 }
 
-export async function requestWithToast(request: () => Promise<unknown>, done?: Done) {
+export async function requestWithToast(request: () => Promise<unknown>, done?: string) {
   try {
     await request();
     if (done) confirmDone(done);

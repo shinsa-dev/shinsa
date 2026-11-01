@@ -39,4 +39,14 @@ describe('HoverHighlight', () => {
     expect(home.hasAttribute('data-hovered')).toBe(true);
     expect(settings.hasAttribute('data-hovered')).toBe(false);
   });
+
+  it('drops its pointer mark when it cleans up, so a page shown again rests on the current item', () => {
+    const view = render(<List />);
+    const settings = view.getByRole('button', { name: 'Settings' });
+    fireEvent.pointerOver(settings);
+    expect(settings.hasAttribute('data-hovered')).toBe(true);
+
+    view.unmount();
+    expect(settings.hasAttribute('data-hovered')).toBe(false);
+  });
 });

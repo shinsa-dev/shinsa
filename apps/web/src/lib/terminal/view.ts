@@ -398,6 +398,11 @@ export function syncTerminalViews(ids: ReadonlySet<string>) {
   }
 }
 
+export function releaseTerminalView(id: string) {
+  views.get(id)?.dispose();
+  views.delete(id);
+}
+
 export function selectTerminalView(id: string) {
   return views.get(id) ?? null;
 }

@@ -17,8 +17,11 @@ import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
+  type ConnectResponse,
   createConnectToken,
   createSettings,
+  type InviteAcceptResponse,
+  type InviteCreateResponse,
   type NativeSignInTokenResponse,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
@@ -26,6 +29,7 @@ import {
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   type RemoteInstance,
+  type RemoteUser,
   type Repo,
   resolveKeyFingerprint,
   SHARE_CHANNEL_PATH,
@@ -45,7 +49,7 @@ const ORIGIN = `http://${HOST}:${PORT}`;
 const PREVIEW_DIR = Bun.env.SHINSA_REMOTE_PREVIEW_DIR ?? join('/tmp', `shinsa-remote-preview-${PORT}`);
 const REMOTE_WEB = join(ROOT, 'apps/web/dist-remote');
 const LOCAL_WEB = join(ROOT, 'apps/web/dist');
-const USER = { id: '1', login: 'you', avatarUrl: null };
+const USER: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
 const PLACE = createPlacementAsker(createQuickCalls(new ProviderRegistry(), createSettings).classify);
 
 const LAPTOP_TASKS = [
@@ -120,7 +124,14 @@ function writeRemoteFile(dataDir: string, id: string, connectKey: string) {
   };
   writeFileSync(
     join(dataDir, REMOTE_FILE),
-    JSON.stringify({ version: 1, credentials, enabled: true, owner: USER.login, devices: [] })
+    JSON.stringify({
+      version: 1,
+      credentials,
+      enabled: true,
+      owner: USER.login,
+      devices: [],
+      access: { owner: USER, members: [] },
+    })
   );
 }
 
@@ -233,6 +244,8 @@ function listInstances(machines: Machine[]): Promise<RemoteInstance[]> {
       online: true,
       lastSeenAt: now,
       createdAt: now - 7 * 24 * 60 * 60 * 1000,
+      owner: USER,
+      role: 'owner',
     }))
   );
 }
@@ -362,7 +375,7 @@ function respondIndex(machines: Machine[], shares: PreviewShare[]) {
       `${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
     ],
     ...machines.map((machine) => [
-      `Add this device to ${machine.name} (a fresh one-time link)`,
+      `Add this device to ${machine.name} (request access, then accept it in that machine's own app below)`,
       `/__preview/enroll/${machine.id}`,
     ]),
     ...machines.map((machine) => [
@@ -388,22 +401,26 @@ function respondIndex(machines: Machine[], shares: PreviewShare[]) {
   ];
   const items = links.map(([label, href]) => `<li><a href="${href}">${label}</a></li>`).join('');
   return new Response(
-    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to each machine first, then open the dashboard.</p><ol>${items}</ol></body>`,
+    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to each machine first: request access, accept it in the machine's own app, then open the dashboard.</p><ol>${items}</ol></body>`,
     { headers: { 'content-type': 'text/html; charset=utf-8' } }
   );
 }
 
-async function respondConnect(machine: Machine) {
+async function createConnect(machine: Machine): Promise<ConnectResponse> {
   const expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS;
   const token = await createConnectToken(machine.connectKey, {
     instanceId: machine.id,
     userId: USER.id,
     expiresAt,
   });
-  return Response.json({
+  return {
     url: `ws://${HOST}:${PORT}/__preview/tunnel/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
     expiresAt,
-  });
+  };
+}
+
+async function respondConnect(machine: Machine) {
+  return Response.json(await createConnect(machine));
 }
 
 function respondNativeSignIn(url: URL) {
@@ -417,6 +434,41 @@ function respondNativeSignIn(url: URL) {
     );
   redirect.searchParams.set('code', 'preview');
   return new Response(null, { status: 302, headers: { location: redirect.toString() } });
+}
+
+const INVITES = new Map<string, string>();
+
+function respondInviteCreate(request: Request, machines: Machine[]) {
+  const bearer = (request.headers.get('authorization') ?? '').replace(/^Bearer preview-/, '');
+  const machine = machines.find((entry) => entry.id === bearer);
+  if (!machine) return Response.json({ error: { code: 'revoked', message: 'Not paired.' } }, { status: 401 });
+  const token = crypto.randomUUID().replaceAll('-', '');
+  INVITES.set(token, machine.id);
+  const answer: InviteCreateResponse = { token };
+  return Response.json(answer);
+}
+
+async function respondInviteAccept(request: Request, machines: Machine[]) {
+  const { token } = (await request.json()) as { token?: string };
+  const machine = machines.find((entry) => entry.id === INVITES.get(token ?? ''));
+  if (!machine)
+    return Response.json(
+      {
+        error: {
+          code: 'invite_invalid',
+          message: 'This invite link was turned off. Ask the machine’s owner for a new one.',
+        },
+      },
+      { status: 404 }
+    );
+  const answer: InviteAcceptResponse = {
+    instanceId: machine.id,
+    name: machine.name,
+    owner: USER,
+    user: USER,
+    connect: await createConnect(machine),
+  };
+  return Response.json(answer);
 }
 
 async function respondDashboard(request: Request, url: URL, machines: Machine[]) {
@@ -445,7 +497,12 @@ async function respondDashboard(request: Request, url: URL, machines: Machine[])
   }
   const machine = machines.find((entry) => pathname.startsWith(`${REMOTE_PATHS.instances}/${entry.id}/`));
   if (machine && pathname.endsWith('/connect') && request.method === 'POST') return respondConnect(machine);
-  if (machine && pathname.endsWith('/remove')) return Response.json({});
+  if (machine && (pathname.endsWith('/remove') || pathname.endsWith('/leave'))) return Response.json({});
+  if (pathname === REMOTE_PATHS.machineInvites) return respondInviteCreate(request, machines);
+  if (pathname === REMOTE_PATHS.inviteAccept) return respondInviteAccept(request, machines);
+  if (pathname === REMOTE_PATHS.machineRequester) return Response.json(USER);
+  if (pathname === REMOTE_PATHS.machineInviteRemove || pathname === REMOTE_PATHS.machineMemberRemove)
+    return Response.json({ ok: true });
   return Response.json({ error: { code: 'not_found', message: 'No such endpoint.' } }, { status: 404 });
 }
 
@@ -496,12 +553,11 @@ async function main() {
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) {
-        const enrollment = await enrolling.remote.createEnrollment('This browser');
+        await enrolling.remote.createLink();
+        const { link } = enrolling.remote.snapshot();
         const onMachine = url.searchParams.has('on');
-        return Response.redirect(
-          onMachine ? enrollment.url.replace('#', '?on=machine#') : enrollment.url,
-          302
-        );
+        const target = link?.url ?? REMOTE_PATHS.app;
+        return Response.redirect(onMachine ? target.replace('#', '?on=machine#') : target, 302);
       }
       const tunnel = /^\/__preview\/tunnel\/([a-z]+)(\/share)?$/.exec(url.pathname);
       const machine = machines.find((entry) => entry.id === tunnel?.[1]);

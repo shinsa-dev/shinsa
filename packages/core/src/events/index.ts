@@ -33,6 +33,7 @@ import type {
   Settings,
   ShapeActor,
   TaskAuto,
+  TaskDuplicate,
   TaskMode,
   TaskPriority,
   TaskShape,
@@ -54,6 +55,7 @@ import type {
 import type { SourceReport } from '../domain/schedules.ts';
 import type {
   CheckChange,
+  FixReply,
   PlanDocument,
   ReportCheck,
   ReportWalkthroughRevision,
@@ -66,6 +68,7 @@ import type { DelegationEventBody } from './delegations.ts';
 import type { MemoryEventBody } from './memory.ts';
 import type { ScheduleEventBody } from './schedules.ts';
 import type { ShareEventBody } from './shares.ts';
+import type { SlackEventBody } from './slack.ts';
 import type { WatchdogEventBody } from './watchdogs.ts';
 
 type QueuedRound = Pick<Round, 'number' | 'title' | 'request' | 'why' | 'shipping' | 'pipeline'>;
@@ -101,6 +104,7 @@ type EventBody =
     }
   | DelegationEventBody
   | ScheduleEventBody
+  | SlackEventBody
   | WatchdogEventBody
   | MemoryEventBody
   | ShareEventBody
@@ -123,8 +127,12 @@ type EventBody =
   | { type: 'task.change_approved'; taskId: string }
   | { type: 'task.staged'; taskId: string; stage: TaskStage; reason: string; by?: 'you' }
   | { type: 'task.prioritized'; taskId: string; priority: TaskPriority; by?: 'you' }
+  | { type: 'task.retitled'; taskId: string; round: number; title: string }
+  | { type: 'task.duplicated'; taskId: string; duplicate: TaskDuplicate }
+  | { type: 'task.duplicate_cleared'; taskId: string }
   | { type: 'task.waits_on_changed'; taskId: string; waitsOn: string[]; by?: 'you' | 'shinsa' }
   | { type: 'task.backlog_changed'; taskId: string; backlog: boolean; cause: BacklogCause }
+  | { type: 'task.snooze_changed'; taskId: string; snoozed: boolean }
   | { type: 'task.noted'; taskId: string; note: string; runId?: string | null }
   | {
       type: 'task.messaged';
@@ -136,6 +144,15 @@ type EventBody =
       suggestionId?: string;
       kept?: true;
     }
+  | {
+      type: 'iteration.requested';
+      taskId: string;
+      iterationId: string;
+      round: number;
+      text: string;
+      comments: number;
+    }
+  | { type: 'iteration.answered'; taskId: string; iterationId: string; reply: FixReply; runId: string }
   | { type: 'task.messages_told'; taskId: string }
   | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
   | { type: 'task.message_routed'; taskId: string; messageId: string }

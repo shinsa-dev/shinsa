@@ -33,6 +33,7 @@ import {
 } from './backlog.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { changeDependencies, resolveDependencies } from './dependencies.ts';
+import { closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { retryTask } from './retry.ts';
@@ -161,6 +162,11 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   if (inferred.length > 0) {
     decider.emit({ type: 'task.waits_on_changed', taskId: task.id, waitsOn: inferred, by: 'shinsa' });
   }
+  const original = selectTriageDuplicate(decider, task, command.duplicateOf);
+  if (original) {
+    closeTriageDuplicate(decider, decider.task(task.id), original, command.reasons?.duplicate ?? null);
+    return;
+  }
   releaseInquiryFromBacklog(decider, task.id);
   startWork(decider, task.id);
 }
@@ -184,16 +190,10 @@ export function cancelTask(decider: Decider, command: CommandOf<'task.cancel'>) 
 
 function assertNothingOpen(task: Task) {
   if (listQueuedRounds(task).length > 0) {
-    throw new DomainError(
-      'task_open',
-      'This task still has rounds waiting to start. Leave it open, or tell the human what is left.'
-    );
+    throw new DomainError('task_open', 'Rounds are still waiting to start.');
   }
   if (task.pullRequest?.state === 'open') {
-    throw new DomainError(
-      'task_open',
-      `Pull request #${task.pullRequest.number} of this task is still open. Leave the task open until it merges.`
-    );
+    throw new DomainError('task_open', `Pull request #${task.pullRequest.number} is still open.`);
   }
 }
 
@@ -202,10 +202,7 @@ function assertNoShippedRoundOpen(task: Task) {
     (round) => round.status === 'shipped' && round.pullRequest?.state === 'open'
   );
   if (!shipped?.pullRequest) return;
-  throw new DomainError(
-    'task_open',
-    `Pull request #${shipped.pullRequest.number} of round ${shipped.number} is still open. Merge it before the task is marked done, or cancel the task.`
-  );
+  throw new DomainError('task_open', `Pull request #${shipped.pullRequest.number} is still open.`);
 }
 
 export function completeTask(decider: Decider, command: CommandOf<'task.complete'>) {
@@ -229,10 +226,7 @@ export function retryTaskCommand(decider: Decider, command: CommandOf<'task.retr
   if (command.account) {
     const task = decider.task(command.taskId);
     if (!RUN_STAGES.has(task.stage)) {
-      throw new DomainError(
-        'no_agent_step',
-        'No agent works on this step, so there is nothing to run on another account.'
-      );
+      throw new DomainError('no_agent_step', 'No agent works on this step.');
     }
     decider.bindNextRun(task.id, command.account);
   }

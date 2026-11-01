@@ -74,6 +74,7 @@ class FakeConnection implements ShinsaConnection {
   selectMachine = () => null;
   listMachines = () => [];
   listUnreachableMachines = () => [];
+  listMachineAccess = () => [];
   command = (command: UserCommand) => {
     this.commands.push(command);
     return Promise.resolve();
@@ -271,6 +272,29 @@ describe('sending to the machine that owns it', () => {
     const studio = createMember('m1', 'Studio');
     const fleet = new Fleet([studio.member], [{ id: 'm3', name: 'Build box' }]);
     expect(fleet.listUnreachableMachines()).toEqual([{ id: 'm3', name: 'Build box' }]);
+  });
+
+  it('lists each machine with its own remote access, kept until one changes', () => {
+    const { fleet, studio, laptop } = createFleet();
+    const remote = { requests: [] } as unknown as RemoteSnapshot;
+    studio.connection.remote = remote;
+    const first = fleet.listMachineAccess();
+    expect(first).toEqual([
+      { id: 'm1', name: 'Studio', remote },
+      { id: 'm2', name: 'Laptop', remote: null },
+    ]);
+    expect(fleet.listMachineAccess()).toBe(first);
+    laptop.connection.remote = remote;
+    expect(fleet.listMachineAccess()[1]?.remote).toBe(remote);
+  });
+
+  it('sends a request naming a machine to that machine', () => {
+    const merged = mergeFleetStates([
+      { id: 'm1', state: createWire(1) },
+      { id: 'm2', state: createWire(1) },
+    ]);
+    const url = new URL('https://app.shinsa.dev/api/remote/requests/accept?machine=m2');
+    expect(resolveRequestOwner(url, merged?.owners ?? new Map())).toBe('m2');
   });
 
   it('reads accounts, terminals and remote access from the first machine, and is quiet while any machine has its desktop app open', () => {

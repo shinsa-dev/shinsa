@@ -1,4 +1,4 @@
-import type { RemoteEnrollment, RemoteSnapshot } from '@shinsa/core';
+import type { RemoteSnapshot } from '@shinsa/core';
 import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
@@ -74,8 +74,12 @@ export const REMOTE_ACCESS_ACTIONS = {
   resume: () => act('/enable'),
   pause: () => act('/disable'),
   remove: () => act('/remove'),
-  forgetDevice: (publicKey: string) => act('/devices/remove', { publicKey }),
-  createEnrollment: (name: string) => requestJson<RemoteEnrollment>('/api/remote/devices/enroll', { name }),
+  revokeDevice: (publicKey: string) => act('/devices/remove', { publicKey }),
+  createLink: () => act('/link/create'),
+  removeLink: () => act('/link/remove'),
+  acceptRequest: (requestId: string) => act('/requests/accept', { requestId }),
+  declineRequest: (requestId: string) => act('/requests/decline', { requestId }),
+  removeMember: (userId: string) => act('/members/remove', { userId }),
 };
 
 export type RemoteAccessActions = typeof REMOTE_ACCESS_ACTIONS;
@@ -86,4 +90,16 @@ export function useRemoteAccess() {
     void refreshRemoteAccess();
   }, []);
   return current;
+}
+
+function resolveMachinePath(path: string, machineId: string) {
+  return `/api/remote${path}?machine=${encodeURIComponent(machineId)}`;
+}
+
+export function acceptMachineRequest(machineId: string, requestId: string) {
+  return requestJson<RemoteSnapshot>(resolveMachinePath('/requests/accept', machineId), { requestId });
+}
+
+export function declineMachineRequest(machineId: string, requestId: string) {
+  return requestJson<RemoteSnapshot>(resolveMachinePath('/requests/decline', machineId), { requestId });
 }

@@ -388,7 +388,8 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
 
 1. **Classify.** One Sonnet call picks the title, the repository or none (A task without a repository,
    below), size, branch and, given every open task, the tasks this one waits on (`waits_on`, a list, usually
-   empty). Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
+   empty) and whether it is the same work as one of them (`duplicate_of`, Duplicates, below). A duplicate is
+   closed there and goes no further. Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
    Setup verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
    default branch.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
@@ -569,8 +570,7 @@ every commit.
   - On a pipeline without the checks step, or a task with no checks at all, there is nothing to run, so approving the
     review with them pushes straight away, as approving without edits does: the push effect commits them first.
   - What an approval does is `resolveApprovalPath` (core), so the decision and the toast after it agree: "Approved.
-    Committing your edits and running the checks.", "Approved. Pushing your edits. The pull request merges once CI
-    passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
+    Committing your edits.", "Approved. Merging once CI passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
     request is open) or "Approved. Merging the pull request." (`resolveApprovalReply` in `apps/web/src/lib/tasks/gates.ts`).
   - A commit of your edits made while a merge is in progress in the checkout (a hand-over that was undone put it
     back) concludes the merge, so it carries git's own merge message, not `fix: apply the edits made in the Code
@@ -643,8 +643,8 @@ them in the order they need:
   task wait on this one (the other part uses what this task adds); any run may set it, since it never holds this
   task, so a planner files that part while it plans. Setting both is refused (`dependency_cycle`). A wait ends
   when the task waited on is finished, merged or done (`isTaskComplete`), so a task that ships no pull request
-  releases its waiters too: an answer, research or investigation settles as done when it hands over (or when you
-  veto its proposal), an operation when it ends, and one whose proposal you approve becomes a change that merges.
+  releases its waiters too: an answer, research or investigation once it hands over (it waits as answered for
+  you to close it, and counts as finished) or when you veto its proposal, an operation when it ends, and one whose proposal you approve becomes a change that merges.
 - **Context carries over by the fork.** With `fork_from` set to this task, the other task's Agent starts from a copy
   of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
   task finished, so it holds this task's whole conversation, and its fork note says where this task's code is.
@@ -920,8 +920,17 @@ folds in `state/shapes.ts`).
   Otherwise the planning run ends, `task.reshaped` records the steps (`by: agent`, its reason), and the first new step
   starts: when the work step changed (a change became an operation, or the other way), the setup is verified again
   first, so a change gets its default branch verified and the Agent plans again, on the same session, with the right prompt.
-- **Your OK** (`your_ok`) owns the proposal gate (gate type `proposal`, stage `awaiting_proposal`); an inquiry step has
-  no gate of its own, and there is one path to it. The inquiry agent's prompt says the human decides whether the task
+- **Answered, not done.** An answer, research or investigation that hands over with nothing after it (no `your_ok`,
+  no plan, no proposal) does not settle: it moves to the stage `answered` and opens a `result` gate titled "Read the
+  answer", "Read the report" or "Read the diagnosis" (`openResultGate`, `decide/shapes.ts`), so it waits in Needs you
+  until you have read it. Done means you have. Close (the gate's one decision, approve) settles it as done
+  (`closeResult`, "closed by you") without closing it, so it still takes follow-ups; marking it done closes it as
+  any task. A message asks a follow-up (`follow_up`: the gate is withdrawn, the inquiry agent answers again and the
+  task comes back to answered); new work in the chat closes it first, then starts the next round. A task waiting on
+  it starts once it is answered (`isTaskComplete`). Vetoing a proposal and a follow-up on merged or finished work
+  still finish as done: you just acted on them.
+- **Your OK** (`your_ok`) owns the proposal gate (gate type `proposal`, stage `awaiting_proposal`); a proposal never
+  goes through the result gate, and there is one path to it. The inquiry agent's prompt says the human decides whether the task
   goes on and asks it to end with what the next step should do. When it hands over, Shinsa records a proposal (the agent's own `propose_change`, or the Agent's reason and what comes next: "Plan the
   operation. You approve the plan before anything runs.") and opens the proposal gate ("Run an operation from this
   diagnosis?", or "Turn this investigation into a fix?" before a change). Approving records `task.change_approved` (the
@@ -984,6 +993,20 @@ them in the composer.
   change in one command (`task.wait_on`, `task.prioritize`); a part you changed is yours, not Auto, from then on; the
   kind does not change after triage except through the Agent while it plans and your OK. Without a
   model (off, failed or unreadable) the task stays a change at its priority, starting now, and the why says so.
+
+**Duplicates.** A task that repeats another is closed as its duplicate: cancelled like any cancel (its runs,
+effects, gates, pull requests, worktree and scratch folder settle the same way), with `task.duplicate` recording
+the task it repeats, who closed it and why; its stage stays `cancelled`, so everything that treats a cancelled task
+as finished still does, and the page shows the status Duplicate, a Duplicates group on All tasks and a "Duplicate of"
+fact linking the original, whose own page shows a "Kept over" fact linking every task closed in its favour. Triage asks `duplicate_of` whenever a task is open: one choice among the open tasks it
+offers `waits_on`, or `none`, with a strict bar (the same outcome; related, overlapping, follow-up, partial or
+uncertain work is `none`) and a `duplicate_why`. A pick outside the offered tasks, or without a project in another
+repository, is dropped; core drops one naming a settled task, itself or a duplicate. You close one yourself with
+`task.mark_duplicate` (Close as a duplicate in the task's menu, `shinsa tasks duplicate <task> --of <task>`, an
+agent's `tasks_duplicate`). Not a duplicate (`task.clear_duplicate`, `shinsa tasks not-duplicate`) clears the mark
+of any duplicate and starts it again: one that never ran an agent (what triage closes) starts as triage would have,
+keeping what it waits on; one that did starts a fresh round with the same request (`restartInNewRound`: a new
+round, a new branch and an empty plan), since its cancel removed its worktree and closed its pull request.
 
 ## Steps and gates
 
@@ -1086,7 +1109,7 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
 - **Chains and diamonds.** MCP v2 → embedded chat → paywall editing in the chat: each link waits for
   the one before it, so they start one after another as each merges. A diamond (B and C wait on
   A, D waits on B and C) starts B and C together when A merges, and D only after both. Cycles
-  are refused (`task.wait_on` throws "‹task› already waits on this task."; a new task cannot close one).
+  are refused (`task.wait_on` throws "That task already waits on this one."; a new task cannot close one).
 - **Cancelling a parent.** The work a dependent needed will never exist, so it is not started
   blind: each waiting dependent gets a failure gate, "“‹parent›” was cancelled", and shows as
   Paused. With other parents still pending, the gate says Retry keeps waiting on those only.
@@ -1140,12 +1163,37 @@ nothing until you start it (`domain/backlog.ts`, `decide/backlog.ts`).
 - **On your behalf.** Both moves are management commands an agent may send for you; the activity reads "Moved
   ‹task› to the backlog" or "out of the backlog". Starting is a plan approval, which only you make.
 
+### Snoozing a task
+
+Snoozing hides an open task from what asks for your attention, in any step, and changes nothing else: its stage,
+gates, plan, branch, worktree, pull request and agent session stay as they are (`decide/snooze.ts`). It is for work
+that is fine but not a priority for a few days, where cancelling would throw it away and the backlog would not take
+it (a task past its plan). It is not pausing: "Paused" already names a step that stopped and needs you, and nothing
+stops here.
+
+- **Snoozing and unsnoozing.** `Task.snoozed` (`{ at }`, or null) changes only through `task.snooze_changed`
+  (`snoozed`). `task.snooze` (Snooze in the task menu, a row's menu and ⌘K, `shinsa tasks snooze`) sets it, and is
+  refused for a settled task (`task_settled`); `task.unsnooze` (Unsnooze, `shinsa tasks unsnooze`) clears it. A
+  repeat records nothing. Each asks for a fresh Home guide. Only you unsnooze a task, or an agent you asked: nothing
+  wakes it on its own.
+- **While snoozed.** `resolveQueue` leaves every open gate of a snoozed task out of `ready` and lists the task in
+  `queue.snoozed` instead of `working`, `waiting` or `backlog`, so it is not in Needs you, In progress, Waiting, the
+  queue button, the guide, the Dock badge or a notification. Home shows it in a Snoozed section, folded by default
+  (`QueueSection.opensOnHome`), the queue popover in a folded Snoozed section, and All tasks in a folded Snoozed
+  group ahead of every gate (`resolveTaskGroup`). The task reads (`GET /api/tasks`, `shinsa tasks list`, an agent's
+  `tasks_list`) mark it `snoozed` and leave it out of `--status needs_you` (`isListed` in `http/reads.ts`). An agent
+  at work keeps working; the gate it reaches waits quietly. A snoozed task that finishes drops out of the snoozed list.
+- **Unsnoozing.** The task shows again where it is now: a gate it reached while snoozed is in Needs you at once.
+- **On your behalf.** Both are management commands an agent may send for you; the activity reads "Snoozed ‹task›"
+  or "Unsnoozed ‹task›".
+
 ## Gates
 
 Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).
 `question` is an agent waiting for an answer and `secret` an agent waiting for a secret (`request_secret`); both are an
 agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
-above), and `operation` an operation after the merge waiting for your OK on the merged commit. `failure` means the
+above), `operation` an operation after the merge waiting for your OK on the merged commit, and `result` a finished
+answer, report or diagnosis waiting for you to read and close it (Task shapes → Answered, not done). `failure` means the
 engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
 reached its usage or cost limit (`cause: budget`), or the
 repository's pre-push hook rejected the push again with the same failures after a fix round (`cause: push_hook`; its
@@ -1165,7 +1213,7 @@ Each gate takes only the answers that mean something for it (`gate.answer` refus
 a plan, review or merge takes approve, revise (ask for changes) or reject; an agent's question takes `reply` with
 words in it; a secret takes `reply` with a secret ref or reject; your OK takes approve or reject; an operation after the
 merge takes approve (run it with the notes on the gate), `reply` (replace the notes with your words, empty clears
-them, then run) or reject (finish without it); a failure or Sign in gate takes approve (retry), `reply` (retry with
+them, then run) or reject (finish without it); a result gate takes approve (Close); a failure or Sign in gate takes approve (retry), `reply` (retry with
 your words as guidance) or reject, which cancels the task; the setup gate takes approve (verify the setup again)
 or reject. `reply` is the one decision that takes words. The table of what each gate takes and does is `GATE_SCHEMA` (`docs/protocol.md` → Steps and gates). A
 question belongs to the run that asked it: when that run ends for any reason the question is withdrawn and the
@@ -1193,7 +1241,7 @@ sending does:
 | operation gate | `operation_notes` | replaces the gate's notes for the operation (`gate.noted`); nothing runs |
 | a working stage with no agent | `restart_step` | starts the step again with it |
 | triage or waiting on another task | `kept` | is kept for the first agent's brief |
-| a resting task (a finished answer, investigation or report; a merged change; an operation that ran) | `follow_up` | a finished inquiry's agent answers it; any other round's last session is resumed by an answerer, in the same round (Rounds, above) |
+| a resting task (an answered or finished answer, investigation or report; a merged change; an operation that ran) | `follow_up` | a finished inquiry's agent answers it; any other round's last session is resumed by an answerer, in the same round (Rounds, above) |
 | a closed task (marked done, cancelled) | `closed` | refused: "This task is finished." |
 
 That is what feedback does, and at a failure, Sign in, setup, question, plan, review, your OK or operation gate, and
@@ -1201,7 +1249,9 @@ while planning with no agent running, it is all a message does, whatever the cla
 Where you decide, above). Elsewhere, a message the classifier reads as needing nothing (`acknowledge`) is only
 recorded, and a message it reads as new work queues the next round,
 and one it reads as work for another task becomes a split-off suggested task (Rounds, above). A message an agent sends
-on your behalf, or a schedule sends, to a task with any open gate is not delivered into the gate: core records it
+on your behalf, or a schedule sends, to a task with any open gate but the result gate is not delivered into the gate (at an
+answered task it asks the follow-up, which brings the gate back with the new answer, and new work there, a kept
+suggestion too, queues its round, which starts once you close the answer): core records it
 (`task.messaged` with `kept`) and keeps it in `Task.untoldMessages`, and the next run of the task's own session (the
 Agent, an answerer, an investigator or a researcher; never the reviewer, a watchdog's check or a watch's read,
 which can only report) is told it once, at the tail of its prompt
@@ -1235,6 +1285,12 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 - Approving records `plan.approved` (`approvedAt`), and your words with it `plan.answered` (`planAnswers`). The
   first phase's instruction says the plan was approved and carries your words; the round brief a fresh session gets
   names the approved version and says to follow it exactly.
+- A plan may carry a new `title` when the work moved away from the task's, such as an "Explain…" question that
+  became a change; the Agent leaves it out while the title still fits. The plan gate shows it in place of the task's
+  title. Once the plan is accepted (at the gate, with no gate, or started from the backlog: `startAfterPlan`), a
+  title that differs from the round's records `task.retitled`: the round takes it, and the task too when it is round
+  1, so a later round never renames the task. A revised plan accepted later renames it again. The handle and the
+  branch stay; pull requests opened after it carry the new title.
 
 ### The review report
 
@@ -1276,6 +1332,34 @@ and the fold merges it into the walkthrough of the latest phase report that has 
 with both the approach and the flow starts one on the latest phase report (risks and testing empty: `createTesting`), and anything else
 is ignored. `assembleReport` reads the result as before, and a new round starts without phase reports, so a revision
 never reaches an earlier round's report. The `walkthrough` schema is static like every tool's (Caching, below).
+
+### Your requests and their replies
+
+Once the work is in, you steer it by sending things back: changes at the review gate, line comments, a question, a
+second thought while the Agent fixes. Each answer used to live only in the chat. Now every one is a request with a
+reply you read on the Overview, so the chat is never where you learn what changed.
+
+- **A request** is an `Iteration` on the task (`docs/protocol.md` → Messages → Requests and replies). A message or a
+  gate answer that starts a fix for you opens one before the fix starts; anything you send while that fix runs
+  joins it (a steer of a run with `purpose: fix`), so one reply covers everything said during one fix. A steer of a
+  build phase, a follow-up to an inquiry and a plan revision open none.
+- **The reply is a hand-over field.** While a request is open, `complete_fix` must carry `reply`: a `headline`, each
+  point you raised as `points` (in your words cut short, marked `done`, `answered` or `not_changed`, each with a
+  `note`: where it is now, the answer, or why it was left), `next` (what you do now, with the commands in `bash run`
+  blocks and full links). Core refuses the fix without one (`reply_required`) and refuses one on a fix
+  nobody asked for (`reply_unasked`), so an automatic checks or review fix never invents an answer. The schema stays
+  static and optional (Caching, below); the human fix prompts (`REPLY_INSTRUCTION`, `prompts/fixes.ts`) and the
+  handover skill say what each field holds.
+- **On the Overview** the review and merge cards lead with the latest reply (`ReplyReport`,
+  `components/overview/reply-report.tsx`): What you sent, folded above it as a quote of your words, then the
+  headline, each point with its outcome and What to do now. Facts the cards add are live links: the pull request at
+  the merge gate with its hover card, whether it conflicts and how its checks stand; the agent review's count is
+  left out when its findings show right below. While the Agent works on one, the work
+  card shows "Your request". Earlier requests, a panel below, lists every earlier reply and every plan revision you
+  gave feedback on (its change summary as the headline), newest first, each folded to its headline and a count of
+  its outcomes (`listEarlierExchanges`, `lib/overview/exchanges.ts`; `RequestsPanel`). The checks fold to one line on these cards, open by
+  themselves only when one failed or they still run (`FoldedChecks`, `components/checks/checks-list.tsx`); opened, they show
+  the list itself, with a stage's header only when there is more than one stage.
 
 ### Steps around the merge
 
@@ -1338,6 +1422,9 @@ steps takes its step out again.
   round that shipped onto the pull request the next round ships on too (it still blocks that merge). The post-merge
   gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
   steps while the later round works. Steps ticked before a round starts are dropped.
+- **On the Overview** pre-merge steps and the tasks the merge waits on show on the merge gate's card only, never at
+  your review; a step's title and detail are Markdown with live links (a shinsa:// task with its hover card, a URL,
+  names such as `API_KEY` set in code), and the step schema asks the Agent for backticks and full links.
 - **Visible to agents.** `read_task` (`serializeTaskDetail`) numbers the steps with their ticks, the review gate's body
   and the pull request's description list them as task lists (`serializeMergeStepsMarkdown`), and the activity
   records each tick. Nothing runs a step for you: a step's command opens in a terminal only when you ask (Run in
@@ -1358,14 +1445,20 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   `{server, data}`, an MCP server that holds the data, or a `source_request` `{data, evidence, suggestions}` when no
   server it has does; `validatePhaseHandOver` refuses both or neither, a repeated title, and a check slower than its
   window, and a production start with no `production_check`). The last phase's instruction lists the project's data sources for the repository
-  (`describeWatchdogGuide`, in the user turn), the handover skill says when one is worth it, a fix revises them like
+  (`describeWatchdogGuide`, in the user turn) as hints, not limits: any MCP server the agent has can be the source, and
+  it checks every server that could hold the data with that server's own tools (`mcp_list`, `load_mcp_server`) before
+  it asks for one. A `source_request` names the servers it checked and why each falls short in `evidence`: on
+  `complete_phase` and `complete_fix` the engine refuses one whose `suggestions` name a server the run already has
+  (loaded or deferred, a whole-word match ignoring case) and whose `evidence` does not say it checked that server (“checked <server>” in one clause; a mere mention of the platform does not count) (`listHeldSourceRequests`,
+  `assertHeldSourcesUsed` in `agents/handover.ts`). The handover skill says when one is worth it, a fix revises them like
   `steps`, and the reviewer's brief lists them (`describeWatchdogsForReview`).
 - **Integrations a project uses live on the project.** A project lists the MCP servers from Integrations its agents
   read, each with what it holds there; on screen and in the command line it is an integration, in code a
   `WatchSource`. `Project.watchSources` (`WatchSource`: `server`, `data`, the `repoIds` it
   covers, none meaning every repository, `addedBy` `you` or `agent`), at most 20. A watchdog whose server the project
   does not list for the task's repository adds it as the agent's when it is armed, so the next task in that
-  repository finds it; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
+  repository finds it, and one it lists whose `data` does not cover what the watchdog reads is widened: the two joined
+  when they fit in 200 characters, left as it is otherwise, so your description is never replaced; you write and remove them (`watch_source.write`, `watch_source.remove`; Settings → Projects lists
   them under each project, `shinsa sources list|write|remove`). A source names a server from Integrations; Shinsa never
   connects one for you. A watch reads one too, filing a task for each new report in it, and a project that starts
   using an integration is offered one (Schedules and webhooks → Suggested watches, below).
@@ -2361,7 +2454,8 @@ tools and T3's MCP toolkits.
 ## Remote access
 
 Reaching this machine from any device at `https://app.shinsa.dev`, behind GitHub sign-in, end to end encrypted to
-devices enrolled at the machine. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
+devices enrolled at the machine. On screen the hosted side is a product, **Shinsa Cloud**: copy names it that and never
+shows its address, except a command-line line that tells you where to open it. The design and what is still to come is `docs/plans/remote-plan.md`; the wire format is
 core's `remote/` (`packages/core/CLAUDE.md`); the hosted side, the Worker on app.shinsa.dev that signs you in, pairs
 machines, makes their tunnels, mints connect tokens and forwards webhooks, is `apps/cloud` (`apps/cloud/CLAUDE.md`).
 The dashboard has an origin of its own, apart from the marketing site on shinsa.dev. Two words keep the parts apart: a
@@ -2371,8 +2465,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 
 - **`remote.json`** (data directory, mode 600, never in the log; `RemoteStore`): the machine's P-256 key pair (made
   on first use), the credentials app.shinsa.dev gave at pairing (`instanceId`, `machineToken`, `tunnelToken`,
-  `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, and the enrolled devices (public key, name,
-  enrolled and last seen). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
+  `tunnelHost`, `connectKey`), the GitHub login that owns it, `enabled`, the enrolled devices (public key, name,
+  enrolled and last seen, the GitHub account that added it), `access`, the owner and members the last heartbeat
+  answered, the one invite link (`link`: its secret, its invite token and when it was made) and the access
+  requests waiting for an answer (`requests`). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
 - **The control-plane client** (`ControlClient`): pair start and poll, heartbeat, offline, removal, all to
   `SHINSA_REMOTE_ORIGIN` (app.shinsa.dev by default). A 401 to a call made with the machine token is `RevokedError`.
 - **`cloudflared`** (`cloudflared.ts`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on first use into
@@ -2394,8 +2490,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   the GitHub user and an expiry at most 60 seconds out, minted by app.shinsa.dev. The token only keeps random traffic
   off the endpoint; trust rests on the handshake.
 - **The sealed channel** (`RemoteChannel`): the browser's first message is the hello; a device key that is not
-  enrolled is refused unless the hello carries a proof made with a live enrollment secret (`Enrollments`: 32 random
-  bytes, 10 minutes, one use, at most five at once), which enrolls it. Both sides derive one AES-GCM key per
+  added is refused unless the hello carries a proof made with the machine's link secret, which turns it into
+  an access request, or the key already has a request waiting under the same GitHub account (a browser that asked,
+  left and came back, `resumeAccess`): the engine answers `pending` and holds the channel until the request is
+  accepted (it then finishes the handshake with `welcome`) or declined (`refused`). Both sides derive one AES-GCM key per
   direction from three ECDH secrets; every later message is a sealed binary frame, and one that is out of order or
   fails to open closes the channel (1008). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
   and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
@@ -2408,37 +2506,72 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
   `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
   (`remote_paired`): remove it first.
-- **Devices** (`Remote.createEnrollment`): Add device, or `shinsa remote enroll <name>`, makes a one-time enrollment
-  secret for a named device (60 characters at most) and answers its link,
-  `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>` with the link's `id`; the device it enrolls takes
-  that name and keeps the link's id as `enrollmentId`. `shinsa
-  remote forget-device <key>` removes one. A device is a browser or a phone, a way in that runs nothing; a machine
-  runs the engine.
+- **The invite link and access requests** (`Remote.createLink`, `removeLink`, `acceptRequest`, `declineRequest`):
+  a machine has one link, for your own devices and for other people alike, since nobody gets in until you accept
+  them. It is a reusable secret (32 random bytes) kept in `remote.json` with the invite token Shinsa Cloud gives over
+  the machine token (`ControlClient.requestInvite`), until you turn it off (`requestInviteRemoval` removes the token
+  there too); making it while it is on keeps the one there, so a new link only comes after turning it off. The link
+  is `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>.<invite token>`, and everything after `#` stays
+  in the browser. `shinsa remote link` shows it (making it when it is off) and `shinsa remote link-off` turns it off.
+  Whoever opens it signs in with GitHub, names the device (filled in from the browser and system, `resolveDeviceName`:
+  the browser and the device off a phone or tablet, the model an Android phone names; for someone this machine is new
+  to, with their GitHub first name in front) and asks for access: the page accepts the invite at Shinsa Cloud for a
+  connect token, and the hello carries the link's proof and the name (`DEVICE_NAME_LIMIT`, 60). The engine checks the
+  proof (`verifyEnrollProof`), then who asks: the owner as they are, anyone else only when Shinsa Cloud vouches they
+  asked through this machine's invite (`requestRequester`, which answers the GitHub user only for an account that
+  opened it, a member or the owner), and nobody before the first heartbeat said who the owner is. It records the
+  request (`AccessRequest`: id, the device's public key, its name, the GitHub user, when; at most 20, the oldest
+  dropped; a device that asks again keeps its one request and its place) and pushes it to every page. The request
+  stays when the browser leaves: the page keeps the device key at once (`EnrolledDevice.waiting`, with the machine's
+  name) and says it can be closed, and the dashboard asks again without the link the next time it opens
+  (`requestWaitingAnswer`). Accepting enrolls the device for that account (`RemoteDevice.userId`) and, for an account
+  not yet on the machine, first makes it a member at Shinsa Cloud (`requestMemberAddition`; 409 is
+  `members_full`), so its connect tokens work from then on; declining forgets the request. Either answers a browser
+  still waiting. A request is answered from Settings → Remote access on the machine, from Settings → Machines on any
+  device that already reaches it, or with the `accept` and `decline` actions of `shinsa remote` (by the request's id
+  or the login that asked). Accepting is the one change to remote access a device away from the machine may make:
+  the machine's own trust is unchanged, since it alone decides which device keys it takes. `forget-device <key>`
+  revokes a device. A device is a browser or a phone, a way in that runs nothing; a machine runs the engine. Each
+  device opens only under the token of the account that added it; a device from before members has none and counts
+  as the owner's.
+- **Members** (`Remote.removeMember`): an account becomes a member when you accept its first request. Every
+  heartbeat's answer (`HeartbeatResponse`: the owner and the members as `RemoteUser`s) is kept as `access`
+  (`#recordAccess`): every device whose account is no longer listed is forgotten and its channels close, so a member
+  who leaves in Shinsa Cloud loses their devices within one heartbeat (about two minutes). Remove member, or `shinsa
+  remote remove-member <login>`, tells Shinsa Cloud first (`requestMemberRemoval`), so it stops minting that
+  account's connect tokens, then forgets their devices at once. A member controls the machine exactly as its owner
+  does; the channel never checks the mirrored list, since Shinsa Cloud already refuses tokens to anyone else.
 - **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
 - **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
-  sign-in, Connecting, Connected, Reconnecting, Paused, Removed) with Turn on, Cancel, Pause, Resume and Remove, the
-  added devices with when each was last used and Forget, and Add device (only while it is on, since pausing drops
-  every link: `canEnrollDevices`): you name the device, and the one-time link
-  shows as a QR code to scan with a phone, with Copy and Add this device for the browser in front of you. That link
+  sign-in, Connecting, Connected, Not connected when it is on and its tunnel is not running, Reconnecting, Paused,
+  Removed) with Turn on, Cancel, Pause, Resume and Remove, the
+  added devices with when each was last used, which member added it (by name), and Revoke, the people who can reach
+  the machine (you as the owner, then each member with their GitHub avatar, name, login, when they joined and Remove,
+  which asks first), the access requests waiting for an answer (yours as the device's name and when you asked, anyone
+  else's with their GitHub avatar, name and login, the device's name and when, and Decline and Accept), and Invite
+  link (only while it is on: `canEnrollDevices`). It opens the link's dialog: Make link when there is none, else the
+  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you. Every toast here is
+  a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). That link
   carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
-  wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. The
-  dialog closes with a toast ("iPhone is added.") the moment a device with its link's id shows up, and a link that
-  expires while it is open gives way to Make new link. So does one remote access dropped: once a push says it is
-  paused, removed or removed at app.shinsa.dev, the link is marked stopped for good, since resuming does not bring
-  back the links `Remote.stop` cleared. Every change to remote access reaches every open page at once:
-  `Remote` notifies on each one (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a
-  pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
+  wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. Every change to remote access reaches every open page at once:
+  `Remote` notifies on each one (a device added or revoked, a link made or turned off, a request, pausing, resuming,
+  removing, the tunnel's status, a pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
   (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
-  The remote build leaves the section out, since every change to it is refused from off the machine.
+  The remote build leaves the section out, since every change to it but answering a request is refused from off the
+  machine; its Settings → Machines shows Access requests instead (`MachineAccessRequests`): each machine of the
+  dashboard with requests waiting, read from that machine's own `remote` push (`Fleet.listMachineAccess`), and the
+  answer sent to that machine (`?machine=<instance>` on the request, which the fleet routes by, `resolveRequestOwner`).
 - **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
-  owner, the machine's name and public key, a pairing under way, the devices), `POST /api/remote/pair`, `/pair/cancel`,
-  `/enable`, `/disable`, `/remove`, `/devices/enroll` (`{ name }`) and `/devices/remove` (`{ publicKey }`).
-- **What stays at the keyboard.** A remote request is refused with `local_only` ("This is only available on the machine
-  Shinsa runs on. Finish it there.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
+  owner, the machine's name and public key, a pairing under way, the devices, who has access, the link, the requests),
+  `POST /api/remote/pair`, `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/link/create` and `/link/remove`,
+  `/requests/accept` and `/requests/decline` (`{ requestId }`), `/members/remove` (`{ userId }`) and
+  `/devices/remove` (`{ publicKey }`).
+- **What stays at the keyboard.** A remote request is refused with `local_only` ("Do this on the machine Shinsa runs
+  on.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
   repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
   takes the origin), and for these routes (`local-only.ts`, 403): any change to remote access, accounts, MCP servers,
   plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
@@ -2455,13 +2588,14 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`/pair?code=`: the machine's name and key fingerprint to compare with Settings) and adding this browser
   (`/enroll#…`: the fragment is kept in `sessionStorage` through the GitHub sign-in and taken out of the address
   bar at once). Adding a browser makes a P-256 key pair that cannot be exported, kept in IndexedDB (`shinsa-remote`)
-  with the machine key pinned from the link, and proves the one-time secret in its first handshake.
+  with the machine key pinned from the link, and proves the link's secret in its first handshake, which asks for
+  access until the request is accepted.
 - **The iPhone app** (`shinsa-dev/shinsa-ios`) reaches the same machines without a browser's cookie jar. It signs in
   through the system sign-in sheet with `/__remote/sign-in?client=native&redirect=shinsa://signed-in&code_challenge=…`;
   app.shinsa.dev sends it back to `shinsa://signed-in?code=<one-time code>`, which it trades with its PKCE verifier at
   `POST /__remote/sign-in/token` for a session token, then calls every signed-in route with `Authorization: Bearer`
   (`apps/cloud/CLAUDE.md` → Sign-in). Nothing changes on the machine: the app sends `Origin: https://app.shinsa.dev` on
-  the channel's socket, and it is added like any device, by scanning Add device's QR code.
+  the channel's socket, and it is added like any device, by scanning the invite link's QR code.
 - **One dashboard over every machine** (`FleetApp`, `lib/remote/fleet.ts`): there is no page to pick a machine. Every machine
   of your account that this browser was added to joins one `Fleet`, each over its own sealed channel (`RemoteLink`,
   `openRemoteChannel`) with its own `Connection`, and the fleet stands in for the page's connection
@@ -2477,8 +2611,19 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   here and leaves the dashboard. A device added to no machine yet shows the machines of the account with the steps to add it, and every page of
   the remote build without one of its own (signed out, no machine, no key, a failure, a pairing or link that cannot
   work) shows the same card of what remote access gives, with a button to check again or open Shinsa.
-  Settings → General → Machines lists every machine in rows like Remote access's: its name with its status beside it
-  (online or last seen), whether it is in this dashboard, and Remove; machines in the dashboard also show their open
+  Every machine you are a member of joins it as your own do, once this browser is added there. The enroll page
+  (`routes/remote/enroll.tsx`, `lib/remote/enroll.ts`) shows the device name to edit and Request access, then says
+  the request was sent, where to accept it and that the page can be closed; for a machine not yet in your list it says
+  you are joining a shared machine. It opens the channel with the connect token `acceptInvite` answers. A connection
+  that drops while the request waits is opened again with the same device key (`requestDeviceAccess`), and once it is
+  accepted the device is kept and the dashboard opens. While it waits, Request access reads Waiting for an answer and
+  no longer spins. Opening the link again on a device that already asked picks up that one request with its key and
+  name instead of asking again, and on a device already added says so with Open Shinsa, unless the account no longer has that machine (a member removed), when it asks again with a new key. A device that left while it waited shows Waiting for an answer
+  in the dashboard and in Settings → Machines until the machine accepts it, which opens it there, or declines it,
+  which forgets its key. Settings → General → Machines lists every machine in rows like
+  Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
+  Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
+  browser's key for it; machines in the dashboard also show their open
   tasks and their task capacity. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
   lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
   it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The
@@ -2498,9 +2643,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
   prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
   none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
-  "Your routing policies decide when you start it", and the toast says where the task went and why; when every provider fails (no
+  "Your routing policies decide when you start it", and the toast says where the task went ("Task started. Runs on Studio."), without the reason, to stay one line; when every provider fails (no
   Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
-  `placement_unreadable`, so the toast says the policies were not read and why (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
+  `placement_unreadable`, so a warning toast says "Your routing policies weren’t read." (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
   focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
   passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
@@ -2649,6 +2794,176 @@ projection and channel will serve teams.
 - **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why
   the link is missing; an agent has no tool to share or stop sharing.
 
+
+## Slack
+
+Mention the Shinsa bot in Slack and the machine of the person who mentioned it does the work. There is one Slack app
+for everyone, on app.shinsa.dev; each person connects their own Slack user to one of their own machines, so the same
+mention from a teammate who connected their Shinsa runs on their machine, and from one who did not, runs nowhere. It
+needs remote access (above): the relay reaches the machine through its tunnel, and the machine posts back through the
+relay with its machine token. No machine holds a Slack token. The rules are core's (`packages/core/src/slack/`,
+`decide/slack.ts`, `state/slack.ts`); the relay is `apps/cloud` (`slack.ts`, `slack-link.ts`, `apps/cloud/CLAUDE.md`);
+the machine side is `apps/engine/src/slack/`.
+
+```
+Slack ──event──► app.shinsa.dev /slack/events
+                  ├─ Slack's signature, the event id seen once
+                  ├─ author not connected ──► private "Connect Slack"
+                  ├─ machine offline ───────► "<machine> is offline"
+                  └─ the thread, signed ──► t-<id>.shinsa.dev
+                                             /api/slack/events
+                                               └─ slack.mention
+   thread holds an open task ──► task.message, "Sent to the task"
+                  └─ a gate open ──► kept in its chat, "Kept for the task"
+   otherwise ──► slack.evaluate: ⏳ on the mention at once,
+                  the model reads the thread
+                  ├─ not work ──► ⏳ off, "Not a task", once per thread
+                  └─ work ──► slack.start_task:
+                              task.create, as from Home
+   the task moves ──► slack.status (edited) + the mention's one reaction
+   a gate opens ──► slack.post (a header, the gate, a button to Shinsa)
+   the result ──► slack.post (its start + a button to Shinsa)
+                  └─ app.shinsa.dev /__remote/slack/post ──► Slack
+
+Slack ──a choice's button──► app.shinsa.dev /slack/interactions
+                  ├─ not linked, not their machine's post, offline ──► private reply
+                  └─ signed ──► /api/slack/interactions ──► slack.answer ──► gate.answer
+                                 └─ the buttons become "@you answered *choice*"
+```
+
+- **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
+  Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
+  with GitHub there if you are not, then with Slack (OpenID Connect, `openid profile`); a workspace without Shinsa
+  goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `groups:history`,
+  `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
+  linked to that machine and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
+  says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
+  (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
+  on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
+  reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
+  link of this machine; it is refused from off the machine (`local-only.ts`, writes only). The hosted dashboard on
+  app.shinsa.dev shows the section too, below Machines, read from the first machine of the dashboard: its status,
+  Connect Slack and the connected workspaces, with a line that Disconnect is on the machine itself (`onMachine`),
+  since it is refused remotely.
+- **A mention reaches the machine** as `SlackMention` (`slack/contract.ts`): the event id, the workspace, channel and
+  thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
+  author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
+  (`resolveSlackReadableText`), a permalink, and the thread's last 100 messages, bots marked. The tunnel route
+  `POST /api/slack/events` (`remote/guard.ts`) is 404 while remote access is off, refuses a body over 1 MB and a
+  forward whose `x-shinsa-slack-signature` is not an HMAC over `v1:<ms>:<body>` keyed by the machine's connect key or
+  whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
+  dispatches `slack.mention` with command id `slack:<event id>`, so a forward that comes twice is answered by its
+  receipt.
+- **How a thread maps to a task** (`Task.slack`, `SlackThreadLink`: workspace, channel, thread, author, the mention's
+  own `messageTs`, permalink, the status message's ts and the reaction on the mention; the key is `resolveSlackThreadKey`, `team:channel:threadTs`). A thread holds at most one
+  open task. A mention in a thread whose task is open (not done or cancelled) messages that task like any message you
+  write (`task.message`, the author and the permalink in front, `serializeSlackMessage`): it is classified and routed
+  as messages are (Messages, above), so an acknowledgement stays an acknowledgement, a correction is feedback and new
+  work a new round. The bot answers "Sent to …" in the thread. While the task has a gate open (a question, a plan, a
+  review, a failure), the mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes
+  nothing, so it never answers a question, revises a plan or sends a review back; the bot answers "Kept for …, it
+  waits on you in Shinsa" (`held`).
+- **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the mention gets
+  ⏳ at once (`hourglass_flowing_sand`, Reactions below), so you see it was picked up, and the machine asks
+  the classifier model, under a fixed system prompt with the thread as data (`SLACK_EVALUATION_SYSTEM`,
+  `serializeSlackEvaluationPrompt`), whether the thread asks for work, and gets `task` or `none`
+  (`parseSlackEvaluation`). Shinsa does work as tasks and never chats: greetings, thanks, small talk and questions
+  about Shinsa itself are `none`, answered once per thread with the one line "Not a task, so nothing was started."
+  (`serializeSlackDeclined`; the engine remembers the threads it said it in until it restarts) and then silence, with
+  no reply of the model's own. Every later mention in that thread is read again with the whole thread, so one that
+  asks for work there still starts a task. Anything someone wants done or wants to know about their code, product or work is a
+  task, and so is a mention the model does not answer: `slack.start_task` (command id `<effect
+  key>:slack.start_task`) starts it, messaging the thread's task instead when one opened meanwhile. Nothing is
+  posted while it reads; a mention that is not a task loses its ⏳.
+- **This one check is the only thing Slack adds.** A task it starts is the same `task.create` Home sends with
+  everything on Auto, through the same `createTask` and the same triage (repository, kind, priority, and whatever
+  triage learns next, such as finding a duplicate of an open task), so a change to triage reaches Slack with no
+  change here.
+- **Work starts a task, as Home does** (`startSlackTask`): a mention in any other thread, a task's
+  closed thread included, is `task.create` with no project, kind or priority given, exactly as a request typed on Home
+  with everything on Auto, so the focus project, then triage, decide the project, the repository, the kind of task
+  (a question is an answer and ends with it) and the priority. Its request is what the person wrote (or "Do what this
+  Slack thread asks for." for a bare mention), who asked with the permalink, and the thread fenced in a nonce-tagged
+  `<slack-thread-…>` element marked as untrusted data (`serializeSlackRequest`). It is linked to the thread
+  (`slack.thread_linked`, "Started from a Slack thread"), and its first `slack.status` posts its status message.
+- **What is posted back** (`syncSlackThreads`, after every command, for the tasks it changed): every gate a linked
+  task opens that you decide or answer (question, secret, plan, review, proposal; `SLACK_POSTED_GATES`) and its result
+  (`task.delivered`: an answer, a diagnosis, a report, an outcome) are a `slack.post`, a new message in the thread so
+  Slack notifies; every change to the task is one `slack.status`, the status message edited in place. Each message is
+  built when it is sent, from the state then (`slack/messages.ts`, `resolveSlackPostMessage`, `serializeSlackStatus`),
+  in Block Kit with no icons (`slack/blocks.ts`): a header naming the post, the main point bold or quoted (`>`, so
+  code and links in it keep their markup), details as fields, a numbered list or a context line, a button to open
+  the task on app.shinsa.dev (`resolveSlackTaskUrl`, the primary one when it is where you decide), and a small last
+  line naming the task (its handle and title, linked) and its pull request as `PR #<number>`, linked:
+  - the status message: what the task is doing now in bold (its stage reason, else its stage, or "Needs you" with
+    the question or failure quoted under it), then the task line, with no header;
+  - a question: "Question for you", the question in bold, the first sentence of its context quoted, "Recommended:"
+    with the agent's recommendation, a button per choice (the recommended one primary) when it has one to five
+    choices of at most 75 characters, otherwise the choices numbered, and "Answer in Shinsa" for any other answer;
+  - a secret: "Secret needed", what is needed in bold, to give it in Shinsa and never in Slack, "Give it in Shinsa";
+  - a plan: "Plan ready for your approval", its goal quoted, its phases numbered (eight at most), "Review the plan";
+  - a review: "Ready for your review", the summary's first sentence quoted, the fields Checks (how they went) and
+    Pull request (`PR #<number>`, or "Opens once you approve"), "Review in Shinsa";
+  - a proposal: "Proposed change", the change quoted, "Decide in Shinsa";
+  - the result: "Result", the result in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a word
+    (`SLACK_RESULT_LIMIT`), and "Open in Shinsa" (or "Read the rest in Shinsa").
+  A link button still sends Slack an interaction, which app.shinsa.dev acknowledges and drops; the app's
+  Interactivity is on, with `/slack/interactions` as its request URL (`apps/cloud/slack-manifest.json`).
+- **A question's choice can be answered in Slack, and nothing else** (`slack/answers.ts`, `answerSlackQuestion`).
+  Each choice button carries `{ gateId, choice }` (`serializeSlackAnswerValue`, action `shinsa.answer.<n>`, in the
+  actions block `shinsa.question.<gate>`). A click reaches `POST /slack/interactions` on app.shinsa.dev, which checks
+  Slack's signature, acknowledges at once and then: refuses privately (an ephemeral reply through the click's
+  `response_url`, which must be on `hooks.slack.com`) a person with no link, a message their own machine did not post,
+  and a machine that is offline; otherwise it forwards a `SlackAnswer` (the click's trigger id, workspace, channel,
+  thread, message, Slack user, gate and choice) to `POST /api/slack/interactions` on that machine, signed like a
+  mention. The machine dispatches `slack.answer` (command id `slack-answer:<trigger id>`), which core accepts only for
+  an open question gate of a task started from that thread by that same Slack user, with a choice the question still
+  has, and answers as you would in Shinsa (`gate.answer`, `reply`, the choice as the response). It answers
+  `{ answered: true, choice }`, and app.shinsa.dev replaces the post's buttons with "@you answered *choice*"
+  (`listSlackAnsweredBlocks`, `serializeSlackAnsweredView`); a refusal (`slack_answer_closed`, `_refused`,
+  `_choice`) comes back as `{ answered: false, reason }` and is shown to the clicker alone. A question answered in
+  Shinsa first keeps its buttons in Slack, and a later click is told it is no longer open. Plans, reviews, merges,
+  proposals, secrets and failures are only ever decided in Shinsa, and a mention while a gate is open is kept, not
+  routed. The status refreshes on every answer (`gate.answered`), wherever it was given.
+- **The status message is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
+  (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
+  that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`
+  → `slack.status_posted`). An edit Slack will not make (a message gone) is posted as a new status message, whose ts
+  is recorded instead.
+- **Reactions: one state on the mention** (`resolveSlackReaction`, `SLACK_REACTIONS`, `/__remote/slack/react`): the
+  message that mentioned the bot always carries one reaction, the task's state: ⏳ `hourglass_flowing_sand` while it
+  is read and triaged or waits on other tasks, 🛠️ `hammer_and_wrench` while an agent works, ✋ `raised_hand` while it
+  waits on you, ❌ `x` when it failed, ✅ `white_check_mark` once answered, delivered, merged or done, and ➖
+  `heavy_minus_sign` when cancelled. Each status edit moves it, taking the old one off first, and records the one
+  shown with the status message's ts (`slack.record_status` → `slack.status_posted`), so a restart never leaves two.
+  It is best effort: a workspace that added the app before it asked for `reactions:write` answers `missing_scope`,
+  app.shinsa.dev logs it and says `applied: false`, and the posts carry on. Connect Slack again grants it: connecting
+  reads the scopes of the workspace's bot token (`hasSlackBotScopes`, the `x-oauth-scopes` Slack answers `auth.test`
+  with) and, when one of `SLACK_BOT_SCOPES` is missing, goes on to add the app again, as for a new workspace.
+- **The thread's own status in Slack** (`resolveSlackSessionStatus`, `agents.sessions.setStatus` through
+  `/__remote/slack/session`): with each status edit the thread is set `processing` while the agent works (Slack's
+  loading indicator), `suspended` while the task waits on you (a question, a plan, a review, a merge, a failure),
+  `active` once it rests or merged, and `closed` when it is done or cancelled; only a change is sent. It is best
+  effort, and today it is never shown: Slack takes it only from an app on its Agent Sessions (the manifest's
+  `agent_view`, Agents & AI Apps), and that stays off, because switching it on cannot be undone, needs Marketplace
+  review and opens an agent pane and direct messages the bot never answers. Without it Slack answers `not_authorized`
+  (`feature_disabled` in a workspace without agent features); app.shinsa.dev says `applied: false` without logging
+  either (`STATUS_UNAVAILABLE_CODES`), and the engine then makes no more status calls for that workspace until it
+  restarts (`#sessionRefused`). Any other refusal (`channel_not_found`, `ratelimited`, `invalid_auth`) is logged and
+  answered 502 `slack_failed`, which the engine logs as a warning and tries again at the next status change, so a
+  passing failure never turns the status off. The posts, reactions and status message carry on as they are.
+- **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
+  (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
+  at all is retried by the outbox; any other refusal (the thread was never sent here, the app was removed from the
+  workspace) is logged (`[Slack] app.shinsa.dev refused the post`) and dropped, since sending it again cannot work.
+  With remote access off nothing is posted. A machine that is offline when someone mentions the bot gets "is offline"
+  in the thread from app.shinsa.dev, and the mention is not kept: mention it again once Shinsa runs there.
+- **What app.shinsa.dev sees.** Slack's messages and the posts back pass through the Worker on their way and are never
+  stored: D1 keeps the workspaces with their bot tokens sealed (AES-GCM, `SLACK_TOKEN_KEY`), the links (Slack user to
+  account and machine), which threads were sent to which machine and which messages each machine posted (so a machine
+  posts only in its own threads and edits only its own messages), and Slack's event ids for a day. The sealed channel
+  of remote access is not involved; this is the one path where the Worker reads what goes by.
+
 ## Who can change Shinsa
 
 Shinsa is a local server for one person, and every agent runs as that person, on that machine, with a shell. There
@@ -2687,7 +3002,8 @@ plainly what protects what.
     agent's new watch is a suggestion instead (Schedules and webhooks → Suggested watches, above);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
   - remote access: pairing this Mac, pausing, resuming and removing it, and enrolling or forgetting a device
-    (`remote pair`, `enable`, `disable`, `remove`, `enroll`, `forget-device`; Remote access, above);
+    (`remote pair`, `enable`, `disable`, `remove`, `link`, `link-off`, `accept`, `decline`, `remove-member`,
+    `forget-device`; Remote access, above);
   - opening a worktree in an editor (`tasks open`);
   - your terminals: listing them (`terminals list`), and opening, typing into, renaming or closing one, which has no
     command at all (Terminals, above);
@@ -4068,7 +4384,8 @@ it means, and the parser, which refuses an answer with anything outside the opti
 are used for triage's `size` (`small` or `large`), `shape` (the six task shapes, each with what it means), `priority`
 and `waits_on` (the open tasks triage offers, Automatic options, each by its id with its title as its meaning;
 refused whole, it waits on nothing), the last three asked only for what the task left on Auto and each with a short why (Task shapes → Automatic
-options), the briefing's `now.task` and every `next[].task` (a
+options), triage's `duplicate_of` (a choice among the same open tasks and `none`, asked whenever one is open, with
+a `duplicate_why`; Duplicates), the briefing's `now.task` and every `next[].task` (a
 choice among the listed decisions' ids; `parseBriefing` still validates), and each setup question that takes one
 option (`model`, `merge`, `plans`, `accounts`, `prerequisites`: its option values plus `unclear`).
 
@@ -4319,8 +4636,8 @@ the run and else from a fresh usage read, so auto-resume works for Codex as for 
 sign-in is read by `codex login status` (exit 0 and "Logged in using ChatGPT" or "an API key" is signed in, exit 1
 "Not logged in" signed out; a missing or outdated codex says how to install or update it) and rides along in the
 accounts snapshot as `providers` (refreshed with the accounts, a failed read logged and the last one kept). Settings →
-Agent usage shows it under the Claude accounts with the sign-in command, and onboarding's tools check lists codex
-and its sign-in as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
+Agent usage shows it under the Claude accounts with the sign-in command, and so does setup's Claude step; setup's
+tools check lists only codex itself, as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
 arrives as `RunFailure.login` (`{ provider: 'codex', email }`, the email the usage reading found, no account), the gate
 names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Paused: ‹email› needs signing in", and
 every sign-in check that finds Codex signed in again (the 5-minute refresh, or Check the Codex sign-in again in
@@ -4590,10 +4907,17 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
   default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
+- **Simulated missing tools.** `SHINSA_SIMULATE_MISSING=git,brew,gh,gh_auth,claude,bun,codex` (any of
+  them, comma separated) makes setup's tool checks answer as a Mac without those tools would (`onboarding/simulate.ts`):
+  `127` for a missing command, Apple's `xcrun` placeholder for Git, "not logged into any GitHub hosts" for `gh auth
+  status`. Install and a command from the help task then only print what they would run, and an install marks its tool
+  installed, so the next check passes; a `brew` install fails while Homebrew is still missing, and Homebrew brings Git.
+  Nothing else is simulated: the accounts, sign-in and agents are real. The `setup-*` services of the Shinsa project
+  each run a fresh Shinsa on one case (a new Mac, no Bun, no Homebrew, GitHub signed out, no Claude Code), to click
+  through setup as that person.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no
   effect runs (no agent, check, git or `gh`), no schedule or clock fires and no run is recovered, and every command
-  is refused with `inspect_read_only` ("Shinsa is in inspect mode and only shows this data. Start it without
-  SHINSA_INSPECT to change anything."): the engine refuses any dispatch (`Engine.readOnly`), the socket answers a
+  is refused with `inspect_read_only` ("Inspect mode is read-only."): the engine refuses any dispatch (`Engine.readOnly`), the socket answers a
   `command` with that error in its ack, and HTTP answers 403 to every request under `/api/` that is not a `GET`, to a
   schedule's webhook and to an MCP sign-in's callback. Setup shows its first step without writing
   `onboarding.json`. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,
@@ -4708,7 +5032,9 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   version, the commit, the state version and the Agent SDK's versions (`process.env.SHINSA_BUILD_*`, read by
   `instance/bundle.ts` as `BUNDLE`, null when running from source): a compiled engine cannot read core's sources or
   the SDK's `package.json`. `shinsa eunoe …` runs eunoe's CLI from the same executable (the agents' `eunoe load` and
-  `eunoe peek`); the forwarder itself is the library, in the engine.
+  `eunoe peek`), importing its `src/cli/main.ts` by path through `node_modules`, since eunoe's `exports` map lists only
+  the library; the Test workflow bundles `scripts/engine-main.ts` so a dependency bump that breaks the import fails
+  before merge. The forwarder itself is the library, in the engine.
   Claude Code and Codex stay the user's own installs, found on the login shell's `PATH`.
 - **The job.** `Contents/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` runs `shinsa engine` from the bundle
   (`BundleProgram`), with `SHINSA_SERVICE=1`, `RunAtLoad`, `KeepAlive` with `SuccessfulExit: false` (a crash or a
@@ -4803,19 +5129,55 @@ limit).
 {
   ready: boolean; // every check passed or is optional
   checks: {
-    id: 'git' | 'gh' | 'gh_auth' | 'claude' | 'claude_auth' | 'codex' | 'codex_auth' | 'bun';
-    label: string;      // "GitHub CLI", "Signed in to Claude"
+    id: 'git' | 'brew' | 'gh' | 'claude' | 'bun' | 'codex';
+    label: string;      // "GitHub CLI"
     ok: boolean;
-    detail: string;     // the version, "Signed in as octo.", or what went wrong
+    detail: string;     // the version, "Signed in as octo.", "Not installed.", "Not signed in.", or what went wrong
     fix: string | null; // one sentence on what fixes it
-    command: string | null; // the command to copy, when one fixes it (`gh auth login`)
-    optional?: true;    // codex and codex_auth
+    command: string | null; // the command that fixes it, when one does (`brew install gh`, `gh auth login`)
+    optional?: true;    // codex, and bun when no repository uses it
+    signIn?: true;      // the fix is a sign-in (`gh auth login`), so the web says Sign in, not Install
   }[];
 }
 ```
 
-**`POST /api/onboarding/complete`** with `{}`: marks onboarding done (`onboardedAt`), once; answers like
-`GET /api/onboarding`. Refused with `roots_required` until folders are saved.
+The checks (`onboarding/prerequisites.ts`) are git, the GitHub CLI, Claude Code, Bun and Codex. The GitHub CLI's
+one row covers its login too: missing, its command is `brew install gh`; installed but signed out, it reads "Not
+signed in." with `gh auth login` and `signIn`; it passes only signed in, showing who. Logins with a page of their own
+are not checked here: Shinsa signs in its own Claude accounts and the Claude step shows Codex's login (below). Bun is required only when a repository in your folders uses it (a `bun.lock`, `bun.lockb` or
+`bunfig.toml` in a chosen folder or one level inside it, `isBunUsed`); otherwise it is optional with "Only for
+repositories that use Bun." Homebrew is listed only when a failing check's command is a `brew` one (the GitHub CLI's
+`brew install gh`), required when that check is. Each command is for macOS: `xcode-select --install`, Homebrew's
+install script, `brew install gh`, `gh auth login`, Claude Code's `curl -fsSL https://claude.ai/install.sh | bash`,
+Bun's `curl -fsSL https://bun.sh/install | bash` and `npm install -g @openai/codex`. Before every
+check the engine adds `~/.bun/bin`, `~/.local/bin` and Homebrew's folders that exist to its own `PATH` again
+(`refreshInstallFolders` in `shell/login.ts`, the folders it adds at start when no login shell answers), so a tool
+you just installed is found without restarting Shinsa. On a Mac without Apple's command line tools `/usr/bin/git`
+is a placeholder that fails with `xcrun: error: invalid active developer path`; that reads "Not installed." too.
+
+**`POST /api/onboarding/install`** with `{ id }` (a check's id) or `{ command }` (a command from the help task's
+reply, below): opens a terminal running it and answers `{ terminal }` (`TerminalInfo`). Only a request from Shinsa's
+own page is taken: one with no `Origin` is refused with `browser_only`, so neither the `shinsa` command nor an agent
+installs anything. With `id`, the terminal runs that check's own command, never one the page sends (`install.ts`,
+`openInstallTerminal`; an id with none is `check_unknown`), as `‹command›; exit`, named "Set up ‹label›". With
+`{ all: true }`, it runs every required missing tool's script in one terminal named "Set up the missing tools", in
+the order they need each other (Git, Homebrew, the GitHub CLI, Claude Code, Bun; `listMissingInstalls`),
+each as `{ ‹script›; }` joined with `&&`, so one that fails stops the rest; Git is left out when Homebrew is in the list,
+since Homebrew's installer brings Apple's command line tools, and it is `nothing_missing` when no required tool is.
+A script is a check's command except for three (`resolveInstallScript`): Git's waits until `xcode-select -p` answers,
+because `xcode-select --install` only opens macOS's installer window and returns; Homebrew's puts `brew` on the
+terminal's `PATH` after it (`brew shellenv`), so the commands after it find it; and the GitHub CLI's installs it when
+it is missing and then signs in when `gh auth status` fails, so one Install covers both. With
+`command`, it runs only when every line of it, a leading `$` or `%` prompt dropped, is in one `bash run` block of
+the current help task's result (`isReplyCommand`), else `command_unknown`, in a terminal named "Fix from the agent".
+Every way the terminal opens in your home folder under the project id `setup`, which no project has, so the
+Terminal page does not list it, and an earlier setup terminal of the same name is closed first. The command is
+followed by `exit`, so the terminal ends when it does, with its exit code, and the web checks again then. Other codes:
+`body_invalid`, `terminals_off` (Shinsa runs with no terminals).
+
+Setup has no endpoint that finishes it: only answering the last step of the flow below does, and that step refuses
+while a required tool is missing or no Claude account is signed in. Finishing marks onboarding done
+(`onboardedAt`), once, and records the welcome task (below) when there is none.
 
 ### The setup steps
 
@@ -4825,9 +5187,11 @@ discovered folders with their repository counts, several at once, and any other 
 (the projects Shinsa suggests for the repositories in those folders), `defaults` (three choices on one step: the
 default model, from the provider's catalog, or each role's own; the merge method; plan approval: large plans first, the
 recommended pick, every plan first, or start building),
-`accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login, claude and its login,
-bun, and optionally codex and its login, each with its fix and the command to copy). Each step has a short label for
-the steps along the top (Folders, Projects, Defaults, Accounts, Tools), a title and a one-line description.
+`accounts` ("Sign in with Claude": Claude Code, then the Claude accounts agents work under) and `prerequisites` (the
+tool checks above, each with its fix and Install). Claude comes before Tools because signing in needs Claude Code and
+the help agent needs an account. Each step has a short label for the path of steps over it (Folders, Projects,
+Defaults, Claude, Tools), a title and a one-line description. The web shows setup as your first task: "Set up
+Shinsa" over that path, each step a gate you pass (`docs/design.md` → Where Shinsa differs, 24).
 Nothing you send can add, drop or reorder a step: a reply only ever answers the step on screen or opens one you
 have reached.
 
@@ -4875,20 +5239,44 @@ have reached.
   repositories of a suggestion keeps its id, key and folder, a new one gets a fresh key, and one named like an
   existing project adds to it. A repository filed since drops out. No model answering is the step's `problem`, and
   the suggestions stay as they were.
-- **Accounts are signed in, never imported.** The `accounts` step lists the Claude accounts Shinsa has and Codex's
-  login, and adds none by itself: Add account signs in to a new one, or to each claude-swap account it offers ("Sign
-  in to ‹email›"), through the same sign-in Settings uses; removing one and signing in again are the web's too
-  (`/api/accounts/*`), and so is Codex's login, which the web shows from the accounts snapshot's `providers` (signed
-  in with `codex login` in a terminal, read again when you come back to the window). With no Claude account signed
-  in the step's button says Skip for now.
+- **Claude accounts are signed in, never found or imported.** The `accounts` step carries the Claude Code check
+  (`checks`, only `claude`), and is not `ready` while Claude Code is missing: the web then shows only that check with
+  Install, since signing in runs it. Once it is there the step lists the Claude accounts Shinsa has and Codex's
+  login, and adds none by itself: Sign in with Claude (Add account once there is one) opens the same sign-in Settings
+  uses; removing one and signing in again are the web's too (`/api/accounts/*`), and so is Codex's login, which the
+  web shows from the accounts snapshot's `providers` (signed in with `codex login` in a terminal, read again when you
+  come back to the window). Setup reads no Claude Code or claude-swap login and offers none: a copied login shares
+  its single-use refresh token and signs one side out (Accounts and usage limits, above); Settings still signs in to
+  a claude-swap account by its email. The step is not `ready` until a Claude account is signed in, and continuing
+  without one is refused as its `problem` ("Sign in to a Claude account first. Agents work under it.").
+- **Setup never finishes with a tool missing.** The `prerequisites` step is `ready` only when every required check
+  passes, its button is always Finish setup, and finishing while one fails is refused as its `problem` ("Install the
+  missing tools first. Setup finishes once every one is there."). Once you are in the app, every tool and a Claude
+  account are there.
+- **Help from an agent.** `{ type: 'help', stepId }` on the step on screen starts a question task (`task.create`,
+  mode `ask`, no repository or project) whose request lists the step's required checks that fail, with what went
+  wrong and Shinsa's fix, and asks for the commands that fix them, each in a `bash run` block, without running
+  anything itself (`resolveHelpRequest` in `onboarding/welcome.ts`). The task's id is the step's `help`, kept in the
+  run, so the web shows its reply on the step and runs a command from it through `POST /install`'s `command`. Only
+  the latest help task is kept. With no failing check the reply is refused with `help_unneeded`.
+- **The welcome task.** Finishing setup (the last answer, or `POST /complete`) records one task, "Welcome to Shinsa"
+  (`onboarding.welcome { body }`, core's `decide/onboarding.ts`): `task.created` with origin `onboarding`, no
+  repository and mode `ask`, `task.triaged` with the next handle, `task.delivered` with the body as the answer, and
+  done. No triage, agent or effect runs. The body (`resolveWelcomeBody`) welcomes you and lists what you set up, each
+  step's summary (folders, projects, defaults, Claude accounts) and that every tool is installed, then what happens
+  next.
+  Core refuses a second one (`welcome_recorded`, any task with that origin), so running setup again never adds
+  another; a finished run with none yet (setup done before the welcome existed) records it. The flow's `welcome` is
+  its id, and the web opens it when setup ends the first time, and goes Home on a run again. In inspect mode nothing
+  is recorded.
 - **Saving** goes through the same code as the endpoints above: each answer is `POST /setup`'s `applySetup`
   (folders to `config.json`, the rest as `settings.change`), and the last step is `complete`. The `settings.change`
   carries an id from the answer it saves (`setup:<run>:<step>:<n>`, the run's id kept in `onboarding.json` and new
   on a restart, `n` the count of answers saved so far), so the same answer sent again after a crash is answered from
   its receipt while a later answer to the same step is not.
-- **Persistence.** The run of setup lives in `data/onboarding.json` (version 5, written atomically: the step on
-  screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem, and the
-  private folders with the picks they came from, and the projects as you changed them in words), so a
+- **Persistence.** The run of setup lives in `data/onboarding.json` (version 6, written atomically: the step on
+  screen, the furthest step reached, the answers saved, the last problem, the private folders with the picks they
+  came from, the projects as you changed them in words, and the help task), so a
   reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
   wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
 - **Run setup again** (`{ type: 'restart' }`, what Settings → General → Setup and ⌘K's Run setup again send before
@@ -4897,7 +5285,8 @@ have reached.
   setup.
 
 **`GET /api/onboarding/flow`**: the run of setup, started on the first call. A finished run (`step: null`) stays
-finished while setup is done, so the web goes Home when it opens one; a restart reopens it. The step on screen is
+finished while setup is done, so the web leaves setup when it opens one (for the welcome task on a first run, else
+Home); a restart reopens it. The step on screen is
 read fresh on every call (the folders, the model catalog, the accounts, the tool checks), so reading it again is
 how the tools are checked again.
 
@@ -4914,20 +5303,20 @@ how the tools are checked again.
     groups: { id: 'model' | 'merge' | 'plans'; label: string; options: Option[] }[]; // defaults
     projects: ProjectSuggestion[]; // projects: { id, name, key, color, projectId, folders, repos }
     access: string[];              // roots: the folders macOS keeps private, to ask access for
-    checks: Check[];               // prerequisites
-    ready: boolean;                // prerequisites: every required tool is there
-    imported: AccountImport[];     // accounts: what this run imported
-    notes: string[];               // accounts: imports that failed
+    checks: Check[];               // prerequisites; accounts: the Claude Code check
+    ready: boolean;                // prerequisites: every required tool is there; accounts: Claude Code is installed
+    help: string | null;           // the help task's id, once you asked
     problem: string | null;        // why the last answer was refused
-    submitLabel: string;           // "Continue", "Skip for now", "Finish setup", "Finish anyway"
+    submitLabel: string;           // "Continue", "Create 6 projects", "Finish setup"
   } | null;
   revisit: boolean;                // setup was done before this run
+  welcome: string | null;          // the welcome task's id, once there is one
 }
 ```
 
-**`POST /api/onboarding/flow`** with a reply (`answer`, `open` or `restart`): answers with the run. Codes:
-`body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`, `reply_invalid`, `step_stale`,
-`step_unreached`, `setup_finished`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
+**`POST /api/onboarding/flow`** with a reply (`answer`, `revise`, `open`, `help` or `restart`): answers with the
+run. Codes: `body_invalid`, `step_invalid`, `values_invalid`, `projects_invalid`, `reply_invalid`, `step_stale`,
+`step_unreached`, `setup_finished`, `help_unneeded`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
 
 ## The socket
 
@@ -5189,7 +5578,7 @@ following a file through its watch and the check every second, both triggered by
   loopback one is taken); `test/agents/providers/claude/guard.test.ts` the shell policy, human-only `shinsa`
   commands included.
 - **Configuration and setup.** `test/config/` covers the layout and `config.json`; `test/onboarding/`
-  and `test/repos/` the onboarding endpoints, discovery, the prerequisite checks and the setup steps.
+  and `test/repos/` the onboarding endpoints, discovery, the prerequisite checks, the install terminals, the welcome and help bodies and the setup steps.
 - **Running in the background.** `test/instance/lock.test.ts` covers the lock (a live holder refused, each kind of
   stale lock taken over, a contended takeover, an unreadable lock) and `test/serve.test.ts` the same through
   `startShinsa`; `test/e2e/lock.test.ts` runs real `shinsa engine` processes on one data directory (the second is

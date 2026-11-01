@@ -38,6 +38,7 @@ import { createLoginResolver, type LoginResolver, type RootSource } from '../rep
 import type { Engine } from '../runtime/engine.ts';
 import type { Schedules } from '../schedules/index.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
+import type { Slack } from '../slack/index.ts';
 import {
   ATTACHMENT_REQUEST_LIMIT_BYTES,
   AttachmentStore,
@@ -61,6 +62,7 @@ export interface ApiContext {
   engine: Engine;
   remote?: Remote;
   shares?: ShareLinks;
+  slack?: Slack;
   config: ServerConfig;
   instance?: ServerInstance;
   evidence: EvidenceStore;
@@ -143,7 +145,7 @@ function readIdempotencyKey(request: Request) {
 function readOpenRequest(body: JsonObject) {
   const { target, path, line } = body;
   if (!OPEN_TARGETS.has(target as OpenTarget))
-    throw new DomainError('target_invalid', 'Open it in the editor, Finder or Terminal.');
+    throw new DomainError('target_invalid', 'Pick the editor, Finder or Terminal.');
   return {
     target: target as OpenTarget,
     path: typeof path === 'string' && path ? path : null,
@@ -193,7 +195,7 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
 
 function readRestartWhen(body: JsonObject): EngineRestartWhen {
   if (body.when === 'now' || body.when === 'idle') return body.when;
-  throw new DomainError('when_invalid', 'Restart the engine now or once agents are idle.');
+  throw new DomainError('when_invalid', 'Restart now or once agents are idle.');
 }
 
 function createServerRoutes(context: ApiContext): ApiRoute[] {
@@ -254,7 +256,7 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
       respond: async (_match, request) => {
         const when = readRestartWhen(await readJsonObject(request));
         if (!restarter) {
-          throw new DomainError('restart_unsupported', 'This Shinsa cannot restart its engine from the app.');
+          throw new DomainError('restart_unsupported', 'This Shinsa cannot restart its engine.');
         }
         return respondJson(await restarter.request(when));
       },
@@ -333,8 +335,12 @@ function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
     },
     {
       method: 'POST',
-      pattern: /^\/api\/onboarding\/complete$/,
-      respond: async () => respondJson(await onboarding.complete()),
+      pattern: /^\/api\/onboarding\/install$/,
+      respond: async (_match, request) => {
+        if (request.headers.get('origin') === null)
+          throw new DomainError('browser_only', 'Only Shinsa’s own page installs the tools setup checks.');
+        return respondJson(await onboarding.openInstall(await readJsonObject(request)));
+      },
     },
     {
       method: 'GET',
@@ -363,6 +369,7 @@ export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
     ...(context.versions ? createVersionRoutes(context.versions) : []),
     ...(context.remote ? createRemoteRoutes(context.remote) : []),
     ...(context.place ? createPlacementRoutes(context.place) : []),
+    ...(context.slack ? context.slack.routes() : []),
     ...(context.roots
       ? createProjectRoutes({
           engine: context.engine,

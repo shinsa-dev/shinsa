@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import type { DisplayPhase, ReportCheck } from '@shinsa/core';
+import type { DisplayPhase } from '@shinsa/core';
 import {
+  describeAgentReviewFact,
   describeFollowUpNote,
-  describeReviewFacts,
   isAgentWorking,
   isTaskWatchable,
   listFeedLines,
@@ -19,20 +19,6 @@ import { createGate, createRun, createShinsaState, createTask } from '../../supp
 function phase(overrides: Partial<DisplayPhase>): DisplayPhase {
   return { key: 'build', title: 'Build', detail: null, status: 'active', planned: false, ...overrides };
 }
-
-function check(outcome: ReportCheck['outcome']): ReportCheck {
-  return { id: `c-${outcome}`, label: `check ${outcome}`, command: 'bun test', outcome, detail: null };
-}
-
-const PULL_REQUEST = {
-  number: 4531,
-  url: 'https://github.com/acme/app/pull/4531',
-  state: 'open' as const,
-  checks: 'passing' as const,
-  unresolvedComments: 0,
-  mergeable: true,
-  updatedAt: 0,
-};
 
 describe('resolveNowTitle', () => {
   it('leaves a finished result to its own card and names the settled stage instead', () => {
@@ -135,37 +121,13 @@ describe('resolveNowTitle', () => {
   });
 });
 
-describe('describeReviewFacts', () => {
-  it('sums up checks and the agent review', () => {
-    const task = createTask({
-      id: 'task-1',
-      checkResults: [check('pass'), check('pass'), check('fail')],
-      findings: [{ severity: 'optional', file: null, line: null, message: 'Consider a guard.' }],
-    });
-    expect(describeReviewFacts(task, false)).toBe('2 of 3 checks passed · agent review left 1 note');
-  });
-
-  it('starts with a capital letter when there are no checks', () => {
-    expect(describeReviewFacts(createTask({ id: 'task-1' }), false)).toBe('Agent review found nothing');
-  });
-
-  it('counts several notes', () => {
+describe('describeAgentReviewFact', () => {
+  it('says the agent review found nothing, and nothing when its findings show below', () => {
     const findings = [
-      { severity: 'blocking' as const, file: null, line: null, message: 'One' },
-      { severity: 'optional' as const, file: null, line: null, message: 'Two' },
+      { severity: 'optional' as const, file: null, line: null, message: 'Consider a guard.' },
     ];
-    expect(describeReviewFacts(createTask({ id: 'task-1', findings }), false)).toBe(
-      'Agent review left 2 notes'
-    );
-  });
-
-  it('says the pull request is clean at the merge gate', () => {
-    const task = createTask({ id: 'task-1', checkResults: [check('pass')], pullRequest: PULL_REQUEST });
-    expect(describeReviewFacts(task, true)).toBe(
-      'The check passed · agent review found nothing · PR #4531 is clean'
-    );
-    expect(describeReviewFacts(task, false)).toBe('The check passed · agent review found nothing');
-    expect(describeReviewFacts(createTask({ id: 'task-2' }), true)).toBe('Agent review found nothing');
+    expect(describeAgentReviewFact(createTask({ id: 'task-1', findings }))).toBeNull();
+    expect(describeAgentReviewFact(createTask({ id: 'task-1' }))).toBe('Agent review found nothing');
   });
 });
 
@@ -324,6 +286,10 @@ describe('what the now card shows', () => {
     const done = createTask({ id: 't', stage: 'done', result: RESULT });
     expect(resolveResultPlace(state, done, undefined)).toBe('now_card');
     expect(resolveResultPlace(state, done, createGate({ id: 'g', taskId: 't', type: 'proposal' }))).toBe(
+      'now_card'
+    );
+    const answered = createTask({ id: 't', stage: 'answered', result: RESULT });
+    expect(resolveResultPlace(state, answered, createGate({ id: 'g', taskId: 't', type: 'result' }))).toBe(
       'now_card'
     );
     expect(resolveResultPlace(state, done, createGate({ id: 'g', taskId: 't', type: 'question' }))).toBe(

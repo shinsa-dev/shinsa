@@ -242,7 +242,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   can be removed; a message or an answer can be attachments alone. The chat shows them as thumbnails
   and file chips, an answer's under the question it answers, and the agent gets each file's path (`docs/engine.md` → The chat protocol → Attachments).
 - **Gate views.** Each decision is the first card of the task's Overview: the plan (approve it, or
-  say in the chat what to change), Review (§5), Merge, Question, a proposed change.
+  say in the chat what to change), Review (§5), Merge, Question, a proposed change. Once you sent changes back,
+  the review card leads with the Agent's reply to them, point by point.
 - **Task page.** Everything about one task, in three tabs: Overview (the decision, the plan,
   progress, evidence, the pull request), Code (the review and every changed file) and Chat (the
   agents' transcripts; you can write to the agent).
@@ -267,7 +268,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   attaches each link as a preview: a preview deployment on this machine, up until the task is finished.
 - **All tasks.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
-  that handle several parents), the backlog, then done and cancelled, collapsed. Priority then age
+  that handle several parents), then snoozed, the backlog, done and cancelled, collapsed. Priority then age
   inside each section. This is the page to open each day and work down. A task can be told to
   wait for others from here, from the task page and from ⌘K, and the new-task box's When to start offers
   Auto start, Start now, After another task… (a search over every open task, several at once) and Backlog.
@@ -278,13 +279,16 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   and builds; Remove from the backlog (the task's menu or ⌘K) makes it a plan to approve. You put work there yourself (When to start → Backlog,
   Move to the backlog, `shinsa do --backlog`, accepting a suggested task into it), or an agent you asked does;
   Shinsa never decides it for you. Questions, research and investigations never wait there.
-- **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
-  questions: the folders that hold your repositories (found on this machine, with their
-  repository counts), the default model, the merge method, plan approval, your Claude accounts and
-  the tools Shinsa needs. Pick a suggestion or answer in your own words; an answer that names an
-  option is taken as is, a skip (or a plain yes where no option is a yes) keeps what is saved, and
-  any other is read by a quick model call that knows what each option means, said back and confirmed (the accounts and tools steps act at once). It can never add, skip or
-  reorder a question. Nothing about folders is hard-coded:
+- **Snoozing.** Snooze (the task's menu, a row's menu, ⌘K or `shinsa tasks snooze`) takes an open task in any step
+  out of Needs you, In progress, the queue, the guide, the Dock badge and notifications, and changes nothing else:
+  its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed
+  section, All tasks in a folded Snoozed group. Unsnooze puts it back where it is now. Nothing wakes a task on
+  its own.
+- **Setup.** Your first task, on first run (and from Settings → General → Setup later), with a fixed list of
+  steps you pass like gates: the folders that hold your repositories (found on this machine, with their
+  repository counts), the projects for them, the default model, the merge method and plan approval, signing in
+  with Claude, and the tools Shinsa needs, each installed with one click. It can never add, skip or reorder a
+  step, and finishing leaves a done "Welcome to Shinsa" task. Nothing about folders is hard-coded:
   Settings → Projects → Repository folders shows the chosen ones, editable, with Find folders.
 - **Every agent can manage Shinsa.** There is no separate conversation: the task chat is where you
   talk, and a question with no repository work (an Answer task) is how you just talk. Every task
@@ -386,6 +390,11 @@ nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is
 a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
 cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
 (`docs/engine.md` → Sharing a task).
+Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
+and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
+that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
+can be answered with its button there, and every other decision is made in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
+own machine in Settings → General → Slack (`docs/engine.md` → Slack).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
   the command's receipt committed in one SQLite transaction, side effects run from the outbox after
@@ -615,12 +624,15 @@ watch, Merge queues, Health):
   waiting, not failed.
 - The web shows a banner when the server skipped a damaged event at boot.
 
-**WS5 Onboarding** (`docs/engine.md` → The setup steps): five steps on first run, one at a time (Folders,
-Projects, Defaults, Accounts, Tools), each with the recommended answer already picked (folders also by path),
-any earlier one open to change. Your projects are suggested from the repositories in your folders and made
-with one press, your Claude logins are imported for you, a folder macOS keeps private asks for access
-instead of failing, and the prerequisites are checked with the command that fixes each. Nothing else opens
-until setup is complete.
+**WS5 Onboarding** (`docs/engine.md` → The setup steps): setup reads as your first task, "Set up Shinsa", whose
+five steps (Folders, Projects, Defaults, Claude, Tools) are gates you pass one at a time, each with the
+recommended answer already picked (folders also by path), any earlier one open to change. Your projects are
+suggested from the repositories in your folders and made with one press, a folder macOS keeps private asks for
+access instead of failing, Claude Code is installed if it is missing and you sign in to your Claude account (no
+login is found or imported for you), and each missing tool installs in a terminal on the step when you click
+Install (Bun only when a repository uses it). When an install still fails, an agent reads the failing checks and
+replies with commands you run with one click. Finishing records a done "Welcome to Shinsa" task that sums up what
+you set up, and you land on it. Nothing else opens until setup is complete.
 
 **WS6 Delegation** (`docs/engine.md` → Delegation): a working agent hands self-contained work to
 other agents and gets the results pushed back into its turn; it can file tasks of its own
@@ -1038,6 +1050,58 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   several at once, whatever project the box shows) and Backlog.
 - **No roadmap.** The word named nothing Shinsa has; the page is All tasks, its sections are task groups, and the
   backlog is the closest thing to a roadmap there is.
+
+### Slack (2026-10-31)
+
+- **Tag the bot, from anywhere in Slack.** A mention outside a thread starts one; in a thread the bot reads all of it,
+  so a bare mention under a bug report is enough. It always answers in the thread and never chats: the new task's
+  status message, "Sent to" the task the thread already has, or, for greetings, thanks and small talk, the one line
+  "Not a task, so nothing was started." and silence after. Work runs
+  the same loop as Home's input with everything on Auto: triage picks the project, the repository, the kind (a
+  question is answered and ends there) and the priority.
+- **One shared bot, locked to its owner.** The app lives on app.shinsa.dev and relays each mention to the machine of
+  the Slack user who wrote it, over remote access's tunnel; someone who has not connected Slack to their own Shinsa
+  gets a private link to do so, and nothing runs. A teammate who connects gets tasks on their machine. No machine holds
+  a Slack token, and the relay stores no message text.
+- **The thread follows the task, in Block Kit**: one status message edited in place as it moves, one post for each
+  question, secret, plan and review, each a header, the gist bold or quoted, its details as fields or a list, a
+  button to decide in Shinsa and a small line naming the task and its `PR #<number>`, and the result's start with a
+  button to the rest. No icons in the posts: the state is the one reaction on your
+  message (⏳ sizing up, 🛠️ working, ✋ needs you, ✅ done), there from the moment the bot reads it. No streamed text
+  and no "Thinking…" placeholder. A question's choices are buttons: the person who started the task answers with one, the post then says who
+  answered what, and anyone else is told privately they cannot; plans, reviews, merges and the rest are decided only
+  in Shinsa.
+- **Built on remote access** instead of Socket Mode: a Socket Mode app is one per workspace with its token on every
+  machine, and Slack spreads a socket app's events across its connections, so one shared bot needs the relay.
+  Mentions while a machine is offline are not kept.
+
+### Duplicates (2026-10-31)
+
+- **A duplicate is a cancel with a reason.** A task that repeats another closes as its duplicate: cancelled like any
+  cancel, linked to the task it repeats, and shown as Duplicate, in its own Duplicates group on All tasks, with a
+  "Duplicate of" fact that opens the original and says who closed it and why. The original shows it too, as a
+  "Kept over" fact linking every task closed in its favour.
+- **Triage catches them before any work.** It is asked whether a new request is the same work as an open task of its
+  project, with a strict bar: the same outcome only. Not a duplicate starts any duplicate again: one triage closed
+  as if it had not flagged it, one that had already worked in a fresh round with the same request. You close one yourself with Close as a duplicate in the
+  task's menu or ⌘K, and agents with `tasks_duplicate`.
+- **Teams come next.** Shared, read-only views of teammates' tasks (chats never leave the machine), public share
+  links, machines shared with other accounts and duplicates found across a team are their own tasks.
+
+### Replies on the Overview, not in the chat (2026-10-31)
+
+- **The goal is never to need the chat.** At review you iterate: you ask for a change, ask a question, add a second
+  thought. Whether the Agent addressed it was only in the chat, so every round meant scrolling a transcript. Now
+  each thing you send after the work is in is a request, and the fix that answers it must hand over a reply
+  (`complete_fix`'s `reply`, `docs/engine.md` → Your requests and their replies).
+- **Confirmations, not a thread.** Five designs were tried in `/ui`; the one chosen reads as a report: a headline,
+  each point you raised marked Done, Answered or Not changed with a note, then What to do now. What you sent folds
+  above it as a quote of your own words; no bubbles, no inline chat: the plan and the reply are one shared record, and
+  earlier requests (plan feedback included) fold below as the same report. Every fact on the card is a live link
+  (the pull request with its hover card), never plain text that names one.
+- **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
+  pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
+  cards).
 
 ## 11. Open questions
 

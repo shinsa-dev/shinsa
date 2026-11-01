@@ -37,7 +37,7 @@ Only these, and they win over anything below:
    choice, select field, copy button, options trigger, info popover, status tiles and marks, times, code text,
    the health banner's card, the choice buttons, the confirm dialog, Home's composer) are on
    `/ui` under Shinsa composites (smart links are not), and so are the feature pieces, each in
-   every state from sample data: the setup steps and the finished page (`routes/ui/onboarding.tsx`, 24), accounts (usage bars and figures, the usage menu, account status, the
+   every state from sample data: the setup steps (`routes/ui/onboarding.tsx`, 24), accounts (usage bars and figures, the usage menu, account status, the
    percent and sign-in dialogs at each phase, the Run on account choices and the run label's account), the
    overview's now cards on `NowFrame` (setup, sign-in, usage wait, wait, secret, paused for a failure, a cost
    limit and a wait out of checks, a question with choices, an escalated review's verdicts, a revised plan),
@@ -376,7 +376,7 @@ Only these, and they win over anything below:
    - **Queued** (`MessageQueue`, `components/chat/message-queue.tsx`, over `listQueuedMessages`): a message the
      classifier read as new work while a round is in flight is the next round, which waits (`round.queued`, status
      `waiting`) until the current round rests or reaches the merge gate (`docs/engine.md` → Rounds). It is not a
-     bubble in the chat: the queue docks above the composer on the Chat and Overview tabs (`Composer`'s `dock`), a
+     bubble in the chat: the queue docks above the composer on the Overview, Review and Chat tabs (`Composer`'s `dock`), a
      `CARD` `mb-1.5` with a 32px `text-2xs` header (an hourglass, "Queued" in `fg-3`, then when it sends in `fg-2`,
      `describeQueue` over core's `resolveRoundRelease`: "· Sends once round 2 is finished." while the round works
      and finishes by itself, and what you have to do first while it waits for you: "· Sends after you merge round
@@ -979,7 +979,7 @@ Only these, and they win over anything below:
       another task, because that is all a new dependency can still do. Stop waiting clears every one at once
       ("No longer waiting.").
     - **Status tones** come from `lib/tasks/status.ts` and `lib/format/tone.ts`, nowhere else:
-      Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
+      Needs your answer and Answered blue, Paused orange, Changes to review amber, Plan to approve purple,
       Ready to merge green, working stages blue, Waiting on another task neutral; Setup incomplete and Sign in
       needed are orange like Paused, and Waiting to check in again, Waiting for the usage limit and Waiting for
       delegations are neutral: the agent is neither working nor waiting on you, so the status is grey and its
@@ -1001,7 +1001,7 @@ Only these, and they win over anything below:
 
 16. **All tasks.** `routes/tasks.tsx` (rows in `components/tasks/`) lists every task in
     to-do order, grouped by `resolveTaskGroup` (`lib/tasks/groups.ts`): Ready to merge, Changes to review, Plan to
-    approve, Needs your answer, Paused, In progress, Waiting on another task, Backlog, Done and Cancelled
+    approve, Needs your answer, Answered, Paused, In progress, Waiting on another task, Backlog, Done and Cancelled
     (both collapsed). Each section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
@@ -1026,6 +1026,9 @@ Only these, and they win over anything below:
       purple): a proposed change decides what gets built, like a plan, but it is not a plan yet.
     - **Operation to confirm** follows it (`IconConsole`, purple): a merged change whose operation waits for your
       OK on the merged code.
+    - **Answered** follows Needs your answer (`IconBubbleCheck`, blue, open): an answer, report or diagnosis that
+      waits for you to read it (the `result` gate). Its now card is the result with Close, which moves it to Done;
+      it never sits in Done before you have read it.
     - **Backlog** comes after Waiting on another task (`IconArchive`, neutral, open): every task kept for later
       (`Task.backlog`), planning or with its plan held (`isHeldInBacklog`). A held plan never reads as Plan to
       approve: its status label and glyph are the Backlog group's (`resolveTaskStatus`, `resolveTaskMenuIcon`). Any
@@ -1163,21 +1166,22 @@ Only these, and they win over anything below:
     land on setup. A run you started again from Settings (Settings → Setup, ⌘K's Run setup again, `restartOnboarding`)
     is not locked: setup is already complete, and each step's footer has Close setup beside its button, which goes to
     Settings.
-    - **The steps along the top** (`OnboardingStepper`, items from `listStepperItems`): one 26px segmented `Choice`
-      with each step's label, no numbers and no circles. The step you are on is the selected segment, and the pill
-      slides to the next one as you move (the stepper sits outside the step, so it is not remounted); a step you
-      answered has no mark, only its answer as the tooltip ("Opus 5.5 · Squash · Plan first"), and so has a step
-      you reached but have not answered again (after going back); both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
-      Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 3 of 5: Defaults",
-      `describeStepHeading`). The finished page keeps the slot empty, so the title never moves: it sits at the same
-      height on every step and on the finished page.
-    - **Each step** (`OnboardingSection`, shared with the finished page) is the `PageHeading` (the question itself as
+    - **Setup reads as your first task** (`OnboardingHeader`): above the steps, the page's own `PageHeading`, "Set up
+      Shinsa", with "Your first task. Pass each step below and Shinsa is ready for real work." under it ("Open any
+      step to change it…" on a run again), then the steps as the task page's path of gates (`OnboardingPath`, items
+      from `listOnboardingPath`): the progress track's own marks (`StepMark`) and connectors, a step you passed done
+      (the green tick, its connector green), the one on screen current (the blue pulse, its label `font-medium`,
+      `aria-current="step"`), the rest pending. A passed step, and one you reached but have not answered again, are
+      buttons that open it, with its answer as the tooltip ("Opus 5.5 · Squash · Plan first"); a step not reached yet
+      and the one on screen are disabled. A hairline under the path closes the header. Below `sm` only the current
+      step keeps its label, as on the progress track. The header sits outside the step, so it never slides.
+    - **Each step** (`OnboardingSection`) is the `PageHeading` (the question itself as
       the `text-base` title, "How should agents work?", its one line of description in `text-xs` `fg-2`
       under it), 16px to the body, a refused answer's reason as an `ErrorLine`, and 24px to the footer: Back
       (`secondary`, the arrow left) on the left; on the right Close setup on a run again, the step's own secondary
-      action (Add account, Check again) and the primary button with the step's label ("Continue", "Create 6 projects",
-      "Skip for now", "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
-      The first step you open, and the finished page when you load it, are simply there. Moving to another step
+      action (Add account, or Check the tools again as a `default` icon button with its tooltip) and the primary button with the step's label ("Continue", "Create 6 projects",
+      "Finish setup") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
+      The first step you open is simply there. Moving to another step
       slides (`OnboardingTrack`): the step you leave slides out to the left while the next slides in from the right
       (the other way when you go back), both the full width of the column and 360ms on the standard curve
       (`cubic-bezier(0.4, 0, 0.2, 1)`: it eases in and out without the long settle of a strong ease-out), and
@@ -1217,24 +1221,43 @@ Only these, and they win over anything below:
       private" in `text-xs` `fg-4` over why in `text-2xs` `fg-3`) offers Open System Settings (Full Disk Access),
       Check again and Leave it out, `sm` secondary buttons; your picks stay checked, and coming back to the window
       checks again by itself (`useWindowReturn`).
-    - **Accounts** are the ones you signed in to, never imported for you: one Settings card of your Claude accounts
-      from the socket, each a `PathRow` (the Claude mark, the email, where it came from and its plan in `text-2xs`
-      `fg-2`: "Signed in through Shinsa · Max plan", "From claude-swap"), Sign in again on a signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s
-      words), then Codex's login as a row of its own (the Codex mark, its email or name, "Signed in with ChatGPT · Plus
-      plan" or "Not signed in", and the `CopyButton` of `codex login` while it is not). Until the socket has the
-      accounts the card holds one row with a delayed `LoadingLine`, never "no login found". Add account in the footer
-      is a menu that asks which: a Claude account (Sign in to Claude with none) opens the sign-in dialog, and so does
-      each claude-swap account ("Sign in to ‹email›", "From claude-swap"), which signs in to that email; a Codex
-      account copies `codex login` to run in a terminal (off once Codex is signed in, with how it is). Coming back to
-      the window reads the accounts again, so a Codex login you finished in a terminal shows.
-    - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
-      the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3` and, when a
-      command fixes it, that command in `TOKEN_TEXT` with a `CopyButton`, and its version or state at the right in
-      `TOKEN_TEXT`. Check again is in the footer, and coming back to the window checks again by itself. An optional check that fails (codex
-      and its sign-in) is a skipped row, never a fail, and never holds setup back.
-    - **Finished** (`OnboardingFinished`) is "Shinsa is ready" with its line, what you set up as `SettingRow`s in a
-      Settings card (Folders, Projects, Defaults, Accounts, the answer at the right in `fg-3`) and Go to Home.
-      Opening `/onboarding` once the server's run is finished (setup done and not started again) goes Home instead.
+    - **Claude** is the accounts you sign in to, never found or imported for you. While Claude Code is missing the
+      step shows only its check, with Install (below), and no sign-in, since signing in needs it. Once it is there:
+      one Settings card of your Claude accounts from the socket, each a `PathRow` (the Claude mark, the email, where
+      it came from and its plan in `text-2xs` `fg-2`: "Signed in through Shinsa · Max plan"), Sign in again on a
+      signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s words), then Codex's login as a row of
+      its own (the Codex mark, its email or name, "Signed in with ChatGPT · Plus plan" or "Not signed in", and the
+      `CopyButton` of `codex login` while it is not). With no account the card is one `SettingsEmpty` row, "No Claude
+      account yet. Agents need one to work.", with the one primary Sign in with Claude (the Claude mark), which opens
+      the sign-in dialog; Continue stays off until an account is signed in, since setup never ends without one. With an account, Add account in the footer opens
+      the same dialog; there is no menu and no claude-swap entry (Settings keeps those). Until the socket has the
+      accounts the card holds one row with a delayed `LoadingLine`. Coming back to the window reads the accounts and
+      the check again, so a Codex login you finished in a terminal shows.
+    - **Tools** are one Settings card of checks (`OnboardingChecks`): one-line `SETTING_ROW`s with the
+      `CheckOutcomeIcon` in the 14px icon slot and the tool's name in `text-xs` `fg-4`, never a fix sentence or the
+      command under it. At the right a passed or optional check that needs nothing shows its version or state in
+      `TOKEN_TEXT`; a failed one shows a 24px `CopyButton` of its command and, 4px after it, a `sm` Install (Sign in
+      when the GitHub CLI is there but signed out; the console icon), which asks the engine to run that check's own command
+      (`POST /api/onboarding/install`, never a command from the page) and opens its terminal inside the card under the
+      row: a 224px pane with the item corner and a hairline, on the terminal's own background. When the command ends
+      the terminal goes and the checks are read again by themselves; an install that failed leaves one `text-2xs`
+      destructive line in its place ("The install ended with code 1. Install it again, or ask an agent for help.").
+      With two or more required tools missing, a row above the checks says how many on one line ("3 tools are
+      missing") with a `sm` primary Install all, whose terminal opens
+      under that row (`{ all: true }`); with one, that check's Install is the primary. Finish setup stays off, and
+      secondary, while a required tool is missing: setup never ends with one missing, so the app can assume every tool
+      is there. Coming back to the window checks again by itself, and so
+      does the footer's icon-only button ("Check the tools again"), whose spinner takes the icon's place while it runs.
+      An optional check that fails (codex) is a skipped row, never a fail, and never holds setup back.
+    - **Help** (`OnboardingHelp`): while a required check still fails, a line under the card ("Stuck on an install?
+      An agent reads the failing checks and replies with the commands to run.") with a secondary Ask an agent for
+      help (the question bubble). Asking starts a question task, and the line turns into a Settings card that holds a
+      delayed `LoadingLine` until the agent replies and then its reply as `Markdown`, whose shell blocks marked run get
+      Run in terminal: the engine runs a command only when it is in one of that reply's run blocks, in the same
+      in-card terminal, which goes when it ends, and the checks are read again. The task itself waits on Home with the rest.
+    - **Finishing** opens the welcome task the engine records ("Welcome to Shinsa", done), whose result says what you
+      set up; a run started again goes Home instead. Opening `/onboarding` once the server's run is finished (setup
+      done and not started again) goes Home.
     Settings → Repository folders lists the chosen folders as `PathRow`s (removable, the `SHINSA_ROOTS` ones marked
     as such), adds one by path and has Find folders (a menu of discovered folders with their repository counts,
     checked when chosen). No folder path is ever written into the code; the ones on screen come from the server.
@@ -1380,8 +1403,13 @@ Only these, and they win over anything below:
       go with the operation.", toast "Notes saved."), so the box shows them.
     - **What a message does** is the composer's placeholder at every gate and the toast after it, from one place
       (`resolveMessageHint` in `lib/tasks/messages.ts`, over core's `resolveMessageEffect`; `docs/engine.md` → Gates →
-      What a message does): the Overview's and the chat's composers and ⌘K's Message the agent all read it, and a task
-      that takes no message (finished, not a follow-up) shows no composer.
+      What a message does): the Overview's, the Review's and the chat's composers and ⌘K's Message the agent all read
+      it, and a task that takes no message (finished, not a follow-up) shows no composer.
+    - **One draft per task.** The composer docks at the foot of Overview, Review and Chat, and the three are one
+      draft (`lib/chat/task-drafts.ts`, keyed by the task's id, in memory until a reload): the text, the attachments
+      and their uploads carry across tabs and survive leaving the task, and sending from any tab clears it everywhere.
+      When the box loses focus to a click on the task's own tabs, the next tab's box takes it with the caret where it was; leaving the task drops that. The Code tab
+      has no composer; Home's new-task box and the answer box keep their own.
     - **The plan's parameters** sit under its phases and operation, in the plan card and in the chat's plan card
       (`PlanParameterList` in `plan-parameters.tsx`, `resolvePlanParameters` in `lib/overview/plan-parameters.ts`),
       each only when the plan sets it: **Impact** (markdown), **Evidence** (the kinds the agent must attach, as a
@@ -1622,7 +1650,7 @@ Only these, and they win over anything below:
       (`RunAccount` in `account-items.tsx`, its latest attempt's account, else the one it is bound to). On the run
       of the step an agent works on now it is a click menu (hover `fg-4`), "Run this step again on" over every
       signed-in account with the current one checked; picking one restarts the step bound to that account, with
-      the toast "Running this step again on a@b.com." ⌘K's This task has the same as "Run this step again on…".
+      the toast "Rerunning on a@b.com." ⌘K's This task has the same as "Run this step again on…".
       Earlier runs show the account as plain text.
     - **In the chat** every notice kind (`lib/chat/timeline.ts`, rows from `lib/chat/notices.ts`) does one of
       these. Seven are a chat line ahead of their turn's work (`NoticeLine`, the line anatomy of 7: the label what
@@ -1718,7 +1746,7 @@ Only these, and they win over anything below:
       take the media keys. In the Mac app the group adds a macOS notifications row with a secondary Open settings
       button that opens System Settings → Notifications → Shinsa, and its description says "Banners and the Dock badge
       only show while macOS allows notifications for Shinsa."; when macOS refuses one, the page shows one error toast,
-      "macOS blocked a notification. Allow notifications for Shinsa in System Settings.", with the action Open
+      "macOS blocked a notification.", with the action Open
       settings (`apps/desktop/CLAUDE.md` → Rules).
     - **What triggers them**: a gate that newly enters Needs you within the focus project. The first snapshot after a
       load never chimes, a gate outside the focus project never does, and neither does one that comes into view when the
@@ -1832,8 +1860,7 @@ Only these, and they win over anything below:
       "Loads when needed · ~4.2k tokens" while the optimizer leaves it out. Then a primary `xs` Connect when it needs
       a sign-in (a Claude Code or plugin MCP's cost carries the tooltip that Claude runs can still use the sign-in
       made in Claude Code), the `Switch` (tooltip: "Only for Shinsa’s agents. Claude Code and Codex keep their own
-      settings."; toast on off: "Turned off ‹name› for Shinsa’s agents. Claude Code and Codex keep their own
-      settings.") and the `•••` menu ("MCP options"): Connect or Sign in again (web MCPs), Sign out, Check now, Show
+      settings."; toast on off: "Turned off ‹name›.") and the `•••` menu ("MCP options"): Connect or Sign in again (web MCPs), Sign out, Check now, Show
       details / Hide details, Use everywhere, Use in one project ▸, Use in one repository ▸ (radio items, the current
       place checked), Edit… (Shinsa's own) or Copy to Shinsa and edit…, and Remove behind `ConfirmDialog` (Shinsa's
       own only, "Remove MCP"). The details sit inside the row, indented to the name (`pl-7`, `pr-2`), with no surface
@@ -1925,7 +1952,7 @@ Only these, and they win over anything below:
       starts as a new round of this task." A closed task (marked done, cancelled) has none.
     - **A split-off is a suggested task's row** in Suggested tasks with Make it a task (outline) and Keep it here
       (secondary, in Dismiss's place); keeping it sends it to this task now, as a message to the open round or a new
-      round of a resting task ("Kept in this task. The agent takes it now."). ⌘K offers "Keep “‹title›” in this task"
+      round of a resting task ("Kept. The agent takes it now."). ⌘K offers "Keep “‹title›” in this task"
       ("The agent takes it now") and, per round whose shipping can change, "Ship round 4 as a
       stacked pull request" or "Ship round 4 onto #12".
     - **On `/ui`** (chat specimens): the round dividers of a four-round task in every state and its Rounds panel.
@@ -2951,6 +2978,18 @@ Only these, and they win over anything below:
     - **Fork into a new task** is a task action (the task menu, an All tasks row's menu, ⌘K) on every task but a cancelled
       one. It opens a dialog with one field, what the new task should do, and Fork; the facts row then shows Forked
       from and Forked into (`IconFork`) like Unblocks.
+42. **A toast is one short line** (since 2026-10-31; `lib/connection/commands.ts`, `scripts/lint-toast.ts`). A toast
+    says what just happened in a few words and never wraps at the toaster's 420px: "Request declined.", "Device
+    revoked.", "Kai Lane joined.", "Couldn’t reach Shinsa.". At most 40 characters, counting an inserted name or
+    count as 12; no description line under it, and no consequence the screen already shows. The one second line is a
+    running update's progress, clipped to one line. An error toast is the server's message, so a `DomainError` a
+    command or request from the web can return is one short sentence too ("This task is finished."); what an agent
+    needs to recover goes in the messages only agents receive. The toaster clips a title or a line that is still too
+    long, such as a git failure, so nothing ever breaks onto a second line. `bun lint:conventions` fails on a longer
+    toast and on toast text it cannot read: the text of every `toast.*`, `confirmDone`, `requestWithToast` and
+    `sendCommandWithToast` call must be a literal, a template, a constant or a function returning one (followed across
+    imports and destructuring), a `done` or `sent` value (checked where it is written), or a server message
+    (`error.message`, `describeFailure(error)`), which the clip covers.
 
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
@@ -2967,7 +3006,11 @@ and those transitions only. Besides that it bans comments (outside `packages/ui`
 global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts`, `hooks/use-code-keys.ts` and
 `hooks/use-review-keys.ts` and `hooks/use-terminal-keys.ts` (32, 34, 37); a terminal's keys go through xterm.js's own
 handler on its element (37). It also rejects an ad hoc selection (`select-text`, `select-all`,
-`select-auto`, `cursor-text`) in the app, the kit and `/ui`, and `user-select` set by hand in the app (39).
+`select-auto`, `cursor-text`) in the app, the kit and `/ui`, and `user-select` set by hand in the app (39). It
+rejects a toast string in the app longer than 40 characters (42): the text passed to `toast.*`, `confirmDone`,
+`requestWithToast`, `sendCommandWithToast` and any function with a `done` or `sent` parameter, and every `done` or
+`sent` property, followed through constants, lookup tables, both branches of a choice and the functions that return
+it, in any file of the app; an inserted value counts as 12. A message from the server is not caught.
 
 ---
 
@@ -3246,12 +3289,11 @@ the string. Product copy is US English ("organization", "canceled", "color").
 
 ### Punctuation and characters
 
-- **No trailing period** on a single phrase: labels, tooltips, badges, toast
-  titles, and combobox and list empty rows ("No campaigns found"). A toast
-  title built from a server message's first sentence drops its period. A
-  description that is a full sentence (hints, dialog bodies, toast
-  descriptions, empty-state bodies, integration row and section
-  descriptions) ends with a period.
+- **No trailing period** on a single phrase: labels, tooltips, badges and
+  combobox and list empty rows ("No campaigns found"). A toast is one short
+  line with no description (Where Shinsa differs, 42). A description that is
+  a full sentence (hints, dialog bodies, empty-state bodies, integration row
+  and section descriptions) ends with a period.
 - **Failure toasts are "Couldn’t {verb} {object}"** ("Couldn’t save
   paywall"), never "Could not…", "Unable to…" or "Failed to…". Inline error
   prose says "couldn’t" too. Don't repeat "Try again." in prose right above a

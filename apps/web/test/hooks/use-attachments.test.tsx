@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { act, render, renderHook, waitFor } from '@testing-library/react';
 import * as React from 'react';
 import { type Attachments, useAttachments } from '@/hooks/use-attachments.ts';
+import { resolveTaskDraft } from '@/lib/chat/task-drafts.ts';
 import { spyOnToasts } from '../support/commands.ts';
 
 const realFetch = globalThis.fetch;
@@ -69,8 +70,7 @@ describe('useAttachments', () => {
     const { result } = renderHook(() => useAttachments());
     act(() => result.current.add([new File(['x'], 'a.txt'), new File(['x'], '')]));
     await waitFor(() => expect(result.current.drafts).toEqual([]));
-    expect(toasts.error).toHaveBeenCalledWith('Couldn’t attach a.txt: The file is empty.');
-    expect(toasts.error).toHaveBeenCalledWith('Couldn’t attach the file: The file is empty.');
+    expect(toasts.error).toHaveBeenCalledWith('The file is empty.');
   });
 
   it('refuses files over the limits, ignores an empty transfer, and revokes previews when it goes', () => {
@@ -83,7 +83,7 @@ describe('useAttachments', () => {
         files: [new File([], 'empty.png', { type: 'image/png' })],
       } as unknown as DataTransfer);
     });
-    expect(toasts.error).toHaveBeenCalledWith('Each file must be between 1 byte and 25 MB.');
+    expect(toasts.error).toHaveBeenCalledWith('Each file must be 1 byte to 25 MB.');
     act(() => result.current.add([new File(['x'], 'c.png', { type: 'image/png' })]));
     unmount();
     expect(revoked).toHaveBeenCalledWith('blob:preview-1');
@@ -141,5 +141,20 @@ describe('useAttachments', () => {
       '/api/attachments/1/b.png',
     ]);
     expect(created).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a keyed draft in the shared store, where an upload finishes after the input goes', async () => {
+    serve((name) => Response.json(stored(name)));
+    const first = renderHook(() => useAttachments('task-1'));
+    const second = renderHook(() => useAttachments('task-1'));
+    act(() => first.result.current.add([new File(['x'], 'a.txt')]));
+    expect(second.result.current.drafts.map((draft) => draft.name)).toEqual(['a.txt']);
+    first.unmount();
+    second.unmount();
+    await waitFor(() => expect(resolveTaskDraft('task-1').attachments[0]?.stored?.name).toBe('a.txt'));
+    const back = renderHook(() => useAttachments('task-1'));
+    expect(back.result.current.ready.map((item) => item.name)).toEqual(['a.txt']);
+    act(() => back.result.current.clear());
+    expect(resolveTaskDraft('task-1').attachments).toEqual([]);
   });
 });

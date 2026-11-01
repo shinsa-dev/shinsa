@@ -18,6 +18,7 @@ import {
   useConnection,
   useDesktopConnected,
   useMachine,
+  useMachineAccess,
   useMachines,
   useTranscript,
   useUnreachableMachines,
@@ -724,10 +725,13 @@ describe('the shared connection', () => {
     ];
     expect(renderHook(() => useMachines()).result.current).toEqual([]);
     expect(renderHook(() => useUnreachableMachines()).result.current).toEqual([]);
+    expect(renderHook(() => useMachineAccess()).result.current).toEqual([]);
     const unreachable = [{ id: 'm3', name: 'Build box' }];
+    const access = [{ id: 'm2', name: 'Laptop', remote: null }];
     const fleet = {
       ...local,
       listUnreachableMachines: () => unreachable,
+      listMachineAccess: () => access,
       selectMachine: (id: string) => (id === 'task-1' ? machine : null),
       listMachines: () => machines,
     };
@@ -735,6 +739,7 @@ describe('the shared connection', () => {
     expect(connection).toBe(fleet);
     expect(renderHook(() => useMachines()).result.current).toBe(machines);
     expect(renderHook(() => useUnreachableMachines()).result.current).toBe(unreachable);
+    expect(renderHook(() => useMachineAccess()).result.current).toBe(access);
     expect(renderHook(() => useMachine('task-1')).result.current).toBe(machine);
     expect(renderHook(() => useMachine(null)).result.current).toBeNull();
     replaceConnection(null);

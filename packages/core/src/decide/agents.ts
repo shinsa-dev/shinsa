@@ -31,6 +31,7 @@ import {
 } from './checks.ts';
 import type { Decider } from './decider.ts';
 import { reactToFindings } from './fixes.ts';
+import { answerIteration } from './iterations.ts';
 import { isLastPhase, needsPlanApproval, resolveCurrentPhase } from './lifecycle.ts';
 import { requestPush } from './pull-requests.ts';
 import { findCurrentRun } from './runs.ts';
@@ -88,7 +89,7 @@ export function proposePlan(decider: Decider, command: CommandOf<'agent.propose_
     return;
   }
   decider.stage(task.id, 'awaiting_plan', proposed.backlog ? BACKLOG_REASON : PLAN_READY_REASON);
-  decider.openGate(task.id, 'plan', task.title, body, {
+  decider.openGate(task.id, 'plan', command.document.title ?? task.title, body, {
     details: { planVersion: proposed.plan?.version ?? 1 },
   });
 }
@@ -251,6 +252,7 @@ export function completeFix(decider: Decider, command: CommandOf<'agent.complete
   assertEvidenceAccounted(decider, task, run, command.files ?? [], command.evidenceKept ?? []);
   const done = new Set(task.phaseReports.map((report) => report.index)).size;
   const changes = resolveCheckChanges(decider, task, command.checkChanges ?? [], done);
+  answerIteration(decider, task, run.id, command.reply ?? null);
   recordTree(decider, task.id, command.treeHash);
   decider.emit({ type: 'task.noted', taskId: task.id, note: command.summary, runId: run.id });
   if (command.walkthrough) {

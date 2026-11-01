@@ -27,6 +27,7 @@ import {
   VERB_CATALOG,
 } from './lint-rules.ts';
 import { RAW_SELECTION_MESSAGE, RAW_SELECTION_PATTERN } from './lint-selection.ts';
+import { listToastViolations } from './lint-toast.ts';
 
 type Violation = { file: string; line: number; message: string };
 
@@ -548,7 +549,7 @@ function parseSource(file: string, source: string) {
   }) as unknown as { program: BabelNode; comments?: BabelComment[] | null };
 }
 
-function checkFile(file: string, violations: Violation[]): void {
+function checkFile(file: string, violations: Violation[], appSources: Record<string, string>): void {
   const source = readFileSync(file, 'utf8');
   let parsed: ReturnType<typeof parseSource>;
   try {
@@ -569,13 +570,16 @@ function checkFile(file: string, violations: Violation[]): void {
     for (const violation of listDisclosureViolations(source)) violations.push({ file, ...violation });
   }
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
+  if (isUnder(file, APP)) appSources[file] = source;
 }
 
 function run(): void {
   const violations: Violation[] = [];
+  const appSources: Record<string, string> = {};
   for (const root of ROOTS.filter((candidate) => existsSync(candidate))) {
-    for (const file of listSourceFiles(root)) checkFile(file, violations);
+    for (const file of listSourceFiles(root)) checkFile(file, violations, appSources);
   }
+  violations.push(...listToastViolations(appSources));
   for (const sheet of APP.flatMap((root) => listStyleSheets(root)))
     collectRawSelection(sheet, readFileSync(sheet, 'utf8'), violations);
   if (violations.length === 0) return;

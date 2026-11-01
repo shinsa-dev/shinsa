@@ -146,6 +146,21 @@ describe('the shinsa tool server', () => {
     expect(fixWalkthrough.properties).toBe(phase.walkthrough.properties);
     expect('required' in fixWalkthrough).toBe(false);
     expect(TOOL_SPECS.complete_fix.inputSchema.required).toEqual(['summary']);
+    const reply = TOOL_SPECS.complete_fix.inputSchema.properties.reply;
+    expect(reply.required).toEqual(['headline', 'points']);
+    expect(reply.properties.headline.maxLength).toBe(PROTOCOL_LIMITS.replyHeadline);
+    expect(reply.properties.points).toMatchObject({ minItems: 1, maxItems: PROTOCOL_LIMITS.replyPoints });
+    expect(reply.properties.points.items.properties.outcome.enum).toEqual([
+      'done',
+      'answered',
+      'not_changed',
+    ]);
+    expect(reply.properties.points.items.properties.ask.maxLength).toBe(PROTOCOL_LIMITS.replyAsk);
+    expect(reply.properties.points.items.properties.note.maxLength).toBe(PROTOCOL_LIMITS.replyNote);
+    expect(reply.properties.points.items.required).toEqual(['ask', 'outcome', 'note']);
+    expect(reply.properties.next.maxLength).toBe(PROTOCOL_LIMITS.replyNext);
+    expect('details' in reply.properties).toBe(false);
+    expect(steps.items.properties.detail.description).toContain('in markdown');
     const call = TOOL_SPECS.complete_phase.inputSchema.properties.judgement_calls.items.properties;
     expect(call.file.maxLength).toBe(PROTOCOL_LIMITS.path);
     expect(call.call.maxLength).toBe(PROTOCOL_LIMITS.call);
@@ -188,6 +203,12 @@ describe('the plan parameters propose_plan publishes', () => {
     expect('checks' in plan).toBe(false);
     expect(plan.approval.type).toBe('boolean');
     expect(TOOL_SPECS.propose_plan.inputSchema.required).not.toContain('impact');
+  });
+
+  test('a new title is optional, within the task title limit, and only for work that moved away from its title', () => {
+    expect(plan.title).toMatchObject({ type: 'string', maxLength: PROTOCOL_LIMITS.taskTitle });
+    expect(plan.title.description).toContain('Leave it out while the title still fits');
+    expect(TOOL_SPECS.propose_plan.inputSchema.required).not.toContain('title');
   });
 
   test('each check in the plan is a label, a scoped command and its phases, within the protocol limits', () => {

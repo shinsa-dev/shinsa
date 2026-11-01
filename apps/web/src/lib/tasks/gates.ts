@@ -30,18 +30,18 @@ const GATE_REPLY = {
   approveOperationPlan: { decision: 'approve', done: 'Approved. Running the operation now.' },
   startBacklog: {
     decision: 'approve',
-    done: 'Started. The worktree moves onto the latest default branch, then building begins.',
+    done: 'Started. Updating the worktree.',
   },
   revisePlan: { decision: 'revise', done: 'Sent back to the agent.' },
   approveChanges: { decision: 'approve', done: 'Approved. Opening the pull request.' },
   pushChanges: { decision: 'approve', done: 'Approved. Pushing the changes.' },
-  approveEdits: { decision: 'approve', done: 'Approved. Committing your edits and running the checks.' },
+  approveEdits: { decision: 'approve', done: 'Approved. Committing your edits.' },
   requestChanges: { decision: 'revise', done: 'Sent back to the agent.' },
   fixFindings: { decision: 'revise', done: 'Sent. The agent works on what you kept.' },
   merge: { decision: 'approve', done: 'Approved. Merging the pull request.' },
   mergeEdits: {
     decision: 'approve',
-    done: 'Approved. Pushing your edits. The pull request merges once CI passes.',
+    done: 'Approved. Merging once CI passes.',
   },
   makeChange: { decision: 'approve', done: 'Approved. Planning the change now.' },
   planOperation: { decision: 'approve', done: 'Approved. Planning the operation now.' },
@@ -50,6 +50,7 @@ const GATE_REPLY = {
   runOperationWithNotes: { decision: 'reply', done: 'Running the operation with your notes.' },
   runOperationWithoutNotes: { decision: 'reply', done: 'Running the operation without notes.' },
   skipOperation: { decision: 'reject', done: 'Finished without running the operation.' },
+  closeResult: { decision: 'approve', done: 'Closed. The task is done.' },
 } as const satisfies Record<string, { decision: GateDecision; done: string }>;
 
 export type GateReply = keyof typeof GATE_REPLY;

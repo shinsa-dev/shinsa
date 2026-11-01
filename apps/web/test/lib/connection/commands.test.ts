@@ -60,14 +60,9 @@ describe('sendCommandWithToast', () => {
 });
 
 describe('requestWithToast', () => {
-  it('confirms a request with a title and a description', async () => {
-    expect(
-      await requestWithToast(async () => {}, {
-        title: 'Imported.',
-        description: 'Take it out of claude-swap.',
-      })
-    ).toBe(true);
-    expect(toasts.success).toHaveBeenCalledWith('Imported.', { description: 'Take it out of claude-swap.' });
+  it('confirms a request with one line', async () => {
+    expect(await requestWithToast(async () => {}, 'Imported.')).toBe(true);
+    expect(toasts.success).toHaveBeenCalledWith('Imported.');
   });
 });
 

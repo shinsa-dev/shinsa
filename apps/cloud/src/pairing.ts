@@ -1,5 +1,6 @@
 import {
   APP_IDENTITY,
+  isSameSecret,
   type MachineCredentials,
   type PairApproveResponse,
   type PairPollResponse,
@@ -11,7 +12,7 @@ import {
   resolveTunnelHost,
 } from '@shinsa/core';
 import { createCloudflare } from './cloudflare.ts';
-import { createClaimCode, createInstanceId, createToken, isSameSecret, resolveTokenHash } from './crypto.ts';
+import { createClaimCode, createInstanceId, createToken, resolveTokenHash } from './crypto.ts';
 import type { PairSessionRow } from './database.ts';
 import { CloudError, readJsonFields, readText, respondJson } from './http.ts';
 import { findPageUser, findSessionUser } from './session.ts';
@@ -114,7 +115,7 @@ export async function respondPairView(request: Request, claimCode: string, world
 export async function respondPairApprove(request: Request, claimCode: string, world: CloudWorld) {
   const user = await findPageUser(request, world);
   const row = await findLivePairSession(claimCode, world);
-  if ((await world.store.listUserInstances(user.id)).length >= MAX_INSTANCES_PER_USER)
+  if ((await world.store.countOwnedInstances(user.id)) >= MAX_INSTANCES_PER_USER)
     throw new CloudError(
       'instances_full',
       `You can pair up to ${MAX_INSTANCES_PER_USER} machines. Remove one on the dashboard first.`,

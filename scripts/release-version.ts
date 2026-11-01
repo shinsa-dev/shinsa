@@ -27,8 +27,6 @@ export const BETA_DOWNLOAD_URL = 'https://shinsa.dev/download/beta';
 
 export const CANARY_DOWNLOAD_URL = 'https://shinsa.dev/download/canary';
 
-export const CANARIES_KEPT = 5;
-
 export const CANARY_IGNORED_PATHS = [
   'docs/**',
   'apps/marketing/**',
@@ -135,11 +133,4 @@ export function describeCanaryDecision(decision: CanaryDecision) {
   const shown = decision.files.slice(0, 5).map((file) => `\`${file}\``);
   const more = decision.files.length - shown.length;
   return `Building a canary: since ${decision.base}, ${shown.join(', ')}${more > 0 ? ` and ${more} more` : ''} changed.`;
-}
-
-export function listStaleCanaries(versions: readonly string[], kept = CANARIES_KEPT) {
-  return versions
-    .filter((tag) => CANARY_TAG.test(tag))
-    .sort((a, b) => resolveVersionOrder(b, a) ?? 0)
-    .slice(kept);
 }

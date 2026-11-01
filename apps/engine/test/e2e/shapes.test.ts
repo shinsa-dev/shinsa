@@ -55,12 +55,12 @@ function listTaskRecord(w: World, taskId: string) {
 }
 
 describe('an inquiry has no verification steps', () => {
-  test('an answer and a research task run end to end with no checks, reviews, gates or pull request', async () => {
+  test('an answer and a research task run end to end with no checks, reviews or pull request, and wait for you to close them', async () => {
     const w = await open();
     const answer = await createShapedTask(w, 'Where does the greeting live?', 'answer');
     const research = await createShapedTask(w, 'Compare ways to store the greetings', 'research');
-    await w.untilStage(answer, 'done');
-    await w.untilStage(research, 'done');
+    await w.untilStage(answer, 'answered');
+    await w.untilStage(research, 'answered');
     for (const [taskId, step] of [
       [answer, 'answer'],
       [research, 'research'],
@@ -73,12 +73,15 @@ describe('an inquiry has no verification steps', () => {
         pullRequest: null,
       });
       const { gates, effects } = listTaskRecord(w, taskId);
-      expect(gates).toEqual([]);
+      expect(gates.map((event) => event.type === 'gate.opened' && event.gate.type)).toEqual(['result']);
       expect(effects).toContain('task.triage');
       expect(effects.filter((kind) => kind === 'checks.run' || kind.startsWith('pull_request.'))).toEqual([]);
     }
     expect(w.agents.sessions.map((session) => session.key).sort()).toEqual(['answerer', 'researcher']);
     expect(w.github.calls).toEqual([]);
+    await w.answer(await w.untilGate(answer, 'result'), 'approve');
+    await w.untilStage(answer, 'done');
+    expect(w.task(answer).stageReason).toBe('closed by you');
   });
 });
 
@@ -86,7 +89,7 @@ describe('the shapes a task can take', () => {
   test('a question is answered from the repository itself, and a follow-up goes to the same answerer', async () => {
     const w = await open();
     const taskId = await createShapedTask(w, 'Where does the greeting live?', 'answer');
-    await w.untilStage(taskId, 'done');
+    await w.untilStage(taskId, 'answered');
     expect(w.task(taskId)).toMatchObject({
       pipeline: ['answer'],
       result: { step: 'answer', body: 'It lives in a.txt.' },
@@ -102,7 +105,7 @@ describe('the shapes a task can take', () => {
       'the follow-up answer',
       () => w.task(taskId).result?.body === 'And b.txt holds the second one.'
     );
-    await w.untilStage(taskId, 'done');
+    await w.untilStage(taskId, 'answered');
     const [first, second] = w.agents.of('answerer');
     expect(first?.cwd).toBe(w.state.repos[w.repoId]?.path ?? '');
     expect(second?.resume).toBe(first?.sessionId ?? '');
@@ -140,7 +143,7 @@ describe('the shapes a task can take', () => {
       waits_on_why: 'No open task touches the greetings.',
     });
     const taskId = await w.createTask('Why are the greetings missing?');
-    await w.untilStage(taskId, 'done');
+    await w.untilStage(taskId, 'answered');
     expect(w.task(taskId)).toMatchObject({
       pipeline: ['investigate'],
       priority: 'high',
@@ -163,7 +166,7 @@ describe('the shapes a task can take', () => {
     expect(w.agents.sessions.map((session) => session.key)).toEqual(['investigator']);
   });
 
-  test('an investigation reports its diagnosis and finishes with no worktree left and no pull request', async () => {
+  test('an investigation reports its diagnosis, and closing it leaves no worktree and no pull request', async () => {
     const w = await open();
     let worktree = '';
     w.agents.queue('investigator', async (agent) => {
@@ -172,6 +175,8 @@ describe('the shapes a task can take', () => {
       await agent.call('report_diagnosis', { diagnosis: 'The greeting files were never written.' });
     });
     const taskId = await createShapedTask(w, 'Find out why the greetings are missing', 'investigate');
+    await w.untilStage(taskId, 'answered');
+    await w.answer(await w.untilGate(taskId, 'result'), 'approve');
     await w.untilStage(taskId, 'done');
     await w.until('the worktree to go', () => w.task(taskId).worktreePath === null && !existsSync(worktree));
     expect(w.task(taskId)).toMatchObject({
@@ -239,7 +244,7 @@ describe('the shapes a task can take', () => {
   test('research runs in the repository itself and finishes with its report', async () => {
     const w = await open();
     const taskId = await createShapedTask(w, 'Compare ways to store the greetings', 'research');
-    await w.untilStage(taskId, 'done');
+    await w.untilStage(taskId, 'answered');
     expect(w.task(taskId)).toMatchObject({
       result: { step: 'research', body: 'Plain text files are the simplest option.' },
       worktreePath: null,

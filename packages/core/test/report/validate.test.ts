@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  listHeldSourceRequests,
   PROTOCOL_LIMITS,
   type Validation,
   validateDelivery,
@@ -557,12 +558,65 @@ describe('validateFixHandOver', () => {
   test('needs a summary', () => {
     expect(readValue(validateFixHandOver({ summary: 'Fixed CI.' }))).toEqual({
       summary: 'Fixed CI.',
+      reply: null,
       walkthrough: null,
       checks: [],
       checkChanges: [],
       evidenceKept: [],
     });
     expect(errorsOf(validateFixHandOver({}))).toEqual(['summary is required.']);
+  });
+
+  test('reads the reply to the human: a headline, each point with its outcome, then what to do', () => {
+    expect(
+      readValue(
+        validateFixHandOver({
+          summary: 'Moved Slack.',
+          reply: {
+            headline: ' Slack is under Remote access now. ',
+            points: [
+              { ask: 'Move Slack', outcome: 'done', note: 'Settings → General.' },
+              { ask: 'Does it need a setting?', outcome: 'answered', note: 'Agents & AI Apps.' },
+            ],
+            next: 'Restart the engine.',
+          },
+        })
+      ).reply
+    ).toEqual({
+      headline: 'Slack is under Remote access now.',
+      points: [
+        { ask: 'Move Slack', outcome: 'done', note: 'Settings → General.' },
+        { ask: 'Does it need a setting?', outcome: 'answered', note: 'Agents & AI Apps.' },
+      ],
+      next: 'Restart the engine.',
+    });
+  });
+
+  test('names every broken part of a reply', () => {
+    expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', reply: 'Done.' }))).toEqual([
+      'reply must be an object.',
+      'reply.headline is required.',
+      'reply.points must be a list.',
+    ]);
+    expect(
+      errorsOf(
+        validateFixHandOver({
+          summary: 'Fixed.',
+          reply: {
+            headline: 'x'.repeat(PROTOCOL_LIMITS.replyHeadline + 1),
+            points: [{ ask: '', outcome: 'maybe', note: 'x'.repeat(PROTOCOL_LIMITS.replyNote + 1) }],
+          },
+        })
+      )
+    ).toEqual([
+      `reply.headline is ${PROTOCOL_LIMITS.replyHeadline + 1} characters; the limit is ${PROTOCOL_LIMITS.replyHeadline}.`,
+      'reply.points[0].ask is required.',
+      'reply.points[0].outcome must be one of done, answered, not_changed.',
+      `reply.points[0].note is ${PROTOCOL_LIMITS.replyNote + 1} characters; the limit is ${PROTOCOL_LIMITS.replyNote}.`,
+    ]);
+    expect(
+      errorsOf(validateFixHandOver({ summary: 'Fixed.', reply: { headline: 'Did it.', points: [] } }))
+    ).toEqual(['reply.points needs at least 1 item.']);
   });
 
   test('names the earlier evidence that still applies, each once', () => {
@@ -836,6 +890,18 @@ describe('the plan parameters', () => {
     });
     const bare = validatePlanHandOver({ ...plan, approval: false });
     expect(bare.ok && Object.keys(bare.value.document)).not.toContain('approval');
+  });
+
+  test('keeps a new title for the task only when the agent gives one, within its limit', () => {
+    const titled = validatePlanHandOver({ ...plan, title: ' Add the scroll settings page ' });
+    expect(titled.ok && titled.value.document.title).toBe('Add the scroll settings page');
+    for (const title of [undefined, '']) {
+      const untitled = validatePlanHandOver({ ...plan, title });
+      expect(untitled.ok && Object.keys(untitled.value.document)).not.toContain('title');
+    }
+    expect(errorsOf(validatePlanHandOver({ ...plan, title: 'x'.repeat(61) }))).toEqual([
+      'title is 61 characters; the limit is 60.',
+    ]);
   });
 
   test('refuses an unknown or repeated kind of evidence and an approval that is not a flag', () => {
@@ -1371,6 +1437,70 @@ describe('watchdogs in the walkthrough', () => {
       'walkthrough.watchdogs[0].production_check is required when it starts on production: how to tell the merged change is live there.',
       'walkthrough.watchdogs[1].starts must be one of merge, production.',
     ]);
+  });
+});
+
+describe('a source request for a server the agent already has', () => {
+  function requestFor(suggestions: string[], evidence = 'apps/marketing serves /updates on a Worker.') {
+    return (
+      readValue(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          walkthrough: {
+            ...WATCHED,
+            watchdogs: [
+              LATENCY,
+              { ...EVENTS, source_request: { data: 'Worker logs', evidence, suggestions } },
+            ],
+          },
+        })
+      ).walkthrough?.watchdogs ?? []
+    );
+  }
+
+  test('is refused for each held server a suggestion names, by its whole name in any case', () => {
+    expect(
+      listHeldSourceRequests(requestFor(['Cloudflare’s official MCP server', 'Composio’s MAPLE toolkit']), [
+        'Cloudflare',
+        'maple',
+        'kampala',
+      ])
+    ).toEqual([
+      'walkthrough.watchdogs[1].source_request suggests `Cloudflare`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked Cloudflare” and why it falls short.',
+      'walkthrough.watchdogs[1].source_request suggests `maple`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked maple” and why it falls short.',
+    ]);
+  });
+
+  test('is refused when the evidence only mentions the server without saying it was checked', () => {
+    expect(
+      listHeldSourceRequests(
+        requestFor(
+          ['Cloudflare’s official MCP server'],
+          'serves /updates/* from the site Cloudflare Worker. Checked maple.'
+        ),
+        ['Cloudflare']
+      )
+    ).toHaveLength(1);
+  });
+
+  test('passes a server named only inside another word, one the evidence explains, and a watchdog with a source', () => {
+    expect(
+      listHeldSourceRequests(requestFor(['Cloudflare-logs MCP', 'Mapleton analytics']), [
+        'Cloudflare',
+        'maple',
+      ])
+    ).toEqual([]);
+    expect(
+      listHeldSourceRequests(
+        requestFor(
+          ['Cloudflare’s official MCP server'],
+          'apps/marketing logs on Cloudflare; I checked Cloudflare: it sees only another account.'
+        ),
+        ['Cloudflare']
+      )
+    ).toEqual([]);
+    expect(listHeldSourceRequests([], ['Cloudflare'])).toEqual([]);
+    expect(listHeldSourceRequests(requestFor(['PostHog’s MCP server']), ['c++ (beta)'])).toEqual([]);
   });
 });
 

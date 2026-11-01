@@ -23,6 +23,7 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     allowedHosts: ['localhost', '127.0.0.1', '[::1]'],
     roots: [root],
     inspect: false,
+    simulateMissing: [],
     editor: null,
     terminal: 'Terminal',
     settleDelayMs: 3_600_000,

@@ -20,10 +20,10 @@ export function resolveAcceptedFiles<T extends Pick<File, 'size'>>(files: T[], a
   const room = Math.max(0, ATTACHMENT_COUNT_LIMIT - attached);
   const accepted = fitting.slice(0, room);
   if (fitting.length < files.length) {
-    return { accepted, refusal: 'Each file must be between 1 byte and 25 MB.' };
+    return { accepted, refusal: 'Each file must be 1 byte to 25 MB.' };
   }
   if (accepted.length < fitting.length) {
-    return { accepted, refusal: `Attach at most ${ATTACHMENT_COUNT_LIMIT} files to one message.` };
+    return { accepted, refusal: `Attach at most ${ATTACHMENT_COUNT_LIMIT} files.` };
   }
   return { accepted, refusal: null };
 }

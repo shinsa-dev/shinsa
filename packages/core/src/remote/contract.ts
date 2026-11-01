@@ -27,7 +27,15 @@ export const REMOTE_PATHS = {
   signInToken: '/__remote/sign-in/token',
   shares: '/__remote/shares',
   sharePage: '/share/t',
+  machineInvites: '/__remote/machine/invites',
+  machineInviteRemove: '/__remote/machine/invites/remove',
+  machineRequester: '/__remote/machine/requesters/find',
+  machineMemberAdd: '/__remote/machine/members/add',
+  machineMemberRemove: '/__remote/machine/members/remove',
+  inviteAccept: '/__remote/invites/accept',
 } as const;
+
+export const MAX_INSTANCE_MEMBERS = 20;
 
 export const REMOTE_NATIVE_CLIENT = 'native';
 
@@ -69,9 +77,28 @@ export interface HeartbeatRequest {
   version: string;
 }
 
-export interface HeartbeatResponse {
+export interface RemoteUser {
+  id: string;
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+export interface RemoteMember {
+  user: RemoteUser;
+  addedAt: number;
+}
+
+export interface RemoteAccess {
+  owner: RemoteUser;
+  members: RemoteMember[];
+}
+
+export interface HeartbeatResponse extends RemoteAccess {
   ok: true;
 }
+
+export type RemoteRole = 'owner' | 'member';
 
 export interface RemoteInstance {
   id: string;
@@ -80,13 +107,33 @@ export interface RemoteInstance {
   online: boolean;
   lastSeenAt: number | null;
   createdAt: number;
+  owner: RemoteUser;
+  role: RemoteRole;
 }
 
 export interface RemoteSession {
-  user: { id: string; login: string; avatarUrl: string | null } | null;
+  user: RemoteUser | null;
 }
 
-export type RemoteUser = NonNullable<RemoteSession['user']>;
+export interface InviteCreateResponse {
+  token: string;
+}
+
+export interface InviteAcceptRequest {
+  token: string;
+}
+
+export interface InviteAcceptResponse {
+  instanceId: string;
+  name: string;
+  owner: RemoteUser;
+  user: RemoteUser;
+  connect: ConnectResponse;
+}
+
+export interface MemberRequest {
+  userId: string;
+}
 
 export interface NativeSignInTokenRequest {
   code: string;
@@ -140,6 +187,10 @@ export function resolveInstanceRemovePath(instanceId: string) {
   return `${resolveInstancePath(instanceId)}/remove`;
 }
 
+export function resolveInstanceLeavePath(instanceId: string) {
+  return `${resolveInstancePath(instanceId)}/leave`;
+}
+
 export function resolveRemoteHookUrl(
   instanceId: string,
   scheduleId: string,
@@ -157,22 +208,24 @@ export function parseRemoteHookPath(pathname: string) {
   return { instanceId, enginePath: `${REMOTE_ENGINE_HOOK_PREFIX}${scheduleId}/${token}` };
 }
 
-export function serializeEnrollFragment(instanceId: string, machineKey: string, secret: string) {
-  return [instanceId, machineKey, secret].join('.');
+export interface EnrollFragment {
+  instanceId: string;
+  machineKey: string;
+  secret: string;
+  invite: string;
 }
 
-export function parseEnrollFragment(fragment: string) {
+export function serializeEnrollFragment(fragment: EnrollFragment) {
+  return [fragment.instanceId, fragment.machineKey, fragment.secret, fragment.invite].join('.');
+}
+
+export function parseEnrollFragment(fragment: string): EnrollFragment | null {
   const parts = fragment.replace(/^#/, '').split('.');
-  if (parts.length !== 3 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) return null;
-  const [instanceId, machineKey, secret] = parts as [string, string, string];
-  return { instanceId, machineKey, secret };
+  if (parts.length !== 4 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) return null;
+  const [instanceId, machineKey, secret, invite] = parts as [string, string, string, string];
+  return { instanceId, machineKey, secret, invite };
 }
 
-export function resolveEnrollUrl(
-  instanceId: string,
-  machineKey: string,
-  secret: string,
-  origin: string = REMOTE_APP_ORIGIN
-) {
-  return `${origin}${REMOTE_PATHS.enrollPage}#${serializeEnrollFragment(instanceId, machineKey, secret)}`;
+export function resolveEnrollUrl(fragment: EnrollFragment, origin: string = REMOTE_APP_ORIGIN) {
+  return `${origin}${REMOTE_PATHS.enrollPage}#${serializeEnrollFragment(fragment)}`;
 }

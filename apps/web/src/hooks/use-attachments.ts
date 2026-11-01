@@ -6,6 +6,12 @@ import {
   resolveAcceptedFiles,
   resolveDraftKind,
 } from '@/lib/chat/attachment-drafts.ts';
+import {
+  resolveTaskDraft,
+  subscribeTaskDrafts,
+  taskDraftFiles,
+  updateTaskDraft,
+} from '@/lib/chat/task-drafts.ts';
 import { listTransferFiles, requestAttachmentUpload } from '@/lib/connection/attachments.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
 
@@ -39,9 +45,29 @@ function useDraftPreviews(drafts: AttachmentDraft[], files: Map<string, File>) {
   );
 }
 
-export function useAttachments() {
-  const [held, setHeld] = React.useState<AttachmentDraft[]>([]);
-  const files = React.useRef(new Map<string, File>()).current;
+type HeldChange = (current: AttachmentDraft[]) => AttachmentDraft[];
+
+const NO_DRAFTS: AttachmentDraft[] = [];
+
+function useHeldAttachments(draftKey: string | undefined) {
+  const [local, setLocal] = React.useState<AttachmentDraft[]>(NO_DRAFTS);
+  const localFiles = React.useRef(new Map<string, File>()).current;
+  const shared = React.useSyncExternalStore(subscribeTaskDrafts, () =>
+    draftKey === undefined ? NO_DRAFTS : resolveTaskDraft(draftKey).attachments
+  );
+  const setShared = React.useCallback(
+    (change: HeldChange) => {
+      if (draftKey === undefined) return;
+      updateTaskDraft(draftKey, (draft) => ({ attachments: change(draft.attachments) }));
+    },
+    [draftKey]
+  );
+  if (draftKey === undefined) return { held: local, setHeld: setLocal, files: localFiles };
+  return { held: shared, setHeld: setShared, files: taskDraftFiles };
+}
+
+export function useAttachments(draftKey?: string) {
+  const { held, setHeld, files } = useHeldAttachments(draftKey);
   const latest = React.useRef(held);
   latest.current = held;
   const drafts = useDraftPreviews(held, files);
@@ -51,7 +77,7 @@ export function useAttachments() {
       files.delete(key);
       setHeld((current) => current.filter((draft) => draft.key !== key));
     },
-    [files]
+    [files, setHeld]
   );
 
   const upload = React.useCallback(
@@ -60,11 +86,11 @@ export function useAttachments() {
         const stored = await requestAttachmentUpload(file);
         setHeld((current) => current.map((draft) => (draft.key === key ? { ...draft, stored } : draft)));
       } catch (error) {
-        toast.error(`Couldn’t attach ${file.name || 'the file'}: ${describeFailure(error)}`);
+        toast.error(describeFailure(error));
         remove(key);
       }
     },
-    [remove]
+    [remove, setHeld]
   );
 
   const add = React.useCallback(
@@ -88,13 +114,13 @@ export function useAttachments() {
       setHeld((current) => [...current, ...added.map((entry) => entry.draft)]);
       for (const { file, draft } of added) void upload(draft.key, file);
     },
-    [files, upload]
+    [files, setHeld, upload]
   );
 
   const clear = React.useCallback(() => {
-    files.clear();
-    setHeld([]);
-  }, [files]);
+    for (const draft of latest.current) files.delete(draft.key);
+    setHeld(() => []);
+  }, [files, setHeld]);
 
   const addTransfer = React.useCallback(
     (transfer: DataTransfer | null) => {

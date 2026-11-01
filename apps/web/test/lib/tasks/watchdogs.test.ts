@@ -178,7 +178,7 @@ describe('watchdog actions', () => {
       [{ type: 'watchdog.stop', taskId: 't', watchdogId: 'w' }, 'Stopped the watchdog “Checkout latency”.'],
       [
         { type: 'watchdog.connect', taskId: 't', watchdogId: 'w', server: ' posthog ', data: 'Events' },
-        'Connected posthog. The watchdog starts watching.',
+        'Connected posthog.',
       ],
       [{ type: 'watch_source.remove', projectId: 'p', server: 'maple' }, 'Removed maple from the project.'],
     ] as never);

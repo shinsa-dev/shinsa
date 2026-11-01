@@ -114,6 +114,15 @@ describe('a merge gate with steps before it', () => {
   });
 });
 
+describe('an answered task', () => {
+  it('is a blue Answered, with the answered glyph', () => {
+    expect(resolveGateGlyph(gate({ type: 'result' }))).toEqual({ icon: 'IconBubbleCheck', tone: 'blue' });
+    const { state, task } = withGate({ type: 'result' }, { stage: 'answered' });
+    expect(resolveTaskStatus(state, task)).toEqual({ label: 'Answered', tone: 'blue' });
+    expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconBubbleCheck', tone: 'blue' });
+  });
+});
+
 describe('a proposed change', () => {
   it('is a purple decision to approve, like a plan', () => {
     expect(resolveGateGlyph(gate({ type: 'proposal' }))).toEqual({ icon: 'IconFileEdit', tone: 'purple' });
@@ -420,5 +429,15 @@ describe('ATTENTION', () => {
     expect(ATTENTION.critical).toEqual({ label: 'Critical', tone: 'red' });
     expect(ATTENTION.high).toEqual({ label: 'Read carefully', tone: 'amber' });
     expect(ATTENTION.normal).toEqual({ label: 'Context', tone: 'neutral' });
+  });
+});
+
+describe('a duplicate', () => {
+  it('shows Duplicate with its own icon instead of Cancelled', () => {
+    const task = createTask({ id: 't', stage: 'cancelled', duplicate: { of: 'o', by: 'shinsa', why: null } });
+    const state = createShinsaState({ tasks: [task] });
+    expect(resolveTaskStatus(state, task)).toEqual({ label: 'Duplicate', tone: 'neutral' });
+    expect(resolveTaskStatusIcon(state, task)).toBe('IconSquareBehindSquare2');
+    expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconSquareBehindSquare2', tone: 'neutral' });
   });
 });

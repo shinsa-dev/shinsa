@@ -11,6 +11,7 @@ import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { applyNowTarget, type TaskView, useTaskView } from '@/hooks/use-task-view.ts';
 import { selectWatchOfHome } from '@/lib/automations.ts';
+import { removeCarriedCaret } from '@/lib/chat/task-drafts.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
 import { replaceRoute, resolveAutomationPath, resolveCanonicalTaskPath } from '@/router.ts';
@@ -159,6 +160,13 @@ function useCanonicalPath(state: ShinsaState, task: Task | null, segment: string
   }, [path]);
 }
 
+function useCarryEndsWithPage(taskId: string | null) {
+  React.useEffect(() => {
+    if (!taskId) return;
+    return () => removeCarriedCaret(taskId);
+  }, [taskId]);
+}
+
 export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string }) {
   const resolved = selectTaskByReference(state, taskId);
   const view = useTaskView(state, resolved?.id ?? taskId);
@@ -166,6 +174,7 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
   useCanonicalPath(state, task, taskId);
   usePrefetchCode(task, view.tabs, view.tab);
   usePrefetchTaskPage(state, task?.id ?? null);
+  useCarryEndsWithPage(task?.id ?? null);
   if (!task) {
     return <EmptyState icon='IconInboxEmpty' title='No such task' description='It may have been removed.' />;
   }

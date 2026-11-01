@@ -1,17 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { TerminalInfo } from '@shinsa/core';
 import { ConfigStore } from '../../src/config/index.ts';
-import { type CommandRunner, Onboarding } from '../../src/onboarding/index.ts';
+import { type CommandRunner, type InstallTerminals, Onboarding } from '../../src/onboarding/index.ts';
 import { PRIVACY_SETTINGS_URL, PrivateFoldersError, resolveChosenRoots } from '../../src/onboarding/roots.ts';
 import { Roots } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
-import { createTempDir, createTestConfig } from '../helpers/index.ts';
+import { createTempDir, createTestConfig, overrideEnv } from '../helpers/index.ts';
 
-function setup(run?: CommandRunner) {
+function setup(run?: CommandRunner, terminals?: InstallTerminals, simulateMissing: string[] = []) {
   const root = createTempDir();
-  const config = createTestConfig(root, { roots: [] });
+  const config = createTestConfig(root, { roots: [], simulateMissing });
   const engine = new Engine(new EventLog(config.databasePath));
   const store = new ConfigStore(config.configPath);
   const developer = join(root, 'Developer');
@@ -29,6 +30,7 @@ function setup(run?: CommandRunner) {
     run: run ?? (() => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false })),
     models: { listModels: () => Promise.resolve([]) },
     accounts: () => Promise.resolve([]),
+    terminals,
   });
   return { root, config, engine, store, developer, onboarding };
 }
@@ -56,7 +58,7 @@ describe('Onboarding', () => {
 
   test('saves the folders to config.json and the defaults as settings, then completes', async () => {
     const { onboarding, engine, store, developer, root } = setup();
-    expect(() => onboarding.complete()).toThrow('Choose the folders that hold your repositories first.');
+    expect(() => onboarding.complete()).toThrow('Choose your repository folders first.');
     const status = await onboarding.applySetup({
       roots: ['~/Developer', `${developer}/`],
       defaultModel: 'sonnet',
@@ -84,12 +86,12 @@ describe('Onboarding', () => {
   test('refuses a setup it cannot use, and changes nothing', async () => {
     const { onboarding, store, root } = setup();
     for (const [body, message] of [
-      [{ roots: [] }, 'Choose at least one folder that holds your repositories.'],
-      [{ roots: 'x' }, 'Choose at least one folder that holds your repositories.'],
+      [{ roots: [] }, 'Choose a folder with your repositories.'],
+      [{ roots: 'x' }, 'Choose a folder with your repositories.'],
       [{ roots: Array.from({ length: 51 }, () => root) }, 'Choose at most 50 folders.'],
       [{ roots: [3] }, 'Each folder must be a path.'],
       [{ roots: ['relative/path'] }, 'relative/path is not a full path.'],
-      [{ roots: ['/no/such/folder'] }, '/no/such/folder is not a folder on this machine.'],
+      [{ roots: ['/no/such/folder'] }, 'That is not a folder on this machine.'],
       [{ roots: [root], defaultModel: 'rm -rf' }, 'Pick a model from the list.'],
       [{ roots: [root], mergeMethod: 'fast-forward' }, 'Merge with squash, merge or rebase.'],
       [{ roots: [root], approvePlans: true }, 'Approve plans when you ask, for large plans or always.'],
@@ -103,6 +105,90 @@ describe('Onboarding', () => {
   test('checks the prerequisites with the injected runner', async () => {
     const { onboarding } = setup();
     expect((await onboarding.resolvePrerequisites()).ready).toBe(true);
+  });
+
+  test('needs Bun only when a repository in your folders uses it', async () => {
+    const run: CommandRunner = (command) =>
+      Promise.resolve({
+        ok: command[0] !== 'bun',
+        code: command[0] === 'bun' ? 127 : 0,
+        stdout: 'v1',
+        stderr: '',
+        timedOut: false,
+      });
+    const { onboarding, developer } = setup(run);
+    expect((await onboarding.resolvePrerequisites()).ready).toBe(true);
+    writeFileSync(join(developer, 'app', 'bun.lock'), '');
+    const report = await onboarding.resolvePrerequisites();
+    expect(report.ready).toBe(false);
+    expect(report.checks.find((check) => check.id === 'bun')).toMatchObject({
+      ok: false,
+      detail: 'Not installed.',
+    });
+  });
+
+  test('finds a tool installed since Shinsa started: each check puts the install folders on PATH', async () => {
+    const { onboarding, config } = setup();
+    const restore = overrideEnv({ PATH: '/usr/bin:/bin' });
+    try {
+      await onboarding.resolvePrerequisites();
+      const before = process.env.PATH;
+      expect(before?.startsWith('/usr/bin:/bin')).toBe(true);
+      mkdirSync(join(config.userHome, '.local/bin'), { recursive: true });
+      await onboarding.resolvePrerequisites();
+      expect(process.env.PATH).toBe(`${before}:${join(config.userHome, '.local/bin')}`);
+    } finally {
+      restore();
+    }
+  });
+
+  test('opens the install terminal for a check, refuses a command no help task replied with, and refuses without terminals', async () => {
+    const opened: string[] = [];
+    const terminals: InstallTerminals = {
+      snapshot: () => ({ terminals: [], services: [], home: '/' }),
+      create: (start) => ({ id: 't1', ...start }) as unknown as TerminalInfo,
+      rename: () => undefined,
+      run: (_id, command) => {
+        opened.push(command);
+      },
+      close: () => undefined,
+    };
+    const { onboarding, config } = setup(undefined, terminals);
+    expect(await onboarding.openInstall({ id: 'gh' })).toEqual({
+      terminal: expect.objectContaining({ id: 't1', cwd: config.userHome, name: 'Set up GitHub CLI' }),
+    });
+    expect(opened).toEqual([expect.stringMatching(/\|\| brew install gh; } && \{ gh auth status .*; exit$/)]);
+    expect(onboarding.openInstall({ command: 'rm -rf ~' })).rejects.toThrow(
+      'Shinsa runs only the commands the help task’s agent replied with.'
+    );
+    expect(onboarding.openInstall({ id: 3 })).rejects.toThrow(
+      'Send “id” as the check to fix, such as gh, “all” for every missing tool, or a “command” from the help task.'
+    );
+    expect(setup().onboarding.openInstall({ id: 'gh' })).rejects.toThrow(
+      'Terminals are off, so run the command yourself.'
+    );
+    expect(opened).toEqual([expect.stringMatching(/\|\| brew install gh; } && \{ gh auth status .*; exit$/)]);
+  });
+
+  test('installs every missing tool in one terminal, and a simulated machine only pretends to', async () => {
+    const opened: string[] = [];
+    const terminals: InstallTerminals = {
+      snapshot: () => ({ terminals: [], services: [], home: '/' }),
+      create: (start) => ({ id: 't1', ...start }) as unknown as TerminalInfo,
+      rename: () => undefined,
+      run: (_id, command) => {
+        opened.push(command);
+      },
+      close: () => undefined,
+    };
+    const { onboarding } = setup(undefined, terminals, ['gh', 'bun']);
+    const before = await onboarding.resolvePrerequisites();
+    expect(before.checks.filter((check) => !check.ok).map((check) => check.id)).toEqual(['gh', 'bun']);
+    await onboarding.openInstall({ all: true });
+    expect(opened[0]).toContain('Simulated setup: nothing is installed.');
+    expect(opened[0]).not.toContain('curl');
+    expect((await onboarding.resolvePrerequisites()).ready).toBe(true);
+    expect(onboarding.openInstall({ all: true })).rejects.toThrow('Every tool Shinsa needs is installed.');
   });
 
   test('resolveChosenRoots expands ~ and drops duplicates', () => {

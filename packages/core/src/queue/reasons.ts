@@ -59,6 +59,11 @@ const GATE_WORDS: Record<GateType, GateWords> = {
     reason: 'Merged, with steps left for you to do',
     why: (gate) => `Merged, and the task is done once you do the steps it left for you: ${gate.title}`,
   },
+  result: {
+    label: 'Answered',
+    reason: 'Answered and waiting for you to read it',
+    why: (gate) => `${gate.title}, and the task moves to Done once you close it`,
+  },
 };
 
 export function resolveGateWords(gate: Gate) {

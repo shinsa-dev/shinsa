@@ -101,7 +101,7 @@ describe('suggested tasks', () => {
     );
     expect(() =>
       harness.send({ type: 'suggestion.accept', taskId, suggestionId: id, waitsOnThis: false })
-    ).toThrow('This suggestion has already been added or dismissed.');
+    ).toThrow('It was already added or dismissed.');
     expect(() => harness.send({ type: 'suggestion.dismiss', taskId, suggestionId: 'nope' })).toThrow(
       'No suggestion nope'
     );
@@ -122,6 +122,6 @@ describe('suggested tasks', () => {
     const id = harness.task(cancelled).suggestions?.[0]?.id ?? '';
     expect(() =>
       harness.send({ type: 'suggestion.accept', taskId: cancelled, suggestionId: id, waitsOnThis: true })
-    ).toThrow('was cancelled, so there is nothing to wait for.');
+    ).toThrow('That task was cancelled.');
   });
 });

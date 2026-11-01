@@ -61,12 +61,8 @@ describe('recordCommandMenuError', () => {
       recordCommandMenuError({ message: 'No frame', details: 'Error: No frame\n    at CommandMenu' })
     );
     expect(open.result.current).toBe(false);
-    const [title, options] = error.mock.calls[0] as [
-      string,
-      { description: string; action: { onClick: () => void } },
-    ];
+    const [title, options] = error.mock.calls[0] as [string, { action: { onClick: () => void } }];
     expect(title).toBe(ERROR_COPY.commandMenu);
-    expect(options.description).toBe('No frame');
     options.action.onClick();
     expect(copied).toHaveBeenCalledWith('Error: No frame\n    at CommandMenu');
   });

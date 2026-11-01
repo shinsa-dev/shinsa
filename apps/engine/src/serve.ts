@@ -64,6 +64,7 @@ import {
 import { Schedules } from './schedules/index.ts';
 import { createWatchWriter } from './schedules/suggest.ts';
 import { SecretStore } from './secrets/index.ts';
+import { Slack } from './slack/index.ts';
 import {
   ATTACHMENT_REQUEST_LIMIT_BYTES,
   EventLog,
@@ -164,6 +165,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
   const shares = new Shares({ engine, remote, evidence });
+  const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
     baseUrl: () => address.url,
@@ -220,6 +222,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     terminals,
     remote,
     shares,
+    slack,
     inbox,
     quick,
     classify,
@@ -245,6 +248,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       resolveLogin,
       roots,
       services: terminals,
+      slack,
     }),
   };
 }
@@ -271,6 +275,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
       models,
       run: options.runPrerequisite,
       accounts: options.accounts ?? createOnboardingAccounts(accounts),
+      terminals: services.terminals,
     }),
     accounts,
     schedules: services.schedules,
@@ -283,6 +288,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     workspaces: services.runs.workspaces,
     remote: services.remote,
     shares: services.shares,
+    slack: services.slack,
     restarter: createLaunchdRestarter(engine, {
       byService: options.byService ?? false,
       drain: services.runs,

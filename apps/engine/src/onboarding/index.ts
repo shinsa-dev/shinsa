@@ -2,11 +2,13 @@ import { join } from 'node:path';
 import {
   DomainError,
   MERGE_METHODS,
+  type OnboardingCheck,
   type OnboardingStatus,
   PLAN_APPROVALS,
   type PlanApproval,
   type RootSuggestions,
   type Settings,
+  selectWelcomeTask,
 } from '@shinsa/core';
 import type { ModelSource } from '../agents/index.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
@@ -16,21 +18,34 @@ import { createProjectChanges } from '../projects/routes.ts';
 import type { LoginResolver, Roots } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
+import { refreshInstallFolders } from '../shell/login.ts';
 import type { AccountSource } from './accounts.ts';
-import { OnboardingSetup } from './flow.ts';
-import { type CommandRunner, resolvePrerequisites } from './prerequisites.ts';
+import { type FlowContext, OnboardingSetup } from './flow.ts';
+import {
+  INSTALL_SCRIPTS,
+  type InstallScripts,
+  type InstallTerminals,
+  openInstallAllTerminal,
+  openInstallTerminal,
+  openReplyTerminal,
+} from './install.ts';
+import { type CommandRunner, isBunUsed, resolvePrerequisites } from './prerequisites.ts';
 import {
   createChosenProjects,
   listFiledProjects,
   listProjectSuggestions,
   type ProjectSetup,
 } from './projects.ts';
+import type { ProjectRevision } from './revise.ts';
 import { requestRevision } from './revise.ts';
 import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from './roots.ts';
+import { createSetupSimulation } from './simulate.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
+import { resolveHelpRequest, resolveWelcomeBody } from './welcome.ts';
 
 export type { AccountSource, ClaudeAccount } from './accounts.ts';
 export { createSummaryAccountSource } from './accounts.ts';
+export type { InstallTerminals } from './install.ts';
 export type { CommandRunner } from './prerequisites.ts';
 
 export interface OnboardingContext {
@@ -43,6 +58,7 @@ export interface OnboardingContext {
   run?: CommandRunner;
   models: ModelSource;
   accounts: AccountSource;
+  terminals?: InstallTerminals;
 }
 
 const MODEL_ID = /^[\w.[\]-]{1,100}$/;
@@ -75,9 +91,18 @@ export class Onboarding {
   readonly #context: OnboardingContext;
   readonly setup: OnboardingSetup;
   readonly #projects: ProjectSetup;
+  readonly #run: CommandRunner;
+  readonly #scripts: InstallScripts;
 
   constructor(context: OnboardingContext) {
     this.#context = context;
+    const run = context.run ?? runCommand;
+    const simulation =
+      context.config.simulateMissing.length > 0
+        ? createSetupSimulation(context.config.simulateMissing, run)
+        : null;
+    this.#run = simulation?.run ?? run;
+    this.#scripts = simulation?.scripts ?? INSTALL_SCRIPTS;
     const { engine, resolveLogin } = context;
     this.#projects = {
       engine,
@@ -92,25 +117,13 @@ export class Onboarding {
       complete: async () => {
         await this.complete();
       },
+      requestHelp: (checks) => this.#requestHelp(checks),
+      selectWelcome: () => selectWelcomeTask(context.engine.state.tasks)?.id ?? null,
       reviseProjects: async (revision, text, choices) => {
         const suggestions = await listProjectSuggestions(this.#projects, context.roots.configured, revision);
         return requestRevision(context.ask, suggestions, revision, text, choices);
       },
-      resolveContext: (revision) => ({
-        userHome: context.config.userHome,
-        settings: context.engine.state.settings,
-        roots: context.roots.configured,
-        projectCount: Object.keys(context.engine.state.projects).length,
-        suggestRoots: () => this.listSuggestions(false),
-        suggestProjects: () => listProjectSuggestions(this.#projects, context.roots.configured, revision),
-        listFiledProjects: () => listFiledProjects(context.engine, context.roots.configured),
-        listModels: () => context.models.listModels(),
-        listAccounts: context.accounts,
-        checkPrerequisites: () => this.resolvePrerequisites(),
-        save: (patch, commandId) => this.#saveAnswer(patch, commandId),
-        createProjects: (choices, commandId) =>
-          createChosenProjects(this.#projects, context.roots.configured, choices, commandId, revision),
-      }),
+      resolveContext: (revision) => this.#resolveContext(revision),
     });
   }
 
@@ -162,23 +175,88 @@ export class Onboarding {
     return this.resolveStatus();
   }
 
-  complete() {
+  async complete() {
     const { store } = this.#context;
     if (store.config.roots.length === 0) {
-      throw new DomainError('roots_required', 'Choose the folders that hold your repositories first.');
+      throw new DomainError('roots_required', 'Choose your repository folders first.');
     }
     if (store.config.onboardedAt === null) store.update({ onboardedAt: Date.now() });
+    await this.#recordWelcome();
     return this.resolveStatus();
   }
 
+  async #recordWelcome() {
+    const { engine } = this.#context;
+    if (engine.readOnly || selectWelcomeTask(engine.state.tasks)) return;
+    const context = this.#resolveContext(null);
+    const steps = ONBOARDING_STEPS.filter((step) => step.id !== 'prerequisites');
+    const lines = await Promise.all(
+      steps.map(async (step) => ({ label: step.label, summary: await step.summarize(context) }))
+    );
+    await engine.dispatch({ type: 'onboarding.welcome', body: resolveWelcomeBody(lines) });
+  }
+
+  async #requestHelp(checks: OnboardingCheck[]) {
+    const events = await this.#context.engine.dispatch({
+      type: 'task.create',
+      request: resolveHelpRequest(checks),
+      repoId: null,
+      projectId: null,
+      mode: 'ask',
+    });
+    const created = events.find((event) => event.type === 'task.created');
+    return created?.taskId ?? null;
+  }
+
   async openPrivacySettings() {
-    const run = this.#context.run ?? runCommand;
-    const result = await run(['open', PRIVACY_SETTINGS_URL], this.#context.config.userHome);
+    const result = await this.#run(['open', PRIVACY_SETTINGS_URL], this.#context.config.userHome);
     return { ok: result.ok };
   }
 
-  resolvePrerequisites() {
-    return resolvePrerequisites(this.#context.config.userHome, this.#context.run);
+  async resolvePrerequisites() {
+    const { config, roots } = this.#context;
+    refreshInstallFolders(Bun.env, config.userHome);
+    return resolvePrerequisites(config.userHome, this.#run, { bun: isBunUsed(await roots.listRoots()) });
+  }
+
+  async openInstall(fields: JsonObject) {
+    const { terminals, config, engine } = this.#context;
+    if (typeof fields.id !== 'string' && typeof fields.command !== 'string' && fields.all !== true)
+      throw new DomainError(
+        'body_invalid',
+        'Send “id” as the check to fix, such as gh, “all” for every missing tool, or a “command” from the help task.'
+      );
+    if (!terminals) throw new DomainError('terminals_off', 'Terminals are off, so run the command yourself.');
+    if (typeof fields.id === 'string')
+      return { terminal: openInstallTerminal(terminals, fields.id, config.userHome, this.#scripts) };
+    if (fields.all === true) {
+      const report = await this.resolvePrerequisites();
+      return { terminal: openInstallAllTerminal(terminals, report.checks, config.userHome, this.#scripts) };
+    }
+    const helpId = await this.setup.selectHelp();
+    const body = (helpId && engine.state.tasks[helpId]?.result?.body) || null;
+    return {
+      terminal: openReplyTerminal(terminals, body, String(fields.command), config.userHome, this.#scripts),
+    };
+  }
+
+  #resolveContext(revision: ProjectRevision | null): FlowContext {
+    const context = this.#context;
+    return {
+      userHome: context.config.userHome,
+      settings: context.engine.state.settings,
+      roots: context.roots.configured,
+      projectCount: Object.keys(context.engine.state.projects).length,
+      suggestRoots: () => this.listSuggestions(false),
+      suggestProjects: () => listProjectSuggestions(this.#projects, context.roots.configured, revision),
+      listFiledProjects: () => listFiledProjects(context.engine, context.roots.configured),
+      listModels: () => context.models.listModels(),
+      listAccounts: context.accounts,
+      checkPrerequisites: () => this.resolvePrerequisites(),
+      save: (patch, commandId) => this.#saveAnswer(patch, commandId),
+      createProjects: (choices, commandId) =>
+        createChosenProjects(this.#projects, context.roots.configured, choices, commandId, revision),
+    };
   }
 
   async #saveAnswer(patch: SetupPatch, commandId: string) {

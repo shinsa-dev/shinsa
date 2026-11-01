@@ -15,6 +15,8 @@ const OPTIMISTIC_COMMANDS = new Set<UserCommand['type']>([
   'task.move_to_backlog',
   'task.prioritize',
   'task.remove_from_backlog',
+  'task.snooze',
+  'task.unsnooze',
   'task.wait_on',
   'usage_wait.change',
 ]);

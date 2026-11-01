@@ -44,6 +44,7 @@ import {
   DAY,
   HOUR,
   listSeedCheckResults,
+  listSeedIterations,
   MINUTE,
   NO_TRIAGE_DECISIONS,
   NOW,
@@ -2846,6 +2847,7 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
             'One blocking finding: the reconnect counter in [mcp-session.ts](shinsa://file/src/chat/mcp-session.ts#L26) resets after every successful connect, so a flaky server gets three new tries every time, and I disagree with the reconnect limit decision for the same reason. Three suggestions, on dropped connections, unlabelled tool failures and reset().\n\n[Let the embedded chat call paywall tools](shinsa://task/task-chat-tools) waits on this change, and #4531 from "Refuse to duplicate code-first paywalls" touches the same editor, so merging that first keeps the conflicts small. The work is on [feat/embedded-chat-mcp](shinsa://branch/feat/embedded-chat-mcp) in [paywall-next](shinsa://repo/paywall-next).',
         },
       ],
+      extra: listEmbeddedChatIterations(),
       gate: {
         type: 'review',
         title: 'Review the embedded chat on MCP v2',
@@ -4045,6 +4047,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         { role: 'agent', purpose: 'build', minutes: 7, summary: 'Made the row scrollable.' },
         { role: 'reviewer', minutes: 2, summary: 'One suggestion.' },
       ],
+      extra: listTabScrollIterations(),
       gate: {
         type: 'review',
         title: 'Review the tab group scroll fix',
@@ -4052,6 +4055,106 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
       },
     },
   ];
+}
+
+function listTabScrollIterations(): ShinsaEventInput[] {
+  return listSeedIterations('task-tab-scroll', 'task-tab-scroll-run-0', [
+    {
+      text: "With the scrollbar hidden I can't tell there are more tabs. Can we show that somehow? And does this work with the arrow keys?",
+      reply: {
+        headline:
+          'The row now fades at an edge while more tabs sit past it, and the arrow keys move between tabs.',
+        points: [
+          {
+            ask: 'Show that there are more tabs',
+            outcome: 'done',
+            note: 'A fade at each edge that has tabs beyond it; it goes once you reach the end.',
+          },
+          {
+            ask: 'Does it work with the arrow keys?',
+            outcome: 'answered',
+            note: 'It did not. Left and right now move the selection and scroll the new tab into view.',
+          },
+        ],
+        next: null,
+      },
+    },
+    {
+      text: 'The active tab disappears when I make the window narrower. Keep it in view, and drop the smooth scroll on first load like the review said.',
+      comments: 1,
+      reply: {
+        headline:
+          'The active tab stays in view when the row resizes, and the first render no longer animates.',
+        points: [
+          {
+            ask: 'Keep the active tab in view when the window narrows',
+            outcome: 'done',
+            note: 'A `ResizeObserver` on the row scrolls the active tab back to the centre.',
+          },
+          {
+            ask: 'No smooth scroll on first load',
+            outcome: 'done',
+            note: 'The first scroll is `instant`; only later selections are smooth.',
+          },
+          {
+            ask: 'Line comment: rename `listRef`',
+            outcome: 'not_changed',
+            note: 'It matches `rowRef` in the other tab components, so I kept the name for consistency.',
+          },
+        ],
+        next: '1. Open the paywall editor on a store with more than 20 tabs, at about 900px wide.\n2. Select the last tab, then narrow the window: it should stay centred.\n3. Reload the page on a later tab: the row should not slide.',
+      },
+    },
+  ]);
+}
+
+function listEmbeddedChatIterations(): ShinsaEventInput[] {
+  return listSeedIterations('task-embedded-chat', 'task-embedded-chat-run-0', [
+    {
+      text: 'Tool results should be collapsed by default, they push the conversation down. Also what happens if MCP v2 is down when the chat opens?',
+      reply: {
+        headline:
+          'Tool results start folded to one line, and the chat falls back to a clear error when MCP v2 is unreachable.',
+        points: [
+          {
+            ask: 'Collapse tool results by default',
+            outcome: 'done',
+            note: 'Each result is one line with its tool name and status; click it to open the full output.',
+          },
+          {
+            ask: 'What happens if MCP v2 is down when the chat opens?',
+            outcome: 'answered',
+            note: '`McpSession` retries three times over 10 seconds, then the chat shows "The assistant is offline" with a Retry button. Nothing is sent to the old `/chat` endpoint.',
+          },
+        ],
+        next: '1. Run `bun dev` in [paywall-next](shinsa://repo/paywall-next) and open the paywall editor.\n2. Ask the assistant to list products: the tool result shows as one folded line.\n3. Stop the MCP server with `bun mcp:stop` and reload: after about 10 seconds you see the offline notice.',
+      },
+    },
+  ]);
+}
+
+function listKeyRotationIterations(): ShinsaEventInput[] {
+  return listSeedIterations('task-key-rotation', 'task-key-rotation-run-0', [
+    {
+      text: 'Can customers choose how long the old key keeps working? 24 hours is short for some of our bigger accounts. And please put the pepper secret in the pre-merge steps.',
+      reply: {
+        headline: 'The overlap stays at 24 hours, and creating `API_KEY_PEPPER` is now a pre-merge step.',
+        points: [
+          {
+            ask: 'Let customers choose the overlap',
+            outcome: 'not_changed',
+            note: 'A longer overlap keeps a leaked key alive longer. I suggested a follow-up task for a per-account overlap, so it gets its own review.',
+          },
+          {
+            ask: 'Put the pepper secret in the pre-merge steps',
+            outcome: 'done',
+            note: 'Step 1 now creates `API_KEY_PEPPER` in production, with the exact command.',
+          },
+        ],
+        next: 'Tick both pre-merge steps below once they are done in production, then merge [#4548](shinsa://pr/paywall-next#4548).',
+      },
+    },
+  ]);
 }
 
 function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
@@ -4610,6 +4713,7 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       reason: 'built, checked and ready for review',
       branch: 'feat/usage-aware-defaults',
       ageHours: 70,
+      extra: [{ type: 'task.snooze_changed', taskId: 'task-usage-defaults', snoozed: true }],
       verification: [createPlanCheck('Model defaults', 'bun test src/shared/defaults.test.ts', [1, 2, 3])],
       worktreePath: defaultsPath,
       report: {
@@ -4933,6 +5037,28 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       ageHours: 120,
     },
     {
+      id: 'task-duplicate-currency',
+      request: 'paywall should show euros for german users, not dollars',
+      title: 'Show euro prices on the paywall in Germany',
+      repo: paywall,
+      size: 'small',
+      stage: 'cancelled',
+      reason: 'duplicate of “Show paywall prices in the visitor’s currency”',
+      branch: 'fix/paywall-euro-prices',
+      ageHours: 1,
+      extra: [
+        {
+          type: 'task.duplicated',
+          taskId: 'task-duplicate-currency',
+          duplicate: {
+            of: 'task-paywall-euro-prices',
+            by: 'shinsa',
+            why: 'Both show paywall prices in the store’s currency for the visitor’s region.',
+          },
+        },
+      ],
+    },
+    {
       id: 'task-closed-spinner',
       request: 'let paywalls hide the native purchase spinner',
       title: 'Hide the native purchase spinner',
@@ -5091,6 +5217,7 @@ function listMergeStepTasks({ paywall, kanna }: Pick<SeedRepos, 'paywall' | 'kan
       ],
       pullRequest: { number: 4548, checks: 'passing' },
       ticked: ['Create `API_KEY_PEPPER` in production', 'Run the `api_keys_previous` migration'],
+      extra: listKeyRotationIterations(),
       gate: {
         type: 'merge',
         title: 'Merge #4548',

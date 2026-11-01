@@ -155,8 +155,23 @@ export interface ReportWalkthrough {
 
 export type ReportWalkthroughRevision = Partial<ReportWalkthrough>;
 
+export type ReplyOutcome = 'done' | 'answered' | 'not_changed';
+
+export interface ReplyPoint {
+  ask: string;
+  outcome: ReplyOutcome;
+  note: string;
+}
+
+export interface FixReply {
+  headline: string;
+  points: ReplyPoint[];
+  next: string | null;
+}
+
 export interface FixHandOver {
   summary: string;
+  reply: FixReply | null;
   walkthrough: ReportWalkthroughRevision | null;
   checks: string[];
   checkChanges: CheckChangeHandOver[];
@@ -188,6 +203,7 @@ export interface PlanPhase {
 }
 
 export interface PlanDocument {
+  title?: string;
   goal: string;
   phases: PlanPhase[];
   behaviour: string[];

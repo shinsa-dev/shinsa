@@ -10,6 +10,7 @@ import {
 } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
@@ -24,6 +25,7 @@ import { PointIndex } from '@/components/review/point-index.tsx';
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
+import { Composer } from '@/components/task/composer.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { prepareCodeDiff } from '@/components/text/code-diff.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
@@ -60,6 +62,7 @@ import {
   toFindingItem,
 } from '@/lib/review/report.ts';
 import { type ChecksView, resolveChecksView } from '@/lib/tasks/checks.ts';
+import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
 function useReviewDiff(task: Task): Loaded<TaskDiff> {
@@ -558,6 +561,20 @@ function ReviewChapters({
   });
 }
 
+function ReviewComposer({ state, task }: { state: ShinsaState; task: Task }) {
+  const hint = resolveMessageHint(state, task);
+  if (!hint) return null;
+  return (
+    <Composer
+      draftKey={task.id}
+      placeholder={hint.placeholder}
+      submitLabel='Send message'
+      onSubmit={(text) => sendTaskMessage(task, hint, text)}
+      dock={<MessageQueue state={state} task={task} />}
+    />
+  );
+}
+
 export function ReviewTab({
   state,
   task,
@@ -618,12 +635,15 @@ export function ReviewTab({
   useRegisterCommands([listReviewCommands({ taskId: task.id, count: stops.length, step })]);
   if (!report && diff.status === 'error') {
     return (
-      <PageScroll>
-        <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
-          <p className='text-fg-2 text-xs'>{diff.message}</p>
-          <EvidenceSection state={state} task={task} showEmpty />
-        </div>
-      </PageScroll>
+      <div className='flex min-h-0 flex-1 flex-col'>
+        <PageScroll>
+          <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
+            <p className='text-fg-2 text-xs'>{diff.message}</p>
+            <EvidenceSection state={state} task={task} showEmpty />
+          </div>
+        </PageScroll>
+        <ReviewComposer state={state} task={task} />
+      </div>
     );
   }
   if (!report) {
@@ -670,6 +690,7 @@ export function ReviewTab({
           <EverythingElse task={task} report={report} diff={diffValue} />
         </div>
       </PageScroll>
+      <ReviewComposer state={state} task={task} />
     </div>
   );
 }

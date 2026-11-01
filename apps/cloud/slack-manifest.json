@@ -1,0 +1,44 @@
+{
+  "display_information": {
+    "name": "Shinsa",
+    "description": "Mention Shinsa in a thread and your own Shinsa takes the work.",
+    "long_description": "Mention @Shinsa in a channel or a thread with what you want done, or under a bug report. Shinsa's relay at app.shinsa.dev reads the thread and passes it to your own machine, without storing the text; your machine decides whether there is work in it and starts a task there. The task's status, its questions, its plan, its review and its result come back in the thread, and you decide in Shinsa. Each person connects Slack to their own Shinsa, so the bot only ever does work for the person who mentioned it.",
+    "background_color": "#1d1c1a"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Shinsa",
+      "always_online": true
+    }
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://app.shinsa.dev/slack/connect/callback",
+      "https://app.shinsa.dev/slack/install/callback"
+    ],
+    "scopes": {
+      "bot": [
+        "app_mentions:read",
+        "channels:history",
+        "groups:history",
+        "chat:write",
+        "reactions:write",
+        "users:read"
+      ],
+      "user": ["openid", "profile"]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://app.shinsa.dev/slack/events",
+      "bot_events": ["app_mention", "app_uninstalled", "tokens_revoked"]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://app.shinsa.dev/slack/interactions"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

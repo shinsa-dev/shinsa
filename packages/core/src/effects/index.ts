@@ -1,3 +1,7 @@
+import { resolveSlackThreadKey, type SlackThreadRef } from '../domain/slack.ts';
+import type { SlackMention } from '../slack/contract.ts';
+import type { SlackPost } from '../slack/posts.ts';
+
 export interface CheckToRun {
   id: string;
   label: string;
@@ -25,7 +29,10 @@ export type ShinsaEffect =
   | { kind: 'run.wake'; runId: string; generation: number }
   | { kind: 'delegation.steer'; runId: string; generation: number }
   | { kind: 'delegation.reply'; runId: string; questionId: string }
-  | { kind: 'share.link'; taskId: string };
+  | { kind: 'share.link'; taskId: string }
+  | { kind: 'slack.evaluate'; mention: SlackMention }
+  | { kind: 'slack.status'; taskId: string; thread: SlackThreadRef }
+  | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost };
 
 export type ShinsaEffectKind = ShinsaEffect['kind'];
 
@@ -53,6 +60,9 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'delegation.steer': 'process_bound',
   'delegation.reply': 'process_bound',
   'share.link': 'replay_safe',
+  'slack.evaluate': 'replay_safe',
+  'slack.status': 'replay_safe',
+  'slack.post': 'replay_safe',
 };
 
 function listEffectKinds(recovery: EffectRecovery) {
@@ -85,6 +95,12 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.runId}:${effect.generation}`;
     case 'delegation.reply':
       return `${effect.kind}:${effect.runId}:${effect.questionId}`;
+    case 'slack.evaluate':
+      return `${effect.kind}:${effect.mention.eventId}`;
+    case 'slack.status':
+      return `${effect.kind}:${effect.taskId}:${seq}`;
+    case 'slack.post':
+      return `${effect.kind}:${resolveSlackThreadKey(effect.thread)}:${seq}`;
     case 'checks.run':
       return `${effect.kind}:${effect.taskId}:${effect.round}:${seq}`;
     case 'briefing.request':
@@ -128,6 +144,11 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return `side:${effect.taskId}`;
     case 'share.link':
       return `share:${effect.taskId}`;
+    case 'slack.evaluate':
+      return `slack:${resolveSlackThreadKey(effect.mention)}`;
+    case 'slack.post':
+    case 'slack.status':
+      return `slack:${resolveSlackThreadKey(effect.thread)}`;
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':

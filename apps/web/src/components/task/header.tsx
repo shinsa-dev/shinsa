@@ -37,14 +37,15 @@ export function TaskHeader({
       {!readOnly && <TaskPageCommands state={state} task={task} view={view} />}
       <div className='flex flex-wrap items-start gap-x-4 gap-y-2'>
         <TaskHeading task={task} className='min-w-60 flex-1 py-0.5' />
-        <Choice
-          label='Task view'
-          items={view.tabs.map((tab) => ({ value: tab, label: TASK_TAB[tab].label }))}
-          value={view.tab}
-          onValueChange={view.applyTab}
-          onItemIntent={onTabIntent}
-          className='shrink-0'
-        />
+        <div data-task-tabs className='shrink-0'>
+          <Choice
+            label='Task view'
+            items={view.tabs.map((tab) => ({ value: tab, label: TASK_TAB[tab].label }))}
+            value={view.tab}
+            onValueChange={view.applyTab}
+            onItemIntent={onTabIntent}
+          />
+        </div>
       </div>
       <div className='flex items-start gap-2'>
         <TaskFacts state={state} task={task} className='min-w-0 flex-1' />

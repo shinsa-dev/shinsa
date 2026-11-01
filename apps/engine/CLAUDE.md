@@ -161,11 +161,11 @@ src/
 │                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts),
 │                        the routes for the webhook URL and secrets (routes.ts), the Schedules service (index.ts)
 ├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
-│                        credentials, the enrolled devices), control.ts (ControlClient for app.shinsa.dev, RevokedError),
+│                        credentials, the enrolled devices, who has access), control.ts (ControlClient for app.shinsa.dev: pairing, heartbeat, invites, members; RevokedError),
 │                        cloudflared.ts (the pinned release, checked by SHA-256, installed under data/bin), connector.ts
 │                        (cloudflared with the token in its environment), supervisor.ts (TunnelSupervisor: heartbeat,
 │                        health pings, restarts and back-off, revocation), guard.ts (what the tunnel may reach),
-│                        enrollments.ts (one-time enrollment secrets, each for a named device), channel.ts
+│                        channel.ts
 │                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
 │                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
 │                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the
@@ -179,6 +179,17 @@ src/
 │                        the link's key, sealed frames out, nothing read after the hello), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
+├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
+│                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
+│                        slack.mention, and a question's choice clicked in Slack as slack.answer
+│                        (handleTunnel); slack.evaluate: ⏳ on the mention, the classifier asked, "Not a task" once
+│                        per thread or slack.start_task; the
+│                        slack.post and slack.status effects, the status message edited at most every 5 s and only
+│                        when it changes, the thread's status and the mention's one reaction moved with it; GET
+│                        /api/slack and POST /api/slack/disconnect), relay.ts (SlackRelay: posts, reactions, the
+│                        thread's status, links
+│                        and unlink on app.shinsa.dev with
+│                        the machine token; SlackRelayError, retried only when the relay is down or busy)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,
 │                        MCP sign-ins
 ├── extensions/          MCP servers, plugins and skills (docs/engine.md → MCP servers, plugins and skills): what
@@ -251,8 +262,9 @@ src/
 │                        (setup verification before a task's first agent)
 ├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts: the folders macOS keeps
 │                        private as PrivateFoldersError, and opening Full Disk Access), the prerequisite checks
-│                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional, each with
-│                        the command that fixes it), the setup steps: the fixed list, what each shows and saves
+│                        (prerequisites.ts: git, gh, claude, bun when a repository uses it, Homebrew when a fix
+│                        needs it, and codex and its sign-in as optional, each with the command that fixes it;
+│                        install.ts: that command run in a terminal of your own), the setup steps: the fixed list, what each shows and saves
 │                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
 │                        back and its saved state (flow.ts), the accounts it lists (accounts.ts)
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's

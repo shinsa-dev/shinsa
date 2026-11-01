@@ -14,7 +14,7 @@ interface BuilderConfig {
   mac?: { icon?: string };
   dmg?: { background?: string };
   extraResources?: { from: string; to: string }[];
-  publish?: Record<string, string>;
+  publish?: Record<string, string | boolean>;
 }
 
 function readYaml(name: string) {
@@ -65,7 +65,7 @@ describe('the Shinsa build', () => {
 
   it('bundles app-update.yml, which electron-updater reads before every download', () => {
     expect(shared.extraResources).toContainEqual({ from: 'resources/app-update.yml', to: 'app-update.yml' });
-    expect(shared.publish).toEqual(readIdentity().feed as Record<string, string>);
+    expect(shared.publish).toEqual(readIdentity().feed as Record<string, string | boolean>);
     expect(readYaml('resources/app-update.yml')).toEqual({
       ...shared.publish,
       updaterCacheDirName: 'shinsa-updater',
@@ -88,7 +88,7 @@ describe('the Shinsa build', () => {
       command: '/u/.local/bin/shinsa',
       data: '/u/.config/shinsa/data',
       url: 'http://127.0.0.1:7446',
-      feed: { provider: 'github', owner: 'shinsa-dev', repo: 'shinsa' },
+      feed: { provider: 'generic', url: 'https://shinsa.dev/updates', useMultipleRangeRequest: false },
     });
   });
 });

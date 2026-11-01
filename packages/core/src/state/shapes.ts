@@ -111,7 +111,7 @@ function applyDelivered(state: ShinsaState, event: EventOf<'task.delivered'>) {
     result: { step: event.step, body: event.body, runId: event.runId, at: event.at },
   });
   record(state, event.taskId, event.at, {
-    actor: 'agent',
+    actor: event.runId ? 'agent' : 'shinsa',
     kind: 'answer',
     text: DELIVERY_TEXT[event.step],
     runId: event.runId,

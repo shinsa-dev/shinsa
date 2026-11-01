@@ -123,7 +123,7 @@ export function stopWatchdog(task: Task, watchdog: Watchdog) {
 export function connectWatchdog(task: Task, watchdog: Watchdog, server: string, data: string) {
   return sendCommandWithToast(
     { type: 'watchdog.connect', taskId: task.id, watchdogId: watchdog.id, server, data },
-    `Connected ${server.trim()}. The watchdog starts watching.`
+    `Connected ${server.trim()}.`
   );
 }
 

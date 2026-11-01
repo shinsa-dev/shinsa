@@ -103,3 +103,34 @@ describe('delegation effects', () => {
     );
   });
 });
+
+describe('slack effects', () => {
+  const thread = { teamId: 'T1', channelId: 'C1', threadTs: '100.1' };
+  const mention = {
+    ...thread,
+    eventId: 'Ev1',
+    messageTs: '100.3',
+    userId: 'U1',
+    userName: 'A',
+    text: '',
+    permalink: null,
+    thread: [],
+  };
+
+  test('a mention is read once per Slack event; posts and status edits run once per decision', () => {
+    expect(resolveEffectKey({ kind: 'slack.evaluate', mention }, 9)).toBe('slack.evaluate:Ev1');
+    expect(resolveEffectKey({ kind: 'slack.status', taskId: 't', thread }, 9)).toBe('slack.status:t:9');
+    expect(resolveEffectKey({ kind: 'slack.post', thread, taskId: 't', post: { kind: 'result' } }, 9)).toBe(
+      'slack.post:T1:C1:100.1:9'
+    );
+  });
+
+  test('everything about one thread runs in order in its own lane', () => {
+    const lanes = [
+      resolveEffectLane({ kind: 'slack.evaluate', mention }),
+      resolveEffectLane({ kind: 'slack.status', taskId: 't', thread }),
+      resolveEffectLane({ kind: 'slack.post', thread, taskId: 't', post: { kind: 'forwarded' } }),
+    ];
+    expect(new Set(lanes)).toEqual(new Set(['slack:T1:C1:100.1']));
+  });
+});

@@ -486,6 +486,38 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'No longer shared.',
   }),
   defineCommand({
+    path: ['tasks', 'duplicate'],
+    summary: 'Close a task as a duplicate of another. It is cancelled and links the task it duplicates.',
+    command: 'task.mark_duplicate',
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'of',
+        kind: 'text',
+        required: true,
+        description:
+          'The task it duplicates: its handle (SW-142), its id, the start of its id, or its exact title.',
+      },
+    ],
+    build: async (values, client) => ({
+      type: 'task.mark_duplicate',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+      duplicateOf: await findTaskId(client, readValue(values, 'of')),
+    }),
+    done: () => 'Closed as a duplicate.',
+  }),
+  defineCommand({
+    path: ['tasks', 'not-duplicate'],
+    summary: 'Start a task closed as a duplicate again. One that already worked starts a fresh round.',
+    command: 'task.clear_duplicate',
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.clear_duplicate',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Started it again.',
+  }),
+  defineCommand({
     path: ['tasks', 'done'],
     summary: 'Mark a task as done without merging it.',
     command: 'task.complete',
@@ -562,6 +594,29 @@ export const TASK_SPECS: SurfaceSpec[] = [
       taskId: await findTaskId(client, readValue(values, 'task')),
     }),
     done: () => 'Removed from the backlog. Its plan now waits for your approval.',
+  }),
+  defineCommand({
+    path: ['tasks', 'snooze'],
+    summary:
+      'Snooze a task: it keeps its step and its work, and leaves Needs you and Home until you unsnooze it.',
+    command: 'task.snooze',
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.snooze',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Snoozed. It keeps working and stays out of Needs you until you unsnooze it.',
+  }),
+  defineCommand({
+    path: ['tasks', 'unsnooze'],
+    summary: 'Unsnooze a task: it shows again where it was, in Needs you when it waits for you.',
+    command: 'task.unsnooze',
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.unsnooze',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Unsnoozed.',
   }),
   defineCommand({
     path: ['tasks', 'bind'],

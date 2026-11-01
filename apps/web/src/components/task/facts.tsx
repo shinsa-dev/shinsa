@@ -49,11 +49,14 @@ import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {
+  describeDuplicateHint,
   describePullRequestFact,
   describeStarted,
+  listDuplicates,
   listForkSources,
   listForks,
   resolveReportFact,
+  selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
 import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
@@ -377,6 +380,29 @@ function AccountFact({ task }: { task: Task }) {
   );
 }
 
+function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
+  const original = selectDuplicateOriginal(state, task);
+  if (!original || !task.duplicate) return null;
+  return (
+    <Hint label={describeDuplicateHint(task.duplicate)}>
+      <button
+        type='button'
+        onClick={() => navigate(resolveTaskPath(original))}
+        className={cn(FACT, FACT_INTERACTIVE, 'max-w-80')}
+      >
+        <Icon size='sm' name='IconSquareBehindSquare2' />
+        <span className='flex min-w-0'>
+          <span className='shrink-0 whitespace-pre'>Duplicate of </span>
+          {original.handle && (
+            <span className='shrink-0 whitespace-pre tabular-nums'>{original.handle} </span>
+          )}
+          <Truncate>{original.title}</Truncate>
+        </span>
+      </button>
+    </Hint>
+  );
+}
+
 function RelatedFact({
   state,
   icon,
@@ -530,6 +556,7 @@ export function TaskFacts({
       <HandleFact task={task} />
       <RoundFact task={task} />
       <StatusFact state={state} task={task} />
+      <DuplicateFact state={state} task={task} />
       <RepoFact state={state} task={task} />
       <BranchFact state={state} task={task} />
       <PullRequestFact state={state} task={task} />
@@ -552,6 +579,12 @@ export function TaskFacts({
       <ReportFact state={state} task={task} />
       <RelatedFact state={state} icon='IconFork' verb='Forked from' tasks={listForkSources(state, task)} />
       <RelatedFact state={state} icon='IconFork' verb='Forked into' tasks={listForks(state, task)} />
+      <RelatedFact
+        state={state}
+        icon='IconSquareBehindSquare2'
+        verb='Kept over'
+        tasks={listDuplicates(state, task)}
+      />
     </div>
   );
 }

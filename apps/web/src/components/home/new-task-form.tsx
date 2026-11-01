@@ -12,6 +12,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent } from '@shinsa/ui/components/popover';
 import { ScrollFade } from '@shinsa/ui/components/scroll-fade';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@shinsa/ui/components/select';
+import { toast } from '@shinsa/ui/components/sonner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -46,6 +47,7 @@ import {
   type NewTaskChoices,
   type NewTaskProjectItem,
   NO_PROJECT,
+  POLICY_FAILURE,
   type PolicyPlacement,
   requestPolicyPlacement,
   resolveNewTaskMachine,
@@ -268,14 +270,14 @@ export function NewTaskForm() {
     setBusy(true);
     let policy: PolicyPlacement | null = null;
     if (placement?.byPolicy) policy = await requestPolicyPlacement(machines, request);
+    if (policy?.failed) toast.warning(POLICY_FAILURE);
     const machineId = policy?.answer?.machineId ?? placement?.id ?? null;
     const sent = await sendCommandWithToast(
       createNewTaskCommand(serializeAttachments(request, attachments.ready), choices),
       placement
         ? describePlacementDone(
             copy.done,
-            machines.find((machine) => machine.id === machineId),
-            policy?.reason ?? ''
+            machines.find((machine) => machine.id === machineId)
           )
         : copy.done,
       machineId

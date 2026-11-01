@@ -16,6 +16,7 @@ import {
   listComposedSteps,
   type PipelineStep,
   type Run,
+  resolveCurrentRound,
   resolveInquiryStep,
   resolveOperationTiming,
   resolveProposalUpgrade,
@@ -61,6 +62,12 @@ const SETTLED_REASON: Record<InquiryStep, string> = {
   answer: 'answered your question',
   research: 'wrote the report',
   investigate: 'reported its diagnosis',
+};
+
+const RESULT_TITLE: Record<InquiryStep, string> = {
+  answer: 'Read the answer',
+  research: 'Read the report',
+  investigate: 'Read the diagnosis',
 };
 
 const DECLINED_REASON: Record<InquiryStep, string> = {
@@ -158,7 +165,16 @@ export function startOperation(decider: Decider, taskId: string, guidance: strin
   });
 }
 
+function retitleFromPlan(decider: Decider, taskId: string) {
+  const task = decider.task(taskId);
+  const title = task.plan?.document?.title;
+  const round = resolveCurrentRound(task);
+  if (!title || title === round.title) return;
+  decider.emit({ type: 'task.retitled', taskId, round: round.number, title });
+}
+
 export function startAfterPlan(decider: Decider, taskId: string, addition = '') {
+  retitleFromPlan(decider, taskId);
   if (resolveWorkStep(resolveTaskPipeline(decider.task(taskId))) === 'operate') {
     startOperation(decider, taskId, null);
     return;
@@ -321,7 +337,16 @@ function finishInquiry(
     requestYourOk(decider, taskId, runId, proposal);
     return;
   }
-  settleTask(decider, taskId, 'done', SETTLED_REASON[step]);
+  openResultGate(decider, taskId, step);
+}
+
+function openResultGate(decider: Decider, taskId: string, step: InquiryStep) {
+  decider.stage(taskId, 'answered', SETTLED_REASON[step]);
+  decider.openGate(taskId, 'result', RESULT_TITLE[step], 'Close the task once you have read it.');
+}
+
+export function closeResult(decider: Decider, taskId: string) {
+  settleTask(decider, taskId, 'done', 'closed by you');
 }
 
 const DELIVER_TOOL = {
@@ -449,7 +474,7 @@ export function answerProposal(decider: Decider, gate: Gate, decision: GateDecis
 export function followUpInquiry(decider: Decider, taskId: string, text: string) {
   const task = decider.task(taskId);
   const step = findInquiryStep(resolveTaskPipeline(task));
-  decider.withdrawGates(taskId, (gate) => gate.type === 'proposal');
+  decider.withdrawGates(taskId, (gate) => gate.type === 'proposal' || gate.type === 'result');
   if (task.proposal?.status === 'open') decider.emit({ type: 'task.change_declined', taskId });
   startInquiry(decider, taskId, step, text);
 }
@@ -489,5 +514,9 @@ function finishFollowUp(decider: Decider, task: Task, run: Run, proposal: Change
 
 export function acceptsFollowUp(task: Task) {
   const pipeline = resolveTaskPipeline(task);
-  return task.stage === 'done' && !pipeline.includes('plan') && resolveInquiryStep(pipeline) !== null;
+  return (
+    (task.stage === 'done' || task.stage === 'answered') &&
+    !pipeline.includes('plan') &&
+    resolveInquiryStep(pipeline) !== null
+  );
 }

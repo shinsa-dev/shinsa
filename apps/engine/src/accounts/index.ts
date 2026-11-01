@@ -562,9 +562,7 @@ export class Accounts {
 
   #assertChangeable() {
     if (!this.#config.inspect) return;
-    throw createReadOnlyError(
-      'Shinsa is in inspect mode and only shows this data. Start it without SHINSA_INSPECT to sign in, refresh or change accounts.'
-    );
+    throw createReadOnlyError();
   }
 
   async startLogin(accountId: string | null) {
@@ -606,7 +604,7 @@ export class Accounts {
     }
     const twin = this.store.selectByIdentity(status, accountId);
     if (twin && isNew) {
-      return { ok: false, message: `${status.email} is already in your accounts.` };
+      return { ok: false, message: `${status.email} is already added.` };
     }
     this.store.update(accountId, {
       email: status.email ?? account.email,
@@ -642,7 +640,7 @@ export class Accounts {
       throw new DomainError('code_invalid', 'Paste the code the sign-in page showed.');
     }
     if (!this.logins.submitCode(loginId, code)) {
-      throw new DomainError('login_stale', 'That sign-in is no longer waiting for a code. Start it again.');
+      throw new DomainError('login_stale', 'That sign-in ended. Start it again.');
     }
     return this.snapshot();
   }

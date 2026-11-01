@@ -42,6 +42,7 @@ const GATE_GLYPH: Record<GateType, Glyph> = {
   configuration: { icon: 'IconToolbox', tone: 'orange' },
   sign_in: { icon: 'IconUserKey', tone: 'orange' },
   post_merge: { icon: 'IconChecklist', tone: 'amber' },
+  result: { icon: 'IconBubbleCheck', tone: 'blue' },
 };
 
 const GATE_STATUS: Record<GateType, Status> = {
@@ -56,6 +57,7 @@ const GATE_STATUS: Record<GateType, Status> = {
   configuration: { label: 'Setup incomplete', tone: 'orange' },
   sign_in: { label: 'Sign in needed', tone: 'orange' },
   post_merge: { label: 'Post-merge', tone: 'amber' },
+  result: { label: 'Answered', tone: 'blue' },
 };
 
 const RESOLVING_CONFLICTS = 'Resolving conflicts';
@@ -96,6 +98,8 @@ export function resolveGateStatus(gate: Gate): Status {
 
 const WATCHING: Status = { label: 'Watching', tone: 'blue' };
 
+const DUPLICATE: Status = { label: 'Duplicate', tone: 'neutral' };
+
 function isWaitingForDelegations(state: ShinsaState, task: Task) {
   return listActiveRuns(state, task.id).some(
     (run) => run.status === 'waiting' && (run.waitingOn?.delegations.length ?? 0) > 0
@@ -118,6 +122,7 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (gate && isHeldInBacklog(state, gate))
     return { label: TASK_GROUP.backlog.title, tone: TASK_GROUP.backlog.tone };
   if (gate) return resolveGateStatus(gate);
+  if (task.duplicate) return DUPLICATE;
   if (isWatchedTask(task)) return WATCHING;
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
   if (task.usageWait?.status === 'armed') return WAITING_FOR_USAGE;
@@ -153,6 +158,7 @@ const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
   watching: 'IconRadar',
   awaiting_proposal: GATE_GLYPH.proposal.icon,
   awaiting_operation: GATE_GLYPH.operation.icon,
+  answered: GATE_GLYPH.result.icon,
   merged: 'IconMerged',
   done: 'IconCheckCircle2',
   cancelled: 'IconCircleX',
@@ -162,6 +168,7 @@ export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName 
   const gate = selectLeadGate(state, task);
   if (gate && isHeldInBacklog(state, gate)) return TASK_GROUP.backlog.icon;
   if (gate) return resolveGateGlyph(gate).icon;
+  if (task.duplicate) return TASK_GROUP.duplicate.icon;
   if (isWatchedTask(task)) return 'IconRadar';
   if (task.monitor?.status === 'armed') return 'IconClockSnooze';
   if (task.usageWait?.status === 'armed') return 'IconGauge';

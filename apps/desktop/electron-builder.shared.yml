@@ -33,6 +33,6 @@ dmg:
       type: link
       path: /Applications
 publish:
-  provider: github
-  owner: shinsa-dev
-  repo: shinsa
+  provider: generic
+  url: https://shinsa.dev/updates
+  useMultipleRangeRequest: false

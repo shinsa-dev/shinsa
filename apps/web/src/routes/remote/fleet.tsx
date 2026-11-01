@@ -1,8 +1,9 @@
 import { describeList } from '@shinsa/core';
 import * as React from 'react';
 import { replaceConnection } from '@/lib/connection/socket.ts';
+import { requestWaitingAnswer } from '@/lib/remote/enroll.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
-import { createFleetMember, listMachineRows } from '@/lib/remote/machines.ts';
+import { createFleetMember, listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
 import { MACHINE_ICON, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
@@ -11,6 +12,7 @@ import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteStep
 type FleetState =
   | { kind: 'starting' }
   | { kind: 'empty'; machines: string[] }
+  | { kind: 'waiting'; machines: string[] }
   | { kind: 'ready' }
   | { kind: 'failed'; title: string; message: string };
 
@@ -22,10 +24,38 @@ const PAIR_STEPS = [
 
 function listAddDeviceSteps(machines: string[]) {
   return [
-    `On ${describeList(machines)}, open Settings, Remote access.`,
-    'Choose Add device and give this one a name.',
-    'Scan the QR code with this device, or open its link here.',
+    `On ${describeList(machines)}, open Settings > Remote access and choose Invite link.`,
+    'Scan the QR code with this device, or open the link here, and ask for access.',
+    'Accept the request on the machine.',
   ];
+}
+
+function WaitingPage({ machines }: { machines: string[] }) {
+  return (
+    <section className='flex flex-col items-center gap-6 pt-4'>
+      <RemoteHero icon='IconKey1' title='Waiting for an answer'>
+        {`This device asked to reach ${describeList(machines)}. It opens here once the request is accepted in Settings > Remote access on the machine.`}
+      </RemoteHero>
+      <RemoteBenefits />
+      <RemoteCheckAgain />
+    </section>
+  );
+}
+
+async function settleWaitingRow(row: MachineRow, services: RemoteServices): Promise<MachineRow> {
+  if (!row.device?.waiting) return row;
+  const answer = await requestWaitingAnswer(row.device, {
+    dashboard: services.dashboard,
+    devices: services.devices,
+    openSocket: (url) => new WebSocket(url),
+  });
+  if (answer === 'waiting') return row;
+  if (answer === 'declined') return { ...row, device: null };
+  return { ...row, device: await services.devices.selectDevice(row.instance.id) };
+}
+
+function settleWaitingRows(rows: MachineRow[], services: RemoteServices) {
+  return Promise.all(rows.map((row) => settleWaitingRow(row, services)));
 }
 
 function NoMachinePage({ machines }: { machines: string[] }) {
@@ -67,13 +97,27 @@ export function FleetApp({
     const release: (() => void)[] = [];
     void (async () => {
       try {
-        const rows = await listMachineRows(services.dashboard, services.devices);
-        const added = rows.flatMap((row) =>
-          row.device ? [{ instance: row.instance, device: row.device }] : []
+        const rows = await settleWaitingRows(
+          await listMachineRows(services.dashboard, services.devices),
+          services
         );
+        const added = rows.flatMap((row) =>
+          row.device && !row.device.waiting ? [{ instance: row.instance, device: row.device }] : []
+        );
+        const listed = new Set(rows.map((row) => row.instance.id));
+        const waiting = [
+          ...rows.flatMap((row) => (row.device?.waiting ? [row.instance.name] : [])),
+          ...(await services.devices.listWaitingDevices()).flatMap((device) =>
+            listed.has(device.instanceId) || !device.waiting ? [] : [device.waiting.machineName]
+          ),
+        ];
         if (!live) return;
         if (added.length === 0) {
-          setState({ kind: 'empty', machines: rows.map((row) => row.instance.name) });
+          setState(
+            waiting.length > 0
+              ? { kind: 'waiting', machines: waiting }
+              : { kind: 'empty', machines: rows.map((row) => row.instance.name) }
+          );
           return;
         }
         let fleet: Fleet | null = null;
@@ -87,8 +131,7 @@ export function FleetApp({
                 setState({
                   kind: 'failed',
                   title: 'Your machines no longer accept this device',
-                  message:
-                    'Add it again from Settings, Remote access on a machine, with Add device, to use it here.',
+                  message: 'Ask for access again with a machine’s invite link to use it here.',
                 });
             },
           })
@@ -96,7 +139,9 @@ export function FleetApp({
         release.push(...members.map((entry) => entry.close));
         fleet = new Fleet(
           members.map((entry) => entry.member),
-          rows.flatMap((row) => (row.device ? [] : [{ id: row.instance.id, name: row.instance.name }]))
+          rows.flatMap((row) =>
+            row.device && !row.device.waiting ? [] : [{ id: row.instance.id, name: row.instance.name }]
+          )
         );
         release.push(() => fleet?.close());
         await startServiceWorker(services.worker, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE);
@@ -125,6 +170,8 @@ export function FleetApp({
       return shell(<RemoteLoading label='Connecting to your machines' />);
     case 'empty':
       return shell(<NoMachinePage machines={state.machines} />);
+    case 'waiting':
+      return shell(<WaitingPage machines={state.machines} />);
     case 'failed':
       return shell(
         <section className='flex flex-col items-center gap-6 pt-4'>

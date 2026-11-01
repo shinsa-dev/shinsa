@@ -204,7 +204,7 @@ describe('the engine restart endpoint', () => {
 });
 
 describe('the onboarding endpoints', () => {
-  test('report the status, suggest folders, save the setup, check the tools and complete', async () => {
+  test('report the status, suggest folders, save the setup, check the tools, and finish only through the steps', async () => {
     const { call, post, config, engine } = await start({ config: { roots: [] } });
     expect(await (await call('/api/onboarding')).json()).toMatchObject({
       completed: false,
@@ -214,7 +214,7 @@ describe('the onboarding endpoints', () => {
       suggestions: [],
       truncated: false,
     });
-    expect((await post('/api/onboarding/complete', {})).status).toBe(400);
+    expect((await post('/api/onboarding/complete', {})).status).toBe(404);
     const saved = await post('/api/onboarding/setup', { roots: [config.home], mergeMethod: 'merge' });
     expect(await saved.json()).toMatchObject({ roots: { source: 'configured', configured: [config.home] } });
     expect(engine.state.settings.mergeMethod).toBe('merge');
@@ -230,7 +230,11 @@ describe('the onboarding endpoints', () => {
     const tools = (await (await call('/api/onboarding/prerequisites')).json()) as { ready: boolean };
     expect(tools.ready).toBe(true);
     expect(await (await post('/api/onboarding/privacy', {})).json()).toEqual({ ok: true });
-    expect(await (await post('/api/onboarding/complete', {})).json()).toMatchObject({ completed: true });
+    expect(await (await post('/api/onboarding/install', { id: 'gh' })).json()).toEqual({
+      error: { code: 'browser_only', message: 'Only Shinsa’s own page installs the tools setup checks.' },
+    });
+    const install = await post('/api/onboarding/install', { id: 'gh' }, { origin: 'http://localhost:5181' });
+    expect(((await install.json()) as { error: { code: string } }).error.code).toBe('terminals_off');
   });
 
   test('run the setup: the first step, an answer, going back, a refused answer and a stale one', async () => {
@@ -250,7 +254,7 @@ describe('the onboarding endpoints', () => {
     const refused = (await (
       await post('/api/onboarding/flow', { type: 'answer', stepId: 'roots', values: ['/no/such'] })
     ).json()) as OnboardingFlow;
-    expect(refused.step).toMatchObject({ id: 'roots', problem: '/no/such is not a folder on this machine.' });
+    expect(refused.step).toMatchObject({ id: 'roots', problem: 'That is not a folder on this machine.' });
     const stale = await post('/api/onboarding/flow', {
       type: 'answer',
       stepId: 'defaults',
@@ -258,7 +262,7 @@ describe('the onboarding endpoints', () => {
     });
     expect(stale.status).toBe(400);
     expect(await stale.json()).toEqual({
-      error: { code: 'step_stale', message: 'That step is no longer open. Answer the step on screen.' },
+      error: { code: 'step_stale', message: 'That step has closed.' },
     });
   });
 });

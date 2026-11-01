@@ -68,6 +68,7 @@ export {
   FINDING_SEVERITIES,
   hasTesting,
   isWebUrl,
+  listHeldSourceRequests,
   listMergeSteps,
   listOpenChecklistItems,
   listOpenMergeSteps,
@@ -85,6 +86,7 @@ export {
   type PullRequestSource,
   parseReviewPayload,
   parseTestFile,
+  REPLY_OUTCOMES,
   type ReviewPayload,
   type ReviewPayloadEvidence,
   replacePullRequestBlock,
@@ -124,6 +126,7 @@ export {
 export type * from './report/types.ts';
 export * from './schedules/index.ts';
 export * from './share/index.ts';
+export * from './slack/index.ts';
 export * from './state/index.ts';
 export * from './stats/index.ts';
 export * from './test-coverage/index.ts';

@@ -69,7 +69,7 @@ describe('the share dialog', () => {
     await unshareTask(task);
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.share', taskId: 't', limit: 'day' }],
-      [{ type: 'task.unshare', taskId: 't' }, 'Stopped sharing. The link no longer opens this task.'],
+      [{ type: 'task.unshare', taskId: 't' }, 'Stopped sharing.'],
     ]);
     spies.restore();
   });

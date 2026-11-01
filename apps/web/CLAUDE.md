@@ -33,7 +33,8 @@ src/
 │   │                    in the remote build, a note that terminals stay on the machine)
 │   ├── remote/          The remote build's own pages on app.shinsa.dev (docs/engine.md → Remote access): index.tsx
 │   │                    (RemoteRoot: the session, then the page for the path), shell.tsx (the header with Sign out, sign-in, RemoteHero: the icon, title and line the pair and enroll pages open with),
-│   │                    pair.tsx, enroll.tsx, fleet.tsx (FleetApp: every machine this device was added to joined
+│   │                    pair.tsx, enroll.tsx, slack.tsx (SlackLinkedPage: /slack/linked after connecting Slack,
+│   │                    the workspace and what happens next, or why it failed), fleet.tsx (FleetApp: every machine this device was added to joined
 │   │                    into one Fleet, the service worker, then the app; or the steps to pair a machine or add this
 │   │                    device, the benefits card and Check again), share.tsx (/share/t/<token>#<key>: a
 │   │                    shared task, live, read-only and without sign-in, docs/engine.md → Sharing a task)
@@ -47,7 +48,7 @@ src/
 │                        section.tsx (Section, Specimen), tokens.tsx, inputs.tsx, overlays.tsx and surfaces.tsx
 │                        (the kit), checklist.tsx (the checklist: ticking, commands, a disabled row, read-only, a
 │                        Markdown task list), composites.tsx (Shinsa's shared building blocks and the
-│                        composer), errors.tsx (the error fallbacks in each size), onboarding.tsx (each kind of setup step and the finished page), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), evidence.tsx (the Evidence panel on sample files from public/samples/evidence, every kind once, and after a revision: an updated shot and the earlier versions), checks.tsx (the Checks list in each state, both stages, a linked test, the plan's Checks, check activity and Always run before review, on sample-checks.ts), code.tsx (the editor, its diffs and Go to
+│                        composer), errors.tsx (the error fallbacks in each size), onboarding.tsx (each kind of setup step), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), evidence.tsx (the Evidence panel on sample files from public/samples/evidence, every kind once, and after a revision: an updated shot and the earlier versions), checks.tsx (the Checks list in each state, both stages, a linked test, the plan's Checks, check activity and Always run before review, on sample-checks.ts), code.tsx (the editor, its diffs and Go to
 │                        file) and settings.tsx (the feature pieces in
 │                        each state), samples.ts, sample-accounts.ts, sample-delegations.ts, sample-extensions.ts,
 │                        sample-versions.ts, sample-code.ts, sample-evidence.ts, sample-checks.ts, sample-overview.ts and sample-merge-steps.ts (their sample data; merge-steps.tsx,
@@ -55,7 +56,8 @@ src/
 │                        shows; /ui never connects or sends anything)
 ├── components/<domain>/ Pieces a route composes, one folder per domain, files named for what they are:
 │                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
-│                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares), review draft, the
+│                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares; the task's composer on
+│                        Overview, Review and Chat is one draft per task, lib/chat/task-drafts.ts), review draft, the
 │                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
@@ -73,12 +75,14 @@ src/
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
 │                        accounts.tsx is the Agent usage tab's Accounts card, with usage.tsx's windows, providers.tsx's
 │                        Codex block and usage-account.tsx, the one block every provider's account renders in;
-│                        integrations.tsx reads the extensions for the search, context-optimizer.tsx,
+│                        integrations.tsx reads the extensions for the search, slack.tsx (General, right under
+│                        Remote access, and below Machines on app.shinsa.dev: the status, Connect Slack, each
+│                        linked workspace, and Disconnect on the machine only), context-optimizer.tsx,
 │                        mcp-servers.tsx (with mcp-server-row.tsx, mcp-server-menu.tsx and server-dialog.tsx),
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
-│                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, defaults: the three pick-one lists, projects: the suggested projects to keep, rename or trim, access: a folder macOS keeps private, accounts, checks, finished),
+│                        onboarding (shell, header: Set up Shinsa over the path, path: the steps as the task page's path of gates, section: the heading, body and footer every step shares, the step and its footer, the option list, defaults: the three pick-one lists, projects: the suggested projects to keep, rename or trim, access: a folder macOS keeps private, accounts: Sign in with Claude and the accounts, checks: each check with Install and its terminal in the card, help: Ask an agent for help and its reply with Run in terminal),
 │                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar),
 │                        services (menu.tsx: Services beside Tasks and in the rail, its popover (SERVICES_PANEL, the
 │                        queue popover's COMPACT_POPOVER, which the queue's QUEUE_POPOVER widens to fit its rows: the list as tall as its content, the forms at one height)
@@ -146,14 +150,14 @@ src/
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
     │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, which
-    │                    machine owns each id, each machine's own state for placement (listMachines), the account's machines it cannot reach (listUnreachableMachines), commands sent to the
+    │                    machine owns each id, each machine's own state for placement (listMachines), each machine's own remote access for its access requests (listMachineAccess), the account's machines it cannot reach (listUnreachableMachines), commands sent to the
     │                    machine named or the one that owns them, transcripts and requests sent to their machine), services.ts (the
     │                    remote services and their context, for Settings → Machines),
     │                    devices.ts and indexed-store.ts (this device's key per machine, in IndexedDB, and whether it sits on that machine),
     │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
     │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
     │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
-    │                    enroll.ts (enrollDevice), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
+    │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, login and initial, the member who added a device), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
     │                    ones this device cannot reach yet, the form's checks and the
     │                    settings each add, edit, move or removal writes), machines.ts (a machine's row, the rows of the account, task capacity's choices, a machine as a
     │                    fleet member)
@@ -196,7 +200,8 @@ src/
     │                    usage-wait.ts, recheck.ts (createUsageRecheck: one read at a time, on open and every
     │                    60 s while watched and the page is visible)
     ├── chat/            attachment-drafts.ts (the files a composer holds until you send: the 10-file and 25 MB
-    │                    limits, what is ready, whether it can send), transcript → timeline → turns, tool descriptions and output, run roles and headlines,
+    │                    limits, what is ready, whether it can send), task-drafts.ts (one draft per task, in memory: the
+    │                    text, attachments and their files every tab's composer reads, and the caret a tab click carries), transcript → timeline → turns, tool descriptions and output, run roles and headlines,
     │                    who worked on a task (agents.ts), notice
     │                    rows, the context meter (context.ts), run evidence, delegations (delegations.ts: views, the tree, a parked step's wait),
     │                    the transcript's blocks and the window of them rendered (window.ts), prefetch.ts (a
@@ -296,8 +301,10 @@ src/
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the policies' answer from POST /api/placement, each machine's load),
-        remote-access.ts (Settings → Remote access: the status words, a device's last use, the one-time link's
-        expiry and its QR code as an image, the device a link added; connection/remote-access.ts reads it from the
+        slack.ts (Settings → General → Slack: the status words, a link's line, the linked page's points, result and
+        reasons; connection/slack.ts reads /api/slack, again when the window comes back, and
+        disconnects), remote-access.ts (Settings → Remote access: the status words, a device's last use and who added it, the copy of
+        the invite link's dialog and its QR code as an image, an access request and the short toast accepting it shows; connection/remote-access.ts reads it from the
         socket's `remote` push, which the connection keeps (`selectRemote`), and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the
@@ -340,10 +347,12 @@ called there.
   `describeMessageStatus` in `lib/tasks/messages.ts`), or, when it asked for new work while a round runs, queued
   above the composer as a waiting round you can send now to the current round, edit or remove (`lib/tasks/message-queue.ts`,
   `components/chat/message-queue.tsx`; `docs/engine.md` → Rounds).
-- **Setup is the server's steps.** The steps, their order, what each answer saves, going back and the accounts it
-  imports all live on the server (`docs/engine.md` → The setup steps); `routes/onboarding.tsx` only renders
-  `GET /api/onboarding/flow` and sends what you pick, a folder path you add, Back or a step you open
-  (`useOnboardingFlow`; how it looks: `docs/design.md`, 24). Until `GET /api/onboarding` says setup is complete,
+- **Setup is the server's steps.** The steps, their order, what each answer saves, going back, the help task and
+  the welcome task all live on the server (`docs/engine.md` → The setup steps); `routes/onboarding.tsx` only renders
+  `GET /api/onboarding/flow` and sends what you pick, a folder path you add, Back, a step you open or a request for
+  help (`useOnboardingFlow`; how it looks: `docs/design.md`, 24). Install sends a check's id, and Run in terminal a
+  command from the help task's reply, to `POST /api/onboarding/install`; the engine decides what runs. Finishing
+  opens the welcome task the flow names (`welcome`), or Home on a run started again. Until `GET /api/onboarding` says setup is complete,
   every route replaces itself with `/onboarding`, and `/onboarding` has no way out: its own shell, no Home button
   and no ⌘K. `/onboarding` goes Home when the run it loads is finished. Run setup again (Settings → Setup, ⌘K) is
   `restartOnboarding`: it starts a new run on the server first, so the page opens on its first step; there is no

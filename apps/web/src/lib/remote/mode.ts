@@ -1,4 +1,10 @@
-import { parseEnrollFragment, parseShareLocation, REMOTE_PATHS, type ShareLink } from '@shinsa/core';
+import {
+  parseEnrollFragment,
+  parseShareLocation,
+  REMOTE_PATHS,
+  type ShareLink,
+  SLACK_RELAY_PATHS,
+} from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 
 export const SERVICE_WORKER_PATH = `${REMOTE_PATHS.app}sw.js`;
@@ -8,6 +14,12 @@ export const SERVICE_WORKER_SCOPE = REMOTE_PATHS.app;
 export const MACHINES_SECTION = 'Machines';
 
 export const MACHINE_ICON: IconName = 'IconMacbookRemote';
+
+export interface RemotePoint {
+  icon: IconName;
+  title: string;
+  detail: string;
+}
 
 const ENROLL_KEY = 'shinsa.remote.enroll';
 
@@ -33,7 +45,8 @@ export type RemoteView =
   | { kind: 'app' }
   | { kind: 'pair'; claimCode: string | null }
   | { kind: 'enroll' }
-  | { kind: 'share'; link: ShareLink | null };
+  | { kind: 'share'; link: ShareLink | null }
+  | { kind: 'slack' };
 
 export function isRemoteBuild(env: Record<string, unknown> = import.meta.env) {
   return env.VITE_SHINSA_REMOTE === '1';
@@ -45,6 +58,7 @@ export function resolveRemoteView(location: Pick<Location, 'pathname' | 'search'
   if (location.pathname === REMOTE_PATHS.enrollPage) return { kind: 'enroll' };
   if (location.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`))
     return { kind: 'share', link: parseShareLocation(location.pathname, location.hash) };
+  if (location.pathname === SLACK_RELAY_PATHS.linkedPage) return { kind: 'slack' };
   return { kind: 'app' };
 }
 

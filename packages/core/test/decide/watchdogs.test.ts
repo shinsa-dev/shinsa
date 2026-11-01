@@ -240,17 +240,11 @@ describe('arming watchdogs', () => {
     expect(plain.harness.task(plain.taskId).watchdogs).toBeUndefined();
   });
 
-  test('a source the project already lists for every repository is not written again', () => {
+  function mergeOverSource(data: string) {
     const harness = createHarness();
     const taskId = createTask(harness);
     const project = projectOf(harness, taskId);
-    harness.send({
-      type: 'watch_source.write',
-      projectId: project.id,
-      server: 'maple',
-      data: 'All telemetry',
-      repoIds: [],
-    });
+    harness.send({ type: 'watch_source.write', projectId: project.id, server: 'maple', data, repoIds: [] });
     handOver(harness, taskId, [LATENCY]);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
@@ -262,9 +256,32 @@ describe('arming watchdogs', () => {
     approve(harness, taskId);
     pushed(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
-    expect(projectOf(harness, taskId).watchSources).toEqual([
-      { server: 'maple', data: 'All telemetry', repoIds: [], addedBy: 'you', addedAt: expect.any(Number) },
+    return projectOf(harness, taskId).watchSources;
+  }
+
+  test('a source the project already lists with what the watchdog reads is not written again', () => {
+    expect(mergeOverSource('OpenTelemetry traces and logs of the API and the web app')).toEqual([
+      {
+        server: 'maple',
+        data: 'OpenTelemetry traces and logs of the API and the web app',
+        repoIds: [],
+        addedBy: 'you',
+        addedAt: expect.any(Number),
+      },
     ]);
+  });
+
+  test('a source the project lists more narrowly is widened to what the watchdog reads there, and kept when that would not fit', () => {
+    expect(mergeOverSource('Logs of the billing Worker')).toEqual([
+      {
+        server: 'maple',
+        data: 'Logs of the billing Worker; OpenTelemetry traces and logs of the API',
+        repoIds: [],
+        addedBy: 'you',
+        addedAt: expect.any(Number),
+      },
+    ]);
+    expect(mergeOverSource('x'.repeat(180))?.[0]?.data).toBe('x'.repeat(180));
   });
 });
 
@@ -780,7 +797,7 @@ describe('a watchdog’s schedule', () => {
       'Watchdogs watch for 1 to 720 hours.'
     );
     expect(() => harness.send({ type: 'settings.change', patch: { watchdogMaxGapHours: 25 } })).toThrow(
-      'Checks are at most 1 to 24 hours apart.'
+      'Checks are 1 to 24 hours apart.'
     );
   });
 
@@ -1041,8 +1058,7 @@ describe('stopping watchdogs', () => {
     const { harness, taskId } = mergeWith([LATENCY, EVENTS]);
     expect(refusal(() => harness.send({ type: 'task.complete', taskId }, { onBehalf: true }))).toEqual({
       code: 'task_open',
-      message:
-        "2 watchdogs still watch this task's change. Leave it open until they finish, or tell the human.",
+      message: '2 watchdogs still watch it.',
     });
     harness.send({ type: 'task.complete', taskId });
     expect(harness.task(taskId).watchdogs?.map((dog) => dog.status)).toEqual(['stopped', 'stopped']);

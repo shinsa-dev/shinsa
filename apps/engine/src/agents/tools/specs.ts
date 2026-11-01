@@ -10,6 +10,7 @@ import {
   MERGE_STEP_TIMINGS,
   PLAN_EVIDENCE_KINDS,
   PROTOCOL_LIMITS,
+  REPLY_OUTCOMES,
   type ShinsaToolName,
   VERIFICATION_RULES,
   WATCHDOG_STARTS,
@@ -53,6 +54,40 @@ const SPOT = {
     ),
   },
   required: ['file', 'start', 'end', 'attention', 'why'],
+};
+
+const REPLY = {
+  type: 'object',
+  description:
+    'Required when the fix answers a request the human sent, and refused otherwise. The human reads it on the overview instead of the chat: what you did about their request, point by point, and what they do now.',
+  properties: {
+    headline: limitedText('What you did about their request, in one sentence.', L.replyHeadline),
+    points: {
+      type: 'array',
+      description: 'Each thing they raised, in their order. At least one.',
+      minItems: 1,
+      maxItems: L.replyPoints,
+      items: {
+        type: 'object',
+        properties: {
+          ask: limitedText('What they asked or raised, in their words cut short.', L.replyAsk),
+          outcome: {
+            type: 'string',
+            enum: [...REPLY_OUTCOMES],
+            description:
+              'done: you made the change. answered: it was a question and the note answers it. not_changed: you left it as it was, and the note says why.',
+          },
+          note: limitedText('Where it is now, the answer, or why you left it.', L.replyNote),
+        },
+        required: ['ask', 'outcome', 'note'],
+      },
+    },
+    next: limitedText(
+      'What they do now to see or try it, in markdown: numbered steps with the exact commands in ```bash run blocks and full links. Leave it out when there is nothing.',
+      L.replyNext
+    ),
+  },
+  required: ['headline', 'points'],
 };
 
 const PLACE = {
@@ -146,11 +181,11 @@ const WALKTHROUGH_PARTS = {
         },
         kind: { type: 'string', enum: [...MERGE_STEP_KINDS], description: 'What kind of step it is.' },
         title: limitedText(
-          'The step as an instruction, naming the thing: "Set STRIPE_WEBHOOK_SECRET in production". Unique in the list.',
+          'The step as an instruction, naming the thing, with names, variables and files in backticks: "Set `STRIPE_WEBHOOK_SECRET` in production". Unique in the list.',
           L.mergeStepTitle
         ),
         detail: limitedText(
-          'Where and how: the service or dashboard, the environment, where the value comes from. Never a secret’s value.',
+          'Where and how, in markdown: the service or dashboard as a link with its full URL, the environment, where the value comes from, names and files in backticks, a task as its shinsa:// link. Never a secret’s value.',
           L.mergeStepDetail
         ),
         command: limitedText(
@@ -177,7 +212,7 @@ const WALKTHROUGH_PARTS = {
         source: {
           type: 'object',
           description:
-            'An MCP server you have that holds the data. Leave it out when none does and give source_request.',
+            'An MCP server you have that reaches the data, any of them, not only the data sources listed: check with its tools first. Leave it out only when none does and give source_request.',
           properties: {
             server: limitedText('The MCP server, by name.', L.watchdogServer),
             data: limitedText('What it holds that this check reads.', L.watchdogData),
@@ -186,15 +221,16 @@ const WALKTHROUGH_PARTS = {
         },
         source_request: {
           type: 'object',
-          description: 'When no server you have holds the data: what the human should connect.',
+          description:
+            'Only when no server you have reaches the data, after checking each that could: what the human should connect.',
           properties: {
             data: limitedText('The data the check needs.', L.watchdogData),
             evidence: limitedText(
-              'Where the code sends that data: the file and the service.',
+              'Where the code sends that data (the file and the service), and which servers you checked and why each cannot reach it.',
               L.watchdogEvidence
             ),
             suggestions: textList(
-              'Servers the human could connect, by name and where they come from (an official MCP server, Composio).',
+              'Servers the human could connect, by name and where they come from (an official MCP server, Composio). Never one you already have, unless evidence says “checked <server>” and why it falls short.',
               L.watchdogSuggestions,
               L.watchdogSuggestion
             ),
@@ -302,6 +338,10 @@ export const TOOL_SPECS = {
     inputSchema: {
       type: 'object',
       properties: {
+        title: limitedText(
+          'Only when the work has moved away from the task’s title, such as a question that became a change: a new title, imperative and in sentence case, with no trailing period. The task takes it once the plan is accepted. Leave it out while the title still fits.',
+          L.taskTitle
+        ),
         goal: limitedText('The outcome in one or two sentences.', L.goal),
         phases: {
           type: 'array',
@@ -458,6 +498,7 @@ export const TOOL_SPECS = {
           'What you changed and, for anything you chose not to change, why.',
           L.phaseSummary
         ),
+        reply: REPLY,
         walkthrough: WALKTHROUGH_REVISION,
         checks: {
           type: 'array',

@@ -16,6 +16,7 @@ import {
 } from '@shinsa/core';
 import { resolveShortPath } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
+import { stripInlineMarkdown } from '@/lib/format/markdown.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { describeCommentLines, type LineComment } from '@/lib/review/draft.ts';
 import { listSeverityCounts, SEVERITY_LABEL, SEVERITY_TONE } from '@/lib/review/findings.ts';
@@ -289,13 +290,6 @@ export function listReviewChapters(
 
 export function listReviewPoints(chapters: readonly ReviewChapter[]) {
   return chapters.flatMap((chapter) => chapter.items);
-}
-
-function stripInlineMarkdown(text: string) {
-  return text
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/`|\*\*/g, '')
-    .trim();
 }
 
 export function resolvePointTitle(item: ReviewItem) {

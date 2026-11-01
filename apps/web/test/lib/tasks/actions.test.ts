@@ -27,7 +27,8 @@ describe('listTaskActions', () => {
       ['pullRequest', 'branch'],
       ['editor', 'terminal', 'finder'],
       ['fork', 'share'],
-      ['restart', 'complete', 'cancel'],
+      ['snooze'],
+      ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
   });
 
@@ -35,21 +36,34 @@ describe('listTaskActions', () => {
     expect(listTaskActions(createTask({ id: 't', branch: 'fix/tabs' }))).toEqual([
       ['branch'],
       ['fork', 'share'],
-      ['restart', 'complete', 'cancel'],
+      ['snooze'],
+      ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
     expect(listTaskActions(createTask({ id: 't', stage: 'merged' }))).toEqual([['fork', 'share']]);
     expect(listTaskActions(createTask({ id: 't', stage: 'cancelled' }))).toEqual([['share']]);
     expect(listTaskActions(createTask({ id: 't', stage: 'cancelled', watchHome: true }))).toEqual([]);
+    const closed = createTask({
+      id: 't',
+      stage: 'cancelled',
+      duplicate: { of: 'o', by: 'shinsa', why: null },
+    });
+    expect(listTaskActions(closed)).toEqual([['share'], ['notDuplicate']]);
+    expect(listTaskActions({ ...closed, duplicate: { of: 'o', by: 'you', why: null } })).toEqual([
+      ['share'],
+      ['notDuplicate'],
+    ]);
+    expect(listTaskActions({ ...closed, duplicate: null })).toEqual([['share']]);
   });
 
   it('offers Move to the backlog before building starts, and Remove from the backlog once it is there', () => {
     expect(listTaskActions(createTask({ id: 't', stage: 'planning' }))).toEqual([
       ['fork', 'share'],
-      ['moveToBacklog'],
-      ['restart', 'complete', 'cancel'],
+      ['moveToBacklog', 'snooze'],
+      ['restart', 'complete', 'duplicate', 'cancel'],
     ]);
     expect(listTaskActions(createTask({ id: 't', stage: 'awaiting_plan', backlog: { at: 1 } }))[1]).toEqual([
       'removeFromBacklog',
+      'snooze',
     ]);
   });
 
@@ -67,6 +81,13 @@ describe('listTaskActions', () => {
       share: { ...share, url: null, failure: 'Refused.' },
     });
     expect(listTaskActions(failed)).toEqual([['fork', 'share', 'unshare']]);
+  });
+
+  it('offers Unsnooze on a snoozed task, and neither once it is settled', () => {
+    expect(listTaskActions(createTask({ id: 't', snoozed: { at: 1 } }))[1]).toEqual(['unsnooze']);
+    expect(listTaskActions(createTask({ id: 't', stage: 'merged', snoozed: { at: 1 } }))).toEqual([
+      ['fork', 'share'],
+    ]);
   });
 
   it('labels every action with its icon', () => {
@@ -129,15 +150,21 @@ describe('runTaskAction', () => {
     ]);
   });
 
+  it('snoozes a task and unsnoozes it, with a toast for each', () => {
+    runTaskAction(FULL, 'snooze');
+    runTaskAction(FULL, 'unsnooze');
+    expect(spies.sent.mock.calls).toEqual([
+      [{ type: 'task.snooze', taskId: 'full' }, 'Snoozed.'],
+      [{ type: 'task.unsnooze', taskId: 'full' }, 'Unsnoozed.'],
+    ]);
+  });
+
   it('moves a task into the backlog and back to Needs you', () => {
     runTaskAction(FULL, 'moveToBacklog');
     runTaskAction(FULL, 'removeFromBacklog');
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.move_to_backlog', taskId: 'full' }, 'Moved to the backlog.'],
-      [
-        { type: 'task.remove_from_backlog', taskId: 'full' },
-        'Removed from the backlog. Its plan now waits for your approval.',
-      ],
+      [{ type: 'task.remove_from_backlog', taskId: 'full' }, 'Removed from the backlog.'],
     ]);
   });
 });

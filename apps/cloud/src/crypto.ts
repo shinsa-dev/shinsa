@@ -1,4 +1,11 @@
-import { encodeText, serializeBase64Url } from '@shinsa/core';
+import {
+  concatBytes,
+  decodeText,
+  encodeText,
+  parseBase64Url,
+  serializeBase64Url,
+  serializeHex,
+} from '@shinsa/core';
 
 const CONFUSABLE = new Set(['I', 'O', '0', '1']);
 
@@ -41,17 +48,48 @@ export function createInstanceId() {
 
 export async function resolveTokenHash(token: string) {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encodeText(token)));
-  return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return serializeHex(digest);
 }
 
 export async function createCodeChallenge(verifier: string) {
   return serializeBase64Url(new Uint8Array(await crypto.subtle.digest('SHA-256', encodeText(verifier))));
 }
 
-export function isSameSecret(left: string, right: string) {
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index++)
-    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  return difference === 0;
+const SEALED_IV_BYTES = 12;
+
+function importTokenKey(secret: string) {
+  const raw = parseBase64Url(secret);
+  if (raw?.length !== 32) throw new Error('SLACK_TOKEN_KEY must be 32 bytes in base64url.');
+  return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+export async function encryptToken(secret: string, token: string) {
+  const iv = createRandomBytes(SEALED_IV_BYTES);
+  const sealed = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await importTokenKey(secret), encodeText(token))
+  );
+  return serializeBase64Url(concatBytes(iv, sealed));
+}
+
+export async function decryptToken(secret: string, sealed: string) {
+  const bytes = parseBase64Url(sealed);
+  if (!bytes || bytes.length <= SEALED_IV_BYTES) throw new Error('The stored token is not sealed.');
+  const opened = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: bytes.slice(0, SEALED_IV_BYTES) },
+    await importTokenKey(secret),
+    bytes.slice(SEALED_IV_BYTES)
+  );
+  return decodeText(new Uint8Array(opened));
+}
+
+export async function createSlackSignature(secret: string, timestamp: string, body: string) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encodeText(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, encodeText(`v0:${timestamp}:${body}`)));
+  return `v0=${serializeHex(digest)}`;
 }
