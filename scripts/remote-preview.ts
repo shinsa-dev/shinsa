@@ -39,6 +39,7 @@ import {
   type RemoteInstance,
   type RemoteUser,
   type Repo,
+  resolveClaimUrl,
   resolveKeyFingerprint,
   resolvePreviewTunnelPath,
   SHARE_CHANNEL_PATH,
@@ -441,6 +442,39 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
   return shares.filter((share): share is PreviewShare => Boolean(share));
 }
 
+const PREVIEW_GUEST = { id: 'preview-guest', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+
+async function createPreviewHandoffs(studio: Awaited<ReturnType<typeof startMachine>>) {
+  const { engine } = studio;
+  const [claimed, waiting] = Object.values(engine.state.tasks).filter(
+    (task) => task.handle && task.repoId && !task.share && !task.watchHome && !isTaskSettled(task)
+  );
+  if (!(claimed && waiting)) return [];
+  await engine.dispatch({ type: 'task.hand_off', taskId: claimed.id });
+  await engine.dispatch({ type: 'handoff.claim', taskId: claimed.id, guest: PREVIEW_GUEST });
+  await engine.dispatch(
+    { type: 'task.message', taskId: claimed.id, text: 'I have this from here. Keep going with the plan.' },
+    { guest: { taskId: claimed.id, login: PREVIEW_GUEST.login } }
+  );
+  await engine.dispatch({ type: 'task.hand_off', taskId: waiting.id });
+  await engine.dispatch({
+    type: 'handoff.record',
+    taskId: waiting.id,
+    url: resolveClaimUrl(
+      { instanceId: studio.machine.id, machineKey: 'preview', secret: 'preview', invite: 'preview' },
+      ORIGIN
+    ),
+  });
+  const at = (task: Task) => `http://${HOST}:${studio.machine.port}/tasks/${task.handle}`;
+  return [
+    [
+      `${claimed.handle}, handed off to @${PREVIEW_GUEST.login} (Share task shows them, Activity their message)`,
+      at(claimed),
+    ],
+    [`${waiting.handle}, with a hand-off link no one opened yet (Share task)`, at(waiting)],
+  ];
+}
+
 async function createServicePreview(
   studio: Awaited<ReturnType<typeof startMachine>>
 ): Promise<{ preview: ServicePreview; demo: DemoService } | null> {
@@ -757,6 +791,7 @@ async function main() {
   await seedLaptop(laptop.engine, laptopData);
   const machines = [studio.machine, laptop.machine];
   const shares = await createPreviewShares(studio);
+  const handoffs = await createPreviewHandoffs(studio);
   const shared = await createServicePreview(studio);
   const preview = shared?.preview ?? null;
   const demo = shared?.demo ?? null;
@@ -800,7 +835,8 @@ async function main() {
       },
     },
   });
-  for (const [label, url] of listPreviewLinks(machines, shares, preview)) console.info(`${label}: ${url}`);
+  for (const [label, url] of [...listPreviewLinks(machines, shares, preview), ...handoffs])
+    console.info(`${label}: ${url}`);
 }
 
 await main();

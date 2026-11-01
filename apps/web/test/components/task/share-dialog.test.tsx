@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { Task } from '@shinsa/core';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
+import { HandoffRemoveConfirm, ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
 import { SharingBanner } from '@/components/task/sharing-banner.tsx';
 import { connection } from '@/lib/connection/socket.ts';
 import { closeShareDialog, closeUnshareConfirm, openShareDialog } from '@/lib/share/dialog.ts';
+import { closeHandoffRemoveConfirm } from '@/lib/share/handoff.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
@@ -18,6 +19,7 @@ function showTask(overrides: Partial<Task> = {}, paired = true) {
     <>
       <ShareDialog />
       <UnshareConfirm />
+      <HandoffRemoveConfirm />
     </>
   );
   act(() => openShareDialog('source'));
@@ -45,6 +47,7 @@ afterEach(() => {
   act(() => {
     closeShareDialog();
     closeUnshareConfirm();
+    closeHandoffRemoveConfirm();
   });
   stopFakeServer();
   mock.restore();
@@ -141,6 +144,84 @@ describe('the share dialog', () => {
         { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'standard' },
       ])
     );
+  });
+});
+
+const KAI = { id: 'u2', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+
+const HANDED = { at: 1, url: null, guest: null, claimedAt: null };
+
+function findHandoff() {
+  return screen.findByRole('region', { name: 'Hand off' });
+}
+
+describe('handing a task off from Share task', () => {
+  it('hands it off without sharing it, and waits for the link', async () => {
+    showTask();
+    const section = await findHandoff();
+    expect(section.textContent).toContain('The first GitHub account to open it');
+    fireEvent.click(within(section).getByRole('button', { name: 'Hand off' }));
+    await waitFor(() => expect(listSentCommands()).toEqual([{ type: 'task.hand_off', taskId: 'source' }]));
+    act(() =>
+      pushState(createShinsaState({ tasks: [createTask({ id: 'source', handle: 'SW-2', handoff: HANDED })] }))
+    );
+    await waitFor(async () =>
+      expect(
+        within(await findHandoff())
+          .getByRole('button')
+          .getAttribute('aria-busy')
+      ).toBe('true')
+    );
+  });
+
+  it('copies the link to send and turns it off', async () => {
+    const writeText = spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    showTask({ handoff: { ...HANDED, url: 'https://app.shinsa.dev/handoff#x' } });
+    const section = await findHandoff();
+    fireEvent.click(within(section).getByRole('button', { name: 'Copy hand-off link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://app.shinsa.dev/handoff#x'));
+    fireEvent.click(within(section).getByRole('button', { name: 'Turn off link' }));
+    await waitFor(() => expect(listSentCommands()).toEqual([{ type: 'handoff.remove', taskId: 'source' }]));
+  });
+
+  it('says why the link failed and tries again', async () => {
+    showTask({ handoff: { ...HANDED, failure: 'Remote access is off.' } });
+    const section = await findHandoff();
+    expect(within(section).getByRole('alert').textContent).toBe('Remote access is off.');
+    fireEvent.click(within(section).getByRole('button', { name: 'Try again' }));
+    fireEvent.click(within(section).getByRole('button', { name: 'Remove' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.hand_off', taskId: 'source' },
+        { type: 'handoff.remove', taskId: 'source' },
+      ])
+    );
+  });
+
+  it('shows who took it over and removes them once you confirm', async () => {
+    showTask({ stage: 'done', handoff: { ...HANDED, guest: KAI, claimedAt: Date.now() } });
+    const section = await findHandoff();
+    expect(section.textContent).toContain('Kai Lane took this task over');
+    expect(section.textContent).toContain('@kai');
+    expect(section.textContent).toContain('Took it over just now');
+    fireEvent.click(within(section).getByRole('button', { name: 'Remove' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog.textContent).toContain('Remove Kai Lane?');
+    expect(listSentCommands()).toEqual([]);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(listSentCommands()).toEqual([{ type: 'handoff.remove', taskId: 'source' }]));
+  });
+
+  it('offers no hand-off on a finished task', async () => {
+    showTask({ stage: 'done' });
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Hand off' })).toBeNull();
+  });
+
+  it('offers no hand-off before remote access is on', async () => {
+    showTask({}, false);
+    expect(await screen.findByRole('button', { name: 'Open Settings' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Hand off' })).toBeNull();
   });
 });
 

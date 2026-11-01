@@ -51,6 +51,7 @@ export interface ActivityActor {
 }
 
 export function resolveActivityActor(state: ShinsaState, entry: Activity): ActivityActor {
+  if (entry.byGuest) return { label: `@${entry.byGuest}`, taskId: null };
   if (!entry.onBehalf) return { label: ACTOR_LABEL[entry.actor], taskId: null };
   const by = entry.byTask ? state.tasks[entry.byTask] : undefined;
   if (!by) return { label: 'Shinsa (on your behalf)', taskId: null };

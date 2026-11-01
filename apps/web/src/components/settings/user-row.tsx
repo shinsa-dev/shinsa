@@ -5,7 +5,7 @@ import type * as React from 'react';
 import { describeUserHandle, describeUserName, resolveUserInitial } from '@/lib/remote/users.ts';
 import { SETTING_ROW } from './group.tsx';
 
-function UserAvatar({ user }: { user: RemoteUser }) {
+export function UserAvatar({ user }: { user: RemoteUser }) {
   if (user.avatarUrl)
     return (
       <img
