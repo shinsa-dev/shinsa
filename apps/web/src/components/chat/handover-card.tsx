@@ -1,6 +1,7 @@
 import {
   type ChatToolArgs,
   capitalise,
+  lowerFirst,
   type Run,
   resolvePhaseChange,
   type ShinsaState,
@@ -20,6 +21,7 @@ import { InAppLink } from '@/components/links/link.tsx';
 import { AgentReplyBlock } from '@/components/overview/agent-reply.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
 import { PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
+import { useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -226,10 +228,11 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
   const context = readString(args, 'context');
   const choices = readStrings(args, 'choices');
   const answer = resolveAskAnswer(call);
+  const owner = useReadOnlyOwner();
   return (
     <Card
       icon='IconBubbleQuestion'
-      title={delegated ? 'Asked the agent that delegated it' : 'Asked you'}
+      title={delegated ? 'Asked the agent that delegated it' : `Asked ${owner ? lowerFirst(owner) : 'you'}`}
       meta={resolveAskMeta(call, delegated)}
     >
       <span className='selectable text-fg-4 text-xs'>
@@ -247,7 +250,9 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
       )}
       {answer !== null && (
         <div className='flex gap-2 border-border border-t pt-2.5 text-xs'>
-          <span className='shrink-0 text-fg-2'>{delegated ? 'Its answer' : 'Your answer'}</span>
+          <span className='shrink-0 text-fg-2'>
+            {delegated ? 'Its answer' : owner ? `${owner}’s answer` : 'Your answer'}
+          </span>
           <div className='flex min-w-0 flex-1 flex-col gap-2'>
             {answer.text && (
               <span className='selectable min-w-0 whitespace-pre-wrap text-fg-4'>{answer.text}</span>

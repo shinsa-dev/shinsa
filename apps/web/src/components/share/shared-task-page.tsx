@@ -5,7 +5,7 @@ import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useTaskView } from '@/hooks/use-task-view.ts';
 import { enterReadOnly } from '@/lib/connection/read-only.ts';
-import { describeSharedBy, listSharedTabs } from '@/lib/share/page.ts';
+import { describeSharedBy, listSharedTabs, resolveOwnerName } from '@/lib/share/page.ts';
 import type { SharedView } from '@/lib/share/view.ts';
 import { resolveTaskTab } from '@/lib/tasks/tabs.ts';
 import { useSearchParam } from '@/router.ts';
@@ -33,6 +33,7 @@ export function SharedTaskPage({
   };
   return (
     <ReadOnlyProvider
+      owner={resolveOwnerName(shared, viewer)}
       note={
         <p className='flex items-center gap-1.5 text-2xs text-fg-2'>
           <Icon size='sm' name='IconEyeOpen' />

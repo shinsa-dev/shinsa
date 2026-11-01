@@ -140,11 +140,13 @@ src/
     │                    live.ts (openShareStream: the link's live channel to the machine, the hello and welcome
     │                    checked with the key, the views and files it pushes as blob addresses, reconnecting),
     │                    sources.ts (a shared file's text, who is looking), view.ts (the read-only state and task the tab components render),
-    │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner), code.ts (the streamed diff and
+    │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner; resolveOwnerName: the owner's
+    │                    login, `@kai`, in place of "You" for anyone else), code.ts (the streamed diff and
     │                    whole files in place of a worktree's refs and blobs, a base rebuilt from its hunks);
     │                    components/share/shared-task-page.tsx renders the owner's TaskFrame inside
     │                    components/task/read-only.tsx (ReadOnlyProvider, useReadOnly: every control hides; useReadOnlyNote: the line
-    │                    the header shows above the title), and
+    │                    the header shows above the title; useReadOnlyOwner: the owner's name for activity, fact hints and
+    │                    the hand-over card, null on your own page), and
     │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
     │                    components/task/share-dialog.tsx is Share task and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows

@@ -3,6 +3,7 @@ import { type ChatTool, resolveAnsweredReply, serializeAttachments, type Task } 
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render } from '@testing-library/react';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
+import { ReadOnlyProvider } from '@/components/task/read-only.tsx';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { describeTool } from '@/lib/chat/tool-describe.ts';
 import { spyOnCommands } from '../../support/commands.ts';
@@ -189,6 +190,26 @@ describe('HandoverCard for the process tools', () => {
     expect(view.getByText('Like this')).toBeTruthy();
     expect(view.getByText('trace.log')).toBeTruthy();
     expect(view.container.textContent).not.toContain('<attachment');
+  });
+
+  it('names the owner instead of you on a teammate’s shared page', () => {
+    const view = render(
+      <TooltipProvider>
+        <ReadOnlyProvider owner='@kai'>
+          <HandoverCard
+            call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
+            run={createRun({ id: 'r', taskId: 't' })}
+            live={false}
+            task={null}
+            at={null}
+          />
+        </ReadOnlyProvider>
+      </TooltipProvider>
+    );
+    expect(view.getByText('Asked @kai')).toBeTruthy();
+    expect(view.getByText('@kai’s answer')).toBeTruthy();
+    expect(view.queryByText('Asked you')).toBeNull();
+    expect(view.queryByText('Your answer')).toBeNull();
   });
 
   it('shows a delegated agent’s question as asked of the agent that delegated it, with its answer', () => {

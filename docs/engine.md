@@ -3072,7 +3072,10 @@ projection and channel will serve teams.
   (`lib/share/view.ts`) and renders the owner's own task page (`TaskFrame`: the same header, facts, Overview, Review
   and Code components, the same layout) inside `ReadOnlyProvider`, whose note sits in the header above the title, one
   header gap from it: read-only, who shared it from which machine ("you" when the GitHub login signed in to
-  app.shinsa.dev is its owner) and when the machine last read it. Read-only takes away
+  app.shinsa.dev is its owner) and when the machine last read it. To anyone but the owner, what the owner did or wrote
+  is labelled with their login instead of "You" (`resolveOwnerName`, read through `useReadOnlyOwner`): "Asked for this ·
+  @kai", "on @kai’s behalf", "@kai closed this as a duplicate.", "Asked @kai" and "@kai’s answer" in Chat, and "The
+  owner" when the share carries no login. Read-only takes away
   only what acts: the task menu, the ⌘K commands, every card's buttons and links (`NowFrame`'s action, `QuietLink`),
   answer boxes, the composer, verdicts, merge-step boxes, suggestion and watchdog buttons, a delegation's Stop, the
   priority menu, services and every way into a chat. Its tabs are the owner's, Chat read-only (each run's streamed
