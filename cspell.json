@@ -224,6 +224,7 @@
     "worktree",
     "worktrees",
     "xcrun",
-    "ZDOTDIR"
+    "ZDOTDIR",
+    "QUIC"
   ]
 }

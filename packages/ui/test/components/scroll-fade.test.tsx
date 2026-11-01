@@ -17,6 +17,16 @@ function Decorated({ seen }: { seen: string[] }) {
   );
 }
 
+function Field() {
+  const field = React.useRef<HTMLTextAreaElement>(null);
+  return (
+    <>
+      <textarea ref={field} data-testid='field' />
+      <ScrollFade field targetRef={field} />
+    </>
+  );
+}
+
 describe('ScrollFade', () => {
   it('renders its own scroller already fading, so the first paint has the fade', () => {
     const { container } = render(
@@ -59,8 +69,51 @@ describe('ScrollFade', () => {
     expect(target.classList.contains('scroll-fade')).toBe(true);
     expect(target.hasAttribute('data-fade-scope')).toBe(false);
     expect(target.style.getPropertyValue('--fade-size')).toBe('16px');
+    expect(target.hasAttribute('data-fade-static')).toBe(false);
     unmount();
     expect(target.classList.contains('scroll-fade')).toBe(false);
     expect(target.hasAttribute('data-fade-orientation')).toBe(false);
+  });
+
+  it('keeps a clipping target exact, fading on a single hidden pixel', () => {
+    const seen: string[] = [];
+    const { getByTestId } = render(<Decorated seen={seen} />);
+    const target = getByTestId('target');
+    place(target, { scrollWidth: 201, clientWidth: 200 });
+    fireEvent.scroll(target);
+    expect(target.hasAttribute('data-overflow-x-end')).toBe(true);
+  });
+
+  it('fades a field from its measured edges alone, with a shorter fade', () => {
+    const { getByTestId, unmount } = render(<Field />);
+    const field = getByTestId('field');
+    expect(field.hasAttribute('data-fade-static')).toBe(true);
+    expect(field.style.getPropertyValue('--fade-size')).toBe('16px');
+    unmount();
+    expect(field.hasAttribute('data-fade-static')).toBe(false);
+  });
+
+  it('clears both fades on input once the text no longer overflows', () => {
+    const { getByTestId } = render(<Field />);
+    const field = getByTestId('field');
+    place(field, { scrollTop: 478, scrollHeight: 638, clientHeight: 160 });
+    fireEvent.scroll(field);
+    expect(field.hasAttribute('data-overflow-y-start')).toBe(true);
+    place(field, { scrollTop: 0, scrollHeight: 40, clientHeight: 40 });
+    fireEvent.input(field);
+    expect(field.hasAttribute('data-overflow-y-start')).toBe(false);
+    expect(field.hasAttribute('data-overflow-y-end')).toBe(false);
+  });
+
+  it('keeps the last line clear when only the padding below it is out of view', () => {
+    const { getByTestId } = render(<Field />);
+    const field = getByTestId('field');
+    place(field, { scrollTop: 332, scrollHeight: 497, clientHeight: 160 });
+    fireEvent.input(field);
+    expect(field.hasAttribute('data-overflow-y-start')).toBe(true);
+    expect(field.hasAttribute('data-overflow-y-end')).toBe(false);
+    place(field, { scrollTop: 300, scrollHeight: 497, clientHeight: 160 });
+    fireEvent.input(field);
+    expect(field.hasAttribute('data-overflow-y-end')).toBe(true);
   });
 });
