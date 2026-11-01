@@ -508,6 +508,39 @@ describe('keeping a teammate’s last list', () => {
     other.feeds.stop();
   });
 
+  test('drops every copy and full task once this machine is unpaired, and expired ones while paused', async () => {
+    let now = 60;
+    const { feeds, laptop, viewWaits } = setUp({ live: createFullLive(), now: () => now });
+    feeds.start();
+    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    viewWaits.shift()?.();
+    await until('the views are kept', () => readKeptViews(laptop).list().length === 2);
+    laptop.store.update((file) => ({ ...file, enabled: false }));
+    laptop.publish();
+    expect(readKeptViews(laptop).list()).toHaveLength(2);
+    now = 51 + TEAM_SNAPSHOT_TTL_MS;
+    laptop.publish();
+    expect(readKeptFile(resolveKeptPath(laptop))).toBeNull();
+    expect(readKeptViews(laptop).list()).toEqual([]);
+    feeds.stop();
+    const other = setUp({ live: createFullLive() });
+    other.feeds.start();
+    await until('the list arrives', () => other.feeds.snapshot().tasks.length === 2);
+    other.viewWaits.shift()?.();
+    await until('the views are kept', () => readKeptViews(other.laptop).list().length === 2);
+    other.laptop.store.update((file) => ({
+      ...file,
+      credentials: null,
+      enabled: false,
+      teams: [],
+      teamKeys: [],
+    }));
+    other.laptop.publish();
+    expect(readKeptFile(resolveKeptPath(other.laptop))).toBeNull();
+    expect(readKeptViews(other.laptop).list()).toEqual([]);
+    other.feeds.stop();
+  });
+
   test('drops it when the teammate’s machine refuses this one', async () => {
     const { feeds, laptop, plane, sockets, waits } = setUp();
     feeds.start();

@@ -9,6 +9,8 @@ export const TEAM_VIEWS_DIR = 'team-views';
 
 const TEAM_VIEW_FILES_LIMIT = 8 * 1024 * 1024;
 
+export const TEAM_VIEWS_LIMIT = 64 * 1024 * 1024;
+
 const INDEX_FILE = 'index.json';
 
 export interface TeamViewEntry {
@@ -17,9 +19,10 @@ export interface TeamViewEntry {
   taskId: string;
   keyDigest: string;
   updatedAt: number;
+  size: number;
 }
 
-export interface HeldTeamView extends TeamViewEntry {
+export interface HeldTeamView extends Omit<TeamViewEntry, 'size'> {
   messages: ShareMessage[];
 }
 
@@ -139,9 +142,10 @@ function resolveViewFile(key: string) {
 
 function readEntry(value: unknown): TeamViewEntry[] {
   if (value === null || typeof value !== 'object') return [];
-  const { teamId, instanceId, taskId, keyDigest, updatedAt } = value as Record<string, unknown>;
+  const { teamId, instanceId, taskId, keyDigest, updatedAt, size } = value as Record<string, unknown>;
   const texts = [teamId, instanceId, taskId, keyDigest];
-  if (!(texts.every((text) => typeof text === 'string') && typeof updatedAt === 'number')) return [];
+  if (!texts.every((text) => typeof text === 'string')) return [];
+  if (!(typeof updatedAt === 'number' && typeof size === 'number')) return [];
   return [
     {
       teamId: teamId as string,
@@ -149,6 +153,7 @@ function readEntry(value: unknown): TeamViewEntry[] {
       taskId: taskId as string,
       keyDigest: keyDigest as string,
       updatedAt,
+      size,
     },
   ];
 }
@@ -159,10 +164,12 @@ function readJson(path: string): unknown {
 
 export class TeamViews {
   readonly dir: string;
+  readonly #limit: number;
   readonly #entries = new Map<string, TeamViewEntry>();
 
-  constructor(dir: string) {
+  constructor(dir: string, limit = TEAM_VIEWS_LIMIT) {
     this.dir = dir;
+    this.#limit = limit;
     for (const entry of this.#readIndex())
       this.#entries.set(resolveViewKey(entry.teamId, entry.instanceId, entry.taskId), entry);
   }
@@ -190,7 +197,7 @@ export class TeamViews {
   select(teamId: string, instanceId: string, taskId: string): HeldTeamView | null {
     const key = resolveViewKey(teamId, instanceId, taskId);
     const entry = this.#entries.get(key);
-    if (!entry) return null;
+    if (!entry || entry.size === 0) return null;
     try {
       const value = readJson(join(this.dir, resolveViewFile(key))) as { messages?: unknown } | null;
       const listed: unknown[] = Array.isArray(value?.messages) ? value.messages : [];
@@ -205,12 +212,27 @@ export class TeamViews {
   write(view: HeldTeamView) {
     const key = resolveViewKey(view.teamId, view.instanceId, view.taskId);
     const { messages, ...entry } = view;
+    const size = Buffer.byteLength(JSON.stringify(messages));
     try {
       writeJsonFile(join(this.dir, resolveViewFile(key)), { version: 1, messages });
-      this.#entries.set(key, entry);
+      this.#entries.set(key, { ...entry, size });
+      this.#evictOver(key);
       this.#saveIndex();
     } catch (error) {
       log.warn('[Teams] Could not keep a team task view', { dir: this.dir, error: describeError(error) });
+    }
+  }
+
+  #evictOver(kept: string) {
+    let total = 0;
+    for (const entry of this.#entries.values()) total += entry.size;
+    const oldest = [...this.#entries].sort(([, a], [, b]) => a.updatedAt - b.updatedAt);
+    for (const [key, entry] of oldest) {
+      if (total <= this.#limit) return;
+      if (key === kept || entry.size === 0) continue;
+      rmSync(join(this.dir, resolveViewFile(key)), { force: true });
+      total -= entry.size;
+      this.#entries.set(key, { ...entry, size: 0 });
     }
   }
 

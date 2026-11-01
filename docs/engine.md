@@ -3233,11 +3233,13 @@ online, and the last list of it their own machine kept while it is not (Offline 
   - **The full task, kept too.** Each engine also keeps the whole page of every task in a list it watches, as the
     owner's machine sent it (the view and its files: the diff, the code, evidence), in `data/team-views/` (`TeamViews`:
     one file per task named by a SHA-256 of its team, machine and task, an `index.json` of each one's team, machine,
-    task, `keyDigest` and the task's `updatedAt`, read leniently, the folder removed once empty). It fetches them
+    task, `keyDigest`, the task's `updatedAt` and the copy's `size`, read leniently, the folder removed once empty). It fetches them
     30 seconds after a list arrives (`TEAM_VIEW_REFRESH_MS`), one at a time, only those whose task changed since its
     copy, each over a task channel closed once the view and every file it lists came or after 30 seconds
     (`TeamViewRecorder`, `TEAM_VIEW_FETCH_TIMEOUT_MS`); a task you open live is kept as it streams. Files past 8 MB a
-    task are left out (`TEAM_VIEW_FILES_LIMIT`). While the owner's machine is not live, the local relay
+    task are left out (`TEAM_VIEW_FILES_LIMIT`), and all the kept views together stay under 64 MB (`TEAM_VIEWS_LIMIT`):
+    past it, the least recently updated tasks lose their full copy (the index keeps them with `size` 0, so they are
+    not fetched again until they change) and open to their summary instead. While the owner's machine is not live, the local relay
     (`TeamFeeds.openRelay`) replays the kept copy instead of reaching for the machine, and closes once the machine is
     live again so the page reconnects to the live task. The page then shows the whole task read-only with the note
     "Read-only copy from before their machine went offline" and when it was updated (`routes/team-task.tsx`); with no
@@ -3260,7 +3262,9 @@ online, and the last list of it their own machine kept while it is not (Offline 
     when the team key changes (a copy kept under another key is not shown, and the next list replaces it); and when
     the owner's machine refuses this one (the share revoked: no longer in its copy of the team, or the project taken
     out). A full task copy goes with its machine's list, and also when the task leaves that list or its channel is
-    refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause.
+    refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause, but still drops
+    those past 30 days, with their full tasks, each time remote access changes and when the engine starts. Removing
+    the machine from remote access, or app.shinsa.dev forgetting it, drops every copy and full task at once.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
   change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as

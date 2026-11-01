@@ -233,11 +233,24 @@ export class TeamFeeds {
       this.#halt(feed);
       this.#feeds.delete(id);
     }
-    if (this.#isWatching()) this.#pruneSnapshots();
+    this.#pruneSnapshots();
     this.#publish();
   }
 
   #pruneSnapshots() {
+    if (!this.#remote.store.file.credentials?.instanceId) {
+      for (const held of this.#snapshots.list()) this.#snapshots.remove(held.teamId, held.instanceId);
+      this.#views.removeWhere(() => true);
+      return;
+    }
+    if (!this.#isWatching()) {
+      for (const held of this.#snapshots.list()) {
+        if (isTeamSnapshotExpired(held.updatedAt, this.#now()))
+          this.#snapshots.remove(held.teamId, held.instanceId);
+      }
+      this.#views.removeWhere((entry) => !this.#snapshots.select(entry.teamId, entry.instanceId));
+      return;
+    }
     for (const held of this.#snapshots.list()) {
       const feed = this.#feeds.get(resolveFeedKey(held.teamId, held.instanceId));
       if (feed?.updatedAt !== null && feed?.updatedAt !== undefined && !this.#isExpired(feed)) continue;
