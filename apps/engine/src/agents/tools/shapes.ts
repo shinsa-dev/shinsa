@@ -12,6 +12,7 @@ import {
 } from '@shinsa/core';
 import { assertProtocol, HANDED_OVER } from '../handover.ts';
 import type { ProcessToolCall } from './process.ts';
+import { REPLY_SPEC } from './reply.ts';
 import { limitedText, type ToolSpec } from './schema.ts';
 
 const L = SHAPE_LIMITS;
@@ -45,6 +46,7 @@ export const SHAPE_TOOL_SPECS = {
       type: 'object',
       properties: {
         answer: limitedText('The answer in markdown.', L.answer),
+        reply: REPLY_SPEC,
         propose_change: PROPOSE_CHANGE_SPEC,
       },
       required: ['answer'],
@@ -60,6 +62,7 @@ export const SHAPE_TOOL_SPECS = {
           'The cause, or what you ruled out, and the evidence, in markdown.',
           L.diagnosis
         ),
+        reply: REPLY_SPEC,
         propose_change: PROPOSE_CHANGE_SPEC,
       },
       required: ['diagnosis'],
@@ -72,6 +75,7 @@ export const SHAPE_TOOL_SPECS = {
       type: 'object',
       properties: {
         report: limitedText('The report in markdown.', L.report),
+        reply: REPLY_SPEC,
         propose_change: PROPOSE_CHANGE_SPEC,
       },
       required: ['report'],
@@ -87,6 +91,7 @@ export const SHAPE_TOOL_SPECS = {
           'What ran, what changed, and anything left to do or undo, in markdown.',
           L.outcome
         ),
+        reply: REPLY_SPEC,
       },
       required: ['outcome'],
     },
@@ -163,8 +168,16 @@ export async function handleShapeTool(name: string, input: Record<string, unknow
   const { runId, attemptId } = call;
   const step = DELIVERING_TOOLS.get(name);
   if (step) {
-    const { body, proposal } = assertProtocol(validateDelivery(step, input));
-    await call.dispatch({ type: 'agent.deliver', runId, attemptId, step, body, ...withProposal(proposal) });
+    const { body, reply, proposal } = assertProtocol(validateDelivery(step, input));
+    await call.dispatch({
+      type: 'agent.deliver',
+      runId,
+      attemptId,
+      step,
+      body,
+      ...(reply ? { reply } : {}),
+      ...withProposal(proposal),
+    });
     return HANDED_OVER;
   }
   if (name === 'report_read') {

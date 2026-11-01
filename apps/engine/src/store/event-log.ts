@@ -122,7 +122,7 @@ export const SETTLED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const SEED_STRIDE = 1000;
 
-const LOG_VERSION = 11;
+const LOG_VERSION = 12;
 
 const BRIEFING_EVENT = 'briefing.written';
 

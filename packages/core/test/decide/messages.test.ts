@@ -25,10 +25,12 @@ import {
   proposePlan,
   pullRequest,
   pushed,
+  REPLY,
   reachReviewGate,
   reachShipping,
   readyWorktree,
   registerRepo,
+  resolveReply,
   shipAndMerge,
   verifySetup,
 } from '../harness.ts';
@@ -530,11 +532,13 @@ function answerFollowUp(
   taskId: string,
   proposal: { request: string; why: string } | null = null
 ) {
+  const runId = harness.activeRun(taskId).id;
   harness.send({
     type: 'agent.deliver',
-    runId: harness.activeRun(taskId).id,
+    runId,
     step: 'answer',
     body: 'Because the project is called Superwall.',
+    ...resolveReply(harness, runId),
     ...(proposal ? { proposal } : {}),
   });
 }
@@ -618,6 +622,13 @@ describe('a message to a resting task', () => {
     answerFollowUp(harness, taskId);
     const task = harness.task(taskId);
     expect(task).toMatchObject({ stage: 'done', stageReason: 'answered your follow-up' });
+    expect(task.iterations).toEqual([
+      expect.objectContaining({
+        requests: [expect.objectContaining({ text: 'Why did you pick SW as the key?' })],
+        reply: REPLY,
+        runId: run.id,
+      }),
+    ]);
     expect(task.result).toMatchObject({ step: 'operate', body: 'Moved 39 repositories into groups.' });
     expect(resolveTaskRounds(task)).toEqual([
       expect.objectContaining({

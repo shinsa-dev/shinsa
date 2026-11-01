@@ -29,6 +29,7 @@ import {
   proposePlan,
   pullRequest,
   pushed,
+  REPLY,
   reachReviewGate,
   reachShipping,
   registerRepo,
@@ -409,6 +410,7 @@ describe('feedback, new work and work that belongs elsewhere', () => {
       runId: harness.activeRun(taskId).id,
       step: 'answer',
       body: 'Seven.',
+      reply: REPLY,
     });
     harness.send({ type: 'task.message', taskId, text: 'Move it to Valkey', kind: 'new_round' });
     expect(listStatuses(harness.task(taskId))).toEqual([

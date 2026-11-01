@@ -72,6 +72,30 @@ describe('the shape tools', () => {
     ] as ShinsaCommand[]);
   });
 
+  test('every delivery passes the reply to the human’s message on, and refuses one that breaks its limits', async () => {
+    const { sent, call } = createCall();
+    const reply = {
+      headline: 'Checked Safari too.',
+      points: [{ ask: 'And Safari?', outcome: 'answered' as const, note: 'Same result.' }],
+    };
+    const deliveries = [
+      ['answer', 'answer'],
+      ['report_diagnosis', 'diagnosis'],
+      ['submit_report', 'report'],
+      ['report_outcome', 'outcome'],
+    ] as const;
+    for (const [tool, field] of deliveries) {
+      expect(SHAPE_TOOL_SPECS[tool].inputSchema.properties).toHaveProperty('reply');
+      await handleShapeTool(tool, { [field]: 'Done.', reply }, call);
+    }
+    expect(sent.map((command) => command.type === 'agent.deliver' && command.reply)).toEqual(
+      deliveries.map(() => ({ ...reply, next: null }))
+    );
+    await expect(
+      handleShapeTool('answer', { answer: 'Done.', reply: { headline: '', points: [] } }, call)
+    ).rejects.toThrow('reply.points');
+  });
+
   test('report_read ends a read of a data source, with live for a watchdog, and refuses a summary over its limit', async () => {
     const { sent, call } = createCall();
     expect(await handleShapeTool('report_read', { summary: 'Read 12 messages; filed 2.' }, call)).toBe(

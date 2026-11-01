@@ -54,8 +54,8 @@ import type {
 } from '../domain/pull-requests.ts';
 import type { SourceReport } from '../domain/schedules.ts';
 import type {
+  AgentReply,
   CheckChange,
-  FixReply,
   PlanDocument,
   ReportCheck,
   ReportWalkthroughRevision,
@@ -154,7 +154,7 @@ type EventBody =
       text: string;
       comments: number;
     }
-  | { type: 'iteration.answered'; taskId: string; iterationId: string; reply: FixReply; runId: string }
+  | { type: 'iteration.answered'; taskId: string; iterationId: string; reply: AgentReply; runId: string }
   | { type: 'task.messages_told'; taskId: string }
   | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
   | { type: 'task.message_routed'; taskId: string; messageId: string }
@@ -197,14 +197,7 @@ type EventBody =
   | { type: 'task.overlaps_told'; taskId: string }
   | { type: 'task.edits_committed'; taskId: string }
   | { type: 'task.edits_approved'; taskId: string; gate: EditsApproval | null }
-  | {
-      type: 'plan.proposed';
-      taskId: string;
-      body: string;
-      document: PlanDocument | null;
-      changeSummary?: string | null;
-      feedback?: string | null;
-    }
+  | { type: 'plan.proposed'; taskId: string; body: string; document: PlanDocument | null }
   | { type: 'plan.answered'; taskId: string; answers: string }
   | { type: 'phase.updated'; taskId: string; index: number; status: PhaseStatus }
   | { type: 'phase.completed'; taskId: string; report: PhaseReport }

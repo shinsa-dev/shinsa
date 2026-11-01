@@ -2473,11 +2473,9 @@ describe('the process tools and what a run cost', () => {
       out_of_scope: [],
       verification: [],
       questions: [],
-      change_summary: 'Split the work in two.',
+      reply,
     });
-    expect(dispatched.find((command) => command.type === 'agent.propose_plan')).toMatchObject({
-      changeSummary: 'Split the work in two.',
-    });
+    expect(dispatched.find((command) => command.type === 'agent.propose_plan')).toMatchObject({ reply });
     const withdraw = new AbortController();
     const asked = fake.input.tools.handle(
       'ask',
