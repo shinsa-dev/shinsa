@@ -241,6 +241,7 @@ function apply(decider: Decider, command: ShinsaCommand) {
         ...(command.planVersion === undefined ? {} : { planVersion: command.planVersion }),
         ...(command.verdicts === undefined ? {} : { verdicts: command.verdicts }),
         ...(command.comments === undefined ? {} : { comments: command.comments }),
+        ...(command.thenApprove === undefined ? {} : { thenApprove: command.thenApprove }),
       });
     case 'merge_step.tick':
       return tickMergeStep(decider, command);

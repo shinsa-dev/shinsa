@@ -135,6 +135,7 @@ export type UserCommand =
       planVersion?: number;
       verdicts?: FindingVerdict[];
       comments?: ReviewComment[];
+      thenApprove?: boolean;
     }
   | { type: 'merge_step.tick'; taskId: string; key: string; done: boolean }
   | {

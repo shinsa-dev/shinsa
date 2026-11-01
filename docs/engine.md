@@ -1777,6 +1777,17 @@ checks it ran.
   Code tab (Where agents work → Your edits). Fix N findings at an escalated review sends the drafted comments with the verdicts the same way. The
   comments are stored on `gate.answered` and on the decision's activity entry, so the task's activity lists each
   with its place. Comments with any other decision or at any other gate are refused.
+- Fix N findings and approve, from the Fix button's chevron, is the same `revise` with `thenApprove: true`
+  (refused at any other gate or with any other decision, `then_approve_invalid`, `then_approve_conflict`). The
+  `gate.answered` fold sets `task.approveAfterFix`; the fix then runs as any other: checks, the agent review and its
+  own fix rounds. While the flag is on, `reactToFindings` sends the agent review's `should_fix` findings to the Agent
+  as well as its blocking ones, the verdicts your review would have defaulted to, so the approval never passes a
+  finding you would have fixed; `optional` ones do not hold it. When the review gate would open again without an escalation, `openReviewGate` opens it and answers
+  it `approve` at once (`approveReviewAhead`, `gate.answered` with `ahead: true`), then approves as your click would:
+  the pull request opens, or every check runs first when you have uncommitted edits. The activity says "Approved after
+  the fix, as you asked". An escalated review, or a failure gate when checks run out of fixes, still stops for you.
+  Every later answer at a review gate writes the flag again (on only for another Fix N findings and approve), and a
+  new round clears it. The web shows the chevron only on an engine with `review.approve_after_fix`.
 - Dismissed findings are kept on the task (`dismissedFindings`, the last 30) and every later
   reviewer is told not to report them again unless the code around them changed. Your decision
   resets the round count.
@@ -2885,8 +2896,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   machine for `feedback.write`. A command sent anyway is refused before it leaves the page, with "Update
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
-  `feedback` for `GET /api/feedback`, and `teams` for the team routes and `GET /api/teams/tasks`, today; Settings →
-  Teams shows only on an engine that has it). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, today; Settings → Teams and the review's Fix and approve
+  choice show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app

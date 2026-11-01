@@ -603,13 +603,12 @@ describe('the Review tab', () => {
   it('decides on each finding and sends the decision from the same action as the Overview', async () => {
     const { task, state } = reviewing();
     renderReview(state, task);
-    const fix = await screen.findByRole('button', { name: 'Fix 1 finding' });
+    expect(await screen.findByRole('button', { name: 'Fix 1 finding' })).toBeDefined();
     fireEvent.click(screen.getAllByRole('tab', { name: 'Fix' })[1] as HTMLElement);
     expect(await screen.findByRole('button', { name: 'Fix 2 findings' })).toBeDefined();
     fireEvent.click(screen.getAllByRole('tab', { name: 'Dismiss' })[0] as HTMLElement);
     fireEvent.click(screen.getAllByRole('tab', { name: 'Dismiss' })[1] as HTMLElement);
-    expect(fix.textContent).toBe('Approve changes');
-    fireEvent.click(fix);
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve changes' }));
     await waitFor(() =>
       expect(listSentCommands()).toMatchObject([{ type: 'gate.answer', gateId: `gate-${task.id}` }])
     );
