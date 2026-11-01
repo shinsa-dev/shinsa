@@ -265,6 +265,48 @@ comes into view.
   (Safari), neither applies and the shift is moved by hand as before. The reading position stays put on the way up
   (`holdPlace`: no jumps, at most 1px).
 
+### The Review tab (2026-11-01)
+
+A task with a lot of evidence and review points (LOC-78: 30 pieces of evidence, 14 of them screenshots, and 83
+points, a 37,600px column of about 7,500 elements) made the whole Review tab stutter. The images were not the cost:
+hiding every one changed nothing. Two things were.
+
+- **How it is measured.** A production build of the web app (`vite build`, served by `vite preview` against the
+  running engine) in Chromium at 1512 × 900 and device scale 2, the CPU throttled 4×, scrolling the Review tab of
+  LOC-78 with 80 wheel steps of 250px 40ms apart. Frames are `requestAnimationFrame` deltas; the rest is the
+  DevTools timeline (`HitTest`, `FunctionCall`, `Paint`, `Layout`, `UpdateLayoutTree`) summed over the scroll. Three
+  runs each, before and after interleaved; the table shows the median.
+
+| | Before | After |
+|---|---|---|
+| Frames drawn | 250 | 308 |
+| Frames over 50ms | 33 | 3 |
+| p95 frame | 67ms | 33ms |
+| Hit testing | 1,707ms | 196ms |
+| Script | 2,060ms | 647ms |
+| Paint | 534ms | 888ms |
+| Layout and style | 153ms | 465ms |
+
+- **Scrolling re-rendered the whole tab.** The point in view was state at the top of `ReviewTab`, so each point
+  scrolled past rendered every evidence figure, note card and diff snippet again (112 renders of the tab in one pass,
+  1,232 of `EvidenceFigure`), and each J or K press did it several times. The point in view, the jump request and the
+  fading highlight now live in a small store (`lib/review/selection.ts`, read with `useSyncExternalStore`): the
+  pinned index reads the point in view, and each point reads only whether it is the lit one, so scrolling renders the
+  index and J or K renders the two points whose highlight changes.
+- **Every push re-rendered it too.** The chapters, the Evidence panel, the agent review, the comments and Everything
+  else are memoized on the slices they read, kept by value with `useStructuralValue` (`lib/format/equal.ts`), so a
+  patch to another task or the per-second clock leaves them alone.
+- **The browser hit-tested and painted the whole column.** Each point, risk row, evidence group and comparison is
+  `content-visibility: auto` with a remembered size (`components/layout/surface/offscreen.ts`, the run sections'
+  pattern), so the browser skips what is off screen; like the runs, only where the browser anchors scrolling
+  (not Safari). That moves some work into the scroll: a point is laid out and
+  painted as it comes in, which is the rise in paint, layout and style, and still well under what hit testing cost.
+  A jump (`?spot=`, J and K) lands where it did, 24px under the top, because the hold scrolls it again while the
+  points above take their real size.
+- **Media load near the screen.** Evidence images are `loading='lazy'`, and a recording's thumbnail mounts its
+  `<video>` only within 800px of view (`hooks/use-near-viewport.ts`); the image viewer reads the size when it
+  opens, so an image that has not loaded yet still opens from its place.
+
 ### What is left
 
 - The scroll is at the display's rate (third pass above); what is left in it is script (about 160 ms of the 150
