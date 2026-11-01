@@ -212,7 +212,7 @@ const WALKTHROUGH_PARTS = {
         source: {
           type: 'object',
           description:
-            'An MCP server you have that holds the data. Leave it out when none does and give source_request.',
+            'An MCP server you have that reaches the data, any of them, not only the data sources listed: check with its tools first. Leave it out only when none does and give source_request.',
           properties: {
             server: limitedText('The MCP server, by name.', L.watchdogServer),
             data: limitedText('What it holds that this check reads.', L.watchdogData),
@@ -221,15 +221,16 @@ const WALKTHROUGH_PARTS = {
         },
         source_request: {
           type: 'object',
-          description: 'When no server you have holds the data: what the human should connect.',
+          description:
+            'Only when no server you have reaches the data, after checking each that could: what the human should connect.',
           properties: {
             data: limitedText('The data the check needs.', L.watchdogData),
             evidence: limitedText(
-              'Where the code sends that data: the file and the service.',
+              'Where the code sends that data (the file and the service), and which servers you checked and why each cannot reach it.',
               L.watchdogEvidence
             ),
             suggestions: textList(
-              'Servers the human could connect, by name and where they come from (an official MCP server, Composio).',
+              'Servers the human could connect, by name and where they come from (an official MCP server, Composio). Never one you already have, unless evidence says “checked <server>” and why it falls short.',
               L.watchdogSuggestions,
               L.watchdogSuggestion
             ),

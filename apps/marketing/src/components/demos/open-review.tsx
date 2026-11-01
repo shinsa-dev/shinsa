@@ -18,7 +18,7 @@ function OpenActions({ link }: { link: string | null }) {
   if (!link) {
     return (
       <div className='flex shrink-0 flex-wrap items-center gap-2'>
-        <a href={site.downloadUrl} className={buttonVariants({ variant: 'primary' })}>
+        <a href={site.canaryUrl} className={buttonVariants({ variant: 'primary' })}>
           {openTask.secondary}
         </a>
       </div>
@@ -26,7 +26,7 @@ function OpenActions({ link }: { link: string | null }) {
   }
   return (
     <div className='flex shrink-0 flex-wrap items-center gap-2'>
-      <a href={site.downloadUrl} className={buttonVariants({ variant: 'outline' })}>
+      <a href={site.canaryUrl} className={buttonVariants({ variant: 'outline' })}>
         {openTask.secondary}
       </a>
       <a href={link} data-icon='inline-start' className={buttonVariants({ variant: 'primary' })}>

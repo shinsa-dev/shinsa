@@ -4,8 +4,8 @@ export const hero = {
   headline: 'Hand over the work.',
   headlineRest: 'Keep the decisions.',
   text: 'Shinsa runs Claude Code and Codex on your own machine, from your request all the way to a merged pull request. Agents research, plan, build and check their own work, and come to you only for the calls that are yours to make.',
-  primary: 'Download for Mac',
-  beta: 'Or download the beta, with the newest changes first',
+  primary: 'Download for Mac (Canary)',
+  beta: 'Or download the beta',
   secondary: 'View on GitHub',
 };
 

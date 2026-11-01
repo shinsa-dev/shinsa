@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  listHeldSourceRequests,
   PROTOCOL_LIMITS,
   type Validation,
   validateDelivery,
@@ -1436,6 +1437,70 @@ describe('watchdogs in the walkthrough', () => {
       'walkthrough.watchdogs[0].production_check is required when it starts on production: how to tell the merged change is live there.',
       'walkthrough.watchdogs[1].starts must be one of merge, production.',
     ]);
+  });
+});
+
+describe('a source request for a server the agent already has', () => {
+  function requestFor(suggestions: string[], evidence = 'apps/marketing serves /updates on a Worker.') {
+    return (
+      readValue(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          walkthrough: {
+            ...WATCHED,
+            watchdogs: [
+              LATENCY,
+              { ...EVENTS, source_request: { data: 'Worker logs', evidence, suggestions } },
+            ],
+          },
+        })
+      ).walkthrough?.watchdogs ?? []
+    );
+  }
+
+  test('is refused for each held server a suggestion names, by its whole name in any case', () => {
+    expect(
+      listHeldSourceRequests(requestFor(['Cloudflare’s official MCP server', 'Composio’s MAPLE toolkit']), [
+        'Cloudflare',
+        'maple',
+        'kampala',
+      ])
+    ).toEqual([
+      'walkthrough.watchdogs[1].source_request suggests `Cloudflare`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked Cloudflare” and why it falls short.',
+      'walkthrough.watchdogs[1].source_request suggests `maple`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked maple” and why it falls short.',
+    ]);
+  });
+
+  test('is refused when the evidence only mentions the server without saying it was checked', () => {
+    expect(
+      listHeldSourceRequests(
+        requestFor(
+          ['Cloudflare’s official MCP server'],
+          'serves /updates/* from the site Cloudflare Worker. Checked maple.'
+        ),
+        ['Cloudflare']
+      )
+    ).toHaveLength(1);
+  });
+
+  test('passes a server named only inside another word, one the evidence explains, and a watchdog with a source', () => {
+    expect(
+      listHeldSourceRequests(requestFor(['Cloudflare-logs MCP', 'Mapleton analytics']), [
+        'Cloudflare',
+        'maple',
+      ])
+    ).toEqual([]);
+    expect(
+      listHeldSourceRequests(
+        requestFor(
+          ['Cloudflare’s official MCP server'],
+          'apps/marketing logs on Cloudflare; I checked Cloudflare: it sees only another account.'
+        ),
+        ['Cloudflare']
+      )
+    ).toEqual([]);
+    expect(listHeldSourceRequests([], ['Cloudflare'])).toEqual([]);
+    expect(listHeldSourceRequests(requestFor(['PostHog’s MCP server']), ['c++ (beta)'])).toEqual([]);
   });
 });
 
