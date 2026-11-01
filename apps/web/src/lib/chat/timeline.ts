@@ -492,11 +492,13 @@ function selectAnswerBefore(body: TimelineItem[], handOver: TimelineItemOf<'hand
 
 function selectReply(body: TimelineItem[], quiet: boolean) {
   const last = body.filter(isTurnHandOver).at(-1);
-  if (last && isFullReplyHandOver(last)) return null;
-  const agents = body.slice(last ? body.indexOf(last) + 1 : 0).filter(isAgentItem);
+  const agents =
+    last && isFullReplyHandOver(last)
+      ? []
+      : body.slice(last ? body.indexOf(last) + 1 : 0).filter(isAgentItem);
   const after =
     agents.filter((item) => item.phase === 'final').at(-1) ?? (quiet ? null : (agents.at(-1) ?? null));
-  if (after || quiet || !last || selectToolName(last.call) !== 'complete_fix') return after;
+  if (after || quiet || !last) return after;
   return selectAnswerBefore(body, last);
 }
 

@@ -97,6 +97,14 @@ export function quoteTitles(tasks: Task[]) {
   return tasks.map((task) => `“${task.title}”`).join(', ');
 }
 
+export function describeWaiting(state: ShinsaState, task: Task, pending: Task[]) {
+  const parent = task.stacksOn ? state.tasks[task.stacksOn] : undefined;
+  const others = pending.filter((dependency) => dependency !== parent);
+  const ready = parent && pending.includes(parent) ? `“${parent.title}” to be ready to merge` : null;
+  const finish = others.length > 0 ? `${quoteTitles(others)} to finish` : null;
+  return `waiting for ${[finish, ready].filter(Boolean).join(' and ')}`;
+}
+
 const SESSION_ENDING_FAILURES: ReadonlySet<RunFailureClass> = new Set<RunFailureClass>([
   'context_window_full',
   'image_error',

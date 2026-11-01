@@ -23,7 +23,7 @@ import { PostMergeCard } from '@/components/overview/merge-steps-card.tsx';
 import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/now-frame.tsx';
 import { OperationCard } from '@/components/overview/operation-card.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
-import { PlanChangeSummary, PlanFeedback, PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
+import { PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
 import { ProgressTrack, TaskTrack } from '@/components/overview/progress-track.tsx';
 import { QuestionChoices } from '@/components/overview/question-choices.tsx';
 import { ReplyReport, WorkingRequest } from '@/components/overview/reply-report.tsx';
@@ -42,7 +42,7 @@ import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { selectShownReply, selectWorkingRequest } from '@/lib/overview/exchanges.ts';
+import { type AnsweredIteration, selectShownReply, selectWorkingRequest } from '@/lib/overview/exchanges.ts';
 import {
   describeAgentReviewFact,
   describeFollowUpNote,
@@ -53,12 +53,13 @@ import {
   resolveNowKind,
   resolveNowTitle,
 } from '@/lib/overview/now.ts';
-import { describePlanEyebrow, resolvePlanVersion } from '@/lib/overview/plan-version.ts';
+import { describePlanEyebrow, resolvePlanChanges } from '@/lib/overview/plan-version.ts';
 import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
 import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
 import { listMergeWaits } from '@/lib/review/merge-steps.ts';
 import { describePlanCard } from '@/lib/tasks/backlog.ts';
+import { describeBundleWait } from '@/lib/tasks/bundles.ts';
 import { resolveChecksView } from '@/lib/tasks/checks.ts';
 import {
   type GateReplier,
@@ -92,20 +93,16 @@ function PlannedOperation({ task }: { task: Task }) {
 function PlanList({ task }: { task: Task }) {
   const document = task.plan?.document;
   if (!document) return null;
-  const version = resolvePlanVersion(task);
+  const changes = resolvePlanChanges(task);
   return (
     <div className='flex flex-col gap-3'>
-      <PlanChangeSummary summary={version?.summary ?? null} />
       <Markdown text={document.goal} className='text-fg-3 text-xs' />
       <ol className='flex flex-col gap-2.5'>
         {document.phases.map((phase, index) => (
           <li key={phase.title} className='flex gap-2.5'>
             <StepNumber index={index} />
             <div className='flex min-w-0 flex-col gap-px'>
-              <PlanPhaseTitle
-                title={phase.title}
-                change={resolvePhaseChange(version?.changes, phase.title)}
-              />
+              <PlanPhaseTitle title={phase.title} change={resolvePhaseChange(changes, phase.title)} />
               <Markdown text={phase.detail} className='text-fg-3 text-xs' />
             </div>
           </li>
@@ -203,6 +200,14 @@ export function PausedCard({
   );
 }
 
+function ShownReply({ task, iteration }: { task: Task; iteration: AnsweredIteration }) {
+  return (
+    <div className='border-border border-b pb-3'>
+      <ReplyReport task={task} iteration={iteration} />
+    </div>
+  );
+}
+
 export function PlanCard({
   state,
   task,
@@ -219,6 +224,7 @@ export function PlanCard({
   const { busy, run } = useBusy<GateReply>();
   const approve = resolvePlanReply(task);
   const copy = describePlanCard(task);
+  const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={describePlanEyebrow(task)} />}
@@ -240,7 +246,7 @@ export function PlanCard({
         </FooterNote>
       }
     >
-      <PlanFeedback text={resolvePlanVersion(task)?.feedback ?? null} />
+      {reply && <ShownReply task={task} iteration={reply} />}
       <PlanList task={task} />
     </NowFrame>
   );
@@ -260,6 +266,7 @@ export function ChangeCard({
   const { busy, run } = useBusy<'makeChange' | 'planOperation' | 'keepAsIs'>();
   const change = describeChangeGate(task, gate);
   const goOn = change.goOn;
+  const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={change.eyebrow} />}
@@ -281,6 +288,7 @@ export function ChangeCard({
         </FooterNote>
       }
     >
+      {reply && <ShownReply task={task} iteration={reply} />}
       {task.result && <Markdown text={task.result.body} className='text-fg-4 text-xs' />}
       {change.why && <Markdown text={change.why} className='text-fg-3 text-xs' />}
       {change.request && <InsetNote label={change.requestLabel} text={change.request} />}
@@ -333,7 +341,7 @@ function ReviewCard({
   const merge = gate.type === 'merge';
   const findings = merge ? [] : task.findings;
   const checks = resolveChecksView(state, task);
-  const reply = selectShownReply(task, gate);
+  const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -343,12 +351,12 @@ function ReviewCard({
           <Button variant='outline' size='sm' onClick={() => onOpen('review')}>
             Review
           </Button>
-          <ReviewActions task={task} gate={gate} />
+          <ReviewActions state={state} task={task} gate={gate} />
         </>
       }
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
     >
-      {reply && <ReplyReport task={task} iteration={reply} />}
+      {reply && <ShownReply task={task} iteration={reply} />}
       {gate.escalation ? (
         <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>
       ) : (
@@ -394,7 +402,7 @@ function WorkCard({
           }
         />
       }
-      title={resolveNowTitle(task, listWaitsOn(state, task), current, run)}
+      title={resolveNowTitle(task, listWaitsOn(state, task), current, run, describeBundleWait(state, task))}
       action={
         run &&
         isTaskWatchable(state, task) && (
@@ -488,6 +496,7 @@ export function ResultCard({
   const result = task.result;
   if (!result) return null;
   const run = result.runId ? state.runs[result.runId] : undefined;
+  const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={result.at} />} />}
@@ -499,6 +508,7 @@ export function ResultCard({
         </FooterNote>
       }
     >
+      {reply && <ShownReply task={task} iteration={reply} />}
       <Markdown text={result.body} className='text-fg-4 text-xs' />
     </NowFrame>
   );

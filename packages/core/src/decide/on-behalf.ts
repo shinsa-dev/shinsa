@@ -9,11 +9,14 @@ type HumanOnlyType =
   | 'memory.write'
   | 'memory.accept'
   | 'memory.remove'
+  | 'feedback.file'
   | 'watch_suggestion.accept'
   | 'task.share'
   | 'task.unshare'
   | 'project.add_to_team'
-  | 'project.remove_from_team';
+  | 'project.remove_from_team'
+  | 'preview.share'
+  | 'preview.unshare';
 
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'gate.answer',
@@ -21,11 +24,14 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'memory.write',
   'memory.accept',
   'memory.remove',
+  'feedback.file',
   'watch_suggestion.accept',
   'task.share',
   'task.unshare',
   'project.add_to_team',
   'project.remove_from_team',
+  'preview.share',
+  'preview.unshare',
 ]);
 
 type OnBehalfCommand = Exclude<UserCommand, { type: HumanOnlyType }>;
@@ -68,6 +74,10 @@ const DESCRIPTIONS: Descriptions = {
   'task.prioritize': (state, command) =>
     `Set the priority of ${quoteTask(state, command.taskId)} to ${command.priority}`,
   'task.wait_on': (state, command) => `Changed what ${quoteTask(state, command.taskId)} waits on`,
+  'task.stack_on': (state, command) =>
+    command.stacksOn
+      ? `Stacked ${quoteTask(state, command.taskId)} on ${quoteTask(state, command.stacksOn)}`
+      : `Took ${quoteTask(state, command.taskId)} out of its bundle`,
   'task.move_to_backlog': (state, command) => `Moved ${quoteTask(state, command.taskId)} to the backlog`,
   'task.remove_from_backlog': (state, command) =>
     `Moved ${quoteTask(state, command.taskId)} out of the backlog`,
@@ -126,6 +136,10 @@ const DESCRIPTIONS: Descriptions = {
     `Connected ${command.server} to a watchdog of ${quoteTask(state, command.taskId)}`,
   'watch_source.write': (state, command) =>
     `Saved ${command.server} as a data source of ${state.projects[command.projectId]?.name ?? 'a project'}`,
+  'feedback.write': (_state, command) =>
+    command.feedbackId ? 'Rewrote a note of feedback on Shinsa' : 'Wrote feedback on Shinsa',
+  'feedback.update': () => 'Changed a feedback issue that waits for you',
+  'feedback.dismiss': () => 'Dismissed feedback on Shinsa',
   'watch_source.remove': (state, command) =>
     `Removed ${command.server} from the data sources of ${state.projects[command.projectId]?.name ?? 'a project'}`,
 };

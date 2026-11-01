@@ -30,6 +30,7 @@ function courier(
     repoId?: string | null;
     thisWaits?: boolean;
     afterThis?: boolean;
+    stackOnThis?: boolean;
     backlog?: boolean;
     forkOf?: string;
   } = {}
@@ -43,6 +44,7 @@ function courier(
     repoId: options.repoId ?? null,
     thisWaits: options.thisWaits ?? false,
     afterThis: options.afterThis ?? false,
+    ...(options.stackOnThis ? { stackOnThis: true } : {}),
     ...(options.forkOf ? { forkOf: options.forkOf } : {}),
     ...(options.backlog ? { backlog: true } : {}),
   });
@@ -190,6 +192,18 @@ describe('a courier task', () => {
     expect(() =>
       courier(harness, harness.activeRun(taskId).id, { thisWaits: true, afterThis: true })
     ).toThrow('Set this_task_waits or after_this, not both');
+  });
+
+  test('can stack on this task as a bundle, alone', () => {
+    const { harness, taskId } = building();
+    const runId = harness.activeRun(taskId).id;
+    const [task] = courier(harness, runId, { stackOnThis: true });
+    expect(task).toMatchObject({ stacksOn: taskId, waitsOn: [] });
+    for (const order of [{ afterThis: true }, { thisWaits: true }]) {
+      expect(() => courier(harness, runId, { key: 'other', stackOnThis: true, ...order })).toThrow(
+        'Set stack_on_this alone'
+      );
+    }
   });
 });
 

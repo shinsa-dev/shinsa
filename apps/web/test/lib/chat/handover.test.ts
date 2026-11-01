@@ -7,6 +7,7 @@ import {
 } from '@shinsa/core';
 import {
   hasHandOverWalkthrough,
+  readHandOverReply,
   readHandOverSpots,
   readPlanParameters,
   readProposedChange,
@@ -171,5 +172,42 @@ describe('hasHandOverWalkthrough', () => {
     expect(hasHandOverWalkthrough({ walkthrough: null })).toBe(false);
     expect(hasHandOverWalkthrough({ walkthrough: ['A'] })).toBe(false);
     expect(hasHandOverWalkthrough({ summary: 'S' })).toBe(false);
+  });
+});
+
+describe('readHandOverReply', () => {
+  it('reads the reply a hand-over carries, dropping points it cannot show', () => {
+    expect(
+      readHandOverReply({
+        reply: {
+          headline: 'Added the test phase.',
+          points: [
+            { ask: 'Add a test phase', outcome: 'done', note: 'Phase 3.' },
+            { ask: 'Why two phases?', outcome: 'answered' },
+            { ask: 'Unknown', outcome: 'maybe', note: 'x' },
+            { outcome: 'done', note: 'No ask.' },
+          ],
+          next: 'Approve the plan.',
+        },
+      })
+    ).toEqual({
+      headline: 'Added the test phase.',
+      points: [
+        { ask: 'Add a test phase', outcome: 'done', note: 'Phase 3.' },
+        { ask: 'Why two phases?', outcome: 'answered', note: '' },
+      ],
+      next: 'Approve the plan.',
+    });
+  });
+
+  it('has no reply without one, without a headline or when it is not an object', () => {
+    expect(readHandOverReply({ summary: 'S' })).toBeNull();
+    expect(readHandOverReply({ reply: { points: [] } })).toBeNull();
+    expect(readHandOverReply({ reply: ['A'] })).toBeNull();
+    expect(readHandOverReply({ reply: { headline: 'Done.' } })).toEqual({
+      headline: 'Done.',
+      points: [],
+      next: null,
+    });
   });
 });

@@ -160,7 +160,7 @@ $ shinsa status
 
 ### shinsa start
 
-Start the engine in the background and wait until it answers. On a Mac, asks launchd to start the engine the Shinsa app set up. On Linux, sets the engine up as a systemd user service the first time (it starts at boot once lingering is on, and again after a crash) and starts it. Then waits until it answers. Any other command that needs the engine starts it the same way.
+Start the engine in the background and wait until it answers. On a Mac with the Shinsa app, asks launchd to start the engine the app set up. On a Mac without it, sets the engine up as its own launchd agent the first time (it starts at login and again after a crash) and starts it; it never starts a second engine beside the app’s. On Linux, sets the engine up as a systemd user service the first time (it starts at boot once lingering is on, and again after a crash) and starts it. Then waits until it answers. Any other command that needs the engine starts it the same way.
 
 ```
 shinsa start
@@ -494,6 +494,35 @@ shinsa tasks stop-waiting <task> [--json]
 ```
 
 Every task agent's tool: `tasks_stop_waiting`. Sends `task.wait_on`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa tasks stack-on
+
+Stack a task on another as a bundle: it starts once that task is ready to merge, builds on its branch, and the bundle merges as one.
+
+```
+shinsa tasks stack-on <task> <below> [--json]
+```
+
+Every task agent's tool: `tasks_stack_on`. Sends `task.stack_on`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<below>` | text, required | The task it stacks on. |
+
+#### shinsa tasks unstack
+
+Take a task out of its bundle before it starts: it no longer waits for the task below.
+
+```
+shinsa tasks unstack <task> [--json]
+```
+
+Every task agent's tool: `tasks_unstack`. Sends `task.stack_on`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
@@ -1279,6 +1308,77 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<memory>` | text, required | The memory id, from `shinsa memory list`. |
 
+### feedback
+
+#### shinsa feedback list
+
+List feedback on Shinsa: the issues that wait for you to open them on shinsa-dev/shinsa, and the ones you opened.
+
+```
+shinsa feedback list [--json]
+```
+
+Every task agent's tool: `feedback_list` (reads).
+
+#### shinsa feedback write
+
+Write feedback on Shinsa, or rewrite one with --id. Your agent drafts it as a public GitHub issue without anything private, and it waits for you to open it.
+
+```
+shinsa feedback write [--id <text>] <note...> [--json]
+```
+
+Every task agent's tool: `feedback_write`. Sends `feedback.write`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `--id` | text, optional | The feedback to rewrite. Leave out to write new feedback. |
+| `<note>` | text, required | What you want to tell Shinsa. |
+
+#### shinsa feedback edit
+
+Change the title and description of a drafted issue before you open it.
+
+```
+shinsa feedback edit <feedback> --title <text> --body <text> [--json]
+```
+
+Every task agent's tool: `feedback_edit`. Sends `feedback.update`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<feedback>` | text, required | The feedback id, from `shinsa feedback list`. |
+| `--title` | text, required | The issue’s title. |
+| `--body` | text, required | The issue’s description, in markdown. |
+
+#### shinsa feedback file
+
+Open a drafted issue on shinsa-dev/shinsa with your GitHub login. Shinsa checks it for anything private first.
+
+```
+shinsa feedback file <feedback> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `feedback.file`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<feedback>` | text, required | The feedback id, from `shinsa feedback list`. |
+
+#### shinsa feedback dismiss
+
+Dismiss feedback that waits for you, without opening an issue.
+
+```
+shinsa feedback dismiss <feedback> [--json]
+```
+
+Every task agent's tool: `feedback_dismiss`. Sends `feedback.dismiss`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<feedback>` | text, required | The feedback id, from `shinsa feedback list`. |
+
 ### settings
 
 #### shinsa settings get
@@ -1849,6 +1949,39 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<service>` | text, required | The service, by its name. |
 | `--project` | text, optional | The project the service belongs to, when two have one by that name. |
 | `--task` | text, optional | Run it for this task, in its worktree: its handle (SW-142), id or exact title. |
+
+#### shinsa services share
+
+Share a task’s run of a service by a link that opens its preview from this machine.
+
+```
+shinsa services share <service> [--project <text>] --task <text> [--until <until_done|hour|day|week|none>] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `preview.share`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<service>` | text, required | The service, by its name. |
+| `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, required | The task whose run of the service it is: its handle (SW-142), id or exact title. |
+| `--until` | choice, optional | How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it or the task finishes). Left out, the shareLimit setting. |
+
+#### shinsa services unshare
+
+Stop sharing a task’s run of a service. Its link stops working.
+
+```
+shinsa services unshare <service> [--project <text>] --task <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `preview.unshare`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<service>` | text, required | The service, by its name. |
+| `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, required | The task whose run of the service it is: its handle (SW-142), id or exact title. |
 
 ### mcp
 

@@ -23,15 +23,27 @@ import {
   reportReview,
 } from './agents.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
+import { reviewBundles } from './bundles.ts';
 import { recordChecks } from './checks.ts';
 import { recordCompaction } from './compaction.ts';
 import { recordConfig } from './config.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
-import { releaseWaiting } from './dependencies.ts';
+import { releaseWaiting, stackOnTask } from './dependencies.ts';
 import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
+import {
+  dismissFeedback,
+  fileFeedback,
+  recordFeedbackDraft,
+  recordFeedbackFailure,
+  recordFeedbackFiled,
+  recordFeedbackIssueState,
+  reportFeedback,
+  updateFeedback,
+  writeFeedback,
+} from './feedback.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
@@ -51,6 +63,7 @@ import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import {
+  recordBundleCheck,
   recordClosedPullRequests,
   recordHookFailure,
   recordPullRequest,
@@ -95,7 +108,19 @@ import {
   writeProject,
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
-import { expireShare, failShare, recordShare, shareTask, syncShares, unshareTask } from './shares.ts';
+import {
+  expirePreview,
+  expireShare,
+  failPreview,
+  failShare,
+  recordPreview,
+  recordShare,
+  sharePreview,
+  shareTask,
+  syncShares,
+  unsharePreview,
+  unshareTask,
+} from './shares.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import {
   answerSlackQuestion,
@@ -130,6 +155,7 @@ import {
 } from './watchdogs.ts';
 
 export type { DecideContext, Decision } from './decider.ts';
+export { describeFeedbackLeaks } from './feedback.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
 export { assertRunTool } from './runs.ts';
@@ -170,6 +196,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return prioritizeTask(decider, command);
     case 'task.wait_on':
       return waitOnTasks(decider, command);
+    case 'task.stack_on':
+      return stackOnTask(decider, command);
     case 'task.move_to_backlog':
       return moveToBacklog(decider, command);
     case 'task.remove_from_backlog':
@@ -247,6 +275,24 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return acceptMemory(decider, command);
     case 'memory.remove':
       return removeMemory(decider, command);
+    case 'feedback.write':
+      return writeFeedback(decider, command);
+    case 'feedback.update':
+      return updateFeedback(decider, command);
+    case 'feedback.file':
+      return fileFeedback(decider, command);
+    case 'feedback.dismiss':
+      return dismissFeedback(decider, command);
+    case 'feedback.record_draft':
+      return recordFeedbackDraft(decider, command);
+    case 'feedback.record_filed':
+      return recordFeedbackFiled(decider, command);
+    case 'feedback.record_issue_state':
+      return recordFeedbackIssueState(decider, command);
+    case 'feedback.record_failure':
+      return recordFeedbackFailure(decider, command);
+    case 'agent.report_feedback':
+      return reportFeedback(decider, command);
     case 'task.share':
       return shareTask(decider, command);
     case 'task.unshare':
@@ -257,6 +303,16 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return failShare(decider, command);
     case 'share.expire':
       return expireShare(decider, command);
+    case 'preview.share':
+      return sharePreview(decider, command);
+    case 'preview.unshare':
+      return unsharePreview(decider, command);
+    case 'preview.record':
+      return recordPreview(decider, command);
+    case 'preview.fail':
+      return failPreview(decider, command);
+    case 'preview.expire':
+      return expirePreview(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':
@@ -285,6 +341,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordPushRetry(decider, command);
     case 'pull_request.record_update_conflict':
       return recordUpdateConflict(decider, command);
+    case 'bundle.record_check':
+      return recordBundleCheck(decider, command);
     case 'pull_request.record_hook_failure':
       return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
@@ -418,6 +476,7 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   syncWatchdogs(decider);
   syncMergeSteps(decider);
   startQueuedRounds(decider);
+  reviewBundles(decider);
   syncMergeSteps(decider);
   enforceLiveness(decider);
   dispatchRuns(decider);

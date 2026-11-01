@@ -1,0 +1,153 @@
+#!/bin/sh
+set -eu
+
+SITE=https://shinsa.dev
+RELEASES=https://github.com/shinsa-dev/shinsa/releases/download
+SUPPORTED="Shinsa's engine runs on Apple Silicon Macs and on Linux x64 and arm64 with glibc."
+
+say() {
+  printf '%s\n' "$*"
+}
+
+fail() {
+  printf 'Could not install Shinsa: %s\n' "$*" >&2
+  exit 1
+}
+
+has() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+fetch() {
+  if has curl; then
+    curl -fsSL --retry 3 -o "$2" "$1"
+  elif has wget; then
+    wget -q -O "$2" "$1"
+  else
+    fail "it needs curl or wget to download the engine."
+  fi
+}
+
+hash_file() {
+  if has sha256sum; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  elif has shasum; then
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  elif has openssl; then
+    openssl dgst -sha256 -r "$1" | cut -d ' ' -f 1
+  else
+    fail "it needs sha256sum, shasum or openssl to check the download."
+  fi
+}
+
+resolve_os() {
+  case "$(uname -s)" in
+    Linux) echo linux ;;
+    Darwin) echo darwin ;;
+    *) fail "$SUPPORTED There is none for $(uname -s)." ;;
+  esac
+}
+
+resolve_arch() {
+  case "$(uname -m)" in
+    x86_64 | amd64)
+      if [ "$1" = darwin ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = 1 ]; then
+        echo arm64
+      else
+        echo x64
+      fi
+      ;;
+    aarch64 | arm64) echo arm64 ;;
+    *) fail "$SUPPORTED There is none for $(uname -m)." ;;
+  esac
+}
+
+assert_platform() {
+  if [ "$1" = darwin ] && [ "$2" = x64 ]; then
+    fail "$SUPPORTED This Mac has an Intel processor, so there is no engine for it."
+  fi
+  if [ "$1" = linux ]; then
+    if ls /lib/ld-musl-* >/dev/null 2>&1 || { has ldd && ldd --version 2>&1 | grep -qi musl; }; then
+      fail "$SUPPORTED This system uses musl (Alpine, for one), so there is no engine for it."
+    fi
+  fi
+}
+
+resolve_version() {
+  if [ -n "${SHINSA_VERSION:-}" ]; then
+    echo "${SHINSA_VERSION#v}"
+    return
+  fi
+  path=/download/version
+  [ "$1" = stable ] || path="$path/$1"
+  fetch "$SITE$path" "$2/version" || fail "shinsa.dev named no $1 release: there is none yet, or the site could not be reached."
+  head -n 1 "$2/version" | tr -d '\r'
+}
+
+main() {
+  channel=${SHINSA_CHANNEL:-canary}
+  case "$channel" in
+    stable | beta | canary) ;;
+    *) fail "SHINSA_CHANNEL is $channel; use stable, beta or canary." ;;
+  esac
+
+  os=$(resolve_os)
+  arch=$(resolve_arch "$os")
+  assert_platform "$os" "$arch"
+
+  install_dir=${SHINSA_INSTALL_DIR:-$HOME/.local/share/shinsa}
+  bin_dir=${SHINSA_BIN_DIR:-$HOME/.local/bin}
+  if [ -e "$install_dir" ] && [ ! -x "$install_dir/bin/shinsa" ]; then
+    fail "$install_dir is not an earlier Shinsa install, so it is left alone. Remove it or set SHINSA_INSTALL_DIR."
+  fi
+  parent=$(dirname "$install_dir")
+  mkdir -p "$parent" "$bin_dir"
+  staging=$(mktemp -d "$parent/.shinsa-install.XXXXXX")
+  trap 'rm -rf "$staging"' EXIT
+  trap 'exit 130' INT TERM
+
+  version=$(resolve_version "$channel" "$staging")
+  case "$version" in
+    '' | *[!0-9A-Za-z.-]*) fail "shinsa.dev answered '$version', which is not a version." ;;
+  esac
+
+  name="shinsa-$os-$arch"
+  archive="$name.tar.gz"
+  base="${SHINSA_RELEASES_URL:-$RELEASES}/v$version"
+  say "Downloading Shinsa $version for $os $arch."
+  fetch "$base/$archive" "$staging/$archive" || fail "could not download $base/$archive."
+  fetch "$base/$archive.sha256" "$staging/$archive.sha256" || fail "could not download $base/$archive.sha256."
+
+  expected=$(cut -d ' ' -f 1 <"$staging/$archive.sha256")
+  case "$expected" in
+    '' | *[!0-9a-f]*) fail "$archive.sha256 holds no checksum." ;;
+  esac
+  [ "${#expected}" = 64 ] || fail "$archive.sha256 holds no checksum."
+  actual=$(hash_file "$staging/$archive")
+  [ "$actual" = "$expected" ] || fail "$archive does not match its checksum ($actual, not $expected). Nothing was installed."
+
+  tar -xzf "$staging/$archive" -C "$staging"
+  [ -x "$staging/$name/bin/shinsa" ] || fail "$archive has no bin/shinsa."
+  "$staging/$name/bin/shinsa" version >/dev/null 2>&1 || fail "the downloaded engine does not run on this machine."
+
+  rm -rf "$install_dir"
+  mv "$staging/$name" "$install_dir"
+  ln -sf "$install_dir/bin/shinsa" "$bin_dir/shinsa"
+
+  say "Installed Shinsa $version in $install_dir, linked as $bin_dir/shinsa."
+  case ":$PATH:" in
+    *":$bin_dir:"*) ;;
+    *) say "Add $bin_dir to your PATH first: export PATH=\"$bin_dir:\$PATH\"" ;;
+  esac
+  if [ "$os" = darwin ] && [ -d /Applications/Shinsa.app ]; then
+    say "The Shinsa app is installed too and runs its own engine, so shinsa start leaves that one running."
+  fi
+  say ""
+  say "Next:"
+  say "  shinsa start                  starts the engine in the background (shinsa restart moves a running one to $version)"
+  say "  shinsa accounts sign-in-code  signs in to Claude without a browser"
+  say "  shinsa folders add <folder>   tells it where your repositories are"
+  say "  shinsa remote pair            lets your other devices reach it"
+}
+
+main "$@"

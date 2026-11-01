@@ -1,9 +1,11 @@
 import {
   type ChatEntry,
   type ClientMessage,
+  DEVELOPMENT_VERSION,
   DomainError,
   isSurface,
   type RequestOrigin,
+  resolveEngineInfo,
   resolveStatePatch,
   type ServerMessage,
   type Surface,
@@ -91,9 +93,11 @@ export function createSocketHub(
   classify: Classifier | null = null,
   terminals?: Terminals,
   remote?: Remote,
-  teamFeeds?: Pick<TeamFeeds, 'subscribe' | 'snapshot'>
+  teamFeeds?: Pick<TeamFeeds, 'subscribe' | 'snapshot'>,
+  version = DEVELOPMENT_VERSION
 ) {
   const sockets = new Set<Socket>();
+  const engineInfo = resolveEngineInfo(version);
   let desktopConnected = false;
 
   function broadcast(message: ServerMessage) {
@@ -189,6 +193,7 @@ export function createSocketHub(
       if (remote) send(socket, { type: 'remote', remote: remote.snapshot() });
       if (teamFeeds) send(socket, { type: 'teams', teams: teamFeeds.snapshot() });
       send(socket, { type: 'surfaces', desktop: desktopConnected });
+      send(socket, { type: 'engine', engine: engineInfo });
     },
     close(socket: Socket) {
       sockets.delete(socket);

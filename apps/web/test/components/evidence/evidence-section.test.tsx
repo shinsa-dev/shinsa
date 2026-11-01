@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import type { Evidence, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { EVIDENCE_EMPTY, EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { refreshHealth } from '@/lib/connection/health.ts';
 import { connection } from '@/lib/connection/socket.ts';
+import { FakeIntersectionObserver, installIntersectionObserver } from '../../support/intersection.ts';
+import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createEvidence, createRun, createShinsaState, createTask, NOW } from '../../support/state.ts';
 import {
   createService,
@@ -111,6 +113,23 @@ describe('the Evidence section', () => {
     const item = screen.getByRole('heading', { name: 'Inbox' }).closest('section') as HTMLElement;
     expect(['Empty', 'Loading', 'Full'].map((name) => within(item).getByText(name))).toHaveLength(3);
     expect(screen.queryByRole('heading', { name: 'Screenshot' })).toBeNull();
+  });
+
+  it('loads a screenshot lazily and mounts a recording only once it comes near the screen', () => {
+    const restore = installIntersectionObserver();
+    try {
+      renderSection([
+        piece('clip', { kind: 'recording', title: 'Scrolling the tabs', uri: `${STORED}/clip.webm` }),
+        piece('shot', { title: 'Tabs' }),
+      ]);
+      expect(screen.getByRole('img', { name: 'Tabs' }).getAttribute('loading')).toBe('lazy');
+      const thumbnail = screen.getByRole('button', { name: 'Play Scrolling the tabs' });
+      expect(thumbnail.querySelector('video')).toBeNull();
+      act(() => FakeIntersectionObserver.report(true));
+      expect(thumbnail.querySelector('video')?.getAttribute('src')).toBe(`${STORED}/clip.webm`);
+    } finally {
+      restore();
+    }
   });
 
   it('opens a recording in the viewer, playing, and closes it again', async () => {
@@ -360,5 +379,19 @@ describe('the task’s running services in the Evidence section', () => {
     expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).not.toContain(
       'http://localhost:4123/'
     );
+  });
+
+  it('offers Share preview beside the agent’s preview of a running service of the task', () => {
+    runWeb(4123);
+    startFakeServer();
+    pushState(createShinsaState({ tasks: [createTask({ id: 'fix' })] }));
+    renderTaskSection([
+      piece('local', { kind: 'preview', title: 'Cart', uri: 'http://localhost:4123/cart' }),
+      piece('remote', { kind: 'preview', title: 'Remote', uri: 'https://preview.dev' }),
+    ]);
+    expect(screen.getAllByRole('button', { name: 'Share preview' })).toHaveLength(1);
+    expect(screen.getByText('Cart').closest('a')?.parentElement?.querySelector('button')).toBeTruthy();
+    expect(screen.getByText('Remote').closest('a')?.parentElement?.querySelector('button')).toBeNull();
+    stopFakeServer();
   });
 });

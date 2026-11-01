@@ -3,13 +3,17 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DomainError } from '@shinsa/core';
 import { STOP_DEADLINE_MS } from './restart.ts';
-import { type EngineService, runServiceOrThrow, SERVICE_MARKER, type ServiceRunner } from './service.ts';
+import {
+  type EngineService,
+  runServiceOrThrow,
+  SERVICE_CARRIED_ENV,
+  SERVICE_MARKER,
+  type ServiceRunner,
+} from './service.ts';
 
 type Env = Record<string, string | undefined>;
 
 export const SYSTEMD_UNIT = 'shinsa.service';
-
-const CARRIED_ENV = ['SHINSA_HOME', 'SHINSA_DATA_DIR', 'XDG_CONFIG_HOME', 'SHINSA_PORT', 'SHINSA_HOST'];
 
 const STOP_TIMEOUT_S = STOP_DEADLINE_MS / 1000 + 10;
 
@@ -33,7 +37,7 @@ export function resolveUnitPath(env: Env) {
 }
 
 export function resolveUnit(program: string, env: Env) {
-  const carried = CARRIED_ENV.flatMap((key) => {
+  const carried = SERVICE_CARRIED_ENV.flatMap((key) => {
     const value = env[key];
     return value ? [`Environment=${quoteUnitValue(`${key}=${value}`, /[\\"%]/g)}`] : [];
   });

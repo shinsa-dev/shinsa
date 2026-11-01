@@ -8,6 +8,7 @@ import { CommandMenu } from '@/components/command/menu.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { AppFrame } from '@/components/layout/frame.tsx';
 import { OnboardingShell } from '@/components/onboarding/shell.tsx';
+import { PreviewShareDialog } from '@/components/services/preview-share-dialog.tsx';
 import { EngineBanner } from '@/components/status/engine-banner.tsx';
 import { HealthBanner } from '@/components/status/health-banner.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
@@ -190,6 +191,7 @@ function App({ route }: { route: PageRoute }) {
         <ForkDialog />
         <ShareDialog />
         <UnshareConfirm />
+        <PreviewShareDialog />
         <DuplicateDialog />
       </ErrorBoundary>
     </>

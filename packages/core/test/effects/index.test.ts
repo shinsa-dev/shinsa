@@ -59,6 +59,10 @@ describe('resolveEffectLane', () => {
   test("making a share link runs in its own lane, so it never waits behind the task's work", () => {
     expect(resolveEffectLane({ kind: 'share.link', taskId: 't' })).toBe('share:t');
     expect(resolveEffectKey({ kind: 'share.link', taskId: 't' }, 4)).toBe('share.link:t:4');
+    expect(resolveEffectLane({ kind: 'preview.link', taskId: 't', serviceId: 'web' })).toBe('preview:t');
+    expect(resolveEffectKey({ kind: 'preview.link', taskId: 't', serviceId: 'web' }, 4)).toBe(
+      'preview.link:t:web:4'
+    );
   });
 
   test('everything else about a task runs in order in the task lane, except the cheap watch in its side lane', () => {
@@ -72,6 +76,7 @@ describe('resolveEffectLane', () => {
     expect([...PROCESS_BOUND_EFFECTS].sort()).toEqual([
       'delegation.reply',
       'delegation.steer',
+      'feedback.file',
       'question.resolve',
       'run.cancel',
       'run.execute',
@@ -83,6 +88,20 @@ describe('resolveEffectLane', () => {
       kinds.filter((kind) => !PROCESS_BOUND_EFFECTS.has(kind)).sort()
     );
     expect(PROCESS_BOUND_EFFECTS.size + REPLAY_SAFE_EFFECTS.size).toBe(kinds.length);
+  });
+});
+
+describe('feedback effects', () => {
+  test('drafting runs again after a restart, opening an issue never does', () => {
+    expect(EFFECT_RECOVERY['feedback.draft']).toBe('replay_safe');
+    expect(EFFECT_RECOVERY['feedback.file']).toBe('process_bound');
+  });
+
+  test('each draft and each filing is its own effect, in one lane per feedback', () => {
+    expect(resolveEffectKey({ kind: 'feedback.draft', feedbackId: 'f' }, 3)).toBe('feedback.draft:f:3');
+    expect(resolveEffectKey({ kind: 'feedback.file', feedbackId: 'f' }, 4)).toBe('feedback.file:f:4');
+    expect(resolveEffectLane({ kind: 'feedback.draft', feedbackId: 'f' })).toBe('feedback:f');
+    expect(resolveEffectLane({ kind: 'feedback.file', feedbackId: 'f' })).toBe('feedback:f');
   });
 });
 

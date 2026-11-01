@@ -57,6 +57,8 @@ export async function resolveStartPoint(repo: Repo, baseBranch: string | null, s
 export async function prepareWorktree(path: string, signal?: AbortSignal) {
   const install = resolveInstallCommand(path);
   if (!install) return;
+  const first = await runCommand(install, path, { signal });
+  if (first.ok || signal?.aborted) return;
   const result = await runCommand(install, path, { signal });
   if (!result.ok && !signal?.aborted) {
     log.warn('[Git] Installing dependencies failed; the agent sets them up', {
@@ -138,8 +140,13 @@ export async function createWorktree(
   return { path, branch: named };
 }
 
-export async function refreshWorktree(repo: Repo, path: string, signal?: AbortSignal) {
-  const base = await resolveStartPoint(repo, null, signal);
+export async function refreshWorktree(
+  repo: Repo,
+  path: string,
+  baseBranch: string | null,
+  signal?: AbortSignal
+) {
+  const base = await resolveStartPoint(repo, baseBranch, signal);
   await runGitOrThrow(['reset', '--hard', '--quiet', base], path, { signal });
   await runGitOrThrow(['clean', '-fdq'], path, { signal });
   await prepareWorktree(path, signal);
@@ -151,6 +158,7 @@ export async function discardEdits(path: string, signal?: AbortSignal) {
 }
 
 export async function removeWorktree(repo: Repo, path: string) {
-  if (existsSync(path)) await runGitOrThrow(['worktree', 'remove', '--force', path], repo.path);
+  if (existsSync(path)) await runCommand(['git', 'worktree', 'remove', '--force', path], repo.path);
+  rmSync(path, { recursive: true, force: true });
   await runCommand(['git', 'worktree', 'prune'], repo.path);
 }

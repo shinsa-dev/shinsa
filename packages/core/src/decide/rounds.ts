@@ -54,9 +54,9 @@ function isMergedBeforeNextRound(task: Task) {
 }
 
 function isAtMergeGate(state: ShinsaState, task: Task) {
-  return (
-    task.stage === 'awaiting_merge' && hasOpenGate(state, task, 'merge') && !isMergedBeforeNextRound(task)
-  );
+  if (isMergedBeforeNextRound(task)) return false;
+  if (task.stage === 'shipping' && task.bundleReady) return true;
+  return task.stage === 'awaiting_merge' && hasOpenGate(state, task, 'merge');
 }
 
 function isShippedThroughPullRequest(pipeline: readonly PipelineStep[]) {

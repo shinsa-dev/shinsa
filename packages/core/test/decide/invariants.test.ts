@@ -9,12 +9,15 @@ import {
   decide,
   type Gate,
   type GateDecision,
+  hasStep,
   isAgentQuestion,
   isDecisionGate,
   isDependencyOf,
   isOverBudget,
   isTaskSettled,
   listActiveRuns,
+  listBundleAbove,
+  listBundleBelow,
   listMissingEvidence,
   listOpenBlockers,
   listOpenGates,
@@ -44,7 +47,7 @@ import {
   type WireState,
 } from '../../src/index.ts';
 import type { CheckChangeHandOver } from '../../src/report/types.ts';
-import { IMPACT, PLAN } from '../harness.ts';
+import { IMPACT, PLAN, resolveOwedReply } from '../harness.ts';
 import { assertAgentInvariants, assertOneSessionPerTask } from './agent-invariants.ts';
 import { assertCheckInvariants } from './check-invariants.ts';
 import {
@@ -256,6 +259,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           type: 'agent.propose_plan',
           runId,
           document: resolvePlanDocument(state, run.taskId),
+          ...resolveOwedReply(state, runId),
         });
         break;
       case 'build':
@@ -267,6 +271,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           judgementCalls: [],
           checkChanges: listCheckChanges(state, run.taskId, random),
           ...resolvePhaseWalkthrough(runId),
+          ...resolveOwedReply(state, runId),
         });
         if (needsEvidence(state, run.taskId) && chance(random, 0.5)) {
           commands.push({
@@ -289,7 +294,13 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
         });
         break;
       case 'operate':
-        commands.push({ type: 'agent.deliver', runId, step: 'operate', body: 'Ran it.' });
+        commands.push({
+          type: 'agent.deliver',
+          runId,
+          step: 'operate',
+          body: 'Ran it.',
+          ...resolveOwedReply(state, runId),
+        });
         break;
       default:
         commands.push({
@@ -297,6 +308,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           runId,
           summary: 'Fixed.',
           ...resolveFixWalkthrough(runId),
+          ...resolveOwedReply(state, runId),
         });
     }
     if (chance(random, 0.3)) {
@@ -647,7 +659,13 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
       { type: 'run.silence', runId, since: chance(random, 0.7) ? state.seq : null },
     ];
     if (run.role === 'answerer')
-      commands.push({ type: 'agent.deliver', runId, step: 'answer', body: 'It works like this.' });
+      commands.push({
+        type: 'agent.deliver',
+        runId,
+        step: 'answer',
+        body: 'It works like this.',
+        ...resolveOwedReply(state, runId),
+      });
     if (run.purpose === 'fix') {
       const fix: ShinsaCommand = {
         type: 'agent.complete_fix',
@@ -656,6 +674,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
         treeHash: `t-${state.seq % 3}`,
         checks: listNamedChecks(state, run.taskId, random),
         checkChanges: listCheckChanges(state, run.taskId, random),
+        ...resolveOwedReply(state, runId),
       };
       commands.push(fix, fix, fix);
     }
@@ -673,7 +692,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
         type: 'agent.propose_plan',
         runId,
         document: resolvePlanDocument(state, run.taskId),
-        changeSummary: 'Tightened it.',
+        ...resolveOwedReply(state, runId),
       });
     }
     return commands;
@@ -917,6 +936,7 @@ function assertInvariants(state: ShinsaState, now: number) {
     ).toBe(false);
 
     assertShapeInvariants(task, gates, state, context);
+    assertBundleInvariants(state, task, gates, context);
     assertMergeStepInvariants(task, gates, context);
     assertRoundInvariants(state, task, context);
     assertAgentInvariants(state, task, context);
@@ -979,6 +999,7 @@ type SideStream =
   | 'pushes'
   | 'backlog'
   | 'duplicates'
+  | 'bundles'
   | null;
 
 function selectBacklogCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
@@ -1052,6 +1073,109 @@ function listDuplicateMarks(state: ShinsaState) {
     task.duplicate ? `closed by ${task.duplicate.by}` : null,
     task.activity.some((entry) => entry.text === 'Not a duplicate after all') ? 'started again' : null,
   ]);
+}
+
+const BUNDLE_PARENT_STAGES = new Set([
+  'checking',
+  'reviewing',
+  'fixing',
+  'awaiting_review',
+  'shipping',
+  'awaiting_merge',
+]);
+
+function resolveCommandTask(state: ShinsaState, command: ShinsaCommand) {
+  if ('taskId' in command && typeof command.taskId === 'string') return command.taskId;
+  if ('runId' in command && typeof command.runId === 'string')
+    return state.runs[command.runId]?.taskId ?? null;
+  if ('gateId' in command && typeof command.gateId === 'string')
+    return state.gates[command.gateId]?.taskId ?? null;
+  return null;
+}
+
+function listBundleDrives(state: ShinsaState, open: Task[], random: Random): ShinsaCommand[] {
+  const parents = new Set(open.flatMap((task) => (task.stacksOn ? [task.stacksOn] : [])));
+  const members = open.filter((task) => task.stacksOn || parents.has(task.id));
+  const ids = new Set(members.map((task) => task.id));
+  const reads: ShinsaCommand[] = members
+    .filter((task) => task.stage === 'shipping' || task.stage === 'awaiting_merge')
+    .map((task) => {
+      if (task.pushPending)
+        return { type: 'pull_request.record_push', taskId: task.id, sha: `sha-${state.seq}` };
+      const pullRequest = randomPullRequest(random);
+      const clean = { ...pullRequest, checks: 'passing', mergeable: true, unresolvedComments: 0 } as const;
+      return {
+        type: 'pull_request.record',
+        taskId: task.id,
+        pullRequest: chance(random, 0.97) ? clean : pullRequest,
+      };
+    });
+  const checks: ShinsaCommand[] = members
+    .filter((task) => !task.stacksOn && chance(random, 0.1))
+    .map((task) => ({
+      type: 'bundle.record_check',
+      taskId: task.id,
+      conflict: chance(random, 0.5)
+        ? null
+        : { taskId: task.id, behindTaskId: chance(random, 0.8) ? task.id : null, base: 'main' },
+    }));
+  const approvals: ShinsaCommand[] = listOpenGates(state)
+    .filter((gate) => ids.has(gate.taskId) && isDecisionGate(gate))
+    .map((gate) => ({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null }));
+  const steps = [...listAgentCommands(state, random), ...listSystemCommands(state, random)].filter(
+    (command) => ids.has(resolveCommandTask(state, command) ?? '')
+  );
+  return [...reads, ...checks, ...approvals, ...steps];
+}
+
+function selectBundleCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
+  const open = Object.values(state.tasks).filter((task) => !isTaskSettled(task));
+  const drives = listBundleDrives(state, open, random);
+  if (drives.length > 0 && chance(random, 0.8)) return pick(random, drives) ?? null;
+  const later = open.filter((task) => BUNDLE_PARENT_STAGES.has(task.stage) && !task.stacksOn);
+  const parent = pick(random, later.length > 0 && chance(random, 0.9) ? later : open)?.id;
+  const child = pick(
+    random,
+    open.filter(
+      (task) => task.stage === 'triage' || task.stage === 'waiting_on_tasks' || task.stage === 'planning'
+    )
+  )?.id;
+  const commands: ShinsaCommand[] = [];
+  if (parent && chance(random, 0.2))
+    commands.push({ type: 'task.create', request: 'Build on it', repoId: 'repo', stacksOn: parent });
+  if (parent && child) commands.push({ type: 'task.stack_on', taskId: child, stacksOn: parent });
+  if (child && chance(random, 0.1)) commands.push({ type: 'task.stack_on', taskId: child, stacksOn: null });
+  return pick(random, commands) ?? null;
+}
+
+function listBundleMarks(state: ShinsaState) {
+  return Object.values(state.tasks).flatMap((task) => [
+    task.bundleReady && task.stage === 'shipping' ? 'ready in its bundle' : null,
+    task.stage === 'merged' && task.bundleReady ? 'merged while ready' : null,
+    task.stackBase ? 'based on the task below' : null,
+  ]);
+}
+
+function assertBundleInvariants(state: ShinsaState, task: Task, gates: Gate[], context: string) {
+  if (isTaskSettled(task)) return;
+  const stacked = Object.values(state.tasks).filter(
+    (child) => child.stacksOn === task.id && !isTaskSettled(child) && hasStep(child, 'pull_request')
+  );
+  expect(stacked.length, context).toBeLessThanOrEqual(1);
+  if (task.stacksOn) expect(isDependencyOf(state, task.id, task.stacksOn), context).toBe(false);
+  const merge = gates.some((gate) => gate.type === 'merge');
+  if (listBundleBelow(state, task).length > 0) expect(merge, context).toBe(false);
+  if (merge) {
+    expect(
+      listBundleAbove(state, task).every((above) => above.bundleReady),
+      context
+    ).toBe(true);
+    expect(task.bundleConflict ?? null, context).toBeNull();
+  }
+  if (task.bundleReady) {
+    expect(['shipping', 'awaiting_merge'], context).toContain(task.stage);
+    expect(task.pullRequest?.state, context).toBe('open');
+  }
 }
 
 function selectOnBehalfCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
@@ -1145,6 +1269,8 @@ function selectSideCommand(
       return selectBacklogCommand(state, randoms.planner);
     case 'duplicates':
       return selectDuplicateCommand(state, randoms.planner);
+    case 'bundles':
+      return selectBundleCommand(state, randoms.planner);
     default:
       return null;
   }
@@ -1529,6 +1655,23 @@ describe('decide under random command sequences', () => {
   );
 
   test(
+    'keeps every invariant while tasks stack on each other as bundles and merge together',
+    () => {
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const mark of listBundleMarks(state)) if (mark) reached.add(mark);
+      };
+      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'bundles', collect);
+      expect([...reached].sort()).toEqual([
+        'based on the task below',
+        'merged while ready',
+        'ready in its bundle',
+      ]);
+    },
+    SEEDS * 2_000
+  );
+
+  test(
     'keeps every invariant while steps are rerun on chosen accounts',
     () => {
       let bound = 0;
@@ -1549,7 +1692,7 @@ describe('decide under random command sequences', () => {
         for (const mark of [...listRoundMarks(state), ...listMergeStepMarks(state)])
           if (mark) reached.add(mark);
       };
-      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) simulate(seed, STEPS, 'rounds', collect);
+      for (let seed = 1; seed <= RARE_SEEDS + 20; seed += 1) simulate(seed, STEPS, 'rounds', collect);
       expect([...reached].sort()).toEqual([
         'carried merge step',
         'closed task',

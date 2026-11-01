@@ -13,6 +13,9 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     dataDir,
     databasePath: join(dataDir, 'shinsa.sqlite'),
     worktreesDir: join(dataDir, 'worktrees'),
+    checkBasesDir: join(dataDir, 'check-bases'),
+    scratchDir: join(dataDir, 'scratch'),
+    cachesDir: join(dataDir, 'caches'),
     evidenceDir: join(dataDir, 'evidence'),
     attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),
@@ -30,6 +33,7 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     pushRetryMs: 10,
     overloadRetryMs: 10,
     remoteOrigin: 'http://127.0.0.1:1',
+    previewOrigin: 'https://shinsa.page',
     ...overrides,
   };
   for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir]) {

@@ -22,6 +22,12 @@ function assertCanWait(run: Run) {
 }
 
 function assertOneOrder(command: CommandOf<'agent.create_task'>) {
+  if (command.stackOnThis && (command.thisWaits || command.afterThis)) {
+    throw new DomainError(
+      'dependency_cycle',
+      'Set stack_on_this alone: the new task already waits for this one to be ready, and this task cannot wait for it.'
+    );
+  }
   if (!command.thisWaits || !command.afterThis) return;
   throw new DomainError(
     'dependency_cycle',
@@ -33,6 +39,7 @@ interface SpawnOptions {
   parent: boolean;
   forkOf?: string;
   waitsOn?: string[];
+  stacksOn?: string;
   backlog?: boolean;
 }
 
@@ -54,6 +61,7 @@ function spawnTask(
       origin: source.origin,
       ...(options.forkOf ? { forkOf: options.forkOf } : {}),
       ...(options.waitsOn ? { waitsOn: options.waitsOn } : {}),
+      ...(options.stacksOn ? { stacksOn: options.stacksOn } : {}),
       ...(options.backlog ? { backlog: true } : {}),
     },
     { createdBy: creator, ...(parent ? { parentTaskId: source.id, shape: 'change' as const } : {}) }
@@ -78,6 +86,7 @@ export function createCourierTask(decider: Decider, command: CommandOf<'agent.cr
       parent: false,
       ...(command.forkOf ? { forkOf: command.forkOf } : {}),
       ...(command.afterThis ? { waitsOn: [task.id] } : {}),
+      ...(command.stackOnThis ? { stacksOn: task.id } : {}),
       ...(command.backlog ? { backlog: true } : {}),
     }
   );

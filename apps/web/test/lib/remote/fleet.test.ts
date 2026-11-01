@@ -2,13 +2,14 @@ import { describe, expect, it } from 'bun:test';
 import type {
   AccountsSnapshot,
   ChatEntry,
+  EngineInfo,
   RemoteSnapshot,
   TeamFeedSnapshot,
   TerminalsSnapshot,
   UserCommand,
   WireState,
 } from '@shinsa/core';
-import { createState, NO_TEAM_FEED } from '@shinsa/core';
+import { createState, ENGINE_PROTOCOL, NO_TEAM_FEED, resolveEngineInfo } from '@shinsa/core';
 import type { ShinsaConnection, Snapshot } from '@/lib/connection/socket.ts';
 import {
   Fleet,
@@ -19,6 +20,7 @@ import {
   resolveFleetStatus,
   resolveRequestOwner,
 } from '@/lib/remote/fleet.ts';
+import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveCanonicalTaskPath, resolveTaskPath } from '@/router.ts';
 import { createTask } from '../../support/state.ts';
@@ -37,6 +39,7 @@ class FakeConnection implements ShinsaConnection {
   remote: RemoteSnapshot | null = null;
   teams: TeamFeedSnapshot = NO_TEAM_FEED;
   desktop = false;
+  engine: EngineInfo | null = null;
   transcript: ChatEntry[] = [];
   readonly signal = createSignal();
 
@@ -79,6 +82,7 @@ class FakeConnection implements ShinsaConnection {
   listMachines = () => [];
   listUnreachableMachines = () => [];
   listMachineAccess = () => [];
+  selectEngine = () => this.engine;
   command = (command: UserCommand) => {
     this.commands.push(command);
     return Promise.resolve();
@@ -125,6 +129,56 @@ function createFleet() {
   });
   return { fleet, studio, laptop };
 }
+
+describe('what each machine’s engine speaks', () => {
+  it('answers for the engine of the machine that owns a task, and the first machine’s otherwise', () => {
+    const { fleet, studio, laptop } = createFleet();
+    laptop.connection.engine = resolveEngineInfo('1.2.0');
+    expect(fleet.selectEngine('task-laptop')).toBe(laptop.connection.engine);
+    expect(fleet.selectEngine('task-studio')).toBeNull();
+    studio.connection.engine = resolveEngineInfo('1.1.0');
+    expect(fleet.selectEngine()).toBe(studio.connection.engine);
+  });
+
+  it('refuses a command the owning machine did not list, naming that machine, and sends one it did', async () => {
+    const { fleet, studio, laptop } = createFleet();
+    laptop.connection.engine = resolveEngineInfo('1.2.0');
+    expect(fleet.command({ type: 'task.share', taskId: 'task-studio', limit: 'day' })).rejects.toThrow(
+      'Update Shinsa on Studio to use this.'
+    );
+    await fleet.command({ type: 'task.share', taskId: 'task-laptop', limit: 'day' });
+    expect(studio.connection.commands).toEqual([]);
+    expect(laptop.connection.commands.map((command) => command.type)).toEqual(['task.share']);
+  });
+
+  it('leaves out a machine on another engine protocol and lists it as one to update', async () => {
+    const { fleet, studio, laptop } = createFleet();
+    const before = fleet.snapshot();
+    studio.connection.engine = { ...resolveEngineInfo('0.9.0'), protocol: ENGINE_PROTOCOL - 1 };
+    studio.connection.push({ ...studio.connection.current, status: 'closed' });
+    expect(fleet.snapshot()).not.toBe(before);
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-laptop']);
+    expect(fleet.snapshot().status).toBe('open');
+    expect(fleet.isEveryMachineOutdated()).toBe(false);
+    expect(fleet.listMachines().map((machine) => machine.id)).toEqual(['m2']);
+    const unreachable = fleet.listUnreachableMachines();
+    expect(unreachable).toEqual([{ id: 'm1', name: 'Studio', outdated: true }]);
+    expect(fleet.listUnreachableMachines()).toBe(unreachable);
+    expect(fleet.command({ type: 'settings.change', patch: {} }, 'm1')).rejects.toThrow(
+      describeOutdatedMachine('Studio')
+    );
+    await fleet.command({ type: 'settings.change', patch: {} });
+    expect(studio.connection.commands).toEqual([]);
+    expect(laptop.connection.commands.map((command) => command.type)).toEqual(['settings.change']);
+    laptop.connection.remote = { requests: [] } as unknown as RemoteSnapshot;
+    expect(fleet.selectRemote()).toBe(laptop.connection.remote);
+    laptop.connection.engine = { ...resolveEngineInfo('0.9.0'), protocol: ENGINE_PROTOCOL + 1 };
+    laptop.connection.push({ ...laptop.connection.current });
+    expect(fleet.isEveryMachineOutdated()).toBe(true);
+    expect(fleet.snapshot().state).toBeNull();
+    expect(new Fleet([]).isEveryMachineOutdated()).toBe(false);
+  });
+});
 
 describe('merging the state of several machines', () => {
   it('links a task by its id when another machine has a task with the same handle', () => {

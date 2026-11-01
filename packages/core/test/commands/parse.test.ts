@@ -132,6 +132,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          stacksOn: 't2',
           forkOf: 't0',
           backlog: true,
         },
@@ -143,6 +144,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          stacksOn: 't2',
           forkOf: 't0',
           backlog: true,
         },
@@ -154,6 +156,14 @@ describe('parseUserCommand', () => {
       [
         { type: 'task.wait_on', taskId: 't1', waitsOn: [] },
         { type: 'task.wait_on', taskId: 't1', waitsOn: [] },
+      ],
+      [
+        { type: 'task.stack_on', taskId: 't1', stacksOn: 't0' },
+        { type: 'task.stack_on', taskId: 't1', stacksOn: 't0' },
+      ],
+      [
+        { type: 'task.stack_on', taskId: 't1', stacksOn: null },
+        { type: 'task.stack_on', taskId: 't1', stacksOn: null },
       ],
       [
         { type: 'task.move_to_backlog', taskId: 't1' },
@@ -964,6 +974,42 @@ describe('memory commands', () => {
       memoryId: 'm1',
     });
     expect(() => parseUserCommand({ type: 'memory.write', text: 3 })).toThrow('text must be text.');
+  });
+});
+
+describe('feedback commands', () => {
+  test('reads a note to write, with or without its id, and a draft to change', () => {
+    expect(parseUserCommand({ type: 'feedback.write', note: 'The plan tool refused a phase.' })).toEqual({
+      type: 'feedback.write',
+      feedbackId: null,
+      note: 'The plan tool refused a phase.',
+    });
+    expect(parseUserCommand({ type: 'feedback.write', feedbackId: 'f1', note: 'Again.' })).toEqual({
+      type: 'feedback.write',
+      feedbackId: 'f1',
+      note: 'Again.',
+    });
+    expect(parseUserCommand({ type: 'feedback.update', feedbackId: 'f1', title: 'T', body: 'B.' })).toEqual({
+      type: 'feedback.update',
+      feedbackId: 'f1',
+      title: 'T',
+      body: 'B.',
+    });
+    expect(() => parseUserCommand({ type: 'feedback.write', note: 'x'.repeat(20_001) })).toThrow(
+      'note is longer than 20000 characters.'
+    );
+  });
+
+  test('reads opening and dismissing an issue by its id', () => {
+    expect(parseUserCommand({ type: 'feedback.file', feedbackId: 'f1' })).toEqual({
+      type: 'feedback.file',
+      feedbackId: 'f1',
+    });
+    expect(parseUserCommand({ type: 'feedback.dismiss', feedbackId: 'f1' })).toEqual({
+      type: 'feedback.dismiss',
+      feedbackId: 'f1',
+    });
+    expect(() => parseUserCommand({ type: 'feedback.file' })).toThrow('feedbackId must be text.');
   });
 });
 

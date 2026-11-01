@@ -1,5 +1,6 @@
 import { isTaskComplete, type Run, type RunPurpose, type Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { resolveBundle } from '../state/queries.ts';
 import { resolveBriefedMemory, resolveMemoryContext } from './memory.ts';
 import { resolveProjectContext } from './project.ts';
 import { describeRound, resolveAgentPrompt } from './roles.ts';
@@ -18,7 +19,7 @@ export function needsRoundBrief(run: Pick<Run, 'role' | 'purpose'>) {
 function resolveBrief(state: ShinsaState, task: Task, purpose: RunPurpose, phaseIndex: number | null) {
   const repo = task.repoId ? (state.repos[task.repoId] ?? null) : null;
   const before = purpose === 'build' && phaseIndex !== null ? phaseIndex : Number.POSITIVE_INFINITY;
-  return describeRound(task, repo, listTaskBases(state, task), before);
+  return describeRound(task, repo, listTaskBases(state, task), before, resolveBundle(state, task));
 }
 
 export function resolveRoundBrief(

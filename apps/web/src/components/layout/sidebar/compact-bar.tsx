@@ -1,10 +1,12 @@
+import type { ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { CommandMenuButton } from '@/components/command/menu.tsx';
+import { FeedbackButton } from '@/components/feedback/button.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { requestNewTaskOnHome } from '@/lib/command/menu.ts';
 
-export function CompactBar({ onMenu }: { onMenu: () => void }) {
+export function CompactBar({ state, onMenu }: { state: ShinsaState; onMenu: () => void }) {
   return (
     <header
       data-window-drag
@@ -21,6 +23,7 @@ export function CompactBar({ onMenu }: { onMenu: () => void }) {
       </Hint>
       <HomeLink />
       <span className='flex-1' />
+      <FeedbackButton state={state} />
       <CommandMenuButton />
       <Hint label='New task'>
         <Button

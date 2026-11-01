@@ -1,6 +1,8 @@
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
   BacklogCause,
+  BundleConflict,
+  BundleReady,
   ConfigProblem,
   DeliveringStep,
   EditsApproval,
@@ -54,8 +56,8 @@ import type {
 } from '../domain/pull-requests.ts';
 import type { SourceReport } from '../domain/schedules.ts';
 import type {
+  AgentReply,
   CheckChange,
-  FixReply,
   PlanDocument,
   ReportCheck,
   ReportWalkthroughRevision,
@@ -65,6 +67,7 @@ import type {
 } from '../report/types.ts';
 import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
+import type { FeedbackEventBody } from './feedback.ts';
 import type { MemoryEventBody } from './memory.ts';
 import type { ScheduleEventBody } from './schedules.ts';
 import type { ShareEventBody } from './shares.ts';
@@ -107,6 +110,7 @@ type EventBody =
   | SlackEventBody
   | WatchdogEventBody
   | MemoryEventBody
+  | FeedbackEventBody
   | ShareEventBody
   | {
       type: 'task.triaged';
@@ -131,6 +135,10 @@ type EventBody =
   | { type: 'task.duplicated'; taskId: string; duplicate: TaskDuplicate }
   | { type: 'task.duplicate_cleared'; taskId: string }
   | { type: 'task.waits_on_changed'; taskId: string; waitsOn: string[]; by?: 'you' | 'shinsa' }
+  | { type: 'task.stack_changed'; taskId: string; stacksOn: string | null; by?: 'you' | 'shinsa' }
+  | { type: 'task.stack_based'; taskId: string; base: string | null }
+  | { type: 'task.bundle_ready'; taskId: string; ready: BundleReady | null }
+  | { type: 'task.bundle_conflict'; taskId: string; conflict: BundleConflict | null }
   | { type: 'task.backlog_changed'; taskId: string; backlog: boolean; cause: BacklogCause }
   | { type: 'task.snooze_changed'; taskId: string; snoozed: boolean }
   | { type: 'task.noted'; taskId: string; note: string; runId?: string | null }
@@ -152,7 +160,7 @@ type EventBody =
       text: string;
       comments: number;
     }
-  | { type: 'iteration.answered'; taskId: string; iterationId: string; reply: FixReply; runId: string }
+  | { type: 'iteration.answered'; taskId: string; iterationId: string; reply: AgentReply; runId: string }
   | { type: 'task.messages_told'; taskId: string }
   | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
   | { type: 'task.message_routed'; taskId: string; messageId: string }
@@ -195,14 +203,7 @@ type EventBody =
   | { type: 'task.overlaps_told'; taskId: string }
   | { type: 'task.edits_committed'; taskId: string }
   | { type: 'task.edits_approved'; taskId: string; gate: EditsApproval | null }
-  | {
-      type: 'plan.proposed';
-      taskId: string;
-      body: string;
-      document: PlanDocument | null;
-      changeSummary?: string | null;
-      feedback?: string | null;
-    }
+  | { type: 'plan.proposed'; taskId: string; body: string; document: PlanDocument | null }
   | { type: 'plan.answered'; taskId: string; answers: string }
   | { type: 'phase.updated'; taskId: string; index: number; status: PhaseStatus }
   | { type: 'phase.completed'; taskId: string; report: PhaseReport }

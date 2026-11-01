@@ -3,9 +3,14 @@ import {
   applyStatePatch,
   type ChatEntry,
   type ClientMessage,
+  type EngineCommand,
+  type EngineFeature,
+  type EngineInfo,
+  hasEngineFeature,
   NO_TEAM_FEED,
   type PlacementMachine,
   type RemoteSnapshot,
+  resolveEngineCommands,
   type ServerMessage,
   type StatePatch,
   type Surface,
@@ -54,6 +59,7 @@ export interface MachineChoice extends PlacementMachine {
 export interface UnreachableMachine {
   id: string;
   name: string;
+  outdated?: boolean;
 }
 
 export interface MachineAccess {
@@ -86,6 +92,7 @@ export interface ShinsaConnection {
   listMachines: () => MachineChoice[];
   listUnreachableMachines: () => UnreachableMachine[];
   listMachineAccess: () => MachineAccess[];
+  selectEngine: (id?: string | null) => EngineInfo | null;
   command: (command: UserCommand, machineId?: string | null) => Promise<void>;
   reset: () => void;
   flush: () => void;
@@ -111,6 +118,25 @@ export const NO_MACHINES: MachineChoice[] = [];
 export const NO_UNREACHABLE_MACHINES: UnreachableMachine[] = [];
 
 export const NO_MACHINE_ACCESS: MachineAccess[] = [];
+
+const UPDATE_ENGINE_MESSAGE = 'Update Shinsa to use this.';
+
+const BASELINE_COMMANDS = resolveEngineCommands(null);
+
+const engineCommands = new WeakMap<EngineInfo, ReadonlySet<string>>();
+
+export function selectEngineCommands(engine: EngineInfo | null) {
+  if (!engine) return BASELINE_COMMANDS;
+  const known = engineCommands.get(engine);
+  if (known) return known;
+  const commands = resolveEngineCommands(engine);
+  engineCommands.set(engine, commands);
+  return commands;
+}
+
+export function resolveUpdateMessage(machineName: string) {
+  return `Update Shinsa on ${machineName} to use this.`;
+}
 
 export const TRANSCRIPT_CACHE_LIMIT = 24;
 
@@ -159,6 +185,7 @@ export class Connection implements ShinsaConnection {
   #terminals: TerminalsSnapshot | null = null;
   #remote: RemoteSnapshot | null = null;
   #teams: TeamFeedSnapshot = NO_TEAM_FEED;
+  #engine: EngineInfo | null = null;
   #desktopConnected = false;
   readonly #options: ConnectionOptions;
   readonly #state = createSignal();
@@ -249,6 +276,8 @@ export class Connection implements ShinsaConnection {
 
   listMachineAccess = (): MachineAccess[] => NO_MACHINE_ACCESS;
 
+  selectEngine = (_id?: string | null) => this.#engine;
+
   replaceAccounts(accounts: AccountsSnapshot | null) {
     this.#accounts = accounts;
     this.#accountsSignal.publish();
@@ -262,6 +291,10 @@ export class Connection implements ShinsaConnection {
     return new Promise<void>((resolve, reject) => {
       if (this.#socket?.readyState !== WebSocket.OPEN) {
         reject(new Error('Not connected to Shinsa.'));
+        return;
+      }
+      if (!selectEngineCommands(this.#engine).has(command.type)) {
+        reject(new Error(UPDATE_ENGINE_MESSAGE));
         return;
       }
       const message: ClientMessage = { type: 'command', id: crypto.randomUUID(), command };
@@ -305,6 +338,7 @@ export class Connection implements ShinsaConnection {
     this.#terminals = null;
     this.#remote = null;
     this.#teams = NO_TEAM_FEED;
+    this.#engine = null;
     this.#desktopConnected = false;
     this.#pending.clear();
     this.#optimistic.clear();
@@ -479,6 +513,10 @@ export class Connection implements ShinsaConnection {
         this.#teams = message.teams;
         this.#teamsSignal.publish();
         return;
+      case 'engine':
+        this.#engine = message.engine;
+        this.#state.publish();
+        return;
     }
   }
 }
@@ -533,6 +571,24 @@ export function useRemoteSnapshot() {
 
 export function useTeamFeed() {
   return useSyncExternalStore(connection.subscribeTeams, connection.selectTeams);
+}
+
+export function useEngineCommands(id?: string | null) {
+  return useSyncExternalStore(connection.subscribe, () => selectEngineCommands(connection.selectEngine(id)));
+}
+
+export function hasEngineCommand(type: EngineCommand, id?: string | null) {
+  return selectEngineCommands(connection.selectEngine(id)).has(type);
+}
+
+export function useEngineCommand(type: EngineCommand, id?: string | null) {
+  return useEngineCommands(id).has(type);
+}
+
+export function useEngineFeature(feature: EngineFeature, id?: string | null) {
+  return useSyncExternalStore(connection.subscribe, () =>
+    hasEngineFeature(connection.selectEngine(id), feature)
+  );
 }
 
 export function useMachineAccess() {

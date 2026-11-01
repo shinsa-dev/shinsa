@@ -56,7 +56,16 @@ export const DEFAULT_ROUND_SHIPPING: RoundShipping = 'onto_pull_request';
 
 type RoundSource = Pick<
   Task,
-  'rounds' | 'request' | 'title' | 'createdAt' | 'pipeline' | 'mode' | 'branch' | 'pullRequest' | 'stage'
+  | 'rounds'
+  | 'request'
+  | 'title'
+  | 'createdAt'
+  | 'pipeline'
+  | 'mode'
+  | 'branch'
+  | 'pullRequest'
+  | 'stage'
+  | 'stackBase'
 >;
 
 type ShippingSource = RoundSource & Pick<Task, 'closedAt' | 'fixFor' | 'pushPending'>;
@@ -142,12 +151,12 @@ export function resolveNextRoundNumber(task: RoundSource) {
 
 export function resolveRoundBase(task: RoundSource) {
   const active = selectActiveRound(task);
-  if (!active?.base) return null;
   const stacked = resolveTaskRounds(task).some(
     (round) =>
-      round.status === 'shipped' && round.branch === active.base && round.pullRequest?.state === 'open'
+      round.status === 'shipped' && round.branch === active?.base && round.pullRequest?.state === 'open'
   );
-  return stacked ? active.base : null;
+  if (active?.base && stacked) return active.base;
+  return task.stackBase ?? null;
 }
 
 export function listStackedPullRequests(task: RoundSource) {

@@ -574,6 +574,40 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'It no longer waits on other tasks.',
   }),
   defineCommand({
+    path: ['tasks', 'stack-on'],
+    summary:
+      'Stack a task on another as a bundle: it starts once that task is ready to merge, builds on its branch, and the bundle merges as one.',
+    command: 'task.stack_on',
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'below',
+        kind: 'text',
+        positional: 'one',
+        required: true,
+        description: 'The task it stacks on.',
+      },
+    ],
+    build: async (values, client) => ({
+      type: 'task.stack_on',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+      stacksOn: await findTaskId(client, readValue(values, 'below')),
+    }),
+    done: () => 'Stacked. It starts once the task below is ready to merge.',
+  }),
+  defineCommand({
+    path: ['tasks', 'unstack'],
+    summary: 'Take a task out of its bundle before it starts: it no longer waits for the task below.',
+    command: 'task.stack_on',
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.stack_on',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+      stacksOn: null,
+    }),
+    done: () => 'It is no longer in a bundle.',
+  }),
+  defineCommand({
     path: ['tasks', 'move-to-backlog'],
     summary: 'Keep a task in the backlog: its plan waits there until you start building it.',
     command: 'task.move_to_backlog',

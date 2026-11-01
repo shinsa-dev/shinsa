@@ -44,7 +44,7 @@ export class WorktreeStrategy implements WorkspaceStrategy {
     if (worktreePath && branch && existsSync(worktreePath)) {
       if (task.phaseReports.length === 0 && isLaterRound(task)) await discardEdits(worktreePath, signal);
       else if (task.phaseReports.length === 0 && !task.pullRequest)
-        await refreshWorktree(repo, worktreePath, signal);
+        await refreshWorktree(repo, worktreePath, resolveRoundBase(task), signal);
       return { path: worktreePath, branch };
     }
     if (!branch) throw new Error('The task has no branch yet.');

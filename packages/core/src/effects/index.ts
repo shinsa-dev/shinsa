@@ -1,4 +1,5 @@
 import { resolveSlackThreadKey, type SlackThreadRef } from '../domain/slack.ts';
+import type { BundlePullRequest } from '../domain/types.ts';
 import type { SlackMention } from '../slack/contract.ts';
 import type { SlackPost } from '../slack/posts.ts';
 
@@ -18,7 +19,7 @@ export type ShinsaEffect =
   | { kind: 'checks.run'; taskId: string; round: number; checks: CheckToRun[]; coverage: boolean }
   | { kind: 'pull_request.open'; taskId: string }
   | { kind: 'pull_request.push'; taskId: string }
-  | { kind: 'pull_request.merge'; taskId: string; headSha: string | null }
+  | { kind: 'pull_request.merge'; taskId: string; headSha: string | null; bundle?: BundlePullRequest[] }
   | { kind: 'pull_request.watch'; taskId: string }
   | { kind: 'pull_request.close'; taskId: string; numbers: number[] }
   | { kind: 'worktree.remove'; taskId: string }
@@ -30,9 +31,12 @@ export type ShinsaEffect =
   | { kind: 'delegation.steer'; runId: string; generation: number }
   | { kind: 'delegation.reply'; runId: string; questionId: string }
   | { kind: 'share.link'; taskId: string }
+  | { kind: 'preview.link'; taskId: string; serviceId: string }
   | { kind: 'slack.evaluate'; mention: SlackMention }
   | { kind: 'slack.status'; taskId: string; thread: SlackThreadRef }
-  | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost };
+  | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost }
+  | { kind: 'feedback.draft'; feedbackId: string }
+  | { kind: 'feedback.file'; feedbackId: string };
 
 export type ShinsaEffectKind = ShinsaEffect['kind'];
 
@@ -60,9 +64,12 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'delegation.steer': 'process_bound',
   'delegation.reply': 'process_bound',
   'share.link': 'replay_safe',
+  'preview.link': 'replay_safe',
   'slack.evaluate': 'replay_safe',
   'slack.status': 'replay_safe',
   'slack.post': 'replay_safe',
+  'feedback.draft': 'replay_safe',
+  'feedback.file': 'process_bound',
 };
 
 function listEffectKinds(recovery: EffectRecovery) {
@@ -99,6 +106,8 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.mention.eventId}`;
     case 'slack.status':
       return `${effect.kind}:${effect.taskId}:${seq}`;
+    case 'preview.link':
+      return `${effect.kind}:${effect.taskId}:${effect.serviceId}:${seq}`;
     case 'slack.post':
       return `${effect.kind}:${resolveSlackThreadKey(effect.thread)}:${seq}`;
     case 'checks.run':
@@ -107,6 +116,9 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.projectId ?? '*'}:${seq}`;
     case 'watch.suggest':
       return `${effect.kind}:${effect.projectId}:${effect.server}:${seq}`;
+    case 'feedback.draft':
+    case 'feedback.file':
+      return `${effect.kind}:${effect.feedbackId}:${seq}`;
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':
@@ -128,6 +140,9 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return 'briefing';
     case 'watch.suggest':
       return `suggest:${effect.projectId}`;
+    case 'feedback.draft':
+    case 'feedback.file':
+      return `feedback:${effect.feedbackId}`;
     case 'run.execute':
     case 'run.wake':
       return `run:${effect.runId}`;
@@ -144,6 +159,8 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return `side:${effect.taskId}`;
     case 'share.link':
       return `share:${effect.taskId}`;
+    case 'preview.link':
+      return `preview:${effect.taskId}`;
     case 'slack.evaluate':
       return `slack:${resolveSlackThreadKey(effect.mention)}`;
     case 'slack.post':

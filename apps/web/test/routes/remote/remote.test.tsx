@@ -189,6 +189,15 @@ describe('the remote dashboard', () => {
     expect(local).toBeInstanceOf(Connection);
   });
 
+  it('says to update Shinsa when every machine runs a protocol this page cannot work with', async () => {
+    const outdated = spyOn(Fleet.prototype, 'isEveryMachineOutdated').mockReturnValue(true);
+    renderRoot('/tasks', { devices: createDevices(DEVICE) });
+    expect(await screen.findByText('Update Shinsa on Studio to reach it from here.')).toBeTruthy();
+    expect(screen.getByText(/Studio runs a version of Shinsa this page cannot work with\./)).toBeTruthy();
+    expect(screen.queryByText('The app')).toBeNull();
+    outdated.mockRestore();
+  });
+
   it('says when this browser cannot reach your machines', async () => {
     const worker = createWorker();
     Object.assign(worker, { register: () => Promise.reject(new Error('Service workers are off.')) });

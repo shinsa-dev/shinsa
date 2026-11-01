@@ -10,6 +10,12 @@ export {
   selectRootRun,
 } from './delegations.ts';
 export type { StateChanges } from './draft.ts';
+export {
+  listFeedback,
+  listFeedbackEntryLeaks,
+  listPrivateWords,
+  resolveFeedbackIssueText,
+} from './feedback.ts';
 export { listKeptMemory, listMemory } from './memory.ts';
 export {
   applyEvent,
@@ -22,6 +28,7 @@ export {
   type ShinsaState,
 } from './project.ts';
 export {
+  canChangeStack,
   findTask,
   isDependencyOf,
   isHeldInBacklog,
@@ -29,6 +36,8 @@ export {
   isWaitingForCheckout,
   isWaitingOnAnswer,
   listActiveRuns,
+  listBundleAbove,
+  listBundleBelow,
   listDependents,
   listLiveRuns,
   listOpenBlockers,
@@ -36,9 +45,14 @@ export {
   listPendingDependencies,
   listProjectRepos,
   listRunningRuns,
+  resolveBundle,
+  resolveBundleRoot,
   resolveTaskProject,
   resolveTaskWorkspace,
   selectCheckoutHolder,
+  selectStackedOnThis,
+  selectStackParent,
+  selectStackRefusal,
   selectTaskByHandle,
   selectTaskByReference,
 } from './queries.ts';

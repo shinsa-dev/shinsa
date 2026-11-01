@@ -29,7 +29,6 @@ import {
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeNextRun } from '@/lib/schedules.ts';
-import { resolveTaskGroup } from '@/lib/tasks/groups.ts';
 
 function FactLabel({ fact }: { fact: AutomationFact }) {
   if (fact.at === null) return fact.label;
@@ -100,14 +99,7 @@ function TasksPanel({ state, schedule }: { state: ShinsaState; schedule: Schedul
             <span className='text-right'>Updated</span>
           </div>
           {tasks.map((task) => (
-            <TaskListRow
-              key={task.id}
-              state={state}
-              task={task}
-              group={resolveTaskGroup(state, task)}
-              depth={0}
-              columns={FILED_COLUMNS}
-            />
+            <TaskListRow key={task.id} state={state} task={task} depth={0} columns={FILED_COLUMNS} />
           ))}
         </div>
       )}

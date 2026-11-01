@@ -9,6 +9,7 @@ import {
 } from '../terminal/index.ts';
 import { CONFIG_SPECS } from './config.ts';
 import { EXTENSION_SPECS } from './extensions.ts';
+import { FEEDBACK_SPECS } from './feedback.ts';
 import { type FieldSpec, serializeFlag, type Values } from './fields.ts';
 import { GATE_SPECS } from './gates.ts';
 import { MEMORY_SPECS } from './memory.ts';
@@ -56,6 +57,7 @@ export const SURFACE: SurfaceSpec[] = [
   ...WORK_SPECS,
   ...SCHEDULE_SPECS,
   ...MEMORY_SPECS,
+  ...FEEDBACK_SPECS,
   ...CONFIG_SPECS,
   ...SYSTEM_SPECS,
   ...SERVICE_SPECS,
@@ -200,6 +202,15 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
       [
         'memory',
         'List the rules every agent follows, write or remove one, and keep the ones agents propose.',
+      ],
+    ],
+  },
+  {
+    title: 'Send feedback on Shinsa',
+    groups: [
+      [
+        'feedback',
+        'Write feedback your agent drafts as a public GitHub issue, read the drafts, and open or dismiss them.',
       ],
     ],
   },

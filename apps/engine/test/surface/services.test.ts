@@ -118,6 +118,22 @@ describe('services', () => {
     expect(fake.posts.map((post) => post.body)).toEqual([{ taskId: 'task-a' }, { taskId: 'task-a' }]);
   });
 
+  test('shares and stops sharing a task’s run of a service', async () => {
+    const fake = createClient();
+    expect((await runSpec(fake, ['services', 'share', 'api', '--task', 'SH-4', '--until', 'day'])).text).toBe(
+      'Shared. Its link shows on the task in a moment.'
+    );
+    await runSpec(fake, ['services', 'share', 'api', '--task', 'SH-4']);
+    expect((await runSpec(fake, ['services', 'unshare', 'api', '--task', 'SH-4'])).text).toBe(
+      'No longer shared.'
+    );
+    expect(fake.sent).toEqual([
+      { type: 'preview.share', taskId: 'task-a', serviceId: 'api', limit: 'day' },
+      { type: 'preview.share', taskId: 'task-a', serviceId: 'api' },
+      { type: 'preview.unshare', taskId: 'task-a', serviceId: 'api' },
+    ]);
+  });
+
   test('asks for the project when two have a service by that name, and names a missing one', async () => {
     await expect(runSpec(createClient(), ['services', 'start', 'web'])).rejects.toThrow('--project');
     await expect(runSpec(createClient(), ['services', 'start', 'docs'])).rejects.toThrow('No service docs.');

@@ -68,7 +68,7 @@ web ──WebSocket──► shinsa engine
   call; read-only steps use hooks, never `disallowedTools`; the extension set is decided once per session. Quick calls
   keep a fixed system prompt and put the call's data in the user prompt. A change that breaks this fails
   `providers/claude/session.test.ts` and `test/e2e/prompt-cache.test.ts`.
-- **The task lifecycle** lives in `packages/core/src/decide/`, one file per area (`lifecycle`, `fixes`, `pull-requests`, `dependencies`, `gates`, `runs`…; the table is `packages/core/CLAUDE.md`): triage → waiting on other tasks → setup verification → planning → building and checking, phase by phase (each phase's checks, the agent's choice) → review gate → shipping → merge gate → merged, for a change. Each task follows its own pipeline of fixed building-block steps (answer, research, investigate, your OK, plan, operate, build, checks, agent review, your review, pull request, merge) under guards in core, so a question, an investigation, research or an operation never opens a pull request, and turning one into a change goes through your OK. Every step and gate is an instance of a typed schema in core (`domain/steps.ts`), and a rule set over it (`domain/verification.ts`) makes verification strict for any work that changes code or runs an operation and never applies to a pure inquiry. Six kinds are presets ("kind of task" on screen, shape in code) and the kind is never yours to change; the planner may compose other steps and set plan parameters, which core's rules checker (`validateComposition`, `validatePlanRules`) accepts or hands back. The path, the shapes, each gate and what opens it are `docs/engine.md` → A task's path, Task shapes, Gates; the schema and the rules are `docs/protocol.md` → Steps and gates, Verification.
+- **The task lifecycle** lives in `packages/core/src/decide/`, one file per area (`lifecycle`, `fixes`, `pull-requests`, `dependencies`, `bundles`, `gates`, `runs`…; the table is `packages/core/CLAUDE.md`): triage → waiting on other tasks → setup verification → planning → building and checking, phase by phase (each phase's checks, the agent's choice) → review gate → shipping → merge gate → merged, for a change. Each task follows its own pipeline of fixed building-block steps (answer, research, investigate, your OK, plan, operate, build, checks, agent review, your review, pull request, merge) under guards in core, so a question, an investigation, research or an operation never opens a pull request, and turning one into a change goes through your OK. Every step and gate is an instance of a typed schema in core (`domain/steps.ts`), and a rule set over it (`domain/verification.ts`) makes verification strict for any work that changes code or runs an operation and never applies to a pure inquiry. Six kinds are presets ("kind of task" on screen, shape in code) and the kind is never yours to change; the planner may compose other steps and set plan parameters, which core's rules checker (`validateComposition`, `validatePlanRules`) accepts or hands back. The path, the shapes, each gate and what opens it are `docs/engine.md` → A task's path, Task shapes, Gates; the schema and the rules are `docs/protocol.md` → Steps and gates, Verification.
 - **The hand-over protocol** (`packages/core/src/report/`): plans, phase hand-overs, fixes, review findings and
   inquiry results have fixed fields with hard length limits. The tools publish the limits in their schemas;
   `validate*` rejects a hand-over that breaks one and tells the agent what to fix. Shinsa assembles the work report
@@ -97,6 +97,16 @@ web ──WebSocket──► shinsa engine
   old event shapes in it, `apps/engine/src/store/legacy.ts` rewrites them once on start, versioned by SQLite's
   `user_version` (bump `LOG_VERSION` in `store/event-log.ts`), so code never reads an old shape (`docs/engine.md` →
   State in memory).
+- **The hosted page can be newer than the engine it reaches.** app.shinsa.dev serves the web app built from `main`
+  while each machine's engine updates on its own channel, so every engine announces what it speaks on connect
+  (`engine { version, protocol, commands, features }`) and the page offers only that, per task's machine. A new user
+  command is announced by itself; add it to `GATED_COMMANDS` (core's `test/protocol/engine.test.ts`, which fails until
+  you do) and give its UI a command the menus filter by (`TASK_ACTION_COMMAND`) or `useEngineCommand(type, taskId)`. A
+  new `/api` route, or a setting an older engine would ignore, needs a name in `ENGINE_FEATURES` and its routes in
+  `ENGINE_FEATURE_ROUTES` (`apps/engine/src/http/features.ts`; `test/http/engine-features.test.ts` fails on a route in
+  neither that nor its frozen baseline), and the UI asks `useEngineFeature`. Never edit the baselines to make a test
+  pass. Raise `ENGINE_PROTOCOL` only when an older page and engine cannot talk at all (`docs/engine.md` → Remote access,
+  What each machine speaks).
 
 ## Commands
 

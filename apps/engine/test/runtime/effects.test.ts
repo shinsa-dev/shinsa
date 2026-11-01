@@ -2,6 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  type BundlePullRequest,
   CI_GRACE_MS,
   createPullRequestWatch,
   evaluatePullRequestWatch,
@@ -13,6 +14,7 @@ import {
 import type { RunSupervisor } from '../../src/agents/index.ts';
 import type { Briefings } from '../../src/briefing/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../../src/config/index.ts';
+import { NO_DRAFT, STOPPED_WHILE_FILING } from '../../src/feedback/index.ts';
 import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
@@ -21,11 +23,13 @@ import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtim
 import type { Slack } from '../../src/slack/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
+import type { Workspaces } from '../../src/workspaces/index.ts';
 import {
   createGitRepo,
   createTempDir,
   createTestConfig,
   git,
+  NO_PREVIEWS,
   NO_SHARES,
   overrideEnv,
   type TestRepo,
@@ -183,6 +187,7 @@ function setup(
   const briefings = createBriefings();
   const runner = new EffectRunner(stub.engine, config, runs, briefings.briefings, {
     shares: NO_SHARES,
+    previews: NO_PREVIEWS,
     resolveLogin: () => Promise.resolve(null),
     triage: (state, task, local) => resolveTriage(state, task, local, () => Promise.resolve(null)),
     ...options,
@@ -276,6 +281,27 @@ describe('routing effects', () => {
     await runner.reportExhausted({ kind: 'share.link', taskId: 't1' }, 'Turn on remote access.', 'share-key');
     expect(dispatched).toEqual([{ type: 'share.fail', taskId: 't1', detail: 'Turn on remote access.' }]);
     expect(commandIds).toEqual(['share-key:share.fail']);
+  });
+
+  test('a preview link is made by the previews, and one that could not be made is kept on its preview', async () => {
+    const linked: string[] = [];
+    const { runner, dispatched, commandIds } = setup(undefined, {
+      previews: {
+        link: (taskId, serviceId, effectContext) => {
+          linked.push(`link:${taskId}:${serviceId}:${effectContext.key}`);
+          return Promise.resolve();
+        },
+      },
+    });
+    const context = createContext();
+    await runner.apply({ kind: 'preview.link', taskId: 't1', serviceId: 'web' }, context);
+    expect(linked).toEqual([`link:t1:web:${context.key}`]);
+    const effect = { kind: 'preview.link', taskId: 't1', serviceId: 'web' } as const;
+    await runner.reportExhausted(effect, 'Turn on remote access.', 'preview-key');
+    expect(dispatched).toEqual([
+      { type: 'preview.fail', taskId: 't1', serviceId: 'web', detail: 'Turn on remote access.' },
+    ]);
+    expect(commandIds).toEqual(['preview-key:preview.fail']);
   });
 });
 
@@ -377,6 +403,43 @@ describe('suggesting a watch', () => {
   });
 });
 
+describe('the feedback effects', () => {
+  const ENTRY = {
+    source: 'human' as const,
+    note: 'The plan tab hides changes.',
+    title: 'Plan tab hides changes',
+    body: 'It hides them.',
+    failure: null,
+    issue: null,
+    taskId: null,
+    runId: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+
+  test('drafting, filing, a failure for good and recovery each report back on the entry', async () => {
+    const { runner, dispatched, commandIds } = setup((state) => {
+      state.feedback.f1 = { ...ENTRY, id: 'f1', status: 'drafting', title: null, body: null };
+      state.feedback.f2 = { ...ENTRY, id: 'f2', status: 'filing' };
+      state.feedback.f3 = { ...ENTRY, id: 'f3', status: 'draft' };
+    });
+    const draft = createContext();
+    await runner.apply({ kind: 'feedback.draft', feedbackId: 'f1' }, draft);
+    await runner.apply({ kind: 'feedback.file', feedbackId: 'f3' }, createContext());
+    await runner.reportExhausted({ kind: 'feedback.file', feedbackId: 'f3' }, 'gh is missing', 'file-key');
+    await runner.recover();
+    expect(dispatched).toEqual([
+      { type: 'feedback.record_failure', feedbackId: 'f1', detail: NO_DRAFT },
+      { type: 'feedback.record_failure', feedbackId: 'f3', detail: 'gh is missing' },
+      { type: 'feedback.record_failure', feedbackId: 'f2', detail: STOPPED_WHILE_FILING },
+    ]);
+    expect(commandIds.slice(0, 2)).toEqual([
+      `${draft.key}:feedback.record_failure`,
+      'file-key:feedback.record_failure',
+    ]);
+  });
+});
+
 describe('triage', () => {
   test('a settled, unknown or already triaged task is left alone', async () => {
     const { runner, dispatched } = setup((state) => {
@@ -408,6 +471,7 @@ describe('triage', () => {
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
         resolveTriage(state, current, local, <T>() =>
@@ -439,6 +503,7 @@ describe('triage', () => {
     const { runs } = createRuns();
     const runner = new EffectRunner(engine, config, runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
         Promise.resolve({
@@ -479,6 +544,7 @@ describe('triage', () => {
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
         resolveTriage(state, current, local, <T>() =>
@@ -502,6 +568,7 @@ describe('triage', () => {
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
         Promise.resolve({
@@ -718,10 +785,52 @@ describe('worktrees', () => {
     expect(dispatched).toEqual([{ type: 'worktree.gone', taskId: 'task-1' }]);
   });
 
+  test('removing a worktree stops what still runs in it, but not your own terminals there', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const server = Bun.spawn(['sh', '-c', 'sleep 30; true'], {
+      cwd: worktree,
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    const shell = Bun.spawn(['sh', '-c', 'sleep 30; true'], {
+      cwd: worktree,
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    const services = { closeTaskServices: () => undefined, listTerminalPids: () => [shell.pid] };
+    const { runner, dispatched } = setup(withTask({ worktreePath: worktree }, repo), { services });
+    await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(await server.exited).not.toBe(0);
+    expect(shell.exitCode).toBeNull();
+    expect(existsSync(worktree)).toBe(false);
+    expect(dispatched).toEqual([{ type: 'worktree.gone', taskId: 'task-1' }]);
+    shell.kill('SIGKILL');
+    await shell.exited;
+  });
+
+  test('removing a worktree prunes the shared build caches, and a failure there is only logged', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const { runner, config } = setup(withTask({ worktreePath: worktree }, repo));
+    mkdirSync(join(config.dataDir, 'caches', 'removed-repo'), { recursive: true });
+    await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(existsSync(join(config.dataDir, 'caches', 'removed-repo'))).toBe(false);
+    const broken = setup(withTask({ worktreePath: createTempDir() }, repo));
+    writeFileSync(join(broken.config.dataDir, 'caches'), '');
+    const warn = spyOn(log, 'warn');
+    await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(warn).toHaveBeenCalledWith('[Effects] Could not prune the shared build caches', {
+      error: expect.stringContaining('ENOTDIR'),
+    });
+    warn.mockRestore();
+  });
+
   test('removing a worktree reports it gone even when git cannot remove it', async () => {
     const { repo, worktree } = await createShippingRepo();
     const closed: string[] = [];
-    const services = { closeTaskServices: (taskId: string) => closed.push(taskId) };
+    const services = {
+      closeTaskServices: (taskId: string) => closed.push(taskId),
+      listTerminalPids: () => [],
+    };
     const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo), {
       services,
     });
@@ -730,8 +839,16 @@ describe('worktrees', () => {
     expect(existsSync(worktree)).toBe(false);
     expect(closed).toEqual(['task-1']);
     expect(commandIds).toEqual([`${context.key}:worktree.gone`]);
-    const broken = setup(withTask({ worktreePath: createTempDir() }, { ...repo, path: createTempDir() }));
+    const failing = { mode: 'worktrees', remove: () => Promise.reject(new Error('Device busy')) };
+    const workspaces = { resolve: () => failing } as unknown as Workspaces;
+    const broken = setup(withTask({ worktreePath: createTempDir() }, repo), { workspaces });
+    const warn = spyOn(log, 'warn');
     await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(warn).toHaveBeenCalledWith('[Effects] Could not remove a worktree', {
+      taskId: 'task-1',
+      error: expect.stringContaining('Device busy'),
+    });
+    warn.mockRestore();
     const none = setup(withTask({ worktreePath: null }));
     await none.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
     expect([...dispatched, ...broken.dispatched, ...none.dispatched]).toEqual([
@@ -785,6 +902,7 @@ describe('scratch folders', () => {
     } as unknown as RunSupervisor;
     const runner = new EffectRunner(stub.engine, config, runs, createBriefings().briefings, {
       shares: NO_SHARES,
+      previews: NO_PREVIEWS,
       triage: () => Promise.resolve(null),
     });
     await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
@@ -839,6 +957,17 @@ describe('checks', () => {
       readFileSync(join(config.evidenceDir, uri.slice('/api/evidence/'.length)), 'utf8');
     expect(read(record.outputs?.[0]?.uri ?? '')).toBe('$ echo 4 pass\nPassed.\n4 pass');
     expect(read(record.outputs?.[1]?.uri ?? '')).toBe('$ grep -q b a.txt\nFailed.\nexit 1');
+  });
+
+  test('checks in a Turbo repository share one Turbo cache per repository', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    writeFileSync(join(worktree, 'turbo.json'), '{}');
+    const { runner, dispatched, config } = setup(
+      withTask({ stage: 'checking', worktreePath: worktree }, repo)
+    );
+    const shared = join(config.dataDir, 'caches', repo.id, 'turbo');
+    await runner.apply(checksEffect([`test "$TURBO_CACHE_DIR" = '${shared}'`]), createContext());
+    expect(dispatched[0]).toMatchObject({ results: [{ outcome: 'pass' }] });
   });
 
   test('a failure whose errors all fail on the base commit too is noted and does not block; others do', async () => {
@@ -1458,6 +1587,173 @@ describe('merging a stack of pull requests', () => {
       spy.mockRestore();
     }
     expect(readGitHub().pulls.map((pull) => pull.state)).toEqual(['OPEN', 'OPEN', 'MERGED']);
+  });
+});
+
+describe('merging a bundle of tasks', () => {
+  function bundlePulls(overrides: Record<number, Record<string, unknown>> = {}) {
+    return [
+      fakePull('feat/root', { number: 7, ...overrides[7] }),
+      fakePull('feat/middle', { number: 8, base: 'feat/root', ...overrides[8] }),
+      fakePull('feat/top', { number: 9, base: 'feat/middle', ...overrides[9] }),
+    ];
+  }
+
+  const BUNDLE: BundlePullRequest[] = [
+    { taskId: 'task-3', number: 9 },
+    { taskId: 'task-2', number: 8 },
+  ];
+
+  async function commitBranch(path: string, branch: string, from: string, files: Record<string, string>) {
+    await git(path, 'checkout', '-q', '-B', branch, from);
+    writeFiles(path, files);
+    await git(path, 'add', '-A');
+    await git(path, 'commit', '-q', '-m', `feat: ${branch}`);
+    await git(path, 'push', '-q', '-f', 'origin', branch);
+  }
+
+  async function setupBundle(stage: Task['stage'] = 'awaiting_merge') {
+    const created = await createGitRepo({ files: { 'top.txt': 'start\n' } });
+    await commitBranch(created.path, 'feat/root', 'main', { 'root.txt': 'root\n' });
+    await commitBranch(created.path, 'feat/middle', 'feat/root', { 'middle.txt': 'middle\n' });
+    await commitBranch(created.path, 'feat/top', 'feat/middle', { 'top.txt': 'top\n' });
+    const ready = { commit: null };
+    const result = setup((state) => {
+      state.repos['repo-1'] = createRepo(created.repo);
+      state.tasks['task-1'] = createTask({
+        id: 'task-1',
+        title: 'Root',
+        branch: 'feat/root',
+        stage,
+        bundleReady: ready,
+        pullRequest: PULL,
+      });
+      state.tasks['task-2'] = createTask({
+        id: 'task-2',
+        title: 'Middle',
+        branch: 'feat/middle',
+        stage,
+        stacksOn: 'task-1',
+        stackBase: 'feat/root',
+        bundleReady: ready,
+        pullRequest: { ...PULL, number: 8, base: 'feat/root' },
+      });
+      state.tasks['task-3'] = createTask({
+        id: 'task-3',
+        title: 'Top',
+        branch: 'feat/top',
+        stage,
+        stacksOn: 'task-2',
+        stackBase: 'feat/middle',
+        bundleReady: ready,
+        pullRequest: { ...PULL, number: 9, base: 'feat/middle' },
+      });
+    });
+    return { ...result, created };
+  }
+
+  async function moveMain(origin: string, root: string, files: Record<string, string>) {
+    const other = join(root, 'other');
+    await git(root, 'clone', '-q', origin, other);
+    writeFiles(other, files);
+    await git(other, 'add', '-A');
+    await git(other, 'commit', '-q', '-m', 'feat: move main');
+    await git(other, 'push', '-q', 'origin', 'main');
+  }
+
+  function listMerged(calls: string[][]) {
+    return calls.filter((call) => call[0] === 'pr' && call[1] === 'merge').map((call) => call[2]);
+  }
+
+  test('the root merges the bundle from the last pull request back to its own, recording each one', async () => {
+    const readGitHub = useFakeGitHub(bundlePulls({ 8: { state: 'MERGED' } }));
+    const { runner, dispatched } = await setupBundle();
+    await runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: null, bundle: BUNDLE },
+      createContext()
+    );
+    expect(listMerged(readGitHub().calls)).toEqual(['9', '7']);
+    expect(
+      records(dispatched)
+        .filter((record) => record.pullRequest.state === 'merged')
+        .map((record) => record.taskId)
+    ).toEqual(['task-3', 'task-2', 'task-1']);
+  });
+
+  test('a root whose head moved is recorded and merges nothing', async () => {
+    const readGitHub = useFakeGitHub(bundlePulls({ 7: { head: 'main' } }));
+    const { runner, dispatched } = await setupBundle();
+    await runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: 'c0ffee0', bundle: BUNDLE },
+      createContext()
+    );
+    expect(listMerged(readGitHub().calls)).toEqual([]);
+    expect(records(dispatched).map((record) => record.taskId)).toEqual(['task-1']);
+  });
+
+  test('a branch that conflicts with the default branch once the bundle merges stops the merge before anything merges', async () => {
+    const readGitHub = useFakeGitHub(bundlePulls());
+    const { runner, created } = await setupBundle();
+    await moveMain(created.origin, created.root, { 'top.txt': 'main\n' });
+    await expect(
+      runner.apply(
+        { kind: 'pull_request.merge', taskId: 'task-1', headSha: null, bundle: BUNDLE },
+        createContext()
+      )
+    ).rejects.toThrow('“Top” conflicts with main once the bundle merges, so nothing was merged.');
+    expect(listMerged(readGitHub().calls)).toEqual([]);
+  });
+
+  test('a task above that GitHub leaves open fails the merge, and the failure goes to the root', async () => {
+    useFakeGitHub(bundlePulls());
+    useFailingGh('pr merge 8', 0);
+    const { runner, dispatched } = await setupBundle();
+    const effect = { kind: 'pull_request.merge' as const, taskId: 'task-1', headSha: null, bundle: BUNDLE };
+    await expect(runner.apply(effect, createContext())).rejects.toThrow(
+      'GitHub still shows the pull request as open after merging it.'
+    );
+    await runner.reportExhausted(effect, 'GitHub refused.', 'merge-key');
+    expect(dispatched.at(-1)).toMatchObject({
+      type: 'effect.fail',
+      taskId: 'task-1',
+      detail: 'GitHub refused.',
+    });
+  });
+
+  test('a sync of the root checks that the whole bundle merges into the default branch', async () => {
+    useFakeGitHub(bundlePulls());
+    const { runner, dispatched, created } = await setupBundle('shipping');
+    await runner.syncPullRequest('task-1', true);
+    expect(dispatched.find((command) => command.type === 'bundle.record_check')).toEqual({
+      type: 'bundle.record_check',
+      taskId: 'task-1',
+      conflict: null,
+    });
+    await moveMain(created.origin, created.root, { 'top.txt': 'main\n' });
+    await runner.syncPullRequest('task-1', true);
+    expect(dispatched.filter((command) => command.type === 'bundle.record_check').at(-1)).toEqual({
+      type: 'bundle.record_check',
+      taskId: 'task-1',
+      conflict: { taskId: 'task-3', behindTaskId: 'task-1', base: 'main' },
+    });
+    await runner.syncPullRequest('task-2', true);
+    expect(dispatched.filter((command) => command.type === 'bundle.record_check')).toHaveLength(2);
+  });
+
+  test('a bundle check that cannot read a branch logs it and records nothing', async () => {
+    useFakeGitHub(bundlePulls());
+    const { runner, dispatched, created } = await setupBundle('shipping');
+    await git(created.path, 'push', '-q', 'origin', '--delete', 'feat/top');
+    const warn = spyOn(log, 'warn');
+    try {
+      await runner.syncPullRequest('task-1', true);
+      expect(warn.mock.calls.map((call) => call[0])).toContain(
+        '[Watch] Could not check that the bundle merges into the default branch'
+      );
+    } finally {
+      warn.mockRestore();
+    }
+    expect(dispatched.some((command) => command.type === 'bundle.record_check')).toBe(false);
   });
 });
 

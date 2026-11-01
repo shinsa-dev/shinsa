@@ -91,6 +91,27 @@ describe('the process tools', () => {
     );
   });
 
+  test('report_feedback reports the problem with Shinsa and lets the agent carry on', async () => {
+    const { sent, call } = createCall();
+    const reply = await handleProcessTool(
+      'report_feedback',
+      { feedback: 'complete_phase refused a spot on a deleted file.' },
+      call
+    );
+    expect(reply).toBe(
+      'Reported. The human reads it before it becomes a public issue. Carry on with your step.'
+    );
+    expect(sent).toEqual([
+      {
+        type: 'agent.report_feedback',
+        runId: 'run-1',
+        attemptId: 'a-1',
+        note: 'complete_phase refused a spot on a deleted file.',
+      },
+    ]);
+    expect(handleProcessTool('report_feedback', {}, call)).rejects.toThrow('feedback');
+  });
+
   test('suggest_tasks hands the follow-ups over and lets the agent carry on', async () => {
     const { sent, call } = createCall();
     const reply = await handleProcessTool(

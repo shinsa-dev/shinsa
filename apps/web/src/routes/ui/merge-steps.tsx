@@ -65,8 +65,18 @@ function PostMerge({ state, initial }: { state: ShinsaState; initial: Task }) {
 
 const SAMPLE_WAITS: MergeWaitView[] = [
   {
+    key: 'bundle:schema',
+    taskId: 'sample-schema',
+    kind: 'bundle',
+    title: '[Add the login schema](shinsa://task/sample-schema) merges with this one',
+    detail: null,
+    command: null,
+    done: true,
+  },
+  {
     key: 'wait:docs',
     taskId: 'sample-docs',
+    kind: 'wait',
     title: 'Merges after [Document the agent login](shinsa://task/sample-docs) finishes',
     detail: null,
     command: null,
@@ -75,6 +85,7 @@ const SAMPLE_WAITS: MergeWaitView[] = [
   {
     key: 'wait:skills',
     taskId: 'sample-skills',
+    kind: 'wait',
     title: 'Merges after [Teach the skill to log in](shinsa://task/sample-skills) finishes',
     detail: null,
     command: null,

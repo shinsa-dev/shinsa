@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
-import { join } from 'node:path';
 import {
+  type BundleConflict,
   type CheckEvidence,
   type Coverage,
   evaluatePullRequestWatch,
@@ -8,6 +8,8 @@ import {
   isSamePullRequest,
   isSamePullRequestWatch,
   isTaskSettled,
+  listBundleAbove,
+  listBundleBelow,
   listStackedPullRequests,
   listTaskChecks,
   needsRepository,
@@ -30,17 +32,24 @@ import {
 import type { RunSupervisor } from '../agents/supervisor.ts';
 import type { Briefings } from '../briefing/index.ts';
 import { BaseCheckouts } from '../checks/base.ts';
+import { pruneSharedCaches, resolveSharedCacheEnv } from '../checks/caches.ts';
 import { serializeCheckOutput } from '../checks/evidence.ts';
 import { listCheckFailures } from '../checks/failures.ts';
 import { type BaseComparison, CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../checks/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
+import type { FeedbackDrafter } from '../feedback/draft.ts';
+import { listFeedbackEnvironment, resolveFeedbackMachine } from '../feedback/environment.ts';
+import { FeedbackEffects } from '../feedback/index.ts';
 import {
+  type BundleBranch,
+  checkBundleMerge,
   hasPrePushHook,
   PushError,
   removeIsolatedWorktrees,
   resolveOutputTail,
   syncRemoteBranch,
 } from '../git/index.ts';
+import { stopProcessesIn } from '../git/processes.ts';
 import { resolveTaskRefs } from '../git/task-refs.ts';
 import { RepoCiCache } from '../github/ci.ts';
 import { PullRequestDescriptions } from '../github/description.ts';
@@ -54,7 +63,10 @@ import {
   retargetPullRequest,
   writePullRequestBlock,
 } from '../github/index.ts';
+import { BUNDLE } from '../instance/bundle.ts';
+import { createServerInstance, type ServerInstance } from '../instance/install.ts';
 import { describeError, log } from '../log/index.ts';
+import type { PreviewEffects } from '../remote/previews.ts';
 import type { ShareEffects } from '../remote/shares.ts';
 import {
   createLoginResolver,
@@ -78,6 +90,8 @@ import { resolveShippingError } from './failures.ts';
 export interface EffectRunnerOptions {
   triage: TriageResolver;
   wordWatch?: WatchWriter;
+  draftFeedback?: FeedbackDrafter;
+  instance?: Pick<ServerInstance, 'version' | 'commit'>;
   timeZone?: string;
   findRepository?: RepositoryFinder;
   resolveLogin?: LoginResolver;
@@ -86,11 +100,13 @@ export interface EffectRunnerOptions {
   workspaces?: Workspaces;
   services?: TaskServices;
   shares: ShareEffects;
+  previews: PreviewEffects;
   slack?: Slack;
 }
 
 export interface TaskServices {
   closeTaskServices(taskId: string): void;
+  listTerminalPids(): number[];
 }
 
 const WATCH_INTERVAL_MS = 45_000;
@@ -164,7 +180,9 @@ export class EffectRunner {
   readonly #workspaces: Workspaces;
   readonly #services: TaskServices | null;
   readonly #shares: ShareEffects;
+  readonly #previews: PreviewEffects;
   readonly #slack: Slack | null;
+  readonly #feedback: FeedbackEffects;
   readonly #evidence: EvidenceStore;
   readonly #descriptions: PullRequestDescriptions;
   readonly #bases: BaseCheckouts;
@@ -196,10 +214,23 @@ export class EffectRunner {
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
     this.#services = options.services ?? null;
     this.#shares = options.shares;
+    this.#previews = options.previews;
     this.#slack = options.slack ?? null;
+    this.#feedback = new FeedbackEffects(
+      engine,
+      config.dataDir,
+      options.draftFeedback ?? (() => Promise.resolve(null)),
+      (state, entry) =>
+        listFeedbackEnvironment(
+          state,
+          entry,
+          options.instance ?? createServerInstance(),
+          resolveFeedbackMachine(Boolean(BUNDLE))
+        )
+    );
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);
-    this.#bases = new BaseCheckouts(join(config.dataDir, 'check-bases'));
+    this.#bases = new BaseCheckouts(config.checkBasesDir);
     this.#workspaces = options.workspaces ?? new Workspaces({ worktreesDir: config.worktreesDir });
   }
 
@@ -248,12 +279,18 @@ export class EffectRunner {
         return this.#runs.replyToDelegate(effect.runId, effect.questionId);
       case 'share.link':
         return this.#shares.link(effect.taskId, context);
+      case 'preview.link':
+        return this.#previews.link(effect.taskId, effect.serviceId, context);
       case 'slack.evaluate':
         return this.#withSlack((slack) => slack.evaluate(effect, context));
       case 'slack.status':
         return this.#withSlack((slack) => slack.status(effect, context));
       case 'slack.post':
         return this.#withSlack((slack) => slack.post(effect));
+      case 'feedback.draft':
+        return this.#feedback.draft(effect.feedbackId, context);
+      case 'feedback.file':
+        return this.#feedback.file(effect.feedbackId, context);
     }
   }
 
@@ -316,10 +353,21 @@ export class EffectRunner {
   }
 
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
+    if (effect.kind === 'feedback.draft' || effect.kind === 'feedback.file') {
+      await this.#feedback.reportExhausted(effect.feedbackId, error, key);
+      return;
+    }
     if (effect.kind === 'share.link') {
       await this.#engine.dispatch(
         { type: 'share.fail', taskId: effect.taskId, detail: error },
         { id: `${key}:share.fail` }
+      );
+      return;
+    }
+    if (effect.kind === 'preview.link') {
+      await this.#engine.dispatch(
+        { type: 'preview.fail', taskId: effect.taskId, serviceId: effect.serviceId, detail: error },
+        { id: `${key}:preview.fail` }
       );
       return;
     }
@@ -332,6 +380,7 @@ export class EffectRunner {
   }
 
   async recover() {
+    await this.#feedback.recover();
     await this.syncAll();
   }
 
@@ -348,6 +397,8 @@ export class EffectRunner {
         (task.stage === 'shipping' || task.stage === 'awaiting_merge') && !task.pullRequestWatch?.stopped
     );
     for (const task of watched) await this.syncPullRequest(task.id);
+    const failure = await this.#feedback.syncIssues(this.#stopping.signal);
+    if (failure) log.warn('[Feedback] Could not read the state of opened issues', { error: failure });
   }
 
   syncPullRequest(taskId: string, force = false, signal = this.#stopping.signal) {
@@ -381,12 +432,45 @@ export class EffectRunner {
       return null;
     }
     if (!read || signal.aborted) return null;
+    await this.#checkBundle(repo, task, read.pullRequest, signal);
     const ci = await this.#resolveCi(repo, read.pullRequest, signal);
     if (force || hasPullRequestNews(task, read, ci)) {
       await this.#syncConflictBase(repo, taskId, read.pullRequest, signal);
       await this.#recordRead(taskId, read, ci);
     }
     return read.pullRequest;
+  }
+
+  #listBundleBranches(repo: Repo, root: Task): BundleBranch[] {
+    const state = this.#engine.state;
+    const above = listBundleAbove(state, root);
+    if (listBundleBelow(state, root).length > 0 || above.length === 0 || !root.branch) return [];
+    if (!above.every((member) => member.bundleReady && member.branch)) return [];
+    return [
+      { taskId: root.id, branch: root.branch, base: repo.defaultBranch },
+      ...above.map((member) => ({
+        taskId: member.id,
+        branch: member.branch ?? '',
+        base: resolveRoundBase(member) ?? repo.defaultBranch,
+      })),
+    ];
+  }
+
+  async #checkBundle(repo: Repo, task: Task, pullRequest: PullRequest, signal: AbortSignal) {
+    const branches = this.#listBundleBranches(repo, task);
+    if (pullRequest.state !== 'open' || branches.length === 0) return;
+    let conflict: BundleConflict | null;
+    try {
+      conflict = await checkBundleMerge(repo, branches, signal);
+    } catch (error) {
+      log.warn('[Watch] Could not check that the bundle merges into the default branch', {
+        taskId: task.id,
+        error: describeError(error),
+      });
+      return;
+    }
+    if (!signal.aborted)
+      await this.#engine.dispatch({ type: 'bundle.record_check', taskId: task.id, conflict });
   }
 
   async #syncConflictBase(repo: Repo, taskId: string, pullRequest: PullRequest, signal: AbortSignal) {
@@ -567,10 +651,12 @@ export class EffectRunner {
     await this.#runs.quiesce(task.id);
     if (task.approvedEdits === 'review') await this.#commitEdits(task, repo, context);
     const worktree = task.worktreePath;
+    const env = resolveSharedCacheEnv(worktree, this.#config.dataDir, repo.id);
     const runs = await runChecks(effect.checks, worktree, {
       timeoutMs: CHECK_TIMEOUT_MS,
       signal: context.signal,
-      compare: this.#createBaseComparison(task, repo, worktree, context.signal),
+      env,
+      compare: this.#createBaseComparison(task, repo, worktree, env, context.signal),
     });
     let coverage: Coverage | null = null;
     if (effect.coverage && !runs.some((run) => isBlockingCheck(run.check))) {
@@ -601,7 +687,13 @@ export class EffectRunner {
     );
   }
 
-  #createBaseComparison(task: Task, repo: Repo, cwd: string, signal: AbortSignal): BaseComparison {
+  #createBaseComparison(
+    task: Task,
+    repo: Repo,
+    cwd: string,
+    env: Record<string, string>,
+    signal: AbortSignal
+  ): BaseComparison {
     let base: Promise<string | null> | null = null;
     const resolveBase = () => {
       base ??= resolveTaskRefs(repo, task, resolveRoundBase(task), signal).then((refs) => refs.base);
@@ -615,6 +707,7 @@ export class EffectRunner {
         run,
         timeoutMs: CHECK_TIMEOUT_MS,
         signal,
+        env,
       });
   }
 
@@ -807,26 +900,61 @@ export class EffectRunner {
   }
 
   async #merge(effect: MergeEffect, context: EffectContext) {
-    const { taskId, headSha } = effect;
-    const { task, repo } = this.#requireTask(taskId);
-    if (!task.pullRequest) throw new Error('There is no pull request to merge.');
-    if (context.signal.aborted) return;
-    const current = await readPullRequest(repo, task, context.signal);
-    if (context.signal.aborted) return;
-    if (current && needsMerge(current.pullRequest) && isHeadMoved(headSha, current.pullRequest)) {
-      await this.#recordFreshRead(repo, taskId, current, context.signal);
+    const bundle = effect.bundle ?? [];
+    if (bundle.length === 0) {
+      await this.#mergeTask(effect.taskId, effect.headSha, context.signal);
       return;
     }
+    if ((await this.#isRootMoved(effect.taskId, effect.headSha, context.signal)) || context.signal.aborted)
+      return;
+    await this.#assertBundleMerges(effect.taskId, context.signal);
+    for (const member of bundle) {
+      if (!(await this.#mergeTask(member.taskId, null, context.signal))) return;
+    }
+    await this.#mergeTask(effect.taskId, null, context.signal);
+  }
+
+  async #isRootMoved(taskId: string, headSha: string | null, signal: AbortSignal) {
+    const { task, repo } = this.#requireTask(taskId);
+    const current = await readPullRequest(repo, task, signal);
+    const moved = Boolean(
+      current && needsMerge(current.pullRequest) && isHeadMoved(headSha, current.pullRequest)
+    );
+    if (moved && current) await this.#recordFreshRead(repo, taskId, current, signal);
+    return moved;
+  }
+
+  async #assertBundleMerges(taskId: string, signal: AbortSignal) {
+    const { task, repo } = this.#requireTask(taskId);
+    const conflict = await checkBundleMerge(repo, this.#listBundleBranches(repo, task), signal);
+    if (!conflict) return;
+    const title = this.#engine.state.tasks[conflict.taskId]?.title ?? 'A task';
+    throw new Error(
+      `“${title}” conflicts with ${repo.defaultBranch} once the bundle merges, so nothing was merged. Retry to bring the bundle up to date first.`
+    );
+  }
+
+  async #mergeTask(taskId: string, headSha: string | null, signal: AbortSignal) {
+    const { task, repo } = this.#requireTask(taskId);
+    if (!task.pullRequest) throw new Error('There is no pull request to merge.');
+    if (signal.aborted) return false;
+    const current = await readPullRequest(repo, task, signal);
+    if (signal.aborted) return false;
+    if (current && needsMerge(current.pullRequest) && isHeadMoved(headSha, current.pullRequest)) {
+      await this.#recordFreshRead(repo, taskId, current, signal);
+      return false;
+    }
     if (needsMerge(current?.pullRequest)) {
-      const merged = await this.#mergeHead(repo, task, task.pullRequest.number, headSha, context.signal);
-      if (!merged) return;
+      const merged = await this.#mergeHead(repo, task, task.pullRequest.number, headSha, signal);
+      if (!merged) return false;
     }
     const stacked = listStackedPullRequests(task);
-    await this.#mergeStack(repo, stacked, context.signal);
-    const after = await readPullRequest(repo, task, context.signal);
-    if (after) await this.#recordFreshRead(repo, taskId, after, context.signal);
+    await this.#mergeStack(repo, stacked, signal);
+    const after = await readPullRequest(repo, task, signal);
+    if (after) await this.#recordFreshRead(repo, taskId, after, signal);
     if (after && isAwaitingMerge(after.pullRequest)) throw new Error(NOT_MERGED_YET);
-    await this.#assertStackMerged(repo, stacked, context.signal);
+    await this.#assertStackMerged(repo, stacked, signal);
+    return true;
   }
 
   async #closePullRequests(effect: CloseEffect, context: EffectContext) {
@@ -871,9 +999,17 @@ export class EffectRunner {
     if (!task?.worktreePath || !repo) return;
     this.#services?.closeTaskServices(taskId);
     try {
-      await this.#workspaces.resolve(task).remove(repo, task);
+      const workspace = this.#workspaces.resolve(task);
+      if (workspace.mode === 'worktrees')
+        await stopProcessesIn(task.worktreePath, { spare: this.#services?.listTerminalPids() ?? [] });
+      await workspace.remove(repo, task);
     } catch (error) {
       log.warn('[Effects] Could not remove a worktree', { taskId, error: describeError(error) });
+    }
+    try {
+      pruneSharedCaches(this.#config.dataDir, Object.keys(this.#engine.state.repos), Date.now());
+    } catch (error) {
+      log.warn('[Effects] Could not prune the shared build caches', { error: describeError(error) });
     }
     await this.#engine.dispatch({ type: 'worktree.gone', taskId }, { id: `${context.key}:worktree.gone` });
   }

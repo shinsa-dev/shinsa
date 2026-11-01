@@ -163,7 +163,7 @@ export interface ReplyPoint {
   note: string;
 }
 
-export interface FixReply {
+export interface AgentReply {
   headline: string;
   points: ReplyPoint[];
   next: string | null;
@@ -171,7 +171,7 @@ export interface FixReply {
 
 export interface FixHandOver {
   summary: string;
-  reply: FixReply | null;
+  reply: AgentReply | null;
   walkthrough: ReportWalkthroughRevision | null;
   checks: string[];
   checkChanges: CheckChangeHandOver[];
@@ -245,13 +245,14 @@ export interface PhaseHandOver {
   summary: string;
   spots: CodeSpot[];
   judgementCalls: JudgementCall[];
+  reply: AgentReply | null;
   walkthrough: ReportWalkthrough | null;
   checkChanges: CheckChangeHandOver[];
 }
 
 export interface PlanHandOver {
   document: PlanDocument;
-  changeSummary: string | null;
+  reply: AgentReply | null;
 }
 
 export interface QuestionHandOver {

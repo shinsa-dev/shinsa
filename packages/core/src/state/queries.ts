@@ -1,6 +1,7 @@
 import {
   DomainError,
   type Gate,
+  hasStep,
   isAgentQuestion,
   isDelegatedRun,
   isSettingUpWorkspace,
@@ -10,6 +11,7 @@ import {
   type Run,
   resolveRepoWorkspace,
   type Task,
+  type TaskStage,
   type WorkspaceMode,
 } from '../domain/index.ts';
 import { listLiveChildRuns } from './delegations.ts';
@@ -73,8 +75,120 @@ export function listOpenBlockers(state: ShinsaState, task: Task) {
   return listDependencies(state, task).filter((dependency) => !isTaskSettled(dependency));
 }
 
+export function selectStackParent(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  return task.stacksOn ? (state.tasks[task.stacksOn] ?? null) : null;
+}
+
+export function selectStackedOnThis(state: Pick<ShinsaState, 'tasks'>, taskId: string) {
+  return (
+    Object.values(state.tasks).find(
+      (task) => task.stacksOn === taskId && !isTaskSettled(task) && hasStep(task, 'pull_request')
+    ) ?? null
+  );
+}
+
+const STACKABLE_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
+  'triage',
+  'waiting_on_tasks',
+  'planning',
+  'awaiting_plan',
+]);
+
+export function canChangeStack(task: Task) {
+  return !isTaskSettled(task) && STACKABLE_STAGES.has(task.stage);
+}
+
+export function selectStackRefusal(
+  state: ShinsaState,
+  task: Task | null,
+  parent: Task,
+  repoId = task?.repoId ?? null
+) {
+  if (parent.id === task?.id) return new DomainError('stack_self', 'A task cannot stack on itself.');
+  if (parent.stage === 'cancelled')
+    return new DomainError('dependency_cancelled', 'That task was cancelled.');
+  if (isTaskSettled(parent)) {
+    return new DomainError('stack_parent_settled', 'That task is finished, so there is nothing to stack on.');
+  }
+  if (!hasStep(parent, 'pull_request')) {
+    return new DomainError('stack_no_pull_request', 'That task opens no pull request to stack on.');
+  }
+  if (repoId && parent.repoId && repoId !== parent.repoId) {
+    return new DomainError('stack_repository', 'The tasks of a bundle work in one repository.');
+  }
+  const taken = selectStackedOnThis(state, parent.id);
+  if (taken && taken.id !== task?.id) {
+    return new DomainError('stack_taken', `“${taken.title}” is already stacked on that task.`);
+  }
+  if (task && isDependencyOf(state, task.id, parent.id)) {
+    return new DomainError('dependency_cycle', 'That task already waits on this one.');
+  }
+  return null;
+}
+
+function isReadyToStackOn(state: ShinsaState, task: Task) {
+  if (task.pullRequest?.state !== 'open') return false;
+  if (task.bundleReady) return true;
+  return listOpenGates(state, task.id).some((gate) => gate.type === 'merge');
+}
+
+function isInBundle(task: Task) {
+  return !isTaskComplete(task) && task.stage !== 'cancelled';
+}
+
+export function listBundleBelow(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  const below: Task[] = [];
+  let parent = selectStackParent(state, task);
+  while (parent && isInBundle(parent) && !below.includes(parent)) {
+    below.push(parent);
+    parent = selectStackParent(state, parent);
+  }
+  return below;
+}
+
+export function listBundleAbove(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  const above: Task[] = [];
+  let child = selectStackedOnThis(state, task.id);
+  while (child && child.id !== task.id && !above.includes(child)) {
+    above.push(child);
+    child = selectStackedOnThis(state, child.id);
+  }
+  return above;
+}
+
+export function resolveBundleRoot(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  return listBundleBelow(state, task).at(-1) ?? task;
+}
+
+function selectStackedChild(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  const children = Object.values(state.tasks).filter((child) => child.stacksOn === task.id);
+  return children.find((child) => !isTaskSettled(child)) ?? children.find(isTaskComplete) ?? null;
+}
+
+export function resolveBundle(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  const bundle: Task[] = [task];
+  let parent = selectStackParent(state, task);
+  while (parent && !bundle.includes(parent)) {
+    bundle.unshift(parent);
+    parent = selectStackParent(state, parent);
+  }
+  let child = selectStackedChild(state, task);
+  while (child && !bundle.includes(child)) {
+    bundle.push(child);
+    child = selectStackedChild(state, child);
+  }
+  return bundle.length > 1 ? bundle : [];
+}
+
+export function isStackPending(state: ShinsaState, parent: Task) {
+  return !isTaskComplete(parent) && !isReadyToStackOn(state, parent);
+}
+
 export function listPendingDependencies(state: ShinsaState, task: Task) {
-  return listDependencies(state, task).filter((dependency) => !isTaskComplete(dependency));
+  const pending = listDependencies(state, task).filter((dependency) => !isTaskComplete(dependency));
+  const parent = selectStackParent(state, task);
+  if (!parent || !isStackPending(state, parent) || pending.includes(parent)) return pending;
+  return [...pending, parent];
 }
 
 export function resolveTaskWorkspace(state: ShinsaState, task: Task): WorkspaceMode {
@@ -113,7 +227,8 @@ export function isDependencyOf(state: ShinsaState, taskId: string, candidateId: 
     if (id === taskId) return true;
     if (seen.has(id)) continue;
     seen.add(id);
-    pending.push(...(state.tasks[id]?.waitsOn ?? []));
+    const task = state.tasks[id];
+    pending.push(...(task?.waitsOn ?? []), ...(task?.stacksOn ? [task.stacksOn] : []));
   }
   return false;
 }

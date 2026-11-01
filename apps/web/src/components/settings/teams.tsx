@@ -28,6 +28,7 @@ import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -605,5 +606,7 @@ export function TeamsGroup({
 
 export function TeamsSettings({ state }: { state: ShinsaState }) {
   const { snapshot, failure } = useRemoteAccess();
+  const supported = useEngineFeature('teams');
+  if (!supported) return null;
   return <TeamsGroup state={state} snapshot={snapshot} failure={failure} />;
 }

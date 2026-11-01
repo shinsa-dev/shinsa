@@ -9,7 +9,7 @@ import {
 import type { ServerWebSocket } from 'bun';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
-import { INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
+import { createServerInstance, INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import {
   type ChannelPeer,
@@ -20,6 +20,7 @@ import {
   resolveLocalOnlyRoute,
   resolveTunnelRoute,
 } from '../remote/index.ts';
+import type { PreviewRelay, PreviewUpgrade } from '../remote/previews.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import {
   createTerminalRoutes,
@@ -67,7 +68,18 @@ interface LiveSocketData {
   channel: LiveChannel | null;
 }
 
-type ServerSocketData = SocketData | TerminalSocketData | RemoteSocketData | LiveSocketData;
+interface PreviewSocketData {
+  kind: 'preview';
+  upgrade: PreviewUpgrade;
+  relay: PreviewRelay | null;
+}
+
+type ServerSocketData =
+  | SocketData
+  | TerminalSocketData
+  | RemoteSocketData
+  | LiveSocketData
+  | PreviewSocketData;
 
 type ServerSocket = ServerWebSocket<ServerSocketData>;
 
@@ -81,6 +93,10 @@ function isRemoteSocket(socket: ServerSocket): socket is ServerWebSocket<RemoteS
 
 function isLiveSocket(socket: ServerSocket): socket is ServerWebSocket<LiveSocketData> {
   return socket.data.kind === 'live';
+}
+
+function isPreviewSocket(socket: ServerSocket): socket is ServerWebSocket<PreviewSocketData> {
+  return socket.data.kind === 'preview';
 }
 
 export interface RemoteSocketHandlers {
@@ -104,6 +120,12 @@ const LIVE_SOCKETS = {
   },
 };
 
+export interface PreviewSocketHandlers {
+  open: (socket: ServerWebSocket<PreviewSocketData>) => void;
+  close: (socket: ServerWebSocket<PreviewSocketData>) => void;
+  message: (socket: ServerWebSocket<PreviewSocketData>, raw: string | Buffer) => void;
+}
+
 export function resolveServerUrl(hostname: string, port: number) {
   const host = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname;
   return `http://${host}:${port}`;
@@ -120,25 +142,29 @@ type TerminalSockets = ReturnType<typeof createTerminalSockets>;
 export function createSocketHandlers(
   hub: Pick<Hub, 'open' | 'close' | 'message'>,
   terminals: TerminalSockets | null,
-  remote: RemoteSocketHandlers | null = null
+  remote: RemoteSocketHandlers | null = null,
+  previews: PreviewSocketHandlers | null = null
 ) {
   return {
     open: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.open(socket);
       else if (isRemoteSocket(socket)) remote?.open(socket);
       else if (isLiveSocket(socket)) LIVE_SOCKETS.open(socket);
+      else if (isPreviewSocket(socket)) previews?.open(socket);
       else hub.open(socket as ServerWebSocket<SocketData>);
     },
     close: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.close(socket);
       else if (isRemoteSocket(socket)) remote?.close(socket);
       else if (isLiveSocket(socket)) LIVE_SOCKETS.close(socket);
+      else if (isPreviewSocket(socket)) previews?.close(socket);
       else hub.close(socket as ServerWebSocket<SocketData>);
     },
     message: (socket: ServerSocket, raw: string | Buffer) => {
       if (isTerminalSocket(socket)) terminals?.message(socket, raw);
       else if (isRemoteSocket(socket)) remote?.message(socket, raw);
       else if (isLiveSocket(socket)) LIVE_SOCKETS.message(socket, raw);
+      else if (isPreviewSocket(socket)) previews?.message(socket, raw);
       else hub.message(socket as ServerWebSocket<SocketData>, raw);
     },
     drain: (socket: ServerSocket) => {
@@ -177,7 +203,8 @@ export function startServer(context: HttpContext) {
     context.classify ?? null,
     terminals,
     context.remote,
-    context.teamFeeds
+    context.teamFeeds,
+    (context.instance ?? createServerInstance()).version
   );
   const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
   const { remote } = context;
@@ -235,6 +262,38 @@ export function startServer(context: HttpContext) {
     : null;
 
   const { shares, teams } = context;
+
+  const { previews } = context;
+  const previewSockets: PreviewSocketHandlers | null = previews
+    ? {
+        open: (socket) => {
+          socket.data.relay = previews.openSocket(
+            {
+              send: (data) => socket.send(data),
+              close: (code, reason) => socket.close(code, reason),
+            },
+            socket.data.upgrade
+          );
+        },
+        close: (socket) => {
+          socket.data.relay?.close();
+        },
+        message: (socket, raw) => {
+          socket.data.relay?.send(typeof raw === 'string' ? raw : new Uint8Array(raw));
+        },
+      }
+    : null;
+
+  async function respondPreview(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+    if (!previews) return respondError('not_found', 'No such endpoint.', 404);
+    const answer = await previews.answer(request, url);
+    if (answer.kind === 'response') return answer.response;
+    const [protocol] = answer.upgrade.protocols;
+    const headers = protocol ? { 'Sec-WebSocket-Protocol': protocol } : undefined;
+    const data: PreviewSocketData = { kind: 'preview', upgrade: answer.upgrade, relay: null };
+    if (bunServer.upgrade(request, { data, ...(headers ? { headers } : {}) })) return undefined;
+    return new Response('Upgrade failed', { status: 400 });
+  }
 
   function respondShareChannel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
     if (!(remote && shares)) return respondError('not_found', 'No such endpoint.', 404);
@@ -298,6 +357,7 @@ export function startServer(context: HttpContext) {
     }
     if (route === 'share') return respondShareChannel(request, url, bunServer);
     if (route === 'team') return respondTeamChannel(request, url, bunServer);
+    if (route === 'preview') return respondPreview(request, url, bunServer);
     if (route === 'slack' && context.slack) {
       if (config.inspect) return respondReadOnly();
       return context.slack.handleTunnel(request, url);
@@ -361,7 +421,7 @@ export function startServer(context: HttpContext) {
         return serveStatic(config.webDir, url.pathname);
       },
       websocket: {
-        ...createSocketHandlers(hub, terminalSockets, remoteSockets),
+        ...createSocketHandlers(hub, terminalSockets, remoteSockets, previewSockets),
         maxPayloadLength: MAX_BODY_BYTES,
       },
     })

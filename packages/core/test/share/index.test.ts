@@ -183,7 +183,6 @@ describe('what a shared task shows', () => {
     });
     expect(shared.task.plan?.document?.files).toEqual([{ path: 'src/panel.ts', change: 'Clamp the width' }]);
     expect(shared.task.plan?.body).toContain('src/panel.ts');
-    expect(shared.task.plan?.feedback).toBeNull();
     expect(shared.task.phaseReports.map((report) => report.files)).toEqual([['src/a.ts'], ['src/b.ts']]);
     expect(shared.task.phaseReports.every((report) => report.runId === null)).toBe(true);
     expect(shared.task.phaseReports[0]?.spots[0]).toMatchObject({ file: 'src/a.ts', start: 1, end: 3 });

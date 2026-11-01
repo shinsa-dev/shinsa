@@ -3,6 +3,7 @@ import {
   type BacklogCause,
   createSettings,
   type Evidence,
+  type Feedback,
   type Focus,
   formatTaskHandle,
   type Gate,
@@ -40,10 +41,12 @@ import {
   describeFailedChecks,
   describeFindings,
   describeFixRound,
+  describeStack,
   describeStage,
 } from './activity.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { removeEntry, writeEntry } from './draft.ts';
+import { applyFeedbackEvent } from './feedback.ts';
 import { recordFork } from './forks.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
@@ -78,6 +81,7 @@ export interface ShinsaState {
   briefings: Record<string, StoredBriefing>;
   schedules: Record<string, Schedule>;
   memories: Record<string, MemoryEntry>;
+  feedback: Record<string, Feedback>;
   watchSuggestions: Record<string, WatchSuggestion>;
   sessionUsage: Record<string, RunUsage>;
   onBehalfActions: OnBehalfAction[];
@@ -102,6 +106,7 @@ export function createState(): ShinsaState {
     briefings: {},
     schedules: {},
     memories: {},
+    feedback: {},
     watchSuggestions: {},
     sessionUsage: {},
     onBehalfActions: [],
@@ -311,6 +316,28 @@ function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_c
   });
 }
 
+function applyStackChanged(state: ShinsaState, event: EventOf<'task.stack_changed'>) {
+  updateTask(state, event.taskId, event.at, { stacksOn: event.stacksOn });
+  const parent = event.stacksOn === null ? null : (state.tasks[event.stacksOn]?.title ?? 'another task');
+  record(state, event.taskId, event.at, {
+    actor: event.by ?? 'you',
+    kind: 'stage',
+    text: describeStack(parent),
+  });
+}
+
+function applyStackBased(state: ShinsaState, event: EventOf<'task.stack_based'>) {
+  updateTask(state, event.taskId, event.at, { stackBase: event.base });
+}
+
+function applyBundleReady(state: ShinsaState, event: EventOf<'task.bundle_ready'>) {
+  updateTask(state, event.taskId, event.at, { bundleReady: event.ready });
+}
+
+function applyBundleConflict(state: ShinsaState, event: EventOf<'task.bundle_conflict'>) {
+  updateTask(state, event.taskId, event.at, { bundleConflict: event.conflict });
+}
+
 const BACKLOG_LEFT: Record<BacklogCause, string> = {
   you: 'Removed from the backlog',
   started: 'Started building from the backlog',
@@ -347,14 +374,7 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
   const previous = task?.plan ?? null;
   const version = (previous?.version ?? 0) + 1;
   const document = event.document;
-  const revision =
-    previous === null
-      ? {}
-      : {
-          changeSummary: event.changeSummary ?? null,
-          changes: resolvePlanChanges(previous.document, document),
-          feedback: event.feedback ?? null,
-        };
+  const revision = previous === null ? {} : { changes: resolvePlanChanges(previous.document, document) };
   const checks = (document?.verification ?? []).map((check, index) => ({
     id: `c${index + 1}`,
     ...check,
@@ -371,7 +391,7 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
     actor: 'agent',
     kind: 'plan',
     text: version === 1 ? 'Proposed a plan' : `Revised the plan (version ${version})`,
-    detail: (version > 1 ? event.changeSummary : null) ?? document?.goal ?? null,
+    detail: document?.goal ?? null,
   });
 }
 
@@ -785,6 +805,18 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.waits_on_changed':
       applyWaitsOnChanged(state, event);
       break;
+    case 'task.stack_changed':
+      applyStackChanged(state, event);
+      break;
+    case 'task.stack_based':
+      applyStackBased(state, event);
+      break;
+    case 'task.bundle_ready':
+      applyBundleReady(state, event);
+      break;
+    case 'task.bundle_conflict':
+      applyBundleConflict(state, event);
+      break;
     case 'task.backlog_changed':
       applyBacklogChanged(state, event);
       break;
@@ -1020,6 +1052,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.unshared':
     case 'share.recorded':
     case 'share.failed':
+    case 'preview.shared':
+    case 'preview.unshared':
+    case 'preview.recorded':
+    case 'preview.failed':
       applyShareEvent(state, event);
       break;
     case 'slack.thread_linked':
@@ -1030,6 +1066,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'memory.proposed':
     case 'memory.removed':
       applyMemoryEvent(state, event);
+      break;
+    case 'feedback.recorded':
+    case 'feedback.removed':
+      applyFeedbackEvent(state, event);
       break;
     case 'watch_suggestion.recorded':
     case 'watch_suggestion.accepted':

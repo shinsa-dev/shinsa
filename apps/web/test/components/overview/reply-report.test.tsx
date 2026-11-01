@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { FixReply, Iteration, ShinsaState, Task } from '@shinsa/core';
+import type { AgentReply, Iteration, ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render } from '@testing-library/react';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
@@ -7,7 +7,7 @@ import { OverviewTab } from '@/routes/task/overview.tsx';
 import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createGate, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
-const REPLY: FixReply = {
+const REPLY: AgentReply = {
   headline: 'Slack is under Remote access now.',
   points: [
     { ask: 'Move Slack to General', outcome: 'done', note: 'Right below Remote access.' },
@@ -100,25 +100,6 @@ describe('the reply to your request on the Overview', () => {
     const view = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task);
     expect(view.getByText(REPLY.headline)).toBeTruthy();
     expect(view.queryByRole('button', { name: 'Expand what you sent' })).toBeNull();
-  });
-
-  it('lists a plan you asked to change with what you sent', () => {
-    const task = createTask({
-      id: 'task-1',
-      stage: 'building',
-      plan: {
-        version: 2,
-        body: '',
-        document: null,
-        proposedAt: NOW - 10_000,
-        changeSummary: 'The bot uses the Events API.',
-        feedback: 'Use the Events API instead.',
-      },
-    });
-    const view = renderOverview(createShinsaState({ tasks: [task] }), task);
-    expect(view.getByText('The bot uses the Events API.')).toBeTruthy();
-    fireEvent.click(view.getByRole('button', { name: 'Expand the plan change' }));
-    expect(view.getByText('Use the Events API instead.')).toBeTruthy();
   });
 
   it('shows the request the agent is working on while it fixes', () => {

@@ -24,6 +24,7 @@ import {
   proposePlan,
   pullRequest,
   pushed,
+  REPLY,
   readInstruction,
 } from '../harness.ts';
 
@@ -411,6 +412,7 @@ describe('a watch check', () => {
       runId: answerer.id,
       step: 'answer',
       body: 'Prices change rarely.',
+      reply: REPLY,
     });
     expect(harness.task(taskId).stage).toBe('merged');
     fire(harness, taskId);

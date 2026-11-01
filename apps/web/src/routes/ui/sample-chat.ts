@@ -1,4 +1,4 @@
-import { type ChatTool, resolveAnsweredReply, type Task } from '@shinsa/core';
+import { type AgentReply, type ChatTool, resolveAnsweredReply, type Task } from '@shinsa/core';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { describeTool } from '@/lib/chat/tool-describe.ts';
 
@@ -25,6 +25,40 @@ const PLAN: ChatTool = {
   },
 };
 
+const REVISION_REPLY: AgentReply = {
+  headline: 'I split the work so the Overview change ships on its own, and kept the docs in the last phase.',
+  points: [
+    {
+      ask: 'Ship the Overview change on its own',
+      outcome: 'done',
+      note: 'It is phase 2 now, with its own checks.',
+    },
+    {
+      ask: 'Do we need the migration?',
+      outcome: 'answered',
+      note: 'Yes: old event logs still carry the plan feedback, and the migration drops it once on start.',
+    },
+  ],
+  next: null,
+};
+
+const REPORT_REPLY: AgentReply = {
+  headline: 'I added Playwright component tests to the comparison and still recommend Vitest browser mode.',
+  points: [
+    {
+      ask: 'Compare Playwright component tests too',
+      outcome: 'done',
+      note: 'A fourth column in the table, with its run time on this repository.',
+    },
+    {
+      ask: 'Which one is fastest in CI?',
+      outcome: 'answered',
+      note: 'Vitest browser mode, 41 seconds against 68.',
+    },
+  ],
+  next: null,
+};
+
 export function createSampleRevisionCall(task: Task) {
   const document = task.plan?.document;
   return createSampleCall('revised', {
@@ -33,7 +67,19 @@ export function createSampleRevisionCall(task: Task) {
     args: {
       goal: document?.goal ?? '',
       phases: (document?.phases ?? []).map((phase) => ({ title: phase.title, detail: phase.detail })),
-      change_summary: task.plan?.changeSummary ?? '',
+      reply: REVISION_REPLY,
+    },
+  });
+}
+
+export function createSampleReportCall() {
+  return createSampleCall('report', {
+    kind: 'shinsa',
+    name: 'submit_report',
+    args: {
+      report:
+        '**Use Vitest browser mode.** It runs the existing tests in a real browser with no new runner, and it is the fastest of the four in CI.\n\n| Tool | CI time | New runner |\n| --- | --- | --- |\n| Vitest browser mode | 41s | no |\n| Playwright component tests | 68s | yes |',
+      reply: REPORT_REPLY,
     },
   });
 }

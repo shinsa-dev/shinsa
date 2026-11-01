@@ -4,6 +4,7 @@ import {
   type ChatEvent,
   type ClientMessage,
   type FileWrite,
+  resolveEngineInfo,
   type ServerMessage,
   type ShinsaState,
   type UserCommand,
@@ -33,6 +34,7 @@ class DemoSocket extends EventTarget {
     this.readyState = 1;
     this.dispatchEvent(new Event('open'));
     this.receive({ type: 'state', state });
+    this.receive({ type: 'engine', engine: resolveEngineInfo('1.0.0') });
   }
 
   send(data: string) {

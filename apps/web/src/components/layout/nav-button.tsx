@@ -4,6 +4,8 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { navigate, useRoute } from '@/router.ts';
 
+export const NAV_ICON_NUDGE = '-translate-y-[0.5px]';
+
 type PageName = 'home' | 'tasks' | 'settings';
 
 const PAGE_PATHS: Record<PageName, string> = { home: '/', tasks: '/tasks', settings: '/settings' };
@@ -32,7 +34,13 @@ export function NavButton({
     <Button
       variant='secondary'
       size={iconOnly ? 'icon-sm' : 'sm'}
-      icon={active ? activeIcon : icon}
+      icon={
+        iconOnly
+          ? active
+            ? activeIcon
+            : icon
+          : { name: active ? activeIcon : icon, className: NAV_ICON_NUDGE }
+      }
       aria-label={iconOnly ? label : undefined}
       aria-current={active ? 'page' : undefined}
       className={cn(active ? 'text-fg-4' : 'text-fg-3', className)}

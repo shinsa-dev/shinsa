@@ -1,7 +1,9 @@
 import {
+  DEVELOPMENT_VERSION,
   NO_TEAM_FEED,
   type RemoteInstance,
   type RemoteSnapshot,
+  resolveEngineInfo,
   type ShinsaState,
   type WireState,
 } from '@shinsa/core';
@@ -225,6 +227,8 @@ export function createSampleMachineServices(now: number): RemoteServices {
   };
 }
 
+const SAMPLE_ENGINE = resolveEngineInfo(DEVELOPMENT_VERSION);
+
 export function createStaticConnection(state: ShinsaState): ShinsaConnection {
   const snapshot = { state: state as unknown as WireState, status: 'open' as const };
   const quiet = () => () => undefined;
@@ -253,6 +257,7 @@ export function createStaticConnection(state: ShinsaState): ShinsaConnection {
     listMachines: () => NO_MACHINES,
     listUnreachableMachines: () => NO_UNREACHABLE_MACHINES,
     listMachineAccess: () => NO_MACHINE_ACCESS,
+    selectEngine: () => SAMPLE_ENGINE,
     command: () => Promise.reject(new Error('This is a sample. Nothing changes here.')),
     reset: () => undefined,
     flush: () => undefined,

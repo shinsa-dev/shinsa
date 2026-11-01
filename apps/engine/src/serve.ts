@@ -24,6 +24,7 @@ import { Briefings } from './briefing/index.ts';
 import { ConfigStore, prepareDataDir, type ServerConfig } from './config/index.ts';
 import { EunoeServer } from './eunoe/index.ts';
 import { Extensions, type ExtensionsOptions } from './extensions/index.ts';
+import { createFeedbackDrafter } from './feedback/draft.ts';
 import { resolveServerUrl, startServer } from './http/index.ts';
 import {
   acquireDataDirLock,
@@ -45,6 +46,7 @@ import {
   type StartConnector,
 } from './remote/index.ts';
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
+import { Previews } from './remote/previews.ts';
 import { ShareClock } from './remote/share-clock.ts';
 import { Shares } from './remote/shares.ts';
 import { TeamFeeds } from './remote/team-feeds.ts';
@@ -183,6 +185,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     readOnly: config.inspect,
     ...options.terminals,
   });
+  const previews = new Previews({ engine, remote, services: terminals, origin: config.previewOrigin });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
     schedules,
     services: terminals,
@@ -228,6 +231,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     shares,
     teams,
     teamFeeds,
+    previews,
     slack,
     inbox,
     quick,
@@ -248,9 +252,12 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     effects: new EffectRunner(engine, config, runs, briefings, {
       workspaces: runs.workspaces,
       shares,
+      previews,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
+      draftFeedback: createFeedbackDrafter(quick.write),
+      instance,
       resolveLogin,
       roots,
       services: terminals,
@@ -296,6 +303,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     shares: services.shares,
     teams: services.teams,
     teamFeeds: services.teamFeeds,
+    previews: services.previews,
     slack: services.slack,
     restarter: createServiceRestarter(engine, {
       byService: options.byService ?? false,

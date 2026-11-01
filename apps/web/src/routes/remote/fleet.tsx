@@ -5,7 +5,12 @@ import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import { requestWaitingAnswer } from '@/lib/remote/enroll.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import { createFleetMember, listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
-import { MACHINE_ICON, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE } from '@/lib/remote/mode.ts';
+import {
+  describeOutdatedMachine,
+  MACHINE_ICON,
+  SERVICE_WORKER_PATH,
+  SERVICE_WORKER_SCOPE,
+} from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
 import { admitTeamMachines } from '@/lib/teams/admit.ts';
@@ -16,7 +21,7 @@ type FleetState =
   | { kind: 'starting' }
   | { kind: 'empty'; machines: string[] }
   | { kind: 'waiting'; machines: string[] }
-  | { kind: 'ready' }
+  | { kind: 'ready'; fleet: Fleet }
   | { kind: 'failed'; title: string; message: string };
 
 const PAIR_STEPS = [
@@ -83,6 +88,35 @@ function NoMachinePage({ machines }: { machines: string[] }) {
       <RemoteCheckAgain />
     </section>
   );
+}
+
+function OutdatedPage({ machines }: { machines: string[] }) {
+  return (
+    <section className='flex flex-col items-center gap-6 pt-4'>
+      <RemoteHero
+        icon='IconArrowRotateClockwise'
+        tone='amber'
+        title={describeOutdatedMachine(describeList(machines))}
+      >
+        {`${describeList(machines)} ${machines.length === 1 ? 'runs' : 'run'} a version of Shinsa this page cannot work with. Update Shinsa there, then try again.`}
+      </RemoteHero>
+      <RemoteCheckAgain label='Try again' />
+    </section>
+  );
+}
+
+function FleetReady({
+  fleet,
+  shell,
+  children,
+}: {
+  fleet: Fleet;
+  shell: (content: React.ReactNode) => React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const outdated = React.useSyncExternalStore(fleet.subscribe, () => fleet.isEveryMachineOutdated());
+  if (!outdated) return children;
+  return shell(<OutdatedPage machines={fleet.members.map((member) => member.name)} />);
 }
 
 export function FleetApp({
@@ -165,7 +199,7 @@ export function FleetApp({
         release.push(serveRelayedRequests(services.worker, (request) => current.fetch(request)));
         replaceConnection(current);
         release.push(() => replaceConnection(null));
-        setState({ kind: 'ready' });
+        setState({ kind: 'ready', fleet: current });
       } catch (error) {
         if (live)
           setState({
@@ -198,6 +232,10 @@ export function FleetApp({
         </section>
       );
     case 'ready':
-      return children;
+      return (
+        <FleetReady fleet={state.fleet} shell={shell}>
+          {children}
+        </FleetReady>
+      );
   }
 }

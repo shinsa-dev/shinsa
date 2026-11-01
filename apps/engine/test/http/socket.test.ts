@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import type { RemoteSnapshot, ServerMessage, TeamFeedSnapshot } from '@shinsa/core';
+import {
+  DEVELOPMENT_VERSION,
+  type RemoteSnapshot,
+  resolveEngineInfo,
+  type ServerMessage,
+  type TeamFeedSnapshot,
+} from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
 import { createSocketHub, type SocketData } from '../../src/http/socket.ts';
 import type { Remote } from '../../src/remote/index.ts';
@@ -174,6 +180,47 @@ describe('the socket hub', () => {
     hub.close(socket);
     hub.stop();
     expect(listeners.size).toBe(0);
+    engine.stop();
+    log.close();
+  });
+
+  test('tells every socket on connect which build it talks to and what it speaks', () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const hub = createSocketHub(
+      engine,
+      new Transcripts(join(dir, 'transcripts')),
+      undefined,
+      null,
+      undefined,
+      undefined,
+      undefined,
+      '1.4.0'
+    );
+    const { socket, sent } = createSocket();
+    hub.open(socket);
+    expect(sent.filter((message) => message.type === 'engine')).toEqual([
+      { type: 'engine', engine: resolveEngineInfo('1.4.0') },
+    ]);
+    expect(sent.at(-1)?.type).toBe('engine');
+    hub.close(socket);
+    hub.stop();
+    engine.stop();
+    log.close();
+  });
+
+  test('announces a development build when it is given no version', () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const { socket, sent } = createSocket();
+    hub.open(socket);
+    const announced = sent.find((message) => message.type === 'engine');
+    expect(announced?.type === 'engine' && announced.engine.version).toBe(DEVELOPMENT_VERSION);
+    hub.close(socket);
+    hub.stop();
     engine.stop();
     log.close();
   });
