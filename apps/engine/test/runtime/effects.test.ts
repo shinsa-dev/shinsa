@@ -21,6 +21,7 @@ import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtim
 import type { Slack } from '../../src/slack/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
+import type { Workspaces } from '../../src/workspaces/index.ts';
 import {
   createGitRepo,
   createTempDir,
@@ -694,10 +695,36 @@ describe('worktrees', () => {
     expect(dispatched).toEqual([{ type: 'worktree.gone', taskId: 'task-1' }]);
   });
 
+  test('removing a worktree stops what still runs in it, but not your own terminals there', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const server = Bun.spawn(['sh', '-c', 'sleep 30; true'], {
+      cwd: worktree,
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    const shell = Bun.spawn(['sh', '-c', 'sleep 30; true'], {
+      cwd: worktree,
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    const services = { closeTaskServices: () => undefined, listTerminalPids: () => [shell.pid] };
+    const { runner, dispatched } = setup(withTask({ worktreePath: worktree }, repo), { services });
+    await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(await server.exited).not.toBe(0);
+    expect(shell.exitCode).toBeNull();
+    expect(existsSync(worktree)).toBe(false);
+    expect(dispatched).toEqual([{ type: 'worktree.gone', taskId: 'task-1' }]);
+    shell.kill('SIGKILL');
+    await shell.exited;
+  });
+
   test('removing a worktree reports it gone even when git cannot remove it', async () => {
     const { repo, worktree } = await createShippingRepo();
     const closed: string[] = [];
-    const services = { closeTaskServices: (taskId: string) => closed.push(taskId) };
+    const services = {
+      closeTaskServices: (taskId: string) => closed.push(taskId),
+      listTerminalPids: () => [],
+    };
     const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo), {
       services,
     });
@@ -706,8 +733,16 @@ describe('worktrees', () => {
     expect(existsSync(worktree)).toBe(false);
     expect(closed).toEqual(['task-1']);
     expect(commandIds).toEqual([`${context.key}:worktree.gone`]);
-    const broken = setup(withTask({ worktreePath: createTempDir() }, { ...repo, path: createTempDir() }));
+    const failing = { mode: 'worktrees', remove: () => Promise.reject(new Error('Device busy')) };
+    const workspaces = { resolve: () => failing } as unknown as Workspaces;
+    const broken = setup(withTask({ worktreePath: createTempDir() }, repo), { workspaces });
+    const warn = spyOn(log, 'warn');
     await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(warn).toHaveBeenCalledWith('[Effects] Could not remove a worktree', {
+      taskId: 'task-1',
+      error: expect.stringContaining('Device busy'),
+    });
+    warn.mockRestore();
     const none = setup(withTask({ worktreePath: null }));
     await none.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
     expect([...dispatched, ...broken.dispatched, ...none.dispatched]).toEqual([

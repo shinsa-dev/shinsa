@@ -407,6 +407,12 @@ export class Terminals {
     this.#changed();
   }
 
+  listTerminalPids() {
+    return [...this.#sessions.values()].flatMap((session) =>
+      session.info.serviceId || session.pid === null ? [] : [session.pid]
+    );
+  }
+
   resumeServices(state: ShinsaState) {
     if (this.#options.readOnly) return;
     for (const terminalId of this.#resumable) {

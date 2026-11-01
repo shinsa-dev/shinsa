@@ -151,6 +151,7 @@ export async function discardEdits(path: string, signal?: AbortSignal) {
 }
 
 export async function removeWorktree(repo: Repo, path: string) {
-  if (existsSync(path)) await runGitOrThrow(['worktree', 'remove', '--force', path], repo.path);
+  if (existsSync(path)) await runCommand(['git', 'worktree', 'remove', '--force', path], repo.path);
+  rmSync(path, { recursive: true, force: true });
   await runCommand(['git', 'worktree', 'prune'], repo.path);
 }

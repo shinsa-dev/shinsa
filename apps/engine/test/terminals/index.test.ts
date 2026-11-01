@@ -348,6 +348,7 @@ describe('Terminals services', () => {
     terminals.closeTaskServices('gone');
     expect(seen.length).toBe(before + 1);
     expect(terminals.find(shell.id).info.status).toBe('running');
+    expect(terminals.listTerminalPids()).toEqual([1003]);
   });
 
   it('starts a task’s run again after a restart only while the task is open', async () => {

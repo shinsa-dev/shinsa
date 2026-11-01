@@ -40,6 +40,18 @@ describe('worktrees', () => {
     await removeWorktree(repo, worktree.path);
   });
 
+  test('removing a worktree deletes its folder, even what was written there after git let go of it', async () => {
+    const { repo, path } = await createGitRepo({ remote: false });
+    const worktree = await createWorktree(repo, createTempDir(), 'task-abcdef', 'fix/value', null);
+    writeFiles(worktree.path, { 'node_modules/.cache/build.json': '{}' });
+    await removeWorktree(repo, worktree.path);
+    expect(existsSync(worktree.path)).toBe(false);
+    writeFiles(worktree.path, { 'CLAUDE.md': 'written by a server that outlived the task' });
+    await removeWorktree(repo, worktree.path);
+    expect(existsSync(worktree.path)).toBe(false);
+    expect(await git(path, 'worktree', 'list')).not.toContain(worktree.path);
+  });
+
   test('creating the same task’s worktree again, after a crash, reuses it instead of making a second', async () => {
     const { repo, path } = await createGitRepo({ remote: false });
     const worktrees = createTempDir();

@@ -41,6 +41,7 @@ import {
   resolveOutputTail,
   syncRemoteBranch,
 } from '../git/index.ts';
+import { stopProcessesIn } from '../git/processes.ts';
 import { resolveTaskRefs } from '../git/task-refs.ts';
 import { RepoCiCache } from '../github/ci.ts';
 import { PullRequestDescriptions } from '../github/description.ts';
@@ -89,6 +90,7 @@ export interface EffectRunnerOptions {
 
 export interface TaskServices {
   closeTaskServices(taskId: string): void;
+  listTerminalPids(): number[];
 }
 
 const WATCH_INTERVAL_MS = 45_000;
@@ -858,7 +860,10 @@ export class EffectRunner {
     if (!task?.worktreePath || !repo) return;
     this.#services?.closeTaskServices(taskId);
     try {
-      await this.#workspaces.resolve(task).remove(repo, task);
+      const workspace = this.#workspaces.resolve(task);
+      if (workspace.mode === 'worktrees')
+        await stopProcessesIn(task.worktreePath, { spare: this.#services?.listTerminalPids() ?? [] });
+      await workspace.remove(repo, task);
     } catch (error) {
       log.warn('[Effects] Could not remove a worktree', { taskId, error: describeError(error) });
     }
