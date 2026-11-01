@@ -196,6 +196,19 @@ describe('the remote store', () => {
     expect(store.file.devices.map((entry) => entry.publicKey)).toEqual(['mine', 'old']);
   });
 
+  test('keeps one grant per teammate and drops the grants of people no longer in a team', () => {
+    const store = new RemoteStore(createPath());
+    store.writeGrant({ userId: '7', teamId: 't1', secret: 'first' });
+    store.writeGrant({ userId: '8', teamId: 't1', secret: 'other' });
+    store.writeGrant({ userId: '7', teamId: 't2', secret: 'again' });
+    expect(store.selectGrant('7')).toEqual({ userId: '7', teamId: 't2', secret: 'again' });
+    store.removeGrantsOutside(new Set(['7', '8']));
+    expect(store.file.grants).toHaveLength(2);
+    store.removeGrantsOutside(new Set(['8']));
+    expect(store.file.grants.map((grant) => grant.userId)).toEqual(['8']);
+    expect(store.selectGrant('7')).toBeNull();
+  });
+
   test('creates the machine key once and reads it back after a restart', async () => {
     const path = createPath();
     const store = new RemoteStore(path);
