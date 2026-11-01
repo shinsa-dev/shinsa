@@ -1779,7 +1779,9 @@ checks it ran.
 - Fix N findings and approve, from the Fix button's chevron, is the same `revise` with `thenApprove: true`
   (refused at any other gate or with any other decision, `then_approve_invalid`, `then_approve_conflict`). The
   `gate.answered` fold sets `task.approveAfterFix`; the fix then runs as any other: checks, the agent review and its
-  own fix rounds. When the review gate would open again without an escalation, `openReviewGate` opens it and answers
+  own fix rounds. While the flag is on, `reactToFindings` sends the agent review's `should_fix` findings to the Agent
+  as well as its blocking ones, the verdicts your review would have defaulted to, so the approval never passes a
+  finding you would have fixed; `optional` ones do not hold it. When the review gate would open again without an escalation, `openReviewGate` opens it and answers
   it `approve` at once (`approveReviewAhead`, `gate.answered` with `ahead: true`), then approves as your click would:
   the pull request opens, or every check runs first when you have uncommitted edits. The activity says "Approved after
   the fix, as you asked". An escalated review, or a failure gate when checks run out of fixes, still stops for you.

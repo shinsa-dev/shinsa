@@ -652,7 +652,8 @@ Only these, and they win over anything below:
     - **A labelled control keeps a tooltip that says what its label can't**: what pressing it leads to or
       covers. Approve changes ("Opens the pull request"), Fix N findings ("Sends the findings you kept and your
       line comments to the agent"), Fix N findings and approve ("Sends the findings you kept, then approves once checks
-      and the agent review pass"), Update ("Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its
+      and the agent review pass"; its two halves keep their size when pressed and the chevron keeps its hover fill while
+      its menu is open), Update ("Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its
       own and agents pick up where they were."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
       notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
       item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments

@@ -4,6 +4,7 @@ import {
   type GateType,
   listOpenGates,
   type ReviewComment,
+  type ReviewFinding,
   SHAPE_PIPELINES,
   type TaskShape,
 } from '../../src/index.ts';
@@ -383,7 +384,7 @@ describe('fixing findings, then approving', () => {
     });
   }
 
-  function review(harness: Harness, taskId: string, findings: typeof blocking | [] = []) {
+  function review(harness: Harness, taskId: string, findings: ReviewFinding[] = []) {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
@@ -421,6 +422,18 @@ describe('fixing findings, then approving', () => {
     expect(harness.task(taskId).approveAfterFix).toBe(true);
     fix(harness, taskId, 'tree-2');
     review(harness, taskId);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.task(taskId).stage).toBe('shipping');
+  });
+
+  test('suggestions the agent review finds after the fix are fixed by the agents before it approves', () => {
+    const { harness, taskId } = askFixThenApprove();
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, [{ severity: 'should_fix', file: 'b.ts', line: 7, message: 'Name it.' }]);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    fix(harness, taskId, 'tree-2');
+    review(harness, taskId, [{ severity: 'optional', file: 'b.ts', line: 9, message: 'Maybe inline it.' }]);
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
     expect(harness.task(taskId).stage).toBe('shipping');
   });

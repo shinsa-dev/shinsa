@@ -164,10 +164,15 @@ function isDismissed(task: Task, finding: ReviewFinding) {
   );
 }
 
+function isFixedBeforeReview(task: Task, finding: ReviewFinding) {
+  if (finding.severity === 'blocking') return true;
+  return finding.severity === 'should_fix' && task.approveAfterFix === true;
+}
+
 export function reactToFindings(decider: Decider, taskId: string, findings: ReviewFinding[]) {
   const task = decider.task(taskId);
   const blocking = findings.filter(
-    (finding) => finding.severity === 'blocking' && !isDismissed(task, finding)
+    (finding) => isFixedBeforeReview(task, finding) && !isDismissed(task, finding)
   );
   if (blocking.length === 0) {
     openReviewGate(decider, taskId);

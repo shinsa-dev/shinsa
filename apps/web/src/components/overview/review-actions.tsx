@@ -7,6 +7,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@shinsa/ui/components/dropdown-menu';
+import { cn } from '@shinsa/ui/lib/utils';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
@@ -24,6 +25,8 @@ import { describeMergeBlock, resolveMergeLabel } from '@/lib/review/merge-steps.
 import { replyToGate, resolveApprovalReply } from '@/lib/tasks/gates.ts';
 
 const FIX_CHOICE = { fix: 'fix', approve: 'approve' } as const;
+
+const SPLIT_PART = 'not-disabled:active:before:inset-0 not-disabled:data-[pressed]:before:inset-0';
 
 function FixChoiceMenu({
   task,
@@ -47,7 +50,7 @@ function FixChoiceMenu({
             size='icon-sm'
             icon='IconChevronDownMedium'
             aria-label='More ways to fix'
-            className='rounded-l-none'
+            className={cn(SPLIT_PART, 'rounded-l-none data-popup-open:before:bg-primary/80')}
           />
         }
       />
@@ -104,7 +107,7 @@ export function ReviewActions({ state, task, gate }: { state: ShinsaState; task:
           size='sm'
           loading={busy === 'decide'}
           disabled={isVerdictActionBlocked(commented, action)}
-          className={split ? 'rounded-r-none' : undefined}
+          className={split ? cn(SPLIT_PART, 'rounded-r-none') : undefined}
           onClick={() =>
             void run('decide', async () => {
               const extras = resolveVerdictAnswer(task.findings, verdicts, draft.comments);
