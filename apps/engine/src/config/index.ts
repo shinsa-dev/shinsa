@@ -134,11 +134,11 @@ export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): S
   };
 }
 
-function excludeFromBackups(dir: string) {
+function excludeFromBackups(dir: string, platform: NodeJS.Platform) {
   const marker = join(dir, NEVER_INDEX_MARKER);
   if (existsSync(marker)) return;
   writeFileSync(marker, '');
-  const xattr = process.platform === 'darwin' ? Bun.which('xattr', { PATH: process.env.PATH ?? '' }) : null;
+  const xattr = platform === 'darwin' ? Bun.which('xattr', { PATH: process.env.PATH ?? '' }) : null;
   if (!xattr) return;
   const result = Bun.spawnSync([xattr, '-wx', BACKUP_EXCLUSION.name, BACKUP_EXCLUSION.value, dir], {
     stdout: 'ignore',
@@ -152,12 +152,12 @@ function excludeFromBackups(dir: string) {
   }
 }
 
-export function prepareDataDir(config: ServerConfig) {
+export function prepareDataDir(config: ServerConfig, platform = process.platform) {
   for (const dir of [config.dataDir, config.evidenceDir, config.transcriptsDir]) {
     mkdirSync(dir, { recursive: true });
   }
   for (const dir of [config.worktreesDir, config.checkBasesDir, config.scratchDir, config.cachesDir]) {
     mkdirSync(dir, { recursive: true });
-    excludeFromBackups(dir);
+    excludeFromBackups(dir, platform);
   }
 }

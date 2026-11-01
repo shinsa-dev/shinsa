@@ -168,7 +168,6 @@ describe('prepareDataDir', () => {
   });
 
   test('a folder Time Machine could not exclude is only logged, and not tried again', () => {
-    if (process.platform !== 'darwin') return;
     const bin = createTempDir();
     const calls = join(bin, 'calls');
     const fake = join(bin, 'xattr');
@@ -178,13 +177,31 @@ describe('prepareDataDir', () => {
     const path = process.env.PATH;
     process.env.PATH = `${bin}:${path}`;
     try {
-      prepareDataDir(config);
-      prepareDataDir(config);
+      prepareDataDir(config, 'darwin');
+      prepareDataDir(config, 'darwin');
     } finally {
       process.env.PATH = path;
     }
     expect(readFileSync(calls, 'utf8').trim().split('\n')).toHaveLength(4);
     expect(existsSync(join(config.scratchDir, '.metadata_never_index'))).toBe(true);
+  });
+
+  test('off macOS the folders get only the marker, and Time Machine is never asked', () => {
+    const bin = createTempDir();
+    const calls = join(bin, 'calls');
+    const fake = join(bin, 'xattr');
+    writeFileSync(fake, `#!/bin/sh\necho run >> '${calls}'\n`);
+    chmodSync(fake, 0o755);
+    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      prepareDataDir(config, 'linux');
+    } finally {
+      process.env.PATH = path;
+    }
+    expect(existsSync(calls)).toBe(false);
+    expect(existsSync(join(config.worktreesDir, '.metadata_never_index'))).toBe(true);
   });
 });
 
