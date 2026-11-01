@@ -2,14 +2,17 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { createSettings, HOUR_MS } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import {
+  changeSharePreset,
   closeShareDialog,
   closeUnshareConfirm,
   describeShareEnd,
+  describeSharePreset,
   isTaskShared,
   listShareLimitItems,
   openShareDialog,
   openUnshareConfirm,
   resolveShareLimitChoice,
+  resolveSharePresetChoice,
   resolveShareView,
   selectLiveShare,
   shareTask,
@@ -65,13 +68,34 @@ describe('the share dialog', () => {
   it('shares and stops sharing with the human’s commands', async () => {
     const spies = spyOnCommands();
     const task = createTask({ id: 't' });
-    await shareTask(task, 'day');
+    await shareTask(task, 'day', 'status');
+    await changeSharePreset(task, 'everything');
     await unshareTask(task);
     expect(spies.sent.mock.calls).toEqual([
-      [{ type: 'task.share', taskId: 't', limit: 'day' }],
+      [{ type: 'task.share', taskId: 't', limit: 'day', preset: 'status' }],
+      [{ type: 'task.share', taskId: 't', preset: 'everything' }, 'Sharing as everything.'],
       [{ type: 'task.unshare', taskId: 't' }, 'Stopped sharing.'],
     ]);
     spies.restore();
+  });
+});
+
+describe('what a shared task shows', () => {
+  it('names each preset, and an unknown one by its value', () => {
+    expect(describeSharePreset('full')).toBe('Full task');
+    expect(describeSharePreset('status')).toBe('Status');
+    expect(describeSharePreset('everything')).toBe('Everything');
+    expect(describeSharePreset('other' as never)).toBe('other');
+  });
+
+  it('defaults to the setting, keeps a shared task’s own, and is Full before settings load', () => {
+    const settings = { ...createSettings(), sharePreset: 'status' as const };
+    const task = createTask({ id: 't' });
+    expect(resolveSharePresetChoice(task, settings)).toBe('status');
+    expect(resolveSharePresetChoice(task, null)).toBe('full');
+    expect(
+      resolveSharePresetChoice({ ...task, share: { ...SHARING, url: null, preset: 'everything' } }, settings)
+    ).toBe('everything');
   });
 });
 

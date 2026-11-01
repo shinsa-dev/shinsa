@@ -1,6 +1,8 @@
 import {
   createState,
   type Evidence,
+  hasShareGroup,
+  resolveShareTranscriptFile,
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARED_EVIDENCE_PREFIX,
@@ -24,6 +26,7 @@ export interface SharedView {
   updatedAt: number;
   diffUrl: string | null;
   codeUrl: string | null;
+  transcripts: Record<string, string>;
 }
 
 export function resolveSharedTaskId(taskId: string) {
@@ -34,6 +37,16 @@ function resolveSharedEvidence(item: Evidence, taskId: string, source: SharedSou
   if (!item.uri.startsWith(SHARED_EVIDENCE_PREFIX)) return { ...item, taskId };
   const url = source.resolveFileUrl(item.uri.slice(SHARED_EVIDENCE_PREFIX.length));
   return url ? { ...item, taskId, uri: url } : null;
+}
+
+function listTranscriptUrls(source: SharedSource) {
+  if (!hasShareGroup(source.shared.preset, 'live')) return {};
+  return Object.fromEntries(
+    source.shared.runs.flatMap((run) => {
+      const url = source.resolveFileUrl(resolveShareTranscriptFile(run.id));
+      return url ? [[run.id, url]] : [];
+    })
+  );
 }
 
 export function resolveSharedView(source: SharedSource): SharedView {
@@ -59,5 +72,6 @@ export function resolveSharedView(source: SharedSource): SharedView {
     updatedAt: source.updatedAt,
     diffUrl: source.shared.code ? source.resolveFileUrl(SHARE_DIFF_FILE) : null,
     codeUrl: source.shared.code ? source.resolveFileUrl(SHARE_CODE_FILE) : null,
+    transcripts: listTranscriptUrls(source),
   };
 }

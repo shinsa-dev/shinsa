@@ -12,6 +12,7 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import {
   ACCOUNT_LABEL,
   type AccountChoice,
@@ -115,12 +116,13 @@ export function RunAccountLabel({
 }
 
 export function RunAccount({ task, run, rerun }: { task: Task; run: Run; rerun: boolean }) {
+  const readOnly = useReadOnly();
   const choices = listRerunChoices(useAccounts());
   const account = resolveRunAccount(run);
   return (
     <RunAccountLabel
       label={account ? resolveAccountLabel(account) : null}
-      choices={rerun ? choices : []}
+      choices={rerun && !readOnly ? choices : []}
       value={account?.id ?? ''}
       onPick={(picked) => {
         if (picked) void rerunStep(task.id, picked);

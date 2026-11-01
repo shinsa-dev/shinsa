@@ -19,6 +19,16 @@ describe('the shared page', () => {
     expect(listSharedTabs(planning, createSharedTask({ code: false }))).toEqual(['overview']);
   });
 
+  it('has Chat only when the share is Everything', () => {
+    const reviewed = createTask({ id: 't', repoId: 'r', stage: 'awaiting_review', report: createReport() });
+    expect(listSharedTabs(reviewed, createSharedTask({ preset: 'everything' }))).toEqual([
+      'overview',
+      'review',
+      'code',
+      'chat',
+    ]);
+  });
+
   it('says who shared it and from which machine, with what it knows', () => {
     expect(describeSharedBy(createSharedTask(), null)).toBe('Shared by @mona from Studio');
     expect(describeSharedBy(createSharedTask({ machine: null }), 'octocat')).toBe('Shared by @mona');

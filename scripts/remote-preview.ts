@@ -163,16 +163,18 @@ async function startMachine(id: string, name: string, dataDir: string) {
     openUrl: () => Promise.resolve(),
   });
   const evidence = new EvidenceStore(config.evidenceDir);
+  const transcripts = new Transcripts(config.transcriptsDir);
   const shares = new Shares({
     engine,
     remote,
     evidence,
+    transcripts,
     github: createPreviewGitHub(engine),
   });
   const http = startServer({
     engine,
     config,
-    transcripts: new Transcripts(config.transcriptsDir),
+    transcripts,
     evidence,
     models: { listModels: () => Promise.resolve([]) } as never,
     onboarding: new Onboarding({

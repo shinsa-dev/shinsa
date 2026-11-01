@@ -13,6 +13,7 @@ const { resetSlack } = await import('@/lib/connection/slack.ts');
 const { connection } = await import('@/lib/connection/socket.ts');
 const { resetEvidenceTexts } = await import('@/lib/evidence/texts.ts');
 const { resetDisclosures } = await import('@/lib/preferences/disclosure.ts');
+const { resetSharedTranscripts } = await import('@/lib/share/transcripts.ts');
 const { replaceSharedHandles } = await import('@/router.ts');
 const { runTeardowns } = await import('./support/teardown.ts');
 const { restoreRealTimers } = await import('./support/timers.ts');
@@ -24,6 +25,7 @@ afterEach(() => {
   toast.dismiss();
   connection.reset();
   resetHighlights();
+  resetSharedTranscripts();
   resetTaskDrafts();
   resetEvidenceTexts();
   resetAgentProviders();

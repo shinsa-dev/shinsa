@@ -23,6 +23,16 @@ function showTask(overrides: Partial<Task> = {}, paired = true) {
   act(() => openShareDialog('source'));
 }
 
+async function choose(label: string, option: RegExp) {
+  fireEvent.click(screen.getByRole('combobox', { name: label }));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+  const item = within(list).getByRole('option', { name: option });
+  fireEvent.pointerDown(item, { pointerType: 'mouse' });
+  fireEvent.click(item);
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+}
+
 const URL = 'https://app.shinsa.dev/share/t/abc';
 
 const SHARING = { at: 1, limit: 'until_done', preset: 'full', endsAt: null } as const;
@@ -54,7 +64,22 @@ describe('the share dialog', () => {
     expect(await screen.findByRole('combobox', { name: 'Share for' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'task.share', taskId: 'source', limit: 'until_done' }])
+      expect(listSentCommands()).toEqual([
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'full' },
+      ])
+    );
+  });
+
+  it('shares it as the preset you pick, Full by default', async () => {
+    showTask();
+    const picker = await screen.findByRole('combobox', { name: 'Share as' });
+    expect(picker.textContent).toBe('Full task');
+    await choose('Share as', /^Everything/);
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'everything' },
+      ])
     );
   });
 
@@ -94,7 +119,9 @@ describe('the share dialog', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('Remote access was removed.');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'task.share', taskId: 'source', limit: 'until_done' }])
+      expect(listSentCommands()).toEqual([
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'full' },
+      ])
     );
   });
 });
@@ -115,6 +142,17 @@ describe('the sharing banner', () => {
     rerender(<SharingBanner task={createTask({ id: 'source' })} />);
     expect(screen.queryByText('Anyone with the link can watch this task.')).toBeNull();
   });
+  it('shows what the link shares and changes it at once, keeping the link', async () => {
+    const task = createTask({ id: 'source', share: { ...SHARING, url: URL } });
+    pushState(createShinsaState({ tasks: [task] }));
+    render(<SharingBanner task={task} />);
+    expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Full task');
+    await choose('Share as', /^Status/);
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([{ type: 'task.share', taskId: 'source', preset: 'status' }])
+    );
+  });
+
   it('says how soon a timed share ends, never a date for an hour away', () => {
     const endsAt = Date.now() + 60 * 60 * 1000;
     render(

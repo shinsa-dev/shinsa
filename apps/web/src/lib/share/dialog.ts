@@ -2,8 +2,10 @@ import {
   isTaskSettled,
   type RemoteSnapshot,
   resolveShareLimit,
+  resolveSharePreset,
   type Settings,
   type ShareLimit,
+  type SharePreset,
   type Task,
   type TaskShare,
 } from '@shinsa/core';
@@ -31,9 +33,38 @@ export const SHARED_MARK_LABEL = 'Shared by link';
 export const SHARING_SECTION = 'Sharing';
 
 export const SHARING_SECTION_DESCRIPTION =
-  'How long a task you share by link stays shared, unless you pick another time when you share it.';
+  'What a task you share by link shows and how long it stays shared, unless you pick otherwise when you share it.';
 
 export const SHARE_LIMIT_SETTING = 'Share tasks for';
+
+export const SHARE_PRESET_TITLE = 'Share as';
+
+export const SHARE_PRESET_SETTING = 'Share tasks as';
+
+export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: string; icon: IconName }[] = [
+  {
+    value: 'full',
+    label: 'Full task',
+    hint: 'Plan, reports, review, checks, evidence and code',
+    icon: 'IconListBullets',
+  },
+  {
+    value: 'status',
+    label: 'Status',
+    hint: 'Title, request and progress, with no names or code',
+    icon: 'IconGauge',
+  },
+  {
+    value: 'everything',
+    label: 'Everything',
+    hint: 'The full task and the agents’ live output and tool calls',
+    icon: 'IconBubbleText',
+  },
+];
+
+export function describeSharePreset(preset: SharePreset) {
+  return SHARE_PRESET_ITEMS.find((item) => item.value === preset)?.label ?? preset;
+}
 
 export const SHARE_LIMIT_ITEMS: { value: ShareLimit; label: string; icon: IconName }[] = [
   { value: 'until_done', label: 'Until the task is done', icon: 'IconCheckCircle2' },
@@ -119,14 +150,26 @@ export function resolveShareLimitChoice(task: Task, settings: Settings): ShareLi
   return limit === 'until_done' && isTaskSettled(task) ? FINISHED_TASK_LIMIT : limit;
 }
 
+export function resolveSharePresetChoice(task: Task, settings: Settings | null): SharePreset {
+  if (task.share) return task.share.preset;
+  return settings ? resolveSharePreset(settings) : 'full';
+}
+
 export function describeShareEnd(share: TaskShare, now = Date.now()) {
   if (share.endsAt !== null) return formatUntil('Sharing ends', share.endsAt, now);
   if (share.limit === 'until_done') return 'Sharing ends when the task is done';
   return 'Shared until you stop it';
 }
 
-export function shareTask(task: Task, limit: ShareLimit) {
-  return sendCommandWithToast({ type: 'task.share', taskId: task.id, limit });
+export function shareTask(task: Task, limit: ShareLimit, preset: SharePreset) {
+  return sendCommandWithToast({ type: 'task.share', taskId: task.id, limit, preset });
+}
+
+export function changeSharePreset(task: Task, preset: SharePreset) {
+  return sendCommandWithToast(
+    { type: 'task.share', taskId: task.id, preset },
+    `Sharing as ${describeSharePreset(preset).toLowerCase()}.`
+  );
 }
 
 export function unshareTask(task: Task) {

@@ -3,12 +3,16 @@ import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
+import { SelectField } from '@/components/controls/select-field.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import {
+  changeSharePreset,
   describeShareEnd,
   openUnshareConfirm,
+  SHARE_PRESET_ITEMS,
+  SHARE_PRESET_TITLE,
   SHARING_NOTE,
   selectLiveShare,
   UNSHARE_TITLE,
@@ -42,6 +46,14 @@ export function SharingBanner({ task }: { task: Task }) {
         .
       </span>
       <div className='ms-auto flex shrink-0 items-center gap-2'>
+        <SelectField
+          label={SHARE_PRESET_TITLE}
+          size='sm'
+          variant='ghost'
+          items={SHARE_PRESET_ITEMS}
+          value={share.preset}
+          onValueChange={(preset) => void changeSharePreset(task, preset)}
+        />
         {share.url && <CopyLinkButton url={share.url} />}
         <Button variant='secondary' size='sm' onClick={() => openUnshareConfirm(task.id)}>
           {UNSHARE_TITLE}

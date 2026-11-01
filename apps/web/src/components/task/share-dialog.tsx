@@ -1,4 +1,4 @@
-import type { ShareLimit, Task } from '@shinsa/core';
+import type { ShareLimit, SharePreset, Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
   Dialog,
@@ -22,10 +22,13 @@ import {
   listShareLimitItems,
   openUnshareConfirm,
   resolveShareLimitChoice,
+  resolveSharePresetChoice,
   resolveShareView,
   SHARE_DESCRIPTION,
   SHARE_LIMIT_TITLE,
   SHARE_NEEDS_REMOTE,
+  SHARE_PRESET_ITEMS,
+  SHARE_PRESET_TITLE,
   SHARE_TITLE,
   type ShareView,
   selectLiveShare,
@@ -79,11 +82,43 @@ function ShareLimitRow({
   );
 }
 
-function ShareActions({ task, view, limit }: { task: Task; view: ShareView; limit: ShareLimit }) {
+function SharePresetRow({
+  preset,
+  onChange,
+}: {
+  preset: SharePreset;
+  onChange: (preset: SharePreset) => void;
+}) {
+  return (
+    <Field className='w-full'>
+      <FieldLabel>{SHARE_PRESET_TITLE}</FieldLabel>
+      <SelectField
+        label={SHARE_PRESET_TITLE}
+        align='start'
+        className='w-full'
+        items={SHARE_PRESET_ITEMS}
+        value={preset}
+        onValueChange={onChange}
+      />
+    </Field>
+  );
+}
+
+function ShareActions({
+  task,
+  view,
+  limit,
+  preset,
+}: {
+  task: Task;
+  view: ShareView;
+  limit: ShareLimit;
+  preset: SharePreset;
+}) {
   const [busy, setBusy] = React.useState(false);
   const share = async () => {
     setBusy(true);
-    await shareTask(task, limit);
+    await shareTask(task, limit, preset);
     setBusy(false);
   };
   if (view.kind === 'unpaired') {
@@ -129,6 +164,8 @@ function ShareContent({ task }: { task: Task }) {
   }, [shared]);
   const [picked, setPicked] = React.useState<ShareLimit | null>(null);
   const limit = picked ?? live?.limit ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
+  const [pickedPreset, setPickedPreset] = React.useState<SharePreset | null>(null);
+  const preset = pickedPreset ?? resolveSharePresetChoice(task, settings);
   return (
     <>
       <DialogHeader>
@@ -136,9 +173,14 @@ function ShareContent({ task }: { task: Task }) {
         <DialogDescription>{SHARE_DESCRIPTION}</DialogDescription>
       </DialogHeader>
       <ShareBody view={view} />
-      {view.kind !== 'unpaired' && <ShareLimitRow task={task} limit={limit} onChange={setPicked} />}
+      {view.kind !== 'unpaired' && (
+        <>
+          <SharePresetRow preset={preset} onChange={setPickedPreset} />
+          <ShareLimitRow task={task} limit={limit} onChange={setPicked} />
+        </>
+      )}
       <DialogFooter>
-        <ShareActions task={task} view={view} limit={limit} />
+        <ShareActions task={task} view={view} limit={limit} preset={preset} />
       </DialogFooter>
     </>
   );
