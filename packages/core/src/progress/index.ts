@@ -1,5 +1,6 @@
 import {
   type FixReason,
+  isRoundResting,
   isWatchdogActive,
   needsRepository,
   type PipelineStep,
@@ -112,13 +113,6 @@ const WAITING_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
 
 const HAND_OVER_KEYS: ReadonlySet<DisplayKey> = new Set<DisplayKey>(['pre-merge', 'post-merge']);
 
-const FINISHED_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
-  'answered',
-  'merged',
-  'done',
-  'watching',
-]);
-
 function hasSetupStep(task: Task, pipeline: readonly PipelineStep[]) {
   if (pipeline[0] === 'plan') return false;
   return task.repoId !== null || needsRepository(pipeline);
@@ -154,7 +148,7 @@ function hasOpenSteps(task: Task, keys: DisplayKey[], when: MergeStepTiming, rou
 function resolveStepsKey(task: Task, keys: DisplayKey[]): DisplayKey | null {
   const round = resolveCurrentRound(task).number;
   if (task.stage === 'awaiting_merge' && hasOpenSteps(task, keys, 'pre_merge', round)) return 'pre-merge';
-  if (FINISHED_STAGES.has(task.stage) && hasOpenSteps(task, keys, 'post_merge', round)) return 'post-merge';
+  if (isRoundResting(task) && hasOpenSteps(task, keys, 'post_merge', round)) return 'post-merge';
   return null;
 }
 
@@ -179,7 +173,7 @@ function resolveStageKey(task: Task, keys: DisplayKey[]) {
 function resolveCurrentIndex(task: Task, keys: DisplayKey[]) {
   if (task.stage === 'cancelled') return -1;
   const key = resolveStageKey(task, keys);
-  if (FINISHED_STAGES.has(task.stage) && key !== 'post-merge') return keys.length;
+  if (isRoundResting(task) && key !== 'post-merge') return keys.length;
   if (key) return keys.indexOf(key);
   const first = keys.findIndex((candidate) => !isKeyDone(task, candidate));
   return first === -1 ? keys.length : first;

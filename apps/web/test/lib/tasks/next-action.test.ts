@@ -17,9 +17,9 @@ function setup(gate?: Partial<Gate>, runs: Partial<Run>[] = [], task: Partial<Ta
   };
 }
 
-function actionFor(gate?: Partial<Gate>, runs: Partial<Run>[] = []) {
-  const { state, task } = setup(gate, runs);
-  return resolveTaskAction(state, task);
+function actionFor(gate?: Partial<Gate>, runs: Partial<Run>[] = [], task: Partial<Task> = {}) {
+  const { state, task: subject } = setup(gate, runs, task);
+  return resolveTaskAction(state, subject);
 }
 
 describe('resolveTaskAction', () => {
@@ -30,7 +30,7 @@ describe('resolveTaskAction', () => {
   it('opens the task for a plan or a merge', () => {
     expect(actionFor({ type: 'plan' })).toEqual({ label: 'Review plan', path: '/tasks/t' });
     expect(actionFor({ type: 'merge' })).toEqual({ label: 'Review and merge', path: '/tasks/t' });
-    expect(actionFor({ type: 'post_merge' })).toEqual({
+    expect(actionFor({ type: 'post_merge' }, [], { stage: 'merged' })).toEqual({
       label: 'Do the post-merge steps',
       path: '/tasks/t',
     });
