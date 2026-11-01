@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { Feedback } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { FeedbackButton } from '@/components/feedback/button.tsx';
 import { FeedbackPanel } from '@/components/feedback/popover.tsx';
 import { isFeedbackOpen, openFeedback, selectOpenFeedbackEntryId } from '@/lib/feedback.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { createActions, createFeedback, stateWith } from '../../support/feedback.ts';
 
 function renderPanel(entries: Feedback[], actions = createActions()) {
@@ -107,6 +108,20 @@ describe('FeedbackPanel', () => {
 });
 
 describe('FeedbackButton', () => {
+  beforeEach(() => {
+    spyOnEngine();
+  });
+
+  it('is left out on an engine that does not take feedback', () => {
+    spyOnEngine(null);
+    render(
+      <TooltipProvider>
+        <FeedbackButton state={stateWith([])} actions={createActions()} />
+      </TooltipProvider>
+    );
+    expect(screen.queryByRole('button', { name: /Feedback/ })).toBeNull();
+  });
+
   it('opens only the button that was clicked when two are mounted', async () => {
     const state = stateWith([createFeedback({ id: 'f1' })]);
     render(

@@ -80,6 +80,12 @@ export function clearEnrollFragment(storage: Storage) {
   storage.removeItem(ENROLL_ON_MACHINE_KEY);
 }
 
-export function describeUnreachableMachine(name: string) {
-  return `Add this device on ${name} first`;
+export function describeOutdatedMachine(name: string) {
+  return `Update Shinsa on ${name} to reach it from here.`;
+}
+
+export function describeUnreachableMachine(machine: { name: string; outdated?: boolean }) {
+  return machine.outdated
+    ? describeOutdatedMachine(machine.name)
+    : `Add this device on ${machine.name} first`;
 }

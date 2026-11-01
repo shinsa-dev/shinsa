@@ -1210,6 +1210,7 @@ or `browser` (a tab, Floaty).
 | `transcript { runId, entries, start }` | On subscribing (the entries from `from`, in pages of 500) and for each new entry; `start` is the position of the first one |
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
+| `engine { engine }` | On connect, right after `surfaces`: what this engine speaks, an `EngineInfo` (below) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
 | `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing): `RemoteSnapshot` (Remote access, below) |
 
@@ -1220,6 +1221,24 @@ server, `parseTerminalClientFrame`). A terminal (`TerminalInfo`) is in a project
 `repository`, `folder` or `worktree`, `listTerminalPlaces`), and `running`, `exited` or `stopped`; a service's
 terminal keeps the port its run was given (`port`), which `resolveServiceUrl` puts in the service's `previewUrl`
 for `ServiceView.url`.
+
+**What an engine speaks** (`packages/core/src/protocol/engine.ts`). The hosted web app is built from `main` and can
+be newer than the engine it reaches, so every engine tells each page what it speaks (`resolveEngineInfo`) and the page
+offers nothing an engine cannot do (`docs/engine.md` → Remote access, What each machine speaks):
+
+| `EngineInfo` field | Holds |
+| --- | --- |
+| `version` | The engine's build, `0.0.0` in development (`DEVELOPMENT_VERSION`) |
+| `protocol` | `ENGINE_PROTOCOL`, raised only when an older page and this engine cannot talk at all (a changed state shape) |
+| `commands` | Every user command type it parses, `USER_COMMAND_TYPES` itself, so a new command is announced the moment it exists |
+| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share` and `feedback` today) that are not a command, such as a route or a setting an older engine ignores |
+
+`ENGINE_BASELINE_COMMANDS` is frozen: the commands every engine has had since before the `engine` message, which a page
+sends to any engine, one that never announced included (`resolveEngineCommands(null)`). A command added since is
+outside it and must be listed in core's test (`GATED_COMMANDS` in `test/protocol/engine.test.ts`), which fails on any
+command in neither. `parseEngineInfo` reads the message leniently (unknown fields dropped, a missing version read as
+development) and refuses one without a whole-number `protocol`. `hasEngineFeature` and `isEngineProtocolMatch` answer
+for one engine; an engine that sent nothing has no features and matches.
 
 `isQuietSurface(surface, desktop)` is true for a page that is not the desktop while one is connected: it plays no
 sound, shows no notification and puts no count in its title or Floaty's tags.
@@ -1404,7 +1423,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | Decisions | `packages/core/src/decide/` (`messages.ts` for `resolveMessageEffect`) |
 | State folds | `packages/core/src/state/` |
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
-| Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/engine/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
+| Socket messages, surfaces, what an engine speaks | `packages/core/src/protocol/messages.ts`, `protocol/engine.ts`; `apps/engine/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
 | Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/engine/src/terminals/`, `apps/web/src/lib/terminal/` |
 | Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `ServiceView.url`, `resolveServiceUrl`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |

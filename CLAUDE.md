@@ -97,6 +97,16 @@ web ──WebSocket──► shinsa engine
   old event shapes in it, `apps/engine/src/store/legacy.ts` rewrites them once on start, versioned by SQLite's
   `user_version` (bump `LOG_VERSION` in `store/event-log.ts`), so code never reads an old shape (`docs/engine.md` →
   State in memory).
+- **The hosted page can be newer than the engine it reaches.** app.shinsa.dev serves the web app built from `main`
+  while each machine's engine updates on its own channel, so every engine announces what it speaks on connect
+  (`engine { version, protocol, commands, features }`) and the page offers only that, per task's machine. A new user
+  command is announced by itself; add it to `GATED_COMMANDS` (core's `test/protocol/engine.test.ts`, which fails until
+  you do) and give its UI a command the menus filter by (`TASK_ACTION_COMMAND`) or `useEngineCommand(type, taskId)`. A
+  new `/api` route, or a setting an older engine would ignore, needs a name in `ENGINE_FEATURES` and its routes in
+  `ENGINE_FEATURE_ROUTES` (`apps/engine/src/http/features.ts`; `test/http/engine-features.test.ts` fails on a route in
+  neither that nor its frozen baseline), and the UI asks `useEngineFeature`. Never edit the baselines to make a test
+  pass. Raise `ENGINE_PROTOCOL` only when an older page and engine cannot talk at all (`docs/engine.md` → Remote access,
+  What each machine speaks).
 
 ## Commands
 

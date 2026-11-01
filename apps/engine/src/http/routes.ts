@@ -356,8 +356,8 @@ function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
   ];
 }
 
-export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
-  const routes: ApiRoute[] = [
+export function listApiRoutes(context: ApiContext, extra: ApiRoute[] = []): ApiRoute[] {
+  return [
     ...extra,
     ...createTaskRoutes(context),
     ...createServerRoutes(context),
@@ -379,7 +379,10 @@ export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
         })
       : []),
   ];
+}
 
+export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
+  const routes = listApiRoutes(context, extra);
   return function handleApi(request: Request, url: URL): Promise<Response> {
     for (const route of routes) {
       const match = route.pattern.exec(url.pathname);

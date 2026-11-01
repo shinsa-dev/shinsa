@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as React from 'react';
@@ -7,7 +7,16 @@ import { Rail } from '@/components/layout/sidebar/rail.tsx';
 import { isFeedbackOpen, openFeedback } from '@/lib/feedback.ts';
 import { useNewTaskRequest } from '@/lib/new-task.ts';
 import { navigate } from '@/router.ts';
+import { spyOnEngine } from '../../../support/engine.ts';
 import { createGate, createShinsaState, createTask } from '../../../support/state.ts';
+
+beforeEach(() => {
+  spyOnEngine();
+});
+
+afterEach(() => {
+  mock.restore();
+});
 
 const STATE = createShinsaState({
   tasks: [createTask({ id: 'review', handle: 'SW-1', title: 'Review the login fix', stage: 'reviewing' })],
