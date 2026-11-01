@@ -16,49 +16,54 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
+import { Input } from '@shinsa/ui/components/input';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { type DialogControl, useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import * as React from 'react';
-import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
-import { TeamDialog } from '@/components/teams/join-dialog.tsx';
+import { LoadingLine } from '@/components/status/loading-line.tsx';
+import { NewTeamDialog } from '@/components/teams/new-team-dialog.tsx';
+import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
 import { formatSince } from '@/lib/format/time.ts';
+import { MACHINE_ICON } from '@/lib/remote/mode.ts';
 import { describeUserName } from '@/lib/remote/users.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import {
   canUseTeams,
-  describeJoinOutcome,
   describeTeamEntry,
-  describeTeamProjects,
   describeTeamsUnavailable,
+  hasMachineAccess,
   listProjectChoices,
   needsTeamLink,
+  type ProjectChoice,
   TEAM_LINK_COPY,
   TEAMS_DESCRIPTION,
   TEAMS_SECTION,
+  validateTeamLink,
 } from '@/lib/teams/settings.ts';
 import {
+  ROW_INSET,
   SETTING_ROW,
   SETTINGS_SUBHEADING,
-  SettingsBlock,
+  SettingRow,
+  SettingsCard,
   SettingsEmpty,
-  SettingsGroup,
-  TOKEN_TEXT,
+  SettingsSection,
 } from './group.tsx';
+import { LinkView } from './remote-access.tsx';
 import { UserRow } from './user-row.tsx';
 
 type TeamsDialog =
   | { kind: 'create' }
-  | { kind: 'join' }
-  | { kind: 'projects'; entry: RemoteTeamEntry }
   | { kind: 'link'; teamId: string; name: string; url: string | null }
   | { kind: 'leave'; entry: RemoteTeamEntry }
-  | { kind: 'remove'; entry: RemoteTeamEntry }
-  | { kind: 'member'; team: RemoteTeam; user: RemoteUser };
+  | { kind: 'delete'; entry: RemoteTeamEntry }
+  | { kind: 'member'; team: RemoteTeam; user: RemoteUser }
+  | { kind: 'grant'; team: RemoteTeam; user: RemoteUser; machine: string };
 
 function TeamLinkDialog({
   control,
@@ -80,9 +85,12 @@ function TeamLinkDialog({
     void requestWithToast(async () => setUrl((await actions.readLink(teamId)).url));
   }, [url, teamId, actions]);
 
-  async function run(act: () => Promise<unknown>, done: string) {
+  async function turnOff() {
     setBusy(true);
-    await requestWithToast(act, done);
+    await requestWithToast(async () => {
+      await actions.removeLink(teamId);
+      control.onOpenChange(false);
+    }, 'The link is off.');
     setBusy(false);
   }
 
@@ -90,41 +98,123 @@ function TeamLinkDialog({
     <Dialog {...control}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{`Link to join ${name}`}</DialogTitle>
+          <DialogTitle>{`Join link for ${name}`}</DialogTitle>
           <DialogDescription>{TEAM_LINK_COPY}</DialogDescription>
         </DialogHeader>
-        <div className='flex w-full min-w-0 items-center gap-1.5'>
-          <Truncate className='min-w-0 flex-1 font-mono text-2xs text-fg-2'>
-            {url ?? 'Making the link…'}
-          </Truncate>
-          {url && <CopyButton text={url} />}
-        </div>
+        {url ? (
+          <LinkView url={url} />
+        ) : (
+          <div className='grid h-56 w-full place-items-center'>
+            <LoadingLine label='Making the link' />
+          </div>
+        )}
         <DialogFooter>
-          <Button
-            variant='secondary'
-            disabled={busy || !url}
-            onClick={() =>
-              void run(async () => {
-                await actions.removeLink(teamId);
-                control.onOpenChange(false);
-              }, 'The link is off.')
-            }
-          >
+          <Button variant='secondary' disabled={busy || !url} onClick={() => void turnOff()}>
             Turn off link
-          </Button>
-          <Button
-            variant='secondary'
-            disabled={busy || !url}
-            onClick={() =>
-              void run(async () => setUrl((await actions.renewLink(teamId)).url), 'New link made.')
-            }
-          >
-            Make new link
           </Button>
           <DialogClose render={<Button />}>Done</DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function GrantDialog({
+  control,
+  team,
+  user,
+  machine,
+  actions,
+}: {
+  control: DialogControl;
+  team: RemoteTeam;
+  user: RemoteUser;
+  machine: string;
+  actions: TeamActions;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  const name = describeUserName(user);
+
+  async function grant() {
+    setBusy(true);
+    await requestWithToast(async () => {
+      await actions.grantAccess(team.id, user.id);
+      control.onOpenChange(false);
+    }, `${name} can reach ${machine} now.`);
+    setBusy(false);
+  }
+
+  return (
+    <Dialog {...control}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{`Give ${name} access to ${machine}?`}</DialogTitle>
+          <DialogDescription>
+            {`${name} can open ${machine} in Shinsa Cloud and use it as you do: start tasks, answer questions and review work. Their browsers that hold ${team.name}’s key are added without asking. Take it back under Remote access.`}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose render={<Button variant='secondary' />}>Cancel</DialogClose>
+          <Button loading={busy} onClick={() => void grant()}>
+            Give access
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TeamLinkRow({
+  state,
+  entry,
+  actions,
+}: {
+  state: ShinsaState;
+  entry: RemoteTeamEntry;
+  actions: TeamActions;
+}) {
+  const [url, setUrl] = React.useState('');
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  async function add() {
+    const problem = validateTeamLink(entry.id, url);
+    setError(problem);
+    if (problem) return;
+    setBusy(true);
+    await requestWithToast(() => actions.join(state, url.trim(), []), `${entry.name}’s tasks show here now.`);
+    setBusy(false);
+  }
+
+  return (
+    <form
+      className={`flex flex-col gap-1.5 py-2 ${ROW_INSET}`}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void add();
+      }}
+    >
+      <span className='text-fg-2 text-xs'>
+        This machine has no key for the team yet. Paste the team’s link to see your teammates’ tasks here and
+        share yours.
+      </span>
+      <div className='flex items-center gap-1.5'>
+        <Input
+          aria-label='Team link'
+          value={url}
+          className='min-w-0 flex-1 font-mono'
+          placeholder='https://app.shinsa.dev/share/team#…'
+          onChange={(event) => {
+            setUrl(event.target.value);
+            setError(null);
+          }}
+        />
+        <Button type='submit' size='sm' loading={busy}>
+          Add link
+        </Button>
+      </div>
+      {error && <span className='text-destructive-text text-xs'>{error}</span>}
+    </form>
   );
 }
 
@@ -169,62 +259,103 @@ function TeamRequests({ team, actions }: { team: RemoteTeam; actions: TeamAction
   );
 }
 
-function TeamPeople({
+function TeammateActions({
   team,
-  viewer,
-  onRemove,
+  user,
+  snapshot,
+  onDialog,
 }: {
   team: RemoteTeam;
-  viewer: string | null;
-  onRemove: (user: RemoteUser) => void;
+  user: RemoteUser;
+  snapshot: RemoteSnapshot;
+  onDialog: (dialog: TeamsDialog) => void;
 }) {
-  const now = useNow();
-  const owns = team.role === 'owner';
+  const granted = hasMachineAccess(snapshot, user.id);
   return (
     <>
-      <p className={SETTINGS_SUBHEADING}>People in the team</p>
-      <UserRow user={team.owner} detail='Owner' self={owns} />
-      {team.members.map((member) => (
-        <UserRow
-          key={member.user.id}
-          user={member.user}
-          detail={describeMemberSince(member, now)}
-          self={member.user.login === viewer}
+      {!granted && snapshot.enabled && (
+        <Button
+          variant='secondary'
+          size='sm'
+          icon={MACHINE_ICON}
+          onClick={() => onDialog({ kind: 'grant', team, user, machine: snapshot.machineName })}
         >
-          {owns && (
-            <Button variant='secondary' size='sm' onClick={() => onRemove(member.user)}>
-              Remove
-            </Button>
-          )}
-        </UserRow>
-      ))}
+          Give machine access
+        </Button>
+      )}
+      {team.role === 'owner' && (
+        <Button variant='secondary' size='sm' onClick={() => onDialog({ kind: 'member', team, user })}>
+          Remove
+        </Button>
+      )}
     </>
   );
 }
 
-function TeamBlock({
-  state,
-  entry,
-  viewer,
-  actions,
+function describePerson(base: string, snapshot: RemoteSnapshot, user: RemoteUser) {
+  return hasMachineAccess(snapshot, user.id) ? `${base} · Can reach ${snapshot.machineName}` : base;
+}
+
+function TeamPeople({
+  team,
+  snapshot,
   onDialog,
 }: {
-  state: ShinsaState;
-  entry: RemoteTeamEntry;
-  viewer: string | null;
-  actions: TeamActions;
+  team: RemoteTeam;
+  snapshot: RemoteSnapshot;
   onDialog: (dialog: TeamsDialog) => void;
 }) {
   const now = useNow();
-  const { team } = entry;
-  const owns = team?.role === 'owner';
+  const viewer = snapshot.access?.owner.id ?? null;
+  const ownerIsYou = team.owner.id === viewer;
   return (
-    <SettingsBlock
-      header={
-        <>
-          <Truncate className='min-w-0 shrink font-medium text-fg-4 text-xs'>{entry.name}</Truncate>
-          <Truncate className={`${TOKEN_TEXT} min-w-0 flex-1`}>{describeTeamEntry(entry, now)}</Truncate>
-          {owns && (
+    <>
+      <p className={SETTINGS_SUBHEADING}>People</p>
+      <UserRow user={team.owner} detail={describePerson('Owner', snapshot, team.owner)} self={ownerIsYou}>
+        {!ownerIsYou && (
+          <TeammateActions team={team} user={team.owner} snapshot={snapshot} onDialog={onDialog} />
+        )}
+      </UserRow>
+      {team.members.map((member) => {
+        const self = member.user.id === viewer;
+        return (
+          <UserRow
+            key={member.user.id}
+            user={member.user}
+            detail={describePerson(describeMemberSince(member, now), snapshot, member.user)}
+            self={self}
+          >
+            {!self && (
+              <TeammateActions team={team} user={member.user} snapshot={snapshot} onDialog={onDialog} />
+            )}
+          </UserRow>
+        );
+      })}
+    </>
+  );
+}
+
+function TeamHeader({
+  entry,
+  onDialog,
+}: {
+  entry: RemoteTeamEntry;
+  onDialog: (dialog: TeamsDialog) => void;
+}) {
+  const now = useNow();
+  const owns = entry.team?.role === 'owner';
+  return (
+    <div className={SETTING_ROW}>
+      <div className='flex min-w-0 flex-1 flex-col'>
+        <Truncate className='font-medium text-fg-4 text-xs'>{entry.name}</Truncate>
+        <Truncate className='text-2xs text-fg-2'>{describeTeamEntry(entry, now)}</Truncate>
+      </div>
+      <div className='flex shrink-0 items-center gap-1.5'>
+        {owns ? (
+          <>
+            <Button variant='secondary' size='sm' onClick={() => onDialog({ kind: 'delete', entry })}>
+              Delete team
+            </Button>
             <Button
               variant='secondary'
               size='sm'
@@ -233,38 +364,50 @@ function TeamBlock({
             >
               Join link
             </Button>
-          )}
-          <Button
-            variant='secondary'
-            size='sm'
-            onClick={() => onDialog(owns ? { kind: 'remove', entry } : { kind: 'leave', entry })}
-          >
-            {owns ? 'Remove team' : team ? 'Leave' : 'Withdraw'}
+          </>
+        ) : (
+          <Button variant='secondary' size='sm' onClick={() => onDialog({ kind: 'leave', entry })}>
+            {entry.team ? 'Leave' : 'Withdraw'}
           </Button>
-        </>
-      }
-    >
-      <div className={SETTING_ROW}>
-        <span className='min-w-0 flex-1 text-fg-2 text-xs'>{describeTeamProjects(state, entry.id)}</span>
-        <Button variant='secondary' size='sm' onClick={() => onDialog({ kind: 'projects', entry })}>
-          Choose projects
-        </Button>
+        )}
       </div>
-      {needsTeamLink(entry) && (
-        <SettingsEmpty>
-          This machine does not hold the team’s key, so it cannot show the team’s tasks. Add the team’s link
-          here with Join a team.
-        </SettingsEmpty>
-      )}
-      {team && <TeamRequests team={team} actions={actions} />}
-      {team && (
-        <TeamPeople
-          team={team}
-          viewer={viewer}
-          onRemove={(user) => onDialog({ kind: 'member', team, user })}
+    </div>
+  );
+}
+
+function TeamCard({
+  state,
+  snapshot,
+  entry,
+  projects,
+  actions,
+  onDialog,
+}: {
+  state: ShinsaState;
+  snapshot: RemoteSnapshot;
+  entry: RemoteTeamEntry;
+  projects: readonly ProjectChoice[];
+  actions: TeamActions;
+  onDialog: (dialog: TeamsDialog) => void;
+}) {
+  const { team } = entry;
+  return (
+    <SettingsCard>
+      <TeamHeader entry={entry} onDialog={onDialog} />
+      <SettingRow title='Shared projects'>
+        <ProjectsSelect
+          label={`Projects shared with ${entry.name}`}
+          projects={projects}
+          chosen={listTeamProjectIds(state, entry.id)}
+          onChange={(projectIds) =>
+            void requestWithToast(() => actions.writeProjects(state, entry.id, projectIds))
+          }
         />
-      )}
-    </SettingsBlock>
+      </SettingRow>
+      {needsTeamLink(entry) && <TeamLinkRow state={state} entry={entry} actions={actions} />}
+      {team && <TeamRequests team={team} actions={actions} />}
+      {team && <TeamPeople team={team} snapshot={snapshot} onDialog={onDialog} />}
+    </SettingsCard>
   );
 }
 
@@ -280,14 +423,12 @@ function TeamsDialogs({
   onDialog: (next: TeamsDialog) => void;
 }) {
   const { value, control } = dialog;
-  const projects = listProjectChoices(state);
   switch (value?.kind) {
     case 'create':
       return (
-        <TeamDialog
+        <NewTeamDialog
           control={control}
-          mode='create'
-          projects={projects}
+          projects={listProjectChoices(state)}
           onSubmit={async (draft) => {
             const name = draft.name.trim();
             return { name, ...(await actions.create(state, name, draft.projectIds)) };
@@ -298,31 +439,6 @@ function TeamsDialogs({
           }}
         />
       );
-    case 'join':
-      return (
-        <TeamDialog
-          control={control}
-          mode='join'
-          projects={projects}
-          onSubmit={async (draft) => {
-            const joined = await actions.join(state, draft.url.trim(), draft.projectIds);
-            confirmDone(describeJoinOutcome(joined.status));
-          }}
-        />
-      );
-    case 'projects':
-      return (
-        <TeamDialog
-          control={control}
-          mode='projects'
-          projects={projects}
-          initialProjectIds={listTeamProjectIds(state, value.entry.id)}
-          onSubmit={async (draft) => {
-            await actions.writeProjects(state, value.entry.id, draft.projectIds);
-            confirmDone('Shared projects saved.');
-          }}
-        />
-      );
     case 'link':
       return (
         <TeamLinkDialog
@@ -330,6 +446,16 @@ function TeamsDialogs({
           teamId={value.teamId}
           name={value.name}
           initialUrl={value.url}
+          actions={actions}
+        />
+      );
+    case 'grant':
+      return (
+        <GrantDialog
+          control={control}
+          team={value.team}
+          user={value.user}
+          machine={value.machine}
           actions={actions}
         />
       );
@@ -349,15 +475,15 @@ function TeamsDialogs({
           }
         />
       );
-    case 'remove':
+    case 'delete':
       return (
         <ConfirmDialog
           control={control}
-          title={`Remove ${value.entry.name}?`}
-          body='The team is removed for every member, and every view of its tasks closes. This cannot be undone.'
-          action='Remove team'
+          title={`Delete ${value.entry.name}?`}
+          body='The team is deleted for every member, and every view of its tasks closes. This cannot be undone.'
+          action='Delete team'
           onConfirm={() =>
-            void requestWithToast(() => actions.remove(value.entry.id), `${value.entry.name} is removed.`)
+            void requestWithToast(() => actions.remove(value.entry.id), `${value.entry.name} is deleted.`)
           }
         />
       );
@@ -396,48 +522,53 @@ export function TeamsGroup({
 }) {
   const dialog = useDialogState<TeamsDialog>();
   const usable = canUseTeams(snapshot);
+  const projects = listProjectChoices(state);
+  const notice = (() => {
+    if (!snapshot) return failure ?? 'Reading teams…';
+    if (!usable) return describeTeamsUnavailable(snapshot);
+    if (snapshot.teams.length === 0)
+      return 'You are in no team yet. Make one, or open a teammate’s join link and sign in to ask to join.';
+    return null;
+  })();
   return (
-    <SettingsGroup
+    <SettingsSection
       title={TEAMS_SECTION}
       description={TEAMS_DESCRIPTION}
       action={
         usable ? (
-          <div className='flex items-center gap-1.5'>
-            <Button variant='secondary' size='sm' onClick={() => dialog.show({ kind: 'join' })}>
-              Join a team
-            </Button>
-            <Button
-              variant='secondary'
-              size='sm'
-              icon='IconPlusSmall'
-              onClick={() => dialog.show({ kind: 'create' })}
-            >
-              New team
-            </Button>
-          </div>
+          <Button
+            variant='secondary'
+            size='sm'
+            icon='IconPlusSmall'
+            onClick={() => dialog.show({ kind: 'create' })}
+          >
+            New team
+          </Button>
         ) : undefined
       }
     >
-      {!snapshot && <SettingsEmpty>{failure ?? 'Reading teams…'}</SettingsEmpty>}
-      {snapshot && !usable && <SettingsEmpty>{describeTeamsUnavailable(snapshot)}</SettingsEmpty>}
-      {usable && snapshot.teams.length === 0 && (
-        <SettingsEmpty>
-          This machine is in no team. Make one, or join one with the link a teammate sent you.
-        </SettingsEmpty>
+      {notice !== null ? (
+        <SettingsCard>
+          <SettingsEmpty>{notice}</SettingsEmpty>
+        </SettingsCard>
+      ) : (
+        <div className='flex flex-col gap-2'>
+          {usable &&
+            snapshot.teams.map((entry) => (
+              <TeamCard
+                key={entry.id}
+                state={state}
+                snapshot={snapshot}
+                entry={entry}
+                projects={projects}
+                actions={actions}
+                onDialog={dialog.show}
+              />
+            ))}
+        </div>
       )}
-      {usable &&
-        snapshot.teams.map((entry) => (
-          <TeamBlock
-            key={entry.id}
-            state={state}
-            entry={entry}
-            viewer={snapshot.owner}
-            actions={actions}
-            onDialog={dialog.show}
-          />
-        ))}
       <TeamsDialogs dialog={dialog} state={state} actions={actions} onDialog={dialog.show} />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
 

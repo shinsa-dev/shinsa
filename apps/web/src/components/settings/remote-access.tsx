@@ -60,13 +60,13 @@ function QrCode({ text }: { text: string }) {
   return <img src={image} alt='QR code for the link' className='size-48 rounded-md' />;
 }
 
-function LinkView({ link }: { link: RemoteLink }) {
+export function LinkView({ url }: { url: string }) {
   return (
     <div className='flex w-full flex-col items-center gap-3'>
-      <QrCode text={link.url} />
+      <QrCode text={url} />
       <div className='flex w-full min-w-0 items-center gap-1.5'>
-        <Truncate className='min-w-0 flex-1 font-mono text-2xs text-fg-2'>{link.url}</Truncate>
-        <CopyButton text={link.url} />
+        <Truncate className='min-w-0 flex-1 font-mono text-2xs text-fg-2'>{url}</Truncate>
+        <CopyButton text={url} />
       </div>
     </div>
   );
@@ -98,7 +98,7 @@ function LinkDialog({
           <DialogTitle>{LINK_COPY.title}</DialogTitle>
           <DialogDescription>{link ? LINK_COPY.share : LINK_COPY.intro}</DialogDescription>
         </DialogHeader>
-        {link && <LinkView link={link} />}
+        {link && <LinkView url={link.url} />}
         <DialogFooter>
           {link ? (
             <>

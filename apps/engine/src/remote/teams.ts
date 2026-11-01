@@ -328,13 +328,14 @@ export class Teams implements TeamLinks {
     };
   }
 
-  #resolveLive(subject: TeamSubject): Promise<LiveShare> {
+  async #resolveLive(subject: TeamSubject): Promise<LiveShare> {
     if (subject.view.kind === 'task') return this.#shares.resolveLive(subject.view.taskId);
     const tasks = listTeamTasks(this.#engine.state, subject.teamId, {
       owner: this.#store.file.owner,
       machine: this.#remote.snapshot().machineName,
     });
-    return Promise.resolve({ view: { tasks, updatedAt: this.#now() }, files: [] });
+    const { publicKey } = await this.#store.resolveMachineKey();
+    return { view: { tasks, machineKey: publicKey, updatedAt: this.#now() }, files: [] };
   }
 
   #syncChannels() {

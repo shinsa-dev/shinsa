@@ -522,6 +522,16 @@ export function createStore(db: Database) {
       return row !== null;
     },
 
+    async sharesTeam(userId: string, otherId: string) {
+      const row = await db
+        .prepare(
+          'SELECT 1 AS found FROM teams WHERE (user_id = ? OR id IN (SELECT team_id FROM team_members WHERE user_id = ?)) AND (user_id = ? OR id IN (SELECT team_id FROM team_members WHERE user_id = ?)) LIMIT 1'
+        )
+        .bind(userId, userId, otherId, otherId)
+        .first<{ found: number }>();
+      return row !== null;
+    },
+
     async countTeamMembers(teamId: string) {
       const row = await db
         .prepare('SELECT COUNT(*) AS total FROM team_members WHERE team_id = ?')

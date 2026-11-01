@@ -481,6 +481,12 @@ describe('the tunnel entry point', () => {
     expect(remote.snapshot().teams[0]?.team?.members.map((member) => member.user.id)).toEqual([BOB.id]);
     expect((await local('/api/remote/teams/leave', { teamId: 'team1' })).status).toBe(400);
     expect((await local('/api/remote/teams/members/remove', { teamId: 'team1' })).status).toBe(400);
+    expect(
+      await readError(await local('/api/remote/members/grant', { teamId: 'team1', userId: 'nobody' }))
+    ).toBe('teammate_not_found');
+    expect(await readError(await local('/api/remote/members/grant', { teamId: 'team1' }))).toBe(
+      'userId_invalid'
+    );
     await local('/api/remote/teams/remove', { teamId: 'team1' });
     expect(remote.snapshot().teams).toEqual([]);
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>

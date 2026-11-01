@@ -2,19 +2,19 @@ import { describe, expect, it } from 'bun:test';
 import {
   canUseTeams,
   createTeamDraft,
-  describeJoinOutcome,
   describeTeamEntry,
-  describeTeamProjects,
   describeTeamsUnavailable,
+  hasMachineAccess,
   listProjectChoices,
   listTeamProjectCommands,
   needsTeamLink,
-  toggleDraftProject,
+  resolveProjectPick,
   validateTeamDraft,
+  validateTeamLink,
 } from '@/lib/teams/settings.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
-import { createTeam, createTeamEntry, KAI, TEAM_URL } from '../../support/teams.ts';
+import { BOB, createTeam, createTeamEntry, KAI, MONA, TEAM_URL } from '../../support/teams.ts';
 
 const NOW = Date.now();
 
@@ -56,10 +56,15 @@ describe('Settings → Teams', () => {
     expect(needsTeamLink(createTeamEntry({ team: null, onMachine: false }))).toBe(false);
   });
 
-  it('lists the projects to choose by name and says which a team sees', () => {
-    expect(listProjectChoices(STATE).map((project) => project.name)).toEqual(['Api', 'Docs', 'Web']);
-    expect(describeTeamProjects(STATE, 'team1')).toBe('You share Api, Web.');
-    expect(describeTeamProjects(STATE, 'team3')).toBe('You share no project with it.');
+  it('lists the projects to choose by name, and names the ones picked in the dropdown', () => {
+    const projects = listProjectChoices(STATE);
+    expect(projects.map((project) => project.name)).toEqual(['Api', 'Docs', 'Web']);
+    expect(resolveProjectPick(projects, [])).toEqual({ dots: [], label: 'No projects' });
+    expect(resolveProjectPick(projects, ['web']).label).toBe('Web');
+    expect(resolveProjectPick(projects, ['web', 'api']).label).toBe('Api, Web');
+    const three = resolveProjectPick(projects, ['web', 'api', 'docs']);
+    expect(three.label).toBe('Api and 2 more');
+    expect(three.dots.map((project) => project.id)).toEqual(['api', 'docs', 'web']);
   });
 
   it('turns the projects you chose into the commands that add and remove them', () => {
@@ -70,27 +75,21 @@ describe('Settings → Teams', () => {
     expect(listTeamProjectCommands(STATE, 'team1', ['web', 'api'])).toEqual([]);
   });
 
-  it('checks a new team’s name and a pasted link before sending them', () => {
-    const draft = createTeamDraft(['web']);
-    expect(draft).toEqual({ name: '', url: '', projectIds: ['web'] });
-    expect(validateTeamDraft('create', draft)).toBe('Give the team a name.');
-    expect(validateTeamDraft('create', { ...draft, name: 'x'.repeat(61) })).toBe(
-      'Keep the name to 60 characters.'
-    );
-    expect(validateTeamDraft('create', { ...draft, name: 'Platform' })).toBeNull();
-    expect(validateTeamDraft('join', { ...draft, url: 'https://example.com' })).toContain('not a team link');
-    expect(validateTeamDraft('join', { ...draft, url: TEAM_URL })).toBeNull();
-    expect(validateTeamDraft('projects', draft)).toBeNull();
+  it('checks a new team’s name, and that a pasted link is this team’s', () => {
+    const draft = createTeamDraft();
+    expect(draft).toEqual({ name: '', projectIds: [] });
+    expect(validateTeamDraft(draft)).toBe('Give the team a name.');
+    expect(validateTeamDraft({ ...draft, name: 'x'.repeat(61) })).toBe('Keep the name to 60 characters.');
+    expect(validateTeamDraft({ ...draft, name: 'Platform' })).toBeNull();
+    expect(validateTeamLink('team1', 'https://example.com')).toContain('not a team link');
+    expect(validateTeamLink('team2', TEAM_URL)).toBe('That link is for another team.');
+    expect(validateTeamLink('team1', ` ${TEAM_URL} `)).toBeNull();
   });
 
-  it('ticks and unticks a project in the draft', () => {
-    const draft = createTeamDraft(['web']);
-    expect(toggleDraftProject(draft, 'api', true).projectIds).toEqual(['web', 'api']);
-    expect(toggleDraftProject(draft, 'web', false).projectIds).toEqual([]);
-  });
-
-  it('says what joining did', () => {
-    expect(describeJoinOutcome('member')).toBe('You are in the team.');
-    expect(describeJoinOutcome('requested')).toBe('Request sent.');
+  it('says who in a team can reach this machine', () => {
+    const snapshot = createRemoteSnapshot({ access: { owner: MONA, members: [{ user: KAI, addedAt: 3 }] } });
+    expect(hasMachineAccess(snapshot, KAI.id)).toBe(true);
+    expect(hasMachineAccess(snapshot, BOB.id)).toBe(false);
+    expect(hasMachineAccess(createRemoteSnapshot(), KAI.id)).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import type { RemoteSnapshot } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { TeamsGroup } from '@/components/settings/teams.tsx';
 import type { TeamActions } from '@/lib/connection/teams.ts';
 import { spyOnToasts } from '../../support/commands.ts';
@@ -16,6 +16,8 @@ const STATE = createShinsaState({
   ],
 });
 
+const ACCESS = { owner: MONA, members: [] };
+
 function createActions() {
   const snapshot = () => Promise.resolve(createRemoteSnapshot());
   return {
@@ -23,19 +25,19 @@ function createActions() {
       Promise.resolve({ teamId: 'team9', url: TEAM_URL })
     ),
     join: mock((_state: unknown, _url: string, _projects: readonly string[]) =>
-      Promise.resolve({ status: 'requested' as const, teamId: 'team1' })
+      Promise.resolve({ status: 'member' as const, teamId: 'team1' })
     ),
     writeProjects: mock((_state: unknown, _teamId: string, _projects: readonly string[]) =>
       Promise.resolve()
     ),
     readLink: mock((_teamId: string) => Promise.resolve({ url: TEAM_URL })),
-    renewLink: mock((_teamId: string) => Promise.resolve({ url: `${TEAM_URL}-new` })),
     removeLink: mock((_teamId: string) => snapshot()),
     acceptRequest: mock((_teamId: string, _userId: string) => snapshot()),
     declineRequest: mock((_teamId: string, _userId: string) => snapshot()),
     removeMember: mock((_teamId: string, _userId: string) => snapshot()),
     leave: mock((_teamId: string) => snapshot()),
     remove: mock((_teamId: string) => snapshot()),
+    grantAccess: mock((_teamId: string, _userId: string) => snapshot()),
   } satisfies TeamActions;
 }
 
@@ -45,6 +47,20 @@ afterEach(() => {
   toasts.success.mockClear();
   toasts.error.mockClear();
 });
+
+async function settle() {
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+}
+
+async function toggleProject(label: string, option: string) {
+  fireEvent.click(screen.getByRole('combobox', { name: label }));
+  await settle();
+  const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+  const item = within(list).getByRole('option', { name: option });
+  fireEvent.pointerDown(item, { pointerType: 'mouse' });
+  fireEvent.click(item);
+  await settle();
+}
 
 function renderTeams(snapshot: RemoteSnapshot | null, failure: string | null = null) {
   const actions = createActions();
@@ -56,62 +72,53 @@ function renderTeams(snapshot: RemoteSnapshot | null, failure: string | null = n
   return actions;
 }
 
+function renderOwnedTeam(overrides: Partial<RemoteSnapshot> = {}) {
+  return renderTeams(createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry()], ...overrides }));
+}
+
 describe('Settings → Teams', () => {
   it('waits for remote access, and needs it turned on', () => {
     renderTeams(null);
     expect(screen.getByText('Reading teams…')).toBeTruthy();
   });
 
-  it('asks for remote access before anything else', () => {
+  it('asks for remote access before anything else, and has no Join a team', () => {
     renderTeams(createRemoteSnapshot({ paired: false }));
     expect(screen.getByText(/Turn it on above first/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'New team' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Join a team' })).toBeNull();
   });
 
-  it('makes a team with the projects you tick, then shows the link that asks to join it', async () => {
+  it('makes a team with the projects you pick, then shows its join link with a QR code', async () => {
     const actions = renderTeams(createRemoteSnapshot());
-    expect(screen.getByText(/This machine is in no team/)).toBeTruthy();
+    expect(screen.getByText(/You are in no team yet/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'New team' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Make team' }));
     expect(await within(dialog).findByText('Give the team a name.')).toBeTruthy();
     fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: ' Platform ' } });
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Api' }));
+    await toggleProject('Shared projects', 'Api');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Make team' }));
     await waitFor(() => expect(actions.create).toHaveBeenCalledWith(STATE, 'Platform', ['api']));
-    expect(await screen.findByText('Link to join Platform')).toBeTruthy();
+    expect(await screen.findByText('Join link for Platform')).toBeTruthy();
     expect(screen.getByText(TEAM_URL)).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'QR code for the link' })).toBeTruthy();
     expect(toasts.success).toHaveBeenCalledWith('Platform is made.');
   });
 
-  it('joins with a pasted link and the projects you tick, refusing a link that is not one', async () => {
+  it('keeps the new team dialog open with the refusal when making it fails', async () => {
     const actions = renderTeams(createRemoteSnapshot());
-    fireEvent.click(screen.getByRole('button', { name: 'Join a team' }));
+    actions.create.mockImplementation(() => Promise.reject(new Error('You own 10 teams already.')));
+    fireEvent.click(screen.getByRole('button', { name: 'New team' }));
     const dialog = await screen.findByRole('dialog');
-    fireEvent.change(within(dialog).getByLabelText('Team link'), { target: { value: 'https://x.dev' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Ask to join' }));
-    expect(await within(dialog).findByText(/not a team link/)).toBeTruthy();
-    fireEvent.change(within(dialog).getByLabelText('Team link'), { target: { value: TEAM_URL } });
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Web' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Ask to join' }));
-    await waitFor(() => expect(actions.join).toHaveBeenCalledWith(STATE, TEAM_URL, ['web']));
-    expect(toasts.success).toHaveBeenCalledWith('Request sent.');
-  });
-
-  it('keeps the dialog open with the refusal when joining fails', async () => {
-    const actions = renderTeams(createRemoteSnapshot());
-    actions.join.mockImplementation(() => Promise.reject(new Error('This team link was turned off.')));
-    fireEvent.click(screen.getByRole('button', { name: 'Join a team' }));
-    const dialog = await screen.findByRole('dialog');
-    fireEvent.change(within(dialog).getByLabelText('Team link'), { target: { value: TEAM_URL } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Ask to join' }));
-    expect(await within(dialog).findByText('This team link was turned off.')).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Platform' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make team' }));
+    expect(await within(dialog).findByText('You own 10 teams already.')).toBeTruthy();
   });
 
   it('shows the owner who asks to join and who is in the team, and answers each', async () => {
-    const actions = renderTeams(createRemoteSnapshot({ teams: [createTeamEntry()] }));
+    const actions = renderOwnedTeam();
     expect(screen.getByText('Platform')).toBeTruthy();
-    expect(screen.getByText('You share Web.')).toBeTruthy();
     expect(screen.getByText('Asking to join')).toBeTruthy();
     expect(screen.getByText('@bob')).toBeTruthy();
     expect(screen.getByText('Kai Lane')).toBeTruthy();
@@ -124,56 +131,87 @@ describe('Settings → Teams', () => {
     await waitFor(() => expect(actions.removeMember).toHaveBeenCalledWith('team1', KAI.id));
   });
 
-  it('changes which projects a team sees, starting from those it sees now', async () => {
-    const actions = renderTeams(createRemoteSnapshot({ teams: [createTeamEntry()] }));
-    fireEvent.click(screen.getByRole('button', { name: 'Choose projects' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(
-      (within(dialog).getByRole('checkbox', { name: 'Web' }) as HTMLElement).getAttribute('aria-checked')
-    ).toBe('true');
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Web' }));
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Api' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(actions.writeProjects).toHaveBeenCalledWith(STATE, 'team1', ['api']));
+  it('picks the projects a team sees in the card, starting from those it sees now', async () => {
+    const actions = renderOwnedTeam();
+    const picker = screen.getByRole('combobox', { name: 'Projects shared with Platform' });
+    expect(picker.textContent).toBe('Web');
+    await toggleProject('Projects shared with Platform', 'Api');
+    await waitFor(() => expect(actions.writeProjects).toHaveBeenCalledWith(STATE, 'team1', ['web', 'api']));
   });
 
-  it('shows, renews and turns off the link of a team you own', async () => {
-    const actions = renderTeams(createRemoteSnapshot({ teams: [createTeamEntry()] }));
+  it('gives a teammate access to this machine without them asking, after saying what it means', async () => {
+    const actions = renderOwnedTeam();
+    fireEvent.click(screen.getByRole('button', { name: 'Give machine access' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Give Kai Lane access to Studio?')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Give access' }));
+    await waitFor(() => expect(actions.grantAccess).toHaveBeenCalledWith('team1', KAI.id));
+    expect(toasts.success).toHaveBeenCalledWith('Kai Lane can reach Studio now.');
+  });
+
+  it('says who can reach this machine already, with no grant offered to them', () => {
+    renderOwnedTeam({ access: { owner: MONA, members: [{ user: KAI, addedAt: 1 }] } });
+    expect(screen.getByText(/Can reach Studio/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Give machine access' })).toBeNull();
+  });
+
+  it('offers no grant while remote access is paused', () => {
+    renderOwnedTeam({ enabled: false });
+    expect(screen.queryByRole('button', { name: 'Give machine access' })).toBeNull();
+  });
+
+  it('turns off the link of a team you own', async () => {
+    const actions = renderOwnedTeam();
     fireEvent.click(screen.getByRole('button', { name: 'Join link' }));
     expect(await screen.findByText(TEAM_URL)).toBeTruthy();
     expect(actions.readLink).toHaveBeenCalledWith('team1');
-    fireEvent.click(screen.getByRole('button', { name: 'Make new link' }));
-    expect(await screen.findByText(`${TEAM_URL}-new`)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Make new link' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Turn off link' }));
     await waitFor(() => expect(actions.removeLink).toHaveBeenCalledWith('team1'));
   });
 
-  it('removes a team you own after a confirmation', async () => {
-    const actions = renderTeams(createRemoteSnapshot({ teams: [createTeamEntry()] }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove team' }));
+  it('deletes a team you own after a confirmation', async () => {
+    const actions = renderOwnedTeam();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete team' }));
     const dialog = await screen.findByRole('alertdialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove team' }));
+    expect(within(dialog).getByText('Delete Platform?')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete team' }));
     await waitFor(() => expect(actions.remove).toHaveBeenCalledWith('team1'));
   });
 
-  it('lets a member leave, hides the owner’s controls, and asks for the key on a machine without it', async () => {
+  it('lets a member leave, hides the owner’s controls and can grant the owner access', async () => {
     const team = createTeam({
       owner: KAI,
       role: 'member',
       members: [{ user: MONA, addedAt: Date.now() }],
       requests: [],
     });
-    const actions = renderTeams(
-      createRemoteSnapshot({ teams: [createTeamEntry({ team, onMachine: false })] })
-    );
-    expect(screen.getByText(/does not hold the team’s key/)).toBeTruthy();
+    const actions = renderTeams(createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team })] }));
     expect(screen.queryByRole('button', { name: 'Join link' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete team' })).toBeNull();
     expect(screen.queryByText('Asking to join')).toBeNull();
     expect(screen.getByText('You')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Give machine access' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Leave team' }));
     await waitFor(() => expect(actions.leave).toHaveBeenCalledWith('team1'));
+  });
+
+  it('asks for the team’s link right in the card on a machine without its key, and checks it', async () => {
+    const actions = renderTeams(
+      createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ onMachine: false })] })
+    );
+    expect(screen.getByText(/This machine has no key for the team yet/)).toBeTruthy();
+    const input = screen.getByLabelText('Team link');
+    fireEvent.change(input, { target: { value: 'https://x.dev' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
+    expect(await screen.findByText(/not a team link/)).toBeTruthy();
+    fireEvent.change(input, { target: { value: TEAM_URL } });
+    expect(screen.queryByText(/not a team link/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
+    await waitFor(() => expect(actions.join).toHaveBeenCalledWith(STATE, TEAM_URL, []));
+    expect(toasts.success).toHaveBeenCalledWith('Platform’s tasks show here now.');
   });
 
   it('withdraws a request the owner has not answered', async () => {

@@ -2366,6 +2366,21 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
 | `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
 
+#### shinsa teams grant
+
+Give a teammate full remote access to this machine. Their browsers that hold the team’s key are added without asking.
+
+```
+shinsa teams grant <team> --login <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
 #### shinsa teams leave
 
 Leave a team. Your projects stop showing their tasks to it.
@@ -2382,7 +2397,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa teams remove
 
-Remove a team you own, for every member.
+Delete a team you own, for every member.
 
 ```
 shinsa teams remove <team> [--json]

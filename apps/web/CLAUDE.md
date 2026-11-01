@@ -148,12 +148,13 @@ src/
     │                    lib/connection/read-only.ts (enterReadOnly: while held, sendCommand and every POST refuse);
     │                    components/task/share-dialog.tsx is Share task and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows
-    ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the join and create
-    │                    dialog's draft, which projects a team sees), join.ts (the join page's fragment and the
+    ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
+    │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
+    │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the
     │                    browser's team keys in IndexedDB), channel.ts (a team channel from the browser with its own
     │                    key, and the engine relay of one task), feeds.ts (teammates' tasks for the focused team,
     │                    merged from the machines and the browser, without machines the dashboard reaches);
-    │                    components/teams/ (the join dialog, the team rows on All tasks and Home),
+    │                    components/teams/ (the new team dialog, the shared projects dropdown, the team rows on All tasks and Home),
     │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's

@@ -74,7 +74,7 @@ export function createSampleTeams(now: number) {
     machineKey: 'machine-key',
     pairing: null,
     devices: [],
-    access: null,
+    access: { owner: MONA, members: [{ user: LEE, addedAt: now - 48 * HOUR_MS }] },
     link: null,
     requests: [],
     teams: [],
@@ -124,13 +124,13 @@ export function createSampleTeamActions(): TeamActions {
     join: refuse,
     writeProjects: refuse,
     readLink: () => Promise.resolve({ url: SAMPLE_TEAM_URL }),
-    renewLink: refuse,
     removeLink: refuse,
     acceptRequest: refuse,
     declineRequest: refuse,
     removeMember: refuse,
     leave: refuse,
     remove: refuse,
+    grantAccess: refuse,
   };
 }
 

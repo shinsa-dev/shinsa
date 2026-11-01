@@ -262,6 +262,7 @@ export class Remote {
       requests: [],
       teams: [],
       teamKeys: [],
+      grants: [],
     }));
     this.#settleWaiters(false);
     this.#publish();
@@ -311,8 +312,10 @@ export class Remote {
     name: string | null,
     userId: string
   ): Promise<AccessAnswer> {
-    if (!(await this.#matchesLink(proof, keys)))
+    if (!(await this.#matchesLink(proof, keys))) {
+      if (await this.#admitTeammate(proof, keys, name, userId)) return { kind: 'admitted' };
       return { kind: 'refused', reason: 'This link was turned off. Ask for a new one.' };
+    }
     const user = await this.#resolveRequester(userId);
     if (typeof user === 'string') return { kind: 'refused', reason: user };
     const earlier = this.store.file.requests.find((entry) => entry.publicKey === keys.device);
@@ -331,6 +334,43 @@ export class Remote {
     }));
     this.#publish();
     return this.#awaitDecision(request.id);
+  }
+
+  async #admitTeammate(proof: string, keys: ProofKeys, name: string | null, userId: string) {
+    const grant = this.store.selectGrant(userId);
+    if (!(grant && this.store.file.access?.members.some((member) => member.user.id === userId))) return false;
+    const team = this.store.selectTeam(grant.teamId);
+    const stored = this.store.selectTeamKey(grant.teamId);
+    const inTeam = team?.owner.id === userId || team?.members.some((member) => member.user.id === userId);
+    if (!(inTeam && stored && (await verifyEnrollProof(stored.key, proof, keys)))) return false;
+    this.store.upsertDevice({
+      publicKey: keys.device,
+      name: name ?? 'Browser',
+      enrolledAt: this.#now(),
+      lastSeenAt: null,
+      userId,
+    });
+    this.#publish();
+    return true;
+  }
+
+  async grantTeammate(userId: string, teamId: string) {
+    const credentials = this.#assertPaired();
+    const access = this.store.file.access;
+    const team = this.store.selectTeam(teamId);
+    if (!(team && this.store.selectTeamKey(teamId)))
+      throw new DomainError('team_not_found', 'This machine is not in that team.');
+    const teammate = [team.owner, ...team.members.map((member) => member.user)].find(
+      (user) => user.id === userId
+    );
+    if (!(access && teammate) || access.owner.id === userId)
+      throw new DomainError('teammate_not_found', 'No one else in that team has that GitHub account.');
+    if (!access.members.some((member) => member.user.id === userId)) {
+      const member = await this.#requestMemberAddition(credentials.machineToken, userId);
+      this.#recordAccess({ ...access, members: [...access.members, member] });
+    }
+    this.store.writeGrant({ userId, teamId });
+    this.#publish();
   }
 
   #resumeAccess(device: string, userId: string): AccessAnswer | null {
@@ -424,6 +464,7 @@ export class Remote {
     if (changed) this.store.update((file) => ({ ...file, access }));
     const allowed = new Set([access.owner.id, ...access.members.map((member) => member.user.id)]);
     const removed = new Set(this.store.removeDevicesOutside(allowed));
+    this.store.removeGrantsOutside(allowed);
     this.#closeChannels((channel) => channel.device !== null && removed.has(channel.device));
     if (changed || removed.size > 0) this.#publish();
   }
@@ -469,6 +510,7 @@ export class Remote {
       access: null,
       teams: [],
       teamKeys: [],
+      grants: [],
     }));
     this.#closeChannels(isAnyChannel);
     this.#publish();

@@ -1,12 +1,14 @@
 import { describeList } from '@shinsa/core';
 import * as React from 'react';
 import { replaceConnection } from '@/lib/connection/socket.ts';
+import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import { requestWaitingAnswer } from '@/lib/remote/enroll.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import { createFleetMember, listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
 import { MACHINE_ICON, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
+import { admitTeamMachines } from '@/lib/teams/admit.ts';
 import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
 import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteSteps } from './shell.tsx';
 
@@ -98,9 +100,14 @@ export function FleetApp({
     const release: (() => void)[] = [];
     void (async () => {
       try {
-        const rows = await settleWaitingRows(
-          await listMachineRows(services.dashboard, services.devices),
-          services
+        const rows = await admitTeamMachines(
+          await settleWaitingRows(await listMachineRows(services.dashboard, services.devices), services),
+          {
+            dashboard: services.dashboard,
+            devices: services.devices,
+            selectTeamKey: services.teamKeys.selectTeamKey,
+            name: resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, null),
+          }
         );
         const added = rows.flatMap((row) =>
           row.device && !row.device.waiting ? [{ instance: row.instance, device: row.device }] : []

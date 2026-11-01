@@ -58,11 +58,9 @@ describe('team actions on this machine', () => {
     ]);
   });
 
-  it('reads and renews the link, and sends each change to its route, keeping the snapshot', async () => {
+  it('reads the link, and sends each change to its route, keeping the snapshot', async () => {
     answers['/api/remote/teams/link'] = { url: TEAM_URL };
-    answers['/api/remote/teams/link/renew'] = { url: `${TEAM_URL}2` };
     expect(await TEAM_ACTIONS.readLink('team1')).toEqual({ url: TEAM_URL });
-    expect(await TEAM_ACTIONS.renewLink('team1')).toEqual({ url: `${TEAM_URL}2` });
     const snapshot = createRemoteSnapshot({ teams: [createTeamEntry()] });
     for (const path of [
       '/link/remove',
@@ -73,21 +71,24 @@ describe('team actions on this machine', () => {
       '/remove',
     ])
       answers[`/api/remote/teams${path}`] = snapshot;
+    answers['/api/remote/members/grant'] = snapshot;
     await TEAM_ACTIONS.removeLink('team1');
     await TEAM_ACTIONS.acceptRequest('team1', '9');
     await TEAM_ACTIONS.declineRequest('team1', '9');
     await TEAM_ACTIONS.removeMember('team1', '7');
     await TEAM_ACTIONS.leave('team1');
     expect(await TEAM_ACTIONS.remove('team1')).toEqual(snapshot);
-    expect(sent.slice(2).map((entry) => [entry.path, entry.body])).toEqual([
+    expect(await TEAM_ACTIONS.grantAccess('team1', '7')).toEqual(snapshot);
+    expect(sent.slice(1).map((entry) => [entry.path, entry.body])).toEqual([
       ['/api/remote/teams/link/remove', { teamId: 'team1' }],
       ['/api/remote/teams/requests/accept', { teamId: 'team1', userId: '9' }],
       ['/api/remote/teams/requests/decline', { teamId: 'team1', userId: '9' }],
       ['/api/remote/teams/members/remove', { teamId: 'team1', userId: '7' }],
       ['/api/remote/teams/leave', { teamId: 'team1' }],
       ['/api/remote/teams/remove', { teamId: 'team1' }],
+      ['/api/remote/members/grant', { teamId: 'team1', userId: '7' }],
     ]);
-    expect(replaced).toHaveBeenCalledTimes(6);
+    expect(replaced).toHaveBeenCalledTimes(7);
     expect(replaced).toHaveBeenLastCalledWith(snapshot);
   });
 });

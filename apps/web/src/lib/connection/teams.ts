@@ -29,13 +29,17 @@ export const TEAM_ACTIONS = {
   },
   writeProjects: writeTeamProjects,
   readLink: (teamId: string) => requestJson<{ url: string }>('/api/remote/teams/link', { teamId }),
-  renewLink: (teamId: string) => requestJson<{ url: string }>('/api/remote/teams/link/renew', { teamId }),
   removeLink: (teamId: string) => act('/link/remove', { teamId }),
   acceptRequest: (teamId: string, userId: string) => act('/requests/accept', { teamId, userId }),
   declineRequest: (teamId: string, userId: string) => act('/requests/decline', { teamId, userId }),
   removeMember: (teamId: string, userId: string) => act('/members/remove', { teamId, userId }),
   leave: (teamId: string) => act('/leave', { teamId }),
   remove: (teamId: string) => act('/remove', { teamId }),
+  grantAccess: async (teamId: string, userId: string) => {
+    const snapshot = await requestJson<RemoteSnapshot>('/api/remote/members/grant', { teamId, userId });
+    connection.replaceRemote(snapshot);
+    return snapshot;
+  },
 };
 
 export type TeamActions = typeof TEAM_ACTIONS;

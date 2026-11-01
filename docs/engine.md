@@ -2820,13 +2820,26 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   one, and a member already in keeps their key.
 - **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page keeps the key in
   the browser and sends `POST /__remote/teams/join { invite }`, which records that the account asked
-  (`team_requesters`) and makes it no member. Pasting the same link in Settings → Teams → Join a team, or
-  `shinsa teams join <url>`, stores the key on that machine too (each of your machines needs it once) and asks the
-  same way. The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
+  (`team_requesters`) and makes it no member. Once the owner accepts, the team shows in Settings → Teams on each of
+  your machines; one without the key asks for the link right in the team's card (or `shinsa teams join <url>`), which
+  stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
   `requests/decline`; `shinsa teams accept|decline <team> --login`). A member may leave (`leave`, which also takes
   your projects out of the team) and the owner may remove a member (`members/remove`) or the team (`remove`); either
-  way the next heartbeat drops it from every machine and their open views close (below). Joining and making a team
-  ask which of your projects to share.
+  way the next heartbeat drops it from every machine and their open views close (below). Making a team asks which of
+  your projects to share, and each team's card picks them after.
+- **Giving a teammate this machine.** A teammate is a step from full remote access: Give machine access beside them
+  in Settings → Teams (`shinsa teams grant <team> --login`, `POST /api/remote/members/grant { teamId, userId }`,
+  `Remote.grantTeammate`) makes them a member of this machine at once, with no invite and no request
+  (`/__remote/machine/members/add`, which app.shinsa.dev allows for an account that shares a team with the machine's
+  owner, `sharesTeam`), and records the grant in `remote.json` (`grants: { userId, teamId }`). Their browser then adds
+  itself: the hosted dashboard, finding a machine shared with them that this browser has no key for
+  (`admitTeamMachines`, `lib/teams/admit.ts`), reads the machine's public key from that team's channel
+  (`TeamListView.machineKey`, sealed with the team key, so app.shinsa.dev cannot swap it), checks it against the
+  fingerprint app.shinsa.dev lists, and opens the sealed channel with an enroll proof made with the team key in place
+  of an invite secret. The machine admits the device without asking (`AccessAnswer` `admitted`) only while the
+  account is a member here, holds a grant, is still in that team and the proof checks against the team's key; any
+  other proof falls back to the invite link. Removing the member under Remote access, or their leaving the
+  machine's members, drops the grant and their devices.
 - **Which projects a team sees is yours alone.** `Project.teamIds` lists the teams a project is in, written by
   `project.add_to_team` and `project.remove_from_team` (`decide/teams.ts`; the project's team picker in Settings →
   Teams, `shinsa projects add-to-team|remove-from-team`). Both are human-only: their surface specs are `humanOnly`
@@ -2849,7 +2862,8 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   read a task. The share channel's code serves both (`ShareChannel`, with a host that authorizes the hello).
 - **What a teammate sees.** The list view is `TeamListView`: every open task of the team's projects and the 50 most
   recently finished (`TEAM_SETTLED_LIMIT`), each a `TeamTask` (`listTeamTasks`): `resolveSharedListing`, the task,
-  its gates and its project as a share link copies them, with the owner's GitHub login and the machine's name. A task
+  its gates and its project as a share link copies them, with the owner's GitHub login and the machine's name, and
+  the machine's public key (`machineKey`, for a teammate given this machine). A task
   view is exactly a share link's `ShareLiveView` and files (`Shares.resolveLive`): the table in Sharing a task is
   what a teammate can and cannot see, the same for every repository. In short, a teammate sees the title, status,
   request text, plan, phase reports, review report, findings, checks, branches, the pull request and its diff and
@@ -2896,11 +2910,14 @@ online. Teams need remote access on (`Remote` paired and enabled), since that is
   merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`), keeping the freshest
   copy of each task.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
-  change to it is refused from off the machine like the rest of remote access): each team with its owner, members and
-  machines, which of your projects it sees, Copy link, Turn link off and New link for the owner, requests with Accept
-  and Decline, Remove for a member, and Leave or Remove team; New team and Join a team open one dialog
-  (`components/teams/join-dialog.tsx`) that asks the name or the link and which projects to share. The local routes
-  are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`,
+  change to it is refused from off the machine like the rest of remote access): one card per team with its name and
+  your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
+  New task's), the link field when this machine has no key, requests with Accept and Decline, and People, each
+  teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
+  which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
+  member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
+  local routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`
+  and `POST /api/remote/members/grant`,
   and the remote snapshot carries the teams (`RemoteSnapshot.teams`, `listTeamEntries`), so every change reaches every
   page at once.
 - **Agents read it, never change it.** `shinsa teams list` (`teams_list`) is every agent's tool; every other `teams`

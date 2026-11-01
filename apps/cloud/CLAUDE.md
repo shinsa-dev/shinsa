@@ -93,9 +93,10 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   that this account asked (`instance_requesters`), makes it no member, and answers the machine's id, name and owner,
   the account's user and a connect token for that account alone, so the browser can ask the machine over the sealed
   channel (an unknown or turned-off token is 404 `invite_invalid`). The machine checks who asked with `POST
-  /__remote/machine/requesters/find { userId }`, which answers the user only for an account that asked, a member or
-  the owner, and when you accept the request it sends `/__remote/machine/members/add { userId }`, which makes that
-  account a member (only one that asked; 409 `members_full` past the limit; the owner is never one) and drops its
+  /__remote/machine/requesters/find { userId }`, which answers the user only for an account that asked, a member,
+  the owner or someone who shares a team with the owner (`sharesTeam`), and when you accept the request, or give a
+  teammate the machine from Settings → Teams, it sends `/__remote/machine/members/add { userId }`, which makes that
+  account a member (only one of those; 409 `members_full` past the limit; the owner is never one) and drops its
   request row. A member sees the machine in their list with `role: 'member'` and its `owner`, gets connect tokens for
   it and can `POST /__remote/instances/<id>/leave`; only the owner removes it (403 `not_owner`), and the owner cannot
   leave (409). The machine removes a member with `POST /__remote/machine/members/remove { userId }`. Shared machines

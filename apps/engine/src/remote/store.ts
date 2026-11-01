@@ -36,6 +36,12 @@ export interface RemoteFile {
   requests: AccessRequest[];
   teams: RemoteTeam[];
   teamKeys: StoredTeamKey[];
+  grants: TeamGrant[];
+}
+
+export interface TeamGrant {
+  userId: string;
+  teamId: string;
 }
 
 export interface StoredTeamKey {
@@ -186,6 +192,14 @@ function readTeamKeys(value: unknown): StoredTeamKey[] {
   });
 }
 
+function readGrants(value: unknown): TeamGrant[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!(isFields(entry) && typeof entry.userId === 'string' && typeof entry.teamId === 'string')) return [];
+    return [{ userId: entry.userId, teamId: entry.teamId }];
+  });
+}
+
 export function listTeamEntries(file: RemoteFile): RemoteTeamEntry[] {
   const keys = new Map(file.teamKeys.map((stored) => [stored.teamId, stored]));
   const known = file.teams.map((team) => ({
@@ -228,6 +242,7 @@ function createRemoteFile(): RemoteFile {
     requests: [],
     teams: [],
     teamKeys: [],
+    grants: [],
   };
 }
 
@@ -254,6 +269,7 @@ export function readRemoteFile(path: string): RemoteFile {
     requests: readRequests(fields.requests),
     teams: readTeams(fields.teams) ?? [],
     teamKeys: readTeamKeys(fields.teamKeys),
+    grants: readGrants(fields.grants),
   };
 }
 
@@ -355,6 +371,22 @@ export class RemoteStore {
       ...file,
       teamKeys: [...file.teamKeys.filter((entry) => entry.teamId !== stored.teamId), stored],
     }));
+  }
+
+  writeGrant(grant: TeamGrant) {
+    this.update((file) => ({
+      ...file,
+      grants: [...file.grants.filter((entry) => entry.userId !== grant.userId), grant],
+    }));
+  }
+
+  selectGrant(userId: string) {
+    return this.#file.grants.find((grant) => grant.userId === userId) ?? null;
+  }
+
+  removeGrantsOutside(userIds: ReadonlySet<string>) {
+    if (this.#file.grants.every((grant) => userIds.has(grant.userId))) return;
+    this.update((file) => ({ ...file, grants: file.grants.filter((grant) => userIds.has(grant.userId)) }));
   }
 
   removeTeam(teamId: string) {

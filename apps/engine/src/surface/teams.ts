@@ -55,18 +55,16 @@ export async function findTeamId(client: SurfaceClient, ref: string) {
   throw new DomainError('team_not_found', `${problem}. See them with \`shinsa teams list\`.`);
 }
 
-async function findUserId(
-  client: SurfaceClient,
-  teamId: string,
-  login: string,
-  among: 'members' | 'requests'
-) {
+type Among = 'members' | 'requests' | 'teammates';
+
+async function findUserId(client: SurfaceClient, teamId: string, login: string, among: Among) {
   const snapshot = await client.read<RemoteSnapshot>('/api/remote');
   const team = snapshot.teams.find((entry) => entry.id === teamId)?.team;
   const wanted = login.replace(/^@/, '').toLowerCase();
-  const found = team?.[among].find((entry) => entry.user.login.toLowerCase() === wanted);
+  const listed = team && (among === 'teammates' ? [{ user: team.owner }, ...team.members] : team[among]);
+  const found = listed?.find((entry) => entry.user.login.toLowerCase() === wanted);
   if (!found) {
-    const where = among === 'members' ? 'is not in this team' : 'has not asked to join this team';
+    const where = among === 'requests' ? 'has not asked to join this team' : 'is not in this team';
     throw new DomainError(
       'member_not_found',
       `@${wanted} ${where}. See the team with \`shinsa teams list\`.`
@@ -93,7 +91,7 @@ function defineMemberAction(
   path: string,
   summary: string,
   route: string,
-  among: 'members' | 'requests',
+  among: Among,
   done: string
 ): SurfaceSpec {
   return defineAction({
@@ -204,6 +202,13 @@ export const TEAM_SPECS: SurfaceSpec[] = [
     'members',
     'They are no longer in the team.'
   ),
+  defineMemberAction(
+    'grant',
+    'Give a teammate full remote access to this machine. Their browsers that hold the team’s key are added without asking.',
+    '/api/remote/members/grant',
+    'teammates',
+    'They can reach this machine now. Take it back with `shinsa remote remove-member`.'
+  ),
   defineTeamAction(
     'leave',
     'Leave a team. Your projects stop showing their tasks to it.',
@@ -212,8 +217,8 @@ export const TEAM_SPECS: SurfaceSpec[] = [
   ),
   defineTeamAction(
     'remove',
-    'Remove a team you own, for every member.',
+    'Delete a team you own, for every member.',
     '/api/remote/teams/remove',
-    'The team is removed.'
+    'The team is deleted.'
   ),
 ];

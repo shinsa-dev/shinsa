@@ -288,3 +288,25 @@ describe('team connect tokens', () => {
     expect(await readCode(refused)).toBe('not_found');
   });
 });
+
+describe('machine access for a teammate', () => {
+  test('a machine adds a teammate of its owner as a member without the teammate asking first', async () => {
+    const { harness, studio } = await joinedTeam();
+    const found = await harness.post(REMOTE_PATHS.machineRequester, { userId: KAI.id }, machineAuth(studio));
+    expect(await readJson<RemoteUser>(found)).toEqual(KAI);
+    const added = await harness.post(REMOTE_PATHS.machineMemberAdd, { userId: KAI.id }, machineAuth(studio));
+    expect(await readJson<RemoteMember>(added)).toMatchObject({ user: KAI });
+  });
+
+  test('someone who only asked to join a team is no teammate, so the machine cannot add them', async () => {
+    const { harness, kai, studio, invite } = await startTeam();
+    await joinTeam(harness, kai, invite);
+    const refused = await harness.post(
+      REMOTE_PATHS.machineMemberAdd,
+      { userId: KAI.id },
+      machineAuth(studio)
+    );
+    expect(refused.status).toBe(404);
+    expect(await readCode(refused)).toBe('not_found');
+  });
+});

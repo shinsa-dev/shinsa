@@ -124,6 +124,7 @@ export interface TeamKeys {
 
 export interface TeamListView {
   tasks: TeamTask[];
+  machineKey: string;
   updatedAt: number;
 }
 

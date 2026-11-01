@@ -393,7 +393,7 @@ nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is
 a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
 cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
 (`docs/engine.md` → Sharing a task).
-Teams: Settings → Teams makes a team or joins one with its link, and you pick which of your projects it sees; every
+Teams: Settings → Teams makes a team, a teammate joins with its link, and you pick which of your projects it sees; every
 member then sees every task in them, live and read-only, next to their own, on app.shinsa.dev and in the local app,
 marked with whose it is. The focus menu reads Your work, your projects, then Teams; focusing a team shows your tasks
 in it and your teammates'. A teammate's task opens on the same read-only page a share link shows: no chat, no
@@ -1124,6 +1124,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Joining works like a machine invite.** The owner's join link sends a request; the owner accepts or declines it
   in Settings → Teams, and a member leaves or is removed there, which ends their access at once. Which projects a
   team sees is yours alone: no agent can add one.
+- **A teammate is one click from your machine.** Give machine access beside a teammate makes them a member of this
+  machine, with full control, without an invite or a request; their browser adds itself with the team's key the next
+  time they open Shinsa Cloud. You take it back under Remote access, like any member.
 - **Nothing about the work leaves your machine for the cloud.** app.shinsa.dev keeps who is in which team, never a
   task. Each view is read from the owner's machine over its tunnel and sealed with a team key that lives only on
   members' machines and browsers, carried in the join link's fragment, which no server receives. A teammate's

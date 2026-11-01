@@ -104,6 +104,12 @@ export function createRemoteRoutes(remote: Remote): ApiRoute[] {
     post('/requests/decline', (fields) => {
       remote.declineRequest(readText(fields, 'requestId', 'Name the access request to decline.'));
     }),
+    post('/members/grant', async (fields) => {
+      await remote.grantTeammate(
+        readText(fields, 'userId', 'Name the teammate by their GitHub id.'),
+        readText(fields, 'teamId', 'Name the team you share with them.')
+      );
+    }),
     post('/members/remove', async (fields) => {
       await remote.removeMember(readText(fields, 'userId', 'Name the member to remove by their GitHub id.'));
     }),

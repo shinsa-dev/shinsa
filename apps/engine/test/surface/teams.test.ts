@@ -116,6 +116,7 @@ describe('the teams commands', () => {
       '/api/remote/teams/leave': reply,
       '/api/remote/teams/remove': reply,
       '/api/remote/teams/link/remove': reply,
+      '/api/remote/members/grant': reply,
     });
     expect((await runSpec(fake, ['teams', 'accept', 'Platform', '--login', '@bob'])).text).toContain(
       'in the team now'
@@ -125,6 +126,9 @@ describe('the teams commands', () => {
     expect((await runSpec(fake, ['teams', 'leave', 'growth'])).text).toBe('You left the team.');
     await runSpec(fake, ['teams', 'remove', 'Platform']);
     await runSpec(fake, ['teams', 'link-off', 'Platform']);
+    expect((await runSpec(fake, ['teams', 'grant', 'Platform', '--login', 'kai'])).text).toContain(
+      'can reach this machine now'
+    );
     expect(fake.posts.map((post) => [post.path, post.body])).toEqual([
       ['/api/remote/teams/requests/accept', { teamId: 'team1', userId: '9' }],
       ['/api/remote/teams/requests/decline', { teamId: 'team1', userId: '9' }],
@@ -132,6 +136,7 @@ describe('the teams commands', () => {
       ['/api/remote/teams/leave', { teamId: 'team2' }],
       ['/api/remote/teams/remove', { teamId: 'team1' }],
       ['/api/remote/teams/link/remove', { teamId: 'team1' }],
+      ['/api/remote/members/grant', { teamId: 'team1', userId: '7' }],
     ]);
   });
 
