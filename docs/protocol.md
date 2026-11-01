@@ -1233,10 +1233,12 @@ or `browser` (a tab, Floaty).
 | `command { id, command }` | A `UserCommand`; answered by `ack` with the same id |
 | `state.sync` | Send the whole state again: a patch did not fit the state the page holds |
 | `transcript.subscribe { runId, from }` / `transcript.unsubscribe { runId }` | Follow a run's transcript from entry `from` (the number the page holds), or stop |
+| `task.detail { taskId }` | Send a summarized task whole and keep it whole on this socket: the page opened or hovered it |
 
 | Server → page (`ServerMessage`) | When |
 | --- | --- |
-| `state { state }` | On connect, after every other connect message, and on `state.sync`: the state as the page holds it (`WireState`, below) |
+| `state { state }` | On connect, after every other connect message, and on `state.sync`: the state as the page holds it (`WireState`, below), settled tasks as summaries |
+| `task.detail { detail }` | After `task.detail`: a `TaskDetail` (below), queued in order with patches |
 | `state.patch { patch }` | After every change: a `StatePatch` from log position `from` to `to` |
 | `ack { id, error }` | After a command, after its patch; `error` is `{ code, message }` or null |
 | `transcript { runId, entries, start }` | On subscribing (the entries from `from`, in pages of 500) and for each new entry; `start` is the position of the first one |
@@ -1292,6 +1294,23 @@ The page never gets a run's prompts. The state on the socket is a `WireState` (`
 | `changes` | The human asked for changes (`revise` on the review gate, with or without verdicts on findings) |
 | `pull_request` | The pull request needs work |
 | `conflicts` | The pull request conflicts with its base, or the branch was being updated onto its base |
+
+**Settled tasks as summaries** (`packages/core/src/protocol/summaries.ts`). `serializeViewState(state, summarized)`
+makes the state a socket gets, the tasks in `summarized` (`listSummarizedTasks`: every settled task, on connect and
+`state.sync`) as summaries; `resolveViewPatch(patch, previous, next, summarized)` rewrites the shared patch for one
+socket, returning the same patch when it touches none of them, and the view it leaves (a task that reopened or went
+away leaves it, sent whole):
+
+| Summarized | What the page gets |
+| --- | --- |
+| The task (`summarizeTask`) | A `WireTask` with `summarized: true`; `plan`, `report` and `coverage` null; `phaseReports`, `findings`, `overlaps`, `planHistory`, `iterations`, `dismissedFindings` and `reviewDisagreements` empty; `activity` only its last entry and its newest agent entry. `isSummarizedTask` tells one |
+| Its runs (`summarizeRun`) | Each without `summary` (null), `feedback`, `compactions`, `continuations`, `silence`, `cohort`, `waitingOn`, `fork` and `failure`, and only its last attempt, without `cwd` and with `handoff` null |
+| Its gates | Only the open ones, whole |
+| Its evidence | None |
+
+A `TaskDetail` (`resolveTaskDetail`) is `{ taskId, seq, task, runs, gates, evidence }`: the task whole (null when it is
+gone), its runs as `WireRun`s, its gates and evidence, and the log position it was read at. `applyTaskDetail` replaces
+the task's entries in a `WireState` with it, or answers null when `seq` is not the state's.
 
 A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolveStatePatch` makes one,
 `applyStatePatch` applies one, or answers null when its `from` is not the state's `seq`; a patch carries runs as
