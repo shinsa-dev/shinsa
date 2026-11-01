@@ -28,6 +28,7 @@ export {
   type ShinsaState,
 } from './project.ts';
 export {
+  canChangeStack,
   findTask,
   isDependencyOf,
   isHeldInBacklog,
@@ -35,6 +36,8 @@ export {
   isWaitingForCheckout,
   isWaitingOnAnswer,
   listActiveRuns,
+  listBundleAbove,
+  listBundleBelow,
   listDependents,
   listLiveRuns,
   listOpenBlockers,
@@ -42,9 +45,14 @@ export {
   listPendingDependencies,
   listProjectRepos,
   listRunningRuns,
+  resolveBundle,
+  resolveBundleRoot,
   resolveTaskProject,
   resolveTaskWorkspace,
   selectCheckoutHolder,
+  selectStackedOnThis,
+  selectStackParent,
+  selectStackRefusal,
   selectTaskByHandle,
   selectTaskByReference,
 } from './queries.ts';

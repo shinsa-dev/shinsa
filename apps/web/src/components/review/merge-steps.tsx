@@ -11,6 +11,7 @@ import {
   MERGE_STEP_ICON,
   MERGE_STEP_KIND,
   MERGE_STEP_TITLE,
+  MERGE_WAIT_KIND,
   type MergeWaitView,
   type PreMergeItem,
   resolveTickBlock,
@@ -27,9 +28,7 @@ interface MergeStepsProps {
 }
 
 function StepKind({ item }: { item: PreMergeItem }) {
-  const kind = isMergeWait(item)
-    ? { icon: 'IconHourglass' as const, label: 'Linked task' }
-    : MERGE_STEP_KIND[item.kind];
+  const kind = isMergeWait(item) ? MERGE_WAIT_KIND[item.kind] : MERGE_STEP_KIND[item.kind];
   return (
     <>
       <Icon size='sm' name={kind.icon} aria-hidden className='shrink-0 text-fg-2' />

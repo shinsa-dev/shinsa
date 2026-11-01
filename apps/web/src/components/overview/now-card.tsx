@@ -59,6 +59,7 @@ import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verd
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
 import { listMergeWaits } from '@/lib/review/merge-steps.ts';
 import { describePlanCard } from '@/lib/tasks/backlog.ts';
+import { describeBundleWait } from '@/lib/tasks/bundles.ts';
 import { resolveChecksView } from '@/lib/tasks/checks.ts';
 import {
   type GateReplier,
@@ -350,7 +351,7 @@ function ReviewCard({
           <Button variant='outline' size='sm' onClick={() => onOpen('review')}>
             Review
           </Button>
-          <ReviewActions task={task} gate={gate} />
+          <ReviewActions state={state} task={task} gate={gate} />
         </>
       }
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
@@ -401,7 +402,7 @@ function WorkCard({
           }
         />
       }
-      title={resolveNowTitle(task, listWaitsOn(state, task), current, run)}
+      title={resolveNowTitle(task, listWaitsOn(state, task), current, run, describeBundleWait(state, task))}
       action={
         run &&
         isTaskWatchable(state, task) && (

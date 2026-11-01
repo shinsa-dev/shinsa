@@ -27,6 +27,7 @@ import { resolveRepoCoverage } from '../test-coverage/setting.ts';
 import {
   describeApprovedPlan,
   describeBases,
+  describeBundle,
   describeDismissedFindings,
   describeEarlierWork,
   describeGoal,
@@ -116,7 +117,13 @@ function describeReshapeNote(task: Task) {
   ].join('\n');
 }
 
-export function resolvePlanningPrompt(task: Task, repo: Repo | null, bases: Task[], feedback: string | null) {
+export function resolvePlanningPrompt(
+  task: Task,
+  repo: Repo | null,
+  bases: Task[],
+  feedback: string | null,
+  bundle: Task[] = []
+) {
   return [
     resolveHouseRules('agent'),
     '',
@@ -127,6 +134,7 @@ export function resolvePlanningPrompt(task: Task, repo: Repo | null, bases: Task
     describeRounds(task),
     describeRepository(repo),
     describeBases(bases),
+    describeBundle(task, bundle),
     '',
     'The human asked for:',
     resolveRequest(task),
@@ -255,7 +263,13 @@ function joinLines(lines: string[]) {
     .join('\n');
 }
 
-export function describeRound(task: Task, repo: Repo | null, bases: Task[], before: number) {
+export function describeRound(
+  task: Task,
+  repo: Repo | null,
+  bases: Task[],
+  before: number,
+  bundle: Task[] = []
+) {
   return [
     joinLines([
       `Your role: the agent for this task, in one conversation across all of its rounds. You planned this round and you carry it out yourself: ${describeRoundJob(task)}`,
@@ -264,6 +278,7 @@ export function describeRound(task: Task, repo: Repo | null, bases: Task[], befo
       describeRounds(task),
       describeRepository(repo),
       describeBases(bases),
+      describeBundle(task, bundle),
     ]),
     joinLines(['The human asked for:', resolveRequest(task), resolveLaterMessages(task)]),
     joinLines([

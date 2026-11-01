@@ -1,4 +1,5 @@
 import type {
+  BundleConflict,
   CheckEvidence,
   ConfigProblem,
   DeliveringStep,
@@ -102,6 +103,7 @@ export type UserCommand =
       planFirst?: boolean;
       origin?: string | null;
       waitsOn?: string[];
+      stacksOn?: string;
       mode?: TaskMode;
       account?: RunAccount | null;
       forkOf?: string;
@@ -109,6 +111,7 @@ export type UserCommand =
     }
   | { type: 'task.prioritize'; taskId: string; priority: TaskPriority }
   | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }
+  | { type: 'task.stack_on'; taskId: string; stacksOn: string | null }
   | { type: 'task.move_to_backlog'; taskId: string }
   | { type: 'task.remove_from_backlog'; taskId: string }
   | { type: 'task.snooze'; taskId: string }
@@ -362,6 +365,7 @@ type SystemCommand =
       detail: string;
     }
   | { type: 'pull_request.record_update_conflict'; taskId: string; base: string; files: string[] }
+  | { type: 'bundle.record_check'; taskId: string; conflict: BundleConflict | null }
   | { type: 'pull_request.record_hook_failure'; taskId: string; output: string; failures: string[] | null }
   | {
       type: 'pull_request.record_closed';

@@ -53,7 +53,7 @@ function renderPage(state: ShinsaState = TASKS, path = '/tasks') {
 function groupHeaders() {
   return screen
     .queryAllByRole('button')
-    .filter((button) => button.hasAttribute('aria-expanded'))
+    .filter((button) => button.hasAttribute('aria-expanded') && button.textContent)
     .map((button) => `${button.textContent}|${button.getAttribute('aria-expanded')}`);
 }
 
@@ -80,8 +80,7 @@ describe('the task groups', () => {
       'Plan to approve1|true',
       'Needs your answer1|true',
       'Paused1|true',
-      'In progress1|true',
-      'Waiting on another task1|true',
+      'In progress2|true',
       'Done1|false',
       'Cancelled1|false',
     ]);
@@ -125,12 +124,12 @@ describe('filtering', () => {
     expect(screen.getByText('Rename the settings page')).toBeTruthy();
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Done' })));
     expect(location.search).toBe('');
-    expect(groupHeaders()).toHaveLength(9);
+    expect(groupHeaders()).toHaveLength(8);
   });
 
   it('ignores a status it does not know', () => {
     renderPage(TASKS, '/tasks?status=someday');
-    expect(groupHeaders()).toHaveLength(9);
+    expect(groupHeaders()).toHaveLength(8);
   });
 
   it.each([
@@ -186,25 +185,25 @@ function waiting(id: string, title: string, waitsOn: string[], overrides: Partia
 }
 
 function waitingRows() {
-  const header = screen.getByRole('button', { name: /^Waiting on another task/ });
+  const header = screen.getByRole('button', { name: /^In progress/ });
   const section = header.closest('section') as HTMLElement;
   return within(section)
     .queryAllByRole('button')
-    .filter((button) => button.tagName === 'DIV');
+    .filter((button) => button.tagName === 'DIV' && button.dataset.depth !== '0');
 }
 
 function depthOf(row: HTMLElement) {
   return Number(row.dataset.depth);
 }
 
-describe('Waiting on another task as chains', () => {
+describe('tasks that wait on another task, nested under it', () => {
   it('nests a straight chain by depth', () => {
     renderPage(
       chain([waiting('a', 'Step A', ['root']), waiting('b', 'Step B', ['a']), waiting('c', 'Step C', ['b'])])
     );
     const shown = waitingRows();
     expect(shown.map((row) => row.textContent?.slice(0, 6))).toEqual(['Step A', 'Step B', 'Step C']);
-    expect(shown.map(depthOf)).toEqual([0, 1, 2]);
+    expect(shown.map(depthOf)).toEqual([1, 2, 3]);
   });
 
   it('caps the indent of a very deep chain', () => {
@@ -217,7 +216,7 @@ describe('Waiting on another task as chains', () => {
         waiting('e', 'Step E', ['d']),
       ])
     );
-    expect(waitingRows().map(depthOf)).toEqual([0, 1, 2, 3, 3]);
+    expect(waitingRows().map(depthOf)).toEqual([1, 2, 3, 3, 3]);
   });
 
   it('puts fan-out siblings side by side under their parent', () => {
@@ -234,7 +233,7 @@ describe('Waiting on another task as chains', () => {
       'Left branch',
       'Right branch',
     ]);
-    expect(shown.map(depthOf)).toEqual([0, 1, 1]);
+    expect(shown.map(depthOf)).toEqual([1, 2, 2]);
   });
 
   it('shows the joining task of a diamond once, after both parents, two levels in', () => {
@@ -253,7 +252,7 @@ describe('Waiting on another task as chains', () => {
       'Step C',
       'Step D',
     ]);
-    expect(shown.map(depthOf)).toEqual([0, 1, 1, 2]);
+    expect(shown.map(depthOf)).toEqual([1, 2, 2, 3]);
   });
 
   it('names every parent in the status column, each a link that opens it', () => {

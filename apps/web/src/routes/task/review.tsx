@@ -558,7 +558,7 @@ function ReviewSummary({
         <Eyebrow state={state} task={task} extra={diff && <DiffStats added={added} removed={removed} />} />
       }
       title={report.headline}
-      action={gate && <ReviewActions task={task} gate={gate} />}
+      action={gate && <ReviewActions state={state} task={task} gate={gate} />}
     >
       {gate?.escalation && <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>}
       <p className='text-fg-3 text-xs'>{describePointCount(points)}</p>

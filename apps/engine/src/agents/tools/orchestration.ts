@@ -143,7 +143,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   create_task: {
     name: 'create_task',
     description:
-      'Create a new task for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both.',
+      'Create a new task for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both. Set stack_on_this instead for the next piece of a bundle in this repository: the new task starts once this one is ready to merge, branches off this task’s branch, and the two merge together. Stack when the new task builds directly on this task’s code and ships with it, so a flaw it finds here is fixed in this pull request before anything merges. Use after_this when this task should ship on its own first: it is worth merging even if the follow-up stalls, the follow-up needs this change live on the default branch, or it works in another repository.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -168,6 +168,11 @@ export const ORCHESTRATION_TOOL_SPECS = {
           type: 'boolean',
           description:
             'The new task waits until this one is finished (merged, or done when it ships no pull request), then starts.',
+        },
+        stack_on_this: {
+          type: 'boolean',
+          description:
+            'The new task stacks on this one as a bundle: it starts once this task is ready to merge, its pull request is based on this task’s branch, and the bundle merges as one. Alone, never with after_this or this_task_waits.',
         },
         backlog: {
           type: 'boolean',
@@ -407,6 +412,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       ...resolveForkOf(call.state(), request.forkFrom),
       thisWaits: request.thisTaskWaits,
       afterThis: request.afterThis,
+      stackOnThis: request.stackOnThis,
       backlog: request.backlog,
     },
     resolveCommandId(call, 'create_task', request.requestKey)

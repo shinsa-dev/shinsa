@@ -58,7 +58,8 @@ src/
 │                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
 │                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares; the task's composer on
 │                        Overview, Review and Chat is one draft per task, lib/chat/task-drafts.ts), review draft, the
-│                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
+│                        handle, bundle.tsx: BundleFact, the toolbar's Bundle item and its popover of the bundle's
+│                        tasks, and BundleMark, its count beside a queue row's name, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
 │                        steps left after the merge), the plan's
@@ -266,7 +267,9 @@ src/
     │                    summaries; the row a linked test or check renders as),
     │                    Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
     │                    rounds, a round's track and pull request, how a round ships), status and tone per task (Resolving conflicts on a conflict fix),
-    │                    task groups and chains, next action, the now line,
+    │                    task groups and chains, bundles (bundles.ts: a bundle's rows and their states, the Stack on another task
+    │                    choices core accepts, the now card's wait and note; groups.ts lists a ready task with its root),
+    │                    next action, the now line,
     │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
     │                    queued messages, when they send (describeQueue, describeRoundRelease: after you merge or

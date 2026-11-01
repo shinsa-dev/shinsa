@@ -23,6 +23,8 @@ import {
   pullRequest,
   pushed,
   REPLY,
+  reachShipping,
+  readyWorktree,
 } from '../harness.ts';
 
 const SECRET: MergeStep = {
@@ -140,6 +142,36 @@ describe('the steps around the merge', () => {
     expect(harness.task(taskId).activity.at(-1)?.text).toBe('Ticked the step “Set STRIPE_WEBHOOK_SECRET”');
     approve(harness, taskId);
     expect(harness.task(taskId).stageReason).toBe('merging');
+  });
+
+  test('the root merges the bundle only once every task above has ticked its steps before the merge', () => {
+    const harness = createHarness();
+    const root = createTask(harness, { request: 'Root' });
+    const top = createTask(harness, { request: 'Top', stacksOn: root });
+    reachShipping(harness, root);
+    harness.send({ type: 'pull_request.record', taskId: root, pullRequest: pullRequest({ number: 42 }) });
+    expect(harness.task(root).bundleReady).toBeTruthy();
+    readyWorktree(harness, top);
+    handOver(harness, top, [SECRET]);
+    harness.send({ type: 'checks.record', taskId: top, results: PASSING });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(top).id,
+      summary: null,
+      findings: [],
+    });
+    approve(harness, top);
+    pushed(harness, top);
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 43 }) });
+    harness.send({ type: 'pull_request.record', taskId: root, pullRequest: pullRequest({ number: 42 }) });
+    expect(harness.openGate(root).type).toBe('merge');
+    expect(refusal(() => approve(harness, root))).toEqual({
+      code: 'merge_steps_open',
+      message: 'Tick the 1 pre-merge step of “Top” first: it merges with this bundle.',
+    });
+    tick(harness, top, SECRET);
+    approve(harness, root);
+    expect(harness.task(root).stage).toBe('awaiting_merge');
   });
 
   test('a step ticks and unticks, and ticking it again changes nothing', () => {

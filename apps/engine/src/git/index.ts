@@ -1,3 +1,4 @@
+export { type BundleBranch, checkBundleMerge } from './bundle.ts';
 export {
   commitWorktree,
   listChangedFiles,

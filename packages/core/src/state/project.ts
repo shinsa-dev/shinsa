@@ -41,6 +41,7 @@ import {
   describeFailedChecks,
   describeFindings,
   describeFixRound,
+  describeStack,
   describeStage,
 } from './activity.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
@@ -313,6 +314,28 @@ function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_c
     kind: 'stage',
     text: describeDependencies(titles),
   });
+}
+
+function applyStackChanged(state: ShinsaState, event: EventOf<'task.stack_changed'>) {
+  updateTask(state, event.taskId, event.at, { stacksOn: event.stacksOn });
+  const parent = event.stacksOn === null ? null : (state.tasks[event.stacksOn]?.title ?? 'another task');
+  record(state, event.taskId, event.at, {
+    actor: event.by ?? 'you',
+    kind: 'stage',
+    text: describeStack(parent),
+  });
+}
+
+function applyStackBased(state: ShinsaState, event: EventOf<'task.stack_based'>) {
+  updateTask(state, event.taskId, event.at, { stackBase: event.base });
+}
+
+function applyBundleReady(state: ShinsaState, event: EventOf<'task.bundle_ready'>) {
+  updateTask(state, event.taskId, event.at, { bundleReady: event.ready });
+}
+
+function applyBundleConflict(state: ShinsaState, event: EventOf<'task.bundle_conflict'>) {
+  updateTask(state, event.taskId, event.at, { bundleConflict: event.conflict });
 }
 
 const BACKLOG_LEFT: Record<BacklogCause, string> = {
@@ -781,6 +804,18 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.waits_on_changed':
       applyWaitsOnChanged(state, event);
+      break;
+    case 'task.stack_changed':
+      applyStackChanged(state, event);
+      break;
+    case 'task.stack_based':
+      applyStackBased(state, event);
+      break;
+    case 'task.bundle_ready':
+      applyBundleReady(state, event);
+      break;
+    case 'task.bundle_conflict':
+      applyBundleConflict(state, event);
       break;
     case 'task.backlog_changed':
       applyBacklogChanged(state, event);

@@ -36,15 +36,7 @@ export function TaskGroupSection({
       </DisclosureHeader>
       {disclosure.open && (
         <WindowedRows items={entries} rowHeight={TASK_LIST_ROW_HEIGHT}>
-          {(entry) => (
-            <TaskListRow
-              key={entry.task.id}
-              state={state}
-              task={entry.task}
-              group={group.key}
-              depth={entry.depth}
-            />
-          )}
+          {(entry) => <TaskListRow key={entry.task.id} state={state} task={entry.task} depth={entry.depth} />}
         </WindowedRows>
       )}
     </section>

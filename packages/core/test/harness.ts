@@ -205,6 +205,7 @@ export function createTask(
     repoId?: string;
     priority?: 'urgent' | 'high' | 'normal' | 'low';
     waitsOn?: string[];
+    stacksOn?: string;
     triageWaitsOn?: string | string[];
     planFirst?: boolean;
     backlog?: boolean;
@@ -218,6 +219,7 @@ export function createTask(
     repoId,
     priority: options.priority,
     waitsOn: options.waitsOn,
+    stacksOn: options.stacksOn,
     planFirst: options.planFirst,
     backlog: options.backlog,
   });
