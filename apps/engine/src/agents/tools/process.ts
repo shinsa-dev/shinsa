@@ -1,9 +1,12 @@
 import {
+  FEEDBACK_LIMITS,
+  FEEDBACK_REPOSITORY,
   MEMORY_LIMITS,
   MEMORY_SCOPES,
   PROTOCOL_LIMITS,
   type ShinsaCommand,
   type ShinsaEvent,
+  validateFeedbackReport,
   validateMemoryProposal,
   validateSuggestions,
   validateWait,
@@ -119,6 +122,20 @@ export const PROCESS_TOOL_SPECS = {
       required: ['scope', 'text', 'why'],
     },
   },
+  report_feedback: {
+    name: 'report_feedback',
+    description: `Report a problem with Shinsa itself, when it got in your way: a tool that refused what it should take, a limit or a rule that blocked sound work, a step that made no sense, a missing tool. Never about the task, its code or the human's own tools. Your agent rewrites it as a public GitHub issue on ${FEEDBACK_REPOSITORY} without anything private, and it opens only when the human reads it and opens it. At most ${FEEDBACK_LIMITS.perTask} per task.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        feedback: limitedText(
+          'What Shinsa did, what you expected, and what you were doing then, in plain words. Leave out names, paths, code and anything private.',
+          FEEDBACK_LIMITS.note
+        ),
+      },
+      required: ['feedback'],
+    },
+  },
 } satisfies Record<string, ToolSpec>;
 
 export interface ProcessToolCall {
@@ -154,6 +171,11 @@ export async function handleProcessTool(name: string, input: Record<string, unkn
       const rule = assertProtocol(validateMemoryProposal(input));
       await call.dispatch({ type: 'agent.remember', runId, attemptId, ...rule });
       return 'Proposed. The human decides whether agents remember it. Carry on with your step.';
+    }
+    case 'report_feedback': {
+      const report = assertProtocol(validateFeedbackReport(input));
+      await call.dispatch({ type: 'agent.report_feedback', runId, attemptId, ...report });
+      return 'Reported. The human reads it before it becomes a public issue. Carry on with your step.';
     }
     default:
       return handleShapeTool(name, input, call);

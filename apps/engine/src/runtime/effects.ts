@@ -34,6 +34,8 @@ import { serializeCheckOutput } from '../checks/evidence.ts';
 import { listCheckFailures } from '../checks/failures.ts';
 import { type BaseComparison, CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../checks/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
+import type { FeedbackDrafter } from '../feedback/draft.ts';
+import { FeedbackEffects } from '../feedback/index.ts';
 import {
   hasPrePushHook,
   PushError,
@@ -77,6 +79,7 @@ import { resolveShippingError } from './failures.ts';
 export interface EffectRunnerOptions {
   triage: TriageResolver;
   wordWatch?: WatchWriter;
+  draftFeedback?: FeedbackDrafter;
   timeZone?: string;
   findRepository?: RepositoryFinder;
   resolveLogin?: LoginResolver;
@@ -162,6 +165,7 @@ export class EffectRunner {
   readonly #workspaces: Workspaces;
   readonly #services: TaskServices | null;
   readonly #slack: Slack | null;
+  readonly #feedback: FeedbackEffects;
   readonly #evidence: EvidenceStore;
   readonly #descriptions: PullRequestDescriptions;
   readonly #bases: BaseCheckouts;
@@ -193,6 +197,11 @@ export class EffectRunner {
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
     this.#services = options.services ?? null;
     this.#slack = options.slack ?? null;
+    this.#feedback = new FeedbackEffects(
+      engine,
+      config.dataDir,
+      options.draftFeedback ?? (() => Promise.resolve(null))
+    );
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#descriptions = new PullRequestDescriptions(this.#evidence);
     this.#bases = new BaseCheckouts(join(config.dataDir, 'check-bases'));
@@ -248,6 +257,10 @@ export class EffectRunner {
         return this.#withSlack((slack) => slack.status(effect, context));
       case 'slack.post':
         return this.#withSlack((slack) => slack.post(effect));
+      case 'feedback.draft':
+        return this.#feedback.draft(effect.feedbackId, context);
+      case 'feedback.file':
+        return this.#feedback.file(effect.feedbackId, context);
     }
   }
 
@@ -310,6 +323,10 @@ export class EffectRunner {
   }
 
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
+    if (effect.kind === 'feedback.draft' || effect.kind === 'feedback.file') {
+      await this.#feedback.reportExhausted(effect.feedbackId, error, key);
+      return;
+    }
     const title = FAILURE_TITLE[effect.kind];
     if (!title || !('taskId' in effect) || effect.taskId === null) return;
     await this.#engine.dispatch(
@@ -319,6 +336,7 @@ export class EffectRunner {
   }
 
   async recover() {
+    await this.#feedback.recover();
     await this.syncAll();
   }
 
