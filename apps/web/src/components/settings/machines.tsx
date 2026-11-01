@@ -159,16 +159,18 @@ function MachineItem({
   const resources = !outdated && machine ? (machine.resources ?? null) : null;
   return (
     <div className={cn(SETTING_ROW, 'items-start py-2')}>
-      <div className='flex min-w-0 flex-1 flex-col gap-1'>
-        <div className='flex min-w-0 items-center gap-1.5 text-xs'>
-          <Truncate className='font-medium text-fg-4'>{row.label}</Truncate>
-          <span className={cn('shrink-0', row.instance.online ? TONE_TEXT.green : 'text-fg-2')}>
-            {row.status}
-          </span>
+      <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
+        <div className='flex min-w-0 flex-col gap-px'>
+          <div className='flex min-w-0 items-center gap-1.5 text-xs leading-4'>
+            <Truncate className='font-medium text-fg-4'>{row.label}</Truncate>
+            <span className={cn('shrink-0', row.instance.online ? TONE_TEXT.green : 'text-fg-2')}>
+              {row.status}
+            </span>
+          </div>
+          <Truncate className={cn('text-2xs leading-4', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
+            {outdated ? describeOutdatedMachine(row.instance.name) : detail}
+          </Truncate>
         </div>
-        <Truncate className={cn('text-2xs', outdated ? TONE_TEXT.amber : 'text-fg-2')}>
-          {outdated ? describeOutdatedMachine(row.instance.name) : detail}
-        </Truncate>
         {resources ? (
           <ResourceGauges resources={resources} />
         ) : (

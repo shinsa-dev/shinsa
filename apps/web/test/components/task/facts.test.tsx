@@ -244,24 +244,38 @@ describe('the machine in the facts row', () => {
         <TaskFacts state={state} task={task} />
       </TooltipProvider>
     );
-    return screen.getByText('Studio');
+    return screen.getByRole('button', { name: 'Studio' });
+  }
+
+  async function openCard(trigger: HTMLElement) {
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    return waitFor(() => {
+      const card = document.querySelector('[data-slot="preview-card-content"]');
+      if (!card?.textContent) throw new Error('No card is open.');
+      return card.textContent;
+    });
   }
 
   afterEach(() => replaceConnection(null));
 
-  it('shows on hover what the task uses on its machine', async () => {
+  it('opens a card with the machine’s numbers and what the task uses there', async () => {
     const fact = renderOnMachine(
       createMachineResources({
         tasks: [createTaskResources({ taskId: 't', checks: { cpuPercent: 30, memoryBytes: 1024 ** 3 } })],
       })
     );
-    expect(await findTooltipText(fact)).toBe(
-      'The machine this task runs onAgent4% · 0.5 GBServicesIdleChecks30% · 1 GBWorktree2 GB'
+    expect(await openCard(fact)).toBe(
+      'StudioCPU 20% · Memory 8 of 32 GB · 120 GB freeWhat this task usesAgent4% · 0.5 GBServicesIdleChecks30% · 1 GBWorktree2 GB'
     );
   });
 
   it('only names the machine while it has sent no reading', async () => {
-    expect(await findTooltipText(renderOnMachine(null))).toBe('The machine this task runs on');
+    expect(await openCard(renderOnMachine(null))).toBe('StudioThe machine this task runs on');
   });
 });
 

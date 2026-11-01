@@ -46,7 +46,7 @@ import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
-import { listTaskUseLines } from '@/lib/remote/resources.ts';
+import { describeMachineResources, listTaskUseLines } from '@/lib/remote/resources.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {
@@ -107,22 +107,26 @@ function MachineFact({ task }: { task: Task }) {
   if (!machine) return null;
   const use = listTaskUseLines(resources, task.id);
   return (
-    <Tooltip>
-      <TooltipTrigger render={<span className={cn(FACT, 'cursor-default')} />}>
-        <Icon size='sm' name={MACHINE_ICON} />
-        <span className='truncate'>{resolveMachineLabel(machine)}</span>
-      </TooltipTrigger>
-      <TooltipContent className={use ? 'min-w-44 flex-col items-stretch gap-1' : undefined}>
-        <span>The machine this task runs on</span>
-        {use?.map((line) => (
-          <InfoLine
-            key={line.label}
-            label={<TooltipLabel>{line.label}</TooltipLabel>}
-            value={<span className='tabular-nums'>{line.value}</span>}
-          />
-        ))}
-      </TooltipContent>
-    </Tooltip>
+    <FactPopover
+      trigger={
+        <>
+          <Icon size='sm' name={MACHINE_ICON} />
+          <span className='truncate'>{resolveMachineLabel(machine)}</span>
+        </>
+      }
+    >
+      <InfoHeader
+        title={resolveMachineLabel(machine)}
+        description={resources ? describeMachineResources(resources) : 'The machine this task runs on'}
+      />
+      {use && (
+        <InfoSection title='What this task uses'>
+          {use.map((line) => (
+            <InfoRow key={line.label} label={line.label} value={line.value} valueClassName='tabular-nums' />
+          ))}
+        </InfoSection>
+      )}
+    </FactPopover>
   );
 }
 
