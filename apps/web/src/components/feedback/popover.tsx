@@ -110,6 +110,7 @@ function RowIcon({ state, entry }: { state: ShinsaState; entry: Feedback }) {
     <span
       className={cn(
         ICON_SLOT,
+        '-mt-px',
         glyph.kind === 'icon' && glyph.tone !== 'neutral' ? TONE_TEXT[glyph.tone] : 'text-fg-3'
       )}
     >
