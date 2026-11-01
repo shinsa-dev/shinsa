@@ -28,10 +28,16 @@ function call(
   };
 }
 
-function renderCard(toolCall: ToolCall, task: Task | null = null) {
+function renderCard(toolCall: ToolCall, task: Task | null = null, at: number | null = null) {
   return render(
     <TooltipProvider>
-      <HandoverCard call={toolCall} run={createRun({ id: 'r', taskId: 't' })} live={false} task={task} />
+      <HandoverCard
+        call={toolCall}
+        run={createRun({ id: 'r', taskId: 't' })}
+        live={false}
+        task={task}
+        at={at}
+      />
     </TooltipProvider>
   );
 }
@@ -87,6 +93,38 @@ describe('HandoverCard for the process tools', () => {
     expect(view.getByText('Two').parentElement?.textContent).toBe('TwoNew');
     expect(view.getByText('Three').parentElement?.textContent).toBe('Three');
     expect(view.queryByText('Zero')).toBeNull();
+  });
+
+  it('keeps the first plan proposed when a later revision kept its goal', () => {
+    const document = {
+      goal: 'Ship it.',
+      phases: [],
+      behaviour: [],
+      approach: '',
+      files: [],
+      outOfScope: [],
+      verification: [],
+      questions: [],
+    };
+    const task = createTask({
+      id: 't',
+      planHistory: [{ version: 1, body: '', document, proposedAt: 1_000 }],
+      plan: {
+        version: 2,
+        body: '',
+        document,
+        proposedAt: 60_000,
+        changes: [{ kind: 'phase_added', title: 'Two' }],
+      },
+    });
+    const proposal = call('propose_plan', { goal: 'Ship it.', phases: [{ title: 'One' }, { title: 'Two' }] });
+    const first = renderCard(proposal, task, 990);
+    expect(first.getByText('Proposed the plan')).toBeTruthy();
+    expect(first.queryByText('New')).toBeNull();
+    first.unmount();
+    const revised = renderCard(proposal, task, 59_990);
+    expect(revised.getByText('Revised the plan')).toBeTruthy();
+    expect(revised.getByText('Two').parentElement?.textContent).toBe('TwoNew');
   });
 
   it('shows the plan’s evidence, checks, impact and that it asked for your approval', () => {

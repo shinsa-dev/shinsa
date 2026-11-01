@@ -58,11 +58,22 @@ describe('selectPlanRevision', () => {
       ],
       plan: { version: 3, body: '', document: DOCUMENT, proposedAt: 3 },
     });
-    expect(selectPlanRevision(task, 'Retry it.')?.version).toBe(2);
-    expect(selectPlanRevision(task, 'Ship it.')?.version).toBe(3);
-    expect(selectPlanRevision(task, 'Something else.')).toBeNull();
-    expect(selectPlanRevision(task, null)).toBeNull();
-    expect(selectPlanRevision(null, 'Ship it.')).toBeNull();
-    expect(selectPlanRevision(createTask({ id: 't' }), 'Ship it.')).toBeNull();
+    expect(selectPlanRevision(task, 'Retry it.', null)?.version).toBe(2);
+    expect(selectPlanRevision(task, 'Ship it.', null)?.version).toBe(3);
+    expect(selectPlanRevision(task, 'Something else.', null)).toBeNull();
+    expect(selectPlanRevision(task, 'Something else.', 2)).toBeNull();
+    expect(selectPlanRevision(task, null, 1)).toBeNull();
+    expect(selectPlanRevision(null, 'Ship it.', 1)).toBeNull();
+    expect(selectPlanRevision(createTask({ id: 't' }), 'Ship it.', 1)).toBeNull();
+  });
+
+  it('tells apart revisions that kept the goal by when each was proposed', () => {
+    const task = createTask({
+      id: 't',
+      planHistory: [{ version: 1, body: '', document: DOCUMENT, proposedAt: 1_000 }],
+      plan: { version: 2, body: '', document: DOCUMENT, proposedAt: 60_000 },
+    });
+    expect(selectPlanRevision(task, 'Ship it.', 990)?.version).toBe(1);
+    expect(selectPlanRevision(task, 'Ship it.', 59_990)?.version).toBe(2);
   });
 });

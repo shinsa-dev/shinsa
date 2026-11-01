@@ -79,10 +79,10 @@ function ReplyFirst({ args, children }: { args: ChatToolArgs; children: React.Re
   );
 }
 
-function PlanCard({ args, task }: { args: ChatToolArgs; task: Task | null }) {
+function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; at: number | null }) {
   const goal = readString(args, 'goal');
   const phases = readList(args, 'phases');
-  const revision = selectPlanRevision(task, goal);
+  const revision = selectPlanRevision(task, goal, at);
   const changes = revision?.changes ?? [];
   return (
     <Card
@@ -367,11 +367,13 @@ export function HandoverCard({
   run,
   live,
   task = null,
+  at = null,
 }: {
   call: ToolCall;
   run: Run;
   live: boolean;
   task?: Task | null;
+  at?: number | null;
 }) {
   const { tool } = call;
   if (tool.kind !== 'shinsa') return <InsetToolRow call={call} live={live} />;
@@ -387,7 +389,7 @@ export function HandoverCard({
   }
   switch (tool.name) {
     case 'propose_plan':
-      return <PlanCard args={tool.args} task={task} />;
+      return <PlanCard args={tool.args} task={task} at={at} />;
     case 'complete_phase':
       return (
         <SummaryCard
