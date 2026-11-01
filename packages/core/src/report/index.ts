@@ -14,6 +14,7 @@ export {
   serializeTestingMarkdown,
 } from './markdown.ts';
 export {
+  listDuePostMergeSteps,
   listMergeSteps,
   listOpenMergeSteps,
   type MergeStepView,

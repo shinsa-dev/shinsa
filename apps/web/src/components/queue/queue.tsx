@@ -144,7 +144,14 @@ function QueueSectionView({
       revealWhenActive={variant === 'compact'}
       title={item.task.title}
       mark={renderMarks(state, item.task)}
-      summary={<RowSummary state={state} task={item.task} detail={variant === 'wide'} />}
+      summary={
+        <RowSummary
+          state={state}
+          task={item.task}
+          gate={item.kind === 'gate' ? item.gate : null}
+          detail={variant === 'wide'}
+        />
+      }
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {
         navigate(resolveTaskPath(item.task));

@@ -78,8 +78,8 @@ describe('resolveTaskNow', () => {
     const phaseReports = [{ index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 }];
     expect(nowFor({ phaseReports }, { type: 'merge' })).toBe('1 step to do before the merge');
     const merged = { ...PULL_REQUEST, state: 'merged' as const };
-    expect(nowFor({ pullRequest: merged }, { type: 'post_merge' })).toBe('PR #42 merged');
-    expect(nowFor({}, { type: 'post_merge' })).toBe('Merged');
+    expect(nowFor({ stage: 'merged', pullRequest: merged }, { type: 'post_merge' })).toBe('PR #42 merged');
+    expect(nowFor({ stage: 'watching' }, { type: 'post_merge' })).toBe('Merged');
   });
 
   it('shows the gate title for a question, a secret request and a failure', () => {
