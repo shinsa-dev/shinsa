@@ -1,5 +1,6 @@
 import { type Repo, resolveCurrentRound, SHAPE_LIMITS, type Task } from '../domain/index.ts';
 import { describeEarlierWork, describeGoal, describeRepository, describeTaskLink } from './context.ts';
+import { describeOwedReply } from './replies.ts';
 import { resolveHouseRules } from './rules.ts';
 
 function describeHeadline(task: Task) {
@@ -27,6 +28,7 @@ export function resolveFollowUpPrompt(task: Task, repo: Repo | null, question: s
     question
       ? ['The follow-up:', question].join('\n')
       : 'Answer the follow-up the human asked in this conversation.',
+    describeOwedReply(task, 'answer'),
     '',
     `Call \`answer\` with your answer in markdown (at most ${SHAPE_LIMITS.answer} characters): lead with the answer itself, then the evidence (files and lines as shinsa:// links).`,
     'Propose no change with it: when the human wants more done, they ask, and Shinsa starts a new round. Work worth doing outside this task goes to `suggest_tasks`. Then stop.',

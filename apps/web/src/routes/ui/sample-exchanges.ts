@@ -98,10 +98,6 @@ export function createExchangesScene(now: number): ExchangesScene {
       body: '',
       document: null,
       proposedAt: now - 6 * HOUR,
-      changeSummary:
-        'The bot is one Slack app on app.shinsa.dev on the Events API, reaching each machine over its tunnel.',
-      feedback:
-        'Use the Events API on app.shinsa.dev instead of Socket Mode, so one shared bot works for everyone.',
       approvedAt: now - 5 * HOUR,
     },
   });

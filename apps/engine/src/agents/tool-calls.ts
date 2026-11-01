@@ -176,14 +176,14 @@ export class ToolCalls {
     const { runId, attemptId, input } = call;
     switch (name) {
       case 'propose_plan': {
-        const { document, changeSummary } = assertProtocol(validatePlanHandOver(input));
+        const { document, reply } = assertProtocol(validatePlanHandOver(input));
         const { task } = this.#findCurrent(runId, attemptId);
         await this.#work.recordOverlaps(
           task.id,
           document.files.map((file) => file.path),
           call.signal
         );
-        await dispatch({ type: 'agent.propose_plan', runId, attemptId, document, changeSummary });
+        await dispatch({ type: 'agent.propose_plan', runId, attemptId, document, reply });
         break;
       }
       case 'complete_phase': {

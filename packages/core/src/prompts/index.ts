@@ -28,6 +28,7 @@ export {
   resolveDeliveryPrompt,
 } from './orchestration.ts';
 export { resolveProjectContext } from './project.ts';
+export { describeReplyInstruction } from './replies.ts';
 export {
   describeEvidenceForFix,
   resolveAgentPrompt,

@@ -18,7 +18,7 @@ import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { InAppLink } from '@/components/links/link.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
-import { PlanChangeSummary, PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
+import { PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -35,7 +35,7 @@ import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import { formatCount } from '@/lib/format/count.ts';
-import { listRevisionChanges } from '@/lib/overview/plan-version.ts';
+import { selectPlanRevision } from '@/lib/overview/plan-version.ts';
 import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeReportedFindings, readReportedFindings } from '@/lib/review/findings.ts';
 import { resolveReviewPath } from '@/lib/review/places.ts';
@@ -69,15 +69,14 @@ function Card({
 function PlanCard({ args, task }: { args: ChatToolArgs; task: Task | null }) {
   const goal = readString(args, 'goal');
   const phases = readList(args, 'phases');
-  const changed = readString(args, 'change_summary');
-  const changes = listRevisionChanges(task, changed);
+  const revision = selectPlanRevision(task, goal);
+  const changes = revision?.changes ?? [];
   return (
     <Card
       icon='IconMap'
-      title={changed ? 'Revised the plan' : 'Proposed the plan'}
+      title={revision && revision.version > 1 ? 'Revised the plan' : 'Proposed the plan'}
       meta={phases.length > 0 ? formatCount(phases.length, 'phase', 'phases') : null}
     >
-      <PlanChangeSummary summary={changed} />
       {goal && <Markdown text={goal} />}
       {phases.length > 0 && (
         <ol className='flex flex-col gap-2'>

@@ -87,9 +87,7 @@ function redactPlan(plan: Plan): Plan {
     body: plan.document ? serializePlanMarkdown(plan.document) : plan.body,
     document: plan.document,
     proposedAt: plan.proposedAt,
-    changeSummary: plan.changeSummary ?? null,
     changes: plan.changes ?? [],
-    feedback: null,
     approvedAt: plan.approvedAt ?? null,
   };
 }

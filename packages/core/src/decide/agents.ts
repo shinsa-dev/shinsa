@@ -73,15 +73,8 @@ export function proposePlan(decider: Decider, command: CommandOf<'agent.propose_
   const { run, task } = findCurrentRun(decider, command.runId, 'propose_plan');
   assertPlanRules(task, command.document);
   answerIteration(decider, task, run.id, command.reply ?? null, 'propose_plan');
-  const changeSummary = command.changeSummary?.trim() || null;
   const body = serializePlanMarkdown(command.document);
-  decider.emit({
-    type: 'plan.proposed',
-    taskId: task.id,
-    body,
-    document: command.document,
-    ...(task.plan ? { changeSummary, feedback: run.feedback ?? null } : {}),
-  });
+  decider.emit({ type: 'plan.proposed', taskId: task.id, body, document: command.document });
   decider.endRun(run, 'completed', 'proposed the plan');
   decider.progressed(task.id);
   const proposed = decider.task(task.id);

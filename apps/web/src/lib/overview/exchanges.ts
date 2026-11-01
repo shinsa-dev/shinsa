@@ -12,10 +12,6 @@ import { formatCount } from '@/lib/format/count.ts';
 
 export type AnsweredIteration = Iteration & { reply: AgentReply; repliedAt: number };
 
-export type Exchange =
-  | { kind: 'request'; key: string; at: number; iteration: AnsweredIteration }
-  | { kind: 'plan'; key: string; at: number; version: number; summary: string | null; feedback: string };
-
 export const REPLY_OUTCOME: Record<
   Exclude<ReplyOutcome, 'done'>,
   { icon: IconName; label: string; className: string }
@@ -47,27 +43,11 @@ export function selectWorkingRequest(task: Task): Iteration | null {
   return task.stage === 'fixing' ? selectOpenIteration(task) : null;
 }
 
-export function listEarlierExchanges(task: Task, shownId: string | null): Exchange[] {
-  const requests: Exchange[] = (task.iterations ?? [])
+export function listEarlierReplies(task: Task, shownId: string | null): AnsweredIteration[] {
+  return (task.iterations ?? [])
     .filter(isAnswered)
     .filter((iteration) => iteration.id !== shownId)
-    .map((iteration) => ({ kind: 'request', key: iteration.id, at: iteration.repliedAt, iteration }));
-  const revisions = [...(task.planHistory ?? []), ...(task.plan ? [task.plan] : [])];
-  const plans: Exchange[] = revisions.flatMap((revision) =>
-    revision.version > 1 && revision.feedback
-      ? [
-          {
-            kind: 'plan' as const,
-            key: `plan-${revision.version}`,
-            at: revision.proposedAt,
-            version: revision.version,
-            summary: revision.changeSummary ?? null,
-            feedback: revision.feedback,
-          },
-        ]
-      : []
-  );
-  return [...requests, ...plans].sort((left, right) => right.at - left.at);
+    .sort((left, right) => right.repliedAt - left.repliedAt);
 }
 
 export function describeRequestText(iteration: Iteration) {

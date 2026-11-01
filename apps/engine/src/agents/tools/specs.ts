@@ -10,13 +10,13 @@ import {
   MERGE_STEP_TIMINGS,
   PLAN_EVIDENCE_KINDS,
   PROTOCOL_LIMITS,
-  REPLY_OUTCOMES,
   type ShinsaToolName,
   VERIFICATION_RULES,
   WATCHDOG_STARTS,
 } from '@shinsa/core';
 import { ORCHESTRATION_TOOL_SPECS } from './orchestration.ts';
-import { CHANGE_SUMMARY_SPEC, CHOICES_SPEC, PROCESS_TOOL_SPECS } from './process.ts';
+import { CHOICES_SPEC, PROCESS_TOOL_SPECS } from './process.ts';
+import { REPLY_SPEC } from './reply.ts';
 import { SCHEDULE_TOOL_SPECS } from './schedules.ts';
 import { limitedPath, limitedText, type ToolSpec, textList } from './schema.ts';
 import { SHAPE_TOOL_SPECS } from './shapes.ts';
@@ -54,40 +54,6 @@ const SPOT = {
     ),
   },
   required: ['file', 'start', 'end', 'attention', 'why'],
-};
-
-const REPLY = {
-  type: 'object',
-  description:
-    'Required when the fix answers a request the human sent, and refused otherwise. The human reads it on the overview instead of the chat: what you did about their request, point by point, and what they do now.',
-  properties: {
-    headline: limitedText('What you did about their request, in one sentence.', L.replyHeadline),
-    points: {
-      type: 'array',
-      description: 'Each thing they raised, in their order. At least one.',
-      minItems: 1,
-      maxItems: L.replyPoints,
-      items: {
-        type: 'object',
-        properties: {
-          ask: limitedText('What they asked or raised, in their words cut short.', L.replyAsk),
-          outcome: {
-            type: 'string',
-            enum: [...REPLY_OUTCOMES],
-            description:
-              'done: you made the change. answered: it was a question and the note answers it. not_changed: you left it as it was, and the note says why.',
-          },
-          note: limitedText('Where it is now, the answer, or why you left it.', L.replyNote),
-        },
-        required: ['ask', 'outcome', 'note'],
-      },
-    },
-    next: limitedText(
-      'What they do now to see or try it, in markdown: numbered steps with the exact commands in ```bash run blocks and full links. Leave it out when there is nothing.',
-      L.replyNext
-    ),
-  },
-  required: ['headline', 'points'],
 };
 
 const PLACE = {
@@ -420,7 +386,7 @@ export const TOOL_SPECS = {
             required: ['question', 'options'],
           },
         },
-        change_summary: CHANGE_SUMMARY_SPEC,
+        reply: REPLY_SPEC,
       },
       required: [
         'goal',
@@ -481,6 +447,7 @@ export const TOOL_SPECS = {
             required: ['title', 'call', 'reason'],
           },
         },
+        reply: REPLY_SPEC,
         walkthrough: WALKTHROUGH,
         check_changes: CHECK_CHANGES,
       },
@@ -498,7 +465,7 @@ export const TOOL_SPECS = {
           'What you changed and, for anything you chose not to change, why.',
           L.phaseSummary
         ),
-        reply: REPLY,
+        reply: REPLY_SPEC,
         walkthrough: WALKTHROUGH_REVISION,
         checks: {
           type: 'array',

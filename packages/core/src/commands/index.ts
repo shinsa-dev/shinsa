@@ -158,7 +158,6 @@ type AgentCommand =
       type: 'agent.propose_plan';
       runId: string;
       document: PlanDocument;
-      changeSummary?: string | null;
       reply?: AgentReply | null;
     }
   | {

@@ -838,7 +838,7 @@ describe('validateReview', () => {
 });
 
 describe('validatePlanHandOver', () => {
-  test('keeps the plan and an optional change summary', () => {
+  test('keeps the plan and the reply it may carry', () => {
     const plan = {
       goal: 'Ship it.',
       phases: [
@@ -853,17 +853,21 @@ describe('validatePlanHandOver', () => {
       questions: [],
     };
     const first = validatePlanHandOver(plan);
-    expect(first.ok && first.value.changeSummary).toBeNull();
-    const revised = validatePlanHandOver({ ...plan, change_summary: ' Added a phase. ' });
-    expect(revised.ok && revised.value.changeSummary).toBe('Added a phase.');
-    expect(validatePlanHandOver({ ...plan, change_summary: 'x'.repeat(241) })).toEqual({
-      ok: false,
-      errors: ['change_summary is 241 characters; the limit is 240.'],
+    expect(first.ok && first.value.reply).toBeNull();
+    const reply = {
+      headline: 'Added the phase you asked for.',
+      points: [{ ask: 'Add a phase', outcome: 'done' as const, note: 'Phase two now covers it.' }],
+    };
+    const revised = validatePlanHandOver({ ...plan, change_summary: 'Ignored.', reply });
+    expect(revised.ok && revised.value).toEqual({
+      document: expect.objectContaining({ goal: 'Ship it.' }),
+      reply: { ...reply, next: null },
     });
-    const broken = validatePlanHandOver({ ...plan, goal: '', change_summary: 'x'.repeat(241) });
+    const broken = validatePlanHandOver({ ...plan, goal: '', reply: { points: [] } });
     expect(broken.ok ? [] : broken.errors).toEqual([
       'goal is required.',
-      'change_summary is 241 characters; the limit is 240.',
+      'reply.headline is required.',
+      'reply.points needs at least 1 item.',
     ]);
   });
 });

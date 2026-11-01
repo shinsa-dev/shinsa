@@ -55,7 +55,7 @@ export {
   selectEvidenceItem,
 } from './evidence.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
-export { isReplyingRun, selectOpenIteration } from './iterations.ts';
+export { isReplyingRun, type ReplyingHandOver, selectOpenIteration } from './iterations.ts';
 export {
   isMemoryOf,
   MEMORY_LIMITS,

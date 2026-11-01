@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { describePlanEyebrow, listRevisionChanges, resolvePlanVersion } from '@/lib/overview/plan-version.ts';
+import { describePlanEyebrow, resolvePlanChanges, selectPlanRevision } from '@/lib/overview/plan-version.ts';
 import { createTask } from '../../support/state.ts';
 
 const DOCUMENT = {
@@ -13,33 +13,22 @@ const DOCUMENT = {
   questions: [],
 };
 
-describe('resolvePlanVersion', () => {
+describe('resolvePlanChanges', () => {
   it('has nothing for a first plan or no plan', () => {
-    expect(resolvePlanVersion(createTask({ id: 't' }))).toBeNull();
+    expect(resolvePlanChanges(createTask({ id: 't' }))).toEqual([]);
     const first = createTask({ id: 't', plan: { version: 1, body: '', document: DOCUMENT, proposedAt: 1 } });
-    expect(resolvePlanVersion(first)).toBeNull();
+    expect(resolvePlanChanges(first)).toEqual([]);
     expect(describePlanEyebrow(first)).toBe('0 phases');
     expect(describePlanEyebrow(createTask({ id: 't' }))).toBe('0 phases');
   });
 
-  it('describes a revision: its summary, its changes and the feedback that asked for it', () => {
+  it('lists what a revision changed', () => {
+    const changes = [{ kind: 'phase_added' as const, title: 'Retry' }, { kind: 'approach' as const }];
     const task = createTask({
       id: 't',
-      plan: {
-        version: 3,
-        body: '',
-        document: DOCUMENT,
-        proposedAt: 1,
-        changeSummary: 'Split the export.',
-        changes: [{ kind: 'phase_added', title: 'Retry' }, { kind: 'approach' }],
-        feedback: 'Retry the export.',
-      },
+      plan: { version: 3, body: '', document: DOCUMENT, proposedAt: 1, changes },
     });
-    expect(resolvePlanVersion(task)).toEqual({
-      summary: 'Split the export.',
-      changes: [{ kind: 'phase_added', title: 'Retry' }, { kind: 'approach' }],
-      feedback: 'Retry the export.',
-    });
+    expect(resolvePlanChanges(task)).toEqual(changes);
     expect(describePlanEyebrow(task)).toBe('Version 3 · 0 phases');
     const phased = createTask({
       id: 't',
@@ -53,51 +42,27 @@ describe('resolvePlanVersion', () => {
     expect(describePlanEyebrow(phased)).toBe('1 phase');
   });
 
-  it('has no summary, changes or feedback for a revision without them', () => {
+  it('has no changes for a revision that recorded none', () => {
     const task = createTask({ id: 't', plan: { version: 2, body: '', document: DOCUMENT, proposedAt: 1 } });
-    expect(resolvePlanVersion(task)).toEqual({ summary: null, changes: [], feedback: null });
+    expect(resolvePlanChanges(task)).toEqual([]);
   });
 });
 
-describe('listRevisionChanges', () => {
-  it('finds the changes of the revision a chat hand-over proposed, by its summary', () => {
-    const added = [{ kind: 'phase_added' as const, title: 'Retry' }];
-    const changed = [{ kind: 'phase_changed' as const, title: 'Retry' }];
+describe('selectPlanRevision', () => {
+  it('finds the latest revision a chat hand-over proposed, by its goal', () => {
     const task = createTask({
       id: 't',
       planHistory: [
         { version: 1, body: '', document: DOCUMENT, proposedAt: 1 },
-        {
-          version: 2,
-          body: '',
-          document: DOCUMENT,
-          proposedAt: 2,
-          changeSummary: 'Added a retry.',
-          changes: added,
-        },
+        { version: 2, body: '', document: { ...DOCUMENT, goal: 'Retry it.' }, proposedAt: 2 },
       ],
-      plan: {
-        version: 3,
-        body: '',
-        document: DOCUMENT,
-        proposedAt: 3,
-        changeSummary: 'Reworked it.',
-        changes: changed,
-      },
+      plan: { version: 3, body: '', document: DOCUMENT, proposedAt: 3 },
     });
-    expect(listRevisionChanges(task, ' Added a retry. ')).toEqual(added);
-    expect(listRevisionChanges(task, 'Reworked it.')).toEqual(changed);
-    expect(listRevisionChanges(task, 'Something else.')).toEqual([]);
-    expect(listRevisionChanges(task, null)).toEqual([]);
-    expect(listRevisionChanges(null, 'Reworked it.')).toEqual([]);
-    expect(listRevisionChanges(createTask({ id: 't' }), 'Reworked it.')).toEqual([]);
-  });
-
-  it('has no changes for a revision that recorded none', () => {
-    const task = createTask({
-      id: 't',
-      plan: { version: 2, body: '', document: DOCUMENT, proposedAt: 2, changeSummary: 'Tightened it.' },
-    });
-    expect(listRevisionChanges(task, 'Tightened it.')).toEqual([]);
+    expect(selectPlanRevision(task, 'Retry it.')?.version).toBe(2);
+    expect(selectPlanRevision(task, 'Ship it.')?.version).toBe(3);
+    expect(selectPlanRevision(task, 'Something else.')).toBeNull();
+    expect(selectPlanRevision(task, null)).toBeNull();
+    expect(selectPlanRevision(null, 'Ship it.')).toBeNull();
+    expect(selectPlanRevision(createTask({ id: 't' }), 'Ship it.')).toBeNull();
   });
 });

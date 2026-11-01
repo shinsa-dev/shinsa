@@ -37,18 +37,16 @@ function renderCard(toolCall: ToolCall, task: Task | null = null) {
 }
 
 describe('HandoverCard for the process tools', () => {
-  it('shows a revised plan with what changed', () => {
+  it('shows a plan it finds no revision of as proposed, with its goal', () => {
     const view = renderCard(
       call('propose_plan', {
         goal: 'Ship it.',
         phases: [{ title: 'One', detail: 'First.' }],
-        change_summary: 'Split the work in two.',
       })
     );
-    expect(view.getByText('Revised the plan')).toBeTruthy();
-    const summary = view.getByText('What changed').parentElement;
-    expect(summary?.textContent).toBe('What changedSplit the work in two.');
-    expect(summary?.nextElementSibling?.textContent).toBe('Ship it.');
+    expect(view.getByText('Proposed the plan')).toBeTruthy();
+    expect(view.getByText('Ship it.')).toBeTruthy();
+    expect(view.queryByText('What changed')).toBeNull();
     expect(view.queryByText('New')).toBeNull();
   });
 
@@ -70,7 +68,6 @@ describe('HandoverCard for the process tools', () => {
         body: '',
         document,
         proposedAt: 1,
-        changeSummary: 'Split the work in two.',
         changes: [
           { kind: 'phase_added', title: 'Two' },
           { kind: 'phase_changed', title: 'One' },
@@ -82,10 +79,10 @@ describe('HandoverCard for the process tools', () => {
       call('propose_plan', {
         goal: 'Ship it.',
         phases: [{ title: 'One', detail: 'First.' }, { title: 'Two', detail: 'Second.' }, { title: 'Three' }],
-        change_summary: 'Split the work in two.',
       }),
       task
     );
+    expect(view.getByText('Revised the plan')).toBeTruthy();
     expect(view.getByText('One').parentElement?.textContent).toBe('OneChanged');
     expect(view.getByText('Two').parentElement?.textContent).toBe('TwoNew');
     expect(view.getByText('Three').parentElement?.textContent).toBe('Three');

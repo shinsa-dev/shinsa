@@ -3,7 +3,7 @@ import type { AgentReply, Iteration } from '@shinsa/core';
 import {
   describeOutcomes,
   describeRequestText,
-  listEarlierExchanges,
+  listEarlierReplies,
   selectShownReply,
   selectWorkingRequest,
 } from '@/lib/overview/exchanges.ts';
@@ -64,8 +64,8 @@ describe('selectWorkingRequest', () => {
   });
 });
 
-describe('listEarlierExchanges', () => {
-  it('lists answered requests and plan revisions you asked for, newest first, leaving out the shown one', () => {
+describe('listEarlierReplies', () => {
+  it('lists answered requests newest first, leaving out the shown one', () => {
     const task = createTask({
       id: 't',
       iterations: [
@@ -73,26 +73,13 @@ describe('listEarlierExchanges', () => {
         iteration('b', { repliedAt: 50 }),
         iteration('c', { reply: null, repliedAt: null }),
       ],
-      planHistory: [
-        { version: 1, body: '', document: null, proposedAt: 5 },
-        {
-          version: 2,
-          body: '',
-          document: null,
-          proposedAt: 20,
-          feedback: 'Use the Events API.',
-          changeSummary: null,
-        },
-      ],
-      plan: { version: 3, body: '', document: null, proposedAt: 40, feedback: null },
     });
-    expect(listEarlierExchanges(task, 'b').map((exchange) => exchange.key)).toEqual(['a', 'plan-2']);
-    expect(listEarlierExchanges(task, null).map((exchange) => [exchange.key, exchange.at])).toEqual([
+    expect(listEarlierReplies(task, 'b').map((reply) => reply.id)).toEqual(['a']);
+    expect(listEarlierReplies(task, null).map((reply) => [reply.id, reply.repliedAt])).toEqual([
       ['b', 50],
       ['a', 30],
-      ['plan-2', 20],
     ]);
-    expect(listEarlierExchanges(createTask({ id: 't' }), null)).toEqual([]);
+    expect(listEarlierReplies(createTask({ id: 't' }), null)).toEqual([]);
   });
 });
 

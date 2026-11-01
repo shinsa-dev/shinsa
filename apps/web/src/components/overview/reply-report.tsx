@@ -11,8 +11,7 @@ import {
   type AnsweredIteration,
   describeOutcomes,
   describeRequestText,
-  type Exchange,
-  listEarlierExchanges,
+  listEarlierReplies,
   REPLY_OUTCOME,
 } from '@/lib/overview/exchanges.ts';
 import {
@@ -127,23 +126,16 @@ export function WorkingRequest({ iteration }: { iteration: Iteration }) {
   );
 }
 
-function ExchangeRow({ task, exchange }: { task: Task; exchange: Exchange }) {
+function ExchangeRow({ task, iteration }: { task: Task; iteration: AnsweredIteration }) {
   const disclosure = useDisclosure(
-    resolveTaskDisclosureId(task.id, 'overview', 'exchange', exchange.key),
+    resolveTaskDisclosureId(task.id, 'overview', 'exchange', iteration.id),
     false
   );
-  const request = exchange.kind === 'request';
-  const title = request
-    ? exchange.iteration.reply.headline
-    : (exchange.summary ?? `Plan version ${exchange.version}`);
+  const title = iteration.reply.headline;
   return (
     <li className='flex flex-col gap-2 py-2 first:pt-0 last:pb-0'>
-      <DisclosureHeader
-        disclosure={disclosure}
-        label={request ? 'the reply' : 'the plan change'}
-        className='gap-2 text-xs'
-      >
-        <Icon size='sm' name={request ? 'IconChecklist' : 'IconNote1'} className='shrink-0 text-fg-3' />
+      <DisclosureHeader disclosure={disclosure} label='the reply' className='gap-2 text-xs'>
+        <Icon size='sm' name='IconChecklist' className='shrink-0 text-fg-3' />
         {disclosure.open ? (
           <InlineMarkdown text={title} className='min-w-0 flex-1 font-medium text-fg-4' />
         ) : (
@@ -152,21 +144,14 @@ function ExchangeRow({ task, exchange }: { task: Task; exchange: Exchange }) {
           </Truncate>
         )}
         <span className='shrink-0 text-2xs text-fg-2 tabular-nums'>
-          {request ? `${describeOutcomes(exchange.iteration.reply)} · ` : `Plan v${exchange.version} · `}
-          <TimeAgo at={exchange.at} />
+          {`${describeOutcomes(iteration.reply)} · `}
+          <TimeAgo at={iteration.repliedAt} />
         </span>
         <DisclosureChevron className='text-fg-3' />
       </DisclosureHeader>
       {disclosure.open && (
         <div className='ps-6'>
-          {request ? (
-            <ReplyReport task={task} iteration={exchange.iteration} headline={false} />
-          ) : (
-            <div className='flex flex-col gap-1'>
-              <span className='text-fg-2 text-xs'>What you sent</span>
-              <SentQuote text={exchange.feedback} />
-            </div>
-          )}
+          <ReplyReport task={task} iteration={iteration} headline={false} />
         </div>
       )}
     </li>
@@ -174,18 +159,18 @@ function ExchangeRow({ task, exchange }: { task: Task; exchange: Exchange }) {
 }
 
 export function RequestsPanel({ task, shownId }: { task: Task; shownId: string | null }) {
-  const exchanges = listEarlierExchanges(task, shownId);
-  if (exchanges.length === 0) return null;
+  const replies = listEarlierReplies(task, shownId);
+  if (replies.length === 0) return null;
   return (
     <Panel
       persistId={resolveOverviewPanelId(task, 'requests')}
       title={shownId ? 'Earlier requests' : 'Your requests'}
       icon='IconChecklist'
-      count={exchanges.length}
+      count={replies.length}
     >
       <ul className='flex flex-col divide-y divide-border'>
-        {exchanges.map((exchange) => (
-          <ExchangeRow key={exchange.key} task={task} exchange={exchange} />
+        {replies.map((iteration) => (
+          <ExchangeRow key={iteration.id} task={task} iteration={iteration} />
         ))}
       </ul>
     </Panel>

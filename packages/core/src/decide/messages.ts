@@ -19,7 +19,7 @@ import {
   type TaskStage,
 } from '../domain/index.ts';
 import type { EventOf } from '../events/index.ts';
-import { resolveHumanFixPrompt } from '../prompts/index.ts';
+import { describeReplyInstruction, resolveHumanFixPrompt } from '../prompts/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates, listRunningRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
@@ -159,7 +159,12 @@ function restartStep(decider: Decider, task: Task, text: string) {
       startOperation(decider, task.id, text);
       return;
     default:
-      startPhase(decider, task.id, resolveCurrentPhase(task), `\n\nThe human added: ${text}`);
+      startPhase(
+        decider,
+        task.id,
+        resolveCurrentPhase(task),
+        `\n\nThe human added: ${text}\n${describeReplyInstruction('complete_phase')}`
+      );
   }
 }
 

@@ -1,5 +1,14 @@
 import type { Iteration, Run, RunPurpose, RunRole, Task } from './types.ts';
 
+export type ReplyingHandOver =
+  | 'propose_plan'
+  | 'complete_phase'
+  | 'complete_fix'
+  | 'answer'
+  | 'report_diagnosis'
+  | 'submit_report'
+  | 'report_outcome';
+
 const REPLYING_ROLES: ReadonlySet<RunRole> = new Set<RunRole>(['answerer', 'investigator', 'researcher']);
 
 const REPLYING_PURPOSES: ReadonlySet<RunPurpose> = new Set<RunPurpose>(['plan', 'build', 'fix', 'operate']);

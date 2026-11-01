@@ -23,7 +23,7 @@ import { PostMergeCard } from '@/components/overview/merge-steps-card.tsx';
 import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/now-frame.tsx';
 import { OperationCard } from '@/components/overview/operation-card.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
-import { PlanChangeSummary, PlanFeedback, PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
+import { PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
 import { ProgressTrack, TaskTrack } from '@/components/overview/progress-track.tsx';
 import { QuestionChoices } from '@/components/overview/question-choices.tsx';
 import { ReplyReport, WorkingRequest } from '@/components/overview/reply-report.tsx';
@@ -53,7 +53,7 @@ import {
   resolveNowKind,
   resolveNowTitle,
 } from '@/lib/overview/now.ts';
-import { describePlanEyebrow, resolvePlanVersion } from '@/lib/overview/plan-version.ts';
+import { describePlanEyebrow, resolvePlanChanges } from '@/lib/overview/plan-version.ts';
 import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
 import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
@@ -92,20 +92,16 @@ function PlannedOperation({ task }: { task: Task }) {
 function PlanList({ task }: { task: Task }) {
   const document = task.plan?.document;
   if (!document) return null;
-  const version = resolvePlanVersion(task);
+  const changes = resolvePlanChanges(task);
   return (
     <div className='flex flex-col gap-3'>
-      <PlanChangeSummary summary={version?.summary ?? null} />
       <Markdown text={document.goal} className='text-fg-3 text-xs' />
       <ol className='flex flex-col gap-2.5'>
         {document.phases.map((phase, index) => (
           <li key={phase.title} className='flex gap-2.5'>
             <StepNumber index={index} />
             <div className='flex min-w-0 flex-col gap-px'>
-              <PlanPhaseTitle
-                title={phase.title}
-                change={resolvePhaseChange(version?.changes, phase.title)}
-              />
+              <PlanPhaseTitle title={phase.title} change={resolvePhaseChange(changes, phase.title)} />
               <Markdown text={phase.detail} className='text-fg-3 text-xs' />
             </div>
           </li>
@@ -240,7 +236,6 @@ export function PlanCard({
         </FooterNote>
       }
     >
-      <PlanFeedback text={resolvePlanVersion(task)?.feedback ?? null} />
       <PlanList task={task} />
     </NowFrame>
   );

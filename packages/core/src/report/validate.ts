@@ -121,7 +121,6 @@ export const PROTOCOL_LIMITS = {
   findingFix: 600,
   reviewSummary: 400,
   path: 300,
-  changeSummary: 240,
   questionContext: 2_000,
   suggestions: 5,
   suggestionTitle: 80,
@@ -888,14 +887,9 @@ export function validateReview(input: Record<string, unknown>): Validation<Revie
 export function validatePlanHandOver(input: Record<string, unknown>): Validation<PlanHandOver> {
   const plan = validatePlanDocument(input);
   const reader = new Reader();
-  const changeSummary = reader.optionalText(
-    input.change_summary,
-    'change_summary',
-    PROTOCOL_LIMITS.changeSummary
-  );
   const reply = readReply(reader, input.reply);
   if (!plan.ok) return { ok: false, errors: [...plan.errors, ...reader.errors] };
-  return reader.result({ document: plan.value, changeSummary, reply });
+  return reader.result({ document: plan.value, reply });
 }
 
 function readChoices(reader: Reader, input: Record<string, unknown>) {

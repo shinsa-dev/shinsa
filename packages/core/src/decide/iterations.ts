@@ -1,15 +1,12 @@
-import { DomainError, resolveCurrentRound, selectOpenIteration, type Task } from '../domain/index.ts';
+import {
+  DomainError,
+  type ReplyingHandOver,
+  resolveCurrentRound,
+  selectOpenIteration,
+  type Task,
+} from '../domain/index.ts';
 import type { AgentReply } from '../report/types.ts';
 import type { Decider } from './decider.ts';
-
-export type ReplyingHandOver =
-  | 'propose_plan'
-  | 'complete_phase'
-  | 'complete_fix'
-  | 'answer'
-  | 'report_diagnosis'
-  | 'submit_report'
-  | 'report_outcome';
 
 export function requestIteration(decider: Decider, taskId: string, text: string | null, comments: number) {
   const task = decider.task(taskId);

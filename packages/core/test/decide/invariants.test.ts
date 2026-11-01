@@ -689,7 +689,6 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
         type: 'agent.propose_plan',
         runId,
         document: resolvePlanDocument(state, run.taskId),
-        changeSummary: 'Tightened it.',
         ...resolveOwedReply(state, runId),
       });
     }

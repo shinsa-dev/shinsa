@@ -33,7 +33,6 @@ export function createSampleRevisionCall(task: Task) {
     args: {
       goal: document?.goal ?? '',
       phases: (document?.phases ?? []).map((phase) => ({ title: phase.title, detail: phase.detail })),
-      change_summary: task.plan?.changeSummary ?? '',
     },
   });
 }

@@ -252,7 +252,6 @@ export interface PhaseHandOver {
 
 export interface PlanHandOver {
   document: PlanDocument;
-  changeSummary: string | null;
   reply: AgentReply | null;
 }
 

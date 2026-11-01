@@ -1,26 +1,16 @@
-import type { PlanChange, Task } from '@shinsa/core';
+import type { PlanChange, PlanRevision, Task } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
 
-export interface PlanVersion {
-  summary: string | null;
-  changes: PlanChange[];
-  feedback: string | null;
-}
-
-export function resolvePlanVersion(task: Task): PlanVersion | null {
+export function resolvePlanChanges(task: Task): PlanChange[] {
   const plan = task.plan;
-  if (!plan || plan.version < 2) return null;
-  return {
-    summary: plan.changeSummary ?? null,
-    changes: plan.changes ?? [],
-    feedback: plan.feedback ?? null,
-  };
+  if (!plan || plan.version < 2) return [];
+  return plan.changes ?? [];
 }
 
-export function listRevisionChanges(task: Task | null, summary: string | null): PlanChange[] {
-  if (!task || !summary) return [];
+export function selectPlanRevision(task: Task | null, goal: string | null): PlanRevision | null {
+  if (!task || !goal) return null;
   const revisions = [...(task.planHistory ?? []), ...(task.plan ? [task.plan] : [])].reverse();
-  return revisions.find((revision) => revision.changeSummary === summary.trim())?.changes ?? [];
+  return revisions.find((revision) => revision.document?.goal === goal) ?? null;
 }
 
 export function describePlanEyebrow(task: Task) {
