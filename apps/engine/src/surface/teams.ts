@@ -34,7 +34,7 @@ function describeEntry(entry: RemoteTeamEntry) {
   return lines;
 }
 
-export function formatTeams(snapshot: RemoteSnapshot) {
+function formatTeams(snapshot: RemoteSnapshot) {
   if (!snapshot.paired)
     return 'Teams reach your teammates through remote access. Turn it on with `shinsa remote pair`.';
   if (snapshot.teams.length === 0)

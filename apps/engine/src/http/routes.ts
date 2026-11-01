@@ -32,8 +32,9 @@ import type { Onboarding } from '../onboarding/index.ts';
 import { createProjectRoutes } from '../projects/routes.ts';
 import { type Remote, resolveRequestOrigin } from '../remote/index.ts';
 import { createPlacementRoutes, type PlacementAsker } from '../remote/placement.ts';
-import { createRemoteRoutes, createTeamRoutes } from '../remote/routes.ts';
+import { createRemoteRoutes, createTeamFeedRoutes, createTeamRoutes } from '../remote/routes.ts';
 import type { ShareLinks } from '../remote/shares.ts';
+import type { TeamFeeds } from '../remote/team-feeds.ts';
 import type { Teams } from '../remote/teams.ts';
 import { createLoginResolver, type LoginResolver, type RootSource } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
@@ -64,6 +65,7 @@ export interface ApiContext {
   remote?: Remote;
   shares?: ShareLinks;
   teams?: Teams;
+  teamFeeds?: TeamFeeds;
   slack?: Slack;
   config: ServerConfig;
   instance?: ServerInstance;
@@ -371,6 +373,7 @@ export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
     ...(context.versions ? createVersionRoutes(context.versions) : []),
     ...(context.remote ? createRemoteRoutes(context.remote) : []),
     ...(context.remote && context.teams ? createTeamRoutes(context.remote, context.teams) : []),
+    ...(context.teamFeeds ? createTeamFeedRoutes(context.teamFeeds) : []),
     ...(context.place ? createPlacementRoutes(context.place) : []),
     ...(context.slack ? context.slack.routes() : []),
     ...(context.roots

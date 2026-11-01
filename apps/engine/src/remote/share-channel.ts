@@ -33,7 +33,7 @@ export interface LiveShare<View = ShareLiveView | TeamListView> {
   files: LiveFile[];
 }
 
-export interface ChannelGrant<Subject> {
+interface ChannelGrant<Subject> {
   subject: Subject;
   welcome: ShareWelcome;
   session: CryptoKey;

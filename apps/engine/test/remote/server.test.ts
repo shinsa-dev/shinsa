@@ -33,6 +33,7 @@ import {
 } from '../../src/remote/index.ts';
 import type { ShareChannel } from '../../src/remote/share-channel.ts';
 import type { ShareLinks } from '../../src/remote/shares.ts';
+import type { TeamFeeds } from '../../src/remote/team-feeds.ts';
 import { Teams } from '../../src/remote/teams.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Schedules } from '../../src/schedules/index.ts';
@@ -111,6 +112,7 @@ async function start(
     openUrl?: (url: string) => Promise<void>;
     shares?: ShareLinks;
     teams?: boolean;
+    teamFeeds?: TeamFeeds;
   } = {}
 ) {
   const config = createTestConfig(createTempDir(), options.config);
@@ -168,6 +170,7 @@ async function start(
     remote,
     ...(options.shares ? { shares: options.shares } : {}),
     ...(teams ? { teams } : {}),
+    ...(options.teamFeeds ? { teamFeeds: options.teamFeeds } : {}),
     slack: createFakeSlack(),
   });
   running.push(async () => {
@@ -401,6 +404,44 @@ describe('the tunnel entry point', () => {
     });
     socket.close();
     await ended;
+  });
+
+  test('relays a teammate’s task to a page on this machine only, and closes when the page speaks', async () => {
+    const targets: unknown[] = [];
+    let relayClosed = 0;
+    const feeds = {
+      openRelay: (peer: { send: (data: string) => void }, target: unknown) => {
+        targets.push(target);
+        peer.send('{"t":"view","data":"{}"}');
+        return {
+          close: () => {
+            relayClosed += 1;
+          },
+        };
+      },
+      listTasks: () => [{ task: { id: 'task-9' } }],
+      snapshot: () => ({ machines: [{ instanceId: 'inst9' }], tasks: [] }),
+    } as unknown as TeamFeeds;
+    const { local, tunnel, port, base } = await start({ teamFeeds: feeds });
+    expect((await local('/api/teams/view?team=t1')).status).toBe(404);
+    expect((await tunnel('/api/teams/view?team=t1&machine=m1&task=x')).status).toBe(404);
+    const tasks = (await (await local('/api/teams/tasks?open=true')).json()) as unknown;
+    expect(tasks).toEqual({ machines: [{ instanceId: 'inst9' }], tasks: [{ task: { id: 'task-9' } }] });
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/api/teams/view?team=t1&machine=m1&task=x`, {
+      headers: { origin: base },
+    } as unknown as string[]);
+    const first = new Promise<string>((resolve) => {
+      socket.addEventListener('message', (event) => resolve(String(event.data)), { once: true });
+    });
+    const ended = new Promise<CloseEvent>((resolve) => {
+      socket.addEventListener('close', resolve, { once: true });
+    });
+    expect(await first).toBe('{"t":"view","data":"{}"}');
+    expect(targets).toEqual([{ teamId: 't1', instanceId: 'm1', taskId: 'x' }]);
+    socket.send('hello');
+    const close = await ended;
+    expect([close.code, close.reason]).toEqual([1008, 'A team view only listens.']);
+    await until('the relay is closed', () => relayClosed >= 1);
   });
 
   test('has no team view without teams, or while remote access is paused', async () => {

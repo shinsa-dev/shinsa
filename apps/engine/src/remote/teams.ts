@@ -38,7 +38,7 @@ export interface TeamSubject {
   userId: string;
 }
 
-export interface TeamLinks {
+interface TeamLinks {
   acceptsViewer: () => boolean;
   openChannel: (peer: ChannelPeer, userId: string) => ShareChannel<TeamSubject>;
   closeChannel: (channel: ShareChannel<TeamSubject>) => void;

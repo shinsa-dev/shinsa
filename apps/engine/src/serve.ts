@@ -47,6 +47,7 @@ import {
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
 import { ShareClock } from './remote/share-clock.ts';
 import { Shares } from './remote/shares.ts';
+import { TeamFeeds } from './remote/team-feeds.ts';
 import { Teams } from './remote/teams.ts';
 import {
   createDiscoverer,
@@ -167,6 +168,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
   });
   const shares = new Shares({ engine, remote, evidence });
   const teams = new Teams({ engine, remote, shares });
+  const teamFeeds = new TeamFeeds({ remote });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
@@ -225,6 +227,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     remote,
     shares,
     teams,
+    teamFeeds,
     slack,
     inbox,
     quick,
@@ -292,6 +295,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     remote: services.remote,
     shares: services.shares,
     teams: services.teams,
+    teamFeeds: services.teamFeeds,
     slack: services.slack,
     restarter: createServiceRestarter(engine, {
       byService: options.byService ?? false,
@@ -318,6 +322,7 @@ async function startWork(services: Services) {
   await effects.recover();
   services.inbox.start();
   services.remote.start();
+  services.teamFeeds.start();
   services.briefings.schedule();
   services.extensions.syncSnapshot();
   void services.extensions.syncUsage();
@@ -360,6 +365,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
       services.schedules.stop();
       services.accounts.stop();
       services.versions.stop();
+      services.teamFeeds.stop();
       await services.remote.stop();
       await services.terminals.stop();
       for (const clock of services.clocks) clock.stop();

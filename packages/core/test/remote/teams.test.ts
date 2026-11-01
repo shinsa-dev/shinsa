@@ -11,11 +11,13 @@ import {
   parseTeamHello,
   parseTeamJoinFragment,
   parseTeamJoinUrl,
+  parseTeamViewTarget,
   resolveMachineTeamPath,
   resolveTeamChannelUrl,
   resolveTeamConnectPath,
   resolveTeamJoinUrl,
   resolveTeamLeavePath,
+  resolveTeamViewPath,
   serializeTeamJoinFragment,
   type TeamView,
   verifyTeamHello,
@@ -30,6 +32,22 @@ const OTHER_KEY = serializeBase64Url(new Uint8Array(32).fill(6));
 const LIST: TeamView = { kind: 'list' };
 
 const TASK: TeamView = { kind: 'task', taskId: 'task-1' };
+
+describe('the local view of a teammate’s task', () => {
+  test('names the team, the machine and the task, and reads them back', () => {
+    const target = { teamId: 'team-1', instanceId: 'inst_2', taskId: '01a1-task' };
+    const path = resolveTeamViewPath(target);
+    expect(path).toBe('/api/teams/view?team=team-1&machine=inst_2&task=01a1-task');
+    expect(parseTeamViewTarget(new URL(path, 'http://localhost'))).toEqual(target);
+  });
+
+  test('refuses a view with a part missing or out of shape', () => {
+    expect(parseTeamViewTarget(new URL('http://localhost/api/teams/view?team=t&machine=m'))).toBeNull();
+    expect(
+      parseTeamViewTarget(new URL('http://localhost/api/teams/view?team=t&machine=m&task=a%2Fb'))
+    ).toBeNull();
+  });
+});
 
 describe('the team join link', () => {
   test('carries the team, the invite and the key in its fragment, and reads back', () => {

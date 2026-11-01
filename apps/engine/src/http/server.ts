@@ -1,4 +1,11 @@
-import { LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, REMOTE_CONNECT_PARAM, SHARE_CHANNEL_PARAM } from '@shinsa/core';
+import {
+  LOCAL_ONLY_CODE,
+  LOCAL_ONLY_MESSAGE,
+  parseTeamViewTarget,
+  REMOTE_CONNECT_PARAM,
+  SHARE_CHANNEL_PARAM,
+  TEAM_VIEW_PATH,
+} from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
@@ -264,6 +271,23 @@ export function startServer(context: HttpContext) {
     return new Response('Upgrade failed', { status: 400 });
   }
 
+  function respondTeamView(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+    const { teamFeeds } = context;
+    const target = parseTeamViewTarget(url);
+    if (!(teamFeeds && target)) return respondError('not_found', 'No such endpoint.', 404);
+    const open = (peer: ChannelPeer) => {
+      const relay = teamFeeds.openRelay(peer, target);
+      return {
+        receive: () => {
+          relay.close();
+          peer.close(1008, 'A team view only listens.');
+        },
+        close: () => relay.close(),
+      };
+    };
+    return upgrade(request, bunServer, { kind: 'live', open, channel: null });
+  }
+
   function respondTunnel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
     const route = remote?.isEnabled ? resolveTunnelRoute(request, url) : null;
     if (route === 'health') return Response.json({ ok: true });
@@ -329,6 +353,7 @@ export function startServer(context: HttpContext) {
             surface: null,
             origin: 'local',
           });
+        if (url.pathname === TEAM_VIEW_PATH) return respondTeamView(request, url, bunServer);
         const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
         if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });
         if (url.pathname.startsWith('/api/')) return respondApi(request, url);

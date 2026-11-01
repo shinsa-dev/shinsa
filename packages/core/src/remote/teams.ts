@@ -35,6 +35,10 @@ export const MAX_OWNED_TEAMS = 10;
 
 export const TEAM_CHANNEL_PATH = '/team';
 
+export const TEAM_TASKS_PATH = '/api/teams/tasks';
+
+export const TEAM_VIEW_PATH = '/api/teams/view';
+
 export type TeamAction =
   | 'invite'
   | 'invite/remove'
@@ -123,6 +127,33 @@ export interface TeamListView {
   updatedAt: number;
 }
 
+export type TeamFeedStatus = 'connecting' | 'live' | 'offline' | 'refused';
+
+export interface TeamFeedMachine {
+  teamId: string;
+  instanceId: string;
+  name: string;
+  userId: string;
+  status: TeamFeedStatus;
+  reason: string | null;
+}
+
+export interface TeamFeedTask extends TeamTask {
+  teamId: string;
+  instanceId: string;
+}
+
+export interface TeamFeedSnapshot {
+  machines: TeamFeedMachine[];
+  tasks: TeamFeedTask[];
+}
+
+export interface TeamViewTarget {
+  teamId: string;
+  instanceId: string;
+  taskId: string;
+}
+
 export function isTeamKey(key: string) {
   return SEGMENT.test(key) && parseBase64Url(key)?.length === TEAM_KEY_BYTES;
 }
@@ -170,6 +201,20 @@ export function resolveMachineTeamPath(teamId: string, action: TeamAction) {
 
 export function resolveTeamChannelUrl(tunnelUrl: string, token: string) {
   return `${tunnelUrl}${TEAM_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`;
+}
+
+export function resolveTeamViewPath(target: TeamViewTarget) {
+  const query = new URLSearchParams({ team: target.teamId, machine: target.instanceId, task: target.taskId });
+  return `${TEAM_VIEW_PATH}?${query.toString()}`;
+}
+
+export function parseTeamViewTarget(url: URL): TeamViewTarget | null {
+  const teamId = url.searchParams.get('team');
+  const instanceId = url.searchParams.get('machine');
+  const taskId = url.searchParams.get('task');
+  if (!(teamId && instanceId && taskId)) return null;
+  if (![teamId, instanceId, taskId].every((part) => SEGMENT.test(part))) return null;
+  return { teamId, instanceId, taskId };
 }
 
 function serializeTeamView(view: TeamView) {

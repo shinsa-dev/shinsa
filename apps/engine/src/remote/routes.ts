@@ -2,6 +2,7 @@ import { DomainError } from '@shinsa/core';
 import { type JsonObject, readJsonObject } from '../http/body.ts';
 import type { ApiRoute } from '../http/routes.ts';
 import type { Remote } from './index.ts';
+import type { TeamFeeds } from './team-feeds.ts';
 import type { Teams } from './teams.ts';
 
 function readText(fields: JsonObject, name: string, message: string) {
@@ -61,6 +62,20 @@ export function createTeamRoutes(remote: Remote, teams: Teams): ApiRoute[] {
     post('/teams/remove', async (fields) => {
       await teams.remove(team(fields));
     }),
+  ];
+}
+
+export function createTeamFeedRoutes(feeds: TeamFeeds): ApiRoute[] {
+  return [
+    {
+      method: 'GET',
+      pattern: /^\/api\/teams\/tasks$/,
+      respond: (_match, request) => {
+        const query = new URL(request.url).searchParams;
+        const tasks = feeds.listTasks({ teamId: query.get('team'), open: query.get('open') === 'true' });
+        return Promise.resolve(Response.json({ machines: feeds.snapshot().machines, tasks }));
+      },
+    },
   ];
 }
 
