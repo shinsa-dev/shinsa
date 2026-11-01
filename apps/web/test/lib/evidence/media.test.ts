@@ -11,6 +11,15 @@ describe('resolveEvidenceMedia', () => {
     expect(resolveEvidenceMedia('javascript:alert(1)', 'screenshot')).toBe('link');
   });
 
+  it('reads a file a shared page decrypted into a blob address by its kind', () => {
+    const blob = 'blob:https://app.shinsa.dev/0b6a1c2e-4f1d-4a6e-9a51-1f2c3d4e5f60';
+    expect(resolveEvidenceMedia(blob, 'screenshot')).toBe('image');
+    expect(resolveEvidenceMedia(blob, 'recording')).toBe('video');
+    expect(resolveEvidenceMedia(blob, 'note')).toBe('text');
+    expect(resolveEvidenceMedia(blob, 'preview')).toBe('file');
+    expect(resolveEvidenceMedia(blob)).toBe('file');
+  });
+
   it('reads stored evidence by its extension, in any case', () => {
     expect(resolveEvidenceMedia('/api/evidence/shot.png')).toBe('image');
     expect(resolveEvidenceMedia('/api/evidence/shot.JPEG')).toBe('image');

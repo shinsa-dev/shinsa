@@ -253,7 +253,7 @@ src/
     │                    report, the line-comment draft (sides, ranges, kept in localStorage per gate, and your
     │                    Fix / Dismiss verdicts; serializeComments is what `gate.answer` sends as `comments`),
     │                    finding places
-    ├── evidence/        The Evidence section: media.ts (image, video, text, file or link from the URL; the round's
+    ├── evidence/        The Evidence section: media.ts (image, video, text, file or link from the URL, a shared page's blob address by its kind; the round's
     │                    evidence), runs.ts (a test or check run's commands, outcomes and counts), layout.ts (the round's items grouped by kind, comparisons as one item, a check's pieces as one item, the viewer's images
     │                    numbered item by item with their parts, the count of items by kind, the folder on disk), texts.ts (the bounded text cache; /ui records its samples in it), prefetch.ts (images and texts
     │                    read ahead with the task)
