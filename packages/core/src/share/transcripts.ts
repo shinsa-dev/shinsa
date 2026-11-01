@@ -1,3 +1,4 @@
+import { splitMessageAttachments } from '../chat/attachments.ts';
 import type { ChatEntry, ChatNotice, ChatTool } from '../chat/protocol.ts';
 import type { ShinsaToolName } from '../domain/tools.ts';
 
@@ -42,7 +43,9 @@ function redactNotice(notice: ChatNotice): ChatNotice {
 function redactEntry(entry: ChatEntry, privateCalls: Set<string>, messages: boolean): ChatEntry | null {
   switch (entry.type) {
     case 'user':
-      return messages && entry.from === 'you' ? { ...entry, attachments: [] } : null;
+      return messages && entry.from === 'you'
+        ? { ...entry, text: splitMessageAttachments(entry.text).text, attachments: [] }
+        : null;
     case 'tool_call':
       if (!isPrivateTool(entry.tool)) return { ...entry, tool: redactTool(entry.tool) };
       privateCalls.add(entry.callId);

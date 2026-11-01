@@ -233,7 +233,8 @@ describe('share presets', () => {
           actor: 'you' as const,
           kind: 'message' as const,
           text: 'Try the left pane.',
-          detail: null,
+          detail:
+            'Try the left pane.\n\n<attachments>\n<attachment kind="file" display_name="n.txt" path="/Users/me/.config/shinsa/data/attachments/01c/n.txt" url="/api/attachments/01c/n.txt" />\n</attachments>',
           evidenceId: null,
         },
         {
@@ -250,5 +251,7 @@ describe('share presets', () => {
       resolveSharedTask(harness.state, task, context(preset)).task.activity.map((entry) => entry.kind);
     expect(kinds('everything')).toEqual(['message']);
     expect(kinds('default')).toEqual([]);
+    const shared = resolveSharedTask(harness.state, task, context('everything')).task.activity;
+    expect(shared[0]?.detail).toBe('Try the left pane.');
   });
 });

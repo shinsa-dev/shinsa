@@ -200,6 +200,11 @@ function isSharedActivity(entry: Activity, grants: Grants) {
   return !PRIVATE_ACTIVITY.has(entry.kind) || (entry.kind === 'message' && grants('messages'));
 }
 
+function resolveSharedDetail(entry: Activity) {
+  if (entry.kind === 'decision' || entry.detail === null) return null;
+  return entry.kind === 'message' ? splitMessageAttachments(entry.detail).text : entry.detail;
+}
+
 function redactActivity(activity: readonly Activity[], grants: Grants): Activity[] {
   return activity
     .filter((entry) => isSharedActivity(entry, grants))
@@ -208,7 +213,7 @@ function redactActivity(activity: readonly Activity[], grants: Grants): Activity
       actor: entry.actor,
       kind: entry.kind,
       text: entry.text,
-      detail: entry.kind === 'decision' ? null : entry.detail,
+      detail: resolveSharedDetail(entry),
       evidenceId: entry.evidenceId,
       runId: null,
       ...(entry.gateType ? { gateType: entry.gateType } : {}),

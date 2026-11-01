@@ -27,7 +27,7 @@ describe('a shared transcript', () => {
         entry({
           type: 'user',
           from: 'you',
-          text: 'Try the left pane.',
+          text: 'Try the left pane.\n\n<attachments>\n<attachment kind="image" display_name="a.png" path="/Users/me/.config/shinsa/data/attachments/01b/a.png" url="/api/attachments/01b/a.png" />\n</attachments>',
           attachments: [{ kind: 'image', name: 'a.png', url: '/api/attachments/a.png' } as never],
         }),
       ],
@@ -42,6 +42,7 @@ describe('a shared transcript', () => {
       attachments: [],
     });
     expect(JSON.stringify(shared)).not.toContain(SECRET);
+    expect(JSON.stringify(shared)).not.toContain('attachments/01b');
   });
 
   test('keeps the agent output and tool calls, never your turns or the prompts Shinsa sends', () => {
