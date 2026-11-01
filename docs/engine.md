@@ -2555,7 +2555,8 @@ beside your run (Runs for a task, below).
   most servers read `PORT`, Vite needs `--port $PORT` in the command. A run that cannot bind fails like any other.
 - **A live preview.** `resolveServiceUrl` (core) puts the run's port in the preview URL, `ServiceView.url`; a run
   without a port has none. Wherever an active run has one, an Open button opens it (`docs/design.md`, 37),
-  `run_service` and `list_services` report it to the agent, and the `services list` command prints it. Before the
+  `run_service` and `list_services` report it to the agent, and the `services list` command prints it. Through remote
+  access, Open goes to the run's private address instead (Private service addresses, below). Before the
   review, the last phase asks the Agent to start the services that show the change and attach each URL, with the path
   to the screen to check, as `preview` evidence, which How to test links (`resolvePhaseInstruction`, the evidence
   skill); Evidence's Preview group also links each active run of the task the agent did not attach
@@ -2630,10 +2631,18 @@ beside your run (Runs for a task, below).
   worktree, and must already be there (a folder only on the task's branch is refused with a message that says so); a
   path that leaves the repository is refused. Everything else goes through the same `readServiceInput` check as
   `POST /api/services` and the same `Terminals.addService`, so a taken name, a preview URL without `{port}` and the
-  limit are refused as they are for you, and the new service shows in Services at once. No tool changes or removes a
-  service, and none starts your own run: those stay yours. The house rules tell those roles to add a service when the
-  project has none they need and never for a one-off command, and the last phase's preview instruction to add the
-  one that shows the change when none does.
+  limit are refused as they are for you, and the new service shows in Services at once. No tool changes a service in
+  place (remove it and add it again), and none starts your own run: that stays yours. The house rules tell those
+  roles to add a service when the project has none they need and never for a one-off command, and the last phase's
+  preview instruction to add the one that shows the change when none does.
+- **Agents remove services.** The same two roles have `remove_service`: `services`, a list of names or ids of any
+  service in the task's project, its folder in this task's repository or not, since a cleanup comes in a batch.
+  `list_services` also names the project's services that cannot run for the task, so the agent can name them. Every
+  name is resolved before anything changes, so an unknown one is refused with a pointer to `list_services` and
+  nothing is removed. A service that runs for you or for another task is refused the same way, naming who runs it,
+  so an agent never stops your dev server; the task's own run of it is stopped with it. The rest goes through
+  `Terminals.removeServices`, as `POST /api/services/remove` does for Manage. The house rules ask an agent to remove
+  a service it added that no longer serves, or one you ask it to remove, and never one you use unless you asked.
 - **Shared beyond this machine.** A task's run of a service with a preview URL can be shared at its own address on
   `shinsa.page`, through remote access's tunnel, for a teammate to open without Shinsa (Sharing a preview, below).
 
@@ -2774,7 +2783,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   which asks first), the access requests waiting for an answer (yours as the device's name and when you asked, anyone
   else's with their GitHub avatar, name and login, the device's name and when, and Decline and Accept), and Invite
   link (only while it is on: `canEnrollDevices`). It opens the link's dialog: Make link when there is none, else the
-  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you. Every toast here is
+  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you, left out through remote
+  access, which this browser reaches only with its key (on the machine's own page the key, kept for app.shinsa.dev,
+  cannot be read, and a device's name does not tell two browsers apart). Every toast here is
   a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). That link
   carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
@@ -3303,11 +3314,63 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
-- **To try it without a deploy**, `bun scripts/remote-preview.ts` runs a real service on Studio for one of its tasks
-  (`scripts/remote-preview-demo.ts`, a small dev server with live updates) and shares it on
-  `http://<label>.localhost:5195` with the Worker's own code. Its start page links the task in Studio's own app, with
-  no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the preview, stopping and
-  starting the service, and a link that no longer works.
+- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox.ts`) shares the seeded `web` service of one of
+  Studio's tasks (`scripts/sandbox-service.ts`, a small dev server with live updates) on
+  `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
+  own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
+  preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
+  longer works.
+
+## Private service addresses
+
+While remote access is on, every running service with a preview URL, a task's run and your own, has a private
+address on `shinsa.page` as well, so Open works from any device on remote access: a laptop looking at a headless
+server, or a phone looking at the Mac. Nothing to click and nothing to share: only the machine's owner and its members
+get in, gated by their app.shinsa.dev sign-in and the machine's connect key, never by a link key. Public Share preview
+links (Sharing a preview, above) stay separate and human-only.
+
+```
+Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
+                          signed in, owner or member of the machine?
+                          303 with ?access=<60 s token, connect key>
+          ──https──► <label>.shinsa.page   (the Worker)
+                          token checked → __Host-shinsa_preview_access
+                          (12 h, that host), 303 without it
+                          cookie → x-shinsa-preview-access
+          ──https──► t-<instance>.shinsa.dev/__preview/<id>/<path>
+                          engine: token, id, owner or member, run
+          ──http───► localhost:<port>/<path>
+```
+
+- **The address.** A run's private preview id is an HMAC of the machine's connect key over its service and task
+  (`resolvePrivatePreviewId` in core's `remote/previews.ts`), so the same run keeps the same address across restarts
+  of the service and the engine, and pairing the machine again (a new connect key) changes every one.
+  `Previews.resolveRemoteUrl` puts it on each running service terminal as `TerminalInfo.remoteUrl`
+  (`resolvePrivatePreviewUrl`: the preview URL's path on `https://<label>.shinsa.page`), which
+  `ServiceView.remoteUrl` carries to the page; it is null while remote access is off, the machine is not paired or
+  the run is not running. The label is LOC-97's (`serializePreviewLabel`), so the Worker route and the engine's
+  `/__preview/<id>` proxy serve both kinds.
+- **Who gets in.** The access token (`createPreviewAccessToken`, `verifyPreviewAccessToken`) names the instance, the
+  preview id, the account and an expiry, signed with the connect key under its own context, so it is never a connect
+  token. The Worker's open route mints one valid 60 seconds (`PREVIEW_OPEN_TTL_MS`) for an owner or member; the
+  Worker trades it on `shinsa.page` for one valid 12 hours (`PREVIEW_ACCESS_TTL_MS`) in an `HttpOnly`, `Secure`,
+  `SameSite=Lax` `__Host-shinsa_preview_access` cookie for that one host. On every request and WebSocket the engine
+  checks the signature, the expiry, the preview id against the run it derives, and that the account is still the
+  owner or a member of the machine (the heartbeat's list). The Worker strips any `x-shinsa-preview-access` a browser
+  sends, so a page cannot forge it. Anything else gets "This preview is not shared". Access goes per account: a
+  `shinsa.page` page holds no enrolled device key.
+- **When it goes down.** A stopped service gets the stopped page, and the address comes back when it starts again.
+  Turning remote access off, removing a member and pairing again cut access on the next request, and close the
+  open sockets of everyone who lost it.
+- **Open in the app.** In the remote build, every Open on a running service (the Services popovers, a task's
+  Services fact, the Terminal toolbar, and `preview` evidence that points at a task's own running service) goes to
+  `/__remote/previews/open?url=<the private address with the preview URL's path>` and shows the `shinsa.page`
+  address (`resolveServiceLink` in `apps/web/src/lib/terminal/services.ts`). Opened on the machine, or with an engine
+  that sends no `remoteUrl`, Open keeps `localhost:<port>`.
+- **To try it without a deploy**, `bun run sandbox` gives Studio's running web service its private
+  address: its start page, `/sandbox`, links the task through remote access, where Open goes there, the open route itself, and the
+  address without a cookie, which shows the not-shared page. The stand-in accepts every access request at once, so
+  Add this device lets the browser in without a trip to the machine's own app.
 
 ## Slack
 
@@ -5456,7 +5519,10 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
-  that is revised and then fixed, and operation-gate notes. The evidence (`scripts/seed-evidence.ts`) is real files in
+  that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
+  (`scripts/seed-services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
+  running `scripts/sandbox-service.ts` in the project's seeded repository with a preview URL; the command names the
+  script by its path in the checkout that seeded it. The evidence (`scripts/seed-evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of

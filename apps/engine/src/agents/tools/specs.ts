@@ -690,7 +690,7 @@ export const TOOL_SPECS = {
   list_services: {
     name: 'list_services',
     description:
-      'List the project’s services this task can run (its dev servers and the like), each with its command, the folder in this task’s worktree and whether it runs for this task. Name one in `service` to read the last lines of its output. It only reads.',
+      'List the project’s services this task can run (its dev servers and the like), each with its command, the folder in this task’s worktree and whether it runs for this task, then the project’s other services. Name one in `service` to read the last lines of its output. It only reads.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -741,6 +741,23 @@ export const TOOL_SPECS = {
         },
       },
       required: ['name', 'command'],
+    },
+  },
+  remove_service: {
+    name: 'remove_service',
+    description:
+      'Remove services from the project, for every task and for the human: one you added that no longer serves, or ones the human asks you to remove. This task’s own run of each stops with it. It refuses a service that runs for the human or another task, and then removes nothing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        services: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'The services’ names, from list_services.',
+        },
+      },
+      required: ['services'],
     },
   },
   note: {

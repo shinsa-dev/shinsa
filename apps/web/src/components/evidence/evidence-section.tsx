@@ -42,7 +42,7 @@ import {
   useDisclosure,
 } from '@/lib/preferences/disclosure.ts';
 import { type ChecksView, resolveChecksView, resolveEvidenceCheckRow } from '@/lib/tasks/checks.ts';
-import { listUnattachedPreviews, selectPreviewView } from '@/lib/terminal/services.ts';
+import { listUnattachedPreviews, resolveServiceLink, selectPreviewView } from '@/lib/terminal/services.ts';
 
 type Viewer = ReturnType<typeof useImageViewer>;
 
@@ -100,12 +100,16 @@ function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer })
 
 function LinkRow({ view, previews }: { view: EvidenceView; previews: ServiceView[] }) {
   const share = view.evidence.kind === 'preview' ? selectPreviewView(previews, view.evidence.uri) : null;
+  const link = (share && resolveServiceLink(share, view.evidence.uri)) ?? {
+    href: view.evidence.uri,
+    text: view.evidence.uri,
+  };
   return (
     <PreviewLinkRow share={share}>
-      <a href={view.evidence.uri} target='_blank' rel='noreferrer' className={PREVIEW_LINK}>
+      <a href={link.href} target='_blank' rel='noreferrer' className={PREVIEW_LINK}>
         <Icon size='sm' name='IconArrowUpRight' className='shrink-0 text-fg-2' />
         <span className='shrink-0 font-medium text-fg-4'>{view.evidence.title}</span>
-        <Truncate className='min-w-0 text-2xs text-fg-2'>{view.evidence.uri}</Truncate>
+        <Truncate className='min-w-0 text-2xs text-fg-2'>{link.text}</Truncate>
         {view.updated && <UpdatedMark text={view.updated} />}
       </a>
     </PreviewLinkRow>

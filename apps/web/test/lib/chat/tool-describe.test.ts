@@ -257,6 +257,11 @@ describe('describeTool', () => {
     expect(shinsa('run_service', { service: 'api', action: 'restart' })).toBe('Restarted a service: api');
     expect(shinsa('run_service', { service: 'api' })).toBe('Ran a service: api');
     expect(shinsa('add_service', { name: 'web', command: 'bun dev' })).toBe('Added a service: web');
+    expect(shinsa('remove_service', { services: ['seeded-app', 'scratch-app'] })).toBe(
+      'Removed services: seeded-app, scratch-app'
+    );
+    expect(shinsa('remove_service', { services: ['web'] })).toBe('Removed a service: web');
+    expect(shinsa('remove_service', {})).toBe('Removed services:');
     expect(shinsa('note', { note: 'Remember' })).toBe('Left a note: Remember');
     expect(shinsa('wait_for', { notes: 'The deploy' })).toBe('Scheduled a check-in: The deploy');
     expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }, { title: 'b' }] })).toBe('Suggested 2 tasks');
@@ -500,6 +505,10 @@ describe('resolveGroupPhrase', () => {
       'Ran 2 services',
     ]);
     expect(phrase('add_service', 1)).toBe('Added 1 service');
+    expect([phrase('remove_service', 1), phrase('remove_service', 2)]).toEqual([
+      'Removed services once',
+      'Removed services 2 times',
+    ]);
     expect([phrase('wait_for', 1), phrase('suggest_tasks', 1), phrase('answer', 1)]).toEqual([
       'Scheduled a check-in',
       'Suggested tasks',

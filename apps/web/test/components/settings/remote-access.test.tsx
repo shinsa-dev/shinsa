@@ -149,6 +149,18 @@ describe('Settings → Remote access', () => {
     expect(here?.getAttribute('href')).toBe(resolveOnMachineUrl(ENROLL_URL));
   });
 
+  it('offers no Add this device through remote access, where the device has its key already', async () => {
+    import.meta.env.VITE_SHINSA_REMOTE = '1';
+    try {
+      renderGroup(createRemoteSnapshot({ link: { url: ENROLL_URL, createdAt: Date.now() } }));
+      fireEvent.click(screen.getByRole('button', { name: 'Invite link' }));
+      expect(await screen.findByText(ENROLL_URL)).toBeTruthy();
+      expect(screen.queryByText('Add this device')).toBeNull();
+    } finally {
+      import.meta.env.VITE_SHINSA_REMOTE = undefined;
+    }
+  });
+
   it('turns the link off with a short toast', async () => {
     const toasts = spyOnToasts();
     const actions = renderGroup(createRemoteSnapshot({ link: { url: ENROLL_URL, createdAt: Date.now() } }));

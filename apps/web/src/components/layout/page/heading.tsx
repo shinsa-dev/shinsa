@@ -5,6 +5,8 @@ export const PAGE_TITLE = 'text-balance font-medium text-base text-fg-4 leading-
 
 export const PAGE_DESCRIPTION = 'max-w-2xl text-pretty text-fg-2 text-xs';
 
+export const SECTION_LABEL = 'flex shrink-0 items-center gap-1.5 font-medium text-2xs text-fg-2 leading-4';
+
 export function PageHeading({
   title,
   description,
