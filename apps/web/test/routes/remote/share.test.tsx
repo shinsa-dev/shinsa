@@ -99,6 +99,19 @@ describe('the shared page on app.shinsa.dev', () => {
     expect((await screen.findAllByText(/keys\.ts/)).length).toBeGreaterThan(0);
   });
 
+  it('opens a changed file whole from the streamed code', async () => {
+    const machine = connect();
+    const view = liveView();
+    view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-whole' } };
+    view.files = { ...view.files, code: { version: 'v1', type: 'text/plain' } };
+    await open(machine, view);
+    const whole = { files: { 'src/keys.ts': 'const ttl = 24;\nexport const keep = true;\n' } };
+    await machine.sendFile('code', 'v1', 'text/plain', JSON.stringify(whole));
+    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+    fireEvent.click((await screen.findAllByText(/keys\.ts/))[0] as HTMLElement);
+    expect((await screen.findAllByText(/const ttl = 24/)).length).toBeGreaterThan(0);
+  });
+
   it('a task with no repository has no Code tab', async () => {
     const machine = connect();
     const view = liveView({ code: false, repository: null, repo: null });
