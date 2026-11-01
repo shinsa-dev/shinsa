@@ -93,6 +93,7 @@ describe('the /ui remote access samples', () => {
     expect(single.listMachines()).toEqual([]);
     expect(single.listUnreachableMachines()).toEqual([]);
     expect(single.listMachineAccess()).toEqual([]);
+    expect(single.removeMachine('studio')).toBeUndefined();
     single.subscribeTeams(() => undefined)();
     expect(single.selectTeams()).toBe(NO_TEAM_FEED);
     expect(single.selectEngine('task')).toMatchObject({ version: DEVELOPMENT_VERSION });
