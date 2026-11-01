@@ -2772,8 +2772,10 @@ projection and channel will serve teams.
   an added or removed file comes whole from the diff, and a changed file's base is rebuilt from its head and its hunks
   (`resolveBaseContent`). Before a pull request, a task with a working copy sends the working copy's patch against the
   branch's base instead (`readWorkingPatch`, untracked files included, the index untouched) and its changed files
-  read from the checkout, versioned by the task's `updatedAt`, so it is read again only when the task changes (an
-  edit an agent records is a change). A Default share also pushes each run's transcript in pages of 200 entries
+  read from the checkout (`readWorktreeFile`: a symlink sends its target path, never the file it points to, and a path
+  that leads outside the checkout through a symlinked folder is refused), versioned by the task's `updatedAt` and the
+  count of its runs' tool results, so it is read again when the task changes or an agent's tool call ends (an agent's
+  file edits record no task event). A Default share also pushes each run's transcript in pages of 200 entries
   (`SHARE_TRANSCRIPT_PAGE`), each the file `transcript-<run id>-<page>` (`resolveShareTranscriptFile`), redacted by
   core's `redactTranscriptPage` and versioned by its entry count. A full page never changes, so it is sent once; when the
   run adds output (`Transcripts.subscribe`) only its last page is sent again, and only a link shared as Default is

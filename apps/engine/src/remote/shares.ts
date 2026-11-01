@@ -1,5 +1,5 @@
-import { statSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { lstatSync, readlinkSync, realpathSync, statSync } from 'node:fs';
+import { extname, join, sep } from 'node:path';
 import {
   type ChatEntry,
   countShareTranscriptPages,
@@ -117,7 +117,7 @@ const WORKTREE: ShareWorktree = {
     return refs.base ?? refs.head;
   },
   readPatch: readWorkingPatch,
-  readFile: (worktree, path) => Bun.file(join(worktree, path)).text(),
+  readFile: readWorktreeFile,
 };
 
 const PULL_REQUEST_CODE: ReadonlySet<PullRequest['state']> = new Set(['open', 'merged']);
@@ -125,6 +125,17 @@ const PULL_REQUEST_CODE: ReadonlySet<PullRequest['state']> = new Set(['open', 'm
 const CODE_FILE_LIMIT = 300;
 
 const CODE_STATUSES: ReadonlySet<string> = new Set(['modified', 'renamed']);
+
+export function readWorktreeFile(worktree: string, path: string) {
+  const root = realpathSync(worktree);
+  const full = join(root, path);
+  if (lstatSync(full).isSymbolicLink()) return Promise.resolve(readlinkSync(full));
+  const real = realpathSync(full);
+  if (!real.startsWith(`${root}${sep}`)) {
+    return Promise.reject(new Error(`${path} leads outside the working copy.`));
+  }
+  return Bun.file(real).text();
+}
 
 function resolveRepositoryName(repo: Repo | null) {
   if (!repo) return null;
@@ -404,10 +415,19 @@ export class Shares implements ShareEffects, ShareLinks {
   #listWorkingFiles(task: Task, repo: Repo, worktree: string) {
     return this.#cacheCode(
       task.id,
-      `working:${task.updatedAt}`,
+      `working:${task.updatedAt}:${this.#countToolResults(task.id)}`,
       async () => this.#worktree.readPatch(worktree, await this.#worktree.readBase(repo, task)),
       (path) => this.#worktree.readFile(worktree, path)
     );
+  }
+
+  #countToolResults(taskId: string) {
+    let count = 0;
+    for (const run of Object.values(this.#engine.state.runs)) {
+      if (run.taskId !== taskId) continue;
+      for (const entry of this.#transcripts.listEntries(run.id)) if (entry.type === 'tool_result') count += 1;
+    }
+    return count;
   }
 
   async #cacheCode(

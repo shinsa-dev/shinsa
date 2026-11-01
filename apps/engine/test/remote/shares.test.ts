@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type Bytes,
@@ -33,6 +33,7 @@ import { ControlClient } from '../../src/remote/control.ts';
 import { Remote } from '../../src/remote/index.ts';
 import { SHARE_GONE_REASON } from '../../src/remote/share-channel.ts';
 import {
+  readWorktreeFile,
   SHARE_LINK_LOST,
   SHARE_NOT_PAIRED,
   SHARE_REMOTE_CHANGED,
@@ -588,7 +589,7 @@ describe('what a link shows', () => {
     });
     const { view, files } = await publisher.resolveLive('task-1');
     expect(view.shared.code).toBe(true);
-    expect(view.files[SHARE_DIFF_FILE]).toEqual({ version: 'working:5', type: 'text/plain' });
+    expect(view.files[SHARE_DIFF_FILE]).toEqual({ version: 'working:5:0', type: 'text/plain' });
     const code = files.find((file) => file.id === SHARE_CODE_FILE);
     expect(new TextDecoder().decode(await code?.read())).toContain(`working src/a.ts in ${worktreePath}`);
     await publisher.resolveLive('task-1');
@@ -597,6 +598,52 @@ describe('what a link shows', () => {
     stub.state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath, updatedAt: 6 });
     await publisher.resolveLive('task-1');
     expect(reads).toHaveLength(2);
+  });
+
+  test('an agent’s tool call reads the working copy again, since its edits record no task event', async () => {
+    const reads: string[] = [];
+    const worktree: ShareWorktree = {
+      readBase: () => Promise.resolve('base-sha'),
+      readPatch: (path) => {
+        reads.push(path);
+        return Promise.resolve(DIFF);
+      },
+      readFile: () => Promise.resolve('edited'),
+    };
+    const worktreePath = createTempDir();
+    const { publisher, transcripts } = setUp({
+      worktree,
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath, updatedAt: 5 });
+        state.runs['run-1'] = createRun();
+      },
+    });
+    await publisher.resolveLive('task-1');
+    transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'Editing.' });
+    await publisher.resolveLive('task-1');
+    expect(reads).toHaveLength(1);
+    transcripts.record('run-1', { type: 'tool_result', callId: 'c1', status: 'ok', output: 'ok', images: [] });
+    const { view } = await publisher.resolveLive('task-1');
+    expect(reads).toHaveLength(2);
+    expect(view.files[SHARE_DIFF_FILE]?.version).toBe('working:5:1');
+  });
+
+  test('a changed symlink shares its target path, never the file it points to', async () => {
+    const worktree = createTempDir();
+    const outside = join(createTempDir(), 'secret.txt');
+    writeFileSync(outside, 'ssh key');
+    symlinkSync(outside, join(worktree, 'link'));
+    expect(await readWorktreeFile(worktree, 'link')).toBe(outside);
+  });
+
+  test('a path through a symlinked folder that leads outside the working copy is refused', async () => {
+    const worktree = createTempDir();
+    const outside = createTempDir();
+    writeFileSync(join(outside, 'id_rsa'), 'ssh key');
+    symlinkSync(outside, join(worktree, 'keys'));
+    await expect(readWorktreeFile(worktree, 'keys/id_rsa')).rejects.toThrow('leads outside the working copy');
+    writeFileSync(join(worktree, 'a.ts'), 'inside');
+    expect(await readWorktreeFile(worktree, 'a.ts')).toBe('inside');
   });
 
   test('the working copy’s code is read from its checkout, against the branch’s base', async () => {
