@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { type PreviewShare, resolveServiceView, type Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { PreviewShareDialog } from '@/components/services/preview-share-dialog.tsx';
 import { PreviewShareButton, PreviewSharingSample } from '@/components/services/task-previews.tsx';
 import { connection } from '@/lib/connection/socket.ts';
@@ -75,17 +75,34 @@ describe('Share preview', () => {
     const writeText = mock(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     showDialog({ previews: [{ ...SHARING, url: URL }] });
-    const link = (await screen.findByRole('textbox', { name: 'Link' })) as HTMLInputElement;
+    const link = (await screen.findByRole('textbox', { name: 'Preview link' })) as HTMLInputElement;
     expect(link.value).toBe(URL);
     expect(link.readOnly).toBe(true);
-    expect(screen.getByText(/Sharing ends when the task is done/)).toBeTruthy();
-    expect(screen.queryByRole('combobox', { name: 'Share for' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+    expect(screen.getByText(/while it runs\. Sharing ends when the task is done\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(URL));
     fireEvent.click(screen.getByRole('button', { name: 'Stop sharing' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'preview.unshare', taskId: 'fix', serviceId: 'web' }])
     );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('changes how long a shared link lasts, and closes on Done', async () => {
+    showDialog({ previews: [{ ...SHARING, url: URL }] });
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Share for' }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const item = within(screen.getAllByRole('listbox').at(-1) as HTMLElement).getByRole('option', {
+      name: '1 hour',
+    });
+    fireEvent.pointerDown(item, { pointerType: 'mouse' });
+    fireEvent.click(item);
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'preview.share', taskId: 'fix', serviceId: 'web', limit: 'hour' },
+      ])
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 

@@ -2,16 +2,17 @@ import { type PreviewShare, resolveShareLimit, type ShareLimit, type Task } from
 import { Button } from '@shinsa/ui/components/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
-import { Field, FieldDescription, FieldLabel } from '@shinsa/ui/components/field';
+import { Field, FieldLabel } from '@shinsa/ui/components/field';
 import { Input } from '@shinsa/ui/components/input';
 import * as React from 'react';
-import { useCopyText } from '@/components/controls/copy-button.tsx';
+import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
@@ -36,39 +37,36 @@ import {
 } from '@/lib/share/previews.ts';
 import { navigate } from '@/router.ts';
 
-function PreviewLink({ preview, url }: { preview: PreviewShare; url: string }) {
+function PreviewLink({ url }: { url: string }) {
   return (
-    <Field className='w-full'>
-      <FieldLabel>{PREVIEW_LINK_TITLE}</FieldLabel>
-      <Input
-        readOnly
-        aria-label={PREVIEW_LINK_TITLE}
-        value={url}
-        className='selectable'
-      />
-      <FieldDescription>
-        {preview.endsAt === null ? (
-          describePreviewEnd(preview)
-        ) : (
-          <TimeAgo at={preview.endsAt} text={(now) => describePreviewEnd(preview, now)} />
-        )}
-        .
-      </FieldDescription>
-    </Field>
+    <div className='relative w-full'>
+      <Input readOnly value={url} aria-label={PREVIEW_LINK_TITLE} className='selectable pr-8' />
+      <CopyButton text={url} className='absolute top-1/2 right-0.5 -translate-y-1/2' />
+    </div>
   );
 }
 
-function CopyLinkButton({ url }: { url: string }) {
-  const { copied, copy } = useCopyText(url);
-  return <Button onClick={copy}>{copied ? 'Copied' : 'Copy link'}</Button>;
+function PreviewDescription({ preview, shared }: { preview: PreviewShare | null; shared: boolean }) {
+  if (!preview || !shared) return <DialogDescription>{PREVIEW_SHARE_DESCRIPTION}</DialogDescription>;
+  return (
+    <DialogDescription>
+      {PREVIEW_SHARE_DESCRIPTION}{' '}
+      {preview.endsAt === null ? (
+        describePreviewEnd(preview)
+      ) : (
+        <TimeAgo at={preview.endsAt} text={(now) => describePreviewEnd(preview, now)} />
+      )}
+      .
+    </DialogDescription>
+  );
 }
 
-function PreviewBody({ view, preview }: { view: ShareView; preview: PreviewShare | null }) {
+function PreviewBody({ view }: { view: ShareView }) {
   switch (view.kind) {
     case 'unpaired':
       return <p className='text-fg-3 text-xs'>{PREVIEW_NEEDS_REMOTE}</p>;
     case 'shared':
-      return preview && <PreviewLink preview={preview} url={view.url} />;
+      return <PreviewLink url={view.url} />;
     case 'failed':
       return (
         <p role='alert' className='selectable text-destructive text-xs'>
@@ -121,7 +119,7 @@ function PreviewActions({
       return (
         <>
           {stop}
-          <CopyLinkButton url={view.url} />
+          <DialogClose render={<Button />}>Done</DialogClose>
         </>
       );
     case 'failed':
@@ -157,16 +155,19 @@ export function PreviewShareView({
   actions: PreviewShareActions;
 }) {
   const [picked, setPicked] = React.useState<ShareLimit | null>(null);
-  const limit = picked ?? preview?.limit ?? defaultLimit;
-  const choosing = view.kind === 'off' || view.kind === 'linking' || view.kind === 'failed';
+  const limit = preview?.limit ?? picked ?? defaultLimit;
+  const changeLimit = (next: ShareLimit) => {
+    setPicked(next);
+    if (preview) void actions.share(next);
+  };
   return (
     <>
       <DialogHeader>
         <DialogTitle>{PREVIEW_SHARE_TITLE}</DialogTitle>
-        <DialogDescription>{PREVIEW_SHARE_DESCRIPTION}</DialogDescription>
+        <PreviewDescription preview={preview} shared={view.kind === 'shared'} />
       </DialogHeader>
-      <PreviewBody view={view} preview={preview} />
-      {choosing && (
+      <PreviewBody view={view} />
+      {view.kind !== 'unpaired' && (
         <Field className='w-full'>
           <FieldLabel>{SHARE_LIMIT_TITLE}</FieldLabel>
           <SelectField
@@ -175,7 +176,7 @@ export function PreviewShareView({
             className='w-full'
             items={listShareLimitItems(task)}
             value={limit}
-            onValueChange={setPicked}
+            onValueChange={changeLimit}
           />
         </Field>
       )}

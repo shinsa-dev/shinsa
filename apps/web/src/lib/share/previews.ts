@@ -9,10 +9,9 @@ export const PREVIEW_SHARE_TITLE = 'Share preview';
 
 export const PREVIEW_SHARED_TITLE = 'Sharing preview';
 
-export const PREVIEW_LINK_TITLE = 'Link';
+export const PREVIEW_LINK_TITLE = 'Preview link';
 
-export const PREVIEW_SHARE_DESCRIPTION =
-  'Anyone with the link can open this service while it runs here, at an address of its own. It stops working when you stop sharing or the task is done.';
+export const PREVIEW_SHARE_DESCRIPTION = 'Anyone with the link can open this service while it runs.';
 
 export const PREVIEW_NEEDS_REMOTE =
   'A preview link reaches this service through remote access. Turn it on in Settings, then share the preview.';
@@ -76,7 +75,7 @@ export function resolvePreviewShareView(
 export function describePreviewEnd(preview: PreviewShare, now = Date.now()) {
   if (preview.endsAt !== null) return formatUntil('Sharing ends', preview.endsAt, now);
   if (preview.limit === 'until_done') return 'Sharing ends when the task is done';
-  return 'Shared until you stop it, or until the task is done';
+  return 'Shared until you stop it or the task is done';
 }
 
 export function sharePreview(target: PreviewTarget, limit: ShareLimit) {

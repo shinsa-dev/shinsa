@@ -91,7 +91,7 @@ describe('a preview share', () => {
     );
     expect(describePreviewEnd(SHARING)).toBe('Sharing ends when the task is done');
     expect(describePreviewEnd({ ...SHARING, limit: 'none' })).toBe(
-      'Shared until you stop it, or until the task is done'
+      'Shared until you stop it or the task is done'
     );
   });
 
