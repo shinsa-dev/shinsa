@@ -20,6 +20,7 @@ import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
 import { Terminals } from '../apps/engine/src/terminals/index.ts';
+import { resolveServiceRunIn } from '../apps/engine/src/terminals/routes.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,
@@ -109,10 +110,10 @@ interface ServicePreview {
 }
 
 interface SharedService {
+  engine: Engine;
   terminals: Terminals;
   serviceId: string;
   taskId: string;
-  cwd: string;
 }
 
 const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
@@ -455,7 +456,7 @@ async function createServicePreview(
   );
   const service = services.find((entry) => entry.projectId === task?.projectId && entry.name === 'web');
   if (!(task && service)) throw new Error('No seeded task has a web service to share.');
-  const shared: SharedService = { terminals, serviceId: service.id, taskId: task.id, cwd: service.cwd };
+  const shared: SharedService = { engine, terminals, serviceId: service.id, taskId: task.id };
   startSharedService(shared);
   await engine.dispatch({ type: 'preview.share', taskId: task.id, serviceId: service.id, limit: 'none' });
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -472,11 +473,10 @@ async function createServicePreview(
 }
 
 function startSharedService(shared: SharedService) {
-  shared.terminals.startService(shared.serviceId, {
-    cwd: shared.cwd,
-    place: 'worktree',
-    taskId: shared.taskId,
-  });
+  const { engine, terminals, serviceId, taskId } = shared;
+  const run = resolveServiceRunIn(engine.state, terminals.findService(serviceId), taskId, terminals);
+  if (!run) throw new Error('The shared web service cannot run in its task.');
+  terminals.startService(serviceId, run);
 }
 
 function createPreviewWorld(machines: Machine[]): CloudWorld {
