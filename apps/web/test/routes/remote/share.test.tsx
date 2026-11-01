@@ -103,7 +103,7 @@ describe('the shared page on app.shinsa.dev', () => {
     view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-diff' } };
     await open(machine, view);
     expect(screen.getByText('Read-only')).toBeTruthy();
-    expect(document.body.textContent).toContain('Shared by mona from Studio');
+    expect(document.body.textContent).toContain('Shared by Mmona from Studio');
     expect(screen.getByText('app')).toBeTruthy();
     expect(screen.getAllByText('Summary').length).toBeGreaterThan(0);
     expect(screen.queryByRole('textbox')).toBeNull();
