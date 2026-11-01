@@ -2,6 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  type BundlePullRequest,
   CI_GRACE_MS,
   createPullRequestWatch,
   evaluatePullRequestWatch,
@@ -1433,6 +1434,104 @@ describe('merging a stack of pull requests', () => {
       spy.mockRestore();
     }
     expect(readGitHub().pulls.map((pull) => pull.state)).toEqual(['OPEN', 'OPEN', 'MERGED']);
+  });
+});
+
+describe('merging a bundle of tasks', () => {
+  function bundlePulls(overrides: Record<number, Record<string, unknown>> = {}) {
+    return [
+      fakePull('feat/root', { number: 7, ...overrides[7] }),
+      fakePull('feat/middle', { number: 8, base: 'feat/root', ...overrides[8] }),
+      fakePull('feat/top', { number: 9, base: 'feat/middle', ...overrides[9] }),
+    ];
+  }
+
+  const BUNDLE: BundlePullRequest[] = [
+    { taskId: 'task-2', number: 8 },
+    { taskId: 'task-3', number: 7 },
+  ];
+
+  async function setupBundle() {
+    const { repo } = await createGitRepo();
+    return setup((state) => {
+      state.repos['repo-1'] = createRepo(repo);
+      state.tasks['task-1'] = createTask({
+        id: 'task-1',
+        branch: 'feat/top',
+        stage: 'awaiting_merge',
+        pullRequest: { ...PULL, number: 9, base: 'feat/middle' },
+      });
+      state.tasks['task-2'] = createTask({
+        id: 'task-2',
+        branch: 'feat/middle',
+        stage: 'awaiting_merge',
+        pullRequest: { ...PULL, number: 8, base: 'feat/root' },
+      });
+      state.tasks['task-3'] = createTask({
+        id: 'task-3',
+        branch: 'feat/root',
+        stage: 'awaiting_merge',
+        pullRequest: PULL,
+      });
+    });
+  }
+
+  function listMerged(calls: string[][]) {
+    return calls.filter((call) => call[0] === 'pr' && call[1] === 'merge').map((call) => call[2]);
+  }
+
+  test('merges the top task’s pull request, then each task’s below it top down, recording each one', async () => {
+    const readGitHub = useFakeGitHub(bundlePulls({ 8: { state: 'MERGED' } }));
+    const { runner, dispatched } = await setupBundle();
+    await runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: null, bundle: BUNDLE },
+      createContext()
+    );
+    expect(listMerged(readGitHub().calls)).toEqual(['9', '7']);
+    expect(records(dispatched).map((record) => [record.taskId, record.pullRequest.state])).toEqual([
+      ['task-1', 'merged'],
+      ['task-2', 'merged'],
+      ['task-3', 'merged'],
+    ]);
+  });
+
+  test('a top whose head moved is recorded and merges nothing below it', async () => {
+    const readGitHub = useFakeGitHub(bundlePulls({ 9: { head: 'main' } }));
+    const { runner, dispatched } = await setupBundle();
+    await runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: 'c0ffee0', bundle: BUNDLE },
+      createContext()
+    );
+    expect(listMerged(readGitHub().calls)).toEqual([]);
+    expect(records(dispatched).map((record) => record.taskId)).toEqual(['task-1']);
+  });
+
+  test('a task below that GitHub leaves open fails the merge, and the failure goes to the first task not merged', async () => {
+    useFakeGitHub(bundlePulls());
+    useFailingGh('pr merge 8', 0);
+    const { runner, dispatched, update } = await setupBundle();
+    const effect = { kind: 'pull_request.merge' as const, taskId: 'task-1', headSha: null, bundle: BUNDLE };
+    await expect(runner.apply(effect, createContext())).rejects.toThrow(
+      'GitHub still shows the pull request as open after merging it.'
+    );
+    update((state) => {
+      const top = state.tasks['task-1'];
+      if (top) state.tasks['task-1'] = { ...top, stage: 'merged' };
+    });
+    await runner.reportExhausted(effect, 'GitHub refused.', 'merge-key');
+    expect(dispatched.at(-1)).toMatchObject({
+      type: 'effect.fail',
+      taskId: 'task-2',
+      detail: 'GitHub refused.',
+    });
+    update((state) => {
+      for (const id of ['task-2', 'task-3']) {
+        const task = state.tasks[id];
+        if (task) state.tasks[id] = { ...task, stage: 'merged' };
+      }
+    });
+    await runner.reportExhausted(effect, 'GitHub refused.', 'merge-key-2');
+    expect(dispatched.at(-1)).toMatchObject({ type: 'effect.fail', taskId: 'task-1' });
   });
 });
 

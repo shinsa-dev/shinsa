@@ -22,7 +22,7 @@ import {
 } from '../prompts/index.ts';
 import { assembleReport } from '../report/assemble.ts';
 import { serializeReportMarkdown } from '../report/markdown.ts';
-import { listPendingDependencies } from '../state/queries.ts';
+import { listPendingDependencies, resolveBundle } from '../state/queries.ts';
 import { type Decider, describeWaiting } from './decider.ts';
 import { syncStackBase } from './dependencies.ts';
 import { proceedAfterSetup } from './shapes.ts';
@@ -91,7 +91,13 @@ export function startPlanning(decider: Decider, taskId: string, feedback: string
   decider.startRun(
     task,
     'agent',
-    resolvePlanningPrompt(task, decider.repoOf(task), decider.basesOf(task), feedback),
+    resolvePlanningPrompt(
+      task,
+      decider.repoOf(task),
+      decider.basesOf(task),
+      feedback,
+      resolveBundle(decider.state, task)
+    ),
     { purpose: 'plan', resumeFrom: decider.taskSession(taskId, 'agent'), feedback }
   );
 }

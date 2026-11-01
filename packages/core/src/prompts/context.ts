@@ -59,6 +59,29 @@ export function describeBases(bases: Task[]) {
   return `This task builds on "${only.title}", which is finished. Build on what it left in the base branch.`;
 }
 
+function describeBundleMember(member: Task, task: Task) {
+  const pullRequest = member.pullRequest ? ` (#${member.pullRequest.number})` : '';
+  return `"${member.title}"${pullRequest}${member.id === task.id ? ', this task' : ''}`;
+}
+
+export function describeBundle(task: Task, bundle: Task[]) {
+  const index = bundle.findIndex((member) => member.id === task.id);
+  if (index < 0) return '';
+  const below = bundle[index - 1];
+  const above = bundle[index + 1];
+  return [
+    `This task is in a bundle of ${bundle.length} tasks that merge together as one GitHub stack, from the bottom: ${bundle.map((member) => describeBundleMember(member, task)).join(', ')}.`,
+    below && below.stage !== 'merged'
+      ? `It is stacked on "${below.title}": your worktree starts from its branch ${below.branch ?? ''} and your pull request is based on that branch. Build on its work; do not redo or undo it. When you find a flaw in it, tell that task with \`tasks_message\` so its agent fixes it in its own pull request, which is still open.`
+      : '',
+    above
+      ? `"${above.title}" is stacked on this task. Once your pull request is clean this task is ready and merges with the bundle; it gets no merge gate of its own. Keep fixing CI, review comments and conflicts as usual: the task above takes in what you push.`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 function describeCheckLine(check: TaskCheck) {
   return `- ${check.id}, ${check.label}: \`${check.command}\``;
 }

@@ -312,10 +312,16 @@ export class EffectRunner {
   async reportExhausted(effect: ShinsaEffect, error: string, key: string) {
     const title = FAILURE_TITLE[effect.kind];
     if (!title || !('taskId' in effect) || effect.taskId === null) return;
+    const taskId = effect.kind === 'pull_request.merge' ? this.#resolveMergeFailure(effect) : effect.taskId;
     await this.#engine.dispatch(
-      { type: 'effect.fail', taskId: effect.taskId, title, detail: error },
+      { type: 'effect.fail', taskId, title, detail: error },
       { id: `${key}:effect.fail` }
     );
+  }
+
+  #resolveMergeFailure(effect: MergeEffect) {
+    const members = [effect.taskId, ...(effect.bundle ?? []).map((member) => member.taskId)];
+    return members.find((id) => this.#engine.state.tasks[id]?.stage !== 'merged') ?? effect.taskId;
   }
 
   async recover() {
@@ -794,26 +800,33 @@ export class EffectRunner {
   }
 
   async #merge(effect: MergeEffect, context: EffectContext) {
-    const { taskId, headSha } = effect;
+    if (!(await this.#mergeTask(effect.taskId, effect.headSha, context.signal))) return;
+    for (const member of effect.bundle ?? []) {
+      if (!(await this.#mergeTask(member.taskId, null, context.signal))) return;
+    }
+  }
+
+  async #mergeTask(taskId: string, headSha: string | null, signal: AbortSignal) {
     const { task, repo } = this.#requireTask(taskId);
     if (!task.pullRequest) throw new Error('There is no pull request to merge.');
-    if (context.signal.aborted) return;
-    const current = await readPullRequest(repo, task, context.signal);
-    if (context.signal.aborted) return;
+    if (signal.aborted) return false;
+    const current = await readPullRequest(repo, task, signal);
+    if (signal.aborted) return false;
     if (current && needsMerge(current.pullRequest) && isHeadMoved(headSha, current.pullRequest)) {
-      await this.#recordFreshRead(repo, taskId, current, context.signal);
-      return;
+      await this.#recordFreshRead(repo, taskId, current, signal);
+      return false;
     }
     if (needsMerge(current?.pullRequest)) {
-      const merged = await this.#mergeHead(repo, task, task.pullRequest.number, headSha, context.signal);
-      if (!merged) return;
+      const merged = await this.#mergeHead(repo, task, task.pullRequest.number, headSha, signal);
+      if (!merged) return false;
     }
     const stacked = listStackedPullRequests(task);
-    await this.#mergeStack(repo, stacked, context.signal);
-    const after = await readPullRequest(repo, task, context.signal);
-    if (after) await this.#recordFreshRead(repo, taskId, after, context.signal);
+    await this.#mergeStack(repo, stacked, signal);
+    const after = await readPullRequest(repo, task, signal);
+    if (after) await this.#recordFreshRead(repo, taskId, after, signal);
     if (after && isAwaitingMerge(after.pullRequest)) throw new Error(NOT_MERGED_YET);
-    await this.#assertStackMerged(repo, stacked, context.signal);
+    await this.#assertStackMerged(repo, stacked, signal);
+    return true;
   }
 
   async #closePullRequests(effect: CloseEffect, context: EffectContext) {
