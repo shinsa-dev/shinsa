@@ -786,6 +786,17 @@ idle cost over a long session, and a transition at the end of it.
   `SOAK_IDLE_MS` with nothing happening, and four Chat ⇄ Overview tab switches (time to the switched frame, the
   longest frame and frames over 34 ms, from `soak-stats.ts`). `SOAK_ATTACH=<port>` drives a window that is already
   open instead; `SOAK_OUT` writes the samples as JSON.
+- **Running it.** Build the web app, copy the data and serve the copy, then soak it from another terminal (the
+  `data-copy` service runs the first four lines on a port of its own):
+
+  ```bash
+  NODE_ENV=production bun run --cwd apps/web build --mode production
+  mkdir -p /tmp/shinsa-copy/data && cp ~/.config/shinsa/config.json /tmp/shinsa-copy/
+  sqlite3 ~/.config/shinsa/data/shinsa.sqlite ".backup /tmp/shinsa-copy/data/shinsa.sqlite"
+  SHINSA_HOME=/tmp/shinsa-copy SHINSA_INSPECT=1 SHINSA_PORT=5640 bun run --cwd apps/engine start
+  SOAK_LAPS=6 SOAK_SAMPLE_EVERY=2 SOAK_IDLE_MS=4000 bun scripts/perf/soak.ts http://127.0.0.1:5640
+  ```
+
 - **The runs below.** `SOAK_LAPS=6 SOAK_SAMPLE_EVERY=2 SOAK_IDLE_MS=4000` on the same data copy and the same build
   settings, before (`bd8019f4`) and after this pass; an Apple silicon Mac with other agents working beside it.
 

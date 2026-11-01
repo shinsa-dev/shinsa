@@ -101,7 +101,7 @@ function recordRead(url: string, key: string, value: unknown) {
   touch(latest, url, key);
   for (const oldest of reads.keys()) {
     if (settledSize <= CODE_READ_BUDGET) return;
-    if (oldest !== key) removeRead(oldest);
+    if (oldest !== key && settled.has(oldest)) removeRead(oldest);
   }
 }
 

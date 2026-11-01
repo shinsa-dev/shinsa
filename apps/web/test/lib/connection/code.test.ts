@@ -488,6 +488,25 @@ describe('useRepoSearch', () => {
 });
 
 describe('useRepoTrees', () => {
+  it('settles a folder still loading when a large answer passes the byte budget', async () => {
+    const { answer } = deferred();
+    const task = createTask({ id: 'pending' });
+    const trees = renderHook(() => useRepoTrees(task, SHA, ['src']));
+    const tree = resolveCodeUrl(task.id, 'tree', { ref: SHA, dir: 'src' });
+    const blob = renderHook(() => useCodeRead('/api/tasks/pending/blob?path=big'));
+    act(() =>
+      answer('/api/tasks/pending/blob?path=big', Response.json({ content: 'x'.repeat(CODE_READ_BUDGET + 1) }))
+    );
+    await waitFor(() => expect(blob.result.current.status).toBe('ready'));
+    act(() => answer(tree, Response.json({ ref: SHA, dir: 'src', entries: [] })));
+    await waitFor(() =>
+      expect(trees.result.current.get('src')).toEqual({
+        status: 'ready',
+        value: { ref: SHA, dir: 'src', entries: [] },
+      })
+    );
+  });
+
   it('reads every open folder once and says which failed', async () => {
     const fetch = serve((url) =>
       url.includes('dir=bad')
