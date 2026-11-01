@@ -51,6 +51,13 @@ const PROJECT_FIELD: FieldSpec = {
   description: 'The project: its key, name or id.',
 };
 
+const TEAM_FIELD: FieldSpec = {
+  name: 'team',
+  kind: 'text',
+  required: true,
+  description: 'The team’s id.',
+};
+
 const PATH_FIELD: FieldSpec = {
   name: 'path',
   kind: 'text',
@@ -301,6 +308,32 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
       projectId: await findProjectId(client, readValue(values, 'project')),
     }),
     done: () => 'Removed the project.',
+  }),
+  defineCommand({
+    path: ['projects', 'add-to-team'],
+    summary: 'Show every task of a project to a team, read-only and without its chat.',
+    command: 'project.add_to_team',
+    humanOnly: true,
+    fields: [PROJECT_FIELD, TEAM_FIELD],
+    build: async (values, client) => ({
+      type: 'project.add_to_team',
+      projectId: await findProjectId(client, readValue(values, 'project')),
+      teamId: readValue(values, 'team'),
+    }),
+    done: () => 'The team sees its tasks now.',
+  }),
+  defineCommand({
+    path: ['projects', 'remove-from-team'],
+    summary: 'Stop showing a project’s tasks to a team.',
+    command: 'project.remove_from_team',
+    humanOnly: true,
+    fields: [PROJECT_FIELD, TEAM_FIELD],
+    build: async (values, client) => ({
+      type: 'project.remove_from_team',
+      projectId: await findProjectId(client, readValue(values, 'project')),
+      teamId: readValue(values, 'team'),
+    }),
+    done: () => 'The team no longer sees its tasks.',
   }),
   defineAction({
     path: ['projects', 'add-repo'],

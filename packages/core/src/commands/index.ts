@@ -59,6 +59,7 @@ import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
 import type { ShareSystemCommand, ShareUserCommand } from './shares.ts';
 import type { SlackSystemCommand } from './slack.ts';
+import type { TeamUserCommand } from './teams.ts';
 import type { WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
 
 export interface ChangeProposalInput {
@@ -90,7 +91,7 @@ export type UserCommand =
   | { type: 'repo.remove'; repoId: string }
   | { type: 'project.write'; project: ProjectInput }
   | { type: 'project.remove'; projectId: string }
-  | { type: 'focus.change'; projectId: string | null; until: number | null }
+  | { type: 'focus.change'; projectId: string | null; teamId?: string | null; until: number | null }
   | { type: 'settings.change'; patch: Partial<Settings> }
   | {
       type: 'task.create';
@@ -151,7 +152,8 @@ export type UserCommand =
   | ScheduleUserCommand
   | WatchdogUserCommand
   | MemoryUserCommand
-  | ShareUserCommand;
+  | ShareUserCommand
+  | TeamUserCommand;
 
 type AgentCommand =
   | { type: 'agent.propose_plan'; runId: string; document: PlanDocument; changeSummary?: string | null }

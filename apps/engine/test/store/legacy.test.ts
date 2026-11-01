@@ -242,7 +242,7 @@ describe('a walkthrough’s testing as a plain list', () => {
     ];
     expect(listLegacyEventTypes(0)).toContain('task.answered');
     const watchdogReads = ['task.created', 'watchdog.armed', 'watchdog.checked'];
-    const later = [...watchdogReads, 'settings.changed'];
+    const later = [...watchdogReads, 'settings.changed', 'focus.changed'];
     expect(listLegacyEventTypes(2)).toEqual([
       'phase.completed',
       'work.submitted',
@@ -270,9 +270,10 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(listLegacyEventTypes(6)).toEqual(['review.reported', 'schedule.written', ...later]);
     expect(listLegacyEventTypes(7)).toEqual(['schedule.written', ...later]);
     expect(listLegacyEventTypes(8)).toEqual(later);
-    expect(listLegacyEventTypes(9)).toEqual(['settings.changed']);
-    expect(listLegacyEventTypes(10)).toEqual(['settings.changed']);
-    expect(listLegacyEventTypes(11)).toEqual([]);
+    expect(listLegacyEventTypes(9)).toEqual(['settings.changed', 'focus.changed']);
+    expect(listLegacyEventTypes(10)).toEqual(['settings.changed', 'focus.changed']);
+    expect(listLegacyEventTypes(11)).toEqual(['focus.changed']);
+    expect(listLegacyEventTypes(12)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -288,7 +289,40 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(11);
+    expect(readStoredLog(path).version).toBe(12);
+  });
+});
+
+describe('A focus saved before teams', () => {
+  test('gains no team, and a focus that names one is left alone', () => {
+    expect(
+      rewrite(
+        { type: 'focus.changed', focus: { projectId: 'project-1', until: null } },
+        { type: 'focus.changed', focus: { projectId: null, teamId: 'team-1', until: null } },
+        { type: 'focus.changed', focus: null }
+      ).map((row) => [row.seq, row.event.focus])
+    ).toEqual([[1, { projectId: 'project-1', until: null, teamId: null }]]);
+  });
+
+  test('is rewritten on boot in a log of the context management version', () => {
+    const path = writeLegacyLog([{ type: 'focus.changed', focus: { projectId: null, until: null } }]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 11');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.replaceLegacyEvents()).toBe(1);
+    log.close();
+    expect(readStoredLog(path)).toMatchObject({
+      version: 12,
+      rows: [
+        {
+          payload: JSON.stringify({
+            type: 'focus.changed',
+            focus: { projectId: null, until: null, teamId: null },
+          }),
+        },
+      ],
+    });
   });
 });
 
@@ -316,7 +350,7 @@ describe('Approve plans saved as a switch', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(11);
+    expect(stored.version).toBe(12);
     expect(stored.rows).toEqual([
       {
         seq: 1,
@@ -353,7 +387,7 @@ describe('the compaction setting saved under its Eunoe names', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     expect(readStoredLog(path)).toMatchObject({
-      version: 11,
+      version: 12,
       rows: [{ payload: JSON.stringify({ type: 'settings.changed', settings: { compaction: 'fold' } }) }],
     });
   });
@@ -380,7 +414,7 @@ describe('the weekly usage a metered run recorded as one number', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     log.close();
     const stored = readStoredLog(path);
-    expect(stored.version).toBe(11);
+    expect(stored.version).toBe(12);
     expect(stored.rows).toEqual([
       { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
     ]);

@@ -33,6 +33,8 @@ export const REMOTE_PATHS = {
   machineMemberAdd: '/__remote/machine/members/add',
   machineMemberRemove: '/__remote/machine/members/remove',
   inviteAccept: '/__remote/invites/accept',
+  teams: '/__remote/teams',
+  teamJoinPage: '/share/team',
 } as const;
 
 export const MAX_INSTANCE_MEMBERS = 20;

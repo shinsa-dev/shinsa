@@ -1369,6 +1369,36 @@ Every task agent's tool: `projects_remove`. Sends `project.remove`.
 | --- | --- | --- |
 | `<project>` | text, required | The project: its key, name or id. |
 
+#### shinsa projects add-to-team
+
+Show every task of a project to a team, read-only and without its chat.
+
+```
+shinsa projects add-to-team <project> --team <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `project.add_to_team`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<project>` | text, required | The project: its key, name or id. |
+| `--team` | text, required | The team’s id. |
+
+#### shinsa projects remove-from-team
+
+Stop showing a project’s tasks to a team.
+
+```
+shinsa projects remove-from-team <project> --team <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `project.remove_from_team`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<project>` | text, required | The project: its key, name or id. |
+| `--team` | text, required | The team’s id. |
+
 #### shinsa projects add-repo
 
 Put a repository in a project, registering it if no agent has worked there yet.

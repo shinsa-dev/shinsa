@@ -26,7 +26,10 @@ const PROJECTS = [
 ];
 
 function focused(projectId: string | null): ShinsaState {
-  return createShinsaState({ projects: PROJECTS, patch: { focus: { projectId, until: null } } });
+  return createShinsaState({
+    projects: PROJECTS,
+    patch: { focus: { projectId, teamId: null, until: null } },
+  });
 }
 
 function find(sections: CommandSection[], id: string): Command {
@@ -128,7 +131,7 @@ describe('the focus choice', () => {
   it('offers no timed focus while on all work, or when the focus has expired', () => {
     const expired = createShinsaState({
       projects: PROJECTS,
-      patch: { focus: { projectId: 'web', until: NOW - 1 } },
+      patch: { focus: { projectId: 'web', teamId: null, until: NOW - 1 } },
     });
     for (const state of [focused(null), expired]) {
       const ids = listGlobalSections(state, { name: 'home' }, 'system', 'cards').flatMap((section) =>

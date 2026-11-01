@@ -7,7 +7,10 @@ import { createProject, createShinsaState } from '../../support/state.ts';
 const PROJECTS = [createProject({ id: 'work', name: 'Work' }), createProject({ id: 'home', name: 'Home' })];
 
 function renderFocus(projectId: string | null) {
-  const state = createShinsaState({ projects: PROJECTS, patch: { focus: { projectId, until: null } } });
+  const state = createShinsaState({
+    projects: PROJECTS,
+    patch: { focus: { projectId, teamId: null, until: null } },
+  });
   render(<FocusMenu state={state} />);
   fireEvent.click(screen.getByRole('button', { name: /^Focus/ }));
 }

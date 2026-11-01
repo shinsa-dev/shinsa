@@ -6,7 +6,10 @@ describe('selectFocus', () => {
   const projects = [createProject({ id: 'work', name: 'Work' })];
 
   it('returns the focused project while the focus lasts', () => {
-    const state = createShinsaState({ projects, patch: { focus: { projectId: 'work', until: NOW + 1000 } } });
+    const state = createShinsaState({
+      projects,
+      patch: { focus: { projectId: 'work', teamId: null, until: NOW + 1000 } },
+    });
     expect(selectFocus(state, NOW)?.name).toBe('Work');
     expect(selectFocus(state, NOW + 1000)).toBeNull();
   });
@@ -14,7 +17,7 @@ describe('selectFocus', () => {
   it('returns null without a focus or when the project is gone', () => {
     expect(selectFocus(createShinsaState({ projects }), NOW)).toBeNull();
     expect(
-      selectFocus(createShinsaState({ patch: { focus: { projectId: 'gone', until: null } } }))
+      selectFocus(createShinsaState({ patch: { focus: { projectId: 'gone', teamId: null, until: null } } }))
     ).toBeNull();
   });
 });

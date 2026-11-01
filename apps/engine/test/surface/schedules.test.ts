@@ -26,7 +26,7 @@ const RESPONSES = {
   '/api/tasks/fix': createTaskDetail(),
   '/api/projects': {
     projects: [{ id: 'proj-1', key: 'LOC', name: 'Shinsa', repos: [] }],
-    focus: { projectId: null, until: null },
+    focus: { projectId: null, teamId: null, until: null },
   },
 };
 

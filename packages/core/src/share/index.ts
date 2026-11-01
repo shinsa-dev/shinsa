@@ -321,21 +321,35 @@ export function hasSharedCode(task: Task, repository: string | null) {
   return task.pullRequest !== null && CODE_STATES.has(task.pullRequest.state);
 }
 
-export function resolveSharedTask(state: ShinsaState, task: Task, context: SharedTaskContext): SharedTask {
+export interface SharedListing {
+  task: Task;
+  gates: Gate[];
+  project: Project | null;
+}
+
+export function resolveSharedListing(state: ShinsaState, task: Task, gates: readonly Gate[]): SharedListing {
   const projectId = resolveTaskProject(state, task);
   const project = projectId ? state.projects[projectId] : undefined;
-  const repo = task.repoId ? state.repos[task.repoId] : undefined;
   return {
     task: scrubValue(redactTask(task)),
-    gates: Object.values(state.gates)
-      .filter((gate) => gate.taskId === task.id)
-      .map((gate) => scrubValue(redactGate(gate))),
+    gates: gates.map((gate) => scrubValue(redactGate(gate))),
+    project: project ? redactProject(project) : null,
+  };
+}
+
+export function resolveSharedTask(state: ShinsaState, task: Task, context: SharedTaskContext): SharedTask {
+  const gates = Object.values(state.gates).filter((gate) => gate.taskId === task.id);
+  const listing = resolveSharedListing(state, task, gates);
+  const repo = task.repoId ? state.repos[task.repoId] : undefined;
+  return {
+    task: listing.task,
+    gates: listing.gates,
     runs: Object.values(state.runs)
       .filter((run) => run.taskId === task.id)
       .map(redactRun),
     evidence: listSharedEvidence(state, task),
     repo: repo ? redactRepo(repo) : null,
-    project: project ? redactProject(project) : null,
+    project: listing.project,
     owner: context.owner,
     machine: context.machine,
     repository: context.repository,

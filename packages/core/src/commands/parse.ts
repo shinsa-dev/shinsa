@@ -407,6 +407,7 @@ function readFocusChange(fields: Fields): UserCommand {
   return {
     type: 'focus.change',
     projectId: readNullableId(fields, 'projectId'),
+    ...(fields.teamId === undefined ? {} : { teamId: readNullableId(fields, 'teamId') }),
     until: readTime(fields, 'until'),
   };
 }
@@ -728,6 +729,16 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     ...('limit' in fields ? { limit: readChoice(fields, 'limit', SHARE_LIMIT_SET) } : {}),
   }),
   'task.unshare': (fields) => ({ type: 'task.unshare', taskId: readId(fields, 'taskId') }),
+  'project.add_to_team': (fields) => ({
+    type: 'project.add_to_team',
+    projectId: readId(fields, 'projectId'),
+    teamId: readId(fields, 'teamId'),
+  }),
+  'project.remove_from_team': (fields) => ({
+    type: 'project.remove_from_team',
+    projectId: readId(fields, 'projectId'),
+    teamId: readId(fields, 'teamId'),
+  }),
 };
 
 export const USER_COMMAND_TYPES = Object.keys(READERS) as UserCommand['type'][];

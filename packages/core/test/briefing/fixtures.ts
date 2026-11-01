@@ -28,6 +28,7 @@ export function entry(
 export function queueOf(entries: QueuedGate[], extra: Partial<Queue> = {}): Queue {
   return {
     focusProjectId: null,
+    focusTeamId: null,
     ready: entries,
     upNow: entries,
     later: [],
