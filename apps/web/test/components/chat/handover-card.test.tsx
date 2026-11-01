@@ -224,6 +224,35 @@ describe('HandoverCard for the process tools', () => {
     expect(diagnosed.getByText('Reported the diagnosis')).toBeTruthy();
     expect(diagnosed.getByText('dry')).toBeTruthy();
   });
+
+  it('shows the reply to your message first, then the plan, the summary or the report below it', () => {
+    const reply = {
+      headline: 'Split the work as you asked.',
+      points: [{ ask: 'Two phases', outcome: 'not_changed', note: 'One phase is enough.' }],
+      next: 'Approve the plan.',
+    };
+    for (const [name, args, below] of [
+      ['propose_plan', { goal: 'Ship it.', phases: [] }, 'Ship it.'],
+      ['complete_phase', { summary: 'The form validates.' }, 'The form validates.'],
+      ['complete_fix', { summary: 'Fixed the form.' }, 'Fixed the form.'],
+      ['answer', { answer: 'It is cached.' }, 'It is cached.'],
+      ['report_diagnosis', { diagnosis: 'The pool runs dry.' }, 'The pool runs dry.'],
+      ['submit_report', { report: 'Use a workspace host.' }, 'Use a workspace host.'],
+      ['report_outcome', { outcome: 'Backfilled 12 rows.' }, 'Backfilled 12 rows.'],
+    ] as const) {
+      const view = renderCard(call(name, { ...args, reply }));
+      const headline = view.getByText('Split the work as you asked.');
+      expect(view.getByText('Two phases')).toBeTruthy();
+      expect(view.getByText('Not changed')).toBeTruthy();
+      expect(view.getByText('What to do now')).toBeTruthy();
+      expect(
+        headline.compareDocumentPosition(view.getByText(below)) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      view.unmount();
+    }
+    const plain = renderCard(call('report_diagnosis', { diagnosis: 'The pool runs dry.' }));
+    expect(plain.queryByText('What to do now')).toBeNull();
+  });
 });
 
 describe('HandoverCard for a watch an agent suggests', () => {

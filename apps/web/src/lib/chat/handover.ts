@@ -1,6 +1,9 @@
 import {
+  type AgentReply,
   type ChatToolArgs,
   QUESTION_WITHDRAWN,
+  REPLY_OUTCOMES,
+  type ReplyOutcome,
   readAnsweredReply,
   splitMessageAttachments,
 } from '@shinsa/core';
@@ -55,6 +58,23 @@ export function readProposedChange(args: ChatToolArgs) {
   if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) return null;
   const why = readString(proposal as ChatToolArgs, 'why');
   return why ? { why, request: readString(proposal as ChatToolArgs, 'request') } : null;
+}
+
+function isReplyOutcome(value: unknown): value is ReplyOutcome {
+  return REPLY_OUTCOMES.some((outcome) => outcome === value);
+}
+
+export function readHandOverReply(args: ChatToolArgs): AgentReply | null {
+  const reply = args.reply;
+  if (!reply || typeof reply !== 'object' || Array.isArray(reply)) return null;
+  const headline = readString(reply as ChatToolArgs, 'headline');
+  if (!headline) return null;
+  const points = readList(reply as ChatToolArgs, 'points').flatMap((point) => {
+    const ask = readString(point, 'ask');
+    if (!ask || !isReplyOutcome(point.outcome)) return [];
+    return [{ ask, outcome: point.outcome, note: readString(point, 'note') ?? '' }];
+  });
+  return { headline, points, next: readString(reply as ChatToolArgs, 'next') };
 }
 
 function readPhases(value: unknown) {
