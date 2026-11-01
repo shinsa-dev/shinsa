@@ -107,6 +107,7 @@ export interface ShinsaConnection {
   listMachines: () => MachineChoice[];
   listUnreachableMachines: () => UnreachableMachine[];
   listMachineAccess: () => MachineAccess[];
+  removeMachine: (id: string) => void;
   selectEngine: (id?: string | null) => EngineInfo | null;
   command: (command: UserCommand, machineId?: string | null) => Promise<void>;
   reset: () => void;
@@ -196,6 +197,7 @@ export class Connection implements ShinsaConnection {
   #flushing = false;
   #syncing = false;
   #attempt = 0;
+  #stopped = false;
   #accounts: AccountsSnapshot | null = null;
   #terminals: TerminalsSnapshot | null = null;
   #resources: MachineResources | null = null;
@@ -224,14 +226,19 @@ export class Connection implements ShinsaConnection {
   }
 
   start() {
-    if (this.#socket === null) this.#connect();
+    if (this.#socket === null && !this.#stopped) this.#connect();
+  }
+
+  stop() {
+    this.#stopped = true;
+    this.#socket?.close();
+    if (this.#snapshot.status !== 'closed') this.#update({ status: 'closed' });
   }
 
   #connect() {
     const socket = this.#options.openSocket();
     this.#socket = socket;
     socket.addEventListener('open', () => {
-      this.#attempt = 0;
       this.#syncing = true;
       this.#detailsAsked.clear();
       this.#update({ status: 'open' });
@@ -246,9 +253,12 @@ export class Connection implements ShinsaConnection {
     socket.addEventListener('close', () => {
       this.#update({ status: 'closed' });
       this.#dropPending();
+      if (this.#stopped) return;
       const delay = RETRY_STEPS_MS[Math.min(this.#attempt, RETRY_STEPS_MS.length - 1)] ?? 5000;
       this.#attempt += 1;
-      this.#options.retry(() => this.#connect(), delay);
+      this.#options.retry(() => {
+        if (!this.#stopped) this.#connect();
+      }, delay);
     });
   }
 
@@ -299,6 +309,8 @@ export class Connection implements ShinsaConnection {
   listUnreachableMachines = (): UnreachableMachine[] => NO_UNREACHABLE_MACHINES;
 
   listMachineAccess = (): MachineAccess[] => NO_MACHINE_ACCESS;
+
+  removeMachine = (_id: string) => undefined;
 
   selectEngine = (_id?: string | null) => this.#engine;
 
@@ -537,6 +549,7 @@ export class Connection implements ShinsaConnection {
   #receive(message: ServerMessage) {
     switch (message.type) {
       case 'state':
+        this.#attempt = 0;
         this.#incomingState = message.state;
         this.#incoming = [];
         this.#scheduleFlush();

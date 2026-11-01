@@ -108,6 +108,7 @@ class FakeConnection implements ShinsaConnection {
   listMachines = () => [];
   listUnreachableMachines = () => [];
   listMachineAccess = () => [];
+  removeMachine = () => undefined;
   selectEngine = () => this.engine;
   command = (command: UserCommand) => {
     this.commands.push(command);
@@ -124,6 +125,7 @@ class FakeConnection implements ShinsaConnection {
 function createMember(id: string, name: string) {
   const connection = new FakeConnection();
   const requests: string[] = [];
+  const closed: string[] = [];
   const member: FleetMember = {
     id,
     name,
@@ -132,8 +134,9 @@ function createMember(id: string, name: string) {
       requests.push(new URL(request.url).pathname);
       return Promise.resolve(new Response(name));
     },
+    close: () => closed.push(id),
   };
-  return { member, connection, requests };
+  return { member, connection, requests, closed };
 }
 
 function createFleet() {
@@ -536,6 +539,42 @@ describe('sending to the machine that owns it', () => {
 
   it('reports no resources while no machine is reachable', () => {
     expect(new Fleet([]).selectResources()).toBeNull();
+  });
+
+  it('drops a removed machine’s tasks at once, closes it and does not list it as unreachable', () => {
+    const { fleet, studio, laptop } = createFleet();
+    const unreachable = new Fleet([studio.member], [{ id: 'm3', name: 'Build box' }]);
+    let published = 0;
+    fleet.subscribe(() => {
+      published += 1;
+    });
+    let remotePublished = 0;
+    fleet.subscribeRemote(() => {
+      remotePublished += 1;
+    });
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {}).sort()).toEqual(['task-laptop', 'task-studio']);
+    fleet.removeMachine('m2');
+    expect(published).toBe(1);
+    expect(remotePublished).toBe(1);
+    expect(Object.keys(fleet.snapshot().state?.tasks ?? {})).toEqual(['task-studio']);
+    expect(fleet.members.map((member) => member.id)).toEqual(['m1']);
+    expect(fleet.listUnreachableMachines()).toEqual([]);
+    expect(laptop.closed).toEqual(['m2']);
+    expect(studio.closed).toEqual([]);
+    fleet.removeMachine('m2');
+    expect(laptop.closed).toEqual(['m2']);
+    expect(unreachable.listUnreachableMachines()).toEqual([{ id: 'm3', name: 'Build box' }]);
+    unreachable.removeMachine('m3');
+    expect(unreachable.listUnreachableMachines()).toEqual([]);
+  });
+
+  it('closes a machine that no longer accepts this browser, and every machine when the fleet closes', () => {
+    const { fleet, studio, laptop } = createFleet();
+    fleet.removeMember('m2');
+    expect(laptop.closed).toEqual(['m2']);
+    fleet.close();
+    expect(studio.closed).toEqual(['m1']);
+    expect(laptop.closed).toEqual(['m2']);
   });
 
   it('keeps the account’s machines this device cannot reach, to show them disabled', () => {

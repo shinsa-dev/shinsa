@@ -226,7 +226,7 @@ describe('Connection', () => {
     latest().receive({ type: 'ack', id, error: null });
   });
 
-  it('backs off between reconnects and resets once a socket opens', () => {
+  it('backs off between reconnects and resets once a socket delivers the state', () => {
     const { subject, sockets, retries, latest } = setup();
     subject.start();
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -236,8 +236,45 @@ describe('Connection', () => {
     expect(retries.map((retry) => retry.delayMs)).toEqual([250, 1000, 2000, 5000, 5000]);
     expect(sockets).toHaveLength(6);
     latest().open();
+    latest().receive({ type: 'state', state: createShinsaState({ tasks: [] }) });
     latest().close();
     expect(retries.at(-1)?.delayMs).toBe(250);
+    expect(subject.snapshot().status).toBe('closed');
+  });
+
+  it('keeps backing off when each socket opens and breaks before its state arrives', () => {
+    const { subject, retries, latest } = setup();
+    subject.start();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      latest().open();
+      latest().close();
+      retries.at(-1)?.reconnect();
+    }
+    expect(retries.map((retry) => retry.delayMs)).toEqual([250, 1000, 2000, 5000, 5000]);
+  });
+
+  it('stops for good: closes its socket, skips the retry and a pending reconnect, and never starts again', () => {
+    const { subject, sockets, retries, latest } = setup();
+    subject.start();
+    latest().close();
+    const pending = retries.at(-1);
+    pending?.reconnect();
+    latest().open();
+    subject.stop();
+    expect(latest().readyState).toBe(3);
+    expect(subject.snapshot().status).toBe('closed');
+    expect(retries).toHaveLength(1);
+    pending?.reconnect();
+    subject.start();
+    expect(sockets).toHaveLength(2);
+    expect(subject.removeMachine('m1')).toBeUndefined();
+  });
+
+  it('says it is closed when stopped before it ever opened a socket', () => {
+    const { subject, sockets } = setup();
+    subject.stop();
+    subject.start();
+    expect(sockets).toHaveLength(0);
     expect(subject.snapshot().status).toBe('closed');
   });
 

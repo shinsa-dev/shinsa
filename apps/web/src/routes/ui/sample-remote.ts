@@ -266,6 +266,7 @@ export function createStaticConnection(
     listMachines: () => NO_MACHINES,
     listUnreachableMachines: () => NO_UNREACHABLE_MACHINES,
     listMachineAccess: () => NO_MACHINE_ACCESS,
+    removeMachine: () => undefined,
     selectEngine: () => SAMPLE_ENGINE,
     command: () => Promise.reject(new Error('This is a sample. Nothing changes here.')),
     reset: () => undefined,

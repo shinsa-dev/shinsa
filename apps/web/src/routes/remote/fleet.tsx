@@ -166,6 +166,10 @@ export function FleetApp({
         const members = added.map(({ instance, device }) =>
           createFleetMember(instance, device, {
             dashboard: services.dashboard,
+            onRemoved: (instanceId) => {
+              void services.devices.removeDevice(instanceId);
+              fleet?.removeMachine(instanceId);
+            },
             onRefused: (instanceId) => {
               void services.devices.removeDevice(instanceId);
               fleet?.removeMember(instanceId);
@@ -178,14 +182,13 @@ export function FleetApp({
             },
           })
         );
-        release.push(...members.map((entry) => entry.close));
         const hostedTeams = new HostedTeamFeeds({
           listTeams: services.dashboard.listTeams,
           selectTeamKey: services.teamKeys.selectTeamKey,
         });
         release.push(() => hostedTeams.stop());
         fleet = new Fleet(
-          members.map((entry) => entry.member),
+          members,
           rows.flatMap((row) =>
             row.device && !row.device.waiting ? [] : [{ id: row.instance.id, name: row.instance.name }]
           ),

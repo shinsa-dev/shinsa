@@ -5,7 +5,7 @@ import {
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
-import { Connection, retryLater, type ShinsaConnection } from '@/lib/connection/socket.ts';
+import type { ShinsaConnection } from '@/lib/connection/socket.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
 import type { FleetMember } from '@/lib/remote/fleet.ts';
@@ -124,24 +124,12 @@ export function createJoinMember(
   dashboard: JoinDashboard,
   openChannel?: RemoteLinkOptions['openChannel']
 ): JoinMember {
-  let closed = false;
-  const entry = createFleetMember(row.instance, row.device, {
+  const member = createFleetMember(row.instance, row.device, {
     dashboard,
-    onRefused: () => close(),
-    createConnection: (openSocket) =>
-      new Connection({
-        openSocket,
-        retry: (reconnect, delayMs) => {
-          if (!closed) retryLater(reconnect, delayMs);
-        },
-      }),
+    onRefused: () => member.close(),
     ...(openChannel ? { openChannel } : {}),
   });
-  function close() {
-    closed = true;
-    entry.close();
-  }
-  return { member: entry.member, close };
+  return { member, close: member.close };
 }
 
 export function createJoinMachinesSource(
