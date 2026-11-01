@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { convertClaudeSession } from '../apps/engine/src/agents/index.ts';
 import { EventLog } from '../apps/engine/src/store/index.ts';
 import type {
+  AgentReply,
   CodeSpot,
   Gate,
   MemoryEntry,
@@ -1987,6 +1988,14 @@ function resolveHandover({ task, role, purpose, index }: SeedRunTimes): ChatTool
   );
 }
 
+const RESULT_HAND_OVERS = new Set(['answer', 'report_diagnosis', 'submit_report', 'report_outcome']);
+
+function resolveHandoverEnding(handover: ChatTool, reply: string): ChatEvent[] {
+  const call = [callTool('handover-1', handover), resolveToolOutput('handover-1', 'Handed over.')];
+  if (handover.kind === 'shinsa' && RESULT_HAND_OVERS.has(handover.name)) return [say(reply), ...call];
+  return [...call, say(reply, 'final')];
+}
+
 function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
   const { task, role } = times;
   const files = seedFiles(task);
@@ -2061,9 +2070,7 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
     ? [resolveToolOutput('test-1', ' 11 pass\n 1 fail'), { type: 'error', text: summary }]
     : [
         resolveToolOutput('test-1', ' 12 pass\n 0 fail'),
-        callTool('handover-1', handover),
-        resolveToolOutput('handover-1', 'Handed over.'),
-        { type: 'agent', phase: 'final', text: seeded?.reply ?? summary },
+        ...resolveHandoverEnding(handover, seeded?.reply ?? summary),
       ];
   return [
     ...work,
@@ -2139,6 +2146,49 @@ const PLAN_TIER_PLAN: PlanDocument = {
   ],
 };
 
+const PLAN_TIER_REQUEST =
+  'Backfill in batches so the database never locks, and skip lists whose owner has no subscription. Do we need a dry run at all?';
+
+const PLAN_TIER_REPLY: AgentReply = {
+  headline:
+    'The backfill now runs in batches of 1,000 and leaves lists without a subscription on the free tier.',
+  points: [
+    {
+      ask: 'Backfill in batches so the database never locks',
+      outcome: 'done',
+      note: 'The second operation step writes 1,000 lists per batch and checks the count after.',
+    },
+    {
+      ask: 'Skip lists whose owner has no subscription',
+      outcome: 'done',
+      note: 'They keep a null `plan_tier`, which the limit check reads as free.',
+    },
+    {
+      ask: 'Do we need a dry run at all?',
+      outcome: 'answered',
+      note: 'Yes: it is the only check before 18,402 rows change, and it costs one read.',
+    },
+  ],
+  next: null,
+};
+
+const BASKET_SYNC_FOLLOW_UP = 'And what happens when the app is offline for a day?';
+
+const BASKET_SYNC_FOLLOW_UP_ANSWER =
+  'Edits queue in `PendingEdits` on disk while the app is offline. On the next foreground with a connection, `ListSync` pushes them oldest first, then pulls; a list edited on both sides keeps the server version of each item and the local version of the order.';
+
+const BASKET_SYNC_REPLY: AgentReply = {
+  headline: 'Offline edits wait on disk and sync, oldest first, the next time the app comes online.',
+  points: [
+    {
+      ask: 'What happens when the app is offline for a day?',
+      outcome: 'answered',
+      note: 'Nothing is lost: `PendingEdits` keeps every edit until the next push succeeds.',
+    },
+  ],
+  next: null,
+};
+
 function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; basketSdk: Repo }): SeedTask[] {
   return [
     {
@@ -2158,11 +2208,37 @@ function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; bask
       branch: 'feat/plan-tier-on-lists',
       ageHours: 0.8,
       plan: PLAN_TIER_PLAN,
-      runs: [{ role: 'agent', purpose: 'plan', minutes: 4, summary: 'Proposed the plan.' }],
+      runs: [
+        { role: 'agent', purpose: 'plan', minutes: 4, summary: 'Proposed the plan.' },
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 3,
+          summary: 'Revised the plan.',
+          reply: 'I revised the plan: your three points are answered at the top of it.',
+          handover: {
+            kind: 'shinsa',
+            name: 'propose_plan',
+            args: { goal: PLAN_TIER_PLAN.goal, phases: PLAN_TIER_PLAN.phases, reply: PLAN_TIER_REPLY },
+          },
+        },
+      ],
+      extra: [
+        ...listSeedIterations('task-basket-plan-tier', 'task-basket-plan-tier-run-1', [
+          { text: PLAN_TIER_REQUEST, reply: PLAN_TIER_REPLY },
+        ]),
+        {
+          type: 'plan.proposed',
+          taskId: 'task-basket-plan-tier',
+          body: PLAN_TIER_PLAN.goal,
+          document: PLAN_TIER_PLAN,
+        },
+      ],
       gate: {
         type: 'plan',
         title: 'Plan tier on lists, then backfill it',
         body: serializePlanMarkdown(PLAN_TIER_PLAN),
+        details: { planVersion: 2 },
       },
     },
     {
@@ -2176,7 +2252,20 @@ function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; bask
       reason: 'answered your question',
       branch: 'ask/sdk-sync',
       ageHours: 3,
-      runs: [{ role: 'answerer', minutes: 2, summary: 'Answered the question.' }],
+      runs: [
+        { role: 'answerer', minutes: 2, summary: 'Answered the question.' },
+        {
+          role: 'answerer',
+          minutes: 2,
+          summary: 'Answered your follow-up.',
+          reply: 'Edits made offline are kept on disk, so nothing is lost.',
+          handover: {
+            kind: 'shinsa',
+            name: 'answer',
+            args: { answer: BASKET_SYNC_FOLLOW_UP_ANSWER, reply: BASKET_SYNC_REPLY },
+          },
+        },
+      ],
       extra: [
         {
           type: 'task.delivered',
@@ -2184,6 +2273,16 @@ function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; bask
           step: 'answer',
           body: '`ListSync` pushes after every local edit, debounced by 2 seconds, and pulls when the app comes to the foreground.',
           runId: 'task-basket-sync-run-0',
+        },
+        ...listSeedIterations('task-basket-sync', 'task-basket-sync-run-1', [
+          { text: BASKET_SYNC_FOLLOW_UP, reply: BASKET_SYNC_REPLY },
+        ]),
+        {
+          type: 'task.delivered',
+          taskId: 'task-basket-sync',
+          step: 'answer',
+          body: BASKET_SYNC_FOLLOW_UP_ANSWER,
+          runId: 'task-basket-sync-run-1',
         },
       ],
     },

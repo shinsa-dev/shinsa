@@ -6824,7 +6824,8 @@ Example: a card reading "I'll add a guard to the login route…" over "(pulse) R
 
 - When a run ends, its work folds into one line: the chevron, "Worked for 3m", meta "14 steps". The final reply sits under it as the main content (the last interim text when there is none).
 - Hand-over cards and errors stay outside the fold; the system's brief lives inside it.
-- A turn that ends in a hand-over shows that card as its reply and nothing under it: text the agent wrote around it ("Done.") folds into the work, so the same reply never shows twice. A question or suggested tasks keep the reply under them.
+- A turn that ends in a hand-over keeps the agent's last words in view above the card, never folded into the work: the text after the hand-over, or when there is none, the text just before it. After a result card (an answer, a report) words written after it fold, so the same reply never shows twice. A question or suggested tasks keep the reply under them.
+- A hand-over card that answers something you sent leads with that reply: its headline, each point you raised with its outcome, and what to do now, then the plan, report or summary below.
 - A message from you starts a new turn with its own fold.
 - The detail is the full log on a hairline rail: interim messages, then tool calls as chat lines; two or more in a row fold into one row ("Ran 3 commands and read 2 files").
 - A hand-over the system rejected and the agent retried folds quietly as an ordinary row with meta "Retried" ("Retrying" while pending), its own icon; opened, the reasons show under "Handed back" in normal ink. Only a failure nobody recovered from is red: the icon, "Failed" and the reasons. A question is never folded.
@@ -9220,6 +9221,7 @@ with `:line` or `:start-end` (`src/a.ts:12-20`).
 | --- | --- | --- |
 | `propose_plan` | `goal` · `phases` (each `title` · `detail`) · `behaviour` items · `approach` · `files` (each change) · `questions` (options each, option) · `checks` (command) | 300 · 2 to 8 (60 · 160) · 8 of 200 · 700 · 20 (140) · 4 of 200 (up to 4 options of 100) · 6 (200) |
 | `complete_phase` | `summary` · `spots` (`why`, `title`, `explain`) · `judgement_calls` (`title`, `call`, `reason`, `alternatives` with `option` and `rejected`) | 240 · 8 (180, 80, 400) · 5 (60, 120, 240, 3 of 100 and 200) |
+| `reply` (every hand-over that answers the human) | `headline` · `points` (`ask`, `note`) · `next` | 240 · 1 to 8 (160, 280) · 1,200 |
 | `walkthrough` | `approach` · `flow` · `risks` (`title`, `risk`) · `testing.automated` · `testing.manual` (`action`, `expect`, target) · `steps` (`title`, `detail`, `command`) | 1,200 · 2,400 · 8 (60, 280) · 4 of 240 · 10 (240, 240, 400) · 8 (80, 400, 400) |
 | `report_review` | `findings` (`title`, `message`, `fix`) · `summary` · `disagreements` (`reason`) | 12 (80, 280, 600) · 400 · 8 (280) |
 | `attach_evidence` | `title` · `detail` · comparison `parts` (`label`) · `width` | 80 · 280 · 2 to 6 (40) · up to 7,680px |
@@ -9242,7 +9244,7 @@ to undo it), `operation` (its steps in order, each with how to check it worked),
 before review: `screenshot`, `recording`, `test`, `note`, `preview`; a change the user sees asks for a screenshot,
 and Shinsa refuses the last phase until each kind is attached), `checks` (commands Shinsa runs after the
 repository's own, when those do not prove the change), `approval` (a risky change, so the human approves the plan
-first), `change_summary` (only when revising a plan: what changed and why). When the steps Shinsa chose do not fit
+first). When the steps Shinsa chose do not fit
 the request, the agent calls `reshape_task` with a one-sentence `reason` instead of a plan.
 
 #### A phase
@@ -9317,6 +9319,15 @@ API in production"), a `detail` (where and how, where a value comes from, what h
 find it. No step for what happens anyway (CI, the merge). The merge waits until every pre-merge step is ticked; a
 post-merge step keeps the task open until the human ticks it, across rounds. A step keeps its tick only while it is
 sent unchanged.
+
+#### Replying to what the human sent
+
+Every hand-over that follows a message from the human (plan feedback, changes at review, a question, a follow-up, a
+message while the agent works) carries `reply`, and only then: a `headline` (one sentence, what the agent did about
+it), `points` (each thing raised, in the human's words cut short, marked `done`, `answered` or `not_changed`, each
+with a `note`: where it is now, the answer, or why it was left) and `next` (what the human does now, with commands in
+```` ```bash run ```` blocks). The same reply sits above the plan, the phase, the fix or the report, for every kind of
+agent, so a plan revision never quotes the request back and never adds a separate What changed line.
 
 #### A fix
 
