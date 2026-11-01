@@ -87,8 +87,8 @@ describe('listTaskActions', () => {
     ).toEqual(['removeFromBacklog', 'snooze']);
   });
 
-  it('offers only Stop sharing while a task is shared, and Share task again to retry a link that failed', () => {
-    const share = { at: 1, limit: 'until_done', endsAt: null } as const;
+  it('offers only Stop sharing while a task is shared or its link failed, since the banner manages it', () => {
+    const share = { at: 1, limit: 'until_done', preset: 'standard', endsAt: null } as const;
     const shared = createTask({
       id: 't',
       stage: 'merged',
@@ -100,7 +100,7 @@ describe('listTaskActions', () => {
       stage: 'merged',
       share: { ...share, url: null, failure: 'Refused.' },
     });
-    expect(listTaskActions(failed, ALL_COMMANDS)).toEqual([['fork', 'share', 'unshare']]);
+    expect(listTaskActions(failed, ALL_COMMANDS)).toEqual([['fork', 'unshare']]);
   });
 
   it('offers Unsnooze on a snoozed task, and neither once it is settled', () => {

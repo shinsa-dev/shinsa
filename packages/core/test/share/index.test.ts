@@ -16,7 +16,12 @@ import {
   registerRepo,
 } from '../harness.ts';
 
-const CONTEXT: SharedTaskContext = { owner: 'mona', machine: 'Studio', repository: 'superwall/paywall-next' };
+const CONTEXT: SharedTaskContext = {
+  preset: 'standard',
+  owner: 'mona',
+  machine: 'Studio',
+  repository: 'superwall/paywall-next',
+};
 
 const REQUEST =
   'Fix the scroll in tab groups\n\n<attachments>\n<attachment kind="image" display_name="shot.png" path="/data/attachments/01b/shot.png" url="/api/attachments/01b/shot.png" />\n</attachments>';
@@ -357,7 +362,7 @@ describe('what a shared task shows', () => {
     );
   });
 
-  test('before a plan, only the general facts and the request are shown', () => {
+  test('before a plan, the general facts, the request and the working copy’s code are shown', () => {
     const harness = createHarness();
     registerRepo(harness);
     const taskId = createTask(harness, { request: REQUEST });
@@ -373,7 +378,7 @@ describe('what a shared task shows', () => {
       findings: [],
     });
     expect(shared.evidence).toEqual([]);
-    expect(shared.code).toBe(false);
+    expect(shared.code).toBe(true);
   });
 
   test('an answer keeps its result without the run that wrote it', () => {
@@ -528,10 +533,13 @@ describe('what a shared task shows', () => {
 });
 
 describe('when a shared task has code', () => {
-  test('only a task in a repository with an open or merged pull request', () => {
+  test('a task in a repository with a working copy, or with an open or merged pull request', () => {
     const harness = createHarness();
-    const task = harness.task(createTask(harness));
+    const working = harness.task(createTask(harness));
+    const task = { ...working, worktreePath: null };
     const repository = CONTEXT.repository;
+    expect(hasSharedCode(working, repository)).toBe(true);
+    expect(hasSharedCode(working, null)).toBe(false);
     expect(hasSharedCode(task, repository)).toBe(false);
     expect(hasSharedCode(withPullRequest(task, 'open'), repository)).toBe(true);
     expect(hasSharedCode(withPullRequest(task, 'merged'), repository)).toBe(true);

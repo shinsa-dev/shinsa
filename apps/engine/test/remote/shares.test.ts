@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type Bytes,
+  CHAT_PROTOCOL_VERSION,
+  type ChatEntry,
+  type ChatEvent,
   createFrameOpener,
   createShareHello,
   decodeText,
@@ -16,27 +19,33 @@ import {
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARE_FILE_BYTES,
+  SHARE_TRANSCRIPT_PAGE,
   type ShareLiveView,
   type ShareMessage,
+  type SharePreset,
   type ShinsaState,
   serializeBase64Url,
   serializeShareUrl,
   type Task,
 } from '@shinsa/core';
+import { createWorktree } from '../../src/git/index.ts';
 import { ControlClient } from '../../src/remote/control.ts';
 import { Remote } from '../../src/remote/index.ts';
 import { SHARE_GONE_REASON } from '../../src/remote/share-channel.ts';
 import {
+  readWorktreeFile,
   SHARE_LINK_LOST,
   SHARE_NOT_PAIRED,
   SHARE_REMOTE_CHANGED,
   type ShareGitHub,
   Shares,
+  type ShareTranscripts,
+  type ShareWorktree,
 } from '../../src/remote/shares.ts';
 import { EffectError } from '../../src/runtime/failures.ts';
 import { EvidenceStore } from '../../src/store/evidence.ts';
-import { createTempDir, until } from '../helpers/index.ts';
-import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
+import { createGitRepo, createTempDir, until } from '../helpers/index.ts';
+import { createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
 
 const CREDENTIALS = {
@@ -59,7 +68,7 @@ const SHARE_URL = serializeShareUrl('https://app.shinsa.dev', {
   key: SHARE_KEY,
 });
 
-const SHARING = { at: 1, limit: 'none', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'none', preset: 'standard', endsAt: null } as const;
 
 let running: FakeControlPlane | null = null;
 
@@ -107,6 +116,30 @@ function createEvidence(overrides: Partial<Evidence>): Evidence {
   };
 }
 
+interface FakeTranscripts extends ShareTranscripts {
+  runs: Map<string, ChatEntry[]>;
+  record: (runId: string, event: ChatEvent) => void;
+}
+
+function createTranscripts(): FakeTranscripts {
+  const listeners = new Set<(runId: string) => void>();
+  const transcripts: FakeTranscripts = {
+    runs: new Map(),
+    listEntries: (runId) => [...(transcripts.runs.get(runId) ?? [])],
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    record: (runId, event) => {
+      const entries = transcripts.runs.get(runId) ?? [];
+      entries.push({ ...event, v: CHAT_PROTOCOL_VERSION, id: `e${entries.length}`, at: 1 } as ChatEntry);
+      transcripts.runs.set(runId, entries);
+      for (const listener of listeners) listener(runId);
+    },
+  };
+  return transcripts;
+}
+
 function shareTask(overrides: Partial<Task> = {}) {
   return createTask({
     repoId: 'repo-1',
@@ -129,8 +162,10 @@ function shareTask(overrides: Partial<Task> = {}) {
 interface SetUp {
   paired?: boolean;
   github?: FakeGitHub;
+  worktree?: ShareWorktree;
   patch?: (state: ShinsaState) => void;
   now?: () => number;
+  transcripts?: FakeTranscripts;
 }
 
 function setUp(options: SetUp = {}) {
@@ -161,16 +196,19 @@ function setUp(options: SetUp = {}) {
     options.patch?.(state);
   });
   const github = options.github ?? createGitHub();
+  const transcripts = options.transcripts ?? createTranscripts();
   let fill = 7;
   const publisher = new Shares({
     engine: stub.engine,
     remote,
     evidence: new EvidenceStore(evidenceDir),
+    transcripts,
     github,
+    ...(options.worktree ? { worktree: options.worktree } : {}),
     random: (bytes) => new Uint8Array(bytes).fill(fill++),
     ...(options.now ? { now: options.now } : {}),
   });
-  return { plane, stub, publisher, github, remote };
+  return { plane, stub, publisher, github, remote, transcripts };
 }
 
 function sha256(text: string) {
@@ -246,11 +284,14 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
   return viewer;
 }
 
-function sharedSetUp(options: SetUp = {}) {
+function sharedSetUp(options: SetUp & { preset?: SharePreset } = {}) {
   return setUp({
     ...options,
     patch: (state) => {
-      state.tasks['task-1'] = shareTask({ share: { ...SHARING, url: SHARE_URL } });
+      state.tasks['task-1'] = shareTask({
+        share: { ...SHARING, preset: options.preset ?? 'standard', url: SHARE_URL },
+      });
+      state.runs['run-1'] = createRun();
       options.patch?.(state);
     },
   });
@@ -289,7 +330,12 @@ describe('making a share link', () => {
 
   test('a key and an id come from the system random source by default', async () => {
     const { stub, remote } = setUp();
-    const shares = new Shares({ engine: stub.engine, remote, evidence: new EvidenceStore(createTempDir()) });
+    const shares = new Shares({
+      engine: stub.engine,
+      remote,
+      evidence: new EvidenceStore(createTempDir()),
+      transcripts: createTranscripts(),
+    });
     await shares.link('task-1', CONTEXT);
     const link = parseShareUrl((stub.dispatched[0] as { url: string }).url);
     expect(link?.key).toHaveLength(43);
@@ -383,7 +429,7 @@ describe('a share link opened live', () => {
   test('refuses a link whose time ran out, even before the clock ends the share', async () => {
     const { stub, publisher } = sharedSetUp();
     stub.state.tasks['task-1'] = shareTask({
-      share: { ...SHARING, limit: 'hour', endsAt: 0, url: SHARE_URL },
+      share: { ...SHARING, limit: 'hour', preset: 'standard', endsAt: 0, url: SHARE_URL },
     });
     const expired = await openViewer(publisher);
     expect(expired.refused).toBe(SHARE_GONE_REASON);
@@ -512,16 +558,148 @@ describe('what a link shows', () => {
     expect(plane.calls).toEqual([]);
   });
 
-  test('a task without a pull request shows no code and reads nothing from GitHub', async () => {
+  test('a task without a pull request or a working copy shows no code and reads nothing from GitHub', async () => {
     const { publisher, github } = setUp({
       patch: (state) => {
-        state.tasks['task-1'] = shareTask({ pullRequest: null });
+        state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath: null });
       },
     });
     const { view } = await publisher.resolveLive('task-1');
     expect(Object.keys(view.files)).toEqual(['shot-1']);
     expect(view.shared.code).toBe(false);
     expect(github.diffReads).toBe(0);
+  });
+
+  test('before a pull request, the code comes from the working copy, read again only when the task changes', async () => {
+    const worktreePath = createTempDir();
+    const reads: string[] = [];
+    const worktree: ShareWorktree = {
+      readBase: () => Promise.resolve('base-sha'),
+      readPatch: (path, base) => {
+        reads.push(`${path}@${base}`);
+        return Promise.resolve(DIFF);
+      },
+      readFile: (path, file) => Promise.resolve(`working ${file} in ${path}`),
+    };
+    const { publisher, github, stub } = setUp({
+      worktree,
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath, updatedAt: 5 });
+      },
+    });
+    const { view, files } = await publisher.resolveLive('task-1');
+    expect(view.shared.code).toBe(true);
+    expect(view.files[SHARE_DIFF_FILE]).toEqual({ version: 'working:5:0', type: 'text/plain' });
+    const code = files.find((file) => file.id === SHARE_CODE_FILE);
+    expect(new TextDecoder().decode(await code?.read())).toContain(`working src/a.ts in ${worktreePath}`);
+    await publisher.resolveLive('task-1');
+    expect(reads).toEqual([`${worktreePath}@base-sha`]);
+    expect(github.diffReads).toBe(0);
+    stub.state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath, updatedAt: 6 });
+    await publisher.resolveLive('task-1');
+    expect(reads).toHaveLength(2);
+  });
+
+  test('an agent’s tool call reads the working copy again, since its edits record no task event', async () => {
+    const reads: string[] = [];
+    const worktree: ShareWorktree = {
+      readBase: () => Promise.resolve('base-sha'),
+      readPatch: (path) => {
+        reads.push(path);
+        return Promise.resolve(DIFF);
+      },
+      readFile: () => Promise.resolve('edited'),
+    };
+    const worktreePath = createTempDir();
+    const { publisher, transcripts } = setUp({
+      worktree,
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath, updatedAt: 5 });
+        state.runs['run-1'] = createRun();
+      },
+    });
+    await publisher.resolveLive('task-1');
+    transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'Editing.' });
+    await publisher.resolveLive('task-1');
+    expect(reads).toHaveLength(1);
+    transcripts.record('run-1', {
+      type: 'tool_result',
+      callId: 'c1',
+      status: 'ok',
+      output: 'ok',
+      images: [],
+    });
+    const { view } = await publisher.resolveLive('task-1');
+    expect(reads).toHaveLength(2);
+    expect(view.files[SHARE_DIFF_FILE]?.version).toBe('working:5:1');
+  });
+
+  test('a changed symlink shares its target path, never the file it points to', async () => {
+    const worktree = createTempDir();
+    const outside = join(createTempDir(), 'secret.txt');
+    writeFileSync(outside, 'ssh key');
+    symlinkSync(outside, join(worktree, 'link'));
+    expect(await readWorktreeFile(worktree, 'link')).toBe(outside);
+  });
+
+  test('a path through a symlinked folder that leads outside the working copy is refused', async () => {
+    const worktree = createTempDir();
+    const outside = createTempDir();
+    writeFileSync(join(outside, 'id_rsa'), 'ssh key');
+    symlinkSync(outside, join(worktree, 'keys'));
+    await expect(readWorktreeFile(worktree, 'keys/id_rsa')).rejects.toThrow('leads outside the working copy');
+    writeFileSync(join(worktree, 'a.ts'), 'inside');
+    expect(await readWorktreeFile(worktree, 'a.ts')).toBe('inside');
+  });
+
+  test('the working copy’s code is read from its checkout, against the branch’s base', async () => {
+    const { repo } = await createGitRepo({ remote: false, files: { 'src/a.ts': 'export const a = 1;\n' } });
+    const checkout = await createWorktree(repo, createTempDir(), 'task-eeeeee', 'fix/live', null);
+    writeFileSync(join(checkout.path, 'src/a.ts'), 'export const a = 2;\n');
+    const { publisher } = setUp({
+      patch: (state) => {
+        state.repos['repo-1'] = createRepo({ path: repo.path });
+        state.tasks['task-1'] = shareTask({
+          pullRequest: null,
+          worktreePath: checkout.path,
+          branch: 'fix/live',
+        });
+      },
+    });
+    const { files } = await publisher.resolveLive('task-1');
+    const read = async (id: string) =>
+      new TextDecoder().decode(await files.find((file) => file.id === id)?.read());
+    expect(await read(SHARE_DIFF_FILE)).toContain('+export const a = 2;');
+    expect(JSON.parse(await read(SHARE_CODE_FILE))).toEqual({
+      files: { 'src/a.ts': 'export const a = 2;\n' },
+    });
+  });
+
+  test('a working copy that cannot be read leaves the code out', async () => {
+    const worktree: ShareWorktree = {
+      readBase: () => Promise.reject(new Error('no base')),
+      readPatch: () => Promise.resolve(''),
+      readFile: () => Promise.resolve(''),
+    };
+    const worktreePath = createTempDir();
+    const { publisher } = setUp({
+      worktree,
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath });
+      },
+    });
+    const { view } = await publisher.resolveLive('task-1');
+    expect(view.files[SHARE_DIFF_FILE]).toBeUndefined();
+  });
+
+  test('a working copy that is gone shows no code', async () => {
+    const { publisher } = setUp({
+      patch: (state) => {
+        state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath: '/nowhere/at/all' });
+      },
+    });
+    const { view } = await publisher.resolveLive('task-1');
+    expect(view.files[SHARE_DIFF_FILE]).toBeUndefined();
   });
 
   test('an unknown task shows nothing', async () => {
@@ -575,5 +753,137 @@ describe('what a link shows', () => {
       SHARE_DIFF_FILE,
     ]);
     expect(github.fileReads).toEqual([]);
+  });
+});
+
+describe('a share by preset', () => {
+  test('a status share names no one, no machine and no repository, and reads no code or evidence', async () => {
+    const { publisher, github } = sharedSetUp({ preset: 'status' });
+    const live = await publisher.resolveLive('task-1');
+    expect(live.view.shared).toMatchObject({
+      preset: 'status',
+      owner: null,
+      machine: null,
+      repository: null,
+      repo: null,
+      code: false,
+      evidence: [],
+      runs: [],
+    });
+    expect(live.files).toEqual([]);
+    expect(github.diffReads).toBe(0);
+  });
+
+  test('a status share streams no transcript', async () => {
+    const transcripts = createTranscripts();
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    const { publisher } = sharedSetUp({ transcripts, preset: 'status' });
+    const live = await publisher.resolveLive('task-1');
+    expect(Object.keys(live.view.files)).not.toContain('transcript-run-1-0');
+    const viewer = await openViewer(publisher);
+    await until('the viewer has the view', () => viewer.views().length > 0);
+    const resolve = publisher.resolveLive.bind(publisher);
+    let builds = 0;
+    publisher.resolveLive = (taskId) => {
+      builds += 1;
+      return resolve(taskId);
+    };
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Again.' });
+    await Bun.sleep(0);
+    expect(builds).toBe(0);
+  });
+
+  test('a default share sends a full page of a transcript once, and only its last page as it grows', async () => {
+    const transcripts = createTranscripts();
+    for (let index = 0; index <= SHARE_TRANSCRIPT_PAGE; index += 1) {
+      transcripts.record('run-1', { type: 'agent', phase: 'interim', text: `Step ${index}` });
+    }
+    const { publisher } = sharedSetUp({ preset: 'standard', transcripts });
+    const viewer = await openViewer(publisher);
+    await until('the viewer reads both pages', () => 'transcript-run-1-1' in viewer.files());
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    await until('the viewer reads the last page again', () =>
+      viewer.messages.some(
+        (message) =>
+          message.t === 'file' && message.id === 'transcript-run-1-1' && message.version === 'agents:2'
+      )
+    );
+    const sends = viewer.messages.filter(
+      (message) => message.t === 'file' && message.id === 'transcript-run-1-0'
+    );
+    expect(sends).toHaveLength(1);
+    const last = JSON.parse(viewer.files()['transcript-run-1-1'] ?? '[]') as ChatEntry[];
+    expect(last.map((entry) => (entry.type === 'agent' ? entry.text : ''))).toEqual([
+      `Step ${SHARE_TRANSCRIPT_PAGE}`,
+      'Done.',
+    ]);
+  });
+
+  test('a default share streams each run without your turns, and again as it grows', async () => {
+    const transcripts = createTranscripts();
+    transcripts.record('run-1', {
+      type: 'user',
+      from: 'shinsa',
+      text: 'Build phase 1. sk-0000',
+      attachments: [],
+    });
+    transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'Reading.' });
+    transcripts.record('run-2', { type: 'agent', phase: 'interim', text: 'Another task.' });
+    const { publisher } = sharedSetUp({ preset: 'standard', transcripts });
+    const viewer = await openViewer(publisher);
+    await until('the viewer reads the transcript', () => 'transcript-run-1-0' in viewer.files());
+    expect(viewer.views()[0]?.files['transcript-run-1-0']).toEqual({
+      version: 'agents:2',
+      type: 'text/plain',
+    });
+    const first = JSON.parse(viewer.files()['transcript-run-1-0'] ?? '[]') as ChatEntry[];
+    expect(first.map((entry) => entry.type)).toEqual(['agent']);
+    expect(viewer.files()['transcript-run-1-0']).not.toContain('sk-0000');
+    const sent = viewer.messages.length;
+    transcripts.record('run-2', { type: 'agent', phase: 'final', text: 'Not this task.' });
+    transcripts.record('unknown', { type: 'agent', phase: 'final', text: 'No run.' });
+    await Bun.sleep(0);
+    expect(viewer.messages.length).toBe(sent);
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    await until('the viewer reads it again', () =>
+      viewer.messages.some((message) => message.t === 'file' && message.version === 'agents:3')
+    );
+    const grown = JSON.parse(viewer.files()['transcript-run-1-0'] ?? '[]') as ChatEntry[];
+    expect(grown.map((entry) => (entry.type === 'agent' ? entry.text : ''))).toEqual(['Reading.', 'Done.']);
+  });
+
+  test('an everything share streams your own turns too, never the prompts Shinsa sends', async () => {
+    const transcripts = createTranscripts();
+    transcripts.record('run-1', {
+      type: 'user',
+      from: 'shinsa',
+      text: 'Build phase 1. sk-0000',
+      attachments: [],
+    });
+    transcripts.record('run-1', { type: 'user', from: 'you', text: 'Try the left pane.', attachments: [] });
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    const { publisher } = sharedSetUp({ preset: 'full', transcripts });
+    const file = (await publisher.resolveLive('task-1')).files.find(
+      (item) => item.id === 'transcript-run-1-0'
+    );
+    expect(file?.version).toBe('messages:3');
+    const shared = JSON.parse(decodeText((await file?.read()) as Bytes)) as ChatEntry[];
+    expect(shared.map((entry) => entry.type)).toEqual(['user', 'agent']);
+    expect(JSON.stringify(shared)).not.toContain('sk-0000');
+  });
+
+  test('a run with no transcript yet streams nothing, and one past the size a file carries keeps its latest entries', async () => {
+    const transcripts = createTranscripts();
+    const { publisher } = sharedSetUp({ preset: 'standard', transcripts });
+    expect(Object.keys((await publisher.resolveLive('task-1')).view.files)).not.toContain(
+      'transcript-run-1-0'
+    );
+    transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'x'.repeat(SHARE_FILE_BYTES) });
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    const file = (await publisher.resolveLive('task-1')).files.find(
+      (item) => item.id === 'transcript-run-1-0'
+    );
+    const kept = JSON.parse(decodeText((await file?.read()) as Bytes)) as ChatEntry[];
+    expect(kept.map((entry) => (entry.type === 'agent' ? entry.text : ''))).toEqual(['Done.']);
   });
 });

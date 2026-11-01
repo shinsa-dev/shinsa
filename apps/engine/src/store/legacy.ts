@@ -77,6 +77,8 @@ const CONTEXT_MANAGEMENT_LOG_VERSION = 11;
 
 const AGENT_REPLY_LOG_VERSION = 12;
 
+const SHARE_PRESET_LOG_VERSION = 13;
+
 const COMPACTION_BY_EUNOE_MODE = new Map<unknown, CompactionMode>([
   ['eunoe_compact', 'fold'],
   ['eunoe_default', 'fold'],
@@ -110,6 +112,7 @@ export function listLegacyEventTypes(version: number) {
     ...(version < WATCHDOG_READS_LOG_VERSION ? WATCHDOG_READS_EVENT_TYPES : []),
     ...(version < CONTEXT_MANAGEMENT_LOG_VERSION ? ['settings.changed'] : []),
     ...(version < AGENT_REPLY_LOG_VERSION ? ['plan.proposed'] : []),
+    ...(version < SHARE_PRESET_LOG_VERSION ? ['task.shared'] : []),
   ];
 }
 
@@ -228,6 +231,8 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
         stages.set(event.taskId, event.stage);
       }
       return event;
+    case 'task.shared':
+      return 'preset' in event ? event : { ...event, preset: 'standard' };
     case 'settings.changed':
       if (!isRecord(event.settings)) return event;
       return { ...event, settings: resolveSettings(event.settings) };

@@ -11,6 +11,7 @@ type ShareEvent = Extract<
       | 'task.unshared'
       | 'share.recorded'
       | 'share.failed'
+      | 'share.described'
       | 'preview.shared'
       | 'preview.unshared'
       | 'preview.recorded'
@@ -70,7 +71,7 @@ function applyPreviewUnshared(state: ShinsaState, event: EventOf<'preview.unshar
 
 function applyShared(state: ShinsaState, event: EventOf<'task.shared'>) {
   const share = state.tasks[event.taskId]?.share;
-  const limits = { limit: event.limit, endsAt: event.endsAt };
+  const limits = { limit: event.limit, preset: event.preset, endsAt: event.endsAt };
   if (share) {
     updateTask(state, event.taskId, event.at, { share: { ...share, ...limits } });
     return;
@@ -96,6 +97,12 @@ function applyFailed(state: ShinsaState, event: EventOf<'share.failed'>) {
   updateTask(state, event.taskId, event.at, { share: { ...share, failure: event.detail } });
 }
 
+function applyDescribed(state: ShinsaState, event: EventOf<'share.described'>) {
+  const share = state.tasks[event.taskId]?.share;
+  if (!share) return;
+  updateTask(state, event.taskId, event.at, { share: { ...share, description: event.description } });
+}
+
 export function applyShareEvent(state: ShinsaState, event: ShareEvent) {
   switch (event.type) {
     case 'task.shared':
@@ -109,6 +116,9 @@ export function applyShareEvent(state: ShinsaState, event: ShareEvent) {
       return;
     case 'share.failed':
       applyFailed(state, event);
+      return;
+    case 'share.described':
+      applyDescribed(state, event);
       return;
     case 'preview.shared':
       applyPreviewShared(state, event);
