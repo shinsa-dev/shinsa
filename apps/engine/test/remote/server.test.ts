@@ -307,16 +307,20 @@ describe('the tunnel entry point', () => {
     expect((await tunnel(`/remote?token=${good}`, { headers: origin })).status).toBe(400);
   });
 
-  test('opens a share link only from app.shinsa.dev and only for a task that is shared', async () => {
+  test('opens a share link only from app.shinsa.dev and only for a task that is shared, and the machine closes it', async () => {
     const received: string[] = [];
     const closed: string[] = [];
     const shares = {
       acceptsShare: (shareId: string) => shareId === 's1',
-      openChannel: (peer: { send: (data: string) => void }, shareId: string) => {
+      openChannel: (
+        peer: { send: (data: string) => void; close: (code: number, reason: string) => void },
+        shareId: string
+      ) => {
         peer.send(`hello ${shareId}`);
         return {
           receive: (raw: string) => {
             received.push(raw);
+            peer.close(1008, 'A share link accepts nothing.');
             return Promise.resolve();
           },
           close: () => closed.push(shareId),
@@ -336,9 +340,11 @@ describe('the tunnel entry point', () => {
       socket.addEventListener('message', (event) => resolve(String(event.data)), { once: true });
     });
     expect(first).toBe('hello s1');
+    const ended = new Promise<CloseEvent>((resolve) => {
+      socket.addEventListener('close', resolve, { once: true });
+    });
     socket.send('hi');
-    await until('the share link reads it', () => received.length === 1);
-    socket.close();
+    expect((await ended).code).toBe(1008);
     await until('the share link is closed', () => closed.length === 1);
     expect(received).toEqual(['hi']);
   });
