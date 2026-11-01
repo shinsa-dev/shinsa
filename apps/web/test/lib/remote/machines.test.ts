@@ -128,7 +128,7 @@ describe('a machine in the dashboard', () => {
         return new Connection({ openSocket, retry: () => undefined });
       },
     });
-    expect(member).toMatchObject({ id: 'k3x9', name: 'Studio' });
+    expect(member).toMatchObject({ id: 'k3x9', name: 'Studio', online: true });
     expect(member.guest).toBeUndefined();
     const handed = createFleetMember({ ...STUDIO, role: 'guest' }, device, {
       dashboard: { requestConnect: () => Promise.reject(new Error('unused')) },
