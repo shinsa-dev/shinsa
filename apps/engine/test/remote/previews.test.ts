@@ -2,6 +2,9 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  createPreviewAccessToken,
+  PREVIEW_ACCESS_HEADER,
+  PREVIEW_ACCESS_TTL_MS,
   PREVIEW_GONE,
   PREVIEW_ID_BYTES,
   PREVIEW_KEY_BYTES,
@@ -9,8 +12,10 @@ import {
   PREVIEW_PAGE_HEADER,
   PREVIEW_STOPPED,
   type PreviewShare,
+  parsePreviewHost,
   parsePreviewUrl,
   resolvePreviewTunnelPath,
+  resolvePrivatePreviewId,
   type ServiceDefinition,
   type ShinsaState,
   serializeBase64Url,
@@ -43,8 +48,14 @@ const CREDENTIALS = {
   machineToken: 'machine-token',
   tunnelToken: 'tunnel',
   tunnelHost: 't-inst1.shinsa.dev',
-  connectKey: 'key',
+  connectKey: serializeBase64Url(new Uint8Array(32).fill(1)),
 };
+
+const OWNER = { id: 'u-owner', login: 'mona', name: null, avatarUrl: null };
+
+const MEMBER = { id: 'u-member', login: 'hubot', name: null, avatarUrl: null };
+
+const ACCESS = { owner: OWNER, members: [{ user: MEMBER, addedAt: 1 }] };
 
 const CONTEXT = { key: 'preview.link:task-1:web:1', attempt: 1, signal: new AbortController().signal };
 
@@ -107,6 +118,7 @@ interface SetUp {
   preview?: PreviewShare | null;
   patch?: (state: ShinsaState) => void;
   now?: () => number;
+  connectKey?: string;
 }
 
 function setUp(options: SetUp = {}) {
@@ -114,7 +126,15 @@ function setUp(options: SetUp = {}) {
   const dir = createTempDir();
   const path = join(dir, 'remote.json');
   if (options.paired ?? true)
-    writeFileSync(path, JSON.stringify({ credentials: CREDENTIALS, enabled: true, owner: 'mona' }));
+    writeFileSync(
+      path,
+      JSON.stringify({
+        credentials: { ...CREDENTIALS, connectKey: options.connectKey ?? CREDENTIALS.connectKey },
+        enabled: true,
+        owner: 'mona',
+        access: ACCESS,
+      })
+    );
   const remote = new Remote({
     path,
     control: new ControlClient({ origin: plane.origin }),
@@ -464,5 +484,190 @@ describe('the headers and codes a preview passes on', () => {
     expect(resolveCloseCode(1006)).toBe(1000);
     expect(resolveCloseCode(1005)).toBe(1000);
     expect(resolveCloseCode(999)).toBe(1000);
+  });
+});
+
+const SERVICE = createService();
+
+async function resolvePrivateUrl(previews: Previews, run: TerminalInfo) {
+  expect(previews.resolveRemoteUrl(run, SERVICE)).toBeNull();
+  await until('the private address is made', () => previews.resolveRemoteUrl(run, SERVICE) !== null);
+  return previews.resolveRemoteUrl(run, SERVICE) as string;
+}
+
+function resolvePrivateId(url: string) {
+  const address = parsePreviewHost(new URL(url).host, ORIGIN);
+  if (!address) throw new Error('expected a preview host');
+  return address.previewId;
+}
+
+async function createAccess(previewId: string, userId: string, expiresAt = 10 + PREVIEW_ACCESS_TTL_MS) {
+  return createPreviewAccessToken(CREDENTIALS.connectKey, {
+    instanceId: 'inst1',
+    previewId,
+    userId,
+    expiresAt,
+  });
+}
+
+function askPrivately(
+  previews: Previews,
+  previewId: string,
+  path: string,
+  init: RequestInit & { access?: string } = {}
+) {
+  const { access, ...rest } = init;
+  const url = `https://t-inst1.shinsa.dev${resolvePreviewTunnelPath(previewId, path)}`;
+  const headers = new Headers(rest.headers);
+  if (access) headers.set(PREVIEW_ACCESS_HEADER, access);
+  return previews.answer(new Request(url, { ...rest, headers }), new URL(url));
+}
+
+describe('a private address for every running service', () => {
+  test('a running service gets its own address on the preview origin, kept the same, once remote access is on', async () => {
+    const { previews } = setUp({ preview: null, now: () => 10 });
+    const published: number[] = [];
+    const unsubscribe = previews.subscribe(() => published.push(1));
+    const url = await resolvePrivateUrl(previews, createRun({ port: 4123 }));
+    expect(published.length).toBe(1);
+    unsubscribe();
+    const previewId = resolvePrivateId(url);
+    expect(previewId).toBe(
+      await resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'web', taskId: 'task-1' })
+    );
+    expect(url).toBe(`${new URL(url).origin}/`);
+    expect(
+      previews.resolveRemoteUrl(
+        createRun({ port: 4999 }),
+        createService({ previewUrl: 'http://localhost:{port}/app?x=1' })
+      )
+    ).toBe(`${new URL(url).origin}/app?x=1`);
+    const yours = await resolvePrivateUrl(previews, createRun({ taskId: null }));
+    expect(resolvePrivateId(yours)).not.toBe(previewId);
+  });
+
+  test('a stopped service, one with no preview URL and a machine without remote access have none', async () => {
+    const { previews, remote } = setUp({ preview: null, now: () => 10 });
+    expect(previews.resolveRemoteUrl(createRun({ status: 'exited', port: null }), SERVICE)).toBeNull();
+    expect(previews.resolveRemoteUrl(createRun(), createService({ previewUrl: null }))).toBeNull();
+    await resolvePrivateUrl(previews, createRun());
+    await remote.disable();
+    expect(previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
+    expect(previews.resolveRemoteUrl(createRun(), createService({ id: 'api' }))).toBeNull();
+    expect(setUp({ paired: false }).previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
+  });
+
+  test('a connect key that cannot sign makes no address, and says so once', async () => {
+    const warned = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const { previews } = setUp({ preview: null, connectKey: '!!' });
+    expect(previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
+    await until('the failure is logged', () => warned.mock.calls.length === 1);
+    expect(warned.mock.calls[0]?.[0]).toBe('[Preview] Could not make a private address');
+    warned.mockRestore();
+  });
+
+  test('the owner and a member get in with their access; anyone else, a forged, stale or missing one do not', async () => {
+    const dev = startDevServer();
+    const now = 10;
+    const { previews, snapshot } = setUp({ preview: null, now: () => now });
+    snapshot.terminals[0] = createRun({ port: dev.port });
+    const previewId = resolvePrivateId(await resolvePrivateUrl(previews, createRun({ port: dev.port })));
+    for (const userId of [OWNER.id, MEMBER.id]) {
+      const response = readResponse(
+        await askPrivately(previews, previewId, '/page', { access: await createAccess(previewId, userId) })
+      );
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe('hello /page');
+    }
+    expect(dev.seen.every((request) => request.headers[PREVIEW_ACCESS_HEADER] === undefined)).toBe(true);
+    const refused = [
+      await createAccess(previewId, 'u-stranger'),
+      await createAccess(previewId, OWNER.id, now),
+      await createAccess(PREVIEW_ID, OWNER.id),
+      `${(await createAccess(previewId, OWNER.id)).split('.')[0]}.forged`,
+      undefined,
+    ];
+    for (const access of refused) {
+      const response = readResponse(await askPrivately(previews, previewId, '/', access ? { access } : {}));
+      expect(response.status).toBe(404);
+      expect(await response.text()).toContain(PREVIEW_GONE);
+    }
+  });
+
+  test('an address made before a restart still opens, a stopped run says so, and a run gone is not shared', async () => {
+    const { previews, snapshot } = setUp({ preview: null, now: () => 10 });
+    const previewId = await resolvePrivatePreviewId(CREDENTIALS.connectKey, {
+      serviceId: 'web',
+      taskId: 'task-1',
+    });
+    snapshot.terminals[0] = createRun({ status: 'exited', port: null });
+    const stopped = readResponse(
+      await askPrivately(previews, previewId, '/', { access: await createAccess(previewId, OWNER.id) })
+    );
+    expect(stopped.status).toBe(503);
+    expect(await stopped.text()).toContain(PREVIEW_STOPPED);
+    const other = await resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'api', taskId: null });
+    snapshot.terminals.push(createRun({ id: 'term-2', serviceId: null }));
+    expect(
+      readResponse(await askPrivately(previews, other, '/', { access: await createAccess(other, OWNER.id) }))
+        .status
+    ).toBe(404);
+  });
+
+  test('a machine that has not heard who has access yet, or has remote access off, lets no one in', async () => {
+    const plain = setUp({ preview: null, now: () => 10 });
+    const previewId = resolvePrivateId(await resolvePrivateUrl(plain.previews, createRun()));
+    const access = await createAccess(previewId, OWNER.id);
+    plain.remote.store.update((file) => ({ ...file, access: null }));
+    expect(readResponse(await askPrivately(plain.previews, previewId, '/', { access })).status).toBe(404);
+    const off = setUp({ preview: null, now: () => 10 });
+    await off.remote.disable();
+    expect(readResponse(await askPrivately(off.previews, previewId, '/', { access })).status).toBe(404);
+  });
+
+  test('a private socket closes as soon as its account loses access or remote access goes off', async () => {
+    const dev = startDevServer();
+    const open = async () => {
+      const setup = setUp({ preview: null, now: () => 10 });
+      setup.snapshot.terminals[0] = createRun({ port: dev.port });
+      const previewId = resolvePrivateId(
+        await resolvePrivateUrl(setup.previews, createRun({ port: dev.port }))
+      );
+      const answer = await askPrivately(setup.previews, previewId, '/hmr', {
+        access: await createAccess(previewId, MEMBER.id),
+        headers: { upgrade: 'websocket', 'sec-websocket-protocol': 'vite-hmr' },
+      });
+      if (answer.kind !== 'upgrade') throw new Error('expected an upgrade');
+      expect(answer.upgrade.userId).toBe(MEMBER.id);
+      const peer = createPeer();
+      const relay = setup.previews.openSocket(peer, answer.upgrade);
+      relay.send('first');
+      await until('the first echo', () => peer.received.length === 1);
+      return { ...setup, peer };
+    };
+    const removed = await open();
+    removed.stub.notify();
+    expect(removed.peer.closed).toBeNull();
+    removed.remote.store.update((file) => ({ ...file, access: { owner: OWNER, members: [] } }));
+    removed.stub.notify();
+    expect(removed.peer.closed).toEqual({ code: 1000, reason: PREVIEW_GONE });
+    const paused = await open();
+    await paused.remote.disable();
+    expect(paused.peer.closed).toEqual({ code: 1000, reason: PREVIEW_GONE });
+  });
+
+  test('pairing again changes the connect key, so every earlier address stops working', async () => {
+    const { previews, remote, snapshot } = setUp({ preview: null, now: () => 10 });
+    snapshot.terminals[0] = createRun();
+    const before = resolvePrivateId(await resolvePrivateUrl(previews, createRun()));
+    const access = await createAccess(before, OWNER.id);
+    const connectKey = serializeBase64Url(new Uint8Array(32).fill(2));
+    remote.store.update((file) => ({
+      ...file,
+      credentials: file.credentials && { ...file.credentials, connectKey },
+    }));
+    expect(readResponse(await askPrivately(previews, before, '/', { access })).status).toBe(404);
+    const after = resolvePrivateId(await resolvePrivateUrl(previews, createRun()));
+    expect(after).not.toBe(before);
   });
 });

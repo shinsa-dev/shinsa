@@ -67,6 +67,8 @@ export interface ServiceInput {
 
 type Listener = (snapshot: TerminalsSnapshot) => void;
 
+export type RemoteUrlResolver = (info: TerminalInfo, service: ServiceDefinition) => string | null;
+
 const NOTIFY_MS = 50;
 
 const SCREEN_MS = 2_000;
@@ -88,6 +90,7 @@ export class Terminals {
   readonly #runEnvs = new Map<string, Record<string, string>>();
   #notifyTimer: ReturnType<typeof setTimeout> | null = null;
   #stopped = false;
+  #remoteUrl: RemoteUrlResolver | null = null;
 
   constructor(options: TerminalsOptions) {
     this.#options = options;
@@ -144,10 +147,29 @@ export class Terminals {
 
   snapshot(): TerminalsSnapshot {
     return {
-      terminals: [...this.#sessions.values()].map((session) => session.info),
+      terminals: this.#listInfos().map((info) => this.#withRemoteUrl(info)),
       services: [...this.#services.values()],
       home: this.#options.home,
     };
+  }
+
+  #listInfos() {
+    return [...this.#sessions.values()].map((session) => session.info);
+  }
+
+  #withRemoteUrl(info: TerminalInfo): TerminalInfo {
+    const service = info.serviceId ? this.#services.get(info.serviceId) : undefined;
+    if (!(this.#remoteUrl && service)) return info;
+    return { ...info, remoteUrl: this.#remoteUrl(info, service) };
+  }
+
+  applyRemoteUrls(resolve: RemoteUrlResolver) {
+    this.#remoteUrl = resolve;
+    this.#scheduleNotify();
+  }
+
+  syncRemoteUrls() {
+    this.#scheduleNotify();
   }
 
   subscribe(listener: Listener) {
@@ -167,7 +189,7 @@ export class Terminals {
 
   #publish() {
     const snapshot = this.snapshot();
-    this.#store.writeTerminals(snapshot.terminals);
+    this.#store.writeTerminals(this.#listInfos());
     for (const listener of this.#listeners) listener(snapshot);
   }
 

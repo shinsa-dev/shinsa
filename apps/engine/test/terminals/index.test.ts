@@ -383,6 +383,31 @@ describe('Terminals services', () => {
     expect(terminals.snapshot().terminals[0]).toMatchObject({ serviceId: null, status: 'stopped' });
   });
 
+  it('adds the address a running service is reached at from elsewhere, publishes it again when asked, and never saves it', async () => {
+    const { terminals, dataDir } = createTerminals();
+    const service = terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}/' });
+    const terminal = terminals.startService(service.id, main('repository'));
+    terminals.create(START);
+    let address = 'https://one.shinsa.page/';
+    const asked: string[] = [];
+    const published: TerminalsSnapshot[] = [];
+    terminals.subscribe((snapshot) => published.push(snapshot));
+    terminals.applyRemoteUrls((info, each) => {
+      asked.push(`${info.id} ${each.id}`);
+      return address;
+    });
+    await until('the snapshot goes out again', () => published.length === 1);
+    expect(published[0]?.terminals.find((each) => each.id === terminal.id)?.remoteUrl).toBe(address);
+    expect(published[0]?.terminals.find((each) => each.id !== terminal.id)?.remoteUrl).toBeUndefined();
+    expect(asked).toContain(`${terminal.id} ${service.id}`);
+    address = 'https://two.shinsa.page/';
+    terminals.syncRemoteUrls();
+    await until('the new address goes out', () => published.length === 2);
+    expect(published[1]?.terminals.find((each) => each.id === terminal.id)?.remoteUrl).toBe(address);
+    const saved = JSON.parse(readFileSync(join(dataDir, 'terminals/terminals.json'), 'utf8'));
+    expect(JSON.stringify(saved)).not.toContain('shinsa.page');
+  });
+
   it('gives each task run a free port of its own in the service’s port variable', async () => {
     const { terminals, fake } = createTerminals();
     const preview = { ...SERVICE, previewUrl: 'http://localhost:{port}/tasks', portVariable: 'APP_PORT' };

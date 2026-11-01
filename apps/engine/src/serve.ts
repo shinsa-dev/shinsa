@@ -182,6 +182,8 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     ...options.terminals,
   });
   const previews = new Previews({ engine, remote, services: terminals, origin: config.previewOrigin });
+  terminals.applyRemoteUrls((info, service) => previews.resolveRemoteUrl(info, service));
+  previews.subscribe(() => terminals.syncRemoteUrls());
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
     schedules,
     services: terminals,

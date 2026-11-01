@@ -369,6 +369,7 @@ describe('the tunnel entry point', () => {
           return Promise.resolve({ kind: 'response', response: new Response('page', { status: 203 }) });
         const upgrade = {
           previewId: 'p1',
+          userId: null,
           target: 'ws://localhost:1/',
           headers: {},
           protocols: ['vite-hmr'],
