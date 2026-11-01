@@ -29,6 +29,17 @@ describe('resolveOverflowEdges', () => {
   it('treats a fractional resting position at the end as the end', () => {
     expect(resolveOverflowEdges(299.4, 200, 500)).toEqual({ start: true, end: false });
   });
+
+  it('ignores an end that hides no more than the tolerance', () => {
+    expect(resolveOverflowEdges(295, 200, 500, 8)).toEqual({ start: true, end: false });
+    expect(resolveOverflowEdges(6, 200, 500, 8)).toEqual({ start: false, end: true });
+    expect(resolveOverflowEdges(0, 200, 208, 8)).toEqual({ start: false, end: false });
+  });
+
+  it('still marks an end that hides more than the tolerance', () => {
+    expect(resolveOverflowEdges(290, 200, 500, 8)).toEqual({ start: true, end: true });
+    expect(resolveOverflowEdges(0, 200, 209, 8)).toEqual({ start: false, end: true });
+  });
 });
 
 describe('resolveFadeTimelines', () => {
