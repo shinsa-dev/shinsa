@@ -132,6 +132,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          stacksOn: 't2',
           forkOf: 't0',
           backlog: true,
         },
@@ -143,6 +144,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          stacksOn: 't2',
           forkOf: 't0',
           backlog: true,
         },
@@ -154,6 +156,14 @@ describe('parseUserCommand', () => {
       [
         { type: 'task.wait_on', taskId: 't1', waitsOn: [] },
         { type: 'task.wait_on', taskId: 't1', waitsOn: [] },
+      ],
+      [
+        { type: 'task.stack_on', taskId: 't1', stacksOn: 't0' },
+        { type: 'task.stack_on', taskId: 't1', stacksOn: 't0' },
+      ],
+      [
+        { type: 'task.stack_on', taskId: 't1', stacksOn: null },
+        { type: 'task.stack_on', taskId: 't1', stacksOn: null },
       ],
       [
         { type: 'task.move_to_backlog', taskId: 't1' },

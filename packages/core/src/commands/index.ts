@@ -100,6 +100,7 @@ export type UserCommand =
       planFirst?: boolean;
       origin?: string | null;
       waitsOn?: string[];
+      stacksOn?: string;
       mode?: TaskMode;
       account?: RunAccount | null;
       forkOf?: string;
@@ -107,6 +108,7 @@ export type UserCommand =
     }
   | { type: 'task.prioritize'; taskId: string; priority: TaskPriority }
   | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }
+  | { type: 'task.stack_on'; taskId: string; stacksOn: string | null }
   | { type: 'task.move_to_backlog'; taskId: string }
   | { type: 'task.remove_from_backlog'; taskId: string }
   | { type: 'task.snooze'; taskId: string }

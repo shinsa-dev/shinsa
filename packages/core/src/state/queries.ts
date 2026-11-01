@@ -73,8 +73,28 @@ export function listOpenBlockers(state: ShinsaState, task: Task) {
   return listDependencies(state, task).filter((dependency) => !isTaskSettled(dependency));
 }
 
+export function selectStackParent(state: ShinsaState, task: Task) {
+  return task.stacksOn ? (state.tasks[task.stacksOn] ?? null) : null;
+}
+
+export function selectStackedOnThis(state: ShinsaState, taskId: string) {
+  return Object.values(state.tasks).find((task) => task.stacksOn === taskId && !isTaskSettled(task)) ?? null;
+}
+
+export function isReadyToStackOn(state: ShinsaState, task: Task) {
+  if (task.pullRequest?.state !== 'open') return false;
+  return listOpenGates(state, task.id).some((gate) => gate.type === 'merge');
+}
+
+export function isStackPending(state: ShinsaState, parent: Task) {
+  return !isTaskComplete(parent) && !isReadyToStackOn(state, parent);
+}
+
 export function listPendingDependencies(state: ShinsaState, task: Task) {
-  return listDependencies(state, task).filter((dependency) => !isTaskComplete(dependency));
+  const pending = listDependencies(state, task).filter((dependency) => !isTaskComplete(dependency));
+  const parent = selectStackParent(state, task);
+  if (!parent || !isStackPending(state, parent) || pending.includes(parent)) return pending;
+  return [...pending, parent];
 }
 
 export function resolveTaskWorkspace(state: ShinsaState, task: Task): WorkspaceMode {
@@ -113,7 +133,8 @@ export function isDependencyOf(state: ShinsaState, taskId: string, candidateId: 
     if (id === taskId) return true;
     if (seen.has(id)) continue;
     seen.add(id);
-    pending.push(...(state.tasks[id]?.waitsOn ?? []));
+    const task = state.tasks[id];
+    pending.push(...(task?.waitsOn ?? []), ...(task?.stacksOn ? [task.stacksOn] : []));
   }
   return false;
 }

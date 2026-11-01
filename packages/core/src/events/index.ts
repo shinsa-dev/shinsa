@@ -129,6 +129,8 @@ type EventBody =
   | { type: 'task.duplicated'; taskId: string; duplicate: TaskDuplicate }
   | { type: 'task.duplicate_cleared'; taskId: string }
   | { type: 'task.waits_on_changed'; taskId: string; waitsOn: string[]; by?: 'you' | 'shinsa' }
+  | { type: 'task.stack_changed'; taskId: string; stacksOn: string | null; by?: 'you' | 'shinsa' }
+  | { type: 'task.stack_based'; taskId: string; base: string | null }
   | { type: 'task.backlog_changed'; taskId: string; backlog: boolean; cause: BacklogCause }
   | { type: 'task.snooze_changed'; taskId: string; snoozed: boolean }
   | { type: 'task.noted'; taskId: string; note: string; runId?: string | null }

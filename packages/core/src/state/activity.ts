@@ -89,6 +89,11 @@ export function describeDependencies(titles: string[]) {
   return `Waits on ${titles.map((title) => `“${title}”`).join(', ')}`;
 }
 
+export function describeStack(parent: string | null) {
+  if (parent === null) return 'Left its bundle';
+  return `Stacked on “${parent}” as a bundle`;
+}
+
 export function describeChecks(results: ReportCheck[]) {
   const failed = results.filter(isBlockingCheck);
   if (results.length === 1) return failed.length === 0 ? 'The check passed' : 'The check failed';

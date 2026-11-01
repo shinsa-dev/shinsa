@@ -3,6 +3,7 @@ import { resolveAgentPrompt } from '../prompts/index.ts';
 import { isTriaged } from '../state/queries.ts';
 import { retryChecks } from './checks.ts';
 import type { Decider } from './decider.ts';
+import { changeStack } from './dependencies.ts';
 import { resetFixBudget } from './fixes.ts';
 import { restartIntakeRead } from './intake.ts';
 import { resolveCurrentPhase, startPhase, startPlanning, startReview, startWork } from './lifecycle.ts';
@@ -12,6 +13,9 @@ import { restartWatchCheck } from './watchdogs.ts';
 
 function dropCancelledDependencies(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
+  if (task.stacksOn && decider.state.tasks[task.stacksOn]?.stage === 'cancelled') {
+    changeStack(decider, taskId, null, 'you');
+  }
   const kept = task.waitsOn.filter((id) => decider.state.tasks[id]?.stage !== 'cancelled');
   if (kept.length === task.waitsOn.length) return;
   decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn: kept, by: 'you' });

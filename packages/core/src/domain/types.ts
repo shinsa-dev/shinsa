@@ -441,6 +441,8 @@ export interface Task {
   pullRequestWatch?: PullRequestWatch | null;
   pullRequestReadFailures?: number;
   waitsOn: string[];
+  stacksOn?: string | null;
+  stackBase?: string | null;
   note: string | null;
   origin: string | null;
   createdAt: number;

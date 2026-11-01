@@ -60,6 +60,10 @@ const DESCRIPTIONS: Descriptions = {
   'task.prioritize': (state, command) =>
     `Set the priority of ${quoteTask(state, command.taskId)} to ${command.priority}`,
   'task.wait_on': (state, command) => `Changed what ${quoteTask(state, command.taskId)} waits on`,
+  'task.stack_on': (state, command) =>
+    command.stacksOn
+      ? `Stacked ${quoteTask(state, command.taskId)} on ${quoteTask(state, command.stacksOn)}`
+      : `Took ${quoteTask(state, command.taskId)} out of its bundle`,
   'task.move_to_backlog': (state, command) => `Moved ${quoteTask(state, command.taskId)} to the backlog`,
   'task.remove_from_backlog': (state, command) =>
     `Moved ${quoteTask(state, command.taskId)} out of the backlog`,
