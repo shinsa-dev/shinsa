@@ -1,4 +1,5 @@
 import {
+  type Gate,
   listActiveRuns,
   type Run,
   resolveShapeState,
@@ -42,9 +43,19 @@ function resolveRowProgress(task: Task, status: string) {
   return { track: <MiniTrack steps={steps} />, note: describeStepCount(selectCurrentStep(steps), status) };
 }
 
-export function RowSummary({ state, task, detail }: { state: ShinsaState; task: Task; detail: boolean }) {
-  const [run] = selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
-  const status = resolveRowStatus(state, task);
+export function RowSummary({
+  state,
+  task,
+  gate = null,
+  detail,
+}: {
+  state: ShinsaState;
+  task: Task;
+  gate?: Gate | null;
+  detail: boolean;
+}) {
+  const [run] = gate || selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
+  const status = resolveRowStatus(state, task, gate);
   const { track, note } = resolveRowProgress(task, status.label);
   return (
     <span className='flex min-w-0 flex-1 items-center gap-2'>

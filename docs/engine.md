@@ -737,7 +737,9 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   `answer`, proposing no change (`follow_up_proposal`). The round reopens while it answers (stage `answering`,
   `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A message on a resting task
   with no kind (the model off or failed) is such a follow-up, never a new round; only a schedule's message to a
-  resting task still starts the next round.
+  resting task still starts the next round. The classifier is shown the post-merge steps still waiting on you
+  (`describeOpenSteps`), so a question about one, even one that quotes it ("what is this for? <the step>"), is
+  `feedback` answered in place, never a round that does the step, which is yours.
 - **A new round is shaped like a new task.** The same call answers, for new work, the kind of work from triage's shape
   question (`SHAPE_QUESTION`), read as the request of a new task with the earlier rounds as its context, and the round
   takes that preset's steps: "how many ended up in Archive?" is an answer round, "open a pull request for it" a change,
@@ -1546,7 +1548,11 @@ steps takes its step out again.
   `Task.carriedMergeSteps` with their round: every open post-merge step, and every open pre-merge step of a
   round that shipped onto the pull request the next round ships on too (it still blocks that merge). The post-merge
   gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
-  steps while the later round works. Steps ticked before a round starts are dropped.
+  steps while the later round works. Steps ticked before a round starts are dropped. While the later round works the
+  gate never leads the task (`selectLeadGate` picks `post_merge` only once the round rests, `isRoundResting`): the task
+  shows twice on Home, its gate row in Needs you reading "Post-merge · 1 step left" (`RowSummary` given the row's gate)
+  and its row in In progress with the round's stage and the agent's latest action, and All tasks, its glyph and its page
+  follow the round. The later round's last phase is told the carried steps, so its walkthrough never lists them again.
 - **On the Overview** pre-merge steps and the tasks the merge waits on show on the merge gate's card only, never at
   your review; a step's title and detail are Markdown with live links (a shinsa:// task with its hover card, a URL,
   names such as `API_KEY` set in code), and the step schema asks the Agent for backticks and full links.

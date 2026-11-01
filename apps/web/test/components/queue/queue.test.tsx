@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { createDisclosureId, readDisclosure, writeDisclosure } from '@/lib/preferences/disclosure.ts';
 import { createAgentEntry, createCallEntry } from '../../support/chat.ts';
+import { createRound } from '../../support/rounds.ts';
 import { pushTranscript, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import {
   createGate,
@@ -338,6 +339,41 @@ describe('a row’s summary line', () => {
     pushTranscript('run-ask', [createAgentEntry('Which export format?', 'interim')]);
     expect(row(/Build the export/).textContent).not.toContain('Which export format?');
     expect(row(/Build the export/).textContent).toContain('Build 1/2');
+  });
+
+  it('shows a later round at work apart from the steps an earlier round left for you', () => {
+    const fixing = createTask({
+      id: 'fix',
+      title: 'Fix the previews',
+      stage: 'fixing',
+      fixFor: 'review',
+      rounds: [createRound({ number: 1 }), createRound({ number: 2, status: 'active', endedAt: null })],
+      carriedMergeSteps: [
+        {
+          when: 'post_merge',
+          kind: 'other',
+          title: 'Submit the domain',
+          detail: 'd',
+          command: null,
+          round: 1,
+          done: false,
+        },
+      ],
+    });
+    renderQueue({
+      variant: 'wide',
+      state: createShinsaState({
+        tasks: [fixing],
+        runs: [createRun({ id: 'run-fix', taskId: 'fix', purpose: 'fix', status: 'running' })],
+        gates: [createGate({ id: 'g-after', taskId: 'fix', type: 'post_merge' })],
+      }),
+    });
+    pushTranscript('run-fix', [createAgentEntry('Reading the review findings', 'interim')]);
+    const [steps, work] = screen.getAllByRole('button', { name: /Fix the previews/ });
+    expect(steps?.textContent).toContain('Post-merge · 1 step left');
+    expect(steps?.textContent).not.toContain('Reading the review findings');
+    expect(work?.textContent).not.toContain('Post-merge');
+    expect(work?.textContent).toContain('Reading the review findings');
   });
 
   it('keeps a waiting agent’s action still', () => {
