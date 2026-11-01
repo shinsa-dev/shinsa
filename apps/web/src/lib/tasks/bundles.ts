@@ -114,7 +114,7 @@ export function toggleStack(task: Task, parent: Task) {
   return task.stacksOn === parent.id ? unstackTask(task) : stackOnTask(task, parent);
 }
 
-export function resolveBundleBranch(state: ShinsaState, rows: BundleRow[]) {
+function resolveBundleBranch(state: ShinsaState, rows: BundleRow[]) {
   const first = rows[0]?.task;
   return (first?.repoId ? state.repos[first.repoId]?.defaultBranch : null) ?? 'the default branch';
 }

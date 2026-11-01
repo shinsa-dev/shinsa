@@ -1194,7 +1194,7 @@ piece of a bundle with `create_task`'s `stack_on_this` (`stacksOn` on `task.crea
   with a failure gate, "“‹parent›” was cancelled"; Retry takes it out of the bundle and bases it on the default
   branch, and Stack on another task… points it elsewhere while it has not started.
 - **Where it shows.** The task toolbar's Bundle item ("Bundle 2/3", the ready tasks of all of them) opens a popover
-  that lists each task numbered from 1, the one whose pull request targets the default branch ("Into main"), with its
+  that lists each task numbered from 1, the one whose pull request targets the default branch, with its
   state (Waiting, Working, Ready, Merging, Merged), its pull request and This task (`BundleFact`); a queue row carries
   the same count, live, as a small mark beside the task's name, where the shared mark goes (`BundleMark`). A
   ready task's now card says it merges when you approve the bundle on the root. All tasks files a ready task with its

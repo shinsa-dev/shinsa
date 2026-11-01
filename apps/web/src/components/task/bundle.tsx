@@ -17,11 +17,10 @@ import {
   describeBundleNote,
   describeBundleProgress,
   listBundleRows,
-  resolveBundleBranch,
 } from '@/lib/tasks/bundles.ts';
 import { resolveTaskPath } from '@/router.ts';
 
-function BundleMember({ row, index, base }: { row: BundleRow; index: number; base: string | null }) {
+function BundleMember({ row, index }: { row: BundleRow; index: number }) {
   const status = BUNDLE_MEMBER[row.state];
   return (
     <li className='flex min-w-0 items-center gap-2 px-3 py-1.5 text-xs'>
@@ -33,7 +32,6 @@ function BundleMember({ row, index, base }: { row: BundleRow; index: number; bas
         >
           <Truncate>{row.task.title}</Truncate>
         </InAppLink>
-        {base && <span className='shrink-0 text-fg-2'>Into {base}</span>}
         {row.current && <span className='shrink-0 text-fg-2'>This task</span>}
       </span>
       <ToneLabel label={status.label} tone={status.tone} />
@@ -66,12 +64,7 @@ export function BundleFact({ state, task }: { state: ShinsaState; task: Task }) 
       <InfoSection>
         <ol aria-label='Tasks in the bundle' className='flex flex-col'>
           {rows.map((row, index) => (
-            <BundleMember
-              key={row.task.id}
-              row={row}
-              index={index}
-              base={index === 0 ? resolveBundleBranch(state, rows) : null}
-            />
+            <BundleMember key={row.task.id} row={row} index={index} />
           ))}
         </ol>
       </InfoSection>
