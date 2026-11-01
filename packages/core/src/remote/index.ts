@@ -122,6 +122,19 @@ export {
   serializePlacementPrompt,
 } from './placement.ts';
 export {
+  describeGigabytes,
+  describeResourceSummary,
+  HEADROOM_STEP,
+  type MachineResources,
+  parseResourceSummary,
+  type ResourceSummary,
+  type ResourceUse,
+  resolveMemoryPercent,
+  resolveResourceHeadroom,
+  resolveResourceSummary,
+  type TaskResources,
+} from './resources.ts';
+export {
   createShareHello,
   createShareWelcome,
   deriveShareSessionKey,

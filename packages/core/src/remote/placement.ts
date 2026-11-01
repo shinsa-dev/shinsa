@@ -1,6 +1,13 @@
 import type { Settings } from '../domain/settings.ts';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { Task } from '../domain/types.ts';
+import {
+  describeResourceSummary,
+  parseResourceSummary,
+  type ResourceSummary,
+  resolveResourceHeadroom,
+  resolveResourceSummary,
+} from './resources.ts';
 
 export interface PlacementMachine {
   id: string;
@@ -10,6 +17,7 @@ export interface PlacementMachine {
     projects: Record<string, unknown>;
     settings: Pick<Settings, 'taskCapacity' | 'placementPolicies'>;
   };
+  resources?: ResourceSummary | null;
 }
 
 export const PLACEMENT_POLICY_LIMITS = { text: 240, perMachine: 20 } as const;
@@ -29,12 +37,21 @@ export interface MachineLoad {
   open: number;
   capacity: number | null;
   full: boolean;
+  headroom: number | null;
 }
 
 export function resolveMachineLoad(machine: PlacementMachine): MachineLoad {
   const open = Object.values(machine.state.tasks).filter((task) => !isTaskSettled(task)).length;
   const capacity = machine.state.settings.taskCapacity ?? null;
-  return { id: machine.id, name: machine.name, open, capacity, full: capacity !== null && open >= capacity };
+  const headroom = machine.resources ? resolveResourceHeadroom(machine.resources) : null;
+  return {
+    id: machine.id,
+    name: machine.name,
+    open,
+    capacity,
+    full: capacity !== null && open >= capacity,
+    headroom,
+  };
 }
 
 function resolveLoadShare(load: MachineLoad) {
@@ -43,6 +60,10 @@ function resolveLoadShare(load: MachineLoad) {
 
 function compareLoads(left: MachineLoad, right: MachineLoad) {
   return resolveLoadShare(left) - resolveLoadShare(right) || left.open - right.open;
+}
+
+function compareHeadroom(left: MachineLoad, right: MachineLoad) {
+  return (right.headroom ?? 0) - (left.headroom ?? 0) || compareLoads(left, right);
 }
 
 export function resolveProjectMachine(machines: PlacementMachine[], projectId: string) {
@@ -54,7 +75,8 @@ export function resolvePlacement(machines: PlacementMachine[], projectId: string
   if (owner) return owner;
   const loads = machines.map(resolveMachineLoad);
   const roomy = loads.filter((load) => !load.full);
-  const [best] = (roomy.length > 0 ? roomy : loads).sort(compareLoads);
+  const compare = loads.every((load) => load.headroom !== null) ? compareHeadroom : compareLoads;
+  const [best] = (roomy.length > 0 ? roomy : loads).sort(compare);
   return best?.id ?? null;
 }
 
@@ -64,6 +86,7 @@ export interface PlacementCandidate {
   policies: string[];
   open: number;
   capacity: number | null;
+  resources: ResourceSummary | null;
 }
 
 export interface PlacementQuestion {
@@ -93,6 +116,7 @@ export function listPlacementCandidates(machines: PlacementMachine[]): Placement
       policies: machine.state.settings.placementPolicies ?? [],
       open: load.open,
       capacity: load.capacity,
+      resources: machine.resources ? resolveResourceSummary(machine.resources) : null,
     };
   });
 }
@@ -103,6 +127,7 @@ export const PLACEMENT_SYSTEM = [
   'Read the request and the policies. Pick the machine a policy sends this request to.',
   `If no policy speaks to this request, answer "${NO_POLICY_MACHINE}"; the machine with the most room takes it then.`,
   'When two policies conflict, follow the one that matches the request most closely.',
+  'Each machine lists its CPU, memory and disk use when it reports them; use them when a policy speaks of them.',
   'The reason is one short sentence in plain words that names the policy you followed.',
 ].join(' ');
 
@@ -121,11 +146,14 @@ function describeCandidate(candidate: PlacementCandidate) {
     candidate.capacity === null
       ? `${candidate.open} open tasks, no limit`
       : `${candidate.open} of ${candidate.capacity} open tasks`;
+  const use = candidate.resources
+    ? describeResourceSummary(candidate.resources)
+    : 'resource use not reported';
   const policies =
     candidate.policies.length > 0
       ? candidate.policies.map((policy) => `  - ${policy}`).join('\n')
       : '  (no policies)';
-  return `Machine "${candidate.id}" named ${candidate.name} (${load}):\n${policies}`;
+  return `Machine "${candidate.id}" named ${candidate.name} (${load}; ${use}):\n${policies}`;
 }
 
 export function serializePlacementPrompt(question: PlacementQuestion) {
@@ -151,14 +179,17 @@ export function parsePlacementAnswer(question: PlacementQuestion, value: unknown
 
 function readCandidate(value: unknown): PlacementCandidate | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { id, name, policies, open, capacity } = value as Record<string, unknown>;
+  const { id, name, policies, open, capacity, resources } = value as Record<string, unknown>;
   if (typeof id !== 'string' || !id || typeof name !== 'string') return null;
   if (!Array.isArray(policies) || !policies.every((policy) => typeof policy === 'string')) return null;
   if (!isPlacementPoliciesValid(policies)) return null;
   if (typeof open !== 'number' || !Number.isInteger(open) || open < 0) return null;
   if (capacity !== null && (typeof capacity !== 'number' || !Number.isInteger(capacity) || capacity < 1))
     return null;
-  return { id, name: name.slice(0, 120), policies, open, capacity };
+  const reported = resources !== null && resources !== undefined;
+  const use = reported ? parseResourceSummary(resources) : null;
+  if (reported && !use) return null;
+  return { id, name: name.slice(0, 120), policies, open, capacity, resources: use };
 }
 
 export function parsePlacementQuestion(value: unknown): PlacementQuestion | null {

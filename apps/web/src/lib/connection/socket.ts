@@ -497,6 +497,8 @@ export class Connection implements ShinsaConnection {
       case 'remote':
         this.replaceRemote(message.remote);
         return;
+      case 'resources':
+        return;
       case 'engine':
         this.#engine = message.engine;
         this.#state.publish();

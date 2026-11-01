@@ -1,5 +1,6 @@
 import type { ChatEntry } from '../chat/protocol.ts';
 import type { UserCommand } from '../commands/index.ts';
+import type { MachineResources } from '../remote/resources.ts';
 import type { RemoteSnapshot } from '../remote/status.ts';
 import type { AccountsSnapshot } from './accounts.ts';
 import type { EngineInfo } from './engine.ts';
@@ -27,6 +28,7 @@ export type ServerMessage =
   | { type: 'surfaces'; desktop: boolean }
   | { type: 'engine'; engine: EngineInfo }
   | { type: 'terminals'; terminals: TerminalsSnapshot }
+  | { type: 'resources'; resources: MachineResources }
   | { type: 'remote'; remote: RemoteSnapshot };
 
 export function isSurface(value: unknown): value is Surface {

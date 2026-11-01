@@ -296,13 +296,14 @@ describe('the machine a new task runs on', () => {
       {
         request: 'Run the benchmark',
         machines: [
-          { id: 'studio', name: 'Studio', policies: [], open: 3, capacity: 4 },
+          { id: 'studio', name: 'Studio', policies: [], open: 3, capacity: 4, resources: null },
           {
             id: 'box',
             name: 'Build box',
             policies: ['Run benchmarks on the build box.'],
             open: 1,
             capacity: null,
+            resources: null,
           },
         ],
       },

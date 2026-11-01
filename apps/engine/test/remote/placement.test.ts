@@ -11,8 +11,9 @@ const QUESTION: PlacementQuestion = {
       policies: ['Run Xcode simulator tests on this machine.'],
       open: 1,
       capacity: null,
+      resources: null,
     },
-    { id: 'box', name: 'Build box', policies: [], open: 0, capacity: 4 },
+    { id: 'box', name: 'Build box', policies: [], open: 0, capacity: 4, resources: null },
   ],
 };
 
