@@ -115,18 +115,22 @@ export function toggleStack(task: Task, parent: Task) {
   return task.stacksOn === parent.id ? unstackTask(task) : stackOnTask(task, parent);
 }
 
-export function describeBundleNote(state: ShinsaState, rows: BundleRow[]) {
+export function resolveBundleBranch(state: ShinsaState, rows: BundleRow[]) {
   const first = rows[0]?.task;
-  const branch = (first?.repoId ? state.repos[first.repoId]?.defaultBranch : null) ?? 'the default branch';
+  return (first?.repoId ? state.repos[first.repoId]?.defaultBranch : null) ?? 'the default branch';
+}
+
+export function describeBundleNote(state: ShinsaState, rows: BundleRow[]) {
+  const branch = resolveBundleBranch(state, rows);
   if (rows.every((row) => row.state === 'merged' || row.state === 'cancelled')) {
     return `The bundle merged into ${branch}.`;
   }
   const top = rows.filter((row) => row.state !== 'merged' && row.state !== 'cancelled').at(-1)?.task;
-  return `The first pull request is based on ${branch} and each one after it on the one before. Once every task is ready, “${top?.title}” merges the whole bundle into ${branch}, top down.`;
+  return `Number 1 targets ${branch} and each one after it builds on the one before. Once every task is ready, approving “${top?.title}” merges them all into ${branch}, from the last back to number 1.`;
 }
 
 export function describeBundleWait(state: ShinsaState, task: Task) {
-  if (isMergingWithBundle(state, task)) return 'Merging with its bundle, top down';
+  if (isMergingWithBundle(state, task)) return 'Merging with its bundle';
   if (!task.bundleReady) return null;
   const top = selectBundleTop(state, task);
   if (!top || top.id === task.id) return null;

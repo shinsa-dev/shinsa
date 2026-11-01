@@ -57,7 +57,7 @@ describe('the members of a bundle', () => {
     ]);
     expect(describeBundleProgress(rows)).toBe('1 of 3 ready');
     expect(describeBundleNote(state, rows)).toBe(
-      'The first pull request is based on main and each one after it on the one before. Once every task is ready, “Add the screen” merges the whole bundle into main, top down.'
+      'Number 1 targets main and each one after it builds on the one before. Once every task is ready, approving “Add the screen” merges them all into main, from the last back to number 1.'
     );
     expect(selectBundleTop(state, root)?.id).toBe('top');
   });
@@ -192,7 +192,7 @@ describe('describeBundleWait', () => {
     expect(describeBundleWait(gated, root)).toBe('Merges when you approve the bundle on “Add the screen”');
     const mergingRoot = createTask({ id: 'root', stage: 'awaiting_merge' });
     const merging = createShinsaState({ tasks: [mergingRoot, { ...top, stage: 'awaiting_merge' }] });
-    expect(describeBundleWait(merging, mergingRoot)).toBe('Merging with its bundle, top down');
+    expect(describeBundleWait(merging, mergingRoot)).toBe('Merging with its bundle');
   });
 
   it('says nothing for a task that is not ready or has nothing open above it', () => {

@@ -12,7 +12,6 @@ import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { MiniTrack } from '@/components/overview/mini-track.tsx';
-import { BundleMark } from '@/components/task/bundle.tsx';
 import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { describeParkedRun } from '@/lib/chat/delegations.ts';
 import { useTranscript } from '@/lib/connection/socket.ts';
@@ -53,7 +52,6 @@ export function RowSummary({ state, task, detail }: { state: ShinsaState; task: 
         <TaskHandlePrefix task={task} />
         <span className={cn('font-medium', TONE_TEXT[status.tone])}>{status.label}</span>
       </span>
-      <BundleMark state={state} task={task} />
       {track}
       {detail && (
         <span className='flex min-w-0 flex-1 contain-inline-size'>

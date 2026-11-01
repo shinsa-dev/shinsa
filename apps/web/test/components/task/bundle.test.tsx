@@ -50,7 +50,7 @@ describe('the Bundle item in the task toolbar', () => {
     expect(await screen.findByText('Bundle · 1 of 2 ready')).toBeTruthy();
     const items = within(screen.getByRole('list', { name: 'Tasks in the bundle' })).getAllByRole('listitem');
     expect(items.map((item) => item.textContent)).toEqual([
-      '1Add the schemaReady41',
+      '1Add the schemaInto mainReady41',
       '2Add the screenThis taskWorking',
     ]);
     expect(
@@ -58,7 +58,7 @@ describe('the Bundle item in the task toolbar', () => {
         .getByRole('link', { name: 'Add the schema' })
         .getAttribute('href')
     ).toBe('/tasks/SW-1');
-    expect(screen.getByText(/merges the whole bundle into main, top down/)).toBeTruthy();
+    expect(screen.getByText(/merges them all into main, from the last back to number 1/)).toBeTruthy();
   });
 
   it('shows nothing for a task outside any bundle', () => {

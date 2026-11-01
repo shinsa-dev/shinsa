@@ -152,6 +152,20 @@ describe('compact queue', () => {
     expect(rowTitles()).toEqual(['Build the export', 'Ship the export docs', 'Plan the garden beds']);
   });
 
+  it('shows a bundle’s count beside the task’s name, not in its summary line', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'root', title: 'Add the schema', stage: 'shipping', bundleReady: { commit: 'a' } }),
+        createTask({ id: 'top', title: 'Add the screen', stage: 'reviewing', stacksOn: 'root' }),
+      ],
+      gates: [createGate({ id: 'g-top', taskId: 'top', type: 'review' })],
+    });
+    renderQueue({ state });
+    const row = screen.getByRole('button', { name: /Add the screen/ });
+    const count = within(row).getByText('1/2');
+    expect(count.parentElement?.textContent).toBe('Add the screen1/2');
+  });
+
   it('opens the task from a row', () => {
     const onNavigate = mock();
     renderQueue({ onNavigate });

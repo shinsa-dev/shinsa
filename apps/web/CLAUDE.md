@@ -58,7 +58,7 @@ src/
 │                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares; the task's composer on
 │                        Overview, Review and Chat is one draft per task, lib/chat/task-drafts.ts), review draft, the
 │                        handle, bundle.tsx: BundleFact, the toolbar's Bundle item and its popover of the bundle's
-│                        tasks, and BundleMark, its count on a queue row, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
+│                        tasks, and BundleMark, its count beside a queue row's name, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
 │                        steps left after the merge), the plan's

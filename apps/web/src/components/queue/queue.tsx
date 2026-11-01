@@ -9,6 +9,7 @@ import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
+import { BundleMark } from '@/components/task/bundle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -127,6 +128,7 @@ function QueueSectionView({
       active={item.task.id === activeTaskId}
       revealWhenActive={variant === 'compact'}
       title={item.task.title}
+      mark={<BundleMark state={state} task={item.task} />}
       summary={<RowSummary state={state} task={item.task} detail={variant === 'wide'} />}
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {
