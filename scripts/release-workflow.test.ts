@@ -71,6 +71,14 @@ describe('the release workflow', () => {
       'APPLE_TEAM_ID',
     ]);
   });
+
+  it('checks Gatekeeper and the staple with the retrying script, only when signed', () => {
+    expect(check.step.run).toContain(
+      'if [ "$MODE" = signed ]; then\n  bun "$GITHUB_WORKSPACE/scripts/release-verify.ts" "$app"\nfi'
+    );
+    expect(check.step.run).not.toContain('xcrun stapler validate');
+    expect(check.step.run).not.toContain('spctl');
+  });
 });
 
 function expression(name: string) {

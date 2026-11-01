@@ -4,13 +4,13 @@ import { basename, join } from 'node:path';
 import { $ } from 'bun';
 import {
   describeNotaryRejection,
-  describeRetryFailure,
   NOTARY_SUBMIT_DELAYS,
   parseNotarySubmission,
   type RetryFailure,
   resolveNotaryCredentials,
   retryStep,
   STAPLE_DELAYS,
+  serializeRetryWarning,
 } from './release-retry.ts';
 
 const app = Bun.argv[2];
@@ -19,8 +19,7 @@ const credentials = resolveNotaryCredentials(Bun.env);
 const directory = mkdtempSync(join(tmpdir(), 'shinsa-notarize-'));
 
 function warnRetry(failure: RetryFailure) {
-  const line = describeRetryFailure(failure);
-  process.stdout.write(Bun.env.GITHUB_ACTIONS ? `::warning title=${failure.label}::${line}\n` : `${line}\n`);
+  process.stdout.write(serializeRetryWarning(failure, Bun.env));
 }
 
 try {
