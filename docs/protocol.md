@@ -902,7 +902,8 @@ The delegation tools name a delegation by `delegation_id`. Reads with no command
 `list_schedules`, `list_services`, `run_service` (which acts on the task's own service runs, in the terminals
 beside the log, not through a command; `docs/engine.md` → Services → Runs for a task) and `add_service` (which adds a
 service definition beside the log, no command either; `docs/engine.md` → Services → Agents add the services they
-need), and `delegation_status` for a delegation still working.
+need), `remove_service` (which removes service definitions the same way; `docs/engine.md` → Services → Agents remove
+services), and `delegation_status` for a delegation still working.
 
 ### System commands
 
@@ -1149,7 +1150,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `find_tasks`, `read_task`, `note` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `list_repository_work` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `list_services`, `run_service` | ✓ | ✓ | | ✓ | | | |
-| `add_service` | ✓ | | | ✓ | | | |
+| `add_service`, `remove_service` | ✓ | | | ✓ | | | |
 | `wait_for` | ✓ | | | ✓ | | | |
 | `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `remember` | ✓ | | ✓ | ✓ | ✓ | | |
