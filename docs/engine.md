@@ -2555,7 +2555,8 @@ beside your run (Runs for a task, below).
   most servers read `PORT`, Vite needs `--port $PORT` in the command. A run that cannot bind fails like any other.
 - **A live preview.** `resolveServiceUrl` (core) puts the run's port in the preview URL, `ServiceView.url`; a run
   without a port has none. Wherever an active run has one, an Open button opens it (`docs/design.md`, 37),
-  `run_service` and `list_services` report it to the agent, and the `services list` command prints it. Before the
+  `run_service` and `list_services` report it to the agent, and the `services list` command prints it. Through remote
+  access, Open goes to the run's private address instead (Private service addresses, below). Before the
   review, the last phase asks the Agent to start the services that show the change and attach each URL, with the path
   to the screen to check, as `preview` evidence, which How to test links (`resolvePhaseInstruction`, the evidence
   skill); Evidence's Preview group also links each active run of the task the agent did not attach
@@ -2630,10 +2631,18 @@ beside your run (Runs for a task, below).
   worktree, and must already be there (a folder only on the task's branch is refused with a message that says so); a
   path that leaves the repository is refused. Everything else goes through the same `readServiceInput` check as
   `POST /api/services` and the same `Terminals.addService`, so a taken name, a preview URL without `{port}` and the
-  limit are refused as they are for you, and the new service shows in Services at once. No tool changes or removes a
-  service, and none starts your own run: those stay yours. The house rules tell those roles to add a service when the
-  project has none they need and never for a one-off command, and the last phase's preview instruction to add the
-  one that shows the change when none does.
+  limit are refused as they are for you, and the new service shows in Services at once. No tool changes a service in
+  place (remove it and add it again), and none starts your own run: that stays yours. The house rules tell those
+  roles to add a service when the project has none they need and never for a one-off command, and the last phase's
+  preview instruction to add the one that shows the change when none does.
+- **Agents remove services.** The same two roles have `remove_service`: `services`, a list of names or ids of any
+  service in the task's project, its folder in this task's repository or not, since a cleanup comes in a batch.
+  `list_services` also names the project's services that cannot run for the task, so the agent can name them. Every
+  name is resolved before anything changes, so an unknown one is refused with a pointer to `list_services` and
+  nothing is removed. A service that runs for you or for another task is refused the same way, naming who runs it,
+  so an agent never stops your dev server; the task's own run of it is stopped with it. The rest goes through
+  `Terminals.removeServices`, as `POST /api/services/remove` does for Manage. The house rules ask an agent to remove
+  a service it added that no longer serves, or one you ask it to remove, and never one you use unless you asked.
 - **Shared beyond this machine.** A task's run of a service with a preview URL can be shared at its own address on
   `shinsa.page`, through remote access's tunnel, for a teammate to open without Shinsa (Sharing a preview, below).
 
@@ -2775,7 +2784,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   which asks first), the access requests waiting for an answer (yours as the device's name and when you asked, anyone
   else's with their GitHub avatar, name and login, the device's name and when, and Decline and Accept), and Invite
   link (only while it is on: `canEnrollDevices`). It opens the link's dialog: Make link when there is none, else the
-  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you. Every toast here is
+  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you, left out through remote
+  access, which this browser reaches only with its key (on the machine's own page the key, kept for app.shinsa.dev,
+  cannot be read, and a device's name does not tell two browsers apart). Every toast here is
   a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). That link
   carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
@@ -2846,7 +2857,13 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
   Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
   browser's key for it; machines in the dashboard also show their open
-  tasks and their task capacity. Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
+  tasks and their task capacity, and, once its engine reports them (How busy each machine is, below), a line of meters
+  for CPU, memory and disk ("CPU 42%", "Memory 12 of 32 GB", "Disk 120 GB free", each with a bar toned as it fills,
+  `listResourceGauges` in `lib/remote/resources.ts`), or "No reading yet." until then. What one task uses is on the
+  task itself: its machine in the task's facts row opens a card like Branch's and Checks' (`FactPopover`), headed by
+  the machine's name with its CPU, memory and free disk (`describeMachineResources`; "The machine this task runs on"
+  before its first reading), then "What this task uses": its agent, services and checks (CPU and memory each, or Idle)
+  and its worktree's size (`listTaskUseLines`). Below it, Routing policies (`components/settings/policies.tsx`, `lib/remote/policies.ts`)
   lists each machine's routing policies, sentences in plain English, the way Memory lists rules: New routing policy opens a one-line form with the machine
   it runs on and a length count, each policy has Edit and Remove, and moving one to another machine writes both. The
   machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
@@ -2883,23 +2900,50 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   first" (`listUnreachableMachines`, from the account's machines without a key here, and any that refused it since). A
   task stays on the machine it was made on for its whole life, since its worktree, sessions and checks live there.
   Automatic goes in this order: a project you picked goes to the machine that holds it (its repositories are on that
-  disk; `resolveProjectMachine`); then, when any machine has a routing policy, the routing policies: each is a sentence in plain
-  English (`placementPolicies`, such as "Run Xcode simulator tests here."), and when you start the task the page sends
-  the request with every machine's policies and load to `POST /api/placement` on the first machine of the dashboard
-  (`apps/engine/src/remote/placement.ts`), whose classifier, the model triage uses, reads them under a fixed system
-  prompt (core's `PLACEMENT_SYSTEM`, `serializePlacementPrompt`) and names a machine with a one-sentence reason, or
-  none (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says; Automatic reads
-  "Your routing policies decide when you start it", and the toast says where the task went ("Task started. Runs on Studio."), without the reason, to stay one line; when every provider fails (no
-  Claude account, a timeout) the route refuses with `placement_unavailable`, and an answer naming no machine of yours with
-  `placement_unreadable`, so a warning toast says "Your routing policies weren’t read." (`requestPolicyPlacement`); `none` is no policy fitting); then, with no answer, the
-  focus project's machine; then the machine with the most room (`resolvePlacement`: open tasks over its task capacity, a machine at its capacity
-  passed over while another has room, ties to the one with fewer open tasks). Picking a machine yourself overrides it and leaves only that
+  disk; `resolveProjectMachine`); otherwise the router decides: when you start the task the page sends the request
+  with every machine's routing policies, projects (each project's name, description and repositories, and the
+  repositories outside a project, `listPlacementCandidates`), open tasks against capacity and CPU, memory and free
+  disk to `POST /api/placement` on the first machine of the dashboard (`apps/engine/src/remote/placement.ts`), whose
+  classifier, the model triage uses, reads them under a fixed system prompt (core's `PLACEMENT_SYSTEM`,
+  `serializePlacementPrompt`) and names a machine with a one-sentence reason, or none. The prompt decides in order:
+  a routing policy that speaks to the request (each a sentence in plain English, `placementPolicies`, such as "Run
+  Xcode simulator tests here."); then where the work lives, the machine holding the project or repository the request
+  is about, since a task cannot run where its repository is not; then room, passing over a machine at its task
+  capacity and preferring the most free CPU and memory and enough disk; `none` only when nothing sets one machine
+  apart (`parsePlacementQuestion` checks what the page sends, `parsePlacementAnswer` what the model says). It costs one
+  quick call per task started on Automatic with two machines or more. Automatic reads "Chooses by your policies,
+  projects and room when you start it", and the toast says where the task went ("Task started. Runs on Studio."),
+  without the reason, to stay one line; when every provider fails (no Claude account, a timeout) the route refuses
+  with `placement_unavailable`, and an answer naming no machine of yours with `placement_unreadable`, so a warning
+  toast says "Couldn’t ask the router. Placed by room." (`requestRoutedPlacement`). With
+  no answer the task goes to the focus project's machine; then the machine with the most room (`resolvePlacement`: a machine at its task capacity
+  passed over while another has room; among the rest, when every machine reports its resources, the most headroom first,
+  the smaller of its free CPU and free memory in steps of 5 % (`resolveResourceHeadroom`), so a busy machine is passed
+  over for a quiet one and two near-equal ones are not told apart by noise; then, or when any machine reports none (an older engine), open
+  tasks over its task capacity, ties to the one with fewer open tasks). Capacity holds over the router too: an answer
+  naming a machine at its task capacity while another has room is set aside for that same fallback
+  (`resolveRoutedPlacement`). The router reads each machine's CPU, memory and
+  free disk as `describeResourceSummary` words them, so a policy such as "Heavy builds go to the machine with the most
+  memory free." can be followed too. Picking a machine yourself overrides it and leaves only that
   machine's projects in the project picker. Task capacity is each machine's own setting (`taskCapacity`, a whole
   number of 1 or more, or no limit, the default), set in Settings → Machines on app.shinsa.dev for each machine in
   the dashboard, which also shows each one's open tasks, or with `shinsa settings set taskCapacity 8` on it. It only
   steers placement: a machine still runs a task you send it when full. Routing policies are each machine's own setting
   too (`placementPolicies`, at most 20 of 1 to 240 characters, Memory's limit), kept in Settings → Routing policies. The fleet sends `task.create` to the chosen
   machine (`ShinsaConnection.command`'s machine).
+- **How busy each machine is** (`apps/engine/src/resources/`, core's `remote/resources.ts`). While a page has a socket
+  open, each engine samples its machine every 5 s and pushes `resources` (`docs/protocol.md` → The socket); with no
+  page, it samples nothing. One `ps` table gives each process's parent, group, memory and cumulative CPU time; CPU
+  is the change in that time between two samples (Linux's `%cpu` is a lifetime average), and the machine's CPU the
+  change in `os.cpus()` times, so the first reading comes about a second after a page connects. Memory used is total
+  minus available (`MemAvailable` on Linux, free, inactive and speculative pages from `vm_stat` on macOS,
+  since Node's free memory there leaves reclaimable pages out). A `ProcessLedger` counts processes toward their task:
+  each agent's process (the session reports it through `onProcess`), each check's (`runCommand`'s `onSpawn`) and
+  each service terminal's, with every process below it and every process in its group, so a child moved to
+  init still counts. Disk free (`df` on the data folder) and each open task's worktree size (`du`) are read every 10
+  minutes, being slow, beside the samples and never before them: the first reading has no worktree sizes yet, and
+  each lands in the next sample once `du` has read it. Settings → Machines shows them (Remote access, above). A machine that runs out of memory is not marked full:
+  task capacity stays the only limit, and resources only order the machines with room.
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.
@@ -3350,11 +3394,63 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
-- **To try it without a deploy**, `bun scripts/remote-preview.ts` runs a real service on Studio for one of its tasks
-  (`scripts/remote-preview-demo.ts`, a small dev server with live updates) and shares it on
-  `http://<label>.localhost:5195` with the Worker's own code. Its start page links the task in Studio's own app, with
-  no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the preview, stopping and
-  starting the service, and a link that no longer works.
+- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox.ts`) shares the seeded `web` service of one of
+  Studio's tasks (`scripts/sandbox-service.ts`, a small dev server with live updates) on
+  `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
+  own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
+  preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
+  longer works.
+
+## Private service addresses
+
+While remote access is on, every running service with a preview URL, a task's run and your own, has a private
+address on `shinsa.page` as well, so Open works from any device on remote access: a laptop looking at a headless
+server, or a phone looking at the Mac. Nothing to click and nothing to share: only the machine's owner and its members
+get in, gated by their app.shinsa.dev sign-in and the machine's connect key, never by a link key. Public Share preview
+links (Sharing a preview, above) stay separate and human-only.
+
+```
+Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
+                          signed in, owner or member of the machine?
+                          303 with ?access=<60 s token, connect key>
+          ──https──► <label>.shinsa.page   (the Worker)
+                          token checked → __Host-shinsa_preview_access
+                          (12 h, that host), 303 without it
+                          cookie → x-shinsa-preview-access
+          ──https──► t-<instance>.shinsa.dev/__preview/<id>/<path>
+                          engine: token, id, owner or member, run
+          ──http───► localhost:<port>/<path>
+```
+
+- **The address.** A run's private preview id is an HMAC of the machine's connect key over its service and task
+  (`resolvePrivatePreviewId` in core's `remote/previews.ts`), so the same run keeps the same address across restarts
+  of the service and the engine, and pairing the machine again (a new connect key) changes every one.
+  `Previews.resolveRemoteUrl` puts it on each running service terminal as `TerminalInfo.remoteUrl`
+  (`resolvePrivatePreviewUrl`: the preview URL's path on `https://<label>.shinsa.page`), which
+  `ServiceView.remoteUrl` carries to the page; it is null while remote access is off, the machine is not paired or
+  the run is not running. The label is LOC-97's (`serializePreviewLabel`), so the Worker route and the engine's
+  `/__preview/<id>` proxy serve both kinds.
+- **Who gets in.** The access token (`createPreviewAccessToken`, `verifyPreviewAccessToken`) names the instance, the
+  preview id, the account and an expiry, signed with the connect key under its own context, so it is never a connect
+  token. The Worker's open route mints one valid 60 seconds (`PREVIEW_OPEN_TTL_MS`) for an owner or member; the
+  Worker trades it on `shinsa.page` for one valid 12 hours (`PREVIEW_ACCESS_TTL_MS`) in an `HttpOnly`, `Secure`,
+  `SameSite=Lax` `__Host-shinsa_preview_access` cookie for that one host. On every request and WebSocket the engine
+  checks the signature, the expiry, the preview id against the run it derives, and that the account is still the
+  owner or a member of the machine (the heartbeat's list). The Worker strips any `x-shinsa-preview-access` a browser
+  sends, so a page cannot forge it. Anything else gets "This preview is not shared". Access goes per account: a
+  `shinsa.page` page holds no enrolled device key.
+- **When it goes down.** A stopped service gets the stopped page, and the address comes back when it starts again.
+  Turning remote access off, removing a member and pairing again cut access on the next request, and close the
+  open sockets of everyone who lost it.
+- **Open in the app.** In the remote build, every Open on a running service (the Services popovers, a task's
+  Services fact, the Terminal toolbar, and `preview` evidence that points at a task's own running service) goes to
+  `/__remote/previews/open?url=<the private address with the preview URL's path>` and shows the `shinsa.page`
+  address (`resolveServiceLink` in `apps/web/src/lib/terminal/services.ts`). Opened on the machine, or with an engine
+  that sends no `remoteUrl`, Open keeps `localhost:<port>`.
+- **To try it without a deploy**, `bun run sandbox` gives Studio's running web service its private
+  address: its start page, `/sandbox`, links the task through remote access, where Open goes there, the open route itself, and the
+  address without a cookie, which shows the not-shared page. The stand-in accepts every access request at once, so
+  Add this device lets the browser in without a trip to the machine's own app.
 
 ## Slack
 
@@ -5507,7 +5603,10 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
-  that is revised and then fixed, and operation-gate notes. The evidence (`scripts/seed-evidence.ts`) is real files in
+  that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
+  (`scripts/seed-services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
+  running `scripts/sandbox-service.ts` in the project's seeded repository with a preview URL; the command names the
+  script by its path in the checkout that seeded it. The evidence (`scripts/seed-evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of

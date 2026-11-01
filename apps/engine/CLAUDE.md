@@ -112,7 +112,8 @@ src/
 │   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
 │   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
-│   │                    the task's own service runs and the services it adds (services.ts: `list_services`, `run_service`, `add_service`),
+│   │                    the task's own service runs and the services it adds and removes (services.ts: `list_services`,
+│   │                    `run_service`, `add_service`, `remove_service`),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
 │   ├── manage/          The surface as every task agent's tools (docs/engine.md → Agents manage Shinsa): tools.ts
 │   │                    (one tool per spec but the human-only ones and those with an `agentTool`, such as
@@ -277,6 +278,11 @@ src/
 │                        (measureTaskCoverage: run each like a check, merge the reports, diff against the task's base, and
 │                        core's measureCoverage; listCoverageDetections for GET /api/repos/coverage)
 │                        (docs/engine.md → Test coverage of the change)
+├── resources/           How busy this machine is (docs/engine.md → Remote access, How busy each machine is): index.ts
+│                        (ResourceMonitor: samples every 5 s while a socket listens, df and du every 10 minutes, the
+│                        memory reader per platform), sample.ts (the ps table, CPU from deltas of CPU time, vm_stat,
+│                        /proc/meminfo, df, du, each task's use), ledger.ts (ProcessLedger: each task's agent, check
+│                        and service processes)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
 │                        (syncRepoRemote, upsertRepo) (index.ts); remote.ts (a repository's origin from .git/config,

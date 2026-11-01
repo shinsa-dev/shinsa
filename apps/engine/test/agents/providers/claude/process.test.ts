@@ -10,7 +10,8 @@ function isAlive(pid: number) {
 }
 
 test('the process keeps the tail of its stderr and is stopped with the background work it started', async () => {
-  const claude = createClaudeProcess();
+  const pids: number[] = [];
+  const claude = createClaudeProcess((pid) => pids.push(pid));
   await claude.terminate();
   const spawned = claude.spawn({
     command: 'perl',
@@ -27,6 +28,7 @@ test('the process keeps the tail of its stderr and is stopped with the backgroun
     spawned.stdout.once('data', (chunk: Buffer) => resolve(Number(chunk.toString().trim())))
   );
   await until('stderr to arrive', () => claude.readStderr() === 'starting up');
+  expect(pids).toEqual([(spawned as unknown as { pid: number }).pid]);
   expect(isAlive(background)).toBe(true);
   await claude.terminate();
   await exited;

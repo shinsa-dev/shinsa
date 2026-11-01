@@ -47,4 +47,11 @@ describe('the preview page', () => {
   test('follows the light or dark appearance of the device', () => {
     expect(serializePreviewPage('gone')).toContain('@media (prefers-color-scheme:dark)');
   });
+
+  test('every custom property in its style ends before the next one starts', () => {
+    const style = /<style>(.*?)<\/style>/s.exec(serializePreviewPage('gone'))?.[1] ?? '';
+    expect(style).not.toBe('');
+    expect(style).not.toMatch(/\)--[a-z]/);
+    expect(style).toContain(';--outline:var(--bg-3);');
+  });
 });

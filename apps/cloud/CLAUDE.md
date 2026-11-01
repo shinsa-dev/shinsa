@@ -26,8 +26,9 @@ src/
 │                  connect tokens to a teammate's /team channel, and the teams in the heartbeat
 ├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
 ├── hooks.ts       /hooks/<instance>/<schedule>/<token> forwarded to the machine's tunnel
-├── previews.ts    *.shinsa.page: the link's key into a per-host cookie, then HTTP and WebSockets forwarded to the
-│                  machine's /__preview/<id> route
+├── previews.ts    *.shinsa.page: the link's key or the open route's access token into a per-host cookie, then HTTP
+│                  and WebSockets forwarded to the machine's /__preview/<id> route; the open route
+│                  for a private address
 ├── slack-link.ts  Connecting Slack: Sign in with Slack, adding the app to a workspace, the link to a machine
 ├── slack.ts       Slack's events (signature, dedupe, uninstall), a mention forwarded to its author's machine with
 │                  the thread, a question's choice clicked, and the machine's links, unlink and posts
@@ -158,6 +159,17 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   not answer`; the machine's own
   pages, such as a stopped service's, pass through with the mark removed. Every answer carries `X-Robots-Tag: noindex, nofollow, noarchive`, the Worker's own error page included.
   Traffic is plain to the Worker: unlike a task's share, a preview is not sealed end to end, and nothing of it is kept.
+- **Private service addresses.** Every running service of a machine with remote access has a private address on
+  `shinsa.page` too (`docs/engine.md` → Private service addresses). `GET /__remote/previews/open?url=<address>`
+  (`respondPreviewOpen`, `REMOTE_PATHS.previewOpen`) takes only a `shinsa.page` preview address, sends a signed-out
+  browser to sign in and back, answers 404 to anyone but the machine's owner or a member, and otherwise redirects
+  (303) to the address with `?access=` a token from `createPreviewAccessToken` signed with the instance's connect key,
+  valid 60 seconds. On the preview host the Worker checks that token against the instance's connect key and sets a
+  new one, valid 12 hours, as `__Host-shinsa_preview_access` (HttpOnly, Secure, SameSite=Lax, that host only),
+  redirecting without it; that cookie is forwarded as `x-shinsa-preview-access`, the same way as the link key, and
+  the machine checks the token, the run and the member list on every request. Any `x-shinsa-preview-key` or
+  `x-shinsa-preview-access` a browser sends is dropped before forwarding, and the preview cookies never reach the dev
+  server. An expired or forged token is the not-shared page.
 - **Webhooks.** `/hooks/<instance>/<schedule>/<token>` is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with

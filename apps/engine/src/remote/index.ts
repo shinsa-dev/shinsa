@@ -334,8 +334,9 @@ export class Remote {
         ? file.requests.map((entry) => (entry.id === request.id ? request : entry))
         : [...file.requests, request].slice(-MAX_REQUESTS),
     }));
+    const answer = this.#awaitDecision(request.id);
     this.#publish();
-    return this.#awaitDecision(request.id);
+    return answer;
   }
 
   async #admitTeammate(proof: string, keys: ProofKeys, name: string | null, userId: string) {

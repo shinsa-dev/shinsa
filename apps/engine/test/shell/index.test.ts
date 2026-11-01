@@ -31,9 +31,9 @@ describe('runCommand', () => {
     const result = await runCommand(
       ['sh', '-c', 'printf "one\\r\\ntwo\\rthree\\n\\n"; printf "warn\\n" >&2; printf "last"'],
       createTempDir(),
-      { onLine: (line) => lines.push(line) }
+      { onLine: (line) => lines.push(line), onSpawn: (pid) => lines.push(`pid ${pid > 0}`) }
     );
-    expect([...lines].sort()).toEqual(['last', 'one', 'three', 'two', 'warn']);
+    expect([...lines].sort()).toEqual(['last', 'one', 'pid true', 'three', 'two', 'warn']);
     expect(result.stdout).toBe('one\r\ntwo\rthree\n\nlast');
     expect(result.stderr).toBe('warn');
   });

@@ -26,6 +26,7 @@ import {
   type SessionStarter,
 } from '../../src/agents/providers/index.ts';
 import { log } from '../../src/log/index.ts';
+import { ProcessLedger } from '../../src/resources/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { createGitRepo, createTempDir, createTestConfig, git, until, writeFiles } from '../helpers/index.ts';
@@ -173,6 +174,30 @@ describe('starting and ending runs', () => {
     await running;
     expect(dispatched.map((command) => command.type)).toEqual(['run.attempt', 'run.link', 'run.end']);
     expect(endedRuns(dispatched)[0]).toMatchObject({ outcome: 'completed' });
+  });
+
+  test('counts the agent’s process toward its task until the turn ends', async () => {
+    const sessions = createSessions();
+    const ledger = new ProcessLedger();
+    const { supervisor } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+      trackProcess: ledger.track,
+    });
+    const running = supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    const { input, finish } = sessions.started[0] as FakeSession;
+    input.onProcess?.(4242);
+    expect(ledger.listRoots()).toEqual([{ taskId: 'task-1', kind: 'agent', pid: 4242 }]);
+    finish();
+    await running;
+    expect(ledger.listRoots()).toEqual([]);
+    const untracked = createSessions();
+    const plain = setup(withTask(createTempDir()), { startSession: untracked.startSession });
+    const ran = plain.supervisor.execute('run-1');
+    await until('the session', () => untracked.started.length === 1);
+    untracked.started[0]?.input.onProcess?.(4243);
+    untracked.started[0]?.finish();
+    await ran;
   });
 
   test('the round agent plans, builds and fixes as separate runs on one session, read-only only while it plans', async () => {
@@ -1110,6 +1135,7 @@ describe('hand-overs', () => {
       addService: () => {
         throw new Error('Nothing is added here.');
       },
+      removeServices: () => undefined,
     };
     const agent = await handOverSetup(undefined, { services });
     expect(await agent.call('list_services')).toBe(
@@ -1117,6 +1143,9 @@ describe('hand-overs', () => {
     );
     expect(agent.call('add_service', { name: 'web', command: 'bun dev' })).rejects.toThrow(
       'add_service needs a task that works in a project’s repository.'
+    );
+    expect(agent.call('remove_service', { services: ['web'] })).rejects.toThrow(
+      'remove_service needs a task in a project.'
     );
     agent.done();
     await agent.running;

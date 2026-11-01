@@ -1,4 +1,4 @@
-import { type ShinsaState, serializeAttachments, type Task } from '@shinsa/core';
+import { resolveRoutedPlacement, type ShinsaState, serializeAttachments, type Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
   Command,
@@ -47,9 +47,9 @@ import {
   type NewTaskChoices,
   type NewTaskProjectItem,
   NO_PROJECT,
-  POLICY_FAILURE,
-  type PolicyPlacement,
-  requestPolicyPlacement,
+  ROUTING_FAILURE,
+  type RoutedPlacement,
+  requestRoutedPlacement,
   resolveNewTaskMachine,
   resolveProjectChoice,
   resolveShownProject,
@@ -281,10 +281,11 @@ export function NewTaskForm() {
   async function submit() {
     if (!ready) return;
     setBusy(true);
-    let policy: PolicyPlacement | null = null;
-    if (placement?.byPolicy) policy = await requestPolicyPlacement(machines, request);
-    if (policy?.failed) toast.warning(POLICY_FAILURE);
-    const machineId = policy?.answer?.machineId ?? placement?.id ?? null;
+    let routed: RoutedPlacement | null = null;
+    if (placement?.byRouter) routed = await requestRoutedPlacement(machines, request);
+    if (routed?.failed) toast.warning(ROUTING_FAILURE);
+    const fallback = placement?.id ?? null;
+    const machineId = resolveRoutedPlacement(machines, routed?.answer?.machineId ?? null, fallback);
     const sent = await sendCommandWithToast(
       createNewTaskCommand(serializeAttachments(request, attachments.ready), choices),
       placement

@@ -14,6 +14,7 @@ export interface CommandOptions {
   timeoutMs?: number | null;
   signal?: AbortSignal;
   onLine?: (line: string) => void;
+  onSpawn?: (pid: number) => void;
 }
 
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
@@ -126,6 +127,7 @@ export async function runCommand(
   }
   const child = spawn(command, cwd, options);
   if (typeof child === 'string') return { ok: false, code: 127, stdout: '', stderr: child, timedOut: false };
+  options.onSpawn?.(child.pid);
   let timedOut = false;
   let stopped = false;
   const stop = () => {

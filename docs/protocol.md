@@ -902,7 +902,8 @@ The delegation tools name a delegation by `delegation_id`. Reads with no command
 `list_schedules`, `list_services`, `run_service` (which acts on the task's own service runs, in the terminals
 beside the log, not through a command; `docs/engine.md` → Services → Runs for a task) and `add_service` (which adds a
 service definition beside the log, no command either; `docs/engine.md` → Services → Agents add the services they
-need), and `delegation_status` for a delegation still working.
+need), `remove_service` (which removes service definitions the same way; `docs/engine.md` → Services → Agents remove
+services), and `delegation_status` for a delegation still working.
 
 ### System commands
 
@@ -1149,7 +1150,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `find_tasks`, `read_task`, `note` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `list_repository_work` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `list_services`, `run_service` | ✓ | ✓ | | ✓ | | | |
-| `add_service` | ✓ | | | ✓ | | | |
+| `add_service`, `remove_service` | ✓ | | | ✓ | | | |
 | `wait_for` | ✓ | | | ✓ | | | |
 | `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `remember` | ✓ | | ✓ | ✓ | ✓ | | |
@@ -1243,6 +1244,7 @@ or `browser` (a tab, Floaty).
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
 | `engine { engine }` | On connect, right after `surfaces`: what this engine speaks, an `EngineInfo` (below) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
+| `resources { resources }` | On connect once sampled, then every 5 s while a page is connected: `MachineResources` (core's `remote/resources.ts`: the machine's cores, CPU percent, memory used and total, disk free and total, and each open task's agent, services and checks as CPU percent and memory, its process count and its worktree's size). An engine samples only while a socket listens, so a page that never reads it costs nothing; an older engine never sends it and an older page ignores it |
 | `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
 | `teams { teams }` | On connect and after every change to what the machine watches of its teammates: `TeamFeedSnapshot` (Teams, below) |
 
@@ -1252,7 +1254,10 @@ Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/
 server, `parseTerminalClientFrame`). A terminal (`TerminalInfo`) is in a project, at a place (`TerminalPlace`:
 `repository`, `folder` or `worktree`, `listTerminalPlaces`), and `running`, `exited` or `stopped`; a service's
 terminal keeps the port its run was given (`port`), which `resolveServiceUrl` puts in the service's `previewUrl`
-for `ServiceView.url`.
+for `ServiceView.url`, and while remote access is on a running service terminal carries its private address
+(`remoteUrl`, `https://<label>.shinsa.page/…`, null otherwise), which `ServiceView.remoteUrl` carries on. Opening it
+takes an access token (`createPreviewAccessToken`: instance, preview id, account and expiry, an HMAC with the connect
+key) that the Worker passes on as `x-shinsa-preview-access` (`docs/engine.md` → Private service addresses).
 
 **What an engine speaks** (`packages/core/src/protocol/engine.ts`). The hosted web app is built from `main` and can
 be newer than the engine it reaches, so every engine tells each page what it speaks (`resolveEngineInfo`) and the page

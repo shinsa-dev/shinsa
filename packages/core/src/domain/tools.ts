@@ -15,6 +15,7 @@ export const SHINSA_TOOL_NAMES = [
   'list_services',
   'run_service',
   'add_service',
+  'remove_service',
   'note',
   'wait_for',
   'suggest_tasks',
@@ -77,6 +78,7 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'list_services',
     'run_service',
     'add_service',
+    'remove_service',
   ],
   reviewer: [
     'report_review',
@@ -104,6 +106,7 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'list_services',
     'run_service',
     'add_service',
+    'remove_service',
   ],
   researcher: ['submit_report', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember', 'report_feedback'],
 };

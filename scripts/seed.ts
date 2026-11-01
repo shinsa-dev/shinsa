@@ -65,6 +65,7 @@ import {
 import { EXPORT_FILES_BASE, EXPORT_FILES_NEW, listProcessTasks } from './seed-process.ts';
 import { resolveRunOpening, stampRunPrompts } from './seed-prompts.ts';
 import { listRoundTasks } from './seed-rounds.ts';
+import { writeSeedServices } from './seed-services.ts';
 import { listShapeTasks, resolveShapeHandover } from './seed-shapes.ts';
 import { listHistoryTasks } from './seed-stats.ts';
 import { listTriggerTasks, writeAccountFiles, writeAccountTranscripts } from './seed-triggers.ts';
@@ -5678,10 +5679,11 @@ function seed() {
   const repos = createRepos();
   const sample = createCodeSample(REPOS, WORKTREES);
   const projects = [...createProjects(), sample.project];
+  const seedRepos = [...Object.values(repos), sample.repo];
   const tasks = [...listTasks(repos, createWorktrees(repos)), ...listCodeTasks(sample)];
 
   const log = new EventLog(join(DATA, 'shinsa.sqlite'));
-  const timeline = stampRunPrompts(buildEvents(tasks, projects, [...Object.values(repos), sample.repo]));
+  const timeline = stampRunPrompts(buildEvents(tasks, projects, seedRepos));
   let seq = 0;
   for (const { at, event } of timeline) {
     log.commitCommand({ events: [event], effects: [], cancellations: [], fromSeq: seq, at, receipt: null });
@@ -5712,6 +5714,7 @@ function seed() {
     `${JSON.stringify({ version: 1, roots: [REPOS], onboardedAt: NOW }, null, 2)}\n`
   );
   writeAccountFiles(DATA);
+  writeSeedServices(DATA, projects, seedRepos);
   const transcripts = join(DATA, 'transcripts');
   mkdirSync(transcripts, { recursive: true });
   const runTimes = listRunTimes(tasks, timeline);
