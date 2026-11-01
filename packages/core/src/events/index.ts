@@ -347,7 +347,7 @@ type EventBody =
       status: 'resumed' | 'reset' | 'cleared';
     };
 
-export interface EventActor {
+interface EventActor {
   onBehalf?: true;
   byTask?: string;
   byGuest?: string;

@@ -62,7 +62,7 @@ export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: stri
 
 export type ShareMode = SharePreset | 'handoff';
 
-export const HANDOFF_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: IconName } = {
+const HANDOFF_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: IconName } = {
   value: 'handoff',
   label: HANDOFF_TITLE,
   hint: 'One person works on it from their own Shinsa',

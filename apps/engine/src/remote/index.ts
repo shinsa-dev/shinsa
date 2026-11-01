@@ -79,7 +79,7 @@ export type HandoffClaimer = (taskId: string, guest: TaskGuest) => Promise<strin
 
 export type GuestLeaver = (userIds: string[]) => void;
 
-export const HANDOFF_NOT_ENABLED =
+const HANDOFF_NOT_ENABLED =
   'Turn on remote access in Settings → General to hand off this task. Its link works once this machine is reachable.';
 
 const HANDOFF_UNAVAILABLE = 'This machine cannot hand off tasks right now. Try again in a moment.';
