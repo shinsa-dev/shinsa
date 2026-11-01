@@ -154,7 +154,8 @@ function restartForStack(decider: Decider, taskId: string) {
     default: {
       const parent = selectStackParent(decider.state, task);
       if (!parent || !isStackPending(decider.state, parent)) syncStackBase(decider, taskId);
-      else if (isTriaged(task)) startWork(decider, taskId);
+      else if (isTriaged(task) && listOpenGates(decider.state, taskId).length === 0)
+        startWork(decider, taskId);
     }
   }
 }

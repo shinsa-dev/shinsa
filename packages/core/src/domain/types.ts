@@ -399,6 +399,15 @@ export interface TaskOverlap {
   untold: string[];
 }
 
+export interface BundleReady {
+  commit: string | null;
+}
+
+export interface BundlePullRequest {
+  taskId: string;
+  number: number;
+}
+
 export interface Task {
   id: string;
   handle?: string | null;
@@ -443,6 +452,7 @@ export interface Task {
   waitsOn: string[];
   stacksOn?: string | null;
   stackBase?: string | null;
+  bundleReady?: BundleReady | null;
   note: string | null;
   origin: string | null;
   createdAt: number;

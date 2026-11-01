@@ -1,6 +1,7 @@
 import {
   DomainError,
   type Gate,
+  hasStep,
   isAgentQuestion,
   isDelegatedRun,
   isSettingUpWorkspace,
@@ -78,12 +79,51 @@ export function selectStackParent(state: ShinsaState, task: Task) {
 }
 
 export function selectStackedOnThis(state: ShinsaState, taskId: string) {
-  return Object.values(state.tasks).find((task) => task.stacksOn === taskId && !isTaskSettled(task)) ?? null;
+  return (
+    Object.values(state.tasks).find(
+      (task) => task.stacksOn === taskId && !isTaskSettled(task) && hasStep(task, 'pull_request')
+    ) ?? null
+  );
 }
 
 export function isReadyToStackOn(state: ShinsaState, task: Task) {
   if (task.pullRequest?.state !== 'open') return false;
+  if (task.bundleReady) return true;
   return listOpenGates(state, task.id).some((gate) => gate.type === 'merge');
+}
+
+function isInBundle(task: Task) {
+  return !isTaskComplete(task) && task.stage !== 'cancelled';
+}
+
+export function listBundleBelow(state: ShinsaState, task: Task) {
+  const below: Task[] = [];
+  let parent = selectStackParent(state, task);
+  while (parent && isInBundle(parent) && !below.includes(parent)) {
+    below.push(parent);
+    parent = selectStackParent(state, parent);
+  }
+  return below;
+}
+
+function selectStackedChild(state: ShinsaState, task: Task) {
+  const children = Object.values(state.tasks).filter((child) => child.stacksOn === task.id);
+  return children.find((child) => !isTaskSettled(child)) ?? children.find(isTaskComplete) ?? null;
+}
+
+export function resolveBundle(state: ShinsaState, task: Task) {
+  const bundle: Task[] = [task];
+  let parent = selectStackParent(state, task);
+  while (parent && !bundle.includes(parent)) {
+    bundle.unshift(parent);
+    parent = selectStackParent(state, parent);
+  }
+  let child = selectStackedChild(state, task);
+  while (child && !bundle.includes(child)) {
+    bundle.push(child);
+    child = selectStackedChild(state, child);
+  }
+  return bundle.length > 1 ? bundle : [];
 }
 
 export function isStackPending(state: ShinsaState, parent: Task) {

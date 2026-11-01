@@ -325,6 +325,10 @@ function applyStackBased(state: ShinsaState, event: EventOf<'task.stack_based'>)
   updateTask(state, event.taskId, event.at, { stackBase: event.base });
 }
 
+function applyBundleReady(state: ShinsaState, event: EventOf<'task.bundle_ready'>) {
+  updateTask(state, event.taskId, event.at, { bundleReady: event.ready });
+}
+
 const BACKLOG_LEFT: Record<BacklogCause, string> = {
   you: 'Removed from the backlog',
   started: 'Started building from the backlog',
@@ -804,6 +808,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.stack_based':
       applyStackBased(state, event);
+      break;
+    case 'task.bundle_ready':
+      applyBundleReady(state, event);
       break;
     case 'task.backlog_changed':
       applyBacklogChanged(state, event);

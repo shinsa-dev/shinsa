@@ -11,11 +11,14 @@ import { recheckPullRequest, requestPush } from './pull-requests.ts';
 import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
 import { restartWatchCheck } from './watchdogs.ts';
 
+function dropCancelledStack(decider: Decider, taskId: string) {
+  const { stacksOn } = decider.task(taskId);
+  if (stacksOn && decider.state.tasks[stacksOn]?.stage === 'cancelled')
+    changeStack(decider, taskId, null, 'you');
+}
+
 function dropCancelledDependencies(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
-  if (task.stacksOn && decider.state.tasks[task.stacksOn]?.stage === 'cancelled') {
-    changeStack(decider, taskId, null, 'you');
-  }
   const kept = task.waitsOn.filter((id) => decider.state.tasks[id]?.stage !== 'cancelled');
   if (kept.length === task.waitsOn.length) return;
   decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn: kept, by: 'you' });
@@ -25,6 +28,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
   decider.withdrawGates(taskId, isPausingGate);
   decider.clearWaits(taskId);
   resetFixBudget(decider, taskId);
+  dropCancelledStack(decider, taskId);
   const hint = guidance ? `\n\nGuidance from the human: ${guidance}` : '';
   const task = decider.task(taskId);
   switch (task.stage) {

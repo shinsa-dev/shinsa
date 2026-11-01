@@ -23,6 +23,7 @@ import {
   reportReview,
 } from './agents.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
+import { reviewBundles } from './bundles.ts';
 import { recordChecks } from './checks.ts';
 import { recordCompaction } from './compaction.ts';
 import { recordConfig } from './config.ts';
@@ -403,6 +404,7 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   syncWatchdogs(decider);
   syncMergeSteps(decider);
   startQueuedRounds(decider);
+  reviewBundles(decider);
   syncMergeSteps(decider);
   enforceLiveness(decider);
   dispatchRuns(decider);
