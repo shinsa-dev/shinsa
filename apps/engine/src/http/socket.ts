@@ -4,12 +4,15 @@ import {
   DEVELOPMENT_VERSION,
   DomainError,
   isSurface,
+  listSummarizedTasks,
   type RequestOrigin,
   resolveEngineInfo,
   resolveStatePatch,
+  resolveTaskDetail,
+  resolveViewPatch,
   type ServerMessage,
   type Surface,
-  serializeState,
+  serializeViewState,
   type UserCommand,
 } from '@shinsa/core';
 import type { Accounts } from '../accounts/index.ts';
@@ -39,6 +42,8 @@ export interface HubSocket {
 type Socket = HubSocket;
 
 const DROPPED = 0;
+
+const NO_SUMMARIES: ReadonlySet<string> = new Set();
 
 function deliver(socket: Socket, payload: string) {
   if (socket.send(payload) !== DROPPED) return;
@@ -77,9 +82,13 @@ function parseClientMessage(raw: string | Buffer): ClientMessage | null {
     command?: unknown;
     surface?: unknown;
     from?: unknown;
+    taskId?: unknown;
   };
   if (fields.type === 'hello' && isSurface(fields.surface)) return { type: 'hello', surface: fields.surface };
   if (fields.type === 'state.sync') return { type: 'state.sync' };
+  if (fields.type === 'task.detail' && isId(fields.taskId)) {
+    return { type: 'task.detail', taskId: fields.taskId };
+  }
   if (fields.type === 'command' && isId(fields.id)) {
     return { type: 'command', id: fields.id, command: fields.command as UserCommand };
   }
@@ -108,6 +117,7 @@ export function createSocketHub(
   resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>
 ) {
   const sockets = new Set<Socket>();
+  const views = new WeakMap<SocketData, ReadonlySet<string>>();
   const engineInfo = resolveEngineInfo(version);
   let desktopConnected = false;
   let unsubscribeResources: (() => void) | null = null;
@@ -115,6 +125,21 @@ export function createSocketHub(
   function broadcast(message: ServerMessage) {
     const payload = JSON.stringify(message);
     for (const socket of sockets) deliver(socket, payload);
+  }
+
+  function selectView(socket: Socket): ReadonlySet<string> {
+    return views.get(socket.data) ?? NO_SUMMARIES;
+  }
+
+  function sendState(socket: Socket) {
+    const summarized = listSummarizedTasks(engine.state);
+    views.set(socket.data, summarized);
+    send(socket, { type: 'state', state: serializeViewState(engine.state, summarized) });
+  }
+
+  function sendTaskDetail(socket: Socket, taskId: string) {
+    views.set(socket.data, new Set([...selectView(socket)].filter((id) => id !== taskId)));
+    send(socket, { type: 'task.detail', detail: resolveTaskDetail(engine.state, taskId) });
   }
 
   function syncSurfaces() {
@@ -153,7 +178,18 @@ export function createSocketHub(
 
   const unsubscribeState = engine.subscribe((state, { previous, changes }) => {
     if (sockets.size === 0) return;
-    broadcast({ type: 'state.patch', patch: resolveStatePatch(previous, state, changes) });
+    const patch = resolveStatePatch(previous, state, changes);
+    let shared: string | null = null;
+    for (const socket of sockets) {
+      const view = resolveViewPatch(patch, previous, state, selectView(socket));
+      views.set(socket.data, view.summarized);
+      if (view.patch !== patch) {
+        send(socket, { type: 'state.patch', patch: view.patch });
+        continue;
+      }
+      shared ??= JSON.stringify({ type: 'state.patch', patch } satisfies ServerMessage);
+      deliver(socket, shared);
+    }
   });
 
   const unsubscribeTranscripts = transcripts.subscribe((runId, entries, start) => {
@@ -192,7 +228,10 @@ export function createSocketHub(
         return;
       }
       case 'state.sync':
-        send(socket, { type: 'state', state: serializeState(engine.state) });
+        sendState(socket);
+        return;
+      case 'task.detail':
+        sendTaskDetail(socket, message.taskId);
         return;
       case 'transcript.subscribe': {
         if (!socket.data.transcripts.has(message.runId)) {
@@ -205,8 +244,6 @@ export function createSocketHub(
       case 'transcript.unsubscribe':
         socket.data.transcripts.get(message.runId)?.();
         socket.data.transcripts.delete(message.runId);
-        return;
-      case 'task.detail':
         return;
     }
   }
@@ -222,7 +259,7 @@ export function createSocketHub(
       if (teamFeeds) send(socket, { type: 'teams', teams: teamFeeds.snapshot() });
       const sampled = resources?.snapshot();
       if (sampled) send(socket, { type: 'resources', resources: sampled });
-      send(socket, { type: 'state', state: serializeState(engine.state) });
+      sendState(socket);
       syncResources();
     },
     close(socket: Socket) {
