@@ -604,6 +604,51 @@ describe('keeping a teammate’s last list', () => {
     feeds.stop();
   });
 
+  test('never lets an older or expired signed copy replace a newer kept one', async () => {
+    const desk = await createSigner();
+    const body = { teamId: 'team1', instanceId: 'inst3', tasks: [createHeldTask('desk-new')], updatedAt: 200 };
+    const fresh = await signTeamSnapshot(desk.privateKey, body);
+    const older = await signTeamSnapshot(desk.privateKey, {
+      ...body,
+      tasks: [createHeldTask('desk-older')],
+      updatedAt: 100,
+    });
+    const expired = await signTeamSnapshot(desk.privateKey, {
+      ...body,
+      tasks: [createHeldTask('desk-expired')],
+      updatedAt: 40,
+    });
+    const desktop: TeamMachine = {
+      id: 'inst3',
+      name: 'Desk',
+      userId: '9',
+      online: false,
+      lastSeenAt: 1,
+      signingKey: desk.signingKey,
+    };
+    const { feeds } = setUp({
+      watcherMachines: [STUDIO, LAPTOP, desktop],
+      held: [fresh, older, fresh, expired],
+      now: () => 50 + TEAM_SNAPSHOT_TTL_MS,
+    });
+    feeds.start();
+    await until('the kept list is taken', () =>
+      feeds.snapshot().tasks.some((task) => task.instanceId === 'inst3')
+    );
+    await until('the teammate’s own list arrives', () =>
+      feeds.snapshot().tasks.some((task) => task.instanceId === 'inst1')
+    );
+    expect(
+      feeds
+        .listTasks()
+        .filter((task) => task.instanceId === 'inst3')
+        .map((task) => task.task.id)
+    ).toEqual(['desk-new']);
+    expect(feeds.snapshot().machines.find((machine) => machine.instanceId === 'inst3')?.updatedAt).toBe(200);
+    expect(feeds.listHeld('team1')).toEqual([fresh]);
+    feeds.stop();
+  });
+
   test('logs a teammate’s kept lists it cannot read, and keeps the teammate’s own list', async () => {
     const warn = spyOn(log, 'warn');
     const { feeds } = setUp({ held: [null as unknown as TeamSnapshot] });
