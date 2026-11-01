@@ -103,6 +103,7 @@ export function createFleetMember(
     id: instance.id,
     name: instance.name,
     current: device.onMachine === true,
+    online: instance.online,
     ...(instance.role === 'guest' ? { guest: true as const, handedBy: instance.owner } : {}),
     connection,
     fetch: (request) => link.fetch(request),
