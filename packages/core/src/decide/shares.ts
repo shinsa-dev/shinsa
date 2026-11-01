@@ -32,8 +32,15 @@ function endShare(decider: Decider, task: Task, reason: ShareEnd) {
   decider.emit({ type: 'task.unshared', taskId: task.id, reason });
 }
 
+function isShareExpired(decider: Decider, task: Task) {
+  const endsAt = task.share?.endsAt ?? null;
+  return endsAt !== null && endsAt <= decider.context.now;
+}
+
 export function shareTask(decider: Decider, command: CommandOf<'task.share'>) {
   assertHumanShares(decider);
+  const shared = decider.task(command.taskId);
+  if (isShareExpired(decider, shared)) endShare(decider, shared, 'expired');
   const task = decider.task(command.taskId);
   if (task.watchHome) throw new DomainError('share_refused', 'An automation has nothing to share.');
   const limit = command.limit ?? task.share?.limit ?? resolveShareLimit(decider.state.settings);
@@ -56,8 +63,7 @@ export function unshareTask(decider: Decider, command: CommandOf<'task.unshare'>
 
 export function expireShare(decider: Decider, command: CommandOf<'share.expire'>) {
   const task = decider.state.tasks[command.taskId];
-  const endsAt = task?.share?.endsAt ?? null;
-  if (!task || endsAt === null || endsAt > decider.context.now) return;
+  if (!task || !isShareExpired(decider, task)) return;
   endShare(decider, task, 'expired');
 }
 

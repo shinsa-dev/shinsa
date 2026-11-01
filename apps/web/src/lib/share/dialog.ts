@@ -87,8 +87,14 @@ export function useShareDialog() {
   return useSyncExternalStore(shareSignal.subscribe, () => sharing);
 }
 
-export function resolveShareView(task: Task, remote: RemoteSnapshot | null): ShareView {
+export function selectLiveShare(task: Task, now = Date.now()) {
   const share = task.share;
+  if (!share || (share.endsAt !== null && share.endsAt <= now)) return null;
+  return share;
+}
+
+export function resolveShareView(task: Task, remote: RemoteSnapshot | null, now = Date.now()): ShareView {
+  const share = selectLiveShare(task, now);
   if (share?.failure) return { kind: 'failed', message: share.failure };
   if (share?.url) return { kind: 'shared', url: share.url };
   if (share) return { kind: 'linking' };

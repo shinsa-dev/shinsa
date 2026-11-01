@@ -4,7 +4,13 @@ import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { openTaskTerminal } from '@/lib/connection/terminals.ts';
 import { openWorktree } from '@/lib/connection/worktree.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
-import { openShareDialog, openUnshareConfirm, SHARE_TITLE, UNSHARE_TITLE } from '@/lib/share/dialog.ts';
+import {
+  openShareDialog,
+  openUnshareConfirm,
+  SHARE_TITLE,
+  selectLiveShare,
+  UNSHARE_TITLE,
+} from '@/lib/share/dialog.ts';
 import { FORK_TITLE, openForkDialog } from '@/lib/tasks/fork.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
@@ -41,7 +47,7 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   cancel: { label: 'Cancel task', icon: 'IconCircleX' },
 };
 
-export function listTaskActions(task: Task): TaskActionKey[][] {
+export function listTaskActions(task: Task, now = Date.now()): TaskActionKey[][] {
   const links: TaskActionKey[] = [];
   if (task.pullRequest) links.push('pullRequest');
   if (task.branch) links.push('branch');
@@ -49,7 +55,7 @@ export function listTaskActions(task: Task): TaskActionKey[][] {
   const lifecycle: TaskActionKey[] = isTaskSettled(task) ? [] : ['restart', 'complete', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
   const share: TaskActionKey[] = task.watchHome ? [] : ['share'];
-  if (task.share) share.push('unshare');
+  if (selectLiveShare(task, now)) share.push('unshare');
   return [links, worktree, [...fork, ...share], listBacklogActions(task), lifecycle].filter(
     (group) => group.length > 0
   );

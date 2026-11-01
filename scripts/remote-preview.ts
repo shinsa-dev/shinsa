@@ -10,6 +10,7 @@ import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
 import { ControlClient, REMOTE_FILE, Remote } from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
+import { ShareClock } from '../apps/engine/src/remote/share-clock.ts';
 import { type ShareGitHub, Shares } from '../apps/engine/src/remote/shares.ts';
 import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
@@ -183,6 +184,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
   });
   engine.start();
+  new ShareClock(engine).start();
   const key = await remote.store.resolveMachineKey();
   const machine: Machine = {
     id,

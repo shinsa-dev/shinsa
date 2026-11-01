@@ -5,7 +5,14 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { describeShareEnd, openUnshareConfirm, SHARING_NOTE, UNSHARE_TITLE } from '@/lib/share/dialog.ts';
+import { useNow } from '@/hooks/use-now.ts';
+import {
+  describeShareEnd,
+  openUnshareConfirm,
+  SHARING_NOTE,
+  selectLiveShare,
+  UNSHARE_TITLE,
+} from '@/lib/share/dialog.ts';
 
 function CopyLinkButton({ url }: { url: string }) {
   const { copied, copy } = useCopyText(url);
@@ -17,7 +24,7 @@ function CopyLinkButton({ url }: { url: string }) {
 }
 
 export function SharingBanner({ task }: { task: Task }) {
-  const share = task.share;
+  const share = selectLiveShare(task, useNow());
   if (!share) return null;
   return (
     <div

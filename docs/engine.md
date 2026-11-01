@@ -2538,7 +2538,10 @@ projection and channel will serve teams.
   so an agent cannot widen it); `endsAt` is when a time limit runs out. A shared task that settles (done, merged or
   cancelled) with `until_done` stops sharing in the same decision (`syncShares`, `task.unshared` with `reason: 'done'`);
   a time limit is ended by `ShareClock` (`apps/engine/src/remote/share-clock.ts`, a `StateClock`) with `share.expire`
-  (`reason: 'expired'`), and the engine refuses a link whose time has passed even before the clock fires. A finished
+  (`reason: 'expired'`), and the engine refuses a link whose time has passed even before the clock fires. The page
+  treats such a share as ended too (`selectLiveShare` in `apps/web/src/lib/share/dialog.ts`): the banner, Stop sharing
+  and the dialog's link go the moment `endsAt` passes, and sharing it again ends the old share first, so it makes a new
+  link rather than bringing the old one back (`shareTask` in core). A finished
   task cannot be shared `until_done` (`share_refused`), so Share task offers only the time limits for one. Changing
   the limit of a shared task keeps its link (`task.share` with another `limit`).
 - **Sharing is yours alone.** `task.share` and `task.unshare` (Share task and Stop sharing in a task's menu and in

@@ -15,6 +15,7 @@ import * as React from 'react';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
@@ -30,6 +31,7 @@ import {
   SHARE_NEEDS_REMOTE,
   SHARE_TITLE,
   type ShareView,
+  selectLiveShare,
   shareTask,
   UNSHARE_DESCRIPTION,
   UNSHARE_TITLE,
@@ -135,13 +137,14 @@ function ShareActions({ task, view, limit }: { task: Task; view: ShareView; limi
 function ShareContent({ task }: { task: Task }) {
   const { snapshot } = useRemoteAccess();
   const settings = useShinsaSelector((state) => state.settings);
-  const view = resolveShareView(task, snapshot);
+  const now = useNow();
+  const live = selectLiveShare(task, now);
+  const view = resolveShareView(task, snapshot, now);
   const [picked, setPicked] = React.useState<ShareLimit | null>(null);
-  const limit =
-    task.share?.limit ?? picked ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
+  const limit = live?.limit ?? picked ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
   const changeLimit = (next: ShareLimit) => {
     setPicked(next);
-    if (task.share) void shareTask(task, next);
+    if (live) void shareTask(task, next);
   };
   return (
     <>

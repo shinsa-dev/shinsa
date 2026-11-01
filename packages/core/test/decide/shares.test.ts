@@ -200,6 +200,17 @@ describe('how long a task is shared', () => {
     expect(harness.send({ type: 'share.expire', taskId: 'missing' }).events).toEqual([]);
   });
 
+  test('sharing again after the time ran out ends the old link and makes a new one', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.share', taskId, limit: 'hour' });
+    harness.send({ type: 'share.record', taskId, url: URL });
+    harness.advance(HOUR_MS);
+    harness.send({ type: 'task.share', taskId, limit: 'hour' });
+    expect(harness.task(taskId).share).toMatchObject({ url: null, endsAt: harness.now + HOUR_MS });
+    expect(links(harness, taskId)).toBe(2);
+  });
+
   test('a finished task cannot be shared until it finishes, only for a time', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

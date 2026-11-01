@@ -10,6 +10,7 @@ import {
   openUnshareConfirm,
   resolveShareLimitChoice,
   resolveShareView,
+  selectLiveShare,
   shareTask,
   unshareTask,
   useShareDialog,
@@ -109,5 +110,19 @@ describe('stopping sharing', () => {
     expect(result.current).toBe('t');
     act(() => openUnshareConfirm('u'));
     expect(result.current).toBe('u');
+  });
+});
+
+describe('a share whose time ran out', () => {
+  it('reads as ended at once, before the machine ends it, for the banner, the dialog and the menu', () => {
+    const url = 'https://app.shinsa.dev/share/t/abc';
+    const task = createTask({ id: 't', share: { ...SHARING, url, limit: 'hour', endsAt: HOUR_MS } });
+    expect(selectLiveShare(task, HOUR_MS - 1)?.url).toBe(url);
+    expect(selectLiveShare(task, HOUR_MS)).toBeNull();
+    expect(selectLiveShare(createTask({ id: 'u' }))).toBeNull();
+    expect(resolveShareView(task, PAIRED, HOUR_MS - 1)).toEqual({ kind: 'shared', url });
+    expect(resolveShareView(task, PAIRED, HOUR_MS)).toEqual({ kind: 'off' });
+    expect(listTaskActions(task, HOUR_MS - 1).flat()).toContain('unshare');
+    expect(listTaskActions(task, HOUR_MS).flat()).not.toContain('unshare');
   });
 });
