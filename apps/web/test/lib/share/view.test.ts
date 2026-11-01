@@ -50,7 +50,7 @@ describe('a shared view', () => {
     expect(
       resolveSharedView({ ...transcripts, shared: createSharedTask({ preset: 'status' }) }).transcripts
     ).toEqual({});
-    const everything = { ...transcripts, shared: createSharedTask({ preset: 'default' }) };
+    const everything = { ...transcripts, shared: createSharedTask({ preset: 'standard' }) };
     expect(resolveSharedView(everything).transcripts).toEqual({ 'run-1': ['/t/1', '/t/2'] });
     expect(resolveSharedView({ ...everything, resolveFileUrl: () => null }).transcripts).toEqual({});
   });

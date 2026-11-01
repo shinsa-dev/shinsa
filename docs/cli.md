@@ -388,7 +388,7 @@ Every task agent's tool: `tasks_cancel`. Sends `task.cancel`.
 Share a task by a link that reads it live from this machine: read-only, without its chat.
 
 ```
-shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--preset <default|status|everything>] [--json]
+shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--preset <status|standard|full>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.share`.
@@ -397,7 +397,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `--until` | choice, optional | How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it). Left out, the shareLimit setting. |
-| `--preset` | choice, optional | What the link shows: default (the whole task with the agents' live output and tool calls, without your messages) or status (an anonymous status card). Left out, the sharePreset setting. |
+| `--preset` | choice, optional | What the link shows: status (an anonymous status card), standard (the whole task with the agents' live output and tool calls, without your messages) or full (standard and your messages). Left out, the sharePreset setting. |
 
 #### shinsa tasks unshare
 

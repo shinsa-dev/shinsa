@@ -1,28 +1,35 @@
 import { describe, expect, it } from 'bun:test';
 import type { Task } from '@shinsa/core';
-import { resolveStatusCard, resolveStatusLatest } from '@/lib/share/status.ts';
-import { createRound } from '../../support/rounds.ts';
+import { resolveStatusCard, STATUS_UPDATE } from '@/lib/share/status.ts';
 import { createTask } from '../../support/state.ts';
 import { createSharedTask } from './fixtures.ts';
 
-function report(headline: string) {
-  return { headline, sections: [], checks: [], judgementCalls: [], walkthrough: null } as NonNullable<
-    Task['report']
-  >;
-}
-
 describe('the status card', () => {
-  it('shows the title, the stage in its words and tone, and no description before one is written', () => {
+  it('shows the title, the customer update in its words and tone, and no description before one is written', () => {
     const card = resolveStatusCard(
       createTask({ id: 't', title: 'Fix export', request: 'Exports fail on Safari.', stage: 'building' }),
-      createSharedTask()
+      createSharedTask({ update: 'working' })
     );
     expect(card).toEqual({
       title: 'Fix export',
-      stage: { label: 'Building', tone: card.stage.tone },
+      stage: { label: 'In progress', tone: 'blue' },
       description: null,
-      latest: null,
+      latest: 'We’re working on it.',
     });
+  });
+
+  it('says deploying, not live, while the change waits for production', () => {
+    const task = createTask({ id: 't', stage: 'merged' });
+    const deploying = resolveStatusCard(task, createSharedTask({ update: 'deploying' }));
+    expect(deploying.stage.label).toBe('Deploying');
+    expect(deploying.latest).toContain('isn’t live yet');
+    expect(resolveStatusCard(task, createSharedTask({ update: 'live' })).latest).toBe(
+      STATUS_UPDATE.live.text
+    );
+  });
+
+  it('falls back to in progress for a share sent without an update', () => {
+    expect(resolveStatusCard(createTask({ id: 't' }), createSharedTask()).stage.label).toBe('In progress');
   });
 
   it('describes the task by the summary written when it was shared, never its request or plan', () => {
@@ -34,24 +41,5 @@ describe('the status card', () => {
     } as unknown as Task['plan'];
     const shared = createSharedTask({ description: 'Exports now work on Safari.' });
     expect(resolveStatusCard({ ...task, plan }, shared).description).toBe('Exports now work on Safari.');
-  });
-
-  it('takes the latest update from the report, the result, the summary, then the last round that had one', () => {
-    const base = createTask({ id: 't' });
-    expect(resolveStatusLatest({ ...base, report: report('Shipped the fix.') })).toBe('Shipped the fix.');
-    expect(
-      resolveStatusLatest({
-        ...base,
-        result: { step: 'answer', body: 'It is the cache.', runId: null, at: 1 },
-      })
-    ).toBe('It is the cache.');
-    expect(resolveStatusLatest({ ...base, summary: 'Half way.' })).toBe('Half way.');
-    const rounds = [
-      createRound({ number: 1 }),
-      createRound({ number: 2, outcome: { goal: null, phases: [], headline: null, result: 'Found it.' } }),
-      createRound({ number: 3, outcome: null }),
-    ];
-    expect(resolveStatusLatest({ ...base, rounds })).toBe('Found it.');
-    expect(resolveStatusLatest({ ...base, rounds: [createRound({ number: 1, outcome: null })] })).toBeNull();
   });
 });

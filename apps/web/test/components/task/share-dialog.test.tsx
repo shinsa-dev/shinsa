@@ -35,7 +35,7 @@ async function choose(label: string, option: RegExp) {
 
 const URL = 'https://app.shinsa.dev/share/t/abc';
 
-const SHARING = { at: 1, limit: 'until_done', preset: 'default', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'until_done', preset: 'standard', endsAt: null } as const;
 
 beforeEach(() => {
   startFakeServer();
@@ -65,15 +65,15 @@ describe('the share dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'default' },
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'standard' },
       ])
     );
   });
 
-  it('shares it as the preset you pick, Default by default', async () => {
+  it('shares it as the preset you pick, Standard by default', async () => {
     showTask();
     const picker = await screen.findByRole('combobox', { name: 'Share as' });
-    expect(picker.textContent).toBe('Default');
+    expect(picker.textContent).toBe('Standard');
     await choose('Share as', /^Status/);
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
@@ -107,13 +107,13 @@ describe('the share dialog', () => {
   it('stays open on a shared task and changes what it shares and how long at once, keeping the link', async () => {
     showTask({ share: { ...SHARING, url: URL } });
     expect(await screen.findByRole('dialog')).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Default');
+    expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Standard');
     expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy();
-    await choose('Share as', /^Everything/);
+    await choose('Share as', /^Full access/);
     await choose('Share for', /^24 hours/);
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', preset: 'everything' },
+        { type: 'task.share', taskId: 'source', preset: 'full' },
         { type: 'task.share', taskId: 'source', limit: 'day' },
       ])
     );
@@ -138,7 +138,7 @@ describe('the share dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'default' },
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'standard' },
       ])
     );
   });
@@ -160,13 +160,13 @@ describe('the sharing banner', () => {
     rerender(<SharingBanner task={createTask({ id: 'source' })} />);
     expect(screen.queryByText('Anyone with the link can watch this task.')).toBeNull();
   });
-  it('names what the link shares and opens the dialog to change it', async () => {
+  it('opens the dialog from Manage to change what the link shares', async () => {
     showTask({ share: { ...SHARING, preset: 'status', url: URL } });
     act(() => closeShareDialog());
     render(
       <SharingBanner task={createTask({ id: 'source', share: { ...SHARING, preset: 'status', url: URL } })} />
     );
-    fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Status' }));
+    fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Manage' }));
     expect(await screen.findByRole('dialog')).toBeTruthy();
   });
 
@@ -176,7 +176,7 @@ describe('the sharing banner', () => {
       <SharingBanner
         task={createTask({
           id: 'source',
-          share: { at: 1, limit: 'hour', preset: 'default', endsAt, url: URL },
+          share: { at: 1, limit: 'hour', preset: 'standard', endsAt, url: URL },
         })}
       />
     );

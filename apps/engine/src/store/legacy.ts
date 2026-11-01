@@ -229,7 +229,7 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       }
       return event;
     case 'task.shared':
-      return 'preset' in event ? event : { ...event, preset: 'default' };
+      return 'preset' in event ? event : { ...event, preset: 'standard' };
     case 'settings.changed':
       if (!isRecord(event.settings)) return event;
       return { ...event, settings: resolveSettings(event.settings) };

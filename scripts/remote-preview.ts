@@ -316,7 +316,7 @@ async function createPreviewShare(
   studio: Awaited<ReturnType<typeof startMachine>>,
   task: Task,
   label: string,
-  preset: SharePreset = 'default'
+  preset: SharePreset = 'standard'
 ): Promise<PreviewShare | null> {
   const seeded = task.repoId ? studio.engine.state.repos[task.repoId] : undefined;
   if (!seeded) return null;
@@ -373,8 +373,8 @@ async function createPreviewShares(studio: Awaited<ReturnType<typeof startMachin
       (await createPreviewShare(
         studio,
         talked,
-        'A task shared as Default, with the agents’ live output in Chat',
-        'default'
+        'A task shared as Standard, with the agents’ live output in Chat',
+        'standard'
       )),
   ];
   return shares.filter((share): share is PreviewShare => Boolean(share));

@@ -823,7 +823,7 @@ describe('shares made before presets', () => {
     expect(readStoredLog(path)).toMatchObject({
       version: 12,
       rows: [
-        { payload: JSON.stringify({ ...shared, preset: 'default' }) },
+        { payload: JSON.stringify({ ...shared, preset: 'standard' }) },
         { payload: JSON.stringify(status) },
       ],
     });

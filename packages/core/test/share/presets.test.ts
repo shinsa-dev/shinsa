@@ -59,18 +59,18 @@ function share(harness: Harness, taskId: string, preset: SharePreset) {
 
 describe('share presets', () => {
   test('each preset is a list of field groups, and Default holds every group Status has and the live output', () => {
-    expect(SHARE_PRESETS).toEqual(['default', 'status', 'everything']);
-    expect(SHARE_PRESET_GROUPS.default.every((group) => hasShareGroup('everything', group))).toBe(true);
-    expect(hasShareGroup('everything', 'messages')).toBe(true);
-    expect(hasShareGroup('default', 'messages')).toBe(false);
-    expect(SHARE_PRESET_GROUPS.status.every((group) => hasShareGroup('default', group))).toBe(true);
-    expect(hasShareGroup('default', 'live')).toBe(true);
+    expect(SHARE_PRESETS).toEqual(['status', 'standard', 'full']);
+    expect(SHARE_PRESET_GROUPS.standard.every((group) => hasShareGroup('full', group))).toBe(true);
+    expect(hasShareGroup('full', 'messages')).toBe(true);
+    expect(hasShareGroup('standard', 'messages')).toBe(false);
+    expect(SHARE_PRESET_GROUPS.status.every((group) => hasShareGroup('standard', group))).toBe(true);
+    expect(hasShareGroup('standard', 'live')).toBe(true);
     expect(hasShareGroup('status', 'live')).toBe(false);
     expect(hasShareGroup('status', 'requests')).toBe(false);
     expect(hasShareGroup('status', 'code')).toBe(false);
   });
 
-  test('Status keeps the title, the written description, where the task stands and its headline, and no request, who or where', () => {
+  test('Status keeps the title, the written description, where the task stands and a customer update, and no request, headline, who or where', () => {
     const harness = createHarness();
     const taskId = reachPullRequest(harness);
     const task = harness.task(taskId);
@@ -110,13 +110,8 @@ describe('share presets', () => {
       watchdogs: [],
       triageDecisions: null,
     });
-    expect(status.task.report).toEqual({
-      headline: task.report?.headline ?? '',
-      sections: [],
-      checks: [],
-      judgementCalls: [],
-      walkthrough: null,
-    });
+    expect(status.update).toBe('ready');
+    expect(status.task.report).toBeNull();
     expect(status.task.plan?.body).toBe('');
     expect(status.task.plan?.document).toEqual({
       goal: '',
@@ -147,20 +142,35 @@ describe('share presets', () => {
       summary: links,
       stageReason: 'waiting for “Acme billing” to finish',
     };
-    const status = resolveSharedTask(harness.state, task, context('status'));
-    expect(status.task.summary).toBe('See scroll.ts on feat/acme in  and #7.');
+    const status = resolveSharedTask(
+      harness.state,
+      {
+        ...task,
+        share: {
+          at: 1,
+          url: null,
+          limit: 'none' as const,
+          preset: 'status' as const,
+          endsAt: null,
+          description: links,
+        },
+      },
+      context('status')
+    );
+    expect(status.description).toBe('See scroll.ts on feat/acme in  and #7.');
+    expect(status.task.summary).toBeNull();
     expect(JSON.stringify(status)).not.toContain('shinsa://');
     expect(JSON.stringify(status)).not.toContain('Acme billing');
-    const full = resolveSharedTask(harness.state, task, context('default'));
+    const full = resolveSharedTask(harness.state, task, context('standard'));
     expect(full.task.summary).toBe(links);
     expect(full.task.stageReason).toBe(task.stageReason);
   });
 
-  test('Default keeps the whole task', () => {
+  test('Standard keeps the whole task', () => {
     const harness = createHarness();
     const taskId = reachPullRequest(harness);
-    const full = share(harness, taskId, 'default');
-    expect(full).toMatchObject({ preset: 'default', owner: 'mona', machine: 'Studio', code: true });
+    const full = share(harness, taskId, 'standard');
+    expect(full).toMatchObject({ preset: 'standard', owner: 'mona', machine: 'Studio', code: true });
     expect(full.task.pullRequest?.state).toBe('open');
     expect(full.task.plan?.document?.approach).toBe(harness.task(taskId).plan?.document?.approach);
     expect(full.evidence).toHaveLength(1);
@@ -195,15 +205,15 @@ describe('share presets', () => {
       ] as never,
     };
     const status = resolveSharedTask(harness.state, task, context('status')).task;
-    expect(status.result).toEqual({ step: 'answer', body: 'It scrolls now.', runId: null, at: 4 });
+    expect(status.result).toEqual({ step: 'answer', body: '', runId: null, at: 4 });
     expect(status.proposal).toMatchObject({ request: '', why: '', status: 'open', runId: null });
     expect(status.rounds?.[0]?.outcome).toEqual({
       goal: null,
       phases: ['One'],
-      headline: 'Done.',
-      result: 'Answered.',
+      headline: null,
+      result: null,
     });
-    const full = resolveSharedTask(harness.state, task, context('default')).task;
+    const full = resolveSharedTask(harness.state, task, context('standard')).task;
     expect(full.proposal).toMatchObject({ request: 'Change it.', why: 'Because.' });
     expect(full.rounds?.[0]?.outcome?.goal).toBe('Ship it.');
   });
@@ -219,7 +229,7 @@ describe('share presets', () => {
       description: 'Tab groups did not scroll on [scroll.ts](shinsa://file/src/scroll.ts).',
     });
     expect(share(harness, taskId, 'status').description).toBe('Tab groups did not scroll on scroll.ts.');
-    expect(share(harness, taskId, 'default').description).toContain('shinsa://file/src/scroll.ts');
+    expect(share(harness, taskId, 'standard').description).toContain('shinsa://file/src/scroll.ts');
   });
 
   test('only Everything keeps your messages in the activity; questions and answers stay private', () => {
@@ -249,9 +259,9 @@ describe('share presets', () => {
     };
     const kinds = (preset: SharePreset) =>
       resolveSharedTask(harness.state, task, context(preset)).task.activity.map((entry) => entry.kind);
-    expect(kinds('everything')).toEqual(['message']);
-    expect(kinds('default')).toEqual([]);
-    const shared = resolveSharedTask(harness.state, task, context('everything')).task.activity;
+    expect(kinds('full')).toEqual(['message']);
+    expect(kinds('standard')).toEqual([]);
+    const shared = resolveSharedTask(harness.state, task, context('full')).task.activity;
     expect(shared[0]?.detail).toBe('Try the left pane.');
   });
 
@@ -272,7 +282,7 @@ describe('share presets', () => {
         },
       ],
     };
-    for (const preset of ['default', 'everything'] as const) {
+    for (const preset of ['standard', 'full'] as const) {
       const shared = resolveSharedTask(harness.state, task, context(preset)).task.activity;
       expect(shared[0]?.detail).toBe('Fix the pane.');
       expect(JSON.stringify(shared)).not.toContain('/Users/me/secret');

@@ -19,10 +19,11 @@ export type ShareGroup =
   | 'live'
   | 'messages';
 
-const STATUS_GROUPS: readonly ShareGroup[] = ['identity', 'description', 'progress', 'summary'];
+const STATUS_GROUPS: readonly ShareGroup[] = ['identity', 'description', 'progress'];
 
-const DEFAULT_GROUPS: readonly ShareGroup[] = [
+const STANDARD_GROUPS: readonly ShareGroup[] = [
   ...STATUS_GROUPS,
+  'summary',
   'requests',
   'people',
   'plan',
@@ -37,12 +38,12 @@ const DEFAULT_GROUPS: readonly ShareGroup[] = [
   'live',
 ];
 
-const EVERYTHING_GROUPS: readonly ShareGroup[] = [...DEFAULT_GROUPS, 'messages'];
+const FULL_GROUPS: readonly ShareGroup[] = [...STANDARD_GROUPS, 'messages'];
 
 export const SHARE_PRESET_GROUPS: Readonly<Record<SharePreset, readonly ShareGroup[]>> = {
-  default: DEFAULT_GROUPS,
   status: STATUS_GROUPS,
-  everything: EVERYTHING_GROUPS,
+  standard: STANDARD_GROUPS,
+  full: FULL_GROUPS,
 };
 
 export function hasShareGroup(preset: SharePreset, group: ShareGroup) {

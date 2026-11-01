@@ -32,7 +32,7 @@ afterEach(() => {
 
 const PAIRED = createRemoteSnapshot({ paired: true });
 
-const SHARING = { at: 1, limit: 'until_done', preset: 'default', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'until_done', preset: 'standard', endsAt: null } as const;
 
 describe('the share dialog', () => {
   it('opens for one task from its action and closes again', () => {
@@ -69,11 +69,11 @@ describe('the share dialog', () => {
     const spies = spyOnCommands();
     const task = createTask({ id: 't' });
     await shareTask(task, 'day', 'status');
-    await changeSharePreset(task, 'default');
+    await changeSharePreset(task, 'standard');
     await unshareTask(task);
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.share', taskId: 't', limit: 'day', preset: 'status' }],
-      [{ type: 'task.share', taskId: 't', preset: 'default' }, 'Sharing as default.'],
+      [{ type: 'task.share', taskId: 't', preset: 'standard' }, 'Sharing as standard.'],
       [{ type: 'task.unshare', taskId: 't' }, 'Stopped sharing.'],
     ]);
     spies.restore();
@@ -82,7 +82,7 @@ describe('the share dialog', () => {
 
 describe('what a shared task shows', () => {
   it('names each preset, and an unknown one by its value', () => {
-    expect(describeSharePreset('default')).toBe('Default');
+    expect(describeSharePreset('standard')).toBe('Standard');
     expect(describeSharePreset('status')).toBe('Status');
     expect(describeSharePreset('other' as never)).toBe('other');
   });
@@ -91,10 +91,10 @@ describe('what a shared task shows', () => {
     const settings = { ...createSettings(), sharePreset: 'status' as const };
     const task = createTask({ id: 't' });
     expect(resolveSharePresetChoice(task, settings)).toBe('status');
-    expect(resolveSharePresetChoice(task, null)).toBe('default');
+    expect(resolveSharePresetChoice(task, null)).toBe('standard');
     expect(
-      resolveSharePresetChoice({ ...task, share: { ...SHARING, url: null, preset: 'default' } }, settings)
-    ).toBe('default');
+      resolveSharePresetChoice({ ...task, share: { ...SHARING, url: null, preset: 'standard' } }, settings)
+    ).toBe('standard');
   });
 });
 

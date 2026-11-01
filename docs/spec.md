@@ -390,10 +390,10 @@ access to that one task through the machine's tunnel, sealed with the key in the
 owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
 Review, Code (a private repository's too, from the working copy before a pull request) and Chat, with the agents'
 live output and tool calls but never your messages to them, and it changes the moment the task does. Share as picks
-what it shows: Default (that page), Status (an anonymous status card of the title, a short description an agent writes
-when sharing starts, the phases and the latest update, for customers and issue subscribers) or Everything (Default and
-your own chat messages); it defaults to Settings → General → Sharing, and Share task, from the task's menu or the
-banner, changes it and how long while the link stays; the machine reads
+what it shows: Status (an anonymous status card of the title, a short description an agent writes when sharing
+starts, the phases and a plain update for customers, such as in progress, deploying or live, which says live only
+once the change is out), Standard (that page) or Full access (Standard and your own chat messages); it defaults to
+Settings → General → Sharing, and Manage on the banner changes it and how long while the link stays; the machine reads
 nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
 a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
 cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once

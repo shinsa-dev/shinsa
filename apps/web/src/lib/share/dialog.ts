@@ -19,6 +19,8 @@ export const SHARE_TITLE = 'Share task';
 
 export const UNSHARE_TITLE = 'Stop sharing';
 
+export const SHARE_MANAGE_TITLE = 'Manage';
+
 export const SHARING_NOTE = 'Anyone with the link can watch this task.';
 
 export const SHARE_DESCRIPTION =
@@ -42,9 +44,19 @@ export const SHARE_PRESET_TITLE = 'Share as';
 export const SHARE_PRESET_SETTING = 'Share tasks as';
 
 export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: string; icon: IconName }[] = [
-  { value: 'default', label: 'Default', hint: 'The task and its agents’ live work', icon: 'IconListBullets' },
-  { value: 'status', label: 'Status', hint: 'A short summary, no names or code', icon: 'IconProgress75' },
-  { value: 'everything', label: 'Everything', hint: 'Default and your messages', icon: 'IconEyeOpen' },
+  {
+    value: 'status',
+    label: 'Status',
+    hint: 'Progress for customers, no names or code',
+    icon: 'IconProgress75',
+  },
+  {
+    value: 'standard',
+    label: 'Standard',
+    hint: 'The task and its agents’ live work',
+    icon: 'IconListBullets',
+  },
+  { value: 'full', label: 'Full access', hint: 'Standard and your messages', icon: 'IconEyeOpen' },
 ];
 
 export function describeSharePreset(preset: SharePreset) {
@@ -137,7 +149,7 @@ export function resolveShareLimitChoice(task: Task, settings: Settings): ShareLi
 
 export function resolveSharePresetChoice(task: Task, settings: Settings | null): SharePreset {
   if (task.share) return task.share.preset;
-  return settings ? resolveSharePreset(settings) : 'default';
+  return settings ? resolveSharePreset(settings) : 'standard';
 }
 
 export function describeShareEnd(share: TaskShare, now = Date.now()) {

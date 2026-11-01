@@ -22,6 +22,7 @@ import type { PlanDocument, ReviewFinding, WorkReport } from '../report/types.ts
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
 import { hasShareGroup, SHARE_PRESET_GROUPS, type ShareGroup } from './presets.ts';
+import { resolveShareUpdate, type ShareUpdate } from './update.ts';
 
 export interface SharedTaskContext {
   preset: SharePreset;
@@ -42,6 +43,7 @@ export interface SharedTask {
   machine: string | null;
   repository: string | null;
   description: string | null;
+  update: ShareUpdate | null;
   code: boolean;
 }
 
@@ -135,10 +137,7 @@ function resolveSharedPlan(plan: Plan | null, grants: Grants) {
 }
 
 function resolveSharedReport(report: WorkReport | null, grants: Grants): WorkReport | null {
-  if (!report) return null;
-  if (grants('reports')) return report;
-  if (!grants('summary')) return null;
-  return { headline: report.headline, sections: [], checks: [], judgementCalls: [], walkthrough: null };
+  return report && grants('reports') ? report : null;
 }
 
 function resolveSharedResult(result: TaskResult | null | undefined, grants: Grants): TaskResult | null {
@@ -487,6 +486,7 @@ export function resolveSharedTask(state: ShinsaState, task: Task, context: Share
     machine: people ? context.machine : null,
     repository: people ? context.repository : null,
     description: grants('description') ? scrubText(task.share?.description ?? '', links) || null : null,
+    update: grants('progress') ? resolveShareUpdate(task) : null,
     code: grants('code') && hasSharedCode(task, context.repository),
   };
 }

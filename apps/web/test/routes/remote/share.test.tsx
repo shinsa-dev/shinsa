@@ -135,13 +135,15 @@ describe('the shared page on app.shinsa.dev', () => {
     view.shared = {
       ...view.shared,
       description: 'Keys now rotate every week.',
+      update: 'deploying',
       task: { ...task, request: 'Rotate the API keys weekly.', plan },
     };
     view.files = {};
     await open(machine, view);
     expect(screen.getByText('Status')).toBeTruthy();
-    expect(screen.getByText('Changes to review')).toBeTruthy();
-    expect(screen.getByText('Rotating a key keeps the old one for a day.')).toBeTruthy();
+    expect(screen.getByText('Deploying')).toBeTruthy();
+    expect(screen.getByText(/isn’t live yet/)).toBeTruthy();
+    expect(screen.queryByText('Rotating a key keeps the old one for a day.')).toBeNull();
     expect(screen.getByText('Keys now rotate every week.')).toBeTruthy();
     expect(screen.queryByText('Keys rotate every week.')).toBeNull();
     expect(screen.queryByText('Rotate the API keys weekly.')).toBeNull();
@@ -151,7 +153,7 @@ describe('the shared page on app.shinsa.dev', () => {
 
   it('a Default link has a Chat tab with the agents’ streamed output and nothing to type in', async () => {
     const machine = connect();
-    const view = liveView({ preset: 'default' });
+    const view = liveView({ preset: 'standard' });
     view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-everything' } };
     view.files = { ...view.files, 'transcript-run-1-0': { version: '1', type: 'text/plain' } };
     await open(machine, view);

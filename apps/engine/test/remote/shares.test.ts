@@ -68,7 +68,7 @@ const SHARE_URL = serializeShareUrl('https://app.shinsa.dev', {
   key: SHARE_KEY,
 });
 
-const SHARING = { at: 1, limit: 'none', preset: 'default', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'none', preset: 'standard', endsAt: null } as const;
 
 let running: FakeControlPlane | null = null;
 
@@ -289,7 +289,7 @@ function sharedSetUp(options: SetUp & { preset?: SharePreset } = {}) {
     ...options,
     patch: (state) => {
       state.tasks['task-1'] = shareTask({
-        share: { ...SHARING, preset: options.preset ?? 'default', url: SHARE_URL },
+        share: { ...SHARING, preset: options.preset ?? 'standard', url: SHARE_URL },
       });
       state.runs['run-1'] = createRun();
       options.patch?.(state);
@@ -429,7 +429,7 @@ describe('a share link opened live', () => {
   test('refuses a link whose time ran out, even before the clock ends the share', async () => {
     const { stub, publisher } = sharedSetUp();
     stub.state.tasks['task-1'] = shareTask({
-      share: { ...SHARING, limit: 'hour', preset: 'default', endsAt: 0, url: SHARE_URL },
+      share: { ...SHARING, limit: 'hour', preset: 'standard', endsAt: 0, url: SHARE_URL },
     });
     const expired = await openViewer(publisher);
     expect(expired.refused).toBe(SHARE_GONE_REASON);
@@ -798,7 +798,7 @@ describe('a share by preset', () => {
     for (let index = 0; index <= SHARE_TRANSCRIPT_PAGE; index += 1) {
       transcripts.record('run-1', { type: 'agent', phase: 'interim', text: `Step ${index}` });
     }
-    const { publisher } = sharedSetUp({ preset: 'default', transcripts });
+    const { publisher } = sharedSetUp({ preset: 'standard', transcripts });
     const viewer = await openViewer(publisher);
     await until('the viewer reads both pages', () => 'transcript-run-1-1' in viewer.files());
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
@@ -829,7 +829,7 @@ describe('a share by preset', () => {
     });
     transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'Reading.' });
     transcripts.record('run-2', { type: 'agent', phase: 'interim', text: 'Another task.' });
-    const { publisher } = sharedSetUp({ preset: 'default', transcripts });
+    const { publisher } = sharedSetUp({ preset: 'standard', transcripts });
     const viewer = await openViewer(publisher);
     await until('the viewer reads the transcript', () => 'transcript-run-1-0' in viewer.files());
     expect(viewer.views()[0]?.files['transcript-run-1-0']).toEqual({
@@ -862,7 +862,7 @@ describe('a share by preset', () => {
     });
     transcripts.record('run-1', { type: 'user', from: 'you', text: 'Try the left pane.', attachments: [] });
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
-    const { publisher } = sharedSetUp({ preset: 'everything', transcripts });
+    const { publisher } = sharedSetUp({ preset: 'full', transcripts });
     const file = (await publisher.resolveLive('task-1')).files.find(
       (item) => item.id === 'transcript-run-1-0'
     );
@@ -874,7 +874,7 @@ describe('a share by preset', () => {
 
   test('a run with no transcript yet streams nothing, and one past the size a file carries keeps its latest entries', async () => {
     const transcripts = createTranscripts();
-    const { publisher } = sharedSetUp({ preset: 'default', transcripts });
+    const { publisher } = sharedSetUp({ preset: 'standard', transcripts });
     expect(Object.keys((await publisher.resolveLive('task-1')).view.files)).not.toContain(
       'transcript-run-1-0'
     );

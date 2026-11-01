@@ -67,20 +67,20 @@ describe('listTaskActions', () => {
     ]);
   });
 
-  it('offers Share task, to change it, and Stop sharing while a task is shared or its link failed', () => {
-    const share = { at: 1, limit: 'until_done', preset: 'default', endsAt: null } as const;
+  it('offers only Stop sharing while a task is shared or its link failed, since the banner manages it', () => {
+    const share = { at: 1, limit: 'until_done', preset: 'standard', endsAt: null } as const;
     const shared = createTask({
       id: 't',
       stage: 'merged',
       share: { ...share, url: 'https://app.shinsa.dev/share/t/a' },
     });
-    expect(listTaskActions(shared)).toEqual([['fork', 'share', 'unshare']]);
+    expect(listTaskActions(shared)).toEqual([['fork', 'unshare']]);
     const failed = createTask({
       id: 't',
       stage: 'merged',
       share: { ...share, url: null, failure: 'Refused.' },
     });
-    expect(listTaskActions(failed)).toEqual([['fork', 'share', 'unshare']]);
+    expect(listTaskActions(failed)).toEqual([['fork', 'unshare']]);
   });
 
   it('offers Unsnooze on a snoozed task, and neither once it is settled', () => {

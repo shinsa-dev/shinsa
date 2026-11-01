@@ -17,7 +17,7 @@ import {
 } from '../harness.ts';
 
 const CONTEXT: SharedTaskContext = {
-  preset: 'default',
+  preset: 'standard',
   owner: 'mona',
   machine: 'Studio',
   repository: 'superwall/paywall-next',

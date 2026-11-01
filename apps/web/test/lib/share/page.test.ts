@@ -25,7 +25,7 @@ describe('the shared page', () => {
 
   it('has Chat when the share sends the agents’ live output, as Default does', () => {
     const reviewed = createTask({ id: 't', repoId: 'r', stage: 'awaiting_review', report: createReport() });
-    expect(listSharedTabs(reviewed, createSharedTask({ preset: 'default' }))).toEqual([
+    expect(listSharedTabs(reviewed, createSharedTask({ preset: 'standard' }))).toEqual([
       'overview',
       'review',
       'code',

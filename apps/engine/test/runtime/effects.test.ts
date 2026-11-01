@@ -405,7 +405,7 @@ describe('describing a shared task', () => {
     await unshared.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
     expect(unshared.dispatched).toEqual([]);
     const silent = setup(
-      withTask({ share: { at: 1, url: null, limit: 'until_done', preset: 'default', endsAt: null } })
+      withTask({ share: { at: 1, url: null, limit: 'until_done', preset: 'standard', endsAt: null } })
     );
     await silent.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
     expect(silent.dispatched).toEqual([]);

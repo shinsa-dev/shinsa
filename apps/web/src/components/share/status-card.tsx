@@ -6,14 +6,8 @@ import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { CARD, CARD_FOOTER } from '@/components/layout/surface/card.ts';
 import { TaskTrack } from '@/components/overview/progress-track.tsx';
 import { ToneLabel } from '@/components/status/text.tsx';
-import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import {
-  resolveStatusCard,
-  STATUS_EYEBROW,
-  STATUS_LATEST_TITLE,
-  STATUS_NO_UPDATE,
-} from '@/lib/share/status.ts';
+import { resolveStatusCard, STATUS_EYEBROW, STATUS_LATEST_TITLE } from '@/lib/share/status.ts';
 import type { SharedView } from '@/lib/share/view.ts';
 
 function StatusSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -43,11 +37,7 @@ export function StatusCardPage({ view }: { view: SharedView }) {
             {card.description && <p className='selectable text-fg-3 text-xs'>{card.description}</p>}
           </header>
           <StatusSection title={STATUS_LATEST_TITLE}>
-            {card.latest ? (
-              <Markdown text={card.latest} className='text-xs' />
-            ) : (
-              <p className='text-fg-2 text-xs'>{STATUS_NO_UPDATE}</p>
-            )}
+            <p className='selectable text-xs'>{card.latest}</p>
           </StatusSection>
           <div className={CARD_FOOTER}>
             <TaskTrack task={view.task} />
