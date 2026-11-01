@@ -16,7 +16,7 @@ const SHARE_ENDED: Record<ShareEnd, { actor: ActivityActor; text: string }> = {
 
 function applyShared(state: ShinsaState, event: EventOf<'task.shared'>) {
   const share = state.tasks[event.taskId]?.share;
-  const limits = { limit: event.limit, endsAt: event.endsAt };
+  const limits = { limit: event.limit, preset: event.preset, endsAt: event.endsAt };
   if (share) {
     updateTask(state, event.taskId, event.at, { share: { ...share, ...limits } });
     return;

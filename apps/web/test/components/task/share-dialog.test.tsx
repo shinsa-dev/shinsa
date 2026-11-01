@@ -25,7 +25,7 @@ function showTask(overrides: Partial<Task> = {}, paired = true) {
 
 const URL = 'https://app.shinsa.dev/share/t/abc';
 
-const SHARING = { at: 1, limit: 'until_done', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'until_done', preset: 'full', endsAt: null } as const;
 
 beforeEach(() => {
   startFakeServer();
@@ -118,7 +118,9 @@ describe('the sharing banner', () => {
   it('says how soon a timed share ends, never a date for an hour away', () => {
     const endsAt = Date.now() + 60 * 60 * 1000;
     render(
-      <SharingBanner task={createTask({ id: 'source', share: { at: 1, limit: 'hour', endsAt, url: URL } })} />
+      <SharingBanner
+        task={createTask({ id: 'source', share: { at: 1, limit: 'hour', preset: 'full', endsAt, url: URL } })}
+      />
     );
     const banner = screen.getByRole('status');
     expect(banner.textContent).toContain('Sharing ends in 1h.');

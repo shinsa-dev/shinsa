@@ -269,9 +269,13 @@ src/
 │                    secrets are made by the caller, so core stays free of randomness
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
 │                    from the task, its current evidence and the project's name; everything its owner sees but
-│                    chats, runs' prompts, messages, gate answers, and attachments) and hasSharedCode
+│                    chats, runs' prompts, messages, gate answers, and attachments) and hasSharedCode; presets.ts:
+│                    the share presets (SharePreset in domain/settings.ts: full, status, everything), each a list
+│                    of field groups (SHARE_PRESET_GROUPS, hasShareGroup), and resolveSharedTask copies only the
+│                    fields of the groups its context's preset grants (TASK_GROUP_FIELDS)
 │                    (decide/shares.ts: task.share and task.unshare, human-only, and the share.link effect;
-│                    how long, ShareLimit and the shareLimit setting, ended by syncShares when a task shared
+│                    how long, ShareLimit and the shareLimit setting, as what, the preset and the sharePreset
+│                    setting, both changed in place on a running share, ended by syncShares when a task shared
 │                    until_done settles and by share.expire;
 │                    share.record, the link the engine made; share.fail, why it could not); the link and its
 │                    live channel are remote/shares.ts (ShareLink, serializeShareUrl, parseShareUrl,

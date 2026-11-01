@@ -4,6 +4,7 @@ import {
   isTaskSettled,
   resolveShareEnd,
   resolveShareLimit,
+  resolveSharePreset,
   type ShareEnd,
   type ShareLimit,
   type Task,
@@ -44,13 +45,15 @@ export function shareTask(decider: Decider, command: CommandOf<'task.share'>) {
   const task = decider.task(command.taskId);
   if (task.watchHome) throw new DomainError('share_refused', 'An automation has nothing to share.');
   const limit = command.limit ?? task.share?.limit ?? resolveShareLimit(decider.state.settings);
+  const preset = command.preset ?? task.share?.preset ?? resolveSharePreset(decider.state.settings);
   assertShareLimit(task, limit);
-  if (task.share && task.share.limit === limit) {
+  if (task.share && task.share.limit === limit && task.share.preset === preset) {
     if (task.share.failure) decider.run({ kind: 'share.link', taskId: task.id });
     return;
   }
-  const endsAt = resolveShareEnd(limit, decider.context.now);
-  decider.emit({ type: 'task.shared', taskId: task.id, limit, endsAt });
+  const endsAt =
+    task.share?.limit === limit ? task.share.endsAt : resolveShareEnd(limit, decider.context.now);
+  decider.emit({ type: 'task.shared', taskId: task.id, limit, preset, endsAt });
   if (!task.share || task.share.failure) decider.run({ kind: 'share.link', taskId: task.id });
 }
 

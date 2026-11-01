@@ -68,7 +68,7 @@ describe('listTaskActions', () => {
   });
 
   it('offers only Stop sharing while a task is shared, and Share task again to retry a link that failed', () => {
-    const share = { at: 1, limit: 'until_done', endsAt: null } as const;
+    const share = { at: 1, limit: 'until_done', preset: 'full', endsAt: null } as const;
     const shared = createTask({
       id: 't',
       stage: 'merged',

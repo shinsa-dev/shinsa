@@ -29,7 +29,7 @@ afterEach(() => {
 
 const PAIRED = createRemoteSnapshot({ paired: true });
 
-const SHARING = { at: 1, limit: 'until_done', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'until_done', preset: 'full', endsAt: null } as const;
 
 describe('the share dialog', () => {
   it('opens for one task from its action and closes again', () => {

@@ -16,7 +16,12 @@ import {
   registerRepo,
 } from '../harness.ts';
 
-const CONTEXT: SharedTaskContext = { owner: 'mona', machine: 'Studio', repository: 'superwall/paywall-next' };
+const CONTEXT: SharedTaskContext = {
+  preset: 'full',
+  owner: 'mona',
+  machine: 'Studio',
+  repository: 'superwall/paywall-next',
+};
 
 const REQUEST =
   'Fix the scroll in tab groups\n\n<attachments>\n<attachment kind="image" display_name="shot.png" path="/data/attachments/01b/shot.png" url="/api/attachments/01b/shot.png" />\n</attachments>';

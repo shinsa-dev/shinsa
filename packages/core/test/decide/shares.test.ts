@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DAY_MS, HOUR_MS, parseUserCommand } from '../../src/index.ts';
+import { DAY_MS, HOUR_MS, MINUTE_MS, parseUserCommand } from '../../src/index.ts';
 import { createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
 
 const URL = 'https://app.shinsa.dev/share/inst/AAAAAAAAAAAAAAAAAAAAAA#key';
@@ -17,6 +17,7 @@ describe('sharing a task', () => {
       at: harness.now,
       url: null,
       limit: 'until_done',
+      preset: 'full',
       endsAt: null,
     });
     expect(links(harness, taskId)).toBe(1);
@@ -224,6 +225,42 @@ describe('how long a task is shared', () => {
     const harness = createHarness();
     expect(() =>
       harness.send({ type: 'settings.change', patch: { shareLimit: 'none' } }, { onBehalf: true })
+    ).toThrow();
+  });
+  test('the preset comes from the setting, and changing it keeps the link and when it ends', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'settings.change', patch: { sharePreset: 'status' } });
+    harness.send({ type: 'task.share', taskId, limit: 'hour' });
+    expect(harness.task(taskId).share).toMatchObject({ preset: 'status', endsAt: harness.now + HOUR_MS });
+    harness.send({ type: 'share.record', taskId, url: URL });
+    const endsAt = harness.task(taskId).share?.endsAt;
+    harness.advance(MINUTE_MS);
+    harness.send({ type: 'task.share', taskId, preset: 'everything' });
+    expect(harness.task(taskId).share).toMatchObject({
+      url: URL,
+      preset: 'everything',
+      limit: 'hour',
+      endsAt,
+    });
+    expect(links(harness, taskId)).toBe(1);
+    expect(harness.send({ type: 'task.share', taskId, preset: 'everything' }).events).toEqual([]);
+  });
+
+  test('a preset is read from a command, and only the human picks one, in the settings too', () => {
+    expect(parseUserCommand({ type: 'task.share', taskId: 't1', preset: 'status' })).toEqual({
+      type: 'task.share',
+      taskId: 't1',
+      preset: 'status',
+    });
+    expect(() => parseUserCommand({ type: 'task.share', taskId: 't1', preset: 'all' })).toThrow();
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(() =>
+      harness.send({ type: 'settings.change', patch: { sharePreset: 'everything' } }, { onBehalf: true })
+    ).toThrow();
+    expect(() =>
+      harness.send({ type: 'task.share', taskId, preset: 'everything' }, { onBehalf: true })
     ).toThrow();
   });
 });

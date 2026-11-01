@@ -217,7 +217,13 @@ describe('a shared task in the list', () => {
       id: 'shared',
       title: 'Share the search page',
       stage: 'building',
-      share: { at: 1, limit: 'until_done', endsAt: null, url: 'https://app.shinsa.dev/share/t/abc' },
+      share: {
+        at: 1,
+        limit: 'until_done',
+        preset: 'full',
+        endsAt: null,
+        url: 'https://app.shinsa.dev/share/t/abc',
+      },
     });
     const { unmount } = renderRow(shared, 'working');
     expect(screen.getByRole('img', { name: 'Shared by link' })).toBeTruthy();

@@ -343,6 +343,7 @@ describe('acting for the human', () => {
       agentFastModes: { agent: true },
       delegationLimit: 4,
       shareLimit: 'week',
+      sharePreset: 'status',
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],

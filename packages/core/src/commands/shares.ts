@@ -1,7 +1,7 @@
-import type { ShareLimit } from '../domain/settings.ts';
+import type { ShareLimit, SharePreset } from '../domain/settings.ts';
 
 export type ShareUserCommand =
-  | { type: 'task.share'; taskId: string; limit?: ShareLimit }
+  | { type: 'task.share'; taskId: string; limit?: ShareLimit; preset?: SharePreset }
   | { type: 'task.unshare'; taskId: string };
 
 export type ShareSystemCommand =

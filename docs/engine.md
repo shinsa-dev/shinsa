@@ -3297,7 +3297,9 @@ truth, and a snapshot only saves replaying it.
   none), an armed watchdog without `linkedTaskIds` (set to none), and `task.created` reports without `watchdogId`, which is set to `null`.
   Logs from before Approve plans had three choices (log version 10, `PLAN_APPROVAL_LOG_VERSION`) have
   `settings.changed` events with `approvePlans` as a switch: on becomes `large` and off `when_asked`.
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 10) marks the log so
+  Logs from before share presets (log version 12, `SHARE_PRESET_LOG_VERSION`) have `task.shared` events without
+  `preset`, which become Full shares (`preset: 'full'`).
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 12) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,

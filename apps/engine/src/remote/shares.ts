@@ -7,6 +7,7 @@ import {
   parseUnifiedDiff,
   type Repo,
   resolveSharedTask,
+  resolveSharePreset,
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARE_FILE_BYTES,
@@ -248,6 +249,7 @@ export class Shares implements ShareEffects, ShareLinks {
   #resolveShared(task: Task) {
     const repo = task.repoId ? (this.#engine.state.repos[task.repoId] ?? null) : null;
     const shared = resolveSharedTask(this.#engine.state, task, {
+      preset: task.share?.preset ?? resolveSharePreset(this.#engine.state.settings),
       owner: this.#remote.store.file.owner,
       machine: this.#remote.snapshot().machineName,
       repository: resolveRepositoryName(repo),

@@ -59,7 +59,7 @@ const SHARE_URL = serializeShareUrl('https://app.shinsa.dev', {
   key: SHARE_KEY,
 });
 
-const SHARING = { at: 1, limit: 'none', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'none', preset: 'full', endsAt: null } as const;
 
 let running: FakeControlPlane | null = null;
 
@@ -383,7 +383,7 @@ describe('a share link opened live', () => {
   test('refuses a link whose time ran out, even before the clock ends the share', async () => {
     const { stub, publisher } = sharedSetUp();
     stub.state.tasks['task-1'] = shareTask({
-      share: { ...SHARING, limit: 'hour', endsAt: 0, url: SHARE_URL },
+      share: { ...SHARING, limit: 'hour', preset: 'full', endsAt: 0, url: SHARE_URL },
     });
     const expired = await openViewer(publisher);
     expect(expired.refused).toBe(SHARE_GONE_REASON);
