@@ -34,6 +34,7 @@ export {
   type EngineService,
   isStartedByService,
   runServiceOrThrow,
+  SERVICE_CARRIED_ENV,
   SERVICE_MARKER,
   type ServiceResult,
   type ServiceRunner,
