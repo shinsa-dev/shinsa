@@ -3157,11 +3157,12 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
-- **To try it without a deploy**, `bun scripts/remote-preview.ts` runs a real service on Studio for one of its tasks
-  (`scripts/remote-preview-demo.ts`, a small dev server with live updates) and shares it on
-  `http://<label>.localhost:5195` with the Worker's own code. Its start page links the task in Studio's own app, with
-  no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the preview, stopping and
-  starting the service, and a link that no longer works.
+- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox.ts`) shares the seeded `web` service of one of
+  Studio's tasks (`scripts/sandbox-service.ts`, a small dev server with live updates) on
+  `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
+  own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
+  preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
+  longer works.
 
 ## Slack
 
@@ -5308,7 +5309,10 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
-  that is revised and then fixed, and operation-gate notes. The evidence (`scripts/seed-evidence.ts`) is real files in
+  that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
+  (`scripts/seed-services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
+  running `scripts/sandbox-service.ts` in the project's seeded repository with a preview URL; the command names the
+  script by its path in the checkout that seeded it. The evidence (`scripts/seed-evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of
