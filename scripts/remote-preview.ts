@@ -240,6 +240,12 @@ async function startMachine(id: string, name: string, dataDir: string) {
   engine.onEffect(async (effect, context) => {
     if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
   });
+  remote.subscribe(() => {
+    setTimeout(() => {
+      for (const request of remote.snapshot().requests)
+        remote.acceptRequest(request.id).catch((error: unknown) => console.error(error));
+    });
+  });
   engine.start();
   new ShareClock(engine).start();
   const key = await remote.store.resolveMachineKey();
@@ -421,7 +427,7 @@ function respondIndex(machines: Machine[], shares: PreviewShare[]) {
       `${REMOTE_PATHS.signIn}?client=${REMOTE_NATIVE_CLIENT}&redirect=shinsa://signed-in`,
     ],
     ...machines.map((machine) => [
-      `Add this device to ${machine.name} (request access, then accept it in that machine's own app below)`,
+      `Add this device to ${machine.name} (accepted at once, then the dashboard opens)`,
       `/__preview/enroll/${machine.id}`,
     ]),
     ...machines.map((machine) => [
@@ -447,7 +453,7 @@ function respondIndex(machines: Machine[], shares: PreviewShare[]) {
   ];
   const items = links.map(([label, href]) => `<li><a href="${href}">${label}</a></li>`).join('');
   return new Response(
-    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to each machine first: request access, accept it in the machine's own app, then open the dashboard.</p><ol>${items}</ol></body>`,
+    `<!doctype html><meta charset="utf-8"><title>Remote access preview</title><body style="font:14px system-ui;margin:40px;max-width:640px"><h1 style="font-size:18px">Remote access preview</h1><p>Add this device to Studio and Laptop first: each machine accepts it at once and the dashboard opens. Then open Settings.</p><ol>${items}</ol></body>`,
     { headers: { 'content-type': 'text/html; charset=utf-8' } }
   );
 }
