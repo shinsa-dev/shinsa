@@ -43,7 +43,9 @@ src/
 │                    resolveRepoWorkspace, WORKSPACE_SETUP_REASON; resolveApprovalPath, what
 │                    approving the review or the merge does with your edits, for decide and the web's toast), the
 │                    files another open task changes too (overlaps.ts: listNewOverlapPaths, describeOverlaps, the
-│                    note the Agent's next turn gets)
+│                    note the Agent's next turn gets), how a person is named (people.ts: resolveFirstName, the
+│                    first name or else the login; selectTaskPerson and resolveGuestFirstName, the guest a task
+│                    was handed to, from its hand-off or the activity line that carries them as `person`)
 ├── agent-models/    The agent model catalog, the default model per role, resolveAgentModel, model labels, and
 │                    RUN_AGENT_ROLE (which agent role's settings each run role uses)
 ├── events/          ShinsaEvent: past-tense facts, the only way state changes (delegations.ts, schedules.ts split

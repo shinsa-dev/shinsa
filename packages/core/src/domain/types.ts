@@ -377,6 +377,7 @@ export interface Activity {
   onBehalf?: boolean;
   byTask?: string | null;
   byGuest?: string;
+  person?: ActivityPerson;
   comments?: ReviewComment[];
   round?: number;
   noted?: boolean;
@@ -595,6 +596,8 @@ export interface TaskGuest {
   name: string | null;
   avatarUrl: string | null;
 }
+
+export type ActivityPerson = Pick<TaskGuest, 'login' | 'name' | 'avatarUrl'>;
 
 export interface TaskHandoff {
   at: number;

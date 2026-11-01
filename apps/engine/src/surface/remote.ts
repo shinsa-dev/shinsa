@@ -17,12 +17,12 @@ function describeSeen(at: number | null) {
 }
 
 function describeUser(user: RemoteUser) {
-  return user.name ? `${user.name} (@${user.login})` : `@${user.login}`;
+  return user.name ? `${user.name} (${user.login})` : user.login;
 }
 
 function describeDevice(snapshot: RemoteSnapshot, device: RemoteDevice) {
   const member = snapshot.access?.members.find((entry) => entry.user.id === device.userId);
-  const by = member ? `, added by @${member.user.login}` : '';
+  const by = member ? `, added by ${describeUser(member.user)}` : '';
   return `  ${device.name} (${describeSeen(device.lastSeenAt)}${by}) ${device.publicKey}`;
 }
 
@@ -82,7 +82,7 @@ async function findRequestId(client: SurfaceClient, ref: string) {
   if (found && matches.length === 1) return found.id;
   const problem =
     matches.length > 1
-      ? `@${wanted} asked more than once; name the request by its id`
+      ? `${wanted} asked more than once; name the request by its id`
       : `No access request matches ${ref}`;
   throw new DomainError('request_not_found', `${problem}. See them with \`shinsa remote status\`.`);
 }
@@ -102,7 +102,7 @@ async function findMemberId(client: SurfaceClient, login: string) {
   if (!member)
     throw new DomainError(
       'member_not_found',
-      `@${wanted} has no access to this machine. See its members with \`shinsa remote status\`.`
+      `${wanted} has no access to this machine. See its members with \`shinsa remote status\`.`
     );
   return member.user.id;
 }

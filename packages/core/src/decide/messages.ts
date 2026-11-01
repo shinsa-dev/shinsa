@@ -13,6 +13,7 @@ import {
   MINUTE_MS,
   type Run,
   resolveCurrentRound,
+  resolveGuestFirstName,
   resolveNextRoundNumber,
   SHAPE_PIPELINES,
   type Task,
@@ -332,7 +333,9 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
 
 function resolveGuestText(decider: Decider, text: string) {
   const guest = decider.context.guest;
-  return guest ? `From @${guest.login}, who the human handed this task to:\n\n${text}` : text;
+  if (!guest) return text;
+  const name = resolveGuestFirstName(decider.state.tasks[guest.taskId], guest.login);
+  return `From ${name}, who the human handed this task to:\n\n${text}`;
 }
 
 export function messageTask(

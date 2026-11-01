@@ -1,4 +1,4 @@
-import type { TaskHandoff } from '../domain/index.ts';
+import { type ActivityPerson, resolveFirstName, type TaskGuest, type TaskHandoff } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateTask } from './write.ts';
@@ -26,6 +26,10 @@ function writeHandoff(
   updateTask(state, event.taskId, event.at, { handoff: change(handoff) });
 }
 
+function resolvePerson(guest: TaskGuest): ActivityPerson {
+  return { login: guest.login, name: guest.name, avatarUrl: guest.avatarUrl };
+}
+
 function applyHandedOff(state: ShinsaState, event: EventOf<'task.handed_off'>) {
   const handoff: TaskHandoff = { at: event.at, url: null, guest: null, claimedAt: null };
   updateTask(state, event.taskId, event.at, { handoff });
@@ -47,16 +51,27 @@ function applyClaimed(state: ShinsaState, event: EventOf<'handoff.claimed'>) {
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'stage',
-    text: `Handed this task to @${event.guest.login}`,
+    text: `Handed this task to ${resolveFirstName(event.guest)}`,
+    person: resolvePerson(event.guest),
   });
 }
 
 function applyRemoved(state: ShinsaState, event: EventOf<'handoff.removed'>) {
   updateTask(state, event.taskId, event.at, { handoff: null });
-  const text = event.guest
-    ? `Took this task back from @${event.guest.login}`
-    : 'Turned off the link to hand this task off';
-  record(state, event.taskId, event.at, { actor: 'you', kind: 'stage', text });
+  if (!event.guest) {
+    record(state, event.taskId, event.at, {
+      actor: 'you',
+      kind: 'stage',
+      text: 'Turned off the link to hand this task off',
+    });
+    return;
+  }
+  record(state, event.taskId, event.at, {
+    actor: 'you',
+    kind: 'stage',
+    text: `Took this task back from ${resolveFirstName(event.guest)}`,
+    person: resolvePerson(event.guest),
+  });
 }
 
 function applyLeft(state: ShinsaState, event: EventOf<'handoff.left'>) {
@@ -64,7 +79,8 @@ function applyLeft(state: ShinsaState, event: EventOf<'handoff.left'>) {
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'stage',
-    text: `@${event.guest.login} gave this task back`,
+    text: `${resolveFirstName(event.guest)} gave this task back`,
+    person: resolvePerson(event.guest),
   });
 }
 

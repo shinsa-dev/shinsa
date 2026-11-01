@@ -20,7 +20,7 @@ const LOGIN_FIELD: FieldSpec = {
 };
 
 function describeUser(user: RemoteUser) {
-  return user.name ? `${user.name} (@${user.login})` : `@${user.login}`;
+  return user.name ? `${user.name} (${user.login})` : user.login;
 }
 
 function describeEntry(entry: RemoteTeamEntry) {
@@ -65,10 +65,7 @@ async function findUserId(client: SurfaceClient, teamId: string, login: string, 
   const found = listed?.find((entry) => entry.user.login.toLowerCase() === wanted);
   if (!found) {
     const where = among === 'requests' ? 'has not asked to join this team' : 'is not in this team';
-    throw new DomainError(
-      'member_not_found',
-      `@${wanted} ${where}. See the team with \`shinsa teams list\`.`
-    );
+    throw new DomainError('member_not_found', `${wanted} ${where}. See the team with \`shinsa teams list\`.`);
   }
   return found.user.id;
 }

@@ -4,7 +4,10 @@ import type { ShinsaState } from './project.ts';
 
 type ActivityEntry = Pick<Activity, 'actor' | 'kind' | 'text'> &
   Partial<
-    Pick<Activity, 'detail' | 'evidenceId' | 'runId' | 'gateType' | 'comments' | 'noted' | 'undelivered'>
+    Pick<
+      Activity,
+      'detail' | 'evidenceId' | 'runId' | 'gateType' | 'person' | 'comments' | 'noted' | 'undelivered'
+    >
   >;
 
 const ACTIVITY_LIMIT = 200;

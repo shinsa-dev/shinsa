@@ -1536,7 +1536,7 @@ describe('handing off a task', () => {
     plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
     remote.start();
     await until('given back', () => engine.state.tasks[taskId]?.handoff === null);
-    expect(engine.state.tasks[taskId]?.activity.at(-1)?.text).toBe('@kai gave this task back');
+    expect(engine.state.tasks[taskId]?.activity.at(-1)?.text).toBe('kai gave this task back');
     await engine.dispatch({ type: 'task.hand_off', taskId });
     expect(engine.state.tasks[taskId]?.handoff?.guest).toBeNull();
   });
