@@ -9325,8 +9325,8 @@ sent unchanged.
 Every hand-over that follows a message from the human (plan feedback, changes at review, a question, a follow-up, a
 message while the agent works) carries `reply`, and only then: a `headline` (one sentence, what the agent did about
 it), `points` (each thing raised, in the human's words cut short, marked `done`, `answered` or `not_changed`, each
-with a `note`: where it is now, the answer, or why it was left) and `next` (what the human does now, with commands in
-```` ```bash run ```` blocks). The same reply sits above the plan, the phase, the fix or the report, for every kind of
+with a `note`: where it is now, the answer, or why it was left) and `next` (what the human does now, with commands
+in ```` ```bash run ```` blocks). The same reply sits above the plan, the phase, the fix or the report, for every kind of
 agent, so a plan revision never quotes the request back and never adds a separate What changed line.
 
 #### A fix
