@@ -330,6 +330,16 @@ on the same delays, with the same warnings. Apple rejecting the app is not retri
 `scripts/release-retry.ts`, tested at 100%. If a release still fails there, Re-run failed jobs on the run builds it
 again from the start.
 
+## Watching main
+
+`.github/workflows/watch.yml` (Watch main) runs when a Test or Release run on `main` finishes, and only for one that
+failed, timed out or could not start. It sends that run's `workflow_run` event, as GitHub would send a webhook, to a
+Shinsa webhook schedule that opens a task to find the cause and fix it: signed with HMAC-SHA256 in
+`x-hub-signature-256`, with `x-github-delivery` set to the run's id and attempt, so a resend opens nothing and a re-run
+that fails again opens a new task. GitHub's own repository webhook sends every run of every workflow on every branch,
+three times each, so it is not used. Set two repository secrets: `SHINSA_WATCH_URL`, the schedule's URL (Settings →
+Schedules in Shinsa), and `SHINSA_WATCH_SECRET`, its signing secret. Without them the workflow passes with a warning.
+
 ## The first releases
 
 1. Set the five secrets (or knowingly ship unsigned betas that will not update themselves).

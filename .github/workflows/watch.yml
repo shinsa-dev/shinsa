@@ -1,0 +1,35 @@
+name: Watch main
+
+on:
+  workflow_run:
+    workflows: [Test, Release]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  report:
+    if: contains(fromJSON('["failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send the failed run to Shinsa
+        env:
+          SHINSA_WATCH_URL: ${{ secrets.SHINSA_WATCH_URL }}
+          SHINSA_WATCH_SECRET: ${{ secrets.SHINSA_WATCH_SECRET }}
+          DELIVERY: ${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+        run: |
+          if [ -z "$SHINSA_WATCH_URL" ] || [ -z "$SHINSA_WATCH_SECRET" ]; then
+            echo "::warning title=Watch main::Set SHINSA_WATCH_URL and SHINSA_WATCH_SECRET to send failed runs to Shinsa."
+            exit 0
+          fi
+          signature=$(openssl dgst -sha256 -hmac "$SHINSA_WATCH_SECRET" -r "$GITHUB_EVENT_PATH" | cut -d' ' -f1)
+          curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors \
+            -X POST \
+            -H 'content-type: application/json' \
+            -H 'x-github-event: workflow_run' \
+            -H "x-github-delivery: $DELIVERY" \
+            -H "x-hub-signature-256: sha256=$signature" \
+            --data-binary "@$GITHUB_EVENT_PATH" \
+            "$SHINSA_WATCH_URL"
