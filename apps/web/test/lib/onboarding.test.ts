@@ -1,23 +1,28 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  countMissingInstalls,
   describeAccessTitle,
   describeAccountSource,
+  describeFixAction,
+  describeInstallEnd,
   describeProviderSource,
-  describeStepHeading,
   describeStepPosition,
   isHighlightKey,
+  isInstallable,
+  isStepInstalled,
   listChosenValues,
   listFolderRows,
   listFolderSuggestions,
+  listOnboardingPath,
   listReadableRoots,
-  listSetupSummary,
-  listStepperItems,
   resolveCheckOutcome,
   resolveFolderOptions,
+  resolveHelpView,
   resolveNextHighlight,
   resolveOnboardingRedirect,
   resolvePickedChoices,
   resolveProviderChoice,
+  resolveSetupEndPath,
   resolveStepDirection,
   resolveStepState,
   resolveSubmitValues,
@@ -31,6 +36,7 @@ import {
   createStep,
   createSuggestions,
 } from '../support/onboarding.ts';
+import { createGate, createShinsaState, createTask } from '../support/state.ts';
 
 describe('the setup lock', () => {
   it('sends every page but setup to /onboarding until setup is complete, and nothing once it is', () => {
@@ -51,19 +57,25 @@ describe('the steps', () => {
     expect(describeStepPosition(createFlow(null))).toBe('Step 5 of 5');
   });
 
-  it('names the step you are on for a narrow window, and only the count once setup is done', () => {
-    expect(describeStepHeading(createFlow(createStep()))).toBe('Step 3 of 5: Defaults');
-    expect(describeStepHeading(createFlow(null))).toBe('Step 5 of 5');
+  it('draws the steps as a path of gates: passed ones done and open, the current one, then the ones ahead held back', () => {
+    expect(listOnboardingPath(createFlow(createStep()))).toEqual([
+      { id: 'roots', label: 'Folders', summary: 'Folders answer', status: 'done', disabled: false },
+      { id: 'projects', label: 'Projects', summary: 'Projects answer', status: 'done', disabled: false },
+      { id: 'defaults', label: 'Defaults', summary: null, status: 'current', disabled: true },
+      { id: 'accounts', label: 'Claude', summary: null, status: 'pending', disabled: true },
+      { id: 'prerequisites', label: 'Tools', summary: null, status: 'pending', disabled: true },
+    ]);
+    const revisit = createFlow(createStep({ id: 'roots' }), {
+      steps: createFlow(null).steps.map((entry) => ({ ...entry, summary: null })),
+      index: 0,
+    });
+    expect(listOnboardingPath(revisit)[1]).toMatchObject({ status: 'pending', disabled: false });
   });
 
-  it('lists the steps along the top with no checkmark, the answer as the hint, and holds back the ones not reached', () => {
-    const items = listStepperItems(createFlow(createStep()));
-    expect(items.slice(0, 4)).toEqual([
-      { value: 'roots', label: 'Folders', hint: 'Folders answer', disabled: false },
-      { value: 'projects', label: 'Projects', hint: 'Projects answer', disabled: false },
-      { value: 'defaults', label: 'Defaults', hint: undefined, disabled: false },
-      { value: 'accounts', label: 'Accounts', hint: undefined, disabled: true },
-    ]);
+  it('finishing lands on the welcome task, or Home on a revisit or without one', () => {
+    expect(resolveSetupEndPath(createFlow(null, { welcome: 'w-1' }))).toBe('/tasks/w-1');
+    expect(resolveSetupEndPath(createFlow(null, { welcome: 'w-1', revisit: true }))).toBe('/');
+    expect(resolveSetupEndPath(createFlow(null))).toBe('/');
   });
 
   it('does not slide the first step in, and slides back only when you go to an earlier step', () => {
@@ -101,12 +113,45 @@ describe('the steps', () => {
     expect(resolveSubmitValues(createStep({ id: 'accounts', groups: [] }), [])).toEqual(['continue']);
   });
 
-  it('lists what you set up, leaving out the steps without an answer to show', () => {
-    expect(listSetupSummary(createFlow(createStep({ id: 'accounts' })))).toEqual([
-      { id: 'roots', label: 'Folders', summary: 'Folders answer' },
-      { id: 'projects', label: 'Projects', summary: 'Projects answer' },
-      { id: 'defaults', label: 'Defaults', summary: 'Defaults answer' },
-    ]);
+  it('offers Install only for a check that fails and has a command, and counts optional ones as installed', () => {
+    const missing = {
+      id: 'gh',
+      label: 'GitHub CLI',
+      ok: false,
+      detail: '',
+      fix: null,
+      command: 'brew install gh',
+    };
+    expect(isInstallable(missing)).toBe(true);
+    expect(isInstallable({ ...missing, ok: true })).toBe(false);
+    expect(isInstallable({ ...missing, command: null })).toBe(false);
+    expect(
+      countMissingInstalls([
+        missing,
+        { ...missing, id: 'bun' },
+        { ...missing, optional: true },
+        { ...missing, ok: true },
+      ])
+    ).toBe(2);
+    expect(describeFixAction(missing)).toBe('Install');
+    expect(describeFixAction({ ...missing, signIn: true })).toBe('Sign in');
+    expect(isStepInstalled(createStep({ checks: [missing] }))).toBe(false);
+    expect(isStepInstalled(createStep({ checks: [{ ...missing, optional: true }] }))).toBe(true);
+    expect(isStepInstalled(createStep({ checks: [] }))).toBe(true);
+  });
+
+  it('says how an install ended', () => {
+    const ended = { status: 'exited', exitCode: 0 } as never;
+    expect(describeInstallEnd(ended)).toBeNull();
+    expect(describeInstallEnd({ status: 'exited', exitCode: 1 } as never)).toBe(
+      'The install ended with code 1. Install it again, or ask an agent for help.'
+    );
+    expect(describeInstallEnd({ status: 'exited', exitCode: null } as never)).toBe(
+      'The install ended without an exit code. Install it again, or ask an agent for help.'
+    );
+    expect(describeInstallEnd({ status: 'stopped', exitCode: null } as never)).toBe(
+      'Shinsa’s engine restarted, so the install stopped. Install it again.'
+    );
   });
 
   it('picking a choice replaces only its own group’s pick', () => {
@@ -241,5 +286,38 @@ describe('folders macOS keeps private', () => {
         '/Users/me'
       )
     ).toEqual(['/Users/me/Developer', '~/oss']);
+  });
+});
+
+describe('resolveHelpView', () => {
+  const RESULT = { step: 'answer' as const, body: 'Run brew install gh.', runId: null, at: 1 };
+
+  it('waits while there is no task yet or the agent is still working', () => {
+    expect(resolveHelpView(null, null)).toEqual({ kind: 'loading' });
+    const task = createTask({ id: 'h', stage: 'answering', result: null });
+    expect(resolveHelpView(createShinsaState({ tasks: [task] }), task)).toEqual({ kind: 'loading' });
+  });
+
+  it('shows a gate the agent opened, a question or a pause, before anything else', () => {
+    const task = createTask({ id: 'h', stage: 'answering', result: RESULT });
+    const gate = createGate({ id: 'g', taskId: 'h', type: 'question' });
+    expect(resolveHelpView(createShinsaState({ tasks: [task], gates: [gate] }), task)).toEqual({
+      kind: 'gate',
+      gate,
+    });
+  });
+
+  it('shows the reply, also beside its result gate', () => {
+    const task = createTask({ id: 'h', stage: 'answered', result: RESULT });
+    const gate = createGate({ id: 'g', taskId: 'h', type: 'result' });
+    expect(resolveHelpView(createShinsaState({ tasks: [task], gates: [gate] }), task)).toEqual({
+      kind: 'result',
+      body: 'Run brew install gh.',
+    });
+  });
+
+  it('says the agent stopped when the task ended without a reply', () => {
+    const task = createTask({ id: 'h', stage: 'cancelled', result: null });
+    expect(resolveHelpView(createShinsaState({ tasks: [task] }), task)).toEqual({ kind: 'stopped' });
   });
 });

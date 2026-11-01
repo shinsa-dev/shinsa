@@ -17,15 +17,18 @@ src/
 │                        starts nothing), wires the pieces, recovers in-flight work, returns { url, engine, stop }
 ├── cli/                 The command line (docs/cli.md: why it is shaped like Tailscale's and Docker's).
 │                        index.ts routes the commands (`engine`, hidden from the help, runs the engine: it reads
-│                        the login shell's environment first unless started from a terminal, exits 0 when launchd
-│                        started it and finds the lock held, and in the bundle writes data/engine.log and puts its
-│                        bin/ on PATH; waking the engine through `launchctl kickstart`); help.ts the top-level
+│                        the login shell's environment first unless started from a terminal, exits 0 when its
+│                        service (launchd or systemd) started it and finds the lock held, and in the bundle writes
+│                        data/engine.log and puts its bin/ on PATH; createPlatformService picks launchd on the Mac
+│                        and systemd on Linux, and waking the engine kicks that service; createOpenApp opens the
+│                        app on the Mac, a browser elsewhere, or prints the URL with no display); help.ts the top-level
 │                        commands as one table (OPEN_COMMANDS, ENGINE_COMMANDS) that the help (describeHelp,
 │                        describeHelpAll), each command's --help and docs/cli.md's generated half
 │                        (replaceReference) come from; commands.ts open
 │                        (the app, a task, or a folder's project) / do / import / status; engine.ts start / stop /
-│                        restart / version through launchctl on the bundle's job (EngineControl, readHealth,
-│                        HUMAN_ONLY_ENGINE_COMMANDS); logs.ts `shinsa logs`; app.ts the app's bundle id, the
+│                        restart / version through the platform's EngineService (EngineControl, readHealth,
+│                        HUMAN_ONLY_ENGINE_COMMANDS); launchd.ts the Mac's EngineService on the app's launchd job
+│                        (createLaunchdService); logs.ts `shinsa logs`; app.ts the app's bundle id, the
 │                        engine's label and `shinsa://` links; surface.ts every `shinsa <group> <action>` (help,
 │                        --json, the idempotency key); api.ts the HTTP client and the surface client, which wake the
 │                        engine once when it does not answer; session.ts reads a Claude Code session for
@@ -43,9 +46,14 @@ src/
 │                        ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
-│                        source), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
-│                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or after draining:
-│                        new runs held until the working ones hand over, 15 minutes at most)
+│                        source), targets.ts (ENGINE_TARGETS, the darwin and Linux builds scripts/build-engine.ts
+│                        accepts, and each one's dist folder), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1`
+│                        the launchd job and the systemd unit set; EngineService, what start, stop, restart and
+│                        waking need from either), systemd.ts (createSystemdService: the `shinsa.service` user
+│                        unit with Restart=on-failure, written or refreshed on Linux by the start command and driven
+│                        through `systemctl --user`), restart.ts (EngineRestarter, createServiceRestarter: stop
+│                        cleanly and exit 75 for the service to start it again, now or after draining: new runs
+│                        held until the working ones hand over, 15 minutes at most)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
 │                        (argv, MCP schemas and tool input), spec.ts (defineCommand / defineRead / defineAction),
@@ -69,6 +77,8 @@ src/
 │                        `fish -lc` when the interactive shell handed off to fish) and
 │                        merges it into the server's, and
 │                        isStartedFromTerminal (a TTY on stdin or stdout) decides whether `shinsa engine` needs it
+│                        (the default shell is zsh on the Mac, /bin/sh elsewhere); browser.ts
+│                        (resolveBrowserCommand: `open` on the Mac, `xdg-open` with a display, null without one)
 ├── store/               EventLog (event-log.ts: the SQLite events, effects, receipts, snapshots and briefings (the
 │                        Home guide) tables; readEvents reports a damaged row instead of throwing and reads from a
 │                        position; replaceLegacyEvents, the one-time rewrite of older events and move of briefings
@@ -169,7 +179,14 @@ src/
 │                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
 │                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
 │                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the
-│                        classifier reads every machine's policies with a new task's request and names its machine), index.ts (Remote: wires
+│                        classifier reads every machine's policies with a new task's request and names its machine),
+│                        shares.ts (Shares: the share.link effect, which makes a link's id and key; the live
+│                        view of a shared task, its evidence files by hash and its pull request's diff and changed
+│                        files whole; every open link, pushed on each state change and ended when sharing stops or
+│                        remote access goes off, and a link whose time ran out refused),
+│                        share-clock.ts (ShareClock: share.expire when a share's time runs out),
+│                        share-channel.ts (ShareChannel: the tunnel's /share channel, the hello checked against
+│                        the link's key, sealed frames out, nothing read after the hello), index.ts (Remote: wires
 │                        them, pairing, pausing, removing, enrolling, the stable webhook URL, markRemoteRequest and
 │                        resolveRequestOrigin)
 ├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
@@ -219,7 +236,9 @@ src/
 │                        check's describeWorkspaceProblem)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create with its body, retarget,
-│                        merge (only the approved head, `--match-head-commit`), the repository's numeric id, a user
+│                        merge (only the approved head, `--match-head-commit`), the repository's numeric id,
+│                        a pull request's diff (`gh pr diff`) and a file at a commit (readRepoFile), what a shared
+│                        task's Code tab shows, a user
 │                        attachment upload and rewriting the description's block (writePullRequestBlock);
 │                        description.ts: PullRequestDescriptions (uploads the evidence GitHub cannot reach, reads
 │                        the notes, builds the body with core's serializePullRequestMarkdown); ci.ts: whether a
@@ -253,8 +272,9 @@ src/
 │                        (setup verification before a task's first agent)
 ├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts: the folders macOS keeps
 │                        private as PrivateFoldersError, and opening Full Disk Access), the prerequisite checks
-│                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional, each with
-│                        the command that fixes it), the setup steps: the fixed list, what each shows and saves
+│                        (prerequisites.ts: git, gh, claude, bun when a repository uses it, Homebrew when a fix
+│                        needs it, and codex and its sign-in as optional, each with the command that fixes it;
+│                        install.ts: that command run in a terminal of your own), the setup steps: the fixed list, what each shows and saves
 │                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
 │                        back and its saved state (flow.ts), the accounts it lists (accounts.ts)
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's

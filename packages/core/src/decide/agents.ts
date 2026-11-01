@@ -89,7 +89,7 @@ export function proposePlan(decider: Decider, command: CommandOf<'agent.propose_
     return;
   }
   decider.stage(task.id, 'awaiting_plan', proposed.backlog ? BACKLOG_REASON : PLAN_READY_REASON);
-  decider.openGate(task.id, 'plan', task.title, body, {
+  decider.openGate(task.id, 'plan', command.document.title ?? task.title, body, {
     details: { planVersion: proposed.plan?.version ?? 1 },
   });
 }

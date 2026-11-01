@@ -203,6 +203,7 @@ export interface PlanPhase {
 }
 
 export interface PlanDocument {
+  title?: string;
   goal: string;
   phases: PlanPhase[];
   behaviour: string[];

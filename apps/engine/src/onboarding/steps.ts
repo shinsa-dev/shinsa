@@ -349,28 +349,40 @@ const DEFAULTS: StepDefinition = {
 };
 
 function describeAccountCount(accounts: ClaudeAccount[]) {
-  if (accounts.length === 0) return 'None yet';
   return accounts.length === 1 ? '1 account' : `${accounts.length} accounts`;
+}
+
+function describeAccountsStep(installed: boolean, signedIn: boolean) {
+  if (!installed)
+    return 'Agents run on Claude Code. Install it here, then sign in to the Claude account agents work under.';
+  if (signedIn) {
+    return 'Agents work under these Claude accounts. When one runs out of usage, Shinsa moves the work to the next.';
+  }
+  return 'Sign in to the Claude account agents work under. You can add more accounts later in Settings.';
 }
 
 const ACCOUNTS: StepDefinition = {
   id: 'accounts',
-  label: 'Accounts',
+  label: 'Claude',
   view: async (context) => {
-    const accounts = await context.listAccounts();
+    const [accounts, report] = await Promise.all([context.listAccounts(), context.checkPrerequisites()]);
+    const checks = report.checks.filter((check) => check.id === 'claude');
+    const installed = checks.every((check) => check.ok);
     const signedIn = accounts.some((account) => account.signedIn);
     return createView({
-      title: 'Which accounts can agents use?',
-      description: signedIn
-        ? 'Agents work under these Claude accounts and your Codex login. When one runs out of usage, Shinsa moves the work to the next.'
-        : 'Agents need a Claude account or Codex to work. Add one now, or later in Settings.',
-      submitLabel: signedIn ? 'Continue' : 'Skip for now',
+      title: 'Sign in with Claude',
+      description: describeAccountsStep(installed, signedIn),
+      checks,
+      ready: installed && signedIn,
     });
   },
   summarize: async (context) => describeAccountCount(await context.listAccounts()),
-  answer: (values) => {
+  answer: async (values, context) => {
     assertContinue(values);
-    return Promise.resolve();
+    const accounts = await context.listAccounts();
+    if (!accounts.some((account) => account.signedIn)) {
+      throw new DomainError('account_required', 'Sign in to a Claude account first. Agents work under it.');
+    }
   },
 };
 
@@ -383,16 +395,21 @@ const PREREQUISITES: StepDefinition = {
       title: 'The tools Shinsa runs',
       description: report.ready
         ? 'Everything Shinsa needs is installed on this machine.'
-        : 'Some tools are missing. Each one says how to install it; check again when you are done.',
+        : 'Some tools are missing. Install each one here, or ask an agent for help when an install fails. Setup finishes once every one is there.',
       checks: report.checks,
       ready: report.ready,
-      submitLabel: report.ready ? 'Finish setup' : 'Finish anyway',
+      submitLabel: 'Finish setup',
     });
   },
   summarize: () => Promise.resolve(null),
-  answer: (values) => {
+  answer: async (values, context) => {
     assertContinue(values);
-    return Promise.resolve();
+    if (!(await context.checkPrerequisites()).ready) {
+      throw new DomainError(
+        'tools_missing',
+        'Install the missing tools first. Setup finishes once every one is there.'
+      );
+    }
   },
 };
 

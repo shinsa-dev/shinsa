@@ -68,6 +68,7 @@ import type { DelegationEventBody } from './delegations.ts';
 import type { FeedbackEventBody } from './feedback.ts';
 import type { MemoryEventBody } from './memory.ts';
 import type { ScheduleEventBody } from './schedules.ts';
+import type { ShareEventBody } from './shares.ts';
 import type { SlackEventBody } from './slack.ts';
 import type { WatchdogEventBody } from './watchdogs.ts';
 
@@ -108,6 +109,7 @@ type EventBody =
   | WatchdogEventBody
   | MemoryEventBody
   | FeedbackEventBody
+  | ShareEventBody
   | {
       type: 'task.triaged';
       taskId: string;
@@ -127,6 +129,7 @@ type EventBody =
   | { type: 'task.change_approved'; taskId: string }
   | { type: 'task.staged'; taskId: string; stage: TaskStage; reason: string; by?: 'you' }
   | { type: 'task.prioritized'; taskId: string; priority: TaskPriority; by?: 'you' }
+  | { type: 'task.retitled'; taskId: string; round: number; title: string }
   | { type: 'task.duplicated'; taskId: string; duplicate: TaskDuplicate }
   | { type: 'task.duplicate_cleared'; taskId: string }
   | { type: 'task.waits_on_changed'; taskId: string; waitsOn: string[]; by?: 'you' | 'shinsa' }

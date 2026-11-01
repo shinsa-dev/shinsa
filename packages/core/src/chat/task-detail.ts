@@ -49,7 +49,17 @@ function describeHeader(state: ShinsaState, task: Task) {
     ]
       .filter(Boolean)
       .join(' · '),
+    describeShare(task),
   ].filter(Boolean);
+}
+
+function describeShare(task: Task) {
+  const share = task.share;
+  if (!share) return '';
+  if (share.failure) return `Shared by link, but it could not be published: ${share.failure}`;
+  return share.url
+    ? `Shared by link: ${share.url}`
+    : 'Shared by link, waiting for app.shinsa.dev to make the link';
 }
 
 function describePlan(task: Task) {

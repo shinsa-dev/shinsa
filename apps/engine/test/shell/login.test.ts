@@ -10,6 +10,8 @@ import {
   isStartedFromTerminal,
   mergePathLists,
   parseLoginEnv,
+  refreshInstallFolders,
+  resolveDefaultShell,
 } from '../../src/shell/login.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 
@@ -177,7 +179,7 @@ describe('the login shell environment', () => {
     expect(env).toMatchObject({ FAKE_FISH_VAR: 'from fish' });
   });
 
-  test('defaults to zsh in the home folder of this machine', async () => {
+  test('defaults to the platform’s shell in the home folder of this machine', async () => {
     const runs: { command: string[]; cwd: string }[] = [];
     const reader = createLoginEnvReader(
       {},
@@ -189,7 +191,14 @@ describe('the login shell environment', () => {
       }
     );
     expect(await reader.read()).toEqual({ A: '1' });
-    expect(runs).toEqual([{ command: expect.arrayContaining(['/bin/zsh', '-lic']), cwd: homedir() }]);
+    expect(runs).toEqual([
+      { command: expect.arrayContaining([resolveDefaultShell(), '-lic']), cwd: homedir() },
+    ]);
+  });
+
+  test('falls back to zsh on the Mac and sh elsewhere', () => {
+    expect(resolveDefaultShell('darwin')).toBe('/bin/zsh');
+    expect(resolveDefaultShell('linux')).toBe('/bin/sh');
   });
 
   test('a shell that hangs, fails or is missing gives nothing, and says so', async () => {
@@ -251,5 +260,19 @@ describe('applying it to the server’s environment', () => {
     const bare: Record<string, string | undefined> = {};
     await applyLoginEnv(bare, { read: () => Promise.resolve(null) }, join(home, 'missing'));
     expect(bare.PATH?.includes('missing')).toBe(false);
+  });
+
+  test('adding the install folders again picks up one created since, once', () => {
+    const home = createTempDir();
+    const env: Record<string, string | undefined> = { PATH: '/usr/bin', HOME: home };
+    refreshInstallFolders(env);
+    const before = env.PATH;
+    mkdirSync(join(home, '.bun/bin'), { recursive: true });
+    refreshInstallFolders(env);
+    refreshInstallFolders(env);
+    expect(env.PATH).toBe(`${before}:${join(home, '.bun/bin')}`);
+    const empty: Record<string, string | undefined> = {};
+    refreshInstallFolders(empty, home);
+    expect(empty.PATH?.split(':')[0]).toBe(join(home, '.bun/bin'));
   });
 });

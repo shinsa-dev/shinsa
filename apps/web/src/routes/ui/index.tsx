@@ -189,7 +189,7 @@ export function UiPage() {
           <Section
             id='shinsa-setup'
             title='Shinsa composites · setup'
-            description='Each kind of setup step and the finished page, from apps/web/src/components/onboarding, on sample steps. Every action only shows a toast.'
+            description='Each kind of setup step, from apps/web/src/components/onboarding, on sample steps. Every action only shows a toast.'
             className='flex-col items-start gap-8'
           >
             <OnboardingSpecimens />

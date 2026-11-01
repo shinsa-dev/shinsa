@@ -1101,6 +1101,7 @@ describe('hand-overs', () => {
   test('the service tools reach the task’s own runs, and only for the roles that have them', async () => {
     const services = {
       home: '/home',
+      dataDir: '/data',
       snapshot: () => ({ terminals: [], services: [], home: '/home' }),
       startService: () => createInfo(),
       stopService: () => Promise.resolve(),

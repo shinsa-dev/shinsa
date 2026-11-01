@@ -66,6 +66,7 @@ export interface CheckRun {
 export interface CheckOptions {
   timeoutMs: number;
   signal?: AbortSignal;
+  env?: Record<string, string>;
 }
 
 export type BaseComparison = (run: CheckRun) => Promise<FailureDiff | null>;
@@ -76,7 +77,7 @@ export interface CheckRoundOptions extends CheckOptions {
 
 export function runCheckCommand(argv: string[], cwd: string, options: CheckOptions) {
   const prefix = Bun.which('nice') ? LOW_PRIORITY : [];
-  return runCommand([...prefix, ...argv], cwd, { env: CHECK_ENV, ...options });
+  return runCommand([...prefix, ...argv], cwd, { ...options, env: { ...CHECK_ENV, ...options.env } });
 }
 
 function joinOutput(result: CommandResult) {

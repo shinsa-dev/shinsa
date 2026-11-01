@@ -18,10 +18,17 @@ import { ServiceRefiner, Terminals } from '../../src/terminals/index.ts';
 import {
   createTerminalSockets,
   resolveServicePlace,
+  resolveServiceRunIn,
   resolveTerminalStart,
   type TerminalSocketData,
 } from '../../src/terminals/routes.ts';
-import { createTempDir, createTestConfig, createTestOnboarding, until } from '../helpers/index.ts';
+import {
+  createTempDir,
+  createTestConfig,
+  createTestOnboarding,
+  until,
+  writeFiles,
+} from '../helpers/index.ts';
 import { createFakeSpawner, createFakeViewer } from './fakes.ts';
 
 setDefaultTimeout(30_000);
@@ -559,6 +566,11 @@ describe('services for a task over HTTP', () => {
     const refused = await call(outside.id, 'start', { taskId });
     expect(refused.error?.code).toBe('service_place_invalid');
     expect(refused.error?.message).toContain('It cannot run in this task.');
+    expect(resolveServiceRunIn(engine.state, service, taskId, terminals)?.env).toEqual({});
+    writeFiles(worktree, { 'turbo.json': '{}' });
+    expect(resolveServiceRunIn(engine.state, service, taskId, terminals)?.env).toEqual({
+      TURBO_CACHE_DIR: join(terminals.dataDir, 'caches', repoId, 'turbo'),
+    });
   });
 });
 

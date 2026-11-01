@@ -1,6 +1,7 @@
 import { type FindingVerdictKind, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
 import * as React from 'react';
 import { Choice } from '@/components/controls/choice.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import { resolveVerdict, resolveVerdictDraft, VERDICT_ITEMS } from '@/lib/overview/verdicts.ts';
@@ -20,10 +21,11 @@ export function VerdictChoice({
 }
 
 export function FindingVerdictChoice({ task, finding }: { task: Task; finding: number | null }) {
+  const readOnly = useReadOnly();
   const draft = useReviewDraft();
   const selectOpen = React.useCallback((state: ShinsaState) => hasOpenReviewGate(state, task.id), [task.id]);
   const reviewing = useShinsaSelector(selectOpen);
-  if (finding === null || !reviewing) return null;
+  if (finding === null || !reviewing || readOnly) return null;
   const verdicts = resolveVerdictDraft(task.findings, draft.verdicts);
   return (
     <VerdictChoice

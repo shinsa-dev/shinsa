@@ -51,7 +51,7 @@ const STEP_LABELS: [OnboardingStepId, string][] = [
   ['roots', 'Folders'],
   ['projects', 'Projects'],
   ['defaults', 'Defaults'],
-  ['accounts', 'Accounts'],
+  ['accounts', 'Claude'],
   ['prerequisites', 'Tools'],
 ];
 
@@ -101,6 +101,7 @@ export function createStep(overrides: Partial<OnboardingStep> = {}): OnboardingS
     checks: [],
     ready: true,
     problem: null,
+    help: null,
     submitLabel: 'Continue',
     ...overrides,
   };
@@ -121,6 +122,7 @@ export function createFlow(
     index,
     step,
     revisit: false,
+    welcome: null,
     ...overrides,
   };
 }

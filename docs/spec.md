@@ -296,13 +296,11 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same popover, marked as
   from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); an opened
   issue's row shows who sent it and, once it is closed on GitHub, Closed. The button's count is what waits for you (`docs/engine.md` → Feedback).
-- **Setup.** A chat on first run (and from Settings → General → Setup later) with a fixed list of
-  questions: the folders that hold your repositories (found on this machine, with their
-  repository counts), the default model, the merge method, plan approval, your Claude accounts and
-  the tools Shinsa needs. Pick a suggestion or answer in your own words; an answer that names an
-  option is taken as is, a skip (or a plain yes where no option is a yes) keeps what is saved, and
-  any other is read by a quick model call that knows what each option means, said back and confirmed (the accounts and tools steps act at once). It can never add, skip or
-  reorder a question. Nothing about folders is hard-coded:
+- **Setup.** Your first task, on first run (and from Settings → General → Setup later), with a fixed list of
+  steps you pass like gates: the folders that hold your repositories (found on this machine, with their
+  repository counts), the projects for them, the default model, the merge method and plan approval, signing in
+  with Claude, and the tools Shinsa needs, each installed with one click. It can never add, skip or reorder a
+  step, and finishing leaves a done "Welcome to Shinsa" task. Nothing about folders is hard-coded:
   Settings → Projects → Repository folders shows the chosen ones, editable, with Find folders.
 - **Every agent can manage Shinsa.** There is no separate conversation: the task chat is where you
   talk, and a question with no repository work (an Answer task) is how you just talk. Every task
@@ -389,13 +387,24 @@ The Mac app (`apps/desktop`) is how you run Shinsa: the engine is compiled into 
 app registers, so it keeps working when the window is closed or the app quit, and the app adds the Dock badge,
 notifications, `shinsa://` links, the `shinsa` command and its own updates (`docs/plans/app-plan.md`,
 `docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
+On an always-on Linux server the same engine runs headless as a systemd user service that `shinsa start` sets up,
+set up over SSH and reached through remote access (`docs/engine.md` → Run on a server). Planned, not built: a
+published package and install script for it.
 Planned, not built: signing with a Developer ID, other providers (Cursor), and dev-server and
 simulator previews per worktree.
 Remote access: Settings → General → Remote access pairs this machine with app.shinsa.dev through GitHub sign-in and adds
 the devices (browsers and phones) that may reach it; app.shinsa.dev is one dashboard over every machine a device was added to, each
 task showing its machine, and with several machines New task places each task automatically (its project's machine, a
 where your policies, plain-English sentences the classifier reads with the request, send it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
-`docs/plans/remote-plan.md`).
+`docs/plans/remote-plan.md`). Share task (a task's menu) makes a link,
+`app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
+access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
+owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
+Review and Code (a private repository's too) but its chat, and it changes the moment the task does; the machine reads
+nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
+a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
+cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
+(`docs/engine.md` → Sharing a task).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
 that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
@@ -437,8 +446,8 @@ own machine in Settings → General → Slack (`docs/engine.md` → Slack).
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
 - **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access
   opens your machines as one dashboard at one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
-  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state
-  (`docs/plans/remote-plan.md`).
+  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state but the
+  tasks you share by link, as a read-only projection without their chat (`docs/plans/remote-plan.md`).
 
 ## 7. Codebase
 
@@ -630,12 +639,15 @@ watch, Merge queues, Health):
   waiting, not failed.
 - The web shows a banner when the server skipped a damaged event at boot.
 
-**WS5 Onboarding** (`docs/engine.md` → The setup steps): five steps on first run, one at a time (Folders,
-Projects, Defaults, Accounts, Tools), each with the recommended answer already picked (folders also by path),
-any earlier one open to change. Your projects are suggested from the repositories in your folders and made
-with one press, your Claude logins are imported for you, a folder macOS keeps private asks for access
-instead of failing, and the prerequisites are checked with the command that fixes each. Nothing else opens
-until setup is complete.
+**WS5 Onboarding** (`docs/engine.md` → The setup steps): setup reads as your first task, "Set up Shinsa", whose
+five steps (Folders, Projects, Defaults, Claude, Tools) are gates you pass one at a time, each with the
+recommended answer already picked (folders also by path), any earlier one open to change. Your projects are
+suggested from the repositories in your folders and made with one press, a folder macOS keeps private asks for
+access instead of failing, Claude Code is installed if it is missing and you sign in to your Claude account (no
+login is found or imported for you), and each missing tool installs in a terminal on the step when you click
+Install (Bun only when a repository uses it). When an install still fails, an agent reads the failing checks and
+replies with commands you run with one click. Finishing records a done "Welcome to Shinsa" task that sums up what
+you set up, and you land on it. Nothing else opens until setup is complete.
 
 **WS6 Delegation** (`docs/engine.md` → Delegation): a working agent hands self-contained work to
 other agents and gets the results pushed back into its turn; it can file tasks of its own

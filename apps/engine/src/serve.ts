@@ -29,7 +29,7 @@ import { resolveServerUrl, startServer } from './http/index.ts';
 import {
   acquireDataDirLock,
   BUNDLE,
-  createLaunchdRestarter,
+  createServiceRestarter,
   resolveServerInstance,
   type ServerInstance,
 } from './instance/index.ts';
@@ -46,6 +46,8 @@ import {
   type StartConnector,
 } from './remote/index.ts';
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
+import { ShareClock } from './remote/share-clock.ts';
+import { Shares } from './remote/shares.ts';
 import {
   createDiscoverer,
   createLoginResolver,
@@ -163,6 +165,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     machineName: resolveMachineName(),
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
+  const shares = new Shares({ engine, remote, evidence });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
@@ -219,6 +222,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     briefings,
     terminals,
     remote,
+    shares,
     slack,
     inbox,
     quick,
@@ -234,9 +238,11 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       new WatchdogClock(engine),
       new UsageResumeClock(engine),
       new SilenceWatch(engine, transcripts),
+      new ShareClock(engine),
     ],
     effects: new EffectRunner(engine, config, runs, briefings, {
       workspaces: runs.workspaces,
+      shares,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
@@ -272,6 +278,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
       models,
       run: options.runPrerequisite,
       accounts: options.accounts ?? createOnboardingAccounts(accounts),
+      terminals: services.terminals,
     }),
     accounts,
     schedules: services.schedules,
@@ -283,8 +290,9 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     place: options.place ?? createPlacementAsker(services.quick.classify),
     workspaces: services.runs.workspaces,
     remote: services.remote,
+    shares: services.shares,
     slack: services.slack,
-    restarter: createLaunchdRestarter(engine, {
+    restarter: createServiceRestarter(engine, {
       byService: options.byService ?? false,
       drain: services.runs,
       stop: () => services.stopShinsa?.() ?? Promise.resolve(),

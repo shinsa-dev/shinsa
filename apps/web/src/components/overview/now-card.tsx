@@ -35,6 +35,7 @@ import { SilenceNote } from '@/components/overview/silence-note.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InsetNote } from '@/components/text/inset-note.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
@@ -127,6 +128,7 @@ export function QuestionCard({
   gate: Gate;
   onReply?: GateReplier;
 }) {
+  const readOnly = useReadOnly();
   const { busy, run } = useBusy<'answer'>();
   const asked = gate.runId ? state.runs[gate.runId] : undefined;
   const answer = (response: string) => run('answer', () => onReply('answer', response));
@@ -136,14 +138,18 @@ export function QuestionCard({
       title={gate.title}
     >
       {gate.body && <Markdown text={gate.body} className='text-fg-3 text-xs' />}
-      <QuestionChoices gate={gate} busy={busy !== null} onPick={(choice) => void answer(choice)} />
-      <AnswerBox
-        label='Your answer'
-        placeholder={describeAnswerPlaceholder(gate)}
-        submitLabel='Send answer'
-        busy={busy === 'answer'}
-        onSubmit={answer}
-      />
+      {!readOnly && (
+        <>
+          <QuestionChoices gate={gate} busy={busy !== null} onPick={(choice) => void answer(choice)} />
+          <AnswerBox
+            label='Your answer'
+            placeholder={describeAnswerPlaceholder(gate)}
+            submitLabel='Send answer'
+            busy={busy === 'answer'}
+            onSubmit={answer}
+          />
+        </>
+      )}
     </NowFrame>
   );
 }
@@ -163,9 +169,10 @@ export function PausedCard({
   onReply?: GateReplier;
   cancelLabel?: string;
 }) {
+  const readOnly = useReadOnly();
   const { busy, run: act } = useBusy<GateReply>();
   const reply = (key: GateReply) => void act(key, () => onReply(key));
-  const run = gate.runId ? state.runs[gate.runId] : undefined;
+  const run = gate.runId && !readOnly ? state.runs[gate.runId] : undefined;
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -363,6 +370,7 @@ function WorkCard({
   task: Task;
   onOpen: (target: NowTarget, runId?: string) => void;
 }) {
+  const readOnly = useReadOnly();
   const progress = resolveTaskProgress(task);
   const [run] = listActiveRuns(state, task.id);
   const current = progress.current;
@@ -408,7 +416,7 @@ function WorkCard({
       )}
       {checks && <ChecksBlock taskId={task.id} view={checks} />}
       {run && <SilenceNote state={state} run={run} />}
-      {run && <LiveFeed run={run} />}
+      {run && !readOnly && <LiveFeed run={run} />}
     </NowFrame>
   );
 }

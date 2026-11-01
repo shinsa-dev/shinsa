@@ -37,13 +37,3 @@ export function isClipped(
   if (axis === 'block') return box.scrollHeight > box.clientHeight + 1;
   return box.scrollWidth > box.clientWidth;
 }
-
-/**
- * How many characters, laid out left to right with these right edges, end
- * inside a box whose right edge is `edge`. Never less than one, so a sweep
- * over them always has a length.
- */
-export function countVisibleChars(rights: number[], edge: number): number {
-  const shown = rights.findIndex((right) => right > edge + 0.5);
-  return Math.max(1, shown === -1 ? rights.length : shown);
-}

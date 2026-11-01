@@ -1,13 +1,14 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveBuildFolder, resolveBuildTarget } from '../src/instance/targets.ts';
 import { resolveStateVersion } from '../src/store/snapshot.ts';
 
 const engineDir = resolve(import.meta.dirname, '..');
-const outDir = resolve(engineDir, 'dist/engine');
+const target = resolveBuildTarget(Bun.env.SHINSA_ENGINE_TARGET);
+const outDir = resolve(engineDir, 'dist', resolveBuildFolder(target));
 const webDist = resolve(engineDir, '../web/dist');
 const version = Bun.env.SHINSA_VERSION?.replace(/^v/, '') || '0.0.0';
-const target = Bun.env.SHINSA_ENGINE_TARGET || 'bun-darwin-arm64';
 
 function readCommit() {
   const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: engineDir });
@@ -18,7 +19,7 @@ function readCommit() {
 async function compile(entry: string, name: string, define: Record<string, string>) {
   const result = await Bun.build({
     entrypoints: [entry],
-    compile: { target: target as Bun.Build.CompileTarget, outfile: join(outDir, 'bin', name) },
+    compile: { target, outfile: join(outDir, 'bin', name) },
     define,
     minify: false,
     sourcemap: 'none',
@@ -56,4 +57,4 @@ await compile(join(engineDir, 'scripts/engine-main.ts'), 'shinsa', {
 cpSync(resolve(engineDir, 'plugin'), join(outDir, 'plugin'), { recursive: true });
 cpSync(webDist, join(outDir, 'web'), { recursive: true });
 
-process.stdout.write(`Shinsa ${version} engine in ${outDir}\n`);
+process.stdout.write(`Shinsa ${version} engine for ${target} in ${outDir}\n`);

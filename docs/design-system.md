@@ -319,7 +319,6 @@ a Tailwind v4 utility, a custom utility defined in the Tokens section, or an arb
 | `@base-ui/react` | ^1.4.0 | The headless primitives: dialog, alert dialog, popover, preview card, menu, context menu, select, tabs, tooltip, checkbox, switch, scroll area, separator, field |
 | `cmdk` | 1.1.1 | The command menu's filtering and keyboard model |
 | `sonner` | ^2.0.7 | Toasts |
-| `motion` | ^12.43.0 | `SizeAnimator`, `ShimmeringText` and reduced-motion reads |
 | `class-variance-authority` | ^0.7.1 | Variant tables (`buttonVariants`, `badgeVariants`) |
 | `clsx`, `tailwind-merge` | ^2.1.1, ^3.5.0 | `cn()` |
 | `tw-animate-css` | ^1.4.0 | `animate-in`, `animate-out`, `fade-*`, `zoom-*`, `slide-in-from-*` |
@@ -626,7 +625,6 @@ Leading and tracking utilities in use:
 | `leading-relaxed` | 1.625 | Code fences, Home's guide copy |
 | `leading-3.5` | 14px | A text diagram inside a code fence (`data-diagram`) |
 | `leading-normal` | 1.5 | A shimmering live line (`SHIMMER_LINE`) |
-| `leading-none` | 1 | `ShimmeringText`'s inline box |
 | `leading-[1.35]` | 1.35 | Tooltip text (kit-internal) |
 | `tracking-tight` | -0.0175em | Large titles (catalog only) |
 | `tracking-widest` | 0.1em | A menu item's shortcut (`DropdownMenuShortcut`) |
@@ -1394,7 +1392,7 @@ Every click and hover lands in the frame it happens, as in a Mac app. A hover, p
 | Image viewer | 240ms open and close; swaps 200ms slide 10px or 150ms fade | `cubic-bezier(0.22, 1, 0.36, 1)`; swaps `cubic-bezier(0.23, 1, 0.32, 1)` | The flight from a thumbnail, backdrop and chrome fades; `SHRUNK` 0.96 |
 | Toast | shake 350ms `cubic-bezier(0.36, 0.07, 0.19, 0.97)`; bump 300ms `ease-out`; loader out 200ms; result icon in 240ms `cubic-bezier(0.22, 1, 0.36, 1)` | | Sonner (stacking keeps Sonner's own 500ms) |
 | Update button | 200ms | | Scales in: `animate-in fade-in-0 zoom-in-95 duration-200` |
-| Shimmering text | 1s per cycle, characters staggered across it, a rest of 50ms per character between cycles, `easeInOut`; stops over 0.5s `easeOut` | | A running agent's line (`ShimmeringText`, `muted-foreground` to `foreground`) |
+| Shimmering text | A 6em band crosses the line in 1s, or at 50ms a character on a line longer than 20 (up to 80), `linear`, then rests for half as long; `transform` only, so it runs on the compositor | | A running agent's line (`ShimmeringText`, `muted-foreground` to `foreground`) |
 | Pulse | `animate-ping` at 60% opacity | | A status dot for work in progress (`motion-reduce:animate-none`) |
 | Spinner | `animate-spin` (1s linear) | | Loading |
 
@@ -1505,7 +1503,7 @@ Global and unlayered, so it beats Sonner's injected stylesheet and inline styles
 ```
 
 - Exempt: `.animate-spin` (a spinner that stops stops saying "working"), and dialogs and their scrims (`data-reduced-motion="fade"`), which drop their scale (`motion-reduce:…:scale-100`) and keep their fade.
-- Looping movement opts out explicitly too: `motion-reduce:animate-none` on the pulse, `motion-reduce:transition-none` on the tab line. `ShimmeringText` stops (reads `useReducedMotion`). The image viewer only fades: it animates through the Web Animations API, which the global reset does not reach, so it drops the flight from the thumbnail for a 240ms fade and swaps with a 150ms fade and no slide. An onboarding step's own rule (`--onboarding-shift: 0`, 160ms) loses to the global reset's `!important`, so under reduced motion a step appears at once.
+- Looping movement opts out explicitly too: `motion-reduce:animate-none` on the pulse, `motion-reduce:transition-none` on the tab line. `ShimmeringText` drops its sweep (`motion-reduce:hidden`). The image viewer only fades: it animates through the Web Animations API, which the global reset does not reach, so it drops the flight from the thumbnail for a 240ms fade and swaps with a 150ms fade and no slide. An onboarding step's own rule (`--onboarding-shift: 0`, 160ms) loses to the global reset's `!important`, so under reduced motion a step appears at once.
 
 ### What never animates
 
@@ -3530,28 +3528,28 @@ Sections are 12px apart (`gap-3`); header and footer have 12px padding; the head
 
 **Not for:** a loading state of a read (that is a spinner after a 300ms wait); static labels; anything that is paused (render the plain text instead).
 
-**Wraps:** `motion` (`motion.span`, `useReducedMotion`).
+**Wraps:** nothing: a `span` and two CSS utilities in `globals.css` (`shimmer-window`, `shimmer-copy`).
 
 **Props:**
 
 | Prop | Default | Notes |
 | --- | --- | --- |
-| `text` | required | A string; each character animates on its own. |
-| `duration` | `1` (s) | One shimmer cycle. |
+| `text` | required | A string, rendered once, with a hidden copy for the band. |
+| `duration` | `1` (s) | The time the band takes to cross a short line; a longer one is crossed at 50ms a character (`resolveShimmerDuration`). |
 | `paused` | `false` | Stop the shimmer (for example when off screen). |
-| `className` and `motion.span` props | | |
+| `className` and `span` props | | |
 
 **Markup and classes:**
 
-- Outer `motion.span`: `inline-flex select-none items-center leading-none [--color:var(--muted-foreground)] [--shimmering-color:var(--foreground)]` + `className`.
-- One `motion.span` per character: `inline-block whitespace-pre leading-none`, `aria-hidden`.
-- A trailing `<span className='sr-only'>{text}</span>` so assistive tech reads the whole string once.
+- Outer `span`, `data-slot="shimmering-text"`: `relative inline-block select-none whitespace-nowrap [--color:var(--muted-foreground)] [--shimmering-color:var(--foreground)] [color:var(--color)]` + `className`, the text, and `--shimmer-duration` set inline.
+- Unless `paused`, after the text: a clip `span` (`pointer-events-none absolute inset-0 overflow-clip motion-reduce:hidden`, `aria-hidden`), holding the window (`shimmer-window block size-full overflow-hidden`), holding the copy (`shimmer-copy block truncate [color:var(--shimmering-color)]`) with the same text.
 
-**Animation per character** (state `running`):
+**Animation:**
 
-- `color` keyframes: `var(--color)` → `var(--shimmering-color)` → `var(--color)` (`muted-foreground` = `fg-2` → `foreground` = `fg-4` → `fg-2`).
-- duration `duration` s, `easeInOut`, repeat forever (`loop`), `repeatDelay` = `text.length × 0.05` s, `delay` = `charIndex × duration / text.length` s. With the defaults the bright band sweeps the whole string left to right in 1s, then the line rests for 50ms per character.
-- `stopped` (when `paused` or the user prefers reduced motion): `color: var(--color)` over `duration × 0.5` s `easeOut`. Initial state is `stopped`.
+- The window is masked to a 6em band at its right edge (`transparent` → black at its middle → `transparent`) and moves from `translateX(-100%)` to `translateX(6em)`; the copy inside moves the opposite way, `translateX(100%)` to `translateX(-6em)`, so it stays over the text and only the band shows it (`muted-foreground` = `fg-2` → `foreground` = `fg-4` → `fg-2`).
+- One cycle is `--shimmer-duration`: the crossing is the first 66%, `linear`; the rest is still with the band past the line's end. `resolveShimmerDuration(text.length, duration)` sets it: `max(duration, min(length, 80) × 0.05) / 0.66` s.
+- The band crosses the nearest positioned box, so a line cut off by its own box (`SHIMMER_LINE`) ends its sweep at the ellipsis. A parent that truncates (`Truncate` around the queue row's line) takes `relative` and the text `static`: the band crosses the parent's visible width. The clip `span` keeps the moving window out of every ancestor's scroll width.
+- Nothing runs on the main thread while it loops: no per-character spans, no measuring, no JavaScript. A paused line has no window and is plain text.
 
 **In Shinsa** the line class is `SHIMMER_LINE` = `block truncate leading-normal`, and a changed step remounts the component (`key={step}`) so the sweep restarts. Override the two colour variables to shimmer on another surface.
 
@@ -7488,24 +7486,24 @@ style of its own.
   `flex h-dvh flex-col overflow-hidden bg-background text-fg-3`.
 - **Locked until done**: while setup is not complete every route replaces itself with setup, so a link, the address
   bar, Back or the app's menu all land there. A run started again from Settings is not locked: every step's footer
-  then has "Close setup" (`secondary`), which goes to Settings. Opening setup once it is finished goes Home.
+  then has "Close setup" (`secondary`), which goes to Settings. Opening setup once it is finished goes to the welcome task, or Home on a run again.
 - **Column**: `mx-auto flex w-full max-w-xl flex-col gap-6 px-6` + `pt-6 pb-16 md:pt-12` (48px from the top from
-  `md` up). Everything starts on the column's left edge. The stepper, the step and its footer are 24px apart.
-- **Stepper**: one segmented `Choice` in a 26px slot (`flex h-6.5 items-center`), each step's label, no numbers, no
-  circles. The current step is the selected segment and the pill slides to the next one (the stepper sits outside
-  the step, so it is not remounted). An answered step has the accent checkmark before its label and its answer as
-  the tooltip ("Opus 5.5"); a reached but unanswered step is plain; both open their step; a step not reached yet is
-  disabled. A click while an answer saves does nothing. Below `sm` the segments give way to one `PAGE_DESCRIPTION`
-  line in the same slot ("Step 2 of 6: Model"). The finished page keeps the 26px slot empty, so the title sits at the
-  same height on every step.
+  `md` up). Everything starts on the column's left edge. The header, the step and its footer are 24px apart.
+- **Setup reads as the first task**: above the step, the page's own heading ("Set up Shinsa", one line under it),
+  then the steps as a task's path of gates: the progress track's marks and connectors, a passed step done (the green
+  tick, its connector green), the one on screen current (the accent pulse, its label `font-medium`,
+  `aria-current="step"`), the rest pending. A passed or reached step is a button that opens it, with its answer as
+  the tooltip ("Opus 5.5 · Squash · Plan first"); a step not reached yet and the one on screen are disabled. A click
+  while an answer saves does nothing. A hairline closes the header. Below `sm` only the current step keeps its
+  label. The header sits outside the step, so it never slides.
 - **Step**: `flex flex-col gap-6`: an inner `flex flex-col gap-4` with the heading (the question itself as
   `PAGE_TITLE`, "How should pull requests be merged?", and one line of `PAGE_DESCRIPTION` under it, `gap-px`), then
   the body 16px under it, then a refused answer's reason as an error line; then the footer 24px under.
 - **Footer**: `flex items-center justify-between gap-3`, no hairline above. Left: Back (`secondary`,
   `IconArrowLeft`), or an empty span on the first step. Right (`flex items-center gap-1.5`, 6px apart): Close setup
-  on a re-run, the step's own secondary action ("Add account", "Check again" with `IconArrowRotateClockwise`), and
-  the primary named for the step ("Continue", "Skip for now", "Finish setup", "Finish anyway") with `IconArrowRight`
-  at its end. All `default` size.
+  on a re-run, the step's own secondary action ("Add account", or an icon-only `IconArrowRotateClockwise` button
+  whose label and tooltip say "Check the tools again"), and the primary named for the step ("Continue", "Finish setup")
+  with `IconArrowRight` at its end, off until the step is ready. All `default` size.
 - **Error line**: `flex min-w-0 items-start gap-1.25 text-red-text text-xs leading-relaxed`, `IconExclamationCircle`
   at `size='sm'` in the 20px slot, the text `selectable min-w-0 whitespace-pre-wrap break-words`.
 - **Motion**: the step enters with a 0.5rem slide and a fade, 220ms on `cubic-bezier(0.23, 1, 0.32, 1)`, from the left when going
@@ -7524,12 +7522,18 @@ style of its own.
     .onboarding-in, .onboarding-in-back { --onboarding-shift: 0; animation-duration: 160ms; }
   }
   ```
-- **Imports happen, they are not asked**: anything the server can bring in by itself is already there when the step
-  opens, marked "Added". Until the data arrives, the card holds one row with a delayed loading line, never "none
-  found". A failed import is an amber line under the card.
-- **Finished page**: "Shinsa is ready", one line ("Start your first task from Home. You can change any of this in
-  Settings."), a Settings card of what was set up (one `SettingRow` each, the answer at the right as
-  `max-w-64 text-fg-3 text-xs` `Truncate`) and "Go to Home" (primary, arrow at its end).
+- **Sign in, never import**: an account the app needs is one primary button ("Sign in with Claude") on an empty
+  row, never a login found on the machine and copied. The step does not move on without one. Until the data arrives, the card holds one row with a delayed
+  loading line, never "none found".
+- **Install in place**: a missing tool's row is its name on one line, then a copy button and Install (`sm`,
+  `IconConsole`), which opens a terminal inside the card that runs the tool's own command; when it ends the terminal
+  goes and the tools are checked again, a failed install leaving one line saying so. With two or more missing, a row
+  above them offers Install all (`primary`), one terminal that installs each in the order they need; with one, its
+  Install is the primary. The flow never finishes with a required tool missing: its forward button stays off and
+  `secondary` until they are all there. When one still fails, "Ask an
+  agent for help" under the card shows the agent's reply in place, each command in it with Run in terminal.
+- **Finishing opens the first task**: the last step lands on a done task that sums up what was set up; there is no
+  finished page.
 - No folder path or other machine-specific value is ever written into the UI code; the ones on screen come from the
   server.
 - **Ask before you need it, and never as an error**: a permission the app needs only for some choices (a folder the
@@ -7537,7 +7541,7 @@ style of its own.
   the choices stay as picked, and coming back to the window checks again by itself.
 - **Suggest, then let them edit**: what the app can work out (projects from repositories) is shown worked out and
   kept, each row with a name to change and a box to untick, and the primary button counts what will be made ("Create 6 projects").
-- Example: Shinsa's five-step setup (Folders, Projects, Defaults, Accounts, Tools).
+- Example: Shinsa's five-step setup (Folders, Projects, Defaults, Claude, Tools).
 
 #### Pick-one and pick-many option lists
 
@@ -7568,10 +7572,13 @@ A list of checks is a Settings card of rows (`SETTING_ROW` with `gap-2`):
 - The outcome icon in a 14px slot: passed `IconCheckCircle2Filled` `text-primary-4`, failed `IconCircleXFilled`
   `text-red-4`, skipped `IconCircleDotted` `text-fg-2`; its tooltip names the outcome in its text tone
   (`text-primary-text`, `text-red-text`, `text-fg-2`).
-- The name (`text-fg-4 text-xs`) over its fix as inline markdown (`text-2xs text-fg-3`), `flex-col gap-px`.
-- Version or state at the right: `TOKEN_TEXT` + `min-w-0 max-w-1/2 shrink text-end`, truncated.
+- The name alone on one line (`text-fg-4 text-xs`, truncated), so every row keeps the icon level with its text.
+- Version or state at the right: `TOKEN_TEXT` + `min-w-0 max-w-1/2 shrink text-end`, truncated; a failed check
+  with a fix shows its 24px copy button and `sm` Install there instead, 4px apart.
 - An optional check that fails is "skipped", never "failed", and never holds the flow back.
-- "Check again" sits in the footer, busy while it runs.
+- Checking again is an icon-only button in the footer ("Check the tools again"); while it runs its spinner takes the
+  icon's place, never beside it (pass the glyph as `icon`, not as a child).
+- A login with a page of its own is not a row; a tool's own login folds into its row (Install, then Sign in).
 - Example: setup's Tools step.
 
 #### The now card: one frame for every process state

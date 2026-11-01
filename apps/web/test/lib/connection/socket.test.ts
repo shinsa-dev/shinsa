@@ -15,6 +15,7 @@ import {
   replaceConnection,
   sendCommand,
   TRANSCRIPT_CACHE_LIMIT,
+  TRANSCRIPT_ENTRY_LIMIT,
   useConnection,
   useDesktopConnected,
   useMachine,
@@ -636,6 +637,24 @@ describe('Connection transcripts', () => {
     expect(subject.selectTranscript('watched')).toEqual([entry('w')]);
     expect(subject.selectTranscript('r0')).toEqual([]);
     expect(subject.selectTranscript('r1')).toEqual([entry('a')]);
+  });
+
+  it('drops the transcripts read longest ago once they hold too many entries, never a watched one', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    const half = Array.from({ length: TRANSCRIPT_ENTRY_LIMIT / 2 }, (_, index) => entry(`e${index}`));
+    subject.watchTranscript('watched');
+    latest().receive({ type: 'transcript', runId: 'watched', entries: half, start: 0 });
+    latest().receive({ type: 'transcript', runId: 'old', entries: half.slice(1), start: 0 });
+    latest().receive({ type: 'transcript', runId: 'new', entries: [entry('n')], start: 0 });
+    expect(subject.selectTranscript('watched')).toHaveLength(TRANSCRIPT_ENTRY_LIMIT / 2);
+    expect(subject.selectTranscript('old')).toHaveLength(TRANSCRIPT_ENTRY_LIMIT / 2 - 1);
+    latest().receive({ type: 'transcript', runId: 'newer', entries: [entry('m')], start: 0 });
+    expect(subject.selectTranscript('old')).toEqual([]);
+    expect(subject.selectTranscript('watched')).toHaveLength(TRANSCRIPT_ENTRY_LIMIT / 2);
+    expect(subject.selectTranscript('new')).toEqual([entry('n')]);
+    expect(subject.selectTranscript('newer')).toEqual([entry('m')]);
   });
 
   it('counts a released transcript as read last, so it outlives older ones', () => {

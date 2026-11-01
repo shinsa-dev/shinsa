@@ -16,6 +16,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { selectReadOnlyRefusal } from './read-only.ts';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 
@@ -108,6 +109,8 @@ export const NO_UNREACHABLE_MACHINES: UnreachableMachine[] = [];
 export const NO_MACHINE_ACCESS: MachineAccess[] = [];
 
 export const TRANSCRIPT_CACHE_LIMIT = 24;
+
+export const TRANSCRIPT_ENTRY_LIMIT = 10_000;
 
 function openShinsaSocket() {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -371,12 +374,15 @@ export class Connection implements ShinsaConnection {
   }
 
   #evictTranscripts() {
-    let excess = this.#transcripts.size - TRANSCRIPT_CACHE_LIMIT;
-    for (const runId of this.#transcripts.keys()) {
-      if (excess <= 0) return;
+    let runs = this.#transcripts.size;
+    let entries = 0;
+    for (const kept of this.#transcripts.values()) entries += kept.length;
+    for (const [runId, kept] of this.#transcripts) {
+      if (runs <= TRANSCRIPT_CACHE_LIMIT && entries <= TRANSCRIPT_ENTRY_LIMIT) return;
       if (this.#transcriptRefs.has(runId)) continue;
       this.#transcripts.delete(runId);
-      excess -= 1;
+      runs -= 1;
+      entries -= kept.length;
     }
   }
 
@@ -500,6 +506,8 @@ export function useTranscript(runId: string | null) {
 }
 
 export function sendCommand(command: UserCommand, machineId?: string | null) {
+  const refusal = selectReadOnlyRefusal();
+  if (refusal) return Promise.reject(refusal);
   return connection.command(command, machineId);
 }
 

@@ -1,6 +1,7 @@
 import type { Activity, ShinsaState, Task } from '@shinsa/core';
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { WideSection } from '@/components/queue/queue.tsx';
+import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { TaskGlyph } from '@/components/status/glyphs.tsx';
 import { TaskMeta } from '@/components/status/text.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
@@ -8,6 +9,7 @@ import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { resolveHomeSectionId, resolvePreview } from '@/lib/home.ts';
+import { isTaskShared } from '@/lib/share/dialog.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 export function RecentlyFinished({ state, finished }: { state: ShinsaState; finished: Task[] }) {
@@ -23,6 +25,7 @@ export function RecentlyFinished({ state, finished }: { state: ShinsaState; fini
           key={task.id}
           leading={<TaskGlyph state={state} task={task} />}
           title={task.title}
+          mark={isTaskShared(task) && <SharedMark task={task} />}
           meta={
             <>
               <TaskHandlePrefix task={task} />
@@ -50,6 +53,7 @@ export function RecentConversations({ conversations }: { conversations: { task: 
           key={task.id}
           leading={<StatusTile icon='IconBubbleText' tone='neutral' />}
           title={task.title}
+          mark={isTaskShared(task) && <SharedMark task={task} />}
           meta={
             <>
               <TaskHandlePrefix task={task} />

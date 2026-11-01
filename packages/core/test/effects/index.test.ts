@@ -56,6 +56,11 @@ describe('resolveEffectLane', () => {
     );
   });
 
+  test("making a share link runs in its own lane, so it never waits behind the task's work", () => {
+    expect(resolveEffectLane({ kind: 'share.link', taskId: 't' })).toBe('share:t');
+    expect(resolveEffectKey({ kind: 'share.link', taskId: 't' }, 4)).toBe('share.link:t:4');
+  });
+
   test('everything else about a task runs in order in the task lane, except the cheap watch in its side lane', () => {
     const checks: ShinsaEffect = { kind: 'checks.run', taskId: 't', round: 0, checks: [], coverage: true };
     for (const effect of [...TASK_EFFECTS, checks]) {

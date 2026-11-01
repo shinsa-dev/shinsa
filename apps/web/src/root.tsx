@@ -13,6 +13,7 @@ import { HealthBanner } from '@/components/status/health-banner.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { DuplicateDialog } from '@/components/task/duplicate-dialog.tsx';
 import { ForkDialog } from '@/components/task/fork-dialog.tsx';
+import { ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
 import { useAttention } from '@/hooks/use-attention.ts';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { useCommandMenuOpen, writeCommandMenuOpen } from '@/lib/command/registry.ts';
@@ -182,6 +183,8 @@ function App({ route }: { route: PageRoute }) {
       </ErrorBoundary>
       <ErrorBoundary size='silent'>
         <ForkDialog />
+        <ShareDialog />
+        <UnshareConfirm />
         <DuplicateDialog />
       </ErrorBoundary>
     </>

@@ -272,6 +272,17 @@ src/
 │                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), and which machine a new task
 │                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and the policies the classifier reads: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
+├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
+│                    from the task, its current evidence and the project's name; everything its owner sees but
+│                    chats, runs' prompts, messages, gate answers, and attachments) and hasSharedCode
+│                    (decide/shares.ts: task.share and task.unshare, human-only, and the share.link effect;
+│                    how long, ShareLimit and the shareLimit setting, ended by syncShares when a task shared
+│                    until_done settles and by share.expire;
+│                    share.record, the link the engine made; share.fail, why it could not); the link and its
+│                    live channel are remote/shares.ts (ShareLink, serializeShareUrl, parseShareUrl,
+│                    ShareLiveView, SHARE_FILE_TYPES and the share paths) and
+│                    remote/share-channel.ts (the hello and welcome HMACs with the link's key,
+│                    deriveShareSessionKey, the ShareMessage the machine alone sends)
 ├── slack/           The Slack bot, shared by the engine and the hosted Worker: the forwarded mention and its parser
 │                    (contract.ts: SlackMention, parseSlackMention, SLACK_LIMITS, SLACK_ENGINE_EVENTS_PATH), the
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as

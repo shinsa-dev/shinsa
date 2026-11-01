@@ -350,6 +350,17 @@ describe('the task commands', () => {
     ],
     [['tasks', 'done', 'fix'], { type: 'task.complete', taskId: 'task-123' }, 'Marked as done.'],
     [
+      ['tasks', 'share', 'fix'],
+      { type: 'task.share', taskId: 'task-123' },
+      'Shared. Its link shows on the task in a moment.',
+    ],
+    [
+      ['tasks', 'share', 'fix', '--until', 'day'],
+      { type: 'task.share', taskId: 'task-123', limit: 'day' },
+      'Shared. Its link shows on the task in a moment.',
+    ],
+    [['tasks', 'unshare', 'fix'], { type: 'task.unshare', taskId: 'task-123' }, 'No longer shared.'],
+    [
       ['tasks', 'prioritize', 'fix', 'urgent'],
       { type: 'task.prioritize', taskId: 'task-123', priority: 'urgent' },
       'Priority set to urgent.',

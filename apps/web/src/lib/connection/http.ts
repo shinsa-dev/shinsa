@@ -1,3 +1,5 @@
+import { selectReadOnlyRefusal } from './read-only.ts';
+
 async function readBody(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -12,6 +14,8 @@ function describeRefusal(body: unknown, code: number) {
 }
 
 async function send(path: string, body: unknown, accept?: string) {
+  const refusal = body === undefined ? null : selectReadOnlyRefusal();
+  if (refusal) throw refusal;
   try {
     if (body === undefined && accept) return await fetch(path, { headers: { accept } });
     if (body === undefined) return await fetch(path);

@@ -15,10 +15,12 @@ import { MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
 export function RemoteShell({
   session,
   dashboard,
+  wide = false,
   children,
 }: {
   session: RemoteSession | null;
   dashboard: Pick<DashboardClient, 'signOut'>;
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const user = session?.user ?? null;
@@ -44,7 +46,9 @@ export function RemoteShell({
           </Button>
         )}
       </header>
-      <main className='mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 pt-10 pb-16'>{children}</main>
+      <main className={cn('flex w-full flex-1 flex-col', !wide && 'mx-auto max-w-lg gap-6 px-4 pt-10 pb-16')}>
+        {children}
+      </main>
     </div>
   );
 }

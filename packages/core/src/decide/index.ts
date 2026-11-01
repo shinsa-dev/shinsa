@@ -58,6 +58,7 @@ import {
 } from './messages.ts';
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
+import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import {
@@ -105,6 +106,7 @@ import {
   writeProject,
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
+import { expireShare, failShare, recordShare, shareTask, syncShares, unshareTask } from './shares.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import {
   answerSlackQuestion,
@@ -270,6 +272,16 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordFeedbackFailure(decider, command);
     case 'agent.report_feedback':
       return reportFeedback(decider, command);
+    case 'task.share':
+      return shareTask(decider, command);
+    case 'task.unshare':
+      return unshareTask(decider, command);
+    case 'share.record':
+      return recordShare(decider, command);
+    case 'share.fail':
+      return failShare(decider, command);
+    case 'share.expire':
+      return expireShare(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':
@@ -414,6 +426,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordSlackStatus(decider, command);
     case 'slack.answer':
       return answerSlackQuestion(decider, command);
+    case 'onboarding.welcome':
+      return recordWelcome(decider, command);
   }
 }
 
@@ -425,6 +439,7 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   }
   apply(decider, command);
   releaseWaiting(decider);
+  syncShares(decider);
   syncWatchdogs(decider);
   syncMergeSteps(decider);
   startQueuedRounds(decider);

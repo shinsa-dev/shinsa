@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import type { OnboardingFlow } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { closeSignIn } from '@/lib/connection/accounts.ts';
+import { connection } from '@/lib/connection/socket.ts';
+import { syncTerminalViews } from '@/lib/terminal/view.ts';
 import { OnboardingPage } from '@/routes/onboarding.tsx';
 import { createAccount, createProviderLogin, createSnapshot } from '../support/accounts.ts';
 import {
@@ -12,7 +14,21 @@ import {
   createStep,
   startFakeOnboarding,
 } from '../support/onboarding.ts';
-import { pushAccounts, startFakeServer, stopFakeServer } from '../support/server.ts';
+import { pushAccounts, pushState, startFakeServer, stopFakeServer } from '../support/server.ts';
+import { createGate, createShinsaState, createTask } from '../support/state.ts';
+import { createTerminal, createTerminalsSnapshot } from '../support/terminals.ts';
+
+class QuietSocket {
+  binaryType = 'blob';
+  readyState = 0;
+  addEventListener() {}
+  send() {}
+  close() {}
+}
+
+const globals = globalThis as { WebSocket: unknown };
+
+const realWebSocket = globals.WebSocket;
 
 let fake: ReturnType<typeof startFakeOnboarding> | null = null;
 
@@ -21,6 +37,8 @@ afterEach(() => {
   fake?.stop();
   fake = null;
   stopFakeServer();
+  syncTerminalViews(new Set());
+  globals.WebSocket = realWebSocket;
 });
 
 const ROOTS = createStep({
@@ -97,7 +115,14 @@ describe('the setup page', () => {
     serve(createFlow(createStep()));
     renderPage();
     expect(await screen.findByRole('heading', { name: 'How should agents work?' })).toBeTruthy();
-    expect(screen.getByRole('navigation', { name: 'Setup, step 3 of 5' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Set up Shinsa' })).toBeTruthy();
+    const path = screen.getByRole('navigation', { name: 'Setup, step 3 of 5' });
+    expect(
+      within(path)
+        .getByRole('button', { name: /Defaults/ })
+        .getAttribute('aria-current')
+    ).toBe('step');
+    expect((within(path).getByRole('button', { name: /Claude/ }) as HTMLButtonElement).disabled).toBe(true);
     const merge = screen.getByRole('listbox', { name: 'Merging' });
     const options = within(merge).getAllByRole('option');
     expect(options.map((option) => option.getAttribute('aria-selected'))).toEqual(['true', 'false']);
@@ -187,7 +212,7 @@ describe('the setup page', () => {
   it('opens any step you already answered from the steps at the top', async () => {
     serve(createFlow(createStep()), [() => createFlow(ROOTS)]);
     renderPage();
-    fireEvent.click(await screen.findByRole('tab', { name: 'Folders' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Folders/ }));
     expect(await screen.findByRole('heading', { name: 'Where do you keep your repositories?' })).toBeTruthy();
     expect(sentReplies()).toEqual([{ type: 'open', stepId: 'roots' }]);
   });
@@ -224,37 +249,58 @@ describe('the setup page', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('offers each claude-swap account as a sign-in of its own from Add account', async () => {
-    startFakeServer();
-    pushAccounts(
-      createSnapshot({
-        accounts: [createAccount({ id: 'me', email: 'me@example.com', origin: 'claude' })],
-        imports: [{ origin: 'cswap', email: 'swap@acme.dev', plan: null }],
-      })
-    );
-    fake = startFakeOnboarding({
-      'GET /api/onboarding/flow': {
-        answer: createFlow(
-          createStep({ id: 'accounts', title: 'Which accounts can agents use?', options: [] })
-        ),
-      },
-      'GET /api/onboarding': { answer: createOnboardingStatus() },
-      'POST /api/accounts/import': { answer: createSnapshot() },
+  it('with Claude Code missing it offers to install or copy it and no sign-in, then hides the terminal and checks again when the install ends', async () => {
+    globals.WebSocket = QuietSocket;
+    const missing = createStep({
+      id: 'accounts',
+      title: 'Sign in with Claude',
+      ready: false,
+      submitLabel: 'Continue',
+      checks: [
+        {
+          id: 'claude',
+          label: 'Claude Code',
+          ok: false,
+          detail: 'Not installed.',
+          fix: 'Install Claude Code, which agents run on.',
+          command: 'curl -fsSL https://claude.ai/install.sh | bash',
+        },
+      ],
     });
+    const terminal = createTerminal({ id: 'install', projectId: 'setup', name: 'Set up Claude Code' });
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': { answer: createFlow(missing) },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+      'POST /api/onboarding/install': { answer: { terminal } },
+    });
+    act(() => connection.replaceTerminals(createTerminalsSnapshot([terminal])));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
-    const item = await screen.findByRole('menuitem', { name: /Sign in to swap@acme\.dev/ });
-    expect(item.textContent).toBe('Sign in to swap@acme.devFrom claude-swap');
-    fireEvent.click(item);
+    fireEvent.click(await screen.findByRole('button', { name: 'Install' }));
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
+    expect(screen.queryByText('Install Claude Code, which agents run on.')).toBeNull();
+    expect(screen.queryByText('curl -fsSL https://claude.ai/install.sh | bash')).toBeNull();
+    expect((screen.getByRole('button', { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /Sign in with Claude/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add account' })).toBeNull();
     await waitFor(() =>
-      expect(fake?.requests.find((request) => request.path === '/api/accounts/import')?.body).toEqual({
-        origin: 'cswap',
-        email: 'swap@acme.dev',
+      expect(fake?.requests.find((request) => request.path === '/api/onboarding/install')?.body).toEqual({
+        id: 'claude',
       })
     );
+    const reads = () =>
+      fake?.requests.filter((request) => request.method === 'GET' && request.path === '/api/onboarding/flow')
+        .length ?? 0;
+    expect(reads()).toBe(1);
+    await waitFor(() => expect(document.querySelector('.xterm')).not.toBeNull());
+    act(() =>
+      connection.replaceTerminals(createTerminalsSnapshot([{ ...terminal, status: 'exited', exitCode: 0 }]))
+    );
+    await waitFor(() => expect(reads()).toBe(2));
+    expect(document.querySelector('.xterm')).toBeNull();
+    expect(screen.queryByText(/The install ended/)).toBeNull();
   });
 
-  it('lists the Claude accounts and Codex, adds either from Add account, and removes one you do not want', async () => {
+  it('lists the Claude accounts and Codex, signs in to another from Add account, and removes one you do not want', async () => {
     const codexSignedOut = createProviderLogin({
       status: 'signed_out',
       method: null,
@@ -276,8 +322,11 @@ describe('the setup page', () => {
         answer: createFlow(
           createStep({
             id: 'accounts',
-            title: 'Which accounts can agents use?',
+            title: 'Sign in with Claude',
             options: [],
+            checks: [
+              { id: 'claude', label: 'Claude Code', ok: true, detail: '2.1', fix: null, command: null },
+            ],
           })
         ),
       },
@@ -305,13 +354,7 @@ describe('the setup page', () => {
         accountId: 'work',
       })
     );
-    const write = spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
     fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Codex account/ }));
-    await waitFor(() => expect(write).toHaveBeenCalledWith('codex login'));
-    write.mockRestore();
-    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Claude account/ }));
     await waitFor(() =>
       expect(fake?.requests.some((request) => request.path === '/api/accounts/login')).toBe(true)
     );
@@ -328,12 +371,12 @@ describe('the setup page', () => {
     );
   });
 
-  it('offers to sign in again or to sign in at all when no account works', async () => {
+  it('offers to sign in again, and with no account one Sign in with Claude and no way on', async () => {
     startFakeServer();
     pushAccounts(createSnapshot({ accounts: [createAccount({ id: 'old', signIn: 'signed_out' })] }));
     fake = startFakeOnboarding({
       'GET /api/onboarding/flow': {
-        answer: createFlow(createStep({ id: 'accounts', options: [], submitLabel: 'Skip for now' })),
+        answer: createFlow(createStep({ id: 'accounts', options: [], ready: false })),
       },
       'GET /api/onboarding': { answer: createOnboardingStatus() },
       'POST /api/accounts/login': { answer: createSnapshot() },
@@ -345,27 +388,28 @@ describe('the setup page', () => {
         accountId: 'old',
       })
     );
-    expect(screen.getByRole('button', { name: /Skip for now/ })).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(true);
     pushAccounts(createSnapshot({ accounts: [] }));
-    expect(await screen.findByText('Shinsa found no Claude login on this machine.')).toBeTruthy();
-    pushAccounts(
-      createSnapshot({ accounts: [], providers: [createProviderLogin({ email: 'me@openai.com' })] })
+    expect(await screen.findByText('No Claude account yet. Agents need one to work.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add account' })).toBeNull();
+    expect(screen.queryByText(/claude-swap/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Claude' }));
+    await waitFor(() =>
+      expect(
+        fake?.requests
+          .filter((request) => request.path === '/api/accounts/login')
+          .map((request) => request.body)
+      ).toEqual([{ accountId: 'old' }, {}])
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
-    expect(await screen.findByRole('menuitem', { name: /Sign in to Claude/ })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Codex account/ }).getAttribute('aria-disabled')).toBe(
-      'true'
-    );
-    expect(screen.getAllByText(/Signed in with ChatGPT/).length).toBeGreaterThan(0);
   });
 
-  it('checks the tools again, finishes setup and shows what you set up with a way home', async () => {
+  it('shows each tool as one line, checks again from the icon button, and finishes only once every tool is there', async () => {
     const tools = createStep({
       id: 'prerequisites',
       title: 'The tools Shinsa runs',
       options: [],
       ready: false,
-      submitLabel: 'Finish anyway',
+      submitLabel: 'Finish setup',
       checks: [
         { id: 'git', label: 'Git', ok: true, detail: 'git version 2.50', fix: null, command: null },
         {
@@ -378,21 +422,35 @@ describe('the setup page', () => {
         },
       ],
     });
-    serve(createFlow(tools), [() => createFlow(null)]);
+    const installed = createStep({
+      ...tools,
+      ready: true,
+      checks: tools.checks.map((check) => ({ ...check, ok: true, detail: '1.0' })),
+    });
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': { answer: () => (reads() > 1 ? createFlow(installed) : createFlow(tools)) },
+      'POST /api/onboarding/flow': { answer: createFlow(null, { welcome: 'welcome-1' }) },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+    });
+    const reads = () =>
+      fake?.requests.filter((request) => request.path === '/api/onboarding/flow').length ?? 0;
     history.replaceState(null, '', '/onboarding');
     renderPage();
-    expect(await screen.findByText('bun: not found')).toBeTruthy();
-    expect(screen.getByText(/Install Bun from/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    expect(await screen.findByText('Bun')).toBeTruthy();
+    expect(screen.queryByText(/Install Bun from/)).toBeNull();
+    expect(screen.queryByText('curl -fsSL https://bun.sh/install | bash')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
+    expect(screen.getByText('git version 2.50')).toBeTruthy();
+    expect(screen.queryByText('bun: not found')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Finish anyway/ })).toBeNull();
+    expect((screen.getByRole('button', { name: /Finish setup/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText('Check again')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Check the tools again' }));
     await waitFor(() =>
-      expect(fake?.requests.filter((request) => request.path === '/api/onboarding/flow')).toHaveLength(2)
+      expect((screen.getByRole('button', { name: /Finish setup/ }) as HTMLButtonElement).disabled).toBe(false)
     );
-    fireEvent.click(await screen.findByRole('button', { name: /Finish anyway/ }));
-    expect(await screen.findByRole('heading', { name: 'Shinsa is ready' })).toBeTruthy();
-    expect(screen.getByText('Accounts answer')).toBeTruthy();
-    expect(location.pathname).toBe('/onboarding');
-    fireEvent.click(screen.getByRole('button', { name: /Go to Home/ }));
-    expect(location.pathname).toBe('/');
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/ }));
+    await waitFor(() => expect(location.pathname).toBe('/tasks/welcome-1'));
   });
 
   it('a folder macOS keeps private offers System Settings, checks again when you come back, or leaves it out', async () => {
@@ -432,7 +490,7 @@ describe('the setup page', () => {
     ]);
   });
 
-  it('a tool you install by command shows it to copy, and the tools are checked again when you come back', async () => {
+  it('a missing tool shows a copy button and Install, and the tools are checked again when you come back', async () => {
     const tools = createStep({
       id: 'prerequisites',
       title: 'The tools Shinsa runs',
@@ -451,8 +509,10 @@ describe('the setup page', () => {
     });
     serve(createFlow(tools));
     renderPage();
-    expect(await screen.findByText('brew install gh')).toBeTruthy();
+    expect(await screen.findByText('GitHub CLI')).toBeTruthy();
+    expect(screen.queryByText('brew install gh')).toBeNull();
     expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Install' })).toBeTruthy();
     const reads = () =>
       fake?.requests.filter((request) => request.method === 'GET' && request.path === '/api/onboarding/flow')
         .length;
@@ -462,6 +522,130 @@ describe('the setup page', () => {
       window.dispatchEvent(new Event('focus'));
     });
     await waitFor(() => expect(reads()).toBe((before ?? 0) + 1));
+  });
+
+  it('with several tools missing, Install all runs them in one terminal and Finish setup waits', async () => {
+    const missing = (id: string, label: string, command: string) => ({
+      id,
+      label,
+      ok: false,
+      detail: 'Not installed.',
+      fix: null,
+      command,
+    });
+    const tools = createStep({
+      id: 'prerequisites',
+      title: 'The tools Shinsa runs',
+      ready: false,
+      submitLabel: 'Finish setup',
+      checks: [
+        missing('gh', 'GitHub CLI', 'brew install gh'),
+        missing('bun', 'Bun', 'curl -fsSL https://bun.sh/install | bash'),
+        { ...missing('codex', 'Codex', 'npm install -g @openai/codex'), optional: true },
+      ],
+    });
+    startFakeServer();
+    const terminal = createTerminal({ id: 'all', projectId: 'setup', name: 'Set up the missing tools' });
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': { answer: createFlow(tools) },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+      'POST /api/onboarding/install': { answer: { terminal } },
+    });
+    renderPage();
+    expect(await screen.findByText('2 tools are missing')).toBeTruthy();
+    const isPrimary = (button: HTMLElement) => button.className.includes('before:bg-primary');
+    expect(isPrimary(screen.getByRole('button', { name: 'Install all' }))).toBe(true);
+    expect(isPrimary(screen.getByRole('button', { name: /Finish setup/ }))).toBe(false);
+    expect(screen.getAllByRole('button', { name: 'Install' }).some(isPrimary)).toBe(false);
+    globals.WebSocket = QuietSocket;
+    act(() => connection.replaceTerminals(createTerminalsSnapshot([terminal])));
+    fireEvent.click(screen.getByRole('button', { name: 'Install all' }));
+    await waitFor(() =>
+      expect(fake?.requests.find((request) => request.path === '/api/onboarding/install')?.body).toEqual({
+        all: true,
+      })
+    );
+    await waitFor(() => expect(document.querySelector('.xterm')).not.toBeNull());
+  });
+
+  it('asks an agent for help with the failing checks, shows its reply, and runs a command from it', async () => {
+    const tools = createStep({
+      id: 'prerequisites',
+      title: 'The tools Shinsa runs',
+      ready: false,
+      submitLabel: 'Finish setup',
+      checks: [
+        {
+          id: 'gh',
+          label: 'GitHub CLI',
+          ok: false,
+          detail: 'Not installed.',
+          fix: null,
+          command: 'brew install gh',
+        },
+      ],
+    });
+    startFakeServer();
+    pushState(createShinsaState({ tasks: [createTask({ id: 'help-1', result: null })] }));
+    const terminal = createTerminal({ id: 'fix', projectId: 'setup', name: 'Fix from the agent' });
+    fake = startFakeOnboarding({
+      'GET /api/onboarding/flow': { answer: createFlow(tools) },
+      'POST /api/onboarding/flow': { answer: createFlow({ ...tools, help: 'help-1' }) },
+      'GET /api/onboarding': { answer: createOnboardingStatus() },
+      'POST /api/onboarding/install': { answer: { terminal } },
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Ask an agent for help/ }));
+    expect(await screen.findByText('An agent is looking into the failing checks')).toBeTruthy();
+    expect(sentReplies()).toEqual([{ type: 'help', stepId: 'prerequisites' }]);
+    pushState(
+      createShinsaState({
+        tasks: [createTask({ id: 'help-1', result: null })],
+        gates: [
+          createGate({
+            id: 'q-1',
+            taskId: 'help-1',
+            type: 'question',
+            title: 'Which shell do you use?',
+          }),
+        ],
+      })
+    );
+    expect(await screen.findByText('Which shell do you use?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Send answer' })).toBeTruthy();
+    expect(screen.queryByText('An agent is looking into the failing checks')).toBeNull();
+    pushState(
+      createShinsaState({
+        tasks: [
+          createTask({
+            id: 'help-1',
+            result: {
+              step: 'answer',
+              body: 'Install Homebrew first.\n\n```bash run\nbrew install gh\n```',
+              runId: null,
+              at: 1,
+            },
+          }),
+        ],
+      })
+    );
+    expect(await screen.findByText('Install Homebrew first.')).toBeTruthy();
+    globals.WebSocket = QuietSocket;
+    act(() => connection.replaceTerminals(createTerminalsSnapshot([terminal])));
+    fireEvent.click(screen.getByRole('button', { name: 'Run in terminal' }));
+    await waitFor(() =>
+      expect(fake?.requests.find((request) => request.path === '/api/onboarding/install')?.body).toEqual({
+        command: 'brew install gh',
+      })
+    );
+    await waitFor(() => expect(document.querySelector('.xterm')).not.toBeNull());
+    act(() =>
+      connection.replaceTerminals(createTerminalsSnapshot([{ ...terminal, status: 'exited', exitCode: 1 }]))
+    );
+    expect(
+      await screen.findByText('The install ended with code 1. Install it again, or ask an agent for help.')
+    ).toBeTruthy();
+    expect(document.querySelector('.xterm')).toBeNull();
   });
 
   it('lets you leave setup you started again from Settings', async () => {

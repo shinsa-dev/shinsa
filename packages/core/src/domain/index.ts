@@ -81,6 +81,7 @@ export {
   resolveMemoryText,
 } from './memory.ts';
 export { ON_BEHALF_ACTION_LIMIT, type OnBehalfAction } from './on-behalf.ts';
+export { selectWelcomeTask, WELCOME_TASK } from './onboarding.ts';
 export {
   describeOverlaps,
   listNewOverlapPaths,
@@ -161,9 +162,13 @@ export {
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolveShareEnd,
+  resolveShareLimit,
   resolveWatchdogDefaults,
   SETTINGS_KEYS,
   type Settings,
+  SHARE_LIMITS,
+  type ShareLimit,
   WATCHDOG_DEFAULTS,
   WATCHDOG_SETTING_LIMITS,
 } from './settings.ts';

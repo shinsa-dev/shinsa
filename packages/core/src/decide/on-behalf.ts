@@ -10,7 +10,9 @@ type HumanOnlyType =
   | 'memory.accept'
   | 'memory.remove'
   | 'feedback.file'
-  | 'watch_suggestion.accept';
+  | 'watch_suggestion.accept'
+  | 'task.share'
+  | 'task.unshare';
 
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'gate.answer',
@@ -20,6 +22,8 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'memory.remove',
   'feedback.file',
   'watch_suggestion.accept',
+  'task.share',
+  'task.unshare',
 ]);
 
 type OnBehalfCommand = Exclude<UserCommand, { type: HumanOnlyType }>;

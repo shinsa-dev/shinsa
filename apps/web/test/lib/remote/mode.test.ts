@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { resolveSharePagePath } from '@shinsa/core';
 import {
   clearEnrollFragment,
   isRemoteBuild,
@@ -32,18 +33,34 @@ describe('the remote page’s mode', () => {
   });
 
   it('shows the pair page, the enroll page, or the one dashboard of every machine, all at the root', () => {
-    expect(resolveRemoteView({ pathname: '/slack/linked', search: '?team=Acme' })).toEqual({ kind: 'slack' });
-    expect(resolveRemoteView({ pathname: '/pair', search: '?code=K7PQ' })).toEqual({
+    expect(resolveRemoteView({ pathname: '/slack/linked', search: '?team=Acme', hash: '' })).toEqual({
+      kind: 'slack',
+    });
+    expect(resolveRemoteView({ pathname: '/pair', search: '?code=K7PQ', hash: '' })).toEqual({
       kind: 'pair',
       claimCode: 'K7PQ',
     });
-    expect(resolveRemoteView({ pathname: '/pair', search: '' })).toEqual({
+    expect(resolveRemoteView({ pathname: '/pair', search: '', hash: '' })).toEqual({
       kind: 'pair',
       claimCode: null,
     });
-    expect(resolveRemoteView({ pathname: '/enroll', search: '' })).toEqual({ kind: 'enroll' });
-    expect(resolveRemoteView({ pathname: '/tasks/LOC-1', search: '' })).toEqual({ kind: 'app' });
-    expect(resolveRemoteView({ pathname: '/', search: '' })).toEqual({ kind: 'app' });
+    expect(resolveRemoteView({ pathname: '/enroll', search: '', hash: '' })).toEqual({ kind: 'enroll' });
+    expect(resolveRemoteView({ pathname: '/tasks/LOC-1', search: '', hash: '' })).toEqual({ kind: 'app' });
+    expect(resolveRemoteView({ pathname: '/', search: '', hash: '' })).toEqual({ kind: 'app' });
+    const shareId = 'BwcHBwcHBwcHBwcHBwcHBw';
+    const key = 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk';
+    expect(
+      resolveRemoteView({ pathname: resolveSharePagePath('k3x9', shareId), search: '', hash: `#${key}` })
+    ).toEqual({
+      kind: 'share',
+      link: { instanceId: 'k3x9', shareId, key },
+    });
+    expect(
+      resolveRemoteView({ pathname: resolveSharePagePath('k3x9', shareId), search: '', hash: '' })
+    ).toEqual({
+      kind: 'share',
+      link: null,
+    });
     expect(SERVICE_WORKER_PATH).toBe('/sw.js');
     expect(SERVICE_WORKER_SCOPE).toBe('/');
   });

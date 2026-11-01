@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useOnHide } from '@/hooks/use-on-hide.ts';
 import { SPOTLIGHT_FADE_MS, SPOTLIGHT_HOLD_MS } from '@/hooks/use-spotlight.ts';
 
 const NEAR_BOTTOM = 80;
@@ -22,6 +23,11 @@ export function useStickToBottom(focusRunId: string | null) {
   const lastTop = React.useRef(0);
   const focus = React.useRef<{ runId: string; until: number } | null>(null);
   const [detached, setDetached] = React.useState(false);
+
+  useOnHide(() => {
+    pinned.current = true;
+    setDetached(false);
+  });
 
   function onScroll() {
     const viewport = scroller.current;
