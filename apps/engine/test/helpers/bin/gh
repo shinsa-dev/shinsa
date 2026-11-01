@@ -54,6 +54,7 @@ interface FakeState {
   uploadReply?: string;
   issues?: FakeIssue[];
   failIssues?: string;
+  issuesListOutput?: string;
 }
 
 interface FakeIssue {
@@ -432,6 +433,11 @@ if (group === 'issue' && command === 'list') {
     save();
     console.error(state.failIssues);
     process.exit(1);
+  }
+  if (state.issuesListOutput !== undefined) {
+    save();
+    console.log(state.issuesListOutput);
+    process.exit(0);
   }
   const listed = (state.issues ?? []).map((issue) => ({
     number: issue.number,

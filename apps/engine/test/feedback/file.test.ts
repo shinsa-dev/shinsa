@@ -113,6 +113,11 @@ describe('reading the state of opened issues', () => {
       ok: false,
       detail: 'gh issue list failed: HTTP 401: Bad credentials',
     });
+    useFakeGitHub({ issuesListOutput: 'Not signed in' });
+    expect(await listFeedbackIssueStates(createTempDir())).toEqual({
+      ok: false,
+      detail: 'GitHub answered without a list of issues: Not signed in',
+    });
     expect(parseIssueStates('not json')).toBeNull();
     expect(parseIssueStates('{}')).toBeNull();
     expect(
