@@ -62,6 +62,7 @@ function entry(task: Task, type: GateType, unblocks = 0, ageHours = 3) {
 
 const queue: Queue = {
   focusProjectId: null,
+  focusTeamId: null,
   ready: [entry(chat, 'review', 1), entry(dup, 'merge')],
   upNow: [],
   later: [],
@@ -258,7 +259,7 @@ describe('Briefings', () => {
     briefings.schedule();
     briefings.schedule();
     await until('the briefing', () => briefed.length === 1);
-    live.focus = { projectId: 'a1', until: null };
+    live.focus = { projectId: 'a1', teamId: null, until: null };
     briefings.schedule();
     await until('the next briefing', () => briefed.length === 2);
     briefings.stop();

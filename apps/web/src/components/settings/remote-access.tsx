@@ -45,15 +45,13 @@ import {
   REMOTE_ACCESS_SECTION,
   resolveQrImage,
 } from '@/lib/remote-access.ts';
-import { ROW_INSET, SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { ROW_INSET, SETTING_ROW, SETTINGS_SUBHEADING, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { UserRow } from './user-row.tsx';
 
 const NO_MEMBERS: RemoteMember[] = [];
 
 const DESCRIPTION =
   'Reach this machine from any device through Shinsa Cloud, behind GitHub sign-in and end to end encrypted. Your devices and other people ask for access with the invite link, and nothing opens until you accept.';
-
-const SUBHEADING = `mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 first:mt-0 first:border-t-0 first:pt-1.5 ${ROW_INSET}`;
 
 const ONLY_YOU = `pt-0.5 pb-1.5 text-fg-2 text-xs ${ROW_INSET}`;
 
@@ -62,13 +60,13 @@ function QrCode({ text }: { text: string }) {
   return <img src={image} alt='QR code for the link' className='size-48 rounded-md' />;
 }
 
-function LinkView({ link }: { link: RemoteLink }) {
+export function LinkView({ url }: { url: string }) {
   return (
     <div className='flex w-full flex-col items-center gap-3'>
-      <QrCode text={link.url} />
+      <QrCode text={url} />
       <div className='flex w-full min-w-0 items-center gap-1.5'>
-        <Truncate className='min-w-0 flex-1 font-mono text-2xs text-fg-2'>{link.url}</Truncate>
-        <CopyButton text={link.url} />
+        <Truncate className='min-w-0 flex-1 font-mono text-2xs text-fg-2'>{url}</Truncate>
+        <CopyButton text={url} />
       </div>
     </div>
   );
@@ -100,7 +98,7 @@ function LinkDialog({
           <DialogTitle>{LINK_COPY.title}</DialogTitle>
           <DialogDescription>{link ? LINK_COPY.share : LINK_COPY.intro}</DialogDescription>
         </DialogHeader>
-        {link && <LinkView link={link} />}
+        {link && <LinkView url={link.url} />}
         <DialogFooter>
           {link ? (
             <>
@@ -153,7 +151,7 @@ export function AccessRequestRows({
   if (requests.length === 0) return null;
   return (
     <>
-      <p className={SUBHEADING}>{title}</p>
+      <p className={SETTINGS_SUBHEADING}>{title}</p>
       {requests.map((request) => {
         const answers = (
           <>
@@ -308,7 +306,7 @@ function PeopleSection({
 }) {
   return (
     <>
-      <p className={SUBHEADING}>People who can reach this machine</p>
+      <p className={SETTINGS_SUBHEADING}>People who can reach this machine</p>
       {owner && <UserRow user={owner} detail='Owner' self />}
       {members.length === 0 && (
         <p className={ONLY_YOU}>Only you. Share the invite link to let someone ask for access.</p>
@@ -432,7 +430,7 @@ export function RemoteAccessGroup({
           onDecline={(request) => actions.declineRequest(request.id)}
         />
       )}
-      {canAdd && <p className={SUBHEADING}>Devices that can reach this machine</p>}
+      {canAdd && <p className={SETTINGS_SUBHEADING}>Devices that can reach this machine</p>}
       {canAdd && snapshot.devices.length === 0 && (
         <SettingsEmpty>
           None yet. Open the invite link on the phone or browser you use away from this machine to ask for

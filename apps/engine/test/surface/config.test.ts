@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { HOUR_MS, PROJECT_COLORS } from '@shinsa/core';
 import { createTempDir } from '../helpers/index.ts';
-import { createFakeClient, runSpec } from './fixtures.ts';
+import { createFakeClient, findSpec, runSpec } from './fixtures.ts';
 
 const PROJECTS = {
   projects: [
@@ -27,7 +27,7 @@ const PROJECTS = {
       repos: [],
     },
   ],
-  focus: { projectId: null, until: null },
+  focus: { projectId: null, teamId: null, until: null },
 };
 
 const REPOS = { repos: [{ id: 'repo-1', name: 'app', path: '/code/app', defaultBranch: 'main' }] };
@@ -89,7 +89,7 @@ describe('projects and focus', () => {
 
   test('shows a project found by key, name or id, with its repositories and folders', async () => {
     const fake = createFakeClient({
-      '/api/projects': { ...PROJECTS, focus: { projectId: 'project-1', until: null } },
+      '/api/projects': { ...PROJECTS, focus: { projectId: 'project-1', teamId: null, until: null } },
     });
     const work = [
       'Work (WK), in focus',
@@ -207,6 +207,25 @@ describe('projects and focus', () => {
     );
   });
 
+  test('puts a project in a team and takes it out, both left to the human', async () => {
+    const fake = createFakeClient({
+      '/api/projects': PROJECTS,
+      '/api/remote': { teams: [{ id: 'team-1', name: 'Platform' }] },
+    });
+    expect((await runSpec(fake, ['projects', 'add-to-team', 'WK', '--team', 'Platform'])).text).toBe(
+      'The team sees its tasks now.'
+    );
+    expect((await runSpec(fake, ['projects', 'remove-from-team', 'WK', '--team', 'team-1'])).text).toBe(
+      'The team no longer sees its tasks.'
+    );
+    expect(fake.sent).toEqual([
+      { type: 'project.add_to_team', projectId: 'project-1', teamId: 'team-1' },
+      { type: 'project.remove_from_team', projectId: 'project-1', teamId: 'team-1' },
+    ]);
+    expect(findSpec(['projects', 'add-to-team']).humanOnly).toBe(true);
+    expect(findSpec(['projects', 'remove-from-team']).humanOnly).toBe(true);
+  });
+
   test('adds a repository or a folder to a project through its routes', async () => {
     const fake = createFakeClient({
       '/api/projects': PROJECTS,
@@ -259,7 +278,7 @@ describe('projects and focus', () => {
       'Focused on Work until 2026-10-23T18:00:00.000Z.'
     );
     const open = createFakeClient({
-      '/api/projects': { ...PROJECTS, focus: { projectId: 'project-2', until: null } },
+      '/api/projects': { ...PROJECTS, focus: { projectId: 'project-2', teamId: null, until: null } },
     });
     expect((await runSpec(open, ['focus', 'show'])).text).toBe('Focused on Home.');
   });

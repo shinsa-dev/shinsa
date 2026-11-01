@@ -455,6 +455,29 @@ export function hasSharedCode(task: Task, repository: string | null) {
   return Boolean(task.worktreePath);
 }
 
+export interface SharedListing {
+  task: Task;
+  gates: Gate[];
+  project: Project | null;
+}
+
+export function resolveSharedListing(
+  state: ShinsaState,
+  task: Task,
+  gates: readonly Gate[],
+  preset: SharePreset
+): SharedListing {
+  const grants: Grants = (group) => hasShareGroup(preset, group);
+  const projectId = resolveTaskProject(state, task);
+  const project = grants('people') && projectId ? state.projects[projectId] : undefined;
+  const links = grants('people') ? SHARED_LINK_KINDS : new Set<string>();
+  return {
+    task: scrubValue(redactTask(task, preset, grants), links),
+    gates: grants('activity') ? gates.map((gate) => scrubValue(redactGate(gate), links)) : [],
+    project: project ? redactProject(project) : null,
+  };
+}
+
 export function resolveSharedTask(state: ShinsaState, task: Task, context: SharedTaskContext): SharedTask {
   const grants: Grants = (group) => hasShareGroup(context.preset, group);
   const people = grants('people');

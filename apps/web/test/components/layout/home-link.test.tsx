@@ -108,7 +108,7 @@ describe('the way home', () => {
     const buttons: HTMLElement[] = [...bar.querySelectorAll('button')];
     const after = buttons.slice(buttons.indexOf(settings) + 1);
     expect(after.map((button) => button.getAttribute('aria-label') ?? button.textContent).at(-1)).toBe(
-      'FocusAll work'
+      'FocusYour work'
     );
     expect(after.length).toBeLessThanOrEqual(2);
     act(() => fireEvent.click(settings));

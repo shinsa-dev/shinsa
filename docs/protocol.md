@@ -24,7 +24,9 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | repository | A git repository Shinsa registered, inside at most one project | `Repo` | repository |
 | handle | A task's name for people, `<project key>-<number>` (`SW-142`), given once, never reused, never a key | `Task.handle` | the handle |
 | id | A UUIDv7, the key of everything stored (events, receipts, references, transcripts) | `id` | not shown |
-| focus | The one project whose work Home, the queue and the guide show, or none for all work | `Focus` | Focus |
+| focus | The one project or team whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
+| team | People who watch each other's work: a project in a team shows every task in it to every member, live and read-only, without its chat | `RemoteTeam`, `Project.teamIds` | team |
+| teammate | Another member of a team you are in, whose team tasks you see read-only | `TeamTask.owner` | teammate |
 | run | One agent working one step of a task (or a delegation of it), from start to end | `Run` | a run, "the agent" |
 | attempt | One execution of a run; a resume, a retry on another account or a restart is a new attempt | `RunAttempt`, `attemptId` (`<run>:<n>`) | not shown |
 | session | The provider's own conversation a run executes in; several runs and attempts can share one | `Run.sessionId` | not shown |
@@ -442,6 +444,7 @@ the merge gate, so an open pull request is never left without one.
 | `description` | string | at most 1,000 characters, given to every fresh run |
 | `folders` | string[] | at most 20; every repository one level inside belongs to the project |
 | `watchSources?` | `WatchSource[]` | at most 20 integrations its agents read: `server` (an MCP server), `data`, `repoIds` (none for every repository), `addedBy` (`you` or `agent`), `addedAt`; kept by `project.write` |
+| `teamIds?` | string[] | the teams that see every task of the project (`docs/engine.md` → Teams); written only by `project.add_to_team` and `project.remove_from_team`, kept by `project.write`; absent for none |
 
 | `Repo` field | Type | Meaning |
 | --- | --- | --- |
@@ -464,7 +467,7 @@ executable changed line (`selectMeasuredCoverage`).
   (`state.taskNumbers`); a key change starts the new key's counter and never reuses a handle. Parsed by
   `parseTaskHandle` (any case). Core finds a task by id or handle (`selectTaskByReference`); the server's reads also
   take the start of an id or the exact title.
-- **Focus**: `{ projectId, until }`; `until` ends it at a time.
+- **Focus**: `{ projectId, teamId, until }`, a project or a team, never both (`focus_refused`); `until` ends it at a time.
 
 ## Runs, attempts and roles
 
@@ -822,9 +825,11 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `schedule.remove` | deletes one | `schedules delete` | agent |
 | `project.write` | creates or changes a project | `projects write` | agent |
 | `project.remove` | removes one | `projects remove` | agent |
+| `project.add_to_team` | shows every task of the project to a team (`teamId`), read-only: `project.written` with the team in `teamIds`; nothing when it is already there | `projects add-to-team --team` | **human** |
+| `project.remove_from_team` | stops showing them: every open view of its tasks for that team closes | `projects remove-from-team --team` | **human** |
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
-| `focus.change` | sets or clears the focus | `focus set`, `focus clear` | agent |
+| `focus.change` | sets or clears the focus: `projectId` or `teamId`, never both (`focus_refused`), and `until` | `focus set`, `focus clear` | agent |
 | `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset` (`HUMAN_ONLY_SETTINGS`) |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
@@ -1238,7 +1243,8 @@ or `browser` (a tab, Floaty).
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
 | `engine { engine }` | On connect, right after `surfaces`: what this engine speaks, an `EngineInfo` (below) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
-| `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing): `RemoteSnapshot` (Remote access, below) |
+| `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
+| `teams { teams }` | On connect and after every change to what the machine watches of its teammates: `TeamFeedSnapshot` (Teams, below) |
 
 Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/protocol/terminals.ts`, `docs/engine.md`
 → Terminals): binary frames carry the shell's output and what you type, text frames carry `reset { cols, rows }` and
@@ -1312,17 +1318,45 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
 | `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version }` keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members }` (`HeartbeatResponse`, a `RemoteAccess`), which the engine reads leniently; a 401 means revoked |
 | `POST /__remote/machine/invites`, `POST /__remote/machine/invites/remove` | The engine, with its machine token | The machine's one reusable invite token, replacing the one before (`InviteCreateResponse`: `token`); removing it turns the invite off |
-| `POST /__remote/machine/requesters/find`, `POST /__remote/machine/members/add`, `POST /__remote/machine/members/remove` | The engine, with its machine token | `{ userId }` (`MemberRequest`): the GitHub user of an account that opened this machine's invite, a member or the owner (a `RemoteUser`, else 404); making such an account a member when you accept its request (a `RemoteMember`, 409 `members_full` past 20); taking a member's access away |
+| `POST /__remote/machine/requesters/find`, `POST /__remote/machine/members/add`, `POST /__remote/machine/members/remove` | The engine, with its machine token | `{ userId }` (`MemberRequest`): the GitHub user of an account that opened this machine's invite, a member, the owner or someone in a team with the owner (a `RemoteUser`, else 404); making such an account a member when you accept its request or give a teammate this machine (a `RemoteMember`, 409 `members_full` past 20); taking a member's access away |
 | `POST /__remote/invites/accept` | The enroll page | `{ token }` (`InviteAcceptRequest`) records that the signed-in account asked and answers the machine's `instanceId`, `name`, `owner`, the account's `user` and a `connect` (`ConnectResponse`) to ask the machine with (`InviteAcceptResponse`); it makes no member |
 | `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
 | `GET /__remote/sign-in?client=native&redirect=…&code_challenge=…`, `POST /__remote/sign-in/token` | The iPhone app | GitHub sign-in that ends at `shinsa://` (or `shinsa-dev://`, `REMOTE_NATIVE_REDIRECT_SCHEMES`) with `?code=`, a one-time code bound to the app's S256 challenge, traded once within 60 s for `{ token, user }` (`NativeSignInTokenRequest`, `NativeSignInTokenResponse`); a failed sign-in ends at `?error=` |
 | `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove`, `POST …/<id>/leave` | The page | The instances you own or are a member of (`RemoteInstance`, with its `owner` and your `role`, `owner` or `member`), a connect token and the channel's URL (`ConnectResponse`), removal (the owner only), leaving (a member only) |
 | `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
 | `POST /__remote/shares/<instance>/connect` | Anyone with a share link | `ShareConnectResponse` (`url`: `wss://t-<instance>.shinsa.dev`, `online`), no session, `X-Robots-Tag: noindex`; 404 when the instance does not exist (`resolveShareConnectPath`) |
+| `POST /__remote/machine/teams` | The engine, with its machine token | `{ name }` (`TeamCreateRequest`) makes a team its owner owns (409 `teams_full` past `MAX_OWNED_TEAMS`) and answers `TeamCreateResponse` (`team`, a `RemoteTeam`, and `invite`) |
+| `POST /__remote/machine/teams/join`, `POST /__remote/teams/join` | The engine, with its machine token; the join page | `{ invite }` (`TeamJoinRequest`) records that the account asked, unless it is in the team already, and answers `TeamJoinResponse` (`teamId`, `name`, `owner`, `status`: `requested` or `member`); 404 `invite_invalid` for a link turned off |
+| `POST /__remote/teams/preview` | The join page, signed in | `{ invite }` answers `TeamPreviewResponse` (`name`, `owner`) so the page names the team before anyone asks; records nothing; 404 `invite_invalid` for a link turned off |
+| `POST /__remote/machine/teams/<team>/<action>` | The engine, with its machine token | `TeamAction`: `invite` (a new invite, `TeamInviteResponse`), `invite/remove`, `members/add` and `requests/decline` (`{ userId }`, of an account that asked), `members/remove`, `remove` (the owner only, else 403 `not_owner`), `leave` (a member; 409 `owner_cannot_leave`), `connect` (`TeamConnectRequest`, below); 404 for a team the account is not in |
+| `GET /__remote/teams`, `POST /__remote/teams/<team>/leave`, `POST /__remote/teams/<team>/connect` | The page | Your teams (`RemoteTeam[]`), leaving one, and a team connect token |
 | any path on `<label>.shinsa.page` | Anyone with a preview link | A shared preview (`previews.ts`): `?key=` set as the `__Host-shinsa_preview` cookie and a 303 to the same path without it; with the cookie, forwarded with `x-shinsa-preview-key` (`PREVIEW_KEY_HEADER`) to the tunnel's `/__preview/<id><path>` (`resolvePreviewTunnelPath`), WebSockets included; `PREVIEW_GONE` (404) or `PREVIEW_OFFLINE` (503) otherwise |
+
+A **team connect token** (`connect`, `{ instanceId }`) is answered only for the team's owner or a member and a
+machine of one of them, as `ConnectResponse` with `url` `wss://t-<instance>.shinsa.dev/team?token=…`
+(`resolveTeamChannelUrl`), the token signed with that machine's connect key for the GitHub account that asked. The
+heartbeat's answer also carries `teams` (`RemoteTeam[]`: `id`, `name`, `owner`, your `role`, `members`, `requests`
+(the owner's only), `machines` (`TeamMachine`: `id`, `name`, `userId`, `online`, `lastSeenAt`, every member's), and
+`createdAt`).
 
 Every signed-in route above takes the session as the `__Host-shinsa_session` cookie or as `Authorization: Bearer
 <token>`; a bearer request needs no `Origin`, since it is not a page.
+
+**Teams** (`teams.ts` here, `share/teams.ts` for the list): the join link is `https://app.shinsa.dev/share/team#<team>.<invite>.<key>`
+(`TeamJoinFragment`, `resolveTeamJoinUrl`, `parseTeamJoinUrl`, `REMOTE_PATHS.teamJoinPage`), the key `TEAM_KEY_BYTES`
+(32) as base64url (`isTeamKey`), never sent to a server. The tunnel's `TEAM_CHANNEL_PATH` (`/team?token=…`) takes one
+`TeamHello` (`team`, `view`: `TeamView`, `{ kind: 'list' }` or `{ kind: 'task', taskId }`, a fresh `ephemeral`, and
+`proof`, an HMAC with the team key over the team, the view and the key), answered by a welcome with the machine's
+fresh key and a proof over all of it or by `refused`; both derive the session key with the view in it
+(`deriveTeamSessionKey`, `TeamKeys`), then the machine sends `ShareMessage`s as a share does. A list view is a
+`TeamListView` (`tasks`: `TeamTask[]`, `machineKey`: the machine's public key, `updatedAt`): each a `SharedListing` (the redacted task, its gates, its project)
+with `owner` (GitHub login) and `machine` (its name), every open task of the team's projects and the
+`TEAM_SETTLED_LIMIT` (50) most recently finished. A task view is a `ShareLiveView`. What a machine watches is a
+`TeamFeedSnapshot`: `machines` (`TeamFeedMachine`: `teamId`, `instanceId`, `name`, `userId`, `status`, one of
+`connecting`, `live`, `offline`, `refused`, and `reason`) and `tasks` (`TeamFeedTask`: a `TeamTask` with its `teamId`
+and `instanceId`); `GET /api/teams/tasks` (`TEAM_TASKS_PATH`, `?team=`, `?open=true`) answers the same shape. The
+local relay of one task is the socket `TEAM_VIEW_PATH` (`/api/teams/view?team=&machine=&task=`, `resolveTeamViewPath`,
+`parseTeamViewTarget`), which carries the task's `ShareMessage`s as text and closes on anything the page sends.
 
 **Shared previews** (core's `remote/previews.ts`): a link is `PreviewLink` (`instanceId`, `previewId` of
 `PREVIEW_ID_BYTES`, `key` of `PREVIEW_KEY_BYTES`, base64url), written `https://<label>.shinsa.page/?key=<key>`
@@ -1407,7 +1441,9 @@ arrived, never from the page.
 `name`, `enrolledAt`, `lastSeenAt`, `userId`: the GitHub account the device was added for, null for a device from
 before members), `access` (the `RemoteAccess` the last heartbeat answered, null until one did), `link`
 (`RemoteLink`: `url` and `createdAt`, the one invite link, or null while it is off) and `requests` (`AccessRequest`:
-`id`, `publicKey`, `deviceName`, `user`, a `RemoteUser`, and `requestedAt`). The enroll fragment
+`id`, `publicKey`, `deviceName`, `user`, a `RemoteUser`, and `requestedAt`) and `teams` (`RemoteTeamEntry`: `id`,
+`name`, `status`, `member` or `requested` (a key kept while the owner answers), `onMachine` (this machine holds the
+team key), `invite` (a join link is on), and `team`, the `RemoteTeam`, null while requested). The enroll fragment
 (`EnrollFragment`) is `<instance>.<machine key>.<secret>.<invite token>`, all four parts required.
 
 ## Slack

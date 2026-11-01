@@ -28,6 +28,11 @@ describe('resolvePageKey', () => {
     expect(resolvePageKey(SETTINGS, null)).toBe('settings');
   });
 
+  it('keys a teammate’s task page by its team, machine and task', () => {
+    const route = { name: 'team-task', teamId: 't', instanceId: 'm', taskId: 'k' } as const;
+    expect(resolvePageKey({ route, search: '' }, null)).toBe('team-task:t/m/k');
+  });
+
   it('keys an automation’s page by its schedule', () => {
     expect(resolvePageKey({ route: { name: 'automation', scheduleId: 's1' }, search: '' }, null)).toBe(
       'automation:s1'

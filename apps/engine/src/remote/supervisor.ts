@@ -1,7 +1,7 @@
-import type { MachineCredentials, RemoteAccess, TunnelStatus } from '@shinsa/core';
+import type { MachineCredentials, RemoteAccess, RemoteTeam, TunnelStatus } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import { type ControlClient, RevokedError } from './control.ts';
-import { readAccess } from './store.ts';
+import { readAccess, readTeams } from './store.ts';
 
 export type { TunnelStatus } from '@shinsa/core';
 
@@ -38,6 +38,7 @@ export interface TunnelSupervisorOptions {
   version: string;
   onRevoked: () => void;
   onAccess?: (access: RemoteAccess) => void;
+  onTeams?: (teams: RemoteTeam[]) => void;
   timings?: TunnelTimings;
   now?: () => number;
 }
@@ -168,7 +169,9 @@ export class TunnelSupervisor {
         version: this.#options.version,
       });
       const access = readAccess(answer);
+      const teams = readTeams(answer.teams);
       if (access && this.#isCurrent(generation)) this.#options.onAccess?.(access);
+      if (teams && this.#isCurrent(generation)) this.#options.onTeams?.(teams);
     } catch (error) {
       if (error instanceof RevokedError) {
         this.#revoke(generation);

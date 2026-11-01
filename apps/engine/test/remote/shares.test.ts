@@ -848,6 +848,7 @@ describe('a share by preset', () => {
     await until('the viewer reads it again', () =>
       viewer.messages.some((message) => message.t === 'file' && message.version === 'agents:3')
     );
+    await until('its body arrives', () => (viewer.files()['transcript-run-1-0'] ?? '').includes('Done.'));
     const grown = JSON.parse(viewer.files()['transcript-run-1-0'] ?? '[]') as ChatEntry[];
     expect(grown.map((entry) => (entry.type === 'agent' ? entry.text : ''))).toEqual(['Reading.', 'Done.']);
   });

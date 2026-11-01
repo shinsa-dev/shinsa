@@ -10,6 +10,10 @@ import {
   REMOTE_PATHS,
   type RemoteMember,
   type RemoteUser,
+  resolveMachineTeamPath,
+  type TeamAction,
+  type TeamCreateResponse,
+  type TeamJoinResponse,
 } from '@shinsa/core';
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -94,6 +98,18 @@ export class ControlClient {
 
   async requestMemberRemoval(machineToken: string, userId: string) {
     await this.#post(REMOTE_PATHS.machineMemberRemove, { userId }, machineToken);
+  }
+
+  requestTeamCreation(machineToken: string, name: string) {
+    return this.#post<TeamCreateResponse>(REMOTE_PATHS.machineTeams, { name }, machineToken);
+  }
+
+  requestTeamJoin(machineToken: string, invite: string) {
+    return this.#post<TeamJoinResponse>(REMOTE_PATHS.machineTeamJoin, { invite }, machineToken);
+  }
+
+  requestTeamAction<T>(machineToken: string, teamId: string, action: TeamAction, body: object = {}) {
+    return this.#post<T>(resolveMachineTeamPath(teamId, action), body, machineToken);
   }
 
   async recordOffline(machineToken: string) {

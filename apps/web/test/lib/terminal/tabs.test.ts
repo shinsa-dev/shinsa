@@ -48,10 +48,11 @@ describe('resolveTerminalProject', () => {
   });
 
   it('falls back to the focus project, then the first project by name, then none', () => {
-    const focused = { ...STATE, focus: { projectId: 'shop', until: null } };
+    const focused = { ...STATE, focus: { projectId: 'shop', teamId: null, until: null } };
     expect(resolveTerminalProject(focused, 'nope', NOW)?.id).toBe('shop');
     expect(
-      resolveTerminalProject({ ...STATE, focus: { projectId: 'gone', until: null } }, null, NOW)?.id
+      resolveTerminalProject({ ...STATE, focus: { projectId: 'gone', teamId: null, until: null } }, null, NOW)
+        ?.id
     ).toBe('docs');
     expect(resolveTerminalProject({ ...STATE, projects: {} }, null, NOW)).toBeNull();
   });
