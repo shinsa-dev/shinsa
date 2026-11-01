@@ -52,7 +52,6 @@ import {
   serializeShareUrl,
   type Task,
 } from '../packages/core/src/index.ts';
-import { SANDBOX_PATH, type SandboxSection, serializeSandboxPage } from './sandbox-page.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PORT = Number(Bun.env.PORT ?? 5195);
@@ -524,6 +523,17 @@ async function respondEnroll(machine: Machine, url: URL) {
   return Response.redirect(url.searchParams.has('on') ? target.replace('#', '?on=machine#') : target, 302);
 }
 
+interface SandboxSection {
+  title: string;
+  links: { label: string; url: string }[];
+}
+
+interface SandboxPageModule {
+  serializeSandboxPage: (sections: SandboxSection[], stylesheet: string) => string;
+}
+
+const SANDBOX_PATH = '/sandbox';
+
 const SERVICE_TOGGLE = new RegExp(`^${SANDBOX_PATH}/service/(start|stop)$`);
 
 const ENROLL = new RegExp(`^${SANDBOX_PATH}/enroll/([a-z]+)$`);
@@ -807,6 +817,9 @@ async function main() {
   const machines = [studio.machine, laptop.machine];
   const shares = await createPreviewShares(studio);
   const { preview, shared } = await createServicePreview(studio);
+  const { serializeSandboxPage }: SandboxPageModule = await import(
+    join(ROOT, 'apps/web/src/components/sandbox/sandbox-page.tsx')
+  );
   const page = serializeSandboxPage(listSandboxSections(machines, shares, preview), findRemoteStylesheet());
   const world = createPreviewWorld(machines);
   Bun.serve<TunnelData>({
