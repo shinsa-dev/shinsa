@@ -138,11 +138,15 @@ function listInstallFolders(home: string) {
   );
 }
 
+export function refreshInstallFolders(env: Env = process.env, home = env.HOME ?? homedir()) {
+  env.PATH = mergePathLists(env.PATH ?? '', listInstallFolders(home).join(delimiter));
+}
+
 export async function applyLoginEnv(env: Env, reader: LoginEnvReader, home = env.HOME ?? homedir()) {
   const login = await reader.read();
   const current = env.PATH ?? '';
   if (!login) {
-    env.PATH = mergePathLists(current, listInstallFolders(home).join(delimiter));
+    refreshInstallFolders(env, home);
     return [];
   }
   const added = Object.keys(login).filter((key) => key !== 'PATH' && env[key] === undefined);

@@ -362,6 +362,7 @@ type SystemCommand =
   | { type: 'account.signed_in'; account: RunAccount }
   | { type: 'provider.record_sign_in'; provider: string }
   | { type: 'account.removed'; accountId: string }
+  | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand
   | SlackSystemCommand

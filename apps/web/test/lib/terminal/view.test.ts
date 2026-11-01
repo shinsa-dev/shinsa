@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { readTerminalFontSize } from '@/lib/preferences/terminal.ts';
 import {
   createWebglRenderer,
+  releaseTerminalView,
   resolveTerminalView,
   selectTerminalView,
   syncTerminalViews,
@@ -387,6 +388,17 @@ describe('the views kept across pages', () => {
     syncTerminalViews(new Set(['b']));
     expect(selectTerminalView('a')).toBeNull();
     expect(selectTerminalView('b')).not.toBeNull();
+  });
+
+  it('releases one view on its own, and a view it does not keep is nothing to release', () => {
+    const { openSocket } = createSockets();
+    const view = resolveTerminalView({ id: 'setup', scheme: 'light', mac: true, read: () => '', openSocket });
+    const dispose = spyOn(view, 'dispose');
+    releaseTerminalView('setup');
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(selectTerminalView('setup')).toBeNull();
+    releaseTerminalView('setup');
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 });
 

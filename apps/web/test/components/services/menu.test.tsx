@@ -231,6 +231,10 @@ describe('the Services popover', () => {
     act(() => finish(refined));
     expect(await screen.findByText('bun run dev --port $PORT')).toBeTruthy();
     expect(screen.queryByText('Checking names and ports with AI')).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Add all' }).getAttribute('aria-checked')).toBe('true')
+    );
+    expect(screen.getByRole('checkbox', { name: 'Add api' }).getAttribute('aria-checked')).toBe('false');
     fireEvent.click(screen.getByRole('button', { name: 'Add 2 services' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect((sent[0] as unknown[])[2]).toEqual([

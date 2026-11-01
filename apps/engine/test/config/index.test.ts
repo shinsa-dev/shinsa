@@ -50,6 +50,7 @@ describe('resolveConfig', () => {
       SHINSA_ALLOWED_HOSTS: 'box.tail.net, other.lan',
       SHINSA_ROOTS: '/work:/more',
       SHINSA_INSPECT: '1',
+      SHINSA_SIMULATE_MISSING: 'bun, gh',
       SHINSA_EDITOR: 'zed',
       SHINSA_TERMINAL: 'Ghostty',
       SHINSA_SETTLE_DELAY_MS: '10',
@@ -71,6 +72,7 @@ describe('resolveConfig', () => {
       overloadRetryMs: 30,
       userHome: '/home/me',
       roots: ['/work', '/more'],
+      simulateMissing: ['bun', 'gh'],
     });
     expect(config.allowedHosts).toEqual([
       'localhost',
