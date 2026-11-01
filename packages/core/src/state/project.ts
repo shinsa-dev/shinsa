@@ -351,14 +351,7 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
   const previous = task?.plan ?? null;
   const version = (previous?.version ?? 0) + 1;
   const document = event.document;
-  const revision =
-    previous === null
-      ? {}
-      : {
-          changeSummary: event.changeSummary ?? null,
-          changes: resolvePlanChanges(previous.document, document),
-          feedback: event.feedback ?? null,
-        };
+  const revision = previous === null ? {} : { changes: resolvePlanChanges(previous.document, document) };
   const checks = (document?.verification ?? []).map((check, index) => ({
     id: `c${index + 1}`,
     ...check,
@@ -375,7 +368,7 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
     actor: 'agent',
     kind: 'plan',
     text: version === 1 ? 'Proposed a plan' : `Revised the plan (version ${version})`,
-    detail: (version > 1 ? event.changeSummary : null) ?? document?.goal ?? null,
+    detail: document?.goal ?? null,
   });
 }
 

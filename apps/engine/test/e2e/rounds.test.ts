@@ -7,7 +7,7 @@ import type { QuickJson } from '../../src/agents/quick/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { MessageInbox } from '../../src/triage/inbox.ts';
 import { type Classifier, createClassifier, routeUserCommand } from '../../src/triage/message.ts';
-import { type AgentScript, World } from './harness.ts';
+import { AGENT_REPLY, type AgentScript, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
@@ -284,8 +284,9 @@ describe('a task that runs in rounds', () => {
       } as T);
     });
     const revisions: string[] = [];
-    const proposePlan = (agent: Parameters<AgentScript>[0]) =>
+    const proposePlan = (agent: Parameters<AgentScript>[0], reply?: typeof AGENT_REPLY) =>
       agent.call('propose_plan', {
+        ...(reply ? { reply } : {}),
         goal: 'Add MCP v2.',
         phases: [
           { title: 'Build it', detail: 'All of it.' },
@@ -306,7 +307,7 @@ describe('a task that runs in rounds', () => {
       },
       async (agent) => {
         revisions.push(agent.prompt);
-        await proposePlan(agent);
+        await proposePlan(agent, AGENT_REPLY);
       }
     );
     const taskId = await w.createTask('Add MCP v2');
@@ -325,6 +326,7 @@ describe('a task that runs in rounds', () => {
     expect(asked).toEqual([]);
     expect(revisions).toHaveLength(1);
     expect(revisions[0]).toContain(text);
+    expect(revisions[0]).toContain('so `propose_plan` also takes `reply`');
     expect(w.state.gates[first.id]?.status).toBe('withdrawn');
     expect(statuses(w, taskId)).toEqual([[1, 'active']]);
     expect(

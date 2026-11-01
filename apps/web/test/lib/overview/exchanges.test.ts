@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'bun:test';
-import type { FixReply, Iteration } from '@shinsa/core';
+import type { AgentReply, Iteration } from '@shinsa/core';
 import {
   describeOutcomes,
   describeRequestText,
-  listEarlierExchanges,
+  listEarlierReplies,
   selectShownReply,
   selectWorkingRequest,
 } from '@/lib/overview/exchanges.ts';
-import { createGate, createTask } from '../../support/state.ts';
+import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
-const REPLY: FixReply = {
+const REPLY: AgentReply = {
   headline: 'Moved it.',
   points: [
     { ask: 'Move it', outcome: 'done', note: 'Under Remote access.' },
@@ -34,22 +34,59 @@ function iteration(id: string, overrides: Partial<Iteration> = {}): Iteration {
 
 const REVIEW = createGate({ id: 'g', taskId: 't', type: 'review' });
 
+const STATE = createShinsaState({
+  runs: [
+    createRun({ id: 'run-1', taskId: 't', purpose: 'fix' }),
+    createRun({ id: 'run-plan', taskId: 't', purpose: 'plan' }),
+    createRun({ id: 'run-answer', taskId: 't', role: 'answerer' }),
+  ],
+});
+
+const RESULT = { step: 'answer' as const, body: 'It is.', at: 10, runId: 'run-answer' };
+
 describe('selectShownReply', () => {
   it('shows the latest answered request of the current round at the review and merge gates', () => {
     const task = createTask({ id: 't', iterations: [iteration('a'), iteration('b')] });
-    expect(selectShownReply(task, REVIEW)?.id).toBe('b');
-    expect(selectShownReply(task, { ...REVIEW, type: 'merge' })?.id).toBe('b');
+    expect(selectShownReply(STATE, task, REVIEW)?.id).toBe('b');
+    expect(selectShownReply(STATE, task, { ...REVIEW, type: 'merge' })?.id).toBe('b');
   });
 
-  it('shows nothing at another gate, with no gate, before an answer or from an earlier round', () => {
+  it('shows a plan reply on the plan card and never at review', () => {
+    const task = createTask({ id: 't', iterations: [iteration('a', { runId: 'run-plan' })] });
+    expect(selectShownReply(STATE, task, { ...REVIEW, type: 'plan' })?.id).toBe('a');
+    expect(selectShownReply(STATE, task, REVIEW)).toBeNull();
+    expect(
+      selectShownReply(STATE, createTask({ id: 't', iterations: [iteration('b')] }), {
+        ...REVIEW,
+        type: 'plan',
+      })
+    ).toBeNull();
+  });
+
+  it('shows the reply of the run that wrote the result on the proposal and result cards', () => {
+    const task = createTask({
+      id: 't',
+      result: RESULT,
+      iterations: [iteration('a', { runId: 'run-answer' })],
+    });
+    expect(selectShownReply(STATE, task, { ...REVIEW, type: 'proposal' })?.id).toBe('a');
+    expect(selectShownReply(STATE, task, { ...REVIEW, type: 'result' })?.id).toBe('a');
+    expect(selectShownReply(STATE, task, undefined)?.id).toBe('a');
+    const other = createTask({ id: 't', result: RESULT, iterations: [iteration('b')] });
+    expect(selectShownReply(STATE, other, undefined)).toBeNull();
+    const unanswered = createTask({ id: 't', result: RESULT, iterations: [iteration('c', { runId: null })] });
+    expect(selectShownReply(STATE, unanswered, undefined)).toBeNull();
+  });
+
+  it('shows nothing at another gate, before an answer or from an earlier round', () => {
     const task = createTask({ id: 't', iterations: [iteration('a')] });
-    expect(selectShownReply(task, { ...REVIEW, type: 'plan' })).toBeNull();
-    expect(selectShownReply(task, undefined)).toBeNull();
-    expect(selectShownReply(createTask({ id: 't' }), REVIEW)).toBeNull();
+    expect(selectShownReply(STATE, task, { ...REVIEW, type: 'question' })).toBeNull();
+    expect(selectShownReply(STATE, task, undefined)).toBeNull();
+    expect(selectShownReply(STATE, createTask({ id: 't' }), REVIEW)).toBeNull();
     const open = createTask({ id: 't', iterations: [iteration('a', { reply: null, repliedAt: null })] });
-    expect(selectShownReply(open, REVIEW)).toBeNull();
+    expect(selectShownReply(STATE, open, REVIEW)).toBeNull();
     const earlier = createTask({ id: 't', iterations: [iteration('a', { round: 2 })] });
-    expect(selectShownReply(earlier, REVIEW)).toBeNull();
+    expect(selectShownReply(STATE, earlier, REVIEW)).toBeNull();
   });
 });
 
@@ -64,8 +101,8 @@ describe('selectWorkingRequest', () => {
   });
 });
 
-describe('listEarlierExchanges', () => {
-  it('lists answered requests and plan revisions you asked for, newest first, leaving out the shown one', () => {
+describe('listEarlierReplies', () => {
+  it('lists answered requests newest first, leaving out the shown one', () => {
     const task = createTask({
       id: 't',
       iterations: [
@@ -73,26 +110,13 @@ describe('listEarlierExchanges', () => {
         iteration('b', { repliedAt: 50 }),
         iteration('c', { reply: null, repliedAt: null }),
       ],
-      planHistory: [
-        { version: 1, body: '', document: null, proposedAt: 5 },
-        {
-          version: 2,
-          body: '',
-          document: null,
-          proposedAt: 20,
-          feedback: 'Use the Events API.',
-          changeSummary: null,
-        },
-      ],
-      plan: { version: 3, body: '', document: null, proposedAt: 40, feedback: null },
     });
-    expect(listEarlierExchanges(task, 'b').map((exchange) => exchange.key)).toEqual(['a', 'plan-2']);
-    expect(listEarlierExchanges(task, null).map((exchange) => [exchange.key, exchange.at])).toEqual([
+    expect(listEarlierReplies(task, 'b').map((reply) => reply.id)).toEqual(['a']);
+    expect(listEarlierReplies(task, null).map((reply) => [reply.id, reply.repliedAt])).toEqual([
       ['b', 50],
       ['a', 30],
-      ['plan-2', 20],
     ]);
-    expect(listEarlierExchanges(createTask({ id: 't' }), null)).toEqual([]);
+    expect(listEarlierReplies(createTask({ id: 't' }), null)).toEqual([]);
   });
 });
 
@@ -116,7 +140,7 @@ describe('describeRequestText', () => {
 describe('describeOutcomes', () => {
   it('counts each outcome the reply has, in a fixed order', () => {
     expect(describeOutcomes(REPLY)).toBe('2 done · 1 answered · 1 not changed');
-    expect(describeOutcomes({ ...REPLY, points: [REPLY.points[2] as FixReply['points'][number]] })).toBe(
+    expect(describeOutcomes({ ...REPLY, points: [REPLY.points[2] as AgentReply['points'][number]] })).toBe(
       '1 answered'
     );
   });

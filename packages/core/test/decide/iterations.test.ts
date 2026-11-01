@@ -1,6 +1,29 @@
 import { describe, expect, test } from 'bun:test';
-import { applyEvent, createState, type ReviewComment, selectOpenIteration } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, REPLY, reachReviewGate } from '../harness.ts';
+import {
+  applyEvent,
+  type CommandOf,
+  createState,
+  isReplyingRun,
+  type ReviewComment,
+  type RunDelegation,
+  resolveMessageEffect,
+  selectOpenIteration,
+} from '../../src/index.ts';
+import {
+  buildAll,
+  completePhase,
+  createHarness,
+  createTask,
+  type Harness,
+  PASSING,
+  PLAN,
+  proposePlan,
+  REPLY,
+  reachReviewGate,
+  registerRepo,
+} from '../harness.ts';
+
+const DELEGATION = { parentRunId: 'parent' } as RunDelegation;
 
 const COMMENT: ReviewComment = { path: 'src/a.ts', side: 'new', line: 2, endLine: null, text: 'Why?' };
 
@@ -8,6 +31,15 @@ function atReview() {
   const harness = createHarness();
   const taskId = createTask(harness);
   reachReviewGate(harness, taskId);
+  return { harness, taskId };
+}
+
+function atPlanGate() {
+  const harness = createHarness();
+  registerRepo(harness);
+  harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+  const taskId = createTask(harness);
+  proposePlan(harness, taskId);
   return { harness, taskId };
 }
 
@@ -119,12 +151,117 @@ describe('your requests and their replies', () => {
     expect(iterations[0]?.requests.map((request) => request.text)).toEqual(['Move it.', 'And rename it.']);
   });
 
-  test('a message that steers a build phase opens no request', () => {
+  test('a message that steers the planner opens a request its plan must answer', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.message', taskId, text: 'Use the new API.' });
     expect(harness.lastEffect('run.steer')).toMatchObject({ text: 'Use the new API.' });
+    const runId = harness.activeRun(taskId).id;
+    expect(() => harness.send({ type: 'agent.propose_plan', runId, document: PLAN })).toThrow(
+      'This `propose_plan` answers a message the human sent, so `reply` is required'
+    );
+    harness.send({ type: 'agent.propose_plan', runId, document: PLAN, reply: REPLY });
+    expect(harness.task(taskId).iterations).toEqual([
+      expect.objectContaining({
+        requests: [expect.objectContaining({ text: 'Use the new API.' })],
+        reply: REPLY,
+        runId,
+      }),
+    ]);
+  });
+
+  test('a first plan that answers only the request refuses a reply', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(() =>
+      harness.send({
+        type: 'agent.propose_plan',
+        runId: harness.activeRun(taskId).id,
+        document: PLAN,
+        reply: REPLY,
+      })
+    ).toThrow(
+      'Leave `reply` out: it answers a message the human sent, and this `propose_plan` answers none.'
+    );
+  });
+
+  test('asking for a new plan at the plan gate opens a request the revision answers', () => {
+    const { harness, taskId } = atPlanGate();
+    askForChanges(harness, taskId, 'Split the last phase.');
+    expect(selectOpenIteration(harness.task(taskId))?.requests).toEqual([
+      { text: 'Split the last phase.', comments: 0, at: expect.any(Number) },
+    ]);
+    proposePlan(harness, taskId);
+    expect(harness.task(taskId).iterations?.[0]?.reply).toEqual(REPLY);
+  });
+
+  test('a message while the plan waits for you opens a request the revision answers', () => {
+    const { harness, taskId } = atPlanGate();
+    harness.send({ type: 'task.message', taskId, text: 'Drop the second phase.' });
+    expect(selectOpenIteration(harness.task(taskId))?.requests[0]?.text).toBe('Drop the second phase.');
+    proposePlan(harness, taskId);
+    expect(selectOpenIteration(harness.task(taskId))).toBeNull();
+  });
+
+  test('a message that steers a build phase opens a request that phase must answer', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    harness.send({ type: 'task.message', taskId, text: 'Keep the old name.' });
+    const runId = harness.activeRun(taskId).id;
+    const phase: CommandOf<'agent.complete_phase'> = {
+      type: 'agent.complete_phase',
+      runId,
+      summary: 'Did it.',
+      spots: [],
+      judgementCalls: [],
+    };
+    expect(() => harness.send(phase)).toThrow('This `complete_phase` answers a message the human sent');
+    harness.send({ ...phase, reply: REPLY });
+    expect(harness.task(taskId).iterations?.[0]).toMatchObject({ reply: REPLY, runId });
+    expect(() => completePhase(harness, taskId)).not.toThrow();
+  });
+
+  test('a message that wakes an agent waiting on its delegation opens a request', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const parent = harness.activeRun(taskId);
+    harness.send({
+      type: 'agent.delegate',
+      runId: parent.id,
+      requestKey: 'copy',
+      title: 'Check the copy',
+      brief: 'Read the strings in src/copy.ts.',
+      role: 'reviewer',
+      mode: 'async',
+      isolation: 'shared',
+      baseCommit: null,
+      provider: null,
+      model: null,
+    });
+    harness.send({ type: 'run.end', runId: parent.id, outcome: 'completed', summary: 'Waiting.' });
+    expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('wake');
+    harness.send({ type: 'task.message', taskId, text: 'Skip the copy check.' });
+    expect(selectOpenIteration(harness.task(taskId))?.requests[0]?.text).toBe('Skip the copy check.');
+  });
+
+  test('a message to the reviewer opens no request', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    expect(harness.activeRun(taskId).role).toBe('reviewer');
+    harness.send({ type: 'task.message', taskId, text: 'Look at the cache.' });
+    expect(harness.lastEffect('run.steer')).toMatchObject({ text: 'Look at the cache.' });
     expect(harness.task(taskId).iterations).toBeUndefined();
+  });
+
+  test('a delegated run never answers a request', () => {
+    expect(isReplyingRun({ role: 'agent', purpose: 'build', delegation: DELEGATION })).toBe(false);
+    expect(isReplyingRun({ role: 'researcher', delegation: null })).toBe(true);
+    expect(isReplyingRun({ role: 'agent', purpose: 'watch' })).toBe(false);
+    expect(isReplyingRun({ role: 'agent' })).toBe(false);
   });
 
   test('events for a task that does not exist change nothing', () => {

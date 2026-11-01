@@ -1,9 +1,9 @@
 import {
+  type AgentReply,
   applyEvent,
   type ConfigProblem,
   createState,
   decide,
-  type FixReply,
   listActiveRuns,
   listOpenGates,
   type PlanDocument,
@@ -121,16 +121,20 @@ export function registerRepo(
   return Object.values(harness.state.repos).find((repo) => repo.name === name)?.id ?? '';
 }
 
-export const REPLY: FixReply = {
+export const REPLY: AgentReply = {
   headline: 'Made the change you asked for.',
   points: [{ ask: 'The change', outcome: 'done', note: 'It is in.' }],
   next: null,
 };
 
-export function resolveReply(harness: Harness, runId: string) {
-  const run = harness.state.runs[runId];
-  const task = run ? harness.state.tasks[run.taskId] : undefined;
+export function resolveOwedReply(state: ShinsaState, runId: string) {
+  const run = state.runs[runId];
+  const task = run ? state.tasks[run.taskId] : undefined;
   return task && selectOpenIteration(task) ? { reply: REPLY } : {};
+}
+
+export function resolveReply(harness: Harness, runId: string) {
+  return resolveOwedReply(harness.state, runId);
 }
 
 export const PLAN: PlanDocument = {
@@ -275,16 +279,19 @@ function resolveHarnessPlan(harness: Harness, taskId: string, plan: PlanDocument
 
 export function proposePlan(harness: Harness, taskId: string, plan: PlanDocument = PLAN) {
   const document = resolveHarnessPlan(harness, taskId, plan);
-  harness.send({ type: 'agent.propose_plan', runId: harness.activeRun(taskId).id, document });
+  const runId = harness.activeRun(taskId).id;
+  harness.send({ type: 'agent.propose_plan', runId, document, ...resolveReply(harness, runId) });
 }
 
 export function completePhase(harness: Harness, taskId: string, summary = 'Did the phase.') {
+  const runId = harness.activeRun(taskId).id;
   harness.send({
     type: 'agent.complete_phase',
-    runId: harness.activeRun(taskId).id,
+    runId,
     summary,
     spots: [{ file: 'src/a.ts', start: 1, end: 3, attention: 'critical', why: 'The change.' }],
     judgementCalls: [],
+    ...resolveReply(harness, runId),
   });
 }
 

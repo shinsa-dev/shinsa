@@ -11,7 +11,7 @@ import {
   resolveQueue,
   resolveTaskProgress,
 } from '../../src/index.ts';
-import { approve, createHarness, type Harness, registerRepo, verifySetup } from '../harness.ts';
+import { approve, createHarness, type Harness, registerRepo, resolveReply, verifySetup } from '../harness.ts';
 
 function ask(harness: Harness = createHarness()) {
   const repoId = registerRepo(harness);
@@ -31,7 +31,8 @@ function ask(harness: Harness = createHarness()) {
 }
 
 function answer(harness: Harness, taskId: string, text = 'It retries three times in `retry()`.') {
-  harness.send({ type: 'agent.deliver', runId: harness.activeRun(taskId).id, step: 'answer', body: text });
+  const runId = harness.activeRun(taskId).id;
+  harness.send({ type: 'agent.deliver', runId, step: 'answer', body: text, ...resolveReply(harness, runId) });
 }
 
 describe('ask mode', () => {

@@ -42,6 +42,7 @@ import {
 import { listOpenGates } from '../state/queries.ts';
 import { assertEvidence } from './agents.ts';
 import type { Decider } from './decider.ts';
+import { answerIteration } from './iterations.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { requestWorkspace } from './workspaces.ts';
@@ -358,12 +359,14 @@ const DELIVER_TOOL = {
 
 export function recordDelivery(decider: Decider, command: CommandOf<'agent.deliver'>) {
   const { run, task } = findCurrentRun(decider, command.runId, DELIVER_TOOL[command.step]);
-  if (isFollowUpOnWork(task)) {
-    finishFollowUp(decider, task, run, command.proposal ?? null);
-    return;
-  }
+  if (command.proposal && isFollowUpOnWork(task)) throwFollowUpProposal();
   if (command.step === 'operate' && !hasStep(task, 'build'))
     assertEvidence(decider, task, 'report the outcome');
+  answerIteration(decider, task, run.id, command.reply ?? null, DELIVER_TOOL[command.step]);
+  if (isFollowUpOnWork(task)) {
+    finishFollowUp(decider, task, run);
+    return;
+  }
   decider.emit({
     type: 'task.delivered',
     taskId: task.id,
@@ -500,13 +503,14 @@ export function resolveRestingStage(task: Task) {
   return merged && resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge' ? 'merged' : 'done';
 }
 
-function finishFollowUp(decider: Decider, task: Task, run: Run, proposal: ChangeProposalInput | null) {
-  if (proposal) {
-    throw new DomainError(
-      'follow_up_proposal',
-      'This answers a follow-up on finished work, so it proposes no change. Call `answer` without `propose_change`; work worth doing outside this task goes to `suggest_tasks`.'
-    );
-  }
+function throwFollowUpProposal(): never {
+  throw new DomainError(
+    'follow_up_proposal',
+    'This answers a follow-up on finished work, so it proposes no change. Call `answer` without `propose_change`; work worth doing outside this task goes to `suggest_tasks`.'
+  );
+}
+
+function finishFollowUp(decider: Decider, task: Task, run: Run) {
   decider.endRun(run, 'completed', 'Answered your follow-up.');
   decider.progressed(task.id);
   settleTask(decider, task.id, resolveRestingStage(task), 'answered your follow-up');

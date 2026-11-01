@@ -134,7 +134,12 @@ describe('the command line drives the whole lifecycle of a task', () => {
     const revised = await shinsa(port, 'plans', 'revise', taskId, 'Keep', 'it', 'to', 'one', 'phase');
     expect(revised.text).toContain('Asked for changes.');
     await w.untilGate(taskId, 'plan');
-    expect(w.task(taskId).plan?.feedback).toBe('Keep it to one phase');
+    expect(
+      w
+        .task(taskId)
+        .iterations?.at(-1)
+        ?.requests.map((request) => request.text)
+    ).toEqual(['Keep it to one phase']);
 
     const refused = await shinsa(port, 'reviews', 'approve', taskId, '--json');
     expect(refused.code).toBe(1);

@@ -13,7 +13,7 @@ function Wide({ children }: { children: React.ReactNode }) {
 export function ExchangeSpecimens() {
   const [now] = React.useState(Date.now);
   const [scene] = React.useState(() => createExchangesScene(now));
-  const shown = selectShownReply(scene.review, scene.gate);
+  const shown = selectShownReply(scene.state, scene.review, scene.gate);
   return (
     <>
       <Specimen label='ReplyReport · the review card after your request: each point you raised, done, answered or not changed, with why, then what to do now; what you sent folded above it as a quote'>
@@ -27,7 +27,7 @@ export function ExchangeSpecimens() {
           <NowCard state={scene.state} task={scene.working} gate={undefined} onOpen={acknowledgeSample} />
         </Wide>
       </Specimen>
-      <Specimen label='RequestsPanel · every request and plan change in the task, newest first, each folded to its headline'>
+      <Specimen label='RequestsPanel · every request you sent in the task, newest first, each folded to its headline'>
         <Wide>
           <RequestsPanel task={scene.review} shownId={null} />
         </Wide>

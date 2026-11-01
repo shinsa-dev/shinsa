@@ -12,6 +12,7 @@ import {
   PLAN,
   proposePlan,
   pullRequest,
+  REPLY,
   reachReviewGate,
   registerRepo,
 } from '../harness.ts';
@@ -407,12 +408,12 @@ describe('plan revisions', () => {
       type: 'agent.propose_plan',
       runId: harness.activeRun(taskId).id,
       document: { ...PLAN, title: 'Fix the overflow on narrow screens' },
-      changeSummary: 'Renamed it.',
+      reply: REPLY,
     });
     expect(harness.openGate(taskId).title).toBe('Fix the overflow on narrow screens');
   });
 
-  test('a revision keeps the earlier version with what changed and why', () => {
+  test('a revision keeps the earlier version with what changed, and the reply answers why', () => {
     const { harness, taskId } = approvingPlans();
     proposePlan(harness, taskId);
     harness.send({
@@ -426,23 +427,26 @@ describe('plan revisions', () => {
       type: 'agent.propose_plan',
       runId: harness.activeRun(taskId).id,
       document: { ...PLAN, phases: [...PLAN.phases, { title: 'Add a test', detail: 'Cover the overflow.' }] },
-      changeSummary: '  Added a test phase, as asked.  ',
+      reply: REPLY,
     });
     const task = harness.task(taskId);
-    expect(task.plan).toMatchObject({
-      version: 2,
-      changeSummary: 'Added a test phase, as asked.',
-      feedback: 'Add a test phase.',
-      changes: [{ kind: 'phase_added', title: 'Add a test' }],
+    expect(task.plan).toEqual(
+      expect.objectContaining({ version: 2, changes: [{ kind: 'phase_added', title: 'Add a test' }] })
+    );
+    expect(task.plan).not.toHaveProperty('changeSummary');
+    expect(task.plan).not.toHaveProperty('feedback');
+    expect(task.iterations?.at(-1)).toMatchObject({
+      requests: [{ text: 'Add a test phase.' }],
+      reply: REPLY,
     });
     expect(task.planHistory?.map((revision) => revision.version)).toEqual([1]);
     expect(harness.openGate(taskId).planVersion).toBe(2);
     expect(task.activity.find((entry) => entry.text === 'Revised the plan (version 2)')?.detail).toBe(
-      'Added a test phase, as asked.'
+      PLAN.goal
     );
   });
 
-  test('a revision without a summary still lists what changed', () => {
+  test('a revision lists what changed in the plan', () => {
     const { harness, taskId } = approvingPlans();
     proposePlan(harness, taskId);
     harness.send({ type: 'task.message', taskId, text: 'Different goal.' });
@@ -450,9 +454,9 @@ describe('plan revisions', () => {
       type: 'agent.propose_plan',
       runId: harness.activeRun(taskId).id,
       document: { ...PLAN, goal: 'Something else.' },
-      changeSummary: '   ',
+      reply: REPLY,
     });
-    expect(harness.task(taskId).plan).toMatchObject({ changeSummary: null, changes: [{ kind: 'goal' }] });
+    expect(harness.task(taskId).plan).toMatchObject({ changes: [{ kind: 'goal' }] });
     const revised = harness
       .task(taskId)
       .activity.find((entry) => entry.text === 'Revised the plan (version 2)');
