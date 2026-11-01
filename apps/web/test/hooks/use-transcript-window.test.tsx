@@ -204,3 +204,23 @@ describe('useTranscriptWindow', () => {
     expect(shown(view)).toBe(INITIAL_BLOCKS);
   });
 });
+
+describe('useTranscriptWindow while hidden', () => {
+  it('goes back to the newest blocks once its page or tab is hidden', () => {
+    const page = (mode: 'visible' | 'hidden') => (
+      <React.Activity mode={mode}>
+        <Transcript count={30} />
+      </React.Activity>
+    );
+    const view = render(page('visible'));
+    const scroller = view.getByTestId('scroller');
+    scroller.scrollTop = 0;
+    act(() => {
+      fireEvent.scroll(scroller);
+    });
+    expect(view.getByTestId('content').children.length).toBe(INITIAL_BLOCKS + GROW_BLOCKS);
+    act(() => view.rerender(page('hidden')));
+    act(() => view.rerender(page('visible')));
+    expect(view.getByTestId('content').children.length).toBe(INITIAL_BLOCKS);
+  });
+});

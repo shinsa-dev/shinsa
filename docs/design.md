@@ -145,7 +145,7 @@ Only these, and they win over anything below:
      next one starts, so the line never flickers between steps; it says "Thinking" only once the
      agent wrote after its last step (no provider sends a thinking signal), "Starting" before
      anything happened. Shimmering text sets `leading-normal` on its truncating box
-     (`SHIMMER_LINE`): the kit's `leading-none` would clip descenders. A new message
+     (`SHIMMER_LINE`) so its descenders are not clipped. A new message
      swaps in: the old one slides up and fades, the new one rises in from below, and the card's
      height eases; under reduced motion it simply changes. The line opens the card onto
      everything so far. Opened, the newest folded group keeps one row under it for its latest
@@ -258,8 +258,8 @@ Only these, and they win over anything below:
    while the task's agent runs and no decision is open, that run's latest action in the present tense,
    shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
    over the run's transcript, which the row follows only while it is mounted, inside `Truncate` so a long one ends in an ellipsis
-   and shows in full in a tooltip, its shimmer sweeping only the characters before the ellipsis: `ShimmeringText` counts
-   the ones its clipping box shows, `countVisibleChars`); otherwise the current
+   and shows in full in a tooltip, its shimmer sweeping only the characters before the ellipsis: the `Truncate` is `relative` and the
+   text `static`, so the band crosses the visible width); otherwise the current
    step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
    ("Pre-merge · 1 step left"), and nothing more. That text after the dots is on Home's rows only: the rail and the
    Needs you popover end at the dots (`RowSummary`'s `detail`, on for the wide queue). The
@@ -2589,10 +2589,11 @@ Only these, and they win over anything below:
       a file you open, ⌘P's top match as you type and a search match you hover.
     - **Keep it, then refresh it.** Code reads are cached by commit (32) and, once read, a read shows its last
       answer at once while a newer version (a task update, a moved head) loads, the way the Files tree and the
-      diff already held. Every cache is bounded: the code reads keep the last 300 (`CODE_READ_LIMIT`), finished
+      diff already held. Every cache is bounded: the code reads keep the last 300 (`CODE_READ_LIMIT`), only the newest version of
+      each and at most 16 MB of answers (`CODE_READ_BUDGET`), finished
       searches 20 (`CODE_SEARCH_LIMIT`), evidence texts 32 (`EVIDENCE_TEXT_LIMIT`), the review's snippets read
       ahead 8 per task (`SNIPPET_PREFETCH_LIMIT`), the socket's transcripts every run a chat follows plus the 24
-      read last (`TRANSCRIPT_CACHE_LIMIT`).
+      read last (`TRANSCRIPT_CACHE_LIMIT`) while they hold 10,000 entries in all (`TRANSCRIPT_ENTRY_LIMIT`).
     - **A wait shows only after 300ms.** For what could not be foreseen (a file nothing pointed at, a search
       never run, the first state after a reload, a sign-in), the place stays empty for 300ms
       (`LOADING_DELAY_MS`, `useDelayed`) and only then shows the spinner and its line (`LoadingLine`,
@@ -5964,7 +5965,10 @@ Rules:
   transition and animation is cut to nothing, except a spinner and the dialogs
   and their scrims (`data-reduced-motion="fade"`), which drop their scale and
   keep their fade. Looping movement
-  opts out with `motion-reduce:animate-none` (skeleton, progress shimmer).
+  opts out with `motion-reduce:animate-none` (skeleton, progress shimmer), and
+  `ShimmeringText` hides its sweep (`motion-reduce:hidden`). A loop that runs
+  while nothing happens, like the agents' shimmering lines, moves by `transform`
+  alone, so it runs on the compositor and never restyles the page each frame.
 
 Skeleton sweep 2s, shimmer 1.5s. The one attention effect is `variant-flash`:
 a 6.5% foreground wash held for the first ~480ms, then eased out over the
