@@ -470,6 +470,7 @@ export interface Task {
   mode?: TaskMode;
   planHistory?: PlanRevision[];
   dismissedFindings?: ReviewFinding[];
+  approveAfterFix?: boolean;
   reviewDisagreements?: ReviewDisagreement[];
   monitor?: Monitor | null;
   treeHash?: string | null;

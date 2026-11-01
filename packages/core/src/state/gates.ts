@@ -1,19 +1,33 @@
-import { isAgentQuestion, isPausingGate } from '../domain/index.ts';
+import { type Gate, isAgentQuestion, isPausingGate } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { describeDecision } from './activity.ts';
 import { writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
 import { applyVerdicts } from './reviews.ts';
-import { record, updateGate } from './write.ts';
+import { record, updateGate, updateTask } from './write.ts';
 
 type GateEvent = Extract<
   ShinsaEvent,
   { type: 'gate.opened' | 'gate.answered' | 'gate.withdrawn' | 'gate.noted' | 'gate.superseded' }
 >;
 
+function writeApproveAfterFix(state: ShinsaState, taskId: string, at: number, approveAfterFix: boolean) {
+  if ((state.tasks[taskId]?.approveAfterFix ?? false) === approveAfterFix) return;
+  updateTask(state, taskId, at, { approveAfterFix });
+}
+
+function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
+  if (gate.type === 'result') return 'Closed the task';
+  if (event.ahead) return `Approved after the fix, as you asked: ${gate.title}`;
+  if (event.thenApprove) return `Asked for changes and to approve after the fix: ${gate.title}`;
+  return describeDecision(event.decision, gate.title);
+}
+
 function applyGateOpened(state: ShinsaState, event: EventOf<'gate.opened'>) {
   const gate = { ...event.gate };
   writeEntry(state, 'gates', gate.id, gate);
+  if (gate.type === 'review' || isPausingGate(gate))
+    writeApproveAfterFix(state, gate.taskId, event.at, false);
   if (isAgentQuestion(gate)) {
     record(state, gate.taskId, event.at, {
       actor: 'agent',
@@ -44,10 +58,11 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
   const gate = state.gates[event.gateId];
   if (!gate) return;
   if (event.verdicts) applyVerdicts(state, gate.taskId, event.at, event.verdicts);
+  if (gate.type === 'review') writeApproveAfterFix(state, gate.taskId, event.at, event.thenApprove === true);
   record(state, gate.taskId, event.at, {
     actor: 'you',
     kind: 'decision',
-    text: gate.type === 'result' ? 'Closed the task' : describeDecision(event.decision, gate.title),
+    text: describeAnswer(gate, event),
     detail: event.response,
     ...(event.comments ? { comments: event.comments } : {}),
   });

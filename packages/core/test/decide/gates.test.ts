@@ -14,6 +14,7 @@ import {
   completePhase,
   createHarness,
   createTask,
+  failing,
   type Harness,
   LARGE_PLAN,
   PASSING,
@@ -26,6 +27,7 @@ import {
   reachShipping,
   readInstruction,
   readyWorktree,
+  resolveReply,
   verifySetup,
 } from '../harness.ts';
 
@@ -340,6 +342,157 @@ describe('verdicts on review findings', () => {
     ).toThrow('Only review findings take a verdict.');
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null, verdicts: [] });
     expect(harness.state.gates[gate.id]?.verdicts).toBeUndefined();
+  });
+});
+
+describe('fixing findings, then approving', () => {
+  const blocking = [{ severity: 'blocking' as const, file: 'src/a.ts', line: 3, message: 'Off by one.' }];
+
+  function askFixThenApprove() {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [{ severity: 'should_fix', file: 'a.ts', line: 3, message: 'Rename it.' }],
+    });
+    const gate = harness.openGate(taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: gate.id,
+      decision: 'revise',
+      response: null,
+      verdicts: [{ index: 0, verdict: 'fix', note: null }],
+      thenApprove: true,
+    });
+    return { harness, taskId, gate };
+  }
+
+  function fix(harness: Harness, taskId: string, treeHash: string, checks: string[] = []) {
+    const runId = harness.activeRun(taskId).id;
+    harness.send({
+      type: 'agent.complete_fix',
+      runId,
+      summary: 'Fixed.',
+      treeHash,
+      ...(checks.length > 0 ? { checks } : {}),
+      ...resolveReply(harness, runId),
+    });
+  }
+
+  function review(harness: Harness, taskId: string, findings: typeof blocking | [] = []) {
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings,
+    });
+  }
+
+  test('the review approves itself once the fix passes the checks and the agent review', () => {
+    const { harness, taskId, gate } = askFixThenApprove();
+    expect(harness.task(taskId).approveAfterFix).toBe(true);
+    expect(harness.state.gates[gate.id]?.decision).toBe('revise');
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      `Asked for changes and to approve after the fix: ${gate.title}`
+    );
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    const approved = Object.values(harness.state.gates).find(
+      (found) => found.taskId === taskId && found.type === 'review' && found.id !== gate.id
+    );
+    expect(approved).toMatchObject({ status: 'answered', decision: 'approve' });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'shipping', approveAfterFix: false });
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      `Approved after the fix, as you asked: ${gate.title}`
+    );
+  });
+
+  test('blocking findings in between are fixed by the agents, then the review still approves itself', () => {
+    const { harness, taskId } = askFixThenApprove();
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
+    expect(harness.task(taskId).approveAfterFix).toBe(true);
+    fix(harness, taskId, 'tree-2');
+    review(harness, taskId);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.task(taskId).stage).toBe('shipping');
+  });
+
+  test('a review the agents cannot settle still opens for you and drops the approval', () => {
+    const { harness, taskId } = askFixThenApprove();
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking);
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking);
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'review', status: 'open' });
+    expect(harness.openGate(taskId).escalation?.reason).toBe('stalled');
+    expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_review', approveAfterFix: false });
+  });
+
+  test('checks that fail past the fix budget stop for you and drop the approval', () => {
+    const { harness, taskId } = askFixThenApprove();
+    harness.send({ type: 'settings.change', patch: { maxFixRounds: 1 } });
+    fix(harness, taskId, 'tree-1', ['c1']);
+    harness.send({ type: 'checks.record', taskId, results: failing('r2') });
+    fix(harness, taskId, 'tree-2');
+    harness.send({ type: 'checks.record', taskId, results: failing('r1') });
+    expect(harness.openGate(taskId).type).toBe('failure');
+    expect(harness.task(taskId).approveAfterFix).toBe(false);
+  });
+
+  test('asking again at a review the agents could not settle approves after that fix', () => {
+    const { harness, taskId } = askFixThenApprove();
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking);
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking);
+    const gate = harness.openGate(taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: gate.id,
+      decision: 'revise',
+      response: 'Try again.',
+      thenApprove: true,
+    });
+    expect(harness.task(taskId).approveAfterFix).toBe(true);
+    fix(harness, taskId, 'tree-2');
+    review(harness, taskId);
+    expect(harness.task(taskId)).toMatchObject({ stage: 'shipping', approveAfterFix: false });
+  });
+
+  test('only a request for changes at a review approves after the fix', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    const reviewGate = harness.openGate(taskId).id;
+    expect(() =>
+      harness.send({
+        type: 'gate.answer',
+        gateId: reviewGate,
+        decision: 'approve',
+        response: null,
+        thenApprove: true,
+      })
+    ).toThrow('Ask for changes to approve after the fix.');
+    approve(harness, taskId);
+    pushed(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+    expect(() =>
+      harness.send({
+        type: 'gate.answer',
+        gateId: harness.openGate(taskId).id,
+        decision: 'revise',
+        response: 'x',
+        thenApprove: true,
+      })
+    ).toThrow('Only a review approves itself after a fix.');
   });
 });
 
