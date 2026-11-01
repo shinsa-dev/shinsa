@@ -7,12 +7,14 @@ import {
   type EngineFeature,
   type EngineInfo,
   hasEngineFeature,
+  NO_TEAM_FEED,
   type PlacementMachine,
   type RemoteSnapshot,
   resolveEngineCommands,
   type ServerMessage,
   type StatePatch,
   type Surface,
+  type TeamFeedSnapshot,
   type TerminalsSnapshot,
   type UserCommand,
   type WireState,
@@ -20,6 +22,7 @@ import {
 import { useEffect, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
+import { useSharedTranscript } from '@/lib/share/transcripts.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { selectReadOnlyRefusal } from './read-only.ts';
 
@@ -84,6 +87,8 @@ export interface ShinsaConnection {
   subscribeRemote: (listener: () => void) => () => void;
   selectRemote: () => RemoteSnapshot | null;
   replaceRemote: (remote: RemoteSnapshot) => void;
+  subscribeTeams: (listener: () => void) => () => void;
+  selectTeams: () => TeamFeedSnapshot;
   selectMachine: (id: string) => MachineView | null;
   listMachines: () => MachineChoice[];
   listUnreachableMachines: () => UnreachableMachine[];
@@ -180,6 +185,7 @@ export class Connection implements ShinsaConnection {
   #accounts: AccountsSnapshot | null = null;
   #terminals: TerminalsSnapshot | null = null;
   #remote: RemoteSnapshot | null = null;
+  #teams: TeamFeedSnapshot = NO_TEAM_FEED;
   #engine: EngineInfo | null = null;
   #desktopConnected = false;
   readonly #options: ConnectionOptions;
@@ -189,6 +195,7 @@ export class Connection implements ShinsaConnection {
   readonly #surfacesSignal = createSignal();
   readonly #terminalsSignal = createSignal();
   readonly #remoteSignal = createSignal();
+  readonly #teamsSignal = createSignal();
   readonly #pending = new Map<string, Pending>();
   readonly #optimistic = new Map<string, UserCommand>();
   readonly #transcripts = new Map<string, ChatEntry[]>();
@@ -255,6 +262,10 @@ export class Connection implements ShinsaConnection {
     this.#remote = remote;
     this.#remoteSignal.publish();
   }
+
+  subscribeTeams = (listener: () => void) => this.#teamsSignal.subscribe(listener);
+
+  selectTeams = () => this.#teams;
 
   isDesktopConnected = () => this.#desktopConnected;
 
@@ -327,6 +338,7 @@ export class Connection implements ShinsaConnection {
     this.#accounts = null;
     this.#terminals = null;
     this.#remote = null;
+    this.#teams = NO_TEAM_FEED;
     this.#engine = null;
     this.#desktopConnected = false;
     this.#pending.clear();
@@ -339,6 +351,7 @@ export class Connection implements ShinsaConnection {
     this.#surfacesSignal.publish();
     this.#terminalsSignal.publish();
     this.#remoteSignal.publish();
+    this.#teamsSignal.publish();
   }
 
   flush() {
@@ -497,6 +510,10 @@ export class Connection implements ShinsaConnection {
       case 'remote':
         this.replaceRemote(message.remote);
         return;
+      case 'teams':
+        this.#teams = message.teams;
+        this.#teamsSignal.publish();
+        return;
       case 'engine':
         this.#engine = message.engine;
         this.#state.publish();
@@ -534,19 +551,30 @@ export function useDesktopConnected() {
 }
 
 export function useTranscript(runId: string | null) {
+  const shared = useSharedTranscript(runId);
+  const watched = shared === null;
   useEffect(() => {
-    if (!runId) return;
+    if (!(runId && watched)) return;
     return connection.watchTranscript(runId);
-  }, [runId]);
-  return useSyncExternalStore(connection.subscribeTranscripts, () =>
+  }, [runId, watched]);
+  const live = useSyncExternalStore(connection.subscribeTranscripts, () =>
     runId ? connection.selectTranscript(runId) : NO_ENTRIES
   );
+  return shared ?? live;
 }
 
 export function sendCommand(command: UserCommand, machineId?: string | null) {
   const refusal = selectReadOnlyRefusal();
   if (refusal) return Promise.reject(refusal);
   return connection.command(command, machineId);
+}
+
+export function useRemoteSnapshot() {
+  return useSyncExternalStore(connection.subscribeRemote, connection.selectRemote);
+}
+
+export function useTeamFeed() {
+  return useSyncExternalStore(connection.subscribeTeams, connection.selectTeams);
 }
 
 export function useEngineCommands(id?: string | null) {

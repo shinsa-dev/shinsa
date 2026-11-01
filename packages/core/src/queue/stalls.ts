@@ -1,4 +1,11 @@
-import { compareTasks, type Gate, isDecisionGate, isPausingGate, type Task } from '../domain/index.ts';
+import {
+  compareTasks,
+  type Gate,
+  isDecisionGate,
+  isPausingGate,
+  isRoundFinished,
+  type Task,
+} from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { listWaitsOn } from './rank.ts';
@@ -15,7 +22,9 @@ export interface WaitLeaf {
 export function selectLeadGate(state: ShinsaState, task: Task) {
   const gates = listOpenGates(state, task.id);
   const current = gates.filter((gate) => gate.type !== 'post_merge');
-  return current.find((gate) => !isDecisionGate(gate)) ?? current[0] ?? gates[0] ?? null;
+  const lead = current.find((gate) => !isDecisionGate(gate)) ?? current[0];
+  if (lead) return lead;
+  return isRoundFinished(task) ? (gates[0] ?? null) : null;
 }
 
 function resolveStall(state: ShinsaState, task: Task): Omit<WaitLeaf, 'path' | 'task'> | null {

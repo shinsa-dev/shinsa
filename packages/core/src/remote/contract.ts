@@ -1,3 +1,5 @@
+import type { RemoteTeam } from './teams.ts';
+
 export const REMOTE_APP_ORIGIN = 'https://app.shinsa.dev';
 
 export const REMOTE_TUNNEL_DOMAIN = 'shinsa.dev';
@@ -34,6 +36,12 @@ export const REMOTE_PATHS = {
   machineMemberRemove: '/__remote/machine/members/remove',
   inviteAccept: '/__remote/invites/accept',
   previewOpen: '/__remote/previews/open',
+  teams: '/__remote/teams',
+  teamJoin: '/__remote/teams/join',
+  teamJoinPage: '/share/team',
+  machineTeams: '/__remote/machine/teams',
+  machineTeamJoin: '/__remote/machine/teams/join',
+  teamPreview: '/__remote/teams/preview',
 } as const;
 
 export const MAX_INSTANCE_MEMBERS = 20;
@@ -97,6 +105,7 @@ export interface RemoteAccess {
 
 export interface HeartbeatResponse extends RemoteAccess {
   ok: true;
+  teams: RemoteTeam[];
 }
 
 export type RemoteRole = 'owner' | 'member';

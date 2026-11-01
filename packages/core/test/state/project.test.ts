@@ -150,9 +150,9 @@ describe('task activity', () => {
 describe('replayEventLog', () => {
   test('applies every event it can, reports the ones it cannot, and keeps the highest sequence', () => {
     const events = [
-      { type: 'focus.changed', focus: { projectId: null, until: 5 }, seq: 1, at: 1 },
+      { type: 'focus.changed', focus: { projectId: null, teamId: null, until: 5 }, seq: 1, at: 1 },
       { type: 'task.suggested', seq: 2, at: 2 },
-      { type: 'focus.changed', focus: { projectId: null, until: 9 }, seq: 3, at: 3 },
+      { type: 'focus.changed', focus: { projectId: null, teamId: null, until: 9 }, seq: 3, at: 3 },
       { type: 'task.suggested', seq: 4, at: 4 },
     ] as unknown as ShinsaEvent[];
     const { state, failures } = replayEventLog(events);

@@ -18,7 +18,7 @@ import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } f
 import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
-import type { ShareLimit } from './settings.ts';
+import type { ShareLimit, SharePreset } from './settings.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
 import type { SlackThreadLink } from './slack.ts';
 import type { PipelineStep } from './steps.ts';
@@ -229,10 +229,12 @@ export interface Project {
   description: string;
   folders: string[];
   watchSources?: WatchSource[];
+  teamIds?: string[];
 }
 
 export interface Focus {
   projectId: string | null;
+  teamId: string | null;
   until: number | null;
 }
 
@@ -541,8 +543,10 @@ export interface TaskShare {
   at: number;
   url: string | null;
   limit: ShareLimit;
+  preset: SharePreset;
   endsAt: number | null;
   failure?: string | null;
+  description?: string | null;
 }
 
 export interface PreviewShare {

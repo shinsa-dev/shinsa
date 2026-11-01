@@ -48,7 +48,10 @@ import {
 import { createPlacementAsker, type PlacementAsker } from './remote/placement.ts';
 import { Previews } from './remote/previews.ts';
 import { ShareClock } from './remote/share-clock.ts';
+import { createShareDescriber } from './remote/share-describe.ts';
 import { Shares } from './remote/shares.ts';
+import { TeamFeeds } from './remote/team-feeds.ts';
+import { Teams } from './remote/teams.ts';
 import {
   createDiscoverer,
   createLoginResolver,
@@ -166,7 +169,9 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     machineName: resolveMachineName(),
     openUrl: options.openRemoteUrl ?? createUrlOpener(config.userHome),
   });
-  const shares = new Shares({ engine, remote, evidence });
+  const shares = new Shares({ engine, remote, evidence, transcripts });
+  const teams = new Teams({ engine, remote, shares, transcripts });
+  const teamFeeds = new TeamFeeds({ remote });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
@@ -227,6 +232,8 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     terminals,
     remote,
     shares,
+    teams,
+    teamFeeds,
     previews,
     slack,
     inbox,
@@ -252,6 +259,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       wordWatch: createWatchWriter(quick.write),
+      describeShare: createShareDescriber(quick.write),
       draftFeedback: createFeedbackDrafter(quick.write),
       instance,
       resolveLogin,
@@ -297,6 +305,8 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     workspaces: services.runs.workspaces,
     remote: services.remote,
     shares: services.shares,
+    teams: services.teams,
+    teamFeeds: services.teamFeeds,
     previews: services.previews,
     slack: services.slack,
     restarter: createServiceRestarter(engine, {
@@ -324,6 +334,7 @@ async function startWork(services: Services) {
   await effects.recover();
   services.inbox.start();
   services.remote.start();
+  services.teamFeeds.start();
   services.briefings.schedule();
   services.extensions.syncSnapshot();
   void services.extensions.syncUsage();
@@ -366,6 +377,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
       services.schedules.stop();
       services.accounts.stop();
       services.versions.stop();
+      services.teamFeeds.stop();
       await services.remote.stop();
       await services.terminals.stop();
       for (const clock of services.clocks) clock.stop();

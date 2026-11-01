@@ -4,6 +4,7 @@ import {
   type ClientMessage,
   decide,
   ENGINE_BASELINE_COMMANDS,
+  NO_TEAM_FEED,
   resolveEngineInfo,
   resolveStatePatch,
   type ServerMessage,
@@ -576,6 +577,24 @@ describe('Connection remote access', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     subject.reset();
     expect(subject.selectRemote()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Connection team feeds', () => {
+  it('keeps the teammates’ task lists the engine pushes, tells its listeners and forgets them on reset', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => undefined);
+    subject.subscribeTeams(listener);
+    subject.start();
+    latest().open();
+    expect(subject.selectTeams()).toBe(NO_TEAM_FEED);
+    const teams = { machines: [], tasks: [] };
+    latest().receive({ type: 'teams', teams });
+    expect(subject.selectTeams()).toEqual(teams);
+    expect(listener).toHaveBeenCalledTimes(1);
+    subject.reset();
+    expect(subject.selectTeams()).toBe(NO_TEAM_FEED);
     expect(listener).toHaveBeenCalledTimes(2);
   });
 });

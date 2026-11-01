@@ -10,23 +10,29 @@ import {
   stashEnrollFragment,
 } from '@/lib/remote/mode.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
+import { createTeamKeyStore, selectTeamJoinFragment, stashTeamJoinFragment } from '@/lib/teams/join.ts';
+import { createJoinMachinesSource } from '@/lib/teams/join-machines.ts';
 import { EnrollPage } from './enroll.tsx';
 import { FleetApp } from './fleet.tsx';
 import { PairPage } from './pair.tsx';
 import { SharePage } from './share.tsx';
 import { RemoteLoading, RemoteShell, SignInPrompt } from './shell.tsx';
 import { SlackLinkedPage } from './slack.tsx';
+import { TeamJoinPage } from './team-join.tsx';
 
 export function createRemoteServices(): RemoteServices {
+  const store = createIndexedStore(indexedDB);
   return {
     dashboard: createDashboardClient(),
-    devices: createDeviceStore(createIndexedStore(indexedDB)),
+    devices: createDeviceStore(store),
+    teamKeys: createTeamKeyStore(store),
     worker: navigator.serviceWorker,
   };
 }
 
 function resolveReturnPath(view: RemoteView) {
   if (view.kind === 'enroll') return REMOTE_PATHS.enrollPage;
+  if (view.kind === 'team-join') return REMOTE_PATHS.teamJoinPage;
   const search = new URLSearchParams(location.search);
   search.delete('sign_in_error');
   const query = search.toString();
@@ -40,8 +46,13 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
       stashEnrollFragment(sessionStorage, location.hash, location.search);
       history.replaceState(null, '', REMOTE_PATHS.enrollPage);
     }
+    if (resolved.kind === 'team-join' && location.hash) {
+      stashTeamJoinFragment(sessionStorage, location.hash);
+      history.replaceState(null, '', REMOTE_PATHS.teamJoinPage);
+    }
     return resolved;
   });
+  const joinMachines = React.useMemo(() => createJoinMachinesSource(services), [services]);
   const [session, setSession] = React.useState<RemoteSession | null>(null);
   const [failure, setFailure] = React.useState<string | null>(null);
   React.useEffect(() => {
@@ -71,6 +82,15 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
             devices={services.devices}
           />
         );
+      case 'team-join':
+        return (
+          <TeamJoinPage
+            link={selectTeamJoinFragment(sessionStorage)}
+            dashboard={services.dashboard}
+            teamKeys={services.teamKeys}
+            openMachines={joinMachines}
+          />
+        );
       case 'slack':
         return <SlackLinkedPage search={location.search} />;
       case 'app':
@@ -85,7 +105,7 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
   );
   if (view.kind === 'share') {
     return (
-      <RemoteShell session={session} dashboard={services.dashboard} wide>
+      <RemoteShell session={session} dashboard={services.dashboard} fill>
         <SharePage link={view.link} />
       </RemoteShell>
     );

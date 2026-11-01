@@ -179,8 +179,8 @@ export function EnrollPage({
           control of that machine from anywhere.
         </RemoteHero>
       ) : (
-        <RemoteHero icon={MACHINE_ICON} title='Add this device to your machine'>
-          Name this device and ask for access. Once you accept it, this device opens Shinsa on your machine
+        <RemoteHero icon={MACHINE_ICON} title='Add this device'>
+          Name this device and ask for access. Once the request is accepted, this device opens that Shinsa
           from anywhere.
         </RemoteHero>
       )}

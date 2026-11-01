@@ -96,7 +96,7 @@ export function createState(): ShinsaState {
     seq: 0,
     repos: {},
     projects: {},
-    focus: { projectId: null, until: null },
+    focus: { projectId: null, teamId: null, until: null },
     taskNumbers: {},
     settings: createSettings(),
     tasks: {},
@@ -1052,6 +1052,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.unshared':
     case 'share.recorded':
     case 'share.failed':
+    case 'share.described':
     case 'preview.shared':
     case 'preview.unshared':
     case 'preview.recorded':

@@ -4,7 +4,7 @@ export const ENGINE_PROTOCOL = 1;
 
 export const DEVELOPMENT_VERSION = '0.0.0';
 
-export const ENGINE_FEATURES = ['task.share', 'feedback'] as const;
+export const ENGINE_FEATURES = ['task.share', 'feedback', 'teams'] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];
 

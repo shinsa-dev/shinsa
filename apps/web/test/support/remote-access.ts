@@ -14,6 +14,7 @@ export function createRemoteSnapshot(overrides: Partial<RemoteSnapshot> = {}): R
     access: null,
     link: null,
     requests: [],
+    teams: [],
     ...overrides,
   };
 }

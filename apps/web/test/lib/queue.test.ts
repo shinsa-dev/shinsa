@@ -48,7 +48,7 @@ function createWorld() {
     ],
     repos: [createRepo({ id: 'app', projectId: 'work' }), createRepo({ id: 'site', projectId: 'home' })],
     projects: [createProject({ id: 'work' }), createProject({ id: 'home' })],
-    patch: { focus: { projectId: 'work', until: null } },
+    patch: { focus: { projectId: 'work', teamId: null, until: null } },
   });
 }
 

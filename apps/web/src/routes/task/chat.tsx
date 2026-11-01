@@ -13,6 +13,7 @@ import { UserMessage } from '@/components/chat/user-message.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { CHAT_COLUMN } from '@/components/layout/surface/card.ts';
 import { Composer } from '@/components/task/composer.tsx';
+import { useReadOnly } from '@/components/task/read-only.tsx';
 import { useOutbox } from '@/hooks/use-outbox.ts';
 import { useStickToBottom } from '@/hooks/use-stick-to-bottom.ts';
 import { useTranscriptWindow } from '@/hooks/use-transcript-window.ts';
@@ -153,7 +154,8 @@ export function ChatTab({
   );
   const opened = React.useMemo(() => listDelegationPath(state, focusRunId), [state, focusRunId]);
   const { scroller, content, detached, onScroll, jumpToLatest } = useStickToBottom(focusRunId);
-  const hint = resolveMessageHint(state, task);
+  const readOnly = useReadOnly();
+  const hint = readOnly ? null : resolveMessageHint(state, task);
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>

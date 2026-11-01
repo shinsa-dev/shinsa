@@ -19,7 +19,7 @@ function createFakeEngine(shares: Record<string, TaskShare | null>, answer: 'eve
   return { engine: engine as unknown as Engine, sent };
 }
 
-const SHARE = { at: 0, url: null, limit: 'hour', endsAt: 1_000 } as const;
+const SHARE = { at: 0, url: null, limit: 'hour', preset: 'standard', endsAt: 1_000 } as const;
 
 describe('the share clock', () => {
   test('ends each share whose time ran out, and only those', async () => {

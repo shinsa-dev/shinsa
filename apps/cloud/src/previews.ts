@@ -62,6 +62,12 @@ function respondPage(kind: PreviewPageKind, status: number) {
   });
 }
 
+function respondRobots() {
+  return new Response('User-agent: *\nDisallow: /\n', {
+    headers: { 'content-type': 'text/plain; charset=utf-8', 'x-robots-tag': NOINDEX },
+  });
+}
+
 function respondCookieRedirect(url: URL, param: string, cookie: string, maxAgeSeconds: number) {
   const clean = new URL(url);
   clean.searchParams.delete(param);
@@ -189,6 +195,7 @@ function readPass(request: Request): PreviewPass {
 }
 
 export async function respondPreview(request: Request, url: URL, world: CloudWorld) {
+  if (url.pathname === '/robots.txt') return respondRobots();
   const address = parsePreviewHost(url.host, world.config.previewOrigin);
   if (!address) return respondPage('gone', 404);
   const query = url.searchParams.get(PREVIEW_KEY_PARAM);

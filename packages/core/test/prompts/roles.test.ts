@@ -164,6 +164,9 @@ describe('what a prompt says about the work it builds on', () => {
       '`testing` has two parts. `automated`: one or two lines on what the tests cover'
     );
     expect(resolvePhaseInstruction(task, null, 0)).toContain('Later phases build on this one');
+    expect(resolvePhaseInstruction(task, null, 1)).not.toContain(
+      'of an earlier round still wait on the human'
+    );
   });
 
   test('only the last phase asks for a live preview of the project’s services as evidence', () => {

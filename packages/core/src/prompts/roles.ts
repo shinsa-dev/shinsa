@@ -19,7 +19,7 @@ import {
   type WatchSource,
 } from '../domain/index.ts';
 import { assembleReport } from '../report/assemble.ts';
-import { listMergeSteps, MERGE_STEP_WHEN_WORDS } from '../report/merge-steps.ts';
+import { listMergeSteps, listOpenMergeSteps, MERGE_STEP_WHEN_WORDS } from '../report/merge-steps.ts';
 import { listTestingLines } from '../report/testing.ts';
 import { PROTOCOL_LIMITS } from '../report/validate.ts';
 import { describeCoverage, listCoverageGaps } from '../test-coverage/describe.ts';
@@ -207,6 +207,16 @@ function describeEvidenceForPhase(task: Task, repo: Repo | null, index: number, 
     .join('\n');
 }
 
+function describeCarriedPostMergeSteps(task: Task) {
+  const round = resolveCurrentRound(task).number;
+  const carried = listOpenMergeSteps(task, 'post_merge').filter((step) => step.round < round);
+  if (carried.length === 0) return '';
+  return [
+    'These steps after the merge of an earlier round still wait on the human. They stay on the task until ticked, so never list them again in the walkthrough’s `steps`:',
+    ...carried.map((step) => `- ${step.title}`),
+  ].join('\n');
+}
+
 function describeWait(waitedMs: number) {
   if (waitedMs >= DAY_MS) return describeCount(Math.floor(waitedMs / DAY_MS), 'day');
   if (waitedMs >= HOUR_MS) return describeCount(Math.floor(waitedMs / HOUR_MS), 'hour');
@@ -250,6 +260,7 @@ export function resolvePhaseInstruction(
       ? '- walkthrough: required now, for the whole change: the approach, how it works behind the scenes, the risks and edge cases with their lines, how to test it, and the steps the human must take around the merge.\n  `steps` lists only what needs a person or production access, before or after the merge: an environment variable or secret to set (name it and where; never its value), a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files). Never a step to stage, commit, push or open a pull request: work in another repository is a task you file with `create_task`. Give each step its exact command when it has one. Leave `steps` out when there is nothing.\n  `testing` has two parts. `automated`: one or two lines on what the tests cover, naming the test files. `manual`: the steps the human follows in order, each an `action`, a `target` when it happens in one place (a `url`, a `file` as `path:line`, a `command` or a `screen`) and `expect`, what they should see. Start from where to go (the preview deployment URL, the local preview you attached, or the command that starts the app and its local URL), then what to click and type, then the edge cases worth trying.\n  Whenever the change has structure or a flow worth drawing (pieces that call each other, a path a request or data takes, states, a tree of files), draw it in `flow` (or `approach`) as a text diagram in a fenced code block: a tree, or boxes and arrows (`a ──► b`), at most 72 columns wide, aligned for a monospace font, with a few words on each step.' +
         describeWatchdogGuide(sources, defaults)
       : '',
+    last ? describeCarriedPostMergeSteps(task) : '',
     'Then stop.',
   ]
     .filter(Boolean)

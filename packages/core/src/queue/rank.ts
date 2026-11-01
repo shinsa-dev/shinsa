@@ -13,6 +13,7 @@ import {
   type TaskStage,
 } from '../domain/index.ts';
 import { listOpenMergeSteps } from '../report/merge-steps.ts';
+import { isTeamTask } from '../share/teams.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
   isHeldInBacklog,
@@ -54,13 +55,22 @@ function isMoving(task: Task, running: ReadonlySet<string>) {
   return WORKING_STAGES.has(task.stage) || hasArmedWait(task) || running.has(task.id);
 }
 
+function isFocusOver(state: ShinsaState, now: number) {
+  const { until } = state.focus;
+  return until !== null && until <= now;
+}
+
 export function resolveFocusProject(state: ShinsaState, now: number) {
-  const { projectId, until } = state.focus;
-  if (until !== null && until <= now) return null;
-  return projectId;
+  return isFocusOver(state, now) ? null : state.focus.projectId;
+}
+
+export function resolveFocusTeam(state: ShinsaState, now: number) {
+  return isFocusOver(state, now) ? null : state.focus.teamId;
 }
 
 export function isInFocus(state: ShinsaState, task: Task, now: number) {
+  const teamId = resolveFocusTeam(state, now);
+  if (teamId !== null) return isTeamTask(state, task, teamId);
   const projectId = resolveFocusProject(state, now);
   return projectId === null || resolveTaskProject(state, task) === projectId;
 }
@@ -154,6 +164,7 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   const limit = resolveAttentionLimit(state.settings);
   return {
     focusProjectId: resolveFocusProject(state, now),
+    focusTeamId: resolveFocusTeam(state, now),
     ready,
     upNow: ready.slice(0, limit),
     later: ready.slice(limit),

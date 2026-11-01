@@ -1,6 +1,7 @@
 import { describeList } from '@shinsa/core';
 import * as React from 'react';
 import { replaceConnection } from '@/lib/connection/socket.ts';
+import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import { requestWaitingAnswer } from '@/lib/remote/enroll.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
 import { createFleetMember, listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
@@ -12,6 +13,8 @@ import {
 } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
+import { admitTeamMachines } from '@/lib/teams/admit.ts';
+import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
 import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteSteps } from './shell.tsx';
 
 type FleetState =
@@ -131,9 +134,14 @@ export function FleetApp({
     const release: (() => void)[] = [];
     void (async () => {
       try {
-        const rows = await settleWaitingRows(
-          await listMachineRows(services.dashboard, services.devices),
-          services
+        const rows = await admitTeamMachines(
+          await settleWaitingRows(await listMachineRows(services.dashboard, services.devices), services),
+          {
+            dashboard: services.dashboard,
+            devices: services.devices,
+            selectTeamKey: services.teamKeys.selectTeamKey,
+            name: resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, null),
+          }
         );
         const added = rows.flatMap((row) =>
           row.device && !row.device.waiting ? [{ instance: row.instance, device: row.device }] : []
@@ -171,12 +179,19 @@ export function FleetApp({
           })
         );
         release.push(...members.map((entry) => entry.close));
+        const hostedTeams = new HostedTeamFeeds({
+          listTeams: services.dashboard.listTeams,
+          selectTeamKey: services.teamKeys.selectTeamKey,
+        });
+        release.push(() => hostedTeams.stop());
         fleet = new Fleet(
           members.map((entry) => entry.member),
           rows.flatMap((row) =>
             row.device && !row.device.waiting ? [] : [{ id: row.instance.id, name: row.instance.name }]
-          )
+          ),
+          hostedTeams
         );
+        void hostedTeams.start();
         release.push(() => fleet?.close());
         await startServiceWorker(services.worker, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE);
         if (!live) return;

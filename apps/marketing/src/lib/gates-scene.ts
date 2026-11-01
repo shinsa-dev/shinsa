@@ -302,7 +302,7 @@ export function createGateScene(now: number, step: GateStep, fixed: boolean) {
   const state: ShinsaState = {
     ...createSampleState({ tasks: [task], gates: gate ? [gate] : [], runs: listRuns(now, step) }),
     projects: { [PROJECT.id]: PROJECT },
-    focus: { projectId: PROJECT.id, until: null },
+    focus: { projectId: PROJECT.id, teamId: null, until: null },
   };
   return { state, task, gate };
 }

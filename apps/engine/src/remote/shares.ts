@@ -1,25 +1,42 @@
-import { statSync } from 'node:fs';
-import { extname } from 'node:path';
+import { lstatSync, readlinkSync, realpathSync, statSync } from 'node:fs';
+import { extname, join, sep } from 'node:path';
 import {
+  type ChatEntry,
+  countShareTranscriptPages,
+  createShareWelcome,
   DomainError,
+  deriveShareSessionKey,
+  hasShareGroup,
   isShareId,
+  type PullRequest,
+  parseShareHello,
   parseShareUrl,
   parseUnifiedDiff,
   type Repo,
+  redactTranscriptPage,
+  resolveRoundBase,
   resolveSharedTask,
+  resolveSharePreset,
+  resolveShareTranscriptFile,
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
   SHARE_FILE_BYTES,
   SHARE_ID_BYTES,
   SHARE_KEY_BYTES,
+  SHARE_TRANSCRIPT_PAGE,
   SHARED_EVIDENCE_PREFIX,
   type SharedTask,
   type ShareFileType,
   type ShareLiveView,
+  type SharePreset,
   serializeBase64Url,
+  serializePublicKey,
   serializeShareUrl,
   type Task,
+  verifyShareHello,
 } from '@shinsa/core';
+import { readWorkingPatch } from '../git/diff.ts';
+import { resolveTaskCheckout, resolveTaskRefs } from '../git/task-refs.ts';
 import { readPullRequestDiff, readRepoFile, resolveRepoSlug } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
@@ -27,7 +44,14 @@ import { EffectError } from '../runtime/failures.ts';
 import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence.ts';
 import type { ChannelPeer } from './channel.ts';
 import type { Remote } from './index.ts';
-import { type LiveFile, type LiveShare, SHARE_GONE_REASON, ShareChannel } from './share-channel.ts';
+import {
+  createChannelEphemeral,
+  type HelloAnswer,
+  type LiveFile,
+  type LiveShare,
+  SHARE_GONE_REASON,
+  ShareChannel,
+} from './share-channel.ts';
 
 export const SHARE_NOT_PAIRED =
   'Turn on remote access in Settings → General to share this task. Its link works once this machine is paired.';
@@ -56,6 +80,17 @@ export interface ShareGitHub {
   readFile: (repo: Repo, ref: string, path: string) => Promise<string>;
 }
 
+export interface ShareWorktree {
+  readBase: (repo: Repo, task: Task) => Promise<string>;
+  readPatch: (worktree: string, base: string) => Promise<string>;
+  readFile: (worktree: string, path: string) => Promise<string>;
+}
+
+export interface ShareTranscripts {
+  listEntries: (runId: string) => ChatEntry[];
+  subscribe: (listener: (runId: string) => void) => () => void;
+}
+
 export interface SharedCode {
   files: Record<string, string>;
 }
@@ -74,7 +109,9 @@ export interface SharesOptions {
   engine: Engine;
   remote: Remote;
   evidence: EvidenceStore;
+  transcripts: ShareTranscripts;
   github?: ShareGitHub;
+  worktree?: ShareWorktree;
   now?: () => number;
   random?: (bytes: number) => Uint8Array<ArrayBuffer>;
 }
@@ -87,9 +124,31 @@ interface HashedFile {
 
 const GITHUB: ShareGitHub = { readDiff: readPullRequestDiff, readFile: readRepoFile };
 
+const WORKTREE: ShareWorktree = {
+  readBase: async (repo, task) => {
+    const refs = await resolveTaskRefs(repo, task, resolveRoundBase(task));
+    return refs.base ?? refs.head;
+  },
+  readPatch: readWorkingPatch,
+  readFile: readWorktreeFile,
+};
+
+const PULL_REQUEST_CODE: ReadonlySet<PullRequest['state']> = new Set(['open', 'merged']);
+
 const CODE_FILE_LIMIT = 300;
 
 const CODE_STATUSES: ReadonlySet<string> = new Set(['modified', 'renamed']);
+
+export function readWorktreeFile(worktree: string, path: string) {
+  const root = realpathSync(worktree);
+  const full = join(root, path);
+  if (lstatSync(full).isSymbolicLink()) return Promise.resolve(readlinkSync(full));
+  const real = realpathSync(full);
+  if (!real.startsWith(`${root}${sep}`)) {
+    return Promise.reject(new Error(`${path} leads outside the working copy.`));
+  }
+  return Bun.file(real).text();
+}
 
 function resolveRepositoryName(repo: Repo | null) {
   if (!repo) return null;
@@ -114,28 +173,51 @@ function createTextFile(id: string, version: string, bytes: Uint8Array<ArrayBuff
   return { id, version, type: 'text/plain', read: async () => bytes };
 }
 
+function encodeTranscript(entries: ChatEntry[]) {
+  const encoder = new TextEncoder();
+  let kept = entries;
+  let bytes = encoder.encode(JSON.stringify(kept));
+  while (bytes.byteLength > SHARE_FILE_BYTES && kept.length > 0) {
+    kept = kept.slice(Math.ceil(kept.length / 4));
+    bytes = encoder.encode(JSON.stringify(kept));
+  }
+  return bytes;
+}
+
 export class Shares implements ShareEffects, ShareLinks {
   readonly #engine: Engine;
   readonly #remote: Remote;
   readonly #evidence: EvidenceStore;
+  readonly #transcripts: ShareTranscripts;
   readonly #github: ShareGitHub;
+  readonly #worktree: ShareWorktree;
   readonly #now: () => number;
   readonly #random: (bytes: number) => Uint8Array<ArrayBuffer>;
   readonly #hashes = new Map<string, HashedFile>();
   readonly #code = new Map<string, { key: string; files: LiveFile[] }>();
-  readonly #channels = new Set<ShareChannel>();
+  readonly #channels = new Map<ShareChannel, string>();
   #pairedAs: string | null;
 
   constructor(options: SharesOptions) {
     this.#engine = options.engine;
     this.#remote = options.remote;
     this.#evidence = options.evidence;
+    this.#transcripts = options.transcripts;
     this.#github = options.github ?? GITHUB;
+    this.#worktree = options.worktree ?? WORKTREE;
     this.#now = options.now ?? Date.now;
     this.#random = options.random ?? createRandom;
     this.#pairedAs = this.#selectInstanceId();
     options.remote.subscribe(() => this.#syncRemote());
     options.engine.subscribe(() => this.#syncChannels());
+    options.transcripts.subscribe((runId) => this.#pushTranscript(runId));
+  }
+
+  #pushTranscript(runId: string) {
+    const taskId = this.#engine.state.runs[runId]?.taskId;
+    const preset = taskId ? this.#engine.state.tasks[taskId]?.share?.preset : undefined;
+    if (!(taskId && preset && hasShareGroup(preset, 'live'))) return;
+    for (const channel of this.#channels.keys()) if (channel.subject === taskId) void channel.push();
   }
 
   #selectInstanceId() {
@@ -162,15 +244,16 @@ export class Shares implements ShareEffects, ShareLinks {
 
   #syncChannels() {
     this.#endChannels(
-      (channel) => channel.taskId !== null && this.#resolveShare(channel.shareId)?.taskId !== channel.taskId,
+      (channel, shareId) =>
+        channel.subject !== null && this.#resolveShare(shareId)?.taskId !== channel.subject,
       SHARE_GONE_REASON
     );
-    for (const channel of this.#channels) if (channel.taskId) void channel.push();
+    for (const channel of this.#channels.keys()) if (channel.subject) void channel.push();
   }
 
-  #endChannels(match: (channel: ShareChannel) => boolean, reason: string) {
-    for (const channel of [...this.#channels]) {
-      if (!match(channel)) continue;
+  #endChannels(match: (channel: ShareChannel, shareId: string) => boolean, reason: string) {
+    for (const [channel, shareId] of [...this.#channels]) {
+      if (!match(channel, shareId)) continue;
       this.#channels.delete(channel);
       void channel.end(reason);
     }
@@ -193,12 +276,31 @@ export class Shares implements ShareEffects, ShareLinks {
   }
 
   openChannel(peer: ChannelPeer, shareId: string) {
-    const channel = new ShareChannel(peer, shareId, {
-      resolveShare: (id) => this.#resolveShare(id),
+    const channel = new ShareChannel<string>(peer, {
+      name: 'share link',
+      authorize: (hello) => this.#authorize(hello, shareId),
       resolveLive: (taskId) => this.resolveLive(taskId),
     });
-    this.#channels.add(channel);
+    this.#channels.set(channel, shareId);
     return channel;
+  }
+
+  async #authorize(text: string, shareId: string): Promise<HelloAnswer<string>> {
+    const hello = parseShareHello(text);
+    if (hello?.share !== shareId) return null;
+    const share = this.#resolveShare(shareId);
+    if (!(share && (await verifyShareHello(share.key, hello)))) return { refused: SHARE_GONE_REASON };
+    const ephemeral = await createChannelEphemeral();
+    const keys = {
+      share: shareId,
+      clientEphemeral: hello.ephemeral,
+      serverEphemeral: await serializePublicKey(ephemeral.publicKey),
+    };
+    return {
+      subject: share.taskId,
+      session: await deriveShareSessionKey(share.key, keys, ephemeral.privateKey, hello.ephemeral),
+      welcome: await createShareWelcome(share.key, keys),
+    };
   }
 
   closeChannel(channel: ShareChannel) {
@@ -223,12 +325,13 @@ export class Shares implements ShareEffects, ShareLinks {
     await this.#engine.dispatch({ type: 'share.record', taskId, url }, { id: `${context.key}:share.record` });
   }
 
-  async resolveLive(taskId: string): Promise<LiveShare> {
+  async resolveLive(taskId: string, preset?: SharePreset): Promise<LiveShare<ShareLiveView>> {
     const task = this.#findTask(taskId);
-    const { shared, repo } = this.#resolveShared(task);
+    const { shared, repo } = this.#resolveShared(task, preset);
     const files = [
       ...(await this.#listEvidenceFiles(shared)),
       ...(await this.#listLiveCodeFiles(shared, task, repo)),
+      ...this.#listTranscriptFiles(shared),
     ];
     const listed = Object.fromEntries(files.map((file) => [file.id, file.id]));
     const view: ShareLiveView = {
@@ -245,14 +348,35 @@ export class Shares implements ShareEffects, ShareLinks {
     return task;
   }
 
-  #resolveShared(task: Task) {
-    const repo = task.repoId ? (this.#engine.state.repos[task.repoId] ?? null) : null;
+  #resolveShared(task: Task, chosen?: SharePreset) {
+    const preset = chosen ?? task.share?.preset ?? resolveSharePreset(this.#engine.state.settings);
+    const people = hasShareGroup(preset, 'people');
+    const repo = people && task.repoId ? (this.#engine.state.repos[task.repoId] ?? null) : null;
     const shared = resolveSharedTask(this.#engine.state, task, {
-      owner: this.#remote.store.file.owner,
-      machine: this.#remote.snapshot().machineName,
+      preset,
+      owner: people ? this.#remote.store.file.owner : null,
+      machine: people ? this.#remote.snapshot().machineName : null,
       repository: resolveRepositoryName(repo),
     });
     return { shared, repo };
+  }
+
+  #listTranscriptFiles(shared: SharedTask) {
+    if (!hasShareGroup(shared.preset, 'live')) return [];
+    const messages = hasShareGroup(shared.preset, 'messages');
+    return shared.runs.flatMap((run) => this.#listTranscriptPages(run.id, messages));
+  }
+
+  #listTranscriptPages(runId: string, messages: boolean): LiveFile[] {
+    const count = this.#transcripts.listEntries(runId).length;
+    const scope = messages ? 'messages' : 'agents';
+    return Array.from({ length: countShareTranscriptPages(count) }, (_, page) => ({
+      id: resolveShareTranscriptFile(runId, page),
+      version: `${scope}:${Math.min(count - page * SHARE_TRANSCRIPT_PAGE, SHARE_TRANSCRIPT_PAGE)}`,
+      type: 'text/plain',
+      read: async () =>
+        encodeTranscript(redactTranscriptPage(this.#transcripts.listEntries(runId), page, messages)),
+    }));
   }
 
   async #listEvidenceFiles(shared: SharedTask) {
@@ -296,48 +420,90 @@ export class Shares implements ShareEffects, ShareLinks {
     try {
       return await this.#listCodeFiles(shared, task, repo);
     } catch (error) {
-      log.warn('[Share] Could not read the pull request from GitHub', {
-        taskId: task.id,
-        error: describeError(error),
-      });
+      log.warn('[Share] Could not read the task’s code', { taskId: task.id, error: describeError(error) });
       return [];
     }
   }
 
-  async #listCodeFiles(shared: SharedTask, task: Task, repo: Repo | null) {
+  #listCodeFiles(shared: SharedTask, task: Task, repo: Repo | null) {
+    if (!(shared.code && repo)) return Promise.resolve([]);
     const pullRequest = task.pullRequest;
-    if (!(shared.code && repo && pullRequest)) return [];
+    if (pullRequest && PULL_REQUEST_CODE.has(pullRequest.state))
+      return this.#listPullRequestFiles(task, repo, pullRequest);
+    const worktree = resolveTaskCheckout(task);
+    return worktree ? this.#listWorkingFiles(task, repo, worktree) : Promise.resolve([]);
+  }
+
+  #listPullRequestFiles(task: Task, repo: Repo, pullRequest: PullRequest) {
     const key = `${pullRequest.number}:${pullRequest.headSha ?? ''}`;
-    const cached = this.#code.get(task.id);
+    const head = pullRequest.headSha;
+    return this.#cacheCode(
+      task.id,
+      key,
+      () => this.#github.readDiff(repo, pullRequest.number),
+      (path) => {
+        if (!head) return null;
+        return this.#github.readFile(repo, head, path);
+      }
+    );
+  }
+
+  #listWorkingFiles(task: Task, repo: Repo, worktree: string) {
+    return this.#cacheCode(
+      task.id,
+      `working:${task.updatedAt}:${this.#countToolResults(task.id)}`,
+      async () => this.#worktree.readPatch(worktree, await this.#worktree.readBase(repo, task)),
+      (path) => this.#worktree.readFile(worktree, path)
+    );
+  }
+
+  #countToolResults(taskId: string) {
+    let count = 0;
+    for (const run of Object.values(this.#engine.state.runs)) {
+      if (run.taskId !== taskId) continue;
+      for (const entry of this.#transcripts.listEntries(run.id)) if (entry.type === 'tool_result') count += 1;
+    }
+    return count;
+  }
+
+  async #cacheCode(
+    taskId: string,
+    key: string,
+    readDiff: () => Promise<string>,
+    readFile: (path: string) => Promise<string> | null
+  ) {
+    const cached = this.#code.get(taskId);
     if (cached?.key === key) return cached.files;
-    const diff = await this.#github.readDiff(repo, pullRequest.number);
+    const diff = await readDiff();
     const encoder = new TextEncoder();
     const diffFile = createTextFile(SHARE_DIFF_FILE, key, encoder.encode(diff));
     let codeFile: LiveFile | null = null;
-    if (diffFile && pullRequest.headSha) {
-      const code = await this.#readChangedFiles(repo, pullRequest.headSha, diff);
-      codeFile = createTextFile(SHARE_CODE_FILE, key, encoder.encode(JSON.stringify(code)));
+    if (diffFile) {
+      const code = await this.#readChangedFiles(diff, readFile);
+      if (code) codeFile = createTextFile(SHARE_CODE_FILE, key, encoder.encode(JSON.stringify(code)));
     }
     const files = [diffFile, codeFile].flatMap((file) => file ?? []);
-    this.#code.set(task.id, { key, files });
+    this.#code.set(taskId, { key, files });
     return files;
   }
 
-  async #readChangedFiles(repo: Repo, head: string, diff: string): Promise<SharedCode> {
+  async #readChangedFiles(
+    diff: string,
+    readFile: (path: string) => Promise<string> | null
+  ): Promise<SharedCode | null> {
     const files: Record<string, string> = {};
     let bytes = 0;
     const changed = parseUnifiedDiff(diff).filter((file) => CODE_STATUSES.has(file.status) && !file.binary);
     for (const file of changed.slice(0, CODE_FILE_LIMIT)) {
+      const reading = readFile(file.path);
+      if (!reading) return null;
       try {
-        const content = await this.#github.readFile(repo, head, file.path);
+        const content = await reading;
         bytes += content.length;
         if (bytes > SHARE_FILE_BYTES) break;
         files[file.path] = content;
       } catch (error) {
-        log.warn('[Share] Could not read a changed file from GitHub', {
-          path: file.path,
-          error: describeError(error),
-        });
+        log.warn('[Share] Could not read a changed file', { path: file.path, error: describeError(error) });
       }
     }
     return { files };

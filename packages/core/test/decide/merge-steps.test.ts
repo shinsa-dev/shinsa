@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   type DomainError,
+  type Gate,
   listMergeSteps,
   listOpenGates,
   listOpenMergeSteps,
@@ -12,6 +13,7 @@ import {
   selectLeadGate,
   serializeTaskDetail,
 } from '../../src/index.ts';
+import { resolvePhaseInstruction } from '../../src/prompts/index.ts';
 import {
   approve,
   completePhase,
@@ -90,6 +92,12 @@ function reachMergeGate(steps: MergeStep[] = [SECRET, MIGRATION]) {
 
 function merge(harness: Harness, taskId: string) {
   harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
+}
+
+function approveGate(harness: Harness, taskId: string, type: Gate['type']) {
+  const gate = listOpenGates(harness.state, taskId).find((open) => open.type === type);
+  if (!gate) throw new Error(`no open ${type} gate`);
+  harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
 }
 
 function listGateTypes(harness: Harness, taskId: string) {
@@ -299,6 +307,46 @@ describe('the steps around the merge', () => {
     ]);
     expect(resolveTaskPipeline(harness.task(taskId))).not.toContain('post_merge');
     expect(resolveQueue(harness.state, harness.now).working.map((task) => task.id)).toEqual([taskId]);
+  });
+
+  test('steps carried into a working round wait in Needs you without leading the task, and lead again once it rests', () => {
+    const { harness, taskId } = reachMergeGate([MIGRATION]);
+    approve(harness, taskId);
+    merge(harness, taskId);
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Add a CSV export',
+      kind: 'new_round',
+      shape: 'change',
+      title: 'CSV',
+    });
+    expect(selectLeadGate(harness.state, harness.task(taskId))).toBeNull();
+    const queue = resolveQueue(harness.state, harness.now);
+    expect(queue.ready.map((entry) => [entry.task.id, entry.gate.type])).toEqual([[taskId, 'post_merge']]);
+    expect(queue.working.map((task) => task.id)).toEqual([taskId]);
+    expect(resolvePhaseInstruction(harness.task(taskId), null, 0)).toContain(
+      'These steps after the merge of an earlier round still wait on the human. They stay on the task until ticked, so never list them again in the walkthrough’s `steps`:\n- Run the migration'
+    );
+    readyWorktree(harness, taskId);
+    handOver(harness, taskId, []);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
+    expect(selectLeadGate(harness.state, harness.task(taskId))?.type).toBe('review');
+    approveGate(harness, taskId, 'review');
+    pushed(harness, taskId);
+    harness.send({
+      type: 'pull_request.record',
+      taskId,
+      pullRequest: pullRequest({ number: 43, state: 'merged' }),
+    });
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(selectLeadGate(harness.state, harness.task(taskId))?.type).toBe('post_merge');
   });
 
   test('only the human ticks, a step it does not have, or one of a cancelled task', () => {

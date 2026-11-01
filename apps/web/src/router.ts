@@ -7,6 +7,7 @@ export type Route =
   | { name: 'tasks' }
   | { name: 'task'; reference: string }
   | { name: 'automation'; scheduleId: string }
+  | { name: 'team-task'; teamId: string; instanceId: string; taskId: string }
   | { name: 'settings' }
   | { name: 'terminal' }
   | { name: 'onboarding' }
@@ -29,11 +30,28 @@ function parseSegment(pattern: RegExp, pathname: string) {
   }
 }
 
+function parseTeamTaskSegments(pathname: string) {
+  const match = /^\/teams\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(pathname);
+  if (!match) return null;
+  try {
+    const [teamId, instanceId, taskId] = match.slice(1).map((part) => decodeURIComponent(part)) as [
+      string,
+      string,
+      string,
+    ];
+    return { teamId, instanceId, taskId };
+  } catch {
+    return null;
+  }
+}
+
 export function parseRoute(pathname: string): Route {
   const reference = parseSegment(/^\/tasks\/([^/]+)$/, pathname);
   if (reference) return { name: 'task', reference };
   const scheduleId = parseSegment(/^\/automations\/([^/]+)$/, pathname);
   if (scheduleId) return { name: 'automation', scheduleId };
+  const team = parseTeamTaskSegments(pathname);
+  if (team) return { name: 'team-task', ...team };
   if (pathname === '/tasks') return { name: 'tasks' };
   if (pathname === '/settings') return { name: 'settings' };
   if (pathname === '/terminal') return { name: 'terminal' };

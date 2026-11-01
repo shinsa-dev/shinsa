@@ -39,6 +39,7 @@ import { SettingsPage } from '@/routes/settings.tsx';
 import { TaskPage } from '@/routes/task/index.tsx';
 import { Prefetch } from '@/routes/task/prefetch.tsx';
 import { TasksPage } from '@/routes/tasks.tsx';
+import { TeamTaskPage } from '@/routes/team-task.tsx';
 import { TerminalPage } from '@/routes/terminal.tsx';
 
 const UiPage = React.lazy(async () => ({ default: (await import('@/routes/ui/index.tsx')).UiPage }));
@@ -62,6 +63,10 @@ const PageView = React.memo(function PageContent({ state, route }: { state: Shin
       return <TaskPage state={state} taskId={route.reference} />;
     case 'automation':
       return <AutomationPage state={state} scheduleId={route.scheduleId} />;
+    case 'team-task':
+      return (
+        <TeamTaskPage target={{ teamId: route.teamId, instanceId: route.instanceId, taskId: route.taskId }} />
+      );
     case 'settings':
       return <SettingsPage state={state} />;
     case 'terminal':
@@ -86,7 +91,7 @@ function Pages({ state, route }: { state: ShinsaState; route: PageRoute }) {
   const pages = [
     ...listHubViews(hubs.current, warm),
     ...tasks.current,
-    ...(route.name === 'automation' ? [{ key, view, shownAt: 0 }] : []),
+    ...(route.name === 'automation' || route.name === 'team-task' ? [{ key, view, shownAt: 0 }] : []),
   ];
   return (
     <>

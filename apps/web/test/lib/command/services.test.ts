@@ -68,7 +68,7 @@ describe('listServiceSections', () => {
       '/api/services/web/start',
       '/api/services/worker/start',
     ]);
-    const focused = { ...STATE, focus: { projectId: 'shop', until: null } };
+    const focused = { ...STATE, focus: { projectId: 'shop', teamId: null, until: null } };
     expect(listServiceSections(focused, snapshot, LATER)[0]?.commands[0]?.label).toBe('Start all services');
   });
 });

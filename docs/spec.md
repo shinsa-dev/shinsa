@@ -403,11 +403,22 @@ where your policies, plain-English sentences the classifier reads with the reque
 `app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
 access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
 owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
-Review and Code (a private repository's too) but its chat, and it changes the moment the task does; the machine reads
+Review, Code (a private repository's too, from the working copy before a pull request) and Chat, with the agents'
+live output and tool calls but never your messages to them, and it changes the moment the task does. Share as picks
+what it shows: Status (an anonymous status card of the title, a short description an agent writes when sharing
+starts, a customer timeline (planning, in progress, in review, deploying, live) and a plain update for customers, such as in progress, deploying or live, which says live only
+once the change is out), Standard (that page) or Full access (Standard and your own chat messages); it defaults to
+Settings → General → Sharing, and Manage on the banner changes it and how long while the link stays; the machine reads
 nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
 a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
 cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
 (`docs/engine.md` → Sharing a task).
+Teams: Settings → Teams makes a team, a teammate joins with its link, and you pick which of your projects it sees; every
+member then sees every task in them, live and read-only, next to their own, on app.shinsa.dev and in the local app,
+marked with whose it is. The focus menu reads Your work, your projects, then Teams; focusing a team shows your tasks
+in it and your teammates'. A teammate's task opens on the same read-only page a Standard share link shows: the agents'
+live output but never your messages to them, and no controls, read live from its owner's machine, and app.shinsa.dev keeps only who is in which team
+(`docs/engine.md` → Teams).
 Share preview, on a task's running service with a preview URL, does the same for the dev server itself: a link,
 `<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's tunnel, hot reload
 included, each preview its own origin on a domain apart from shinsa.dev. It has the same time limits, ends with the
@@ -1111,8 +1122,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   project, with a strict bar: the same outcome only. Not a duplicate starts any duplicate again: one triage closed
   as if it had not flagged it, one that had already worked in a fresh round with the same request. You close one yourself with Close as a duplicate in the
   task's menu or ⌘K, and agents with `tasks_duplicate`.
-- **Teams come next.** Shared, read-only views of teammates' tasks (chats never leave the machine), public share
-  links, machines shared with other accounts and duplicates found across a team are their own tasks.
+- **Across a team next.** Triage checking teammates' open tasks for duplicates is its own task, on the teams'
+  read API.
 
 ### Replies on the Overview, not in the chat (2026-10-31)
 
@@ -1128,6 +1139,33 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Less noise at review.** The checks fold to one line ("All 13 checks passed") and open only when one fails;
   pre-merge steps wait for the merge gate, and their text renders like any Markdown (inline code, links, task hover
   cards).
+
+### Teams (2026-11-01)
+
+- **A team is a share link for whole projects.** You join a team and pick which of your projects it sees; every
+  task in them is shown to every member, live, without a link, a banner or a warning per task. It reuses the share
+  link's projection, channel and page, so a teammate sees exactly what a share link shows: the title, status,
+  request, plan, phase reports, review, findings, checks, branches, the pull request with its diff and code,
+  evidence, gates without your answers, runs without their prompts, and activity without messages. Never a chat, a
+  transcript, live agent output, a message to an agent, a gate answer, a verdict note, an attachment, the worktree
+  or a path on your disk, and they can change nothing.
+- **Joining works like a machine invite.** The owner's join link names the team and sends a request; the owner
+  accepts or declines it in Settings → Teams, and a member leaves or is removed there, which ends their access at
+  once. Asking to join asks which of your projects to share first, from every machine the browser reaches, so none
+  is forgotten. Which projects a team sees is yours alone: no agent can add one.
+- **A teammate is one click from your machine.** Give machine access beside a teammate makes them a member of this
+  machine, with full control, without an invite or a request; their browser adds itself with the team's key the next
+  time they open Shinsa Cloud. You take it back under Remote access, like any member.
+- **Nothing about the work leaves your machine for the cloud.** app.shinsa.dev keeps who is in which team, never a
+  task. Each view is read from the owner's machine over its tunnel and sealed with a team key that lives only on
+  members' machines and browsers, carried in the join link's fragment, which no server receives. A teammate's
+  machine that is offline shows nothing until it is back.
+- **Focus on a team.** The focus menu says Your work instead of All work, then your projects, then Teams. A focused
+  team's Home and All tasks add your teammates' tasks, each marked with its owner; they never count towards Needs
+  you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
+  full control, never twice.
+- **For agents.** The engine serves the team's tasks at `GET /api/teams/tasks`, which triage's team-wide duplicate
+  check will read. Agents can list teams (`teams_list`) and change nothing about them.
 
 ### Bundles (2026-11-01)
 
