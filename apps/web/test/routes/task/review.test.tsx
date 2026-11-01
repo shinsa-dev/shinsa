@@ -230,6 +230,8 @@ describe('the Review tab', () => {
       'finding:1',
       'finding:0',
     ]);
+    for (const item of document.querySelectorAll('[data-review-item]'))
+      expect(item.className).toContain('[content-visibility:auto]');
     for (const heading of [
       'How it’s built',
       'Approach',

@@ -15,6 +15,7 @@ import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
+import { SKIPPED_OFFSCREEN_POINT, SKIPPED_OFFSCREEN_ROW } from '@/components/layout/surface/offscreen.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { FileLink } from '@/components/links/file.tsx';
 import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
@@ -200,7 +201,11 @@ function Stop({
     <div
       data-review-item={stop}
       data-selected={lit || undefined}
-      className={cn('corner-superellipse/1.125 scroll-my-6 rounded-xl', REVIEW_SELECTED)}
+      className={cn(
+        'corner-superellipse/1.125 scroll-my-6 rounded-xl',
+        REVIEW_SELECTED,
+        SKIPPED_OFFSCREEN_POINT
+      )}
     >
       {children}
     </div>
@@ -312,7 +317,7 @@ function PointCard({
       task={task}
       item={item}
       selection={selection}
-      className={className}
+      className={cn(SKIPPED_OFFSCREEN_POINT, className)}
       action={<FindingVerdictChoice task={task} finding={item.finding} />}
     />
   );
@@ -325,7 +330,10 @@ function RiskRow({ task, item, selection }: { task: Task; item: ReviewItem; sele
     <li
       data-review-item={item.key}
       data-selected={lit || undefined}
-      className='corner-superellipse/1.125 flex scroll-my-6 flex-col gap-2 rounded-lg p-1.5 transition-[background-color] duration-500 data-selected:bg-primary-a1'
+      className={cn(
+        'corner-superellipse/1.125 flex scroll-my-6 flex-col gap-2 rounded-lg p-1.5 transition-[background-color] duration-500 data-selected:bg-primary-a1',
+        SKIPPED_OFFSCREEN_ROW
+      )}
     >
       {item.title && <span className='font-medium text-fg-4 text-xs leading-5'>{item.title}</span>}
       <Prose text={item.body} />

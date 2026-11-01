@@ -10,6 +10,7 @@ import { EvidenceText } from '@/components/evidence/evidence-text.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
+import { SKIPPED_OFFSCREEN } from '@/components/layout/surface/offscreen.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
 import { TaskPreviewLinks, useTaskPreviews } from '@/components/services/task-previews.tsx';
@@ -65,7 +66,7 @@ function listAttachedUris(layout: EvidenceLayout) {
 
 function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer }) {
   return (
-    <section className='flex min-w-0 flex-col gap-1.5'>
+    <section className={cn('flex min-w-0 flex-col gap-1.5', SKIPPED_OFFSCREEN)}>
       <div className='flex min-w-0 flex-col gap-px'>
         <h3 className='flex min-w-0 items-center gap-1.5 text-xs'>
           <span className='min-w-0 font-medium text-fg-4'>{entry.title}</span>
@@ -194,7 +195,7 @@ function Group({
   const count = group.entries.length + local.length;
   const linked = group.entries.filter((entry) => entry.check);
   return (
-    <section className='flex min-w-0 flex-col gap-1'>
+    <section className={cn('flex min-w-0 flex-col gap-1', SKIPPED_OFFSCREEN)}>
       <SectionLabel count={count > 1 ? count : undefined}>
         {local.length > 0 ? describeEvidenceKind(group.kind, count) : group.label}
       </SectionLabel>
