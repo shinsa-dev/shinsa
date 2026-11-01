@@ -3,6 +3,7 @@ import type { Gate, PipelineStep, ShinsaState, Task, TriageDecisions } from '@sh
 import { Toaster, toast } from '@shinsa/ui/components/sonner';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, waitFor, within } from '@testing-library/react';
+import * as React from 'react';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { OverviewTab } from '@/routes/task/overview.tsx';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
@@ -464,5 +465,54 @@ describe('the change on the Overview', () => {
     ).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: 'Read the review' }));
     expect(onOpen).toHaveBeenCalledWith('review');
+  });
+});
+
+describe('the activity on the Overview', () => {
+  function busy() {
+    const activity = Array.from({ length: 250 }, (_, index) => ({
+      at: index,
+      actor: 'shinsa' as const,
+      kind: 'stage' as const,
+      text: `Entry ${index}`,
+      detail: null,
+      evidenceId: null,
+    }));
+    const task = createTask({ id: 't', activity });
+    return { task, state: createShinsaState({ tasks: [task] }) };
+  }
+
+  it('shows the newest entries and older ones a page at a time', async () => {
+    const { task, state } = busy();
+    const view = renderOverview(state, task);
+    await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy());
+    expect(view.queryByText('Entry 149')).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'Show 100 older entries' }));
+    await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy());
+    fireEvent.click(view.getByRole('button', { name: 'Show 50 older entries' }));
+    await waitFor(() => expect(view.getByText('Entry 0')).toBeTruthy());
+    expect(view.queryByRole('button', { name: /older entr/ })).toBeNull();
+  });
+
+  it('goes back to the newest entries once the Overview is hidden', async () => {
+    const { task, state } = busy();
+    pushState(state);
+    const page = (mode: 'visible' | 'hidden') => (
+      <TooltipProvider>
+        <ReviewDraftProvider enabled draftKey={task.id}>
+          <React.Activity mode={mode}>
+            <OverviewTab state={state} task={task} gate={undefined} onOpen={mock()} />
+          </React.Activity>
+        </ReviewDraftProvider>
+      </TooltipProvider>
+    );
+    const view = render(page('visible'));
+    await waitFor(() => expect(view.getByText('Entry 150')).toBeTruthy());
+    fireEvent.click(view.getByRole('button', { name: 'Show 100 older entries' }));
+    await waitFor(() => expect(view.getByText('Entry 50')).toBeTruthy());
+    view.rerender(page('hidden'));
+    view.rerender(page('visible'));
+    await waitFor(() => expect(view.queryByText('Entry 149')).toBeNull());
+    expect(view.getByText('Entry 150')).toBeTruthy();
   });
 });

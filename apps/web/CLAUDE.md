@@ -127,7 +127,7 @@ src/
 │                        the Terminal page's ⌘T and ⌘W (use-terminal-keys),
 │                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
-│                        (use-transcript-window), the rows in view of a list (use-row-window) and a long list's rows a
+│                        (use-transcript-window, trimmed back to its newest blocks when hidden through use-on-hide, which the Overview's activity cap shares), the rows in view of a list (use-row-window) and a long list's rows a
 │                        batch at a time (use-progressive-count), use-delayed (useDelayed: true once a wait has
 │                        lasted LOADING_DELAY_MS, 300ms), use-settling (useSettling: active, then settling for
 │                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck

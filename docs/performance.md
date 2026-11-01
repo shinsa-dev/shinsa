@@ -229,8 +229,10 @@ comes into view.
   transition, so a click or a key is never queued behind it), keeps what you read in place by moving the scroll by
   the first block's shift, fills a short page before the first paint, and reaches back to a focused run
   (`?run=`, a delegation's chat run) before the jump. A run that is not rendered does not subscribe to its
-  transcript, so opening a 60-run chat subscribes to about 16, not 60. Mounted blocks stay mounted, so a folded row
-  you opened stays open.
+  transcript, so opening a 60-run chat subscribes to about 16, not 60. Mounted blocks stay mounted while you read, so a
+  folded row you opened stays open; once the page or the Chat tab is hidden, the window goes back to its newest
+  blocks and the chat to its bottom (`hooks/use-on-hide.ts`), so history you scrolled up through does not stay in a
+  kept page's DOM.
 - **Markdown is parsed once per text.** `components/text/markdown.tsx` caches the element tree per text
   (`lib/format/cache.ts`, 400 entries), and `useReferenceMarkdown` caches the linked text per reference catalog and
   scope and reads only the catalog and the route's task through `useShinsaSelector`, so a state push no longer
@@ -243,7 +245,8 @@ comes into view.
   (`components/queue/windowed-rows.tsx`, `hooks/use-row-window.ts`, rows 36px, in chunks of eight so scrolling
   re-renders rarely; rows are memoized). Home's queue sections, the Overview's activity and an opened turn's detail
   render their first rows at once and the rest a batch per task after the paint (`hooks/use-progressive-count.ts`);
-  queue rows are not one height, so they are not windowed.
+  queue rows are not one height, so they are not windowed. The Overview's activity stops at its newest 100 entries,
+  with a button for 100 older ones, and goes back to 100 once the Overview is hidden.
 - **Times format with shared `Intl.DateTimeFormat`s** (`lib/format/time.ts`; `toLocale*` built a formatter per
   call), and `TimeAgo` and `Duration` build their tooltip text only when the tooltip opens.
 - **The scroll fade no longer repaints** (second pass). The `ScrollArea` fade was a mask on the scroller, which the
