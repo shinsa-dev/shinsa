@@ -15,7 +15,7 @@ function isErrorBody(body: unknown): body is { error: { code?: string; message: 
 export type EngineWake = () => Promise<boolean>;
 
 export const NOT_RUNNING =
-  'Shinsa is not running. Open the Shinsa app, which starts it and keeps it running.';
+  'Shinsa is not running. Start it with `shinsa start`, or open the Shinsa app on a Mac.';
 
 async function reach(
   base: string,

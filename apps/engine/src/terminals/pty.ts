@@ -1,5 +1,6 @@
 import { userInfo } from 'node:os';
 import { DomainError } from '@shinsa/core';
+import { resolveDefaultShell } from '../shell/login.ts';
 
 type Env = Record<string, string | undefined>;
 
@@ -29,9 +30,9 @@ const LOCALE_KEYS = ['LC_ALL', 'LC_CTYPE', 'LANG'];
 export function resolveLoginShell(env: Env, readUser: () => { shell: string | null } = userInfo) {
   if (env.SHELL) return env.SHELL;
   try {
-    return readUser().shell || '/bin/zsh';
+    return readUser().shell || resolveDefaultShell();
   } catch {
-    return '/bin/zsh';
+    return resolveDefaultShell();
   }
 }
 
