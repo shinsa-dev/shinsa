@@ -25,8 +25,8 @@ const DEVICE: RemoteDevice = {
 describe('a GitHub user on screen', () => {
   it('goes by their name with the login beside it, or by the login alone', () => {
     expect(describeUserName(NAMED)).toBe('Kai Lane');
-    expect(describeUserHandle(NAMED)).toBe('@kai');
-    expect(describeUserName(BARE)).toBe('@mona');
+    expect(describeUserHandle(NAMED)).toBe('kai');
+    expect(describeUserName(BARE)).toBe('mona');
     expect(describeUserHandle(BARE)).toBeNull();
   });
 

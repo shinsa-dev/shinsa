@@ -33,7 +33,7 @@ describe('the user tag', () => {
     expect(trigger.closest('a')?.getAttribute('href')).toBe('https://github.com/kai');
     const card = await openCard(trigger);
     expect(card.textContent).toContain('Kai Tanaka');
-    expect(card.textContent).toContain('@kai');
+    expect(card.textContent).toContain('kai ·');
     expect(card.textContent).toContain('On Studio, read-only');
     expect(card.querySelector('img')?.getAttribute('src')).toBe('https://avatars.example/kai');
     const profile = screen.getByText('View on GitHub').closest('a');
@@ -46,7 +46,7 @@ describe('the user tag', () => {
   it('falls back to the login with an initial when GitHub has no name or photo', async () => {
     render(<UserTag user={{ login: 'mona', name: null, avatarUrl: null }} />);
     const card = await openCard(screen.getByText('mona'));
-    expect(card.textContent).toContain('@mona');
+    expect(card.textContent).not.toContain('@');
     expect(card.textContent).toContain('M');
     expect(card.querySelector('img')).toBeNull();
   });

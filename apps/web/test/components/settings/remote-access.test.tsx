@@ -173,7 +173,7 @@ describe('Settings → Remote access', () => {
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     expect(screen.getByText(/^Kai iPhone · Asked/)).toBeTruthy();
     expect(screen.getByText('Chrome on Mac')).toBeTruthy();
-    expect(screen.queryByText('@mona')).toBeNull();
+    expect(screen.queryByText('mona')).toBeNull();
     fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[0] as HTMLElement);
     await waitFor(() => expect(actions.acceptRequest).toHaveBeenCalledWith('r1'));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Kai joined.'));
@@ -194,10 +194,10 @@ describe('Settings → Remote access', () => {
     );
     expect(screen.getByText('People who can reach this machine')).toBeTruthy();
     expect(screen.getByText('You')).toBeTruthy();
-    expect(screen.queryByText('@mona')).toBeNull();
+    expect(screen.queryByText('mona')).toBeNull();
     expect(screen.getByText('Owner')).toBeTruthy();
     expect(screen.getByText('Kai Lane')).toBeTruthy();
-    expect(screen.getByText('@kai')).toBeTruthy();
+    expect(screen.getByText('kai')).toBeTruthy();
     expect(screen.getByText(/Added by Kai$/)).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Remove' }).at(-1) as HTMLElement);
     fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));

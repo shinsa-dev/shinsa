@@ -270,7 +270,7 @@ describe('access requests in Settings → Machines', () => {
     expect(screen.queryByText('Waiting on Air')).toBeNull();
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     expect(screen.getAllByText('Safari on iPad')).toHaveLength(1);
-    expect(screen.getByText('@mona')).toBeTruthy();
+    expect(screen.getByText('mona')).toBeTruthy();
     unmount();
     render(
       <MachineAccessRequests machines={[{ id: 'w4t8', name: 'Laptop', remote: null }]} instances={[]} />

@@ -3,11 +3,11 @@ import type { RemoteAccess, RemoteDevice, RemoteUser, SharedPerson } from '@shin
 export type UserProfile = Pick<RemoteUser, 'login' | 'name' | 'avatarUrl'>;
 
 export function describeUserName(user: Pick<RemoteUser, 'login' | 'name'>) {
-  return user.name ?? `@${user.login}`;
+  return user.name ?? user.login;
 }
 
 export function describeUserHandle(user: Pick<RemoteUser, 'login' | 'name'>) {
-  return user.name ? `@${user.login}` : null;
+  return user.name ? user.login : null;
 }
 
 export function resolveFirstName(user: Pick<RemoteUser, 'login' | 'name'>) {
@@ -23,7 +23,7 @@ export function resolveGitHubProfileUrl(user: Pick<RemoteUser, 'login'>) {
 }
 
 export function resolveUserInitial(user: Pick<RemoteUser, 'login' | 'name'>) {
-  return describeUserName(user).replace(/^@/, '').slice(0, 1).toUpperCase();
+  return describeUserName(user).slice(0, 1).toUpperCase();
 }
 
 export function selectDeviceMember(access: RemoteAccess | null, device: RemoteDevice) {
