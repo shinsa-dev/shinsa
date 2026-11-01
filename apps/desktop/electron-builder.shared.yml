@@ -32,6 +32,7 @@ dmg:
       y: 196
       type: link
       path: /Applications
+detectUpdateChannel: false
 publish:
   provider: generic
   url: https://shinsa.dev/updates
