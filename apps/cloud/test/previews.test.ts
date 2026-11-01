@@ -178,6 +178,26 @@ describe('a preview link', () => {
     harness.world.store.selectInstance = () => Promise.reject(new Error('d1 down'));
     const answer = await visit(harness, `${origin}/`, withKey());
     expect(answer.status).toBe(500);
+    expect(answer.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
+  });
+
+  test('tells every crawler to stay out of any host, with or without a key, before the machine is asked', async () => {
+    const harness = createHarness();
+    const { origin } = await shareMachine(harness);
+    const forwarded = spyOn(harness.world, 'fetch');
+    for (const url of [
+      `${origin}/robots.txt`,
+      'https://shinsa.page/robots.txt',
+      'https://nope.shinsa.page/robots.txt',
+    ]) {
+      for (const init of [{}, withKey()]) {
+        const answer = await visit(harness, url, init);
+        expect(answer.status).toBe(200);
+        expect(await answer.text()).toBe('User-agent: *\nDisallow: /\n');
+        expect(answer.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
+      }
+    }
+    expect(forwarded).not.toHaveBeenCalled();
   });
 
   test('passes on every cookie but its own', () => {
