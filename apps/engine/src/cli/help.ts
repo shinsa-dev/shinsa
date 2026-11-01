@@ -101,7 +101,7 @@ const ENGINE_COMMANDS: CliCommand[] = [
     usage: 'shinsa start',
     summary: 'Start the engine in the background and wait until it answers.',
     detail:
-      'On a Mac, asks launchd to start the engine the Shinsa app set up. On Linux, sets the engine up as a systemd user service the first time (it starts at boot once lingering is on, and again after a crash) and starts it. Then waits until it answers. Any other command that needs the engine starts it the same way.',
+      'On a Mac with the Shinsa app, asks launchd to start the engine the app set up. On a Mac without it, sets the engine up as its own launchd agent the first time (it starts at login and again after a crash) and starts it; it never starts a second engine beside the app’s. On Linux, sets the engine up as a systemd user service the first time (it starts at boot once lingering is on, and again after a crash) and starts it. Then waits until it answers. Any other command that needs the engine starts it the same way.',
     options: [],
     examples: ['shinsa start'],
   },

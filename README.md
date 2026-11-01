@@ -80,16 +80,22 @@ Open it and it sets up its engine in the background: agents and schedules keep r
 the app is quit, and the app updates itself. It also puts `shinsa` on your terminal's PATH, in zsh, bash and fish:
 `shinsa .` opens Shinsa on the project you are in, and `shinsa do "…"` hands it work.
 
-### Run on a server
+### The engine on its own
 
-The engine also runs headless on an always-on Linux machine (x64 or arm64), reached from your other devices through
-remote access. Build it with `SHINSA_ENGINE_TARGET=bun-linux-x64 bun apps/engine/scripts/build-engine.ts` (after
-`bun run --cwd apps/web build`; a published package is coming), copy `apps/engine/dist/engine-linux-x64` over and
-put its `bin/` on your `PATH`. Then, over SSH:
+For an always-on machine, a Linux server (x64 or arm64) or a Mac mini without the app, install just the engine, with
+its interface inside, and reach it from your other devices through remote access:
+
+```sh
+curl -fsSL https://shinsa.dev/install | sh    # or: npm i -g shinsa@canary
+```
+
+The script checks the download's checksum, installs under `~/.local/share/shinsa` and links `~/.local/bin/shinsa`.
+It installs the canary until the first stable release; `SHINSA_CHANNEL=beta` picks the beta, and on npm the tags are
+`latest`, `beta` and `canary`. Then, over SSH:
 
 ```bash
-shinsa start                          # sets it up as a systemd user service and starts it
-sudo loginctl enable-linger "$USER"   # keeps it running after you log out, and starts it at boot
+shinsa start                          # sets it up as a background service (systemd, or launchd on a Mac) and starts it
+sudo loginctl enable-linger "$USER"   # Linux: keeps it running after you log out, and starts it at boot
 shinsa accounts sign-in               # open the address it prints anywhere, then:
 shinsa accounts sign-in-code <login> <code>
 gh auth login
@@ -97,8 +103,10 @@ shinsa folders add ~/code
 shinsa remote pair                    # finish it from any device
 ```
 
-It needs git, the GitHub CLI and Claude Code installed. `systemctl --user disable --now shinsa` takes the service
-away. The details are [`docs/engine.md`](docs/engine.md) → Run on a server.
+It needs git, the GitHub CLI and Claude Code installed. On a Mac with the app, use the app: `shinsa start` will not
+run a second engine beside it. `systemctl --user disable --now shinsa` takes the Linux service away. The details are
+[`docs/engine.md`](docs/engine.md) → Run on a server, and how the engine is published is
+[`docs/release.md`](docs/release.md) → The engine on its own.
 
 ## Development
 

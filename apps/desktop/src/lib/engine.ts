@@ -137,6 +137,20 @@ export function resolveEngineTarget(uid: number, label = ENGINE_LABEL) {
   return `gui/${uid}/${label}`;
 }
 
+function unescapeXml(text: string) {
+  return text
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&amp;', '&');
+}
+
+export function isStandaloneAgent(plist: string, appProgram: string) {
+  const program = /<key>ProgramArguments<\/key>\s*<array>\s*<string>([^<]*)<\/string>/.exec(plist)?.[1];
+  return program !== undefined && unescapeXml(program) !== appProgram;
+}
+
 export function resolveEngineProgram(resourcesPath: string) {
   return join(resourcesPath, 'engine', 'bin', 'shinsa');
 }
