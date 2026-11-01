@@ -137,7 +137,7 @@ export {
   type StatePatch,
   type ValueChange,
 } from './patch.ts';
-export { serializeRun, serializeState, type WireRun, type WireState } from './runs.ts';
+export { serializeRun, serializeState, type WireRun, type WireState, type WireTask } from './runs.ts';
 export {
   isServiceActive,
   isServiceEnvKey,
@@ -162,6 +162,17 @@ export {
   selectServiceTerminal,
   type TaskServiceView,
 } from './services.ts';
+export {
+  applyTaskDetail,
+  listSummarizedTasks,
+  resolveTaskDetail,
+  resolveViewPatch,
+  serializeViewState,
+  summarizeRun,
+  summarizeTask,
+  type TaskDetail,
+  type ViewPatch,
+} from './summaries.ts';
 export {
   listTerminalPlaces,
   parseTerminalClientFrame,

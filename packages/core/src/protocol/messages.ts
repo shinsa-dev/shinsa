@@ -7,6 +7,7 @@ import type { AccountsSnapshot } from './accounts.ts';
 import type { EngineInfo } from './engine.ts';
 import type { StatePatch } from './patch.ts';
 import type { WireState } from './runs.ts';
+import type { TaskDetail } from './summaries.ts';
 import type { TerminalsSnapshot } from './terminals.ts';
 
 export const SURFACES = ['desktop', 'browser'] as const;
@@ -17,12 +18,14 @@ export type ClientMessage =
   | { type: 'hello'; surface: Surface }
   | { type: 'command'; id: string; command: UserCommand }
   | { type: 'state.sync' }
+  | { type: 'task.detail'; taskId: string }
   | { type: 'transcript.subscribe'; runId: string; from: number }
   | { type: 'transcript.unsubscribe'; runId: string };
 
 export type ServerMessage =
   | { type: 'state'; state: WireState }
   | { type: 'state.patch'; patch: StatePatch }
+  | { type: 'task.detail'; detail: TaskDetail }
   | { type: 'ack'; id: string; error: { code: string; message: string } | null }
   | { type: 'transcript'; runId: string; entries: ChatEntry[]; start: number }
   | { type: 'accounts'; accounts: AccountsSnapshot }
