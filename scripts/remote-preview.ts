@@ -466,6 +466,13 @@ function waitForHandoffLink(engine: Engine, taskId: string) {
   });
 }
 
+function resolveClaimAs(claim: string) {
+  if (!claim.startsWith('http')) return claim;
+  const link = new URL(claim);
+  const back = `${link.pathname}${link.hash}`;
+  return `${ORIGIN}/__preview/as/${GUEST.login}?return=${encodeURIComponent(back)}`;
+}
+
 async function createPreviewHandoffs(studio: Awaited<ReturnType<typeof startMachine>>) {
   const { engine } = studio;
   const [claimed, waiting] = Object.values(engine.state.tasks).filter(
@@ -488,8 +495,10 @@ async function createPreviewHandoffs(studio: Awaited<ReturnType<typeof startMach
       at(claimed),
     ],
     [`${waiting.handle}, with a hand-off link no one opened yet (Share task)`, at(waiting)],
-    [`Sign in as @${GUEST.login}, the person a task is handed to`, `${ORIGIN}/__preview/as/${GUEST.login}`],
-    [`${waiting.handle}'s hand-off link, to claim as @${GUEST.login} in a fresh browser profile`, claim],
+    [
+      `${waiting.handle}'s hand-off link, signed in as @${GUEST.login} (open it in a private window)`,
+      resolveClaimAs(claim),
+    ],
     [`Sign in as @${USER.login} again`, `${ORIGIN}/__preview/as/${USER.login}`],
   ];
 }
@@ -764,11 +773,13 @@ function readPreviewUser(request: Request) {
   return cookie.includes(`${AS_COOKIE}=${GUEST.login}`) ? GUEST : USER;
 }
 
-function respondSignInAs(login: string) {
+function respondSignInAs(login: string, url: URL) {
   const user = login === GUEST.login ? GUEST : USER;
+  const back = url.searchParams.get('return') ?? '';
+  const location = back.startsWith('/') && !back.startsWith('//') ? back : REMOTE_PATHS.app;
   return new Response(null, {
     status: 302,
-    headers: { location: REMOTE_PATHS.app, 'set-cookie': `${AS_COOKIE}=${user.login}; Path=/; SameSite=Lax` },
+    headers: { location, 'set-cookie': `${AS_COOKIE}=${user.login}; Path=/; SameSite=Lax` },
   });
 }
 
@@ -875,7 +886,7 @@ async function main() {
       const share = SHARE_CONNECT.exec(url.pathname);
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const as = /^\/__preview\/as\/([a-z]+)$/.exec(url.pathname);
-      if (as) return respondSignInAs(as[1] ?? '');
+      if (as) return respondSignInAs(as[1] ?? '', url);
       const enroll = /^\/__preview\/enroll\/([a-z]+)$/.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) return respondEnroll(enrolling, url);
