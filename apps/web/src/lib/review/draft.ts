@@ -17,6 +17,8 @@ export interface ReviewDraft {
   clearComments: () => void;
   verdicts: Readonly<Record<number, FindingVerdictKind>>;
   setVerdict: (index: number, verdict: FindingVerdictKind) => void;
+  thenApprove: boolean;
+  chooseThenApprove: (thenApprove: boolean) => void;
 }
 
 function ignore() {}
@@ -29,6 +31,8 @@ export const ReviewDraftContext = React.createContext<ReviewDraft>({
   clearComments: ignore,
   verdicts: {},
   setVerdict: ignore,
+  thenApprove: false,
+  chooseThenApprove: ignore,
 });
 
 const STORAGE_PREFIX = 'shinsa.review-draft.';

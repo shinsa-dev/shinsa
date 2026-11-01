@@ -25,6 +25,7 @@ import { serializeReportMarkdown } from '../report/markdown.ts';
 import { listPendingDependencies, resolveBundle } from '../state/queries.ts';
 import { type Decider, describeWaiting } from './decider.ts';
 import { syncStackBase } from './dependencies.ts';
+import { approveReviewAhead } from './gates.ts';
 import { proceedAfterSetup } from './shapes.ts';
 import { holdForCheckout } from './workspaces.ts';
 
@@ -176,9 +177,17 @@ export function openReviewGate(decider: Decider, taskId: string, escalation: Rev
     'awaiting_review',
     escalation ? 'the agents could not settle the review' : 'changes ready for your review'
   );
-  decider.openGate(taskId, 'review', decider.task(taskId).title, serializeReportMarkdown(report), {
-    ...(escalation ? { details: { escalation } } : {}),
-  });
+  const ahead = escalation === null && decider.task(taskId).approveAfterFix === true;
+  const gate = decider.openGate(
+    taskId,
+    'review',
+    decider.task(taskId).title,
+    serializeReportMarkdown(report),
+    {
+      ...(escalation ? { details: { escalation } } : {}),
+    }
+  );
+  if (ahead) approveReviewAhead(decider, gate);
 }
 
 export function settleTask(

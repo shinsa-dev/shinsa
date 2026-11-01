@@ -14,6 +14,7 @@ import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { OPERATION_SKIP } from '@/lib/overview/operation.ts';
 import {
   describeApproveHint,
+  isFixingAction,
   isVerdictActionBlocked,
   resolveVerdictAction,
   resolveVerdictAnswer,
@@ -46,6 +47,7 @@ export interface GateContext {
   comments: LineComment[];
   clearComments: () => void;
   verdicts: Readonly<Record<number, FindingVerdictKind>>;
+  thenApprove?: boolean;
   tab: TaskTab | null;
 }
 
@@ -254,26 +256,33 @@ async function sendVerdicts(
   if (sent && extras.comments) context.clearComments();
 }
 
-function resolveDecision(task: Task, gate: Gate, context: GateContext) {
+function resolveVerdictCommand(task: Task, gate: Gate, context: GateContext, thenApprove: boolean) {
   const commented = context.comments.length > 0;
+  const draft = resolveVerdictDraft(task.findings, context.verdicts);
+  const action = resolveVerdictAction(task.findings, draft, thenApprove);
+  const extras = resolveVerdictAnswer(task.findings, draft, context.comments);
+  const hint = describeApproveHint(commented, action);
+  return {
+    action,
+    command: {
+      label: action.label,
+      hint,
+      ...(isVerdictActionBlocked(commented, action) ? { disabled: hint } : {}),
+      run: () => void sendVerdicts(task, gate, action, extras, context),
+    },
+  };
+}
+
+function resolveDecision(task: Task, gate: Gate, context: GateContext) {
   if (task.findings.length === 0) {
     return {
       label: 'Approve the changes',
       hint: 'Opens the pull request',
-      ...(commented ? { disabled: 'Send or clear your comments first' } : {}),
+      ...(context.comments.length > 0 ? { disabled: 'Send or clear your comments first' } : {}),
       run: () => void replyToGate(gate, resolveApprovalReply(task, gate, 'approveChanges')),
     };
   }
-  const draft = resolveVerdictDraft(task.findings, context.verdicts);
-  const action = resolveVerdictAction(task.findings, draft);
-  const extras = resolveVerdictAnswer(task.findings, draft, context.comments);
-  const hint = describeApproveHint(commented, action);
-  return {
-    label: action.label,
-    hint,
-    ...(isVerdictActionBlocked(commented, action) ? { disabled: hint } : {}),
-    run: () => void sendVerdicts(task, gate, action, extras, context),
-  };
+  return resolveVerdictCommand(task, gate, context, context.thenApprove === true).command;
 }
 
 function createDecideCommand(task: Task, gate: Gate, context: GateContext): Command {
@@ -286,9 +295,27 @@ function createDecideCommand(task: Task, gate: Gate, context: GateContext): Comm
   };
 }
 
+function listFixChoiceCommands(task: Task, gate: Gate, context: GateContext): Command[] {
+  if (context.thenApprove === undefined || task.findings.length === 0) return [];
+  const { action, command } = resolveVerdictCommand(task, gate, context, !context.thenApprove);
+  if (!isFixingAction(action)) return [];
+  return [
+    {
+      kind: 'run',
+      id: `${resolveGateId(gate)}.fix_choice`,
+      icon: action.reply === 'fixFindingsAndApprove' ? 'IconCheckmark1' : 'IconPencil',
+      keywords: ['review', 'findings', 'fix', 'approve', 'accept', 'lgtm'],
+      ...command,
+    },
+  ];
+}
+
 function listReviewCommands(task: Task, gate: Gate, context: GateContext): Command[] {
   const id = resolveGateId(gate);
-  const commands: Command[] = [createDecideCommand(task, gate, context)];
+  const commands: Command[] = [
+    createDecideCommand(task, gate, context),
+    ...listFixChoiceCommands(task, gate, context),
+  ];
   if (context.tab !== 'review' && hasReview(task)) {
     commands.push({
       kind: 'go',

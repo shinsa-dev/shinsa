@@ -630,6 +630,18 @@ describe('parseUserCommand for line comments', () => {
   });
 });
 
+describe('parseUserCommand for approving after a fix', () => {
+  const answer = { type: 'gate.answer', gateId: 'g', decision: 'revise', response: null } as const;
+
+  test('reads thenApprove as a yes or no, and leaves it out when absent', () => {
+    expect(parseUserCommand({ ...answer, thenApprove: true })).toEqual({ ...answer, thenApprove: true });
+    expect(parseUserCommand(answer)).toEqual(answer);
+    expect(() => parseUserCommand({ ...answer, thenApprove: 'yes' })).toThrow(
+      'thenApprove must be true or false.'
+    );
+  });
+});
+
 describe('parseUserCommand for accounts and usage limits', () => {
   test('reads account bindings, usage waits, the account of a new task and the limit settings', () => {
     expect(

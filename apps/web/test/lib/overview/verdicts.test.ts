@@ -5,6 +5,7 @@ import {
   describeApproveHint,
   describeEscalationBody,
   describeReviewTitle,
+  isFixingAction,
   isVerdictActionBlocked,
   listVerdicts,
   resolveVerdict,
@@ -64,6 +65,20 @@ describe('finding verdicts', () => {
       label: 'Approve changes',
     });
     expect(resolveVerdictAction([], {}).reply).toBe('approveChanges');
+  });
+
+  it('fixes then approves when you chose it, and only while there is something to fix', () => {
+    const then = resolveVerdictAction(FINDINGS, { 0: 'fix' }, true);
+    expect(then).toEqual({ reply: 'fixFindingsAndApprove', label: 'Fix 1 finding and approve' });
+    expect(resolveVerdictAction(FINDINGS, {}, true).reply).toBe('approveChanges');
+    expect([isFixingAction(then), isFixingAction(resolveVerdictAction(FINDINGS, {}))]).toEqual([true, false]);
+    expect(isVerdictActionBlocked(true, then)).toBe(false);
+    expect(describeApproveHint(false, then)).toBe(
+      'Sends the findings you kept, then approves once checks and the agent review pass'
+    );
+    expect(describeApproveHint(true, then)).toBe(
+      'Sends the findings you kept and your line comments, then approves once checks and the agent review pass'
+    );
   });
 
   it('offers fix or dismiss per finding and says what the primary action will do', () => {

@@ -38,6 +38,7 @@ const GATE_REPLY = {
   approveEdits: { decision: 'approve', done: 'Approved. Committing your edits.' },
   requestChanges: { decision: 'revise', done: 'Sent back to the agent.' },
   fixFindings: { decision: 'revise', done: 'Sent. The agent works on what you kept.' },
+  fixFindingsAndApprove: { decision: 'revise', done: 'Sent. Approving once the fix passes.' },
   merge: { decision: 'approve', done: 'Approved. Merging the pull request.' },
   mergeEdits: {
     decision: 'approve',
@@ -68,7 +69,11 @@ export function replyToGate(
   extras: AnswerExtras = {}
 ) {
   const { decision, done } = GATE_REPLY[reply];
-  return sendCommandWithToast({ type: 'gate.answer', gateId: gate.id, decision, response, ...extras }, done);
+  const thenApprove = reply === 'fixFindingsAndApprove' ? { thenApprove: true } : {};
+  return sendCommandWithToast(
+    { type: 'gate.answer', gateId: gate.id, decision, response, ...extras, ...thenApprove },
+    done
+  );
 }
 
 export function resolveRetryLabel(state: ShinsaState, gate: Gate) {

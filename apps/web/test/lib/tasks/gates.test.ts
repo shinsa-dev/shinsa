@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'bun:test';
-import { resolveApprovalReply, resolvePlanReply } from '@/lib/tasks/gates.ts';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { replyToGate, resolveApprovalReply, resolvePlanReply } from '@/lib/tasks/gates.ts';
+import { spyOnCommands } from '../../support/commands.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
 import { createGate, createTask } from '../../support/state.ts';
 
@@ -38,5 +39,33 @@ describe('resolveApprovalReply', () => {
     expect(resolveApprovalReply(task, merge, 'merge')).toBe('merge');
     expect(resolveApprovalReply(edited, merge, 'merge')).toBe('mergeEdits');
     expect(resolveApprovalReply(edited, review, 'fixFindings')).toBe('fixFindings');
+  });
+});
+
+describe('replyToGate', () => {
+  let spies: ReturnType<typeof spyOnCommands>;
+
+  beforeEach(() => {
+    spies = spyOnCommands();
+  });
+
+  afterEach(() => {
+    spies.restore();
+  });
+
+  it('asks for the approval after the fix only when you fix and approve', async () => {
+    const review = createGate({ id: 'g', taskId: 't', type: 'review' });
+    await replyToGate(review, 'fixFindingsAndApprove');
+    await replyToGate(review, 'fixFindings');
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        { type: 'gate.answer', gateId: 'g', decision: 'revise', response: null, thenApprove: true },
+        'Sent. Approving once the fix passes.',
+      ],
+      [
+        { type: 'gate.answer', gateId: 'g', decision: 'revise', response: null },
+        'Sent. The agent works on what you kept.',
+      ],
+    ]);
   });
 });
