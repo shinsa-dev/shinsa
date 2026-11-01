@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import {
   type Bytes,
   CHANNEL_BODY_CHUNK_BYTES,
+  CHANNEL_COMPRESSION,
+  type ChannelCompression,
   type ChannelMessage,
   encodeText,
   parseBodyChunk,
@@ -28,7 +30,11 @@ interface Harness {
   access: { answer: AccessAnswer; asked: (string | null)[]; waiting: AccessAnswer | null };
 }
 
-async function createHarness(respond?: (request: Request) => Promise<Response>, maxBodyBytes = 1024) {
+async function createHarness(
+  respond?: (request: Request) => Promise<Response>,
+  maxBodyBytes = 1024,
+  firstState = '{"type":"state"}'
+) {
   const machine = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
@@ -59,7 +65,7 @@ async function createHarness(respond?: (request: Request) => Promise<Response>, 
     hub: {
       open: (socket) => {
         harness.hubOpened.push(socket);
-        socket.send('{"type":"state"}');
+        socket.send(firstState);
       },
       close: (socket) => harness.hubClosed.push(socket),
       message: (_socket, raw) => harness.hubMessages.push(raw),
@@ -80,10 +86,10 @@ async function createHarness(respond?: (request: Request) => Promise<Response>, 
   return harness;
 }
 
-async function connect(harness: Harness) {
+async function connect(harness: Harness, compression: ChannelCompression[] = []) {
   const device = await createKeyPair();
   harness.enrolled.add(await serializeDeviceKey(device));
-  const start = await startHandshake({ machineKey: harness.machineKey, device });
+  const start = await startHandshake({ machineKey: harness.machineKey, device, compression });
   await harness.channel.receive(start.hello);
   const session = await start.finish(harness.sent[0] as string);
   await until(() => harness.sent.length >= 2);
@@ -127,6 +133,27 @@ describe('the sealed channel', () => {
     harness.channel.close();
     expect(harness.hubClosed).toHaveLength(1);
     await harness.channel.receive('ignored once closed');
+  });
+
+  test('deflates large frames both ways once the hello offered compression', async () => {
+    const state = JSON.stringify({ type: 'state', tasks: Array.from({ length: 4000 }, (_, id) => ({ id })) });
+    const harness = await createHarness(undefined, 1024, state);
+    const { session } = await connect(harness, [CHANNEL_COMPRESSION]);
+    expect(JSON.parse(harness.sent[0] as string)).toMatchObject({ compression: CHANNEL_COMPRESSION });
+    expect(session.compression).toBe(CHANNEL_COMPRESSION);
+    await harness.channel.receive(await session.seal({ t: 'ready' }));
+    await until(() => harness.sent.length >= 3);
+    expect((harness.sent[2] as Bytes).length).toBeLessThan(state.length / 4);
+    expect(await readFrom(harness, session, 2)).toEqual([{ t: 'socket', data: state }]);
+    await harness.channel.receive(await session.seal({ t: 'socket', data: state }));
+    expect(harness.hubMessages).toEqual([state]);
+  });
+
+  test('keeps plain frames for a hello that offers no compression', async () => {
+    const harness = await createHarness();
+    const { session } = await connect(harness);
+    expect(JSON.parse(harness.sent[0] as string)).toMatchObject({ compression: null });
+    expect(session.compression).toBeNull();
   });
 
   test('closes the channel and its app socket when a sealed frame is dropped', async () => {
