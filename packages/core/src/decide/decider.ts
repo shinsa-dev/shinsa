@@ -43,6 +43,12 @@ export interface DecideContext {
   newId: () => string;
   onBehalf?: boolean;
   byTask?: string | null;
+  guest?: GuestActor | null;
+}
+
+export interface GuestActor {
+  taskId: string;
+  login: string;
 }
 
 export interface Decision {
@@ -137,7 +143,11 @@ export class Decider {
 
   emit(event: ShinsaEventInput) {
     const byTask = this.context.byTask ? { byTask: this.context.byTask } : {};
-    const stamped: ShinsaEventInput = this.context.onBehalf ? { ...event, onBehalf: true, ...byTask } : event;
+    const onBehalf: ShinsaEventInput = this.context.onBehalf
+      ? { ...event, onBehalf: true, ...byTask }
+      : event;
+    const guest = this.context.guest;
+    const stamped: ShinsaEventInput = guest ? { ...onBehalf, byGuest: guest.login } : onBehalf;
     this.events.push(stamped);
     applyEvent(this.state, { ...stamped, seq: this.state.seq + 1, at: this.context.now });
   }

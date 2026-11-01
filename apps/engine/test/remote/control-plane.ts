@@ -9,13 +9,13 @@ interface ControlCall {
 export interface FakeControlPlane {
   origin: string;
   calls: ControlCall[];
-  answers: Map<string, () => Response>;
+  answers: Map<string, () => Response | Promise<Response>>;
   stop: () => Promise<void>;
 }
 
 export function startFakeControlPlane(): FakeControlPlane {
   const calls: ControlCall[] = [];
-  const answers = new Map<string, () => Response>();
+  const answers = new Map<string, () => Response | Promise<Response>>();
   const server = Bun.serve({
     port: 0,
     hostname: '127.0.0.1',

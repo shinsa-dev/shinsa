@@ -395,7 +395,7 @@ async function routeResolved(
   engine: Engine,
   command: UserCommand,
   id: string | null,
-  from: Pick<DispatchOptions, 'onBehalf' | 'byTask'>,
+  from: Pick<DispatchOptions, 'onBehalf' | 'byTask' | 'guest'>,
   resolve: () => Promise<UserCommand>
 ) {
   if (id) return routeOnce(engine, command, { ...from, id }, resolve);
@@ -407,7 +407,7 @@ export function routeUserCommand(
   command: UserCommand,
   id: string | null,
   classify: Classifier | null,
-  from: Pick<DispatchOptions, 'onBehalf' | 'byTask'> = {}
+  from: Pick<DispatchOptions, 'onBehalf' | 'byTask' | 'guest'> = {}
 ) {
   const plain = id ? { ...from, id } : from;
   if (!classify || (id && engine.hasReceipt(id))) return engine.dispatch(command, plain);
@@ -415,7 +415,7 @@ export function routeUserCommand(
   if (shapeless)
     return routeResolved(engine, command, id, from, () => shapeCommand(classify.shape, shapeless));
   if (command.type !== 'task.message' || command.kind) return engine.dispatch(command, plain);
-  if (!from.onBehalf && !from.byTask) {
+  if (!(from.onBehalf || from.byTask || from.guest)) {
     const { taskId, text } = command;
     return engine.dispatch(
       { type: 'message.receive', taskId, text },

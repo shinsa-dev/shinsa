@@ -1,0 +1,117 @@
+import { isTaskSettled, type RemoteUser, type Task, type TaskGuest } from '@shinsa/core';
+import type { IconName } from '@shinsa/ui/components/icon';
+import { useSyncExternalStore } from 'react';
+import { sendCommandWithToast } from '@/lib/connection/commands.ts';
+import { describeUserName } from '@/lib/remote/users.ts';
+import { createSignal } from '@/lib/signal.ts';
+
+export const HANDOFF_TITLE = 'Hand off';
+
+export const HANDOFF_ICON: IconName = 'IconHandshake';
+
+export const HANDOFF_DESCRIPTION =
+  'The first GitHub account to open the link works on this task from their own Shinsa and reaches nothing else on this machine. It stays yours: it runs here, you see everything they do, and you can take it back at any time.';
+
+export const HANDOFF_HELD_DESCRIPTION =
+  'It stays yours: it runs here, you see everything they do, and Remove takes it back at once.';
+
+export const HANDOFF_COPY = 'Copy hand-off link';
+
+export const HANDOFF_REMOVE = 'Remove';
+
+export const HANDOFF_REMOVE_DESCRIPTION =
+  'They lose this task at once. To hand it to someone else, hand it off again for a new link.';
+
+export type HandoffView =
+  | { kind: 'off' }
+  | { kind: 'linking' }
+  | { kind: 'failed'; message: string }
+  | { kind: 'ready'; url: string }
+  | { kind: 'claimed'; guest: TaskGuest; at: number };
+
+const handoffSignal = createSignal();
+
+let removing: string | null = null;
+
+export function openHandoffRemoveConfirm(taskId: string) {
+  removing = taskId;
+  handoffSignal.publish();
+}
+
+export function closeHandoffRemoveConfirm() {
+  removing = null;
+  handoffSignal.publish();
+}
+
+export function useHandoffRemoveConfirm() {
+  return useSyncExternalStore(handoffSignal.subscribe, () => removing);
+}
+
+export function canHandOff(task: Task) {
+  if (task.handoff) return true;
+  return !task.watchHome && !isTaskSettled(task);
+}
+
+export function resolveHandoffView(task: Task): HandoffView {
+  const handoff = task.handoff;
+  if (!handoff) return { kind: 'off' };
+  if (handoff.guest) return { kind: 'claimed', guest: handoff.guest, at: handoff.claimedAt ?? handoff.at };
+  if (handoff.failure) return { kind: 'failed', message: handoff.failure };
+  if (handoff.url) return { kind: 'ready', url: handoff.url };
+  return { kind: 'linking' };
+}
+
+export function describeHandoffClaim(guest: TaskGuest) {
+  return `${describeUserName(guest)} is working on this task`;
+}
+
+export function isTaskHandedOff(task: Task) {
+  const handoff = task.handoff;
+  return Boolean(handoff && (handoff.guest || (handoff.url && !handoff.failure)));
+}
+
+export function describeHandoffMark(task: Task, handedBy: RemoteUser | null) {
+  if (handedBy) return `Handed to you by ${describeUserName(handedBy)}`;
+  const guest = task.handoff?.guest;
+  return guest ? `Handed to ${describeUserName(guest)}` : 'Hand-off link not opened yet';
+}
+
+export function resolveHandoffFact(task: Task, handedBy: RemoteUser | null) {
+  if (handedBy)
+    return {
+      verb: 'Handed to you by',
+      user: handedBy,
+      hint: 'The task stays theirs and runs on their machine',
+    };
+  const guest = task.handoff?.guest;
+  return guest ? { verb: 'Handed to', user: guest, hint: 'They work on it from their own Shinsa' } : null;
+}
+
+export const HANDOFF_JOINED = 'Joined';
+
+export const HANDOFF_TURN_OFF = 'Turn off link';
+
+export function describeHandoffBanner(view: HandoffView) {
+  switch (view.kind) {
+    case 'off':
+      return null;
+    case 'linking':
+      return 'Making the hand-off link.';
+    case 'failed':
+      return `The hand-off link couldn’t be made. ${view.message}`;
+    case 'ready':
+      return 'The first GitHub account to open the hand-off link can work on this task.';
+    case 'claimed':
+      return `${describeHandoffClaim(view.guest)}. It stays yours.`;
+  }
+}
+
+export function handOffTask(task: Task) {
+  return sendCommandWithToast({ type: 'task.hand_off', taskId: task.id });
+}
+
+export function removeHandoff(task: Task) {
+  const guest = task.handoff?.guest;
+  const done = guest ? `${describeUserName(guest)} no longer has this task.` : 'The hand-off link is off.';
+  return sendCommandWithToast({ type: 'handoff.remove', taskId: task.id }, done);
+}

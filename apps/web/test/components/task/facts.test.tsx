@@ -486,6 +486,15 @@ describe('a duplicate', () => {
   });
 });
 
+describe('a task handed off', () => {
+  it('names who it was handed to beside its other facts', () => {
+    const guest = { id: 'u7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    renderFacts(createTask({ id: 't', handle: 'SW-7', handoff: { at: 1, url: null, guest, claimedAt: 2 } }));
+    expect(screen.getByText('Handed to')).toBeTruthy();
+    expect(screen.getByText('Kai Lane')).toBeTruthy();
+  });
+});
+
 describe('who filed the task', () => {
   const filer = createTask({ id: 'filer', handle: 'LOC-122', title: 'Retry the export' });
 

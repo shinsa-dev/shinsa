@@ -18,7 +18,13 @@ import { createTempDir } from '../helpers/index.ts';
 function createSocket() {
   const sent: ServerMessage[] = [];
   const socket = {
-    data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' } satisfies SocketData,
+    data: {
+      kind: 'hub',
+      transcripts: new Map(),
+      surface: null,
+      origin: 'local',
+      guest: null,
+    } satisfies SocketData,
     send: (payload: string) => sent.push(JSON.parse(payload) as ServerMessage),
   } as unknown as Parameters<ReturnType<typeof createSocketHub>['open']>[0];
   return { socket, sent };
@@ -277,7 +283,13 @@ describe('the socket hub', () => {
     const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
     let closed = 0;
     const full = {
-      data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' } satisfies SocketData,
+      data: {
+        kind: 'hub',
+        transcripts: new Map(),
+        surface: null,
+        origin: 'local',
+        guest: null,
+      } satisfies SocketData,
       send: () => 0,
       close: () => {
         closed += 1;

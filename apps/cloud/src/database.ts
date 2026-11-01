@@ -1,4 +1,4 @@
-import type { MachineCredentials } from '@shinsa/core';
+import type { MachineCredentials, RemoteRole } from '@shinsa/core';
 
 export interface DatabaseStatement {
   bind: (...values: unknown[]) => DatabaseStatement;
@@ -43,6 +43,7 @@ export interface SharedInstanceRow extends InstanceRow {
   owner_login: string;
   owner_name: string | null;
   owner_avatar_url: string | null;
+  role: RemoteRole;
 }
 
 export interface MemberRow extends UserRow {
@@ -295,9 +296,9 @@ export function createStore(db: Database) {
     async listUserInstances(userId: string) {
       const { results } = await db
         .prepare(
-          `SELECT ${SHARED_INSTANCE_COLUMNS} FROM instances JOIN users ON users.id = instances.user_id WHERE instances.user_id = ? OR instances.id IN (SELECT instance_id FROM instance_members WHERE user_id = ?) ORDER BY instances.created_at`
+          `SELECT ${SHARED_INSTANCE_COLUMNS}, CASE WHEN instances.user_id = ?1 THEN 'owner' WHEN instances.id IN (SELECT instance_id FROM instance_members WHERE user_id = ?1) THEN 'member' ELSE 'guest' END AS role FROM instances JOIN users ON users.id = instances.user_id WHERE instances.user_id = ?1 OR instances.id IN (SELECT instance_id FROM instance_members WHERE user_id = ?1) OR instances.id IN (SELECT instance_id FROM instance_guests WHERE user_id = ?1) ORDER BY instances.created_at`
         )
-        .bind(userId, userId)
+        .bind(userId)
         .all<SharedInstanceRow>();
       return results;
     },
@@ -416,6 +417,70 @@ export function createStore(db: Database) {
     async removeMember(instanceId: string, userId: string) {
       await db
         .prepare('DELETE FROM instance_members WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .run();
+    },
+
+    async createHandoff(instanceId: string, tokenHash: string, now: number) {
+      await db
+        .prepare('INSERT INTO instance_handoffs (token_hash, instance_id, created_at) VALUES (?, ?, ?)')
+        .bind(tokenHash, instanceId, now)
+        .run();
+    },
+
+    async removeHandoff(instanceId: string, tokenHash: string) {
+      await db
+        .prepare('DELETE FROM instance_handoffs WHERE instance_id = ? AND token_hash = ?')
+        .bind(instanceId, tokenHash)
+        .run();
+    },
+
+    async selectHandoffInstance(tokenHash: string) {
+      const row = await db
+        .prepare('SELECT instance_id FROM instance_handoffs WHERE token_hash = ?')
+        .bind(tokenHash)
+        .first<{ instance_id: string }>();
+      return row?.instance_id ?? null;
+    },
+
+    async createGuest(instanceId: string, userId: string, now: number) {
+      await db
+        .prepare(
+          'INSERT INTO instance_guests (instance_id, user_id, added_at) VALUES (?, ?, ?) ON CONFLICT (instance_id, user_id) DO NOTHING'
+        )
+        .bind(instanceId, userId, now)
+        .run();
+    },
+
+    async isGuest(instanceId: string, userId: string) {
+      const row = await db
+        .prepare('SELECT 1 AS found FROM instance_guests WHERE instance_id = ? AND user_id = ?')
+        .bind(instanceId, userId)
+        .first<{ found: number }>();
+      return row !== null;
+    },
+
+    async countGuests(instanceId: string) {
+      const row = await db
+        .prepare('SELECT COUNT(*) AS total FROM instance_guests WHERE instance_id = ?')
+        .bind(instanceId)
+        .first<{ total: number }>();
+      return row?.total ?? 0;
+    },
+
+    async listGuests(instanceId: string) {
+      const { results } = await db
+        .prepare(
+          `SELECT ${USER_COLUMNS}, instance_guests.added_at FROM instance_guests JOIN users ON users.id = instance_guests.user_id WHERE instance_guests.instance_id = ? ORDER BY instance_guests.added_at, users.login`
+        )
+        .bind(instanceId)
+        .all<MemberRow>();
+      return results;
+    },
+
+    async removeGuest(instanceId: string, userId: string) {
+      await db
+        .prepare('DELETE FROM instance_guests WHERE instance_id = ? AND user_id = ?')
         .bind(instanceId, userId)
         .run();
     },

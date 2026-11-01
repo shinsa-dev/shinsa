@@ -4,6 +4,8 @@ import {
   type MachineResources,
   NO_TEAM_FEED,
   type RemoteSnapshot,
+  type RemoteUser,
+  SCOPE_MESSAGES,
   type TeamFeedSnapshot,
   type UserCommand,
   type WireState,
@@ -32,6 +34,8 @@ export interface FleetMember {
   id: string;
   name: string;
   current?: boolean;
+  guest?: true;
+  handedBy?: RemoteUser;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
 }
@@ -183,7 +187,8 @@ export class Fleet implements ShinsaConnection {
     unreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES,
     hostedTeams: TeamFeedSource | null = null
   ) {
-    for (const member of members) this.#add(member);
+    for (const member of [...members].sort((a, b) => Number(a.guest === true) - Number(b.guest === true)))
+      this.#add(member);
     this.#unreachable = unreachable;
     this.#hostedTeams = hostedTeams;
     hostedTeams?.subscribe(() => this.#teams.publish());
@@ -198,7 +203,13 @@ export class Fleet implements ShinsaConnection {
     const { connection } = member;
     this.#entries.push({
       member,
-      view: { id: member.id, name: member.name, current: member.current === true },
+      view: {
+        id: member.id,
+        name: member.name,
+        current: member.current === true,
+        ...(member.guest ? { guest: true as const } : {}),
+        ...(member.handedBy ? { handedBy: member.handedBy } : {}),
+      },
       release: [
         connection.subscribe(() => this.#state.publish()),
         connection.subscribeTranscripts(() => this.#transcripts.publish()),
@@ -340,9 +351,10 @@ export class Fleet implements ShinsaConnection {
   };
 
   selectMachine = (id: string) => {
-    if (this.#entries.length + this.#unreachable.length < 2) return null;
     const owner = this.#ownerOf(id);
-    return this.#entries.find((entry) => entry.member.id === owner)?.view ?? null;
+    const view = this.#entries.find((entry) => entry.member.id === owner)?.view ?? null;
+    if (view?.guest) return view;
+    return this.#entries.length + this.#unreachable.length < 2 ? null : view;
   };
 
   listMachines = () => {
@@ -403,7 +415,9 @@ export class Fleet implements ShinsaConnection {
     const member = this.#memberOf(machineId ?? resolveCommandOwner(command, this.#owners));
     if (!member) return Promise.reject(new Error('No machine is connected.'));
     if (!selectEngineCommands(member.connection.selectEngine()).has(command.type))
-      return Promise.reject(new Error(resolveUpdateMessage(member.name)));
+      return Promise.reject(
+        new Error(member.guest ? SCOPE_MESSAGES.command : resolveUpdateMessage(member.name))
+      );
     return member.connection.command(command);
   };
 

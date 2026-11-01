@@ -21,6 +21,7 @@ import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { startServer } from '../../src/http/index.ts';
 import { log } from '../../src/log/index.ts';
+import { Handoffs } from '../../src/remote/handoffs.ts';
 import {
   ControlClient,
   createUrlOpener,
@@ -194,7 +195,7 @@ async function start(
         ? {}
         : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
     });
-  return { remote, base, tunnel, local, port: http.server.port, plane, connectors, opened };
+  return { remote, engine, base, tunnel, local, port: http.server.port, plane, connectors, opened };
 }
 
 async function createToken(expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS, userId = OWNER.id) {
@@ -1248,6 +1249,347 @@ describe('links, access requests and members', () => {
     const removed = await readSnapshot(await local('/api/remote/remove', {}));
     expect(removed).toMatchObject({ access: null, link: null, requests: [] });
     expect(await opening).toBe('The channel closed.');
+  });
+});
+
+describe('handing off a task', () => {
+  const GUEST_MEMBER = { user: KAI, addedAt: 5 };
+
+  async function startHandoff() {
+    const started = await start();
+    const { engine, remote, plane } = started;
+    const handoffs = new Handoffs({ engine, remote });
+    plane.answers.set(REMOTE_PATHS.machineHandoffs, () => Response.json({ token: 'handoff-token' }));
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
+    plane.answers.set(REMOTE_PATHS.machineGuestAdd, () => Response.json(GUEST_MEMBER));
+    await engine.dispatch({ type: 'task.create', request: 'Hand this over', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Keep this one', repoId: null });
+    const [taskId, otherId] = Object.keys(engine.state.tasks);
+    await engine.dispatch({ type: 'task.hand_off', taskId: taskId as string });
+    await handoffs.link(taskId as string, { key: 'link' } as never);
+    const machine = await remote.store.resolveMachineKey();
+    return { ...started, handoffs, taskId: taskId as string, otherId: otherId as string, machine };
+  }
+
+  function readClaim(engine: Engine, taskId: string) {
+    return parseEnrollFragment(new URL(engine.state.tasks[taskId]?.handoff?.url ?? 'https://x').hash);
+  }
+
+  async function readSocketUntil(channel: OpenChannel, type: string) {
+    const seen: { type: string; [key: string]: unknown }[] = [];
+    for (;;) {
+      const message = await channel.next();
+      if (message.t !== 'socket') continue;
+      const parsed = JSON.parse(message.data) as { type: string };
+      seen.push(parsed);
+      if (parsed.type === type) return seen;
+    }
+  }
+
+  async function sendCommand(channel: OpenChannel, id: string, command: unknown) {
+    await channel.send({ t: 'socket', data: JSON.stringify({ type: 'command', id, command }) });
+    return (await readAck(channel)).error?.code ?? null;
+  }
+
+  async function requestStatus(channel: OpenChannel, id: string, path: string) {
+    await channel.send({ t: 'request', id, method: 'GET', path, headers: [] });
+    await channel.send({ t: 'end', id });
+    for (;;) {
+      const message = await channel.next();
+      if (message.t === 'response' && message.id === id) return message.status;
+    }
+  }
+
+  test('makes one claim link per task, only while remote access is on', async () => {
+    const { remote, engine, taskId, plane } = await startHandoff();
+    const url = engine.state.tasks[taskId]?.handoff?.url ?? '';
+    expect(url.startsWith(`${plane.origin}${REMOTE_PATHS.claimPage}#`)).toBe(true);
+    expect(readClaim(engine, taskId)?.invite).toBe('handoff-token');
+    expect(await remote.createHandoff(taskId)).toBe(url);
+    expect(plane.calls.filter((call) => call.path === REMOTE_PATHS.machineHandoffs)).toHaveLength(1);
+    await remote.disable();
+    await expect(remote.createHandoff('another')).rejects.toThrow('Turn on remote access');
+  });
+
+  test('a link the machine cannot make is a final failure the task keeps', async () => {
+    const { engine, remote, handoffs, taskId } = await startHandoff();
+    await engine.dispatch({ type: 'handoff.remove', taskId });
+    await engine.dispatch({ type: 'task.hand_off', taskId });
+    await remote.disable();
+    await expect(handoffs.link(taskId, { key: 'again' } as never)).rejects.toMatchObject({
+      policy: { retryable: false },
+    });
+    await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
+    await handoffs.link(taskId, { key: 'claimed' } as never);
+    await handoffs.link('missing', { key: 'missing' } as never);
+  });
+
+  test('the first account to open the link takes the task and reaches only it', async () => {
+    const { remote, engine, port, plane, taskId, otherId, machine } = await startHandoff();
+    const claim = readClaim(engine, taskId);
+    const channel = await openChannel(remote.appOrigin, port, claim?.secret ?? '', machine.publicKey, {
+      userId: KAI.id,
+      name: 'Kai’s laptop',
+      onPending: () => {
+        throw new Error('A claim never waits for an answer.');
+      },
+    });
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('kai');
+    expect(remote.store.file.handoffs).toEqual([]);
+    expect(remote.store.file.guests).toEqual([GUEST_MEMBER]);
+    expect(remote.snapshot().devices).toMatchObject([{ name: 'Kai’s laptop', userId: KAI.id, taskId }]);
+    expect(plane.calls.find((call) => call.path === REMOTE_PATHS.machineHandoffRemove)?.body).toEqual({
+      token: 'handoff-token',
+    });
+    await channel.send({ t: 'ready' });
+    const opened = await readSocketUntil(channel, 'state');
+    expect(opened.map((message) => message.type)).toEqual(['surfaces', 'engine', 'state']);
+    const state = opened[2]?.state as { tasks: Record<string, unknown> };
+    expect(Object.keys(state.tasks)).toEqual([taskId]);
+    const engineInfo = opened[1]?.engine as { commands: string[] };
+    expect(engineInfo.commands).toContain('task.message');
+    expect(engineInfo.commands).not.toContain('task.hand_off');
+    expect(
+      await sendCommand(channel, 'c1', { type: 'task.prioritize', taskId: otherId, priority: 'high' })
+    ).toBe('handoff_scope');
+    expect(
+      await sendCommand(channel, 'c2', { type: 'settings.change', patch: { mergeMethod: 'squash' } })
+    ).toBe('local_only');
+    await channel.send({
+      t: 'socket',
+      data: JSON.stringify({
+        type: 'command',
+        id: 'c3',
+        command: { type: 'task.prioritize', taskId, priority: 'high' },
+      }),
+    });
+    const patched = await readSocketUntil(channel, 'ack');
+    expect(patched.at(-1)?.error).toBeNull();
+    const activity = engine.state.tasks[taskId]?.activity ?? [];
+    expect(activity.at(-1)?.byGuest).toBe('kai');
+    const patch = patched.find((message) => message.type === 'state.patch')?.patch as {
+      records: { tasks?: Record<string, unknown> };
+    };
+    expect(Object.keys(patch.records.tasks ?? {})).toEqual([taskId]);
+    await channel.send({ t: 'socket', data: JSON.stringify({ type: 'state.sync' }) });
+    const synced = (await readSocketUntil(channel, 'state')).at(-1)?.state as { tasks: object };
+    expect(Object.keys(synced.tasks)).toEqual([taskId]);
+    expect(await requestStatus(channel, 'h1', `/api/tasks/${taskId}`)).toBe(200);
+    expect(await requestStatus(channel, 'h2', `/api/tasks/${otherId}`)).toBe(403);
+    expect(await requestStatus(channel, 'h3', '/api/tasks')).toBe(403);
+  });
+
+  test('a guest follows only the transcripts of their task', async () => {
+    const { remote, engine, port, taskId, machine } = await startHandoff();
+    const LEE = { user: { id: '9', login: 'lee', name: null, avatarUrl: null }, addedAt: 2 };
+    remote.store.update((file) => ({ ...file, guests: [LEE], access: { owner: OWNER, members: [LEE] } }));
+    const channel = await openChannel(
+      remote.appOrigin,
+      port,
+      readClaim(engine, taskId)?.secret ?? '',
+      machine.publicKey,
+      {
+        userId: KAI.id,
+      }
+    );
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    await channel.send({ t: 'ready' });
+    await readSocketUntil(channel, 'engine');
+    await channel.send({
+      t: 'socket',
+      data: JSON.stringify({ type: 'transcript.subscribe', runId: 'someone-elses-run' }),
+    });
+    await channel.send({ t: 'socket', data: JSON.stringify({ type: 'hello', surface: 'desktop' }) });
+    expect(await sendCommand(channel, 'c1', { type: 'task.prioritize', taskId, priority: 'low' })).toBeNull();
+    expect(remote.store.file.guests.map((guest) => guest.user.login)).toEqual(['lee', 'kai']);
+    expect(engine.state.tasks[taskId]?.activity?.at(-1)?.byGuest).toBe('kai');
+  });
+
+  test('taking the task back closes the guest’s channel, forgets their device and tells Shinsa Cloud', async () => {
+    const { remote, engine, port, plane, handoffs, taskId, machine } = await startHandoff();
+    const channel = await openChannel(
+      remote.appOrigin,
+      port,
+      readClaim(engine, taskId)?.secret ?? '',
+      machine.publicKey,
+      {
+        userId: KAI.id,
+      }
+    );
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    await handoffs.revoke(taskId, KAI.id);
+    expect(await channel.closed).toBe(1008);
+    expect(remote.snapshot().devices).toEqual([]);
+    expect(remote.store.file.guests).toEqual([]);
+    expect(plane.calls.find((call) => call.path === REMOTE_PATHS.machineGuestRemove)?.body).toEqual({
+      userId: KAI.id,
+    });
+    await handoffs.revoke(taskId, KAI.id);
+    expect(plane.calls.filter((call) => call.path === REMOTE_PATHS.machineGuestRemove)).toHaveLength(1);
+  });
+
+  test('turning off a link nobody took retires it at Shinsa Cloud, even when Shinsa Cloud does not answer', async () => {
+    const { remote, plane, handoffs, taskId } = await startHandoff();
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    plane.answers.set(REMOTE_PATHS.machineHandoffRemove, () => new Response('', { status: 500 }));
+    await handoffs.revoke(taskId, null);
+    expect(remote.store.file.handoffs).toEqual([]);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test('a guest still handed another task keeps their place at Shinsa Cloud', async () => {
+    const { remote, handoffs, plane, taskId, otherId } = await startHandoff();
+    remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
+    const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, userId: KAI.id };
+    remote.store.upsertDevice({ ...device, publicKey: 'a', taskId });
+    remote.store.upsertDevice({ ...device, publicKey: 'b', taskId: otherId });
+    await handoffs.revoke(taskId, KAI.id);
+    expect(remote.snapshot().devices.map((entry) => entry.publicKey)).toEqual(['b']);
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineGuestRemove)).toBe(false);
+  });
+
+  test('a link someone else took, a full machine and a failing Shinsa Cloud are refused with a reason', async () => {
+    const { remote, engine, port, plane, taskId, machine } = await startHandoff();
+    const secret = readClaim(engine, taskId)?.secret ?? '';
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const claimAs = () =>
+      settleChannel(openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id }));
+    plane.answers.set(REMOTE_PATHS.machineGuestAdd, () => new Response('', { status: 409 }));
+    expect(await claimAs()).toContain('This machine already has 20 people working on its tasks');
+    plane.answers.set(REMOTE_PATHS.machineGuestAdd, () => new Response('', { status: 500 }));
+    expect(await claimAs()).toContain('This machine cannot hand off tasks right now');
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => new Response('', { status: 500 }));
+    expect(await claimAs()).toContain('This machine could not check who you are');
+    expect(remote.snapshot().devices).toEqual([]);
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
+    await engine.dispatch({ type: 'handoff.remove', taskId });
+    await engine.dispatch({ type: 'task.hand_off', taskId });
+    await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...OWNER } });
+    expect(await claimAs()).toContain('Someone else already opened this hand-off link');
+    expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('mona');
+    warn.mockRestore();
+  });
+
+  test('a machine that hands off nothing refuses the claim, and a forgotten machine forgets its links', async () => {
+    const started = await start();
+    const { remote, port, plane } = started;
+    plane.answers.set(REMOTE_PATHS.machineHandoffs, () => Response.json({ token: 'handoff-token' }));
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
+    const url = await remote.createHandoff('t1');
+    const secret = parseEnrollFragment(new URL(url).hash)?.secret ?? '';
+    const machine = await remote.store.resolveMachineKey();
+    expect(
+      await settleChannel(openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id }))
+    ).toContain('This machine cannot hand off tasks right now');
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => new Response('', { status: 401 }));
+    remote.start();
+    await until('forgotten', () => remote.store.file.credentials === null);
+    expect(remote.store.file.handoffs).toEqual([]);
+  });
+
+  test('a link Shinsa Cloud did not answer for is retried, and a claim the engine could not record is refused', async () => {
+    const { remote, engine, port, plane, handoffs, taskId, machine } = await startHandoff();
+    const secret = readClaim(engine, taskId)?.secret ?? '';
+    await engine.dispatch({ type: 'handoff.remove', taskId });
+    await handoffs.revoke(taskId, null);
+    await engine.dispatch({ type: 'task.hand_off', taskId });
+    plane.answers.set(REMOTE_PATHS.machineHandoffs, () => new Response('', { status: 500 }));
+    await expect(handoffs.link(taskId, { key: 'down' } as never)).rejects.toThrow('status 500');
+    remote.store.update((file) => ({
+      ...file,
+      handoffs: [{ taskId, secret, invite: 'handoff-token', createdAt: 1 }],
+    }));
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const dispatch = spyOn(engine, 'dispatch').mockImplementation(() =>
+      Promise.reject(new Error('disk full'))
+    );
+    expect(
+      await settleChannel(openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id }))
+    ).toContain('could not hand the task to you');
+    dispatch.mockRestore();
+    warn.mockRestore();
+  });
+
+  test('a heartbeat keeps the devices of the guests it lists and forgets the rest', async () => {
+    const { remote, plane, taskId } = await startHandoff();
+    const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, userId: KAI.id, taskId };
+    remote.store.upsertDevice({ ...device, publicKey: 'guest' });
+    plane.answers.set(REMOTE_PATHS.heartbeat, () =>
+      Response.json({ ok: true, ...ACCESS, guests: [GUEST_MEMBER] })
+    );
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    await remote.supervisor.requestHeartbeat();
+    expect(remote.store.file.guests).toEqual([GUEST_MEMBER]);
+    expect(remote.snapshot().devices).toHaveLength(1);
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    await remote.supervisor.requestHeartbeat();
+    expect(remote.snapshot().devices).toEqual([]);
+  });
+
+  test('a guest who left at Shinsa Cloud gives the task back, so it can be handed off again', async () => {
+    const { remote, engine, plane, taskId } = await startHandoff();
+    await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
+    remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    remote.start();
+    await until('given back', () => engine.state.tasks[taskId]?.handoff === null);
+    expect(engine.state.tasks[taskId]?.activity.at(-1)?.text).toBe('@kai gave this task back');
+    await engine.dispatch({ type: 'task.hand_off', taskId });
+    expect(engine.state.tasks[taskId]?.handoff?.guest).toBeNull();
+  });
+
+  test('a member who takes a task over stays a member, and the next heartbeat keeps the task with them', async () => {
+    const { remote, engine, port, plane, taskId, machine } = await startHandoff();
+    const access = { ...ACCESS, members: [GUEST_MEMBER] };
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...access, guests: [] }));
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    const secret = readClaim(engine, taskId)?.secret ?? '';
+    const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id });
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineGuestAdd)).toBe(false);
+    expect(remote.store.file.guests).toEqual([]);
+    await remote.supervisor.requestHeartbeat();
+    expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('kai');
+    expect(remote.snapshot().devices).toMatchObject([{ userId: KAI.id, taskId }]);
+  });
+
+  test('a heartbeat Shinsa Cloud answered before a claim landed keeps the guest it just added', async () => {
+    const { remote, engine, port, plane, taskId, machine } = await startHandoff();
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    const held = Promise.withResolvers<Response>();
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => held.promise);
+    const beat = remote.supervisor.requestHeartbeat();
+    const secret = readClaim(engine, taskId)?.secret ?? '';
+    const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id });
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    held.resolve(Response.json({ ok: true, ...ACCESS, guests: [] }));
+    await beat;
+    expect(remote.store.file.guests).toEqual([GUEST_MEMBER]);
+    expect(remote.snapshot().devices).toHaveLength(1);
+    expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('kai');
+  });
+
+  test('a guest leaving is logged when the task cannot take it back', async () => {
+    const { remote, engine, plane, taskId } = await startHandoff();
+    await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
+    remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const dispatch = spyOn(engine, 'dispatch').mockImplementation(() =>
+      Promise.reject(new Error('disk full'))
+    );
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    remote.start();
+    await until('logged', () =>
+      warn.mock.calls.some((call) => call[0] === '[Handoff] Could not give a task back')
+    );
+    dispatch.mockRestore();
+    warn.mockRestore();
   });
 });
 
