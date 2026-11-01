@@ -7486,24 +7486,24 @@ style of its own.
   `flex h-dvh flex-col overflow-hidden bg-background text-fg-3`.
 - **Locked until done**: while setup is not complete every route replaces itself with setup, so a link, the address
   bar, Back or the app's menu all land there. A run started again from Settings is not locked: every step's footer
-  then has "Close setup" (`secondary`), which goes to Settings. Opening setup once it is finished goes Home.
+  then has "Close setup" (`secondary`), which goes to Settings. Opening setup once it is finished goes to the welcome task, or Home on a run again.
 - **Column**: `mx-auto flex w-full max-w-xl flex-col gap-6 px-6` + `pt-6 pb-16 md:pt-12` (48px from the top from
-  `md` up). Everything starts on the column's left edge. The stepper, the step and its footer are 24px apart.
-- **Stepper**: one segmented `Choice` in a 26px slot (`flex h-6.5 items-center`), each step's label, no numbers, no
-  circles. The current step is the selected segment and the pill slides to the next one (the stepper sits outside
-  the step, so it is not remounted). An answered step has the accent checkmark before its label and its answer as
-  the tooltip ("Opus 5.5"); a reached but unanswered step is plain; both open their step; a step not reached yet is
-  disabled. A click while an answer saves does nothing. Below `sm` the segments give way to one `PAGE_DESCRIPTION`
-  line in the same slot ("Step 2 of 6: Model"). The finished page keeps the 26px slot empty, so the title sits at the
-  same height on every step.
+  `md` up). Everything starts on the column's left edge. The header, the step and its footer are 24px apart.
+- **Setup reads as the first task**: above the step, the page's own heading ("Set up Shinsa", one line under it),
+  then the steps as a task's path of gates: the progress track's marks and connectors, a passed step done (the green
+  tick, its connector green), the one on screen current (the accent pulse, its label `font-medium`,
+  `aria-current="step"`), the rest pending. A passed or reached step is a button that opens it, with its answer as
+  the tooltip ("Opus 5.5 · Squash · Plan first"); a step not reached yet and the one on screen are disabled. A click
+  while an answer saves does nothing. A hairline closes the header. Below `sm` only the current step keeps its
+  label. The header sits outside the step, so it never slides.
 - **Step**: `flex flex-col gap-6`: an inner `flex flex-col gap-4` with the heading (the question itself as
   `PAGE_TITLE`, "How should pull requests be merged?", and one line of `PAGE_DESCRIPTION` under it, `gap-px`), then
   the body 16px under it, then a refused answer's reason as an error line; then the footer 24px under.
 - **Footer**: `flex items-center justify-between gap-3`, no hairline above. Left: Back (`secondary`,
   `IconArrowLeft`), or an empty span on the first step. Right (`flex items-center gap-1.5`, 6px apart): Close setup
-  on a re-run, the step's own secondary action ("Add account", "Check again" with `IconArrowRotateClockwise`), and
-  the primary named for the step ("Continue", "Skip for now", "Finish setup", "Finish anyway") with `IconArrowRight`
-  at its end. All `default` size.
+  on a re-run, the step's own secondary action ("Add account", or an icon-only `IconArrowRotateClockwise` button
+  whose label and tooltip say "Check the tools again"), and the primary named for the step ("Continue", "Finish setup")
+  with `IconArrowRight` at its end, off until the step is ready. All `default` size.
 - **Error line**: `flex min-w-0 items-start gap-1.25 text-red-text text-xs leading-relaxed`, `IconExclamationCircle`
   at `size='sm'` in the 20px slot, the text `selectable min-w-0 whitespace-pre-wrap break-words`.
 - **Motion**: the step enters with a 0.5rem slide and a fade, 220ms on `cubic-bezier(0.23, 1, 0.32, 1)`, from the left when going
@@ -7522,12 +7522,18 @@ style of its own.
     .onboarding-in, .onboarding-in-back { --onboarding-shift: 0; animation-duration: 160ms; }
   }
   ```
-- **Imports happen, they are not asked**: anything the server can bring in by itself is already there when the step
-  opens, marked "Added". Until the data arrives, the card holds one row with a delayed loading line, never "none
-  found". A failed import is an amber line under the card.
-- **Finished page**: "Shinsa is ready", one line ("Start your first task from Home. You can change any of this in
-  Settings."), a Settings card of what was set up (one `SettingRow` each, the answer at the right as
-  `max-w-64 text-fg-3 text-xs` `Truncate`) and "Go to Home" (primary, arrow at its end).
+- **Sign in, never import**: an account the app needs is one primary button ("Sign in with Claude") on an empty
+  row, never a login found on the machine and copied. The step does not move on without one. Until the data arrives, the card holds one row with a delayed
+  loading line, never "none found".
+- **Install in place**: a missing tool's row is its name on one line, then a copy button and Install (`sm`,
+  `IconConsole`), which opens a terminal inside the card that runs the tool's own command; when it ends the terminal
+  goes and the tools are checked again, a failed install leaving one line saying so. With two or more missing, a row
+  above them offers Install all (`primary`), one terminal that installs each in the order they need; with one, its
+  Install is the primary. The flow never finishes with a required tool missing: its forward button stays off and
+  `secondary` until they are all there. When one still fails, "Ask an
+  agent for help" under the card shows the agent's reply in place, each command in it with Run in terminal.
+- **Finishing opens the first task**: the last step lands on a done task that sums up what was set up; there is no
+  finished page.
 - No folder path or other machine-specific value is ever written into the UI code; the ones on screen come from the
   server.
 - **Ask before you need it, and never as an error**: a permission the app needs only for some choices (a folder the
@@ -7535,7 +7541,7 @@ style of its own.
   the choices stay as picked, and coming back to the window checks again by itself.
 - **Suggest, then let them edit**: what the app can work out (projects from repositories) is shown worked out and
   kept, each row with a name to change and a box to untick, and the primary button counts what will be made ("Create 6 projects").
-- Example: Shinsa's five-step setup (Folders, Projects, Defaults, Accounts, Tools).
+- Example: Shinsa's five-step setup (Folders, Projects, Defaults, Claude, Tools).
 
 #### Pick-one and pick-many option lists
 
@@ -7566,10 +7572,13 @@ A list of checks is a Settings card of rows (`SETTING_ROW` with `gap-2`):
 - The outcome icon in a 14px slot: passed `IconCheckCircle2Filled` `text-primary-4`, failed `IconCircleXFilled`
   `text-red-4`, skipped `IconCircleDotted` `text-fg-2`; its tooltip names the outcome in its text tone
   (`text-primary-text`, `text-red-text`, `text-fg-2`).
-- The name (`text-fg-4 text-xs`) over its fix as inline markdown (`text-2xs text-fg-3`), `flex-col gap-px`.
-- Version or state at the right: `TOKEN_TEXT` + `min-w-0 max-w-1/2 shrink text-end`, truncated.
+- The name alone on one line (`text-fg-4 text-xs`, truncated), so every row keeps the icon level with its text.
+- Version or state at the right: `TOKEN_TEXT` + `min-w-0 max-w-1/2 shrink text-end`, truncated; a failed check
+  with a fix shows its 24px copy button and `sm` Install there instead, 4px apart.
 - An optional check that fails is "skipped", never "failed", and never holds the flow back.
-- "Check again" sits in the footer, busy while it runs.
+- Checking again is an icon-only button in the footer ("Check the tools again"); while it runs its spinner takes the
+  icon's place, never beside it (pass the glyph as `icon`, not as a child).
+- A login with a page of its own is not a row; a tool's own login folds into its row (Install, then Sign in).
 - Example: setup's Tools step.
 
 #### The now card: one frame for every process state

@@ -47,6 +47,7 @@ import {
 } from './messages.ts';
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
+import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import {
@@ -384,6 +385,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordSlackStatus(decider, command);
     case 'slack.answer':
       return answerSlackQuestion(decider, command);
+    case 'onboarding.welcome':
+      return recordWelcome(decider, command);
   }
 }
 

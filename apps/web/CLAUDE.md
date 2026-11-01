@@ -47,7 +47,7 @@ src/
 │                        section.tsx (Section, Specimen), tokens.tsx, inputs.tsx, overlays.tsx and surfaces.tsx
 │                        (the kit), checklist.tsx (the checklist: ticking, commands, a disabled row, read-only, a
 │                        Markdown task list), composites.tsx (Shinsa's shared building blocks and the
-│                        composer), errors.tsx (the error fallbacks in each size), onboarding.tsx (each kind of setup step and the finished page), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), evidence.tsx (the Evidence panel on sample files from public/samples/evidence, every kind once, and after a revision: an updated shot and the earlier versions), checks.tsx (the Checks list in each state, both stages, a linked test, the plan's Checks, check activity and Always run before review, on sample-checks.ts), code.tsx (the editor, its diffs and Go to
+│                        composer), errors.tsx (the error fallbacks in each size), onboarding.tsx (each kind of setup step), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), evidence.tsx (the Evidence panel on sample files from public/samples/evidence, every kind once, and after a revision: an updated shot and the earlier versions), checks.tsx (the Checks list in each state, both stages, a linked test, the plan's Checks, check activity and Always run before review, on sample-checks.ts), code.tsx (the editor, its diffs and Go to
 │                        file) and settings.tsx (the feature pieces in
 │                        each state), samples.ts, sample-accounts.ts, sample-delegations.ts, sample-extensions.ts,
 │                        sample-versions.ts, sample-code.ts, sample-evidence.ts, sample-checks.ts, sample-overview.ts and sample-merge-steps.ts (their sample data; merge-steps.tsx,
@@ -81,7 +81,7 @@ src/
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
-│                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, defaults: the three pick-one lists, projects: the suggested projects to keep, rename or trim, access: a folder macOS keeps private, accounts, checks, finished),
+│                        onboarding (shell, header: Set up Shinsa over the path, path: the steps as the task page's path of gates, section: the heading, body and footer every step shares, the step and its footer, the option list, defaults: the three pick-one lists, projects: the suggested projects to keep, rename or trim, access: a folder macOS keeps private, accounts: Sign in with Claude and the accounts, checks: each check with Install and its terminal in the card, help: Ask an agent for help and its reply with Run in terminal),
 │                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar),
 │                        services (menu.tsx: Services beside Tasks and in the rail, its popover (SERVICES_PANEL, the
 │                        queue popover's COMPACT_POPOVER, which the queue's QUEUE_POPOVER widens to fit its rows: the list as tall as its content, the forms at one height)
@@ -333,10 +333,12 @@ called there.
   `describeMessageStatus` in `lib/tasks/messages.ts`), or, when it asked for new work while a round runs, queued
   above the composer as a waiting round you can send now to the current round, edit or remove (`lib/tasks/message-queue.ts`,
   `components/chat/message-queue.tsx`; `docs/engine.md` → Rounds).
-- **Setup is the server's steps.** The steps, their order, what each answer saves, going back and the accounts it
-  imports all live on the server (`docs/engine.md` → The setup steps); `routes/onboarding.tsx` only renders
-  `GET /api/onboarding/flow` and sends what you pick, a folder path you add, Back or a step you open
-  (`useOnboardingFlow`; how it looks: `docs/design.md`, 24). Until `GET /api/onboarding` says setup is complete,
+- **Setup is the server's steps.** The steps, their order, what each answer saves, going back, the help task and
+  the welcome task all live on the server (`docs/engine.md` → The setup steps); `routes/onboarding.tsx` only renders
+  `GET /api/onboarding/flow` and sends what you pick, a folder path you add, Back, a step you open or a request for
+  help (`useOnboardingFlow`; how it looks: `docs/design.md`, 24). Install sends a check's id, and Run in terminal a
+  command from the help task's reply, to `POST /api/onboarding/install`; the engine decides what runs. Finishing
+  opens the welcome task the flow names (`welcome`), or Home on a run started again. Until `GET /api/onboarding` says setup is complete,
   every route replaces itself with `/onboarding`, and `/onboarding` has no way out: its own shell, no Home button
   and no ⌘K. `/onboarding` goes Home when the run it loads is finished. Run setup again (Settings → Setup, ⌘K) is
   `restartOnboarding`: it starts a new run on the server first, so the page opens on its first step; there is no

@@ -143,8 +143,9 @@ describe('the /ui gallery', () => {
     expect(setup.getByText('macOS keeps ~/Documents private')).toBeTruthy();
     expect(setup.getByRole('option', { name: /Squash/ }).getAttribute('aria-selected')).toBe('true');
     expect(setup.getAllByRole('button', { name: 'Sign in again' }).length).toBeGreaterThan(0);
-    expect(setup.getByText('Not signed in.')).toBeTruthy();
-    expect(setup.getByRole('heading', { name: 'Shinsa is ready' })).toBeTruthy();
+    expect(setup.getAllByRole('heading', { name: 'Set up Shinsa' }).length).toBeGreaterThan(0);
+    expect(setup.getAllByRole('button', { name: 'Install' }).length).toBeGreaterThan(0);
+    expect(setup.getByText('An agent is looking into the failing checks')).toBeTruthy();
     expect(shinsa.getByRole('button', { name: 'Remove account' })).toBeTruthy();
     for (const name of ['Project', 'When to start', 'Priority']) {
       expect(shinsa.getByRole('combobox', { name })).toBeTruthy();
@@ -172,7 +173,8 @@ describe('the /ui gallery', () => {
     fireEvent.click(setup.getByRole('button', { name: 'Open System Settings' }));
     fireEvent.click(setup.getByRole('button', { name: 'Leave it out' }));
     fireEvent.click(setup.getByRole('button', { name: 'Add account' }));
-    fireEvent.click(setup.getByRole('button', { name: /Go to Home/ }));
+    fireEvent.click(setup.getAllByRole('button', { name: 'Sign in with Claude' })[0] as HTMLElement);
+    fireEvent.click(setup.getByRole('button', { name: /Ask an agent for help/ }));
     fireEvent.click(
       findSection('shinsa-chat').getByRole('button', {
         name: 'Stop “Review the session cleanup” and what it delegated',
