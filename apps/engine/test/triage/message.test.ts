@@ -148,6 +148,52 @@ describe('reading what a message asks for', () => {
     }
   );
 
+  test('a merged task names the steps left for you after the merge, and a question about one is feedback', async () => {
+    const asked: string[] = [];
+    const ask: QuickJson = <T>(_system: string, prompt: string) => {
+      asked.push(prompt);
+      return Promise.resolve({
+        kind: 'feedback',
+        shape: 'answer',
+        title: 'The PSL step',
+        why: 'A question.',
+      } as T);
+    };
+    const step = {
+      when: 'post_merge' as const,
+      kind: 'other' as const,
+      title: 'Submit `shinsa.page` to the Public Suffix List',
+      detail: `Open a pull request on publicsuffix/list.\n\n${'Until it is listed, previews share a site. '.repeat(10)}`,
+      command: null,
+    };
+    const task = createTask({
+      stage: 'merged',
+      stageReason: 'merged',
+      rounds: [createRound({ status: 'merged', pipeline: [...SHAPE_PIPELINES.change], outcome: null })],
+      carriedMergeSteps: [
+        { ...step, round: 1, done: false },
+        { ...step, title: 'Rotate the key', round: 1, done: true },
+      ],
+    });
+    await resolveMessageClass(task, `whats this for? ${step.detail}`, ask);
+    const [read] = asked;
+    expect(read).toContain(
+      'Now: round 1 is done and nothing is in progress.\nSteps left for the human after the merge (the human does these, not an agent):\n- Submit `shinsa.page` to the Public Suffix List: Open a pull request on publicsuffix/list. Until it is listed'
+    );
+    expect(read).toContain('…\n\nMessage:');
+    expect(read).not.toContain('Rotate the key');
+    expect(read).toContain(
+      'or about one of the steps left for the human after the merge, even one that quotes the step ("what is this for? <the step>")'
+    );
+    expect(read).toContain(
+      'a step left for the human after the merge, quoted or asked about, is not this, since the human does it'
+    );
+
+    asked.length = 0;
+    await resolveMessageClass(createTask({ stage: 'merged', stageReason: 'merged' }), 'why?', ask);
+    expect(asked[0]).not.toContain('Steps left for the human');
+  });
+
   test('an answer outside the options, or none, leaves the message to Shinsa’s default', async () => {
     const task = createTask();
     expect(await resolveMessageClass(task, 'x', answer(null))).toBeNull();

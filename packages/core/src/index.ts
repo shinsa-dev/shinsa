@@ -68,6 +68,7 @@ export {
   FINDING_SEVERITIES,
   hasTesting,
   isWebUrl,
+  listDuePostMergeSteps,
   listHeldSourceRequests,
   listMergeSteps,
   listOpenChecklistItems,
