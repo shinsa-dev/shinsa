@@ -1074,6 +1074,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'handoff.failed':
     case 'handoff.claimed':
     case 'handoff.removed':
+    case 'handoff.left':
       applyHandoffEvent(state, event);
       break;
     case 'slack.thread_linked':

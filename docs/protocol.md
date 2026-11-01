@@ -929,6 +929,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `handoff.record` | `handoff.link` effect | the link the engine made (`url`); clears the last failure; ignored once claimed |
 | `handoff.fail` | `handoff.link` effect, when it gives up | the reason (`detail`), kept on `TaskHandoff.failure` for Share task; opens no gate |
 | `handoff.claim` | the engine, when a browser proves a hand-off link on the sealed channel | the account that opened it (`guest`); the same account again does nothing, another is refused (`handoff_claimed`), and a task no longer handed off too (`handoff_gone`) |
+| `handoff.leave` | the engine, when a heartbeat no longer lists a guest who holds the task | gives it back (`handoff.left`) and queues `handoff.revoke`; nothing when another account holds it (`guestId`) |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
 | `pull_request.record_push` | open and push effects | records a pushed commit |
 | `pull_request.record_step` | open and push effects | `step`: `{ kind: 'updating', base }`, `{ kind: 'pushing', hook }` or `{ kind: 'opening' }`; sets the stage reason while the task ships with a push pending |
@@ -991,6 +992,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `preview.recorded`, `preview.failed` | the engine made the preview's link (`url`, null when unchanged), or could not (`detail`) |
 | `task.handed_off`, `handoff.removed` | you handed a task off, or took it back (`guest`, null when no one had claimed it); each adds an activity entry |
 | `handoff.recorded`, `handoff.failed`, `handoff.claimed` | the engine made the hand-off link (`url`), or could not (`detail`), or an account took the task over (`guest`; adds an activity entry, "Handed this task to @login") |
+| `handoff.left` | the guest left the machine at app.shinsa.dev, so the task is no longer handed off (`guest`; adds an activity entry, "@login gave this task back") |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.retitled` | an accepted plan named the work anew (`round`, `title`): the round takes the title, and the task too when it is round 1; activity “Renamed to …” |

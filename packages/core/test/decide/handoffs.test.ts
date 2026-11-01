@@ -123,6 +123,27 @@ describe('handing a task off', () => {
     expect(harness.task(claimed).activity.at(-1)?.text).toBe('Took this task back from @kai');
   });
 
+  test('a guest who leaves gives the task back, and someone else leaving changes nothing', () => {
+    const harness = createHarness();
+    const taskId = handOff(harness);
+    expect(harness.send({ type: 'handoff.leave', taskId, guestId: 'u-kai' }).events).toEqual([]);
+    harness.send({ type: 'handoff.claim', taskId, guest: KAI });
+    expect(harness.send({ type: 'handoff.leave', taskId, guestId: 'u-robin' }).events).toEqual([]);
+    harness.send({ type: 'handoff.leave', taskId, guestId: 'u-kai' });
+    expect(harness.task(taskId).handoff).toBeNull();
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
+      actor: 'shinsa',
+      text: '@kai gave this task back',
+    });
+    expect(harness.lastEffect('handoff.revoke')).toEqual({
+      kind: 'handoff.revoke',
+      taskId,
+      guestId: 'u-kai',
+    });
+    harness.send({ type: 'task.hand_off', taskId });
+    expect(harness.task(taskId).handoff?.guest).toBeNull();
+  });
+
   test('is the human’s alone', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

@@ -1,3 +1,4 @@
+import { splitMessageAttachments } from '../chat/attachments.ts';
 import type { UserCommand } from '../commands/index.ts';
 import type { Gate, GateType, Run, RunAccount, Task } from '../domain/index.ts';
 import { resolveEngineInfo } from '../protocol/engine.ts';
@@ -46,6 +47,7 @@ export const SCOPE_MESSAGES = {
   command: 'This stays with the owner of the task. You were handed one task to work on.',
   task: 'You can only work on the task that was handed to you.',
   gate: 'Only the owner of the task can answer this, on their machine.',
+  attachments: 'Only the owner of the task can attach files to it.',
 } as const;
 
 function isScopedCommand(command: UserCommand): command is ScopedCommand {
@@ -58,10 +60,18 @@ function resolveCommandTask(state: ShinsaState, command: ScopedCommand) {
   return state.gates[command.gateId]?.taskId ?? null;
 }
 
+function resolveWrittenText(command: ScopedCommand) {
+  if (command.type === 'task.message') return command.text;
+  if (command.type === 'round.update') return command.request;
+  return '';
+}
+
 export function resolveScopedRefusal(state: ShinsaState, taskId: string, command: UserCommand) {
   if (!isScopedCommand(command)) return SCOPE_MESSAGES.command;
   if (resolveCommandTask(state, command) !== taskId) return SCOPE_MESSAGES.task;
   if (command.type === 'task.retry' && command.account) return LOCAL_ONLY_MESSAGE;
+  if (splitMessageAttachments(resolveWrittenText(command)).attachments.length > 0)
+    return SCOPE_MESSAGES.attachments;
   const gate = command.type === 'gate.answer' ? state.gates[command.gateId] : undefined;
   if (gate && KEYBOARD_GATES.has(gate.type)) return SCOPE_MESSAGES.gate;
   return null;

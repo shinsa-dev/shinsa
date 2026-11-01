@@ -6,7 +6,13 @@ import { record, updateTask } from './write.ts';
 type HandoffEvent = Extract<
   ShinsaEvent,
   {
-    type: 'task.handed_off' | 'handoff.recorded' | 'handoff.failed' | 'handoff.claimed' | 'handoff.removed';
+    type:
+      | 'task.handed_off'
+      | 'handoff.recorded'
+      | 'handoff.failed'
+      | 'handoff.claimed'
+      | 'handoff.removed'
+      | 'handoff.left';
   }
 >;
 
@@ -53,6 +59,15 @@ function applyRemoved(state: ShinsaState, event: EventOf<'handoff.removed'>) {
   record(state, event.taskId, event.at, { actor: 'you', kind: 'stage', text });
 }
 
+function applyLeft(state: ShinsaState, event: EventOf<'handoff.left'>) {
+  updateTask(state, event.taskId, event.at, { handoff: null });
+  record(state, event.taskId, event.at, {
+    actor: 'shinsa',
+    kind: 'stage',
+    text: `@${event.guest.login} gave this task back`,
+  });
+}
+
 export function applyHandoffEvent(state: ShinsaState, event: HandoffEvent) {
   switch (event.type) {
     case 'task.handed_off':
@@ -69,6 +84,9 @@ export function applyHandoffEvent(state: ShinsaState, event: HandoffEvent) {
       return;
     case 'handoff.removed':
       applyRemoved(state, event);
+      return;
+    case 'handoff.left':
+      applyLeft(state, event);
       return;
   }
 }

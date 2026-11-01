@@ -7,4 +7,5 @@ export type HandoffUserCommand =
 export type HandoffSystemCommand =
   | { type: 'handoff.record'; taskId: string; url: string }
   | { type: 'handoff.fail'; taskId: string; detail: string }
-  | { type: 'handoff.claim'; taskId: string; guest: TaskGuest };
+  | { type: 'handoff.claim'; taskId: string; guest: TaskGuest }
+  | { type: 'handoff.leave'; taskId: string; guestId: string };

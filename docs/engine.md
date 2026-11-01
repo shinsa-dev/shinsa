@@ -3123,12 +3123,15 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
     checked by `resolveScopedRefusal` before `decide` (`dispatchUserCommand`, `handoff_scope`): only commands that act
     on its task by `taskId`, a run or a gate (a message, a gate answer, retry, snooze, priority, a round, a merge step,
     a suggestion and the like); never another task, a share, a hand-off, a setting, an account, a schedule or a new
-    task, nor a secret or sign-in gate ("Only the owner of the task can answer this, on their machine.") or a retry on
-    a chosen account. Merges and operations are the guest's to approve, as yours are. What stays at the keyboard
+    task, nor a secret or sign-in gate ("Only the owner of the task can answer this, on their machine."), a retry on
+    a chosen account, or a message or round whose text carries an attachments block ("Only the owner of the task can
+    attach files to it."), so every file the task names was attached by you. Merges and operations are the guest's to approve, as yours are. What stays at the keyboard
     (Remote access → What stays at the keyboard) stays there too.
   - **Requests.** HTTP inside its channel reaches only `isGuestRoute` (`remote/guest-routes.ts`): `GET` of
     `/api/health`, `/api/tasks/<its id>` and its `blob`, `chat`, `diff`, `paths`, `raw`, `refs`, `search` and `tree`, and
-    an evidence or attachment file its task or evidence names; anything else is 403 `handoff_scope`. So a guest uploads
+    the files of that task alone: evidence in its own folder (`/api/evidence/<its id>/…`) or recorded for it, an
+    attachment of its request or inbox, and a tool image or a message attachment in the transcript of one of its runs;
+    a path that only appears in some text never counts. Anything else is 403 `handoff_scope`. So a guest uploads
     no attachment and edits no file in Code: both write to your disk.
 - **Logged as theirs.** Everything a guest sends runs with `DecideContext.guest`, and each event it causes carries
   `byGuest` (the login), which activity shows as `@login` ("Handed this task to @kai" for the claim). A guest's message
@@ -3149,8 +3152,11 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
 - **Taking it back.** `handoff.remove` emits `handoff.removed` and queues `handoff.revoke`, which turns the link off at
   app.shinsa.dev, forgets every device of that task and closes their channels at once, then removes the guest there
   (`/__remote/machine/guests/remove`) unless they still hold another task here, so app.shinsa.dev stops listing the
-  machine for them. Each heartbeat answers the machine's guests too, and a guest who left loses their devices on the
-  next one. Pausing remote access ends every channel, a guest's included; removing it or pairing again forgets every
+  machine for them. Each heartbeat answers the machine's guests too, and a guest who left (Leave in their Settings →
+  Machines) loses their devices on the next one, and each task they held is given back: the engine sends
+  `handoff.leave`, which emits `handoff.left` ("@kai gave this task back") and queues `handoff.revoke`, so Share task
+  can hand it off again. A heartbeat whose answer was read before a claim here added its guest keeps the guests the
+  machine has, so a claim that lands while a heartbeat is out is never taken for a leave. Pausing remote access ends every channel, a guest's included; removing it or pairing again forgets every
   guest and hand-off link.
 - **Agents read it, never change it.** An agent has no tool to hand off or take back a task.
 

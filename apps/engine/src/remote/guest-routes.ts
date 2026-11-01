@@ -1,19 +1,44 @@
-import type { ShinsaState } from '@shinsa/core';
+import { type ChatEntry, type ShinsaState, splitMessageAttachments } from '@shinsa/core';
+import { ATTACHMENT_ROUTE } from '../store/attachments.ts';
+import { EVIDENCE_ROUTE } from '../store/evidence.ts';
+
+export type RunEntryReader = (runId: string) => ChatEntry[];
 
 const TASK_READS = /^\/api\/tasks\/([^/]+)(?:\/(?:blob|chat|diff|paths|raw|refs|search|tree))?$/;
 
-const FILE_READS = /^\/api\/(?:evidence|attachments)\/(.+)$/;
-
-function isReferenced(state: ShinsaState, taskId: string, name: string) {
-  const evidence = Object.values(state.evidence).filter((entry) => entry.taskId === taskId);
-  return JSON.stringify([state.tasks[taskId], evidence]).includes(name);
+function listTaskTexts(state: ShinsaState, taskId: string) {
+  const task = state.tasks[taskId];
+  return [task?.request ?? '', ...(task?.inbox ?? []).map((message) => message.text)];
 }
 
-export function isGuestRoute(state: ShinsaState, taskId: string, method: string, pathname: string) {
+function listEntryFiles(entry: ChatEntry) {
+  if (entry.type === 'tool_result') return entry.images;
+  if (entry.type === 'user') return entry.attachments.map((attachment) => attachment.url);
+  return [];
+}
+
+function isTaskFile(state: ShinsaState, taskId: string, path: string, readEntries: RunEntryReader) {
+  if (path.startsWith(`${EVIDENCE_ROUTE}${taskId}/`)) return true;
+  const evidence = Object.values(state.evidence);
+  if (evidence.some((entry) => entry.taskId === taskId && entry.uri === path)) return true;
+  const texts = listTaskTexts(state, taskId);
+  const attached = texts.flatMap((text) => splitMessageAttachments(text).attachments);
+  if (attached.some((attachment) => attachment.url === path)) return true;
+  const runs = Object.values(state.runs).filter((run) => run.taskId === taskId);
+  return runs.some((run) => readEntries(run.id).some((entry) => listEntryFiles(entry).includes(path)));
+}
+
+export function isGuestRoute(
+  state: ShinsaState,
+  taskId: string,
+  method: string,
+  pathname: string,
+  readEntries: RunEntryReader
+) {
   if (method !== 'GET' && method !== 'HEAD') return false;
   if (pathname === '/api/health') return true;
   const task = TASK_READS.exec(pathname);
   if (task) return decodeURIComponent(task[1] ?? '') === taskId;
-  const file = FILE_READS.exec(pathname);
-  return file !== null && isReferenced(state, taskId, file[1] ?? '');
+  if (!(pathname.startsWith(EVIDENCE_ROUTE) || pathname.startsWith(ATTACHMENT_ROUTE))) return false;
+  return isTaskFile(state, taskId, pathname, readEntries);
 }

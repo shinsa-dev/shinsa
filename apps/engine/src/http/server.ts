@@ -219,11 +219,16 @@ export function startServer(context: HttpContext) {
     }
   }
 
+  const readRunEntries = (runId: string) => context.transcripts.listEntries(runId);
+
   function respondInsideChannel(request: Request, guest: GuestActor | null) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/'))
       return Promise.resolve(respondError('not_found', 'No such endpoint.', 404));
-    if (guest && !isGuestRoute(context.engine.state, guest.taskId, request.method, url.pathname))
+    if (
+      guest &&
+      !isGuestRoute(context.engine.state, guest.taskId, request.method, url.pathname, readRunEntries)
+    )
       return Promise.resolve(respondError(SCOPE_REFUSAL_CODE, SCOPE_MESSAGES.task, 403));
     if (resolveLocalOnlyRoute(request.method, url.pathname))
       return Promise.resolve(respondError(LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, 403));

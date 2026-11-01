@@ -47,7 +47,14 @@ import {
   writeFeedback,
 } from './feedback.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
-import { claimHandoff, failHandoff, handOffTask, recordHandoff, removeHandoff } from './handoffs.ts';
+import {
+  claimHandoff,
+  failHandoff,
+  handOffTask,
+  leaveHandoff,
+  recordHandoff,
+  removeHandoff,
+} from './handoffs.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -304,6 +311,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return failHandoff(decider, command);
     case 'handoff.claim':
       return claimHandoff(decider, command);
+    case 'handoff.leave':
+      return leaveHandoff(decider, command);
     case 'task.unshare':
       return unshareTask(decider, command);
     case 'share.record':

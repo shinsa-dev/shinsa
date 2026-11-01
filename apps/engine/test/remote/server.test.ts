@@ -1315,6 +1315,53 @@ describe('handing off a task', () => {
     await remote.supervisor.requestHeartbeat();
     expect(remote.snapshot().devices).toEqual([]);
   });
+
+  test('a guest who left at Shinsa Cloud gives the task back, so it can be handed off again', async () => {
+    const { remote, engine, plane, taskId } = await startHandoff();
+    await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
+    remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    remote.start();
+    await until('given back', () => engine.state.tasks[taskId]?.handoff === null);
+    expect(engine.state.tasks[taskId]?.activity.at(-1)?.text).toBe('@kai gave this task back');
+    await engine.dispatch({ type: 'task.hand_off', taskId });
+    expect(engine.state.tasks[taskId]?.handoff?.guest).toBeNull();
+  });
+
+  test('a heartbeat Shinsa Cloud answered before a claim landed keeps the guest it just added', async () => {
+    const { remote, engine, port, plane, taskId, machine } = await startHandoff();
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    remote.start();
+    await until('connected', () => remote.snapshot().status === 'connected');
+    const held = Promise.withResolvers<Response>();
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => held.promise);
+    const beat = remote.supervisor.requestHeartbeat();
+    const secret = readClaim(engine, taskId)?.secret ?? '';
+    const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id });
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    held.resolve(Response.json({ ok: true, ...ACCESS, guests: [] }));
+    await beat;
+    expect(remote.store.file.guests).toEqual([GUEST_MEMBER]);
+    expect(remote.snapshot().devices).toHaveLength(1);
+    expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('kai');
+  });
+
+  test('a guest leaving is logged when the task cannot take it back', async () => {
+    const { remote, engine, plane, taskId } = await startHandoff();
+    await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
+    remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const dispatch = spyOn(engine, 'dispatch').mockImplementation(() =>
+      Promise.reject(new Error('disk full'))
+    );
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    remote.start();
+    await until('logged', () =>
+      warn.mock.calls.some((call) => call[0] === '[Handoff] Could not give a task back')
+    );
+    dispatch.mockRestore();
+    warn.mockRestore();
+  });
 });
 
 describe('naming and opening', () => {

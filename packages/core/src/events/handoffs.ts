@@ -5,4 +5,5 @@ export type HandoffEventBody =
   | { type: 'handoff.recorded'; taskId: string; url: string }
   | { type: 'handoff.failed'; taskId: string; detail: string }
   | { type: 'handoff.claimed'; taskId: string; guest: TaskGuest }
-  | { type: 'handoff.removed'; taskId: string; guest: TaskGuest | null };
+  | { type: 'handoff.removed'; taskId: string; guest: TaskGuest | null }
+  | { type: 'handoff.left'; taskId: string; guest: TaskGuest };

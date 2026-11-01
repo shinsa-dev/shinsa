@@ -84,6 +84,25 @@ describe('resolveScopedRefusal', () => {
     ).toBe(SCOPE_MESSAGES.gate);
   });
 
+  test('refuses a file attached by text, since only the owner can attach one', () => {
+    const { harness, taskId } = createHandedTask();
+    const block = '<attachments><attachment url="/api/attachments/x/secret.png" /></attachments>';
+    expect(
+      resolveScopedRefusal(harness.state, taskId, { type: 'task.message', taskId, text: `See ${block}` })
+    ).toBe(SCOPE_MESSAGES.attachments);
+    expect(
+      resolveScopedRefusal(harness.state, taskId, { type: 'round.update', taskId, number: 2, request: block })
+    ).toBe(SCOPE_MESSAGES.attachments);
+    expect(
+      resolveScopedRefusal(harness.state, taskId, {
+        type: 'round.update',
+        taskId,
+        number: 2,
+        request: 'Plain',
+      })
+    ).toBeNull();
+  });
+
   test('every scoped command is one the engine parses, and none shares or hands off', () => {
     for (const type of SCOPED_COMMANDS) expect(USER_COMMAND_TYPES).toContain(type);
     for (const type of ['task.share', 'task.unshare', 'task.hand_off', 'handoff.remove', 'task.bind_account'])

@@ -26,6 +26,7 @@ export class Handoffs implements HandoffEffects {
     this.#engine = options.engine;
     this.#remote = options.remote;
     options.remote.handleClaims((taskId, user) => this.#claim(taskId, user));
+    options.remote.handleLeaves((userIds) => this.#leave(userIds));
   }
 
   async link(taskId: string, context: EffectContext) {
@@ -57,6 +58,19 @@ export class Handoffs implements HandoffEffects {
       if (error instanceof DomainError) return error.message;
       log.warn('[Handoff] Could not record a claim', { taskId, error: describeError(error) });
       return CLAIM_FAILED;
+    }
+  }
+
+  #leave(userIds: string[]) {
+    const left = new Set(userIds);
+    for (const task of Object.values(this.#engine.state.tasks)) {
+      const guest = task.handoff?.guest;
+      if (!(guest && left.has(guest.id))) continue;
+      const command = { type: 'handoff.leave' as const, taskId: task.id, guestId: guest.id };
+      const id = `handoff.leave:${task.id}:${guest.id}:${task.handoff?.claimedAt ?? 0}`;
+      this.#engine.dispatch(command, { id }).catch((error: unknown) => {
+        log.warn('[Handoff] Could not give a task back', { taskId: task.id, error: describeError(error) });
+      });
     }
   }
 }

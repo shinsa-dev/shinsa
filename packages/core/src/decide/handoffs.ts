@@ -59,3 +59,11 @@ export function claimHandoff(decider: Decider, command: CommandOf<'handoff.claim
   }
   decider.emit({ type: 'handoff.claimed', taskId: command.taskId, guest: command.guest });
 }
+
+export function leaveHandoff(decider: Decider, command: CommandOf<'handoff.leave'>) {
+  const guest = decider.state.tasks[command.taskId]?.handoff?.guest;
+  if (guest?.id !== command.guestId) return;
+  decider.cancelEffects(command.taskId, ['handoff.link'], 'The task is no longer handed off.');
+  decider.emit({ type: 'handoff.left', taskId: command.taskId, guest });
+  decider.run({ kind: 'handoff.revoke', taskId: command.taskId, guestId: guest.id });
+}

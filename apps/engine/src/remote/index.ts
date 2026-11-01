@@ -76,6 +76,8 @@ type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
 
 export type HandoffClaimer = (taskId: string, guest: TaskGuest) => Promise<string | null>;
 
+export type GuestLeaver = (userIds: string[]) => void;
+
 export const HANDOFF_NOT_ENABLED =
   'Turn on remote access in Settings → General to hand off this task. Its link works once this machine is reachable.';
 
@@ -120,6 +122,8 @@ export class Remote {
   readonly #waiters = new Map<string, ((approved: boolean) => void)[]>();
   #pairing: Pairing | null = null;
   #claimer: HandoffClaimer | null = null;
+  #leaver: GuestLeaver | null = null;
+  #guestRevision = 0;
 
   constructor(options: RemoteOptions) {
     this.#options = options;
@@ -127,7 +131,10 @@ export class Remote {
     this.store = new RemoteStore(options.path);
     this.control = options.control ?? new ControlClient();
     this.supervisor = new TunnelSupervisor({
-      control: this.control,
+      control: {
+        recordHeartbeat: (token, request) => this.#recordHeartbeat(token, request),
+        recordOffline: (token) => this.control.recordOffline(token),
+      },
       connect: options.connect,
       ping: options.ping ?? requestHealth,
       localUrl: options.localUrl,
@@ -313,6 +320,22 @@ export class Remote {
     this.#claimer = claimer;
   }
 
+  handleLeaves(leaver: GuestLeaver) {
+    this.#leaver = leaver;
+  }
+
+  async #recordHeartbeat(...[token, request]: Parameters<ControlClient['recordHeartbeat']>) {
+    const revision = this.#guestRevision;
+    const answer = await this.control.recordHeartbeat(token, request);
+    if (revision === this.#guestRevision) return answer;
+    return { ...answer, guests: this.store.file.guests };
+  }
+
+  #updateGuests(change: (guests: RemoteMember[]) => RemoteMember[]) {
+    this.#guestRevision += 1;
+    this.store.update((file) => ({ ...file, guests: change(file.guests) }));
+  }
+
   #resolveHandoffUrl(handoff: StoredHandoff) {
     const { credentials, machine } = this.store.file;
     const fragment = {
@@ -381,10 +404,7 @@ export class Remote {
     if (refusal) return { kind: 'refused', reason: refusal };
     const guest = await this.#addGuest(user.id);
     if (typeof guest === 'string') return { kind: 'refused', reason: guest };
-    this.store.update((file) => ({
-      ...file,
-      guests: [...file.guests.filter((entry) => entry.user.id !== user.id), guest],
-    }));
+    this.#updateGuests((guests) => [...guests.filter((entry) => entry.user.id !== user.id), guest]);
     this.store.upsertDevice({
       publicKey: device,
       name: name ?? 'Browser',
@@ -414,10 +434,7 @@ export class Remote {
     const handedMore = devices.some((device) => device.userId === guestId && device.taskId);
     if (handedMore || !guests.some((guest) => guest.user.id === guestId)) return;
     if (credentials) await this.control.requestGuestRemoval(credentials.machineToken, guestId);
-    this.store.update((file) => ({
-      ...file,
-      guests: file.guests.filter((guest) => guest.user.id !== guestId),
-    }));
+    this.#updateGuests((guests) => guests.filter((guest) => guest.user.id !== guestId));
   }
 
   #selectLogin(userId: string | null) {
@@ -567,6 +584,9 @@ export class Remote {
       JSON.stringify(access) !== JSON.stringify(before.access) ||
       JSON.stringify(guests) !== JSON.stringify(before.guests);
     if (changed) this.store.update((file) => ({ ...file, access, guests }));
+    const listed = new Set(guests.map((guest) => guest.user.id));
+    const left = before.guests.map((guest) => guest.user.id).filter((id) => !listed.has(id));
+    if (left.length > 0) this.#leaver?.(left);
     const allowed = new Set([access.owner.id, ...access.members.map((member) => member.user.id)]);
     const handed = new Set([...allowed, ...guests.map((guest) => guest.user.id)]);
     const removed = new Set(this.store.removeDevicesOutside(allowed, handed));
