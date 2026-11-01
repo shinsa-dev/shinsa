@@ -154,10 +154,10 @@ describe('prepareDataDir', () => {
       expect(existsSync(dir)).toBe(true);
   });
 
-  test('keeps the worktree, check-base and scratch folders out of indexing and Time Machine', () => {
+  test('keeps the worktree, check-base, scratch and cache folders out of indexing and Time Machine', () => {
     const config = resolveConfig({ SHINSA_HOME: createTempDir() });
     prepareDataDir(config);
-    const folders = [config.worktreesDir, config.checkBasesDir, config.scratchDir];
+    const folders = [config.worktreesDir, config.checkBasesDir, config.scratchDir, config.cachesDir];
     for (const dir of folders) expect(existsSync(join(dir, '.metadata_never_index'))).toBe(true);
     expect(existsSync(join(config.evidenceDir, '.metadata_never_index'))).toBe(false);
     if (process.platform !== 'darwin' || !Bun.which('tmutil')) return;
@@ -183,7 +183,7 @@ describe('prepareDataDir', () => {
     } finally {
       process.env.PATH = path;
     }
-    expect(readFileSync(calls, 'utf8').trim().split('\n')).toHaveLength(3);
+    expect(readFileSync(calls, 'utf8').trim().split('\n')).toHaveLength(4);
     expect(existsSync(join(config.scratchDir, '.metadata_never_index'))).toBe(true);
   });
 });

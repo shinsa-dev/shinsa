@@ -92,10 +92,11 @@ export class BaseCheckouts {
   }
 
   async #runCommand(path: string, request: BaseRequest): Promise<BaseResult | null> {
-    const { signal, timeoutMs } = request;
+    const { signal, timeoutMs, env } = request;
     const result = await runCheckCommand(['sh', '-c', request.run.check.command], path, {
       timeoutMs,
       signal,
+      ...(env ? { env } : {}),
     });
     if (signal?.aborted || result.timedOut) return null;
     if (result.ok) return { failed: false, failures: [] };

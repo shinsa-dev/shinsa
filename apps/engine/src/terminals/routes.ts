@@ -16,6 +16,7 @@ import {
   type TerminalPlaceKind,
 } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
+import { resolveSharedCacheEnv } from '../checks/caches.ts';
 import { type JsonObject, readJsonObject } from '../http/body.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { listServiceSuggestions } from './detect.ts';
@@ -213,19 +214,27 @@ function resolveServicePlaceIn(state: ShinsaState, service: ServiceDefinition, h
   return resolveServicePlace(listTerminalPlaces(state, service.projectId), service.cwd, home);
 }
 
+export interface ServiceMachine {
+  home: string;
+  dataDir: string;
+}
+
 export function resolveServiceRunIn(
   state: ShinsaState,
   service: ServiceDefinition,
   taskId: string | null,
-  home: string
+  machine: ServiceMachine
 ): ServiceRun | null {
   if (taskId === null) {
-    const place = resolveServicePlaceIn(state, service, home);
+    const place = resolveServicePlaceIn(state, service, machine.home);
     return place ? { cwd: service.cwd, place, taskId: null } : null;
   }
   const task = state.tasks[taskId];
-  const cwd = task ? resolveTaskServiceCwd(state, service, task) : null;
-  return cwd === null ? null : { cwd, place: 'worktree', taskId };
+  if (!(task?.worktreePath && task.repoId)) return null;
+  const cwd = resolveTaskServiceCwd(state, service, task);
+  if (cwd === null) return null;
+  const env = resolveSharedCacheEnv(task.worktreePath, machine.dataDir, task.repoId);
+  return { cwd, place: 'worktree', taskId, env };
 }
 
 export function readTerminalSocketId(pathname: string) {
@@ -265,7 +274,7 @@ export function createTerminalRoutes(
     const service = terminals.findService(serviceId);
     if (taskId !== null && !engine.state.tasks[taskId])
       throw new DomainError('task_not_found', 'That task is not there anymore.');
-    const run = resolveServiceRunIn(engine.state, service, taskId, home);
+    const run = resolveServiceRunIn(engine.state, service, taskId, terminals);
     if (!run)
       throw new DomainError(
         'service_place_invalid',

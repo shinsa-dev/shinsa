@@ -17,6 +17,7 @@ export interface ServerConfig {
   worktreesDir: string;
   checkBasesDir: string;
   scratchDir: string;
+  cachesDir: string;
   evidenceDir: string;
   attachmentsDir: string;
   transcriptsDir: string;
@@ -91,6 +92,7 @@ function resolveDataPaths(dataDir: string, env: Env) {
     worktreesDir: env.SHINSA_WORKTREES_DIR || join(dataDir, 'worktrees'),
     checkBasesDir: join(dataDir, 'check-bases'),
     scratchDir: join(dataDir, 'scratch'),
+    cachesDir: join(dataDir, 'caches'),
     evidenceDir: join(dataDir, 'evidence'),
     attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),
@@ -154,7 +156,7 @@ export function prepareDataDir(config: ServerConfig) {
   for (const dir of [config.dataDir, config.evidenceDir, config.transcriptsDir]) {
     mkdirSync(dir, { recursive: true });
   }
-  for (const dir of [config.worktreesDir, config.checkBasesDir, config.scratchDir]) {
+  for (const dir of [config.worktreesDir, config.checkBasesDir, config.scratchDir, config.cachesDir]) {
     mkdirSync(dir, { recursive: true });
     excludeFromBackups(dir);
   }

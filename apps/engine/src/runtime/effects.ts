@@ -29,6 +29,7 @@ import {
 import type { RunSupervisor } from '../agents/supervisor.ts';
 import type { Briefings } from '../briefing/index.ts';
 import { BaseCheckouts } from '../checks/base.ts';
+import { resolveSharedCacheEnv } from '../checks/caches.ts';
 import { serializeCheckOutput } from '../checks/evidence.ts';
 import { listCheckFailures } from '../checks/failures.ts';
 import { type BaseComparison, CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../checks/index.ts';
@@ -555,10 +556,12 @@ export class EffectRunner {
     await this.#runs.quiesce(task.id);
     if (task.approvedEdits === 'review') await this.#commitEdits(task, repo, context);
     const worktree = task.worktreePath;
+    const env = resolveSharedCacheEnv(worktree, this.#config.dataDir, repo.id);
     const runs = await runChecks(effect.checks, worktree, {
       timeoutMs: CHECK_TIMEOUT_MS,
       signal: context.signal,
-      compare: this.#createBaseComparison(task, repo, worktree, context.signal),
+      env,
+      compare: this.#createBaseComparison(task, repo, worktree, env, context.signal),
     });
     let coverage: Coverage | null = null;
     if (effect.coverage && !runs.some((run) => isBlockingCheck(run.check))) {
@@ -589,7 +592,13 @@ export class EffectRunner {
     );
   }
 
-  #createBaseComparison(task: Task, repo: Repo, cwd: string, signal: AbortSignal): BaseComparison {
+  #createBaseComparison(
+    task: Task,
+    repo: Repo,
+    cwd: string,
+    env: Record<string, string>,
+    signal: AbortSignal
+  ): BaseComparison {
     let base: Promise<string | null> | null = null;
     const resolveBase = () => {
       base ??= resolveTaskRefs(repo, task, resolveRoundBase(task), signal).then((refs) => refs.base);
@@ -603,6 +612,7 @@ export class EffectRunner {
         run,
         timeoutMs: CHECK_TIMEOUT_MS,
         signal,
+        env,
       });
   }
 

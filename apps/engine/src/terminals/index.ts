@@ -53,6 +53,7 @@ export interface ServiceRun {
   cwd: string;
   place: TerminalPlaceKind;
   taskId: string | null;
+  env?: Record<string, string>;
 }
 
 export interface ServiceInput {
@@ -84,6 +85,7 @@ export class Terminals {
   readonly #now: () => number;
   readonly #services = new Map<string, ServiceDefinition>();
   readonly #resumable = new Set<string>();
+  readonly #runEnvs = new Map<string, Record<string, string>>();
   #notifyTimer: ReturnType<typeof setTimeout> | null = null;
   #stopped = false;
 
@@ -120,6 +122,10 @@ export class Terminals {
 
   get home() {
     return this.#options.home;
+  }
+
+  get dataDir() {
+    return this.#options.dataDir;
   }
 
   find(id: string) {
@@ -207,8 +213,9 @@ export class Terminals {
   #resolveServiceEnv(session: TerminalSession, service: ServiceDefinition, env: Record<string, string>) {
     const port = this.#resolvePort(session, service);
     session.info = { ...session.info, port };
-    if (port === null) return { ...env, ...service.env };
-    return { ...env, ...service.env, [service.portVariable]: String(port) };
+    const own = { ...env, ...this.#runEnvs.get(session.info.id), ...service.env };
+    if (port === null) return own;
+    return { ...own, [service.portVariable]: String(port) };
   }
 
   #start(session: TerminalSession) {
@@ -227,7 +234,7 @@ export class Terminals {
     return this.#options.newId?.() ?? Bun.randomUUIDv7();
   }
 
-  #open(start: TerminalStart, service: ServiceDefinition | null) {
+  #open(start: TerminalStart, service: ServiceDefinition | null, env: Record<string, string> = {}) {
     if (this.#sessions.size >= TERMINAL_LIMITS.terminals)
       throw new DomainError('terminal_limit', `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most.`);
     const info: TerminalInfo = {
@@ -244,6 +251,7 @@ export class Terminals {
     };
     const session = this.#createSession(info, null);
     this.#sessions.set(info.id, session);
+    this.#runEnvs.set(info.id, env);
     this.#start(session);
     this.#changed();
     return session.info;
@@ -309,6 +317,7 @@ export class Terminals {
   #closeSession(session: TerminalSession) {
     const { id } = session.info;
     this.#sessions.delete(id);
+    this.#runEnvs.delete(id);
     clearTimeout(this.#screenTimers.get(id));
     this.#screenTimers.delete(id);
     session.hangUp();
@@ -373,10 +382,12 @@ export class Terminals {
   startService(id: string, run: ServiceRun) {
     this.#assertWritable();
     const service = this.findService(id);
+    const { env = {}, ...start } = run;
     const session = this.#serviceSession(id, run.taskId);
-    if (!session) return this.#open({ projectId: service.projectId, ...run }, service);
+    if (!session) return this.#open({ projectId: service.projectId, ...start }, service, env);
     if (session.running) return session.info;
     session.info = { ...session.info, cwd: run.cwd, place: run.place };
+    this.#runEnvs.set(session.info.id, env);
     this.#start(session);
     this.#changed();
     return session.info;
@@ -418,7 +429,7 @@ export class Terminals {
     for (const terminalId of this.#resumable) {
       const info = this.#sessions.get(terminalId)?.info;
       const service = this.#services.get(info?.serviceId ?? '');
-      const run = info && service ? resolveServiceRunIn(state, service, info.taskId, this.home) : null;
+      const run = info && service ? resolveServiceRunIn(state, service, info.taskId, this) : null;
       if (service && run) this.startService(service.id, run);
     }
     this.#resumable.clear();

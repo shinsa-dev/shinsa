@@ -851,6 +851,17 @@ describe('checks', () => {
     expect(read(record.outputs?.[1]?.uri ?? '')).toBe('$ grep -q b a.txt\nFailed.\nexit 1');
   });
 
+  test('checks in a Turbo repository share one Turbo cache per repository', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    writeFileSync(join(worktree, 'turbo.json'), '{}');
+    const { runner, dispatched, config } = setup(
+      withTask({ stage: 'checking', worktreePath: worktree }, repo)
+    );
+    const shared = join(config.dataDir, 'caches', repo.id, 'turbo');
+    await runner.apply(checksEffect([`test "$TURBO_CACHE_DIR" = '${shared}'`]), createContext());
+    expect(dispatched[0]).toMatchObject({ results: [{ outcome: 'pass' }] });
+  });
+
   test('a failure whose errors all fail on the base commit too is noted and does not block; others do', async () => {
     const { repo, worktree } = await createShippingRepo();
     const { runner, dispatched } = setup(

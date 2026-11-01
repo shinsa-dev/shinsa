@@ -15,6 +15,7 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     worktreesDir: join(dataDir, 'worktrees'),
     checkBasesDir: join(dataDir, 'check-bases'),
     scratchDir: join(dataDir, 'scratch'),
+    cachesDir: join(dataDir, 'caches'),
     evidenceDir: join(dataDir, 'evidence'),
     attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),

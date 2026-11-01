@@ -399,6 +399,27 @@ describe('Terminals services', () => {
     expect(run('a').port).toBe(5003);
   });
 
+  it('gives a task run its own variables, under the service’s, and keeps them across a restart', async () => {
+    const { terminals, fake } = createTerminals();
+    const service = terminals.addService('p1', {
+      ...SERVICE,
+      env: { PORT: '4000', TURBO_CACHE_DIR: '/mine' },
+    });
+    const plain = terminals.addService('p1', { ...SERVICE, name: 'api', env: {} });
+    const forTask = {
+      cwd: '/wt/a',
+      place: 'worktree',
+      taskId: 'a',
+      env: { TURBO_CACHE_DIR: '/shared', A: '1' },
+    } as const;
+    terminals.startService(plain.id, forTask);
+    expect(fake.spawned[0]?.options.env).toMatchObject({ TURBO_CACHE_DIR: '/shared', A: '1' });
+    terminals.startService(service.id, forTask);
+    expect(fake.spawned[1]?.options.env).toMatchObject({ TURBO_CACHE_DIR: '/mine', A: '1' });
+    await terminals.restartService(plain.id, { cwd: '/wt/a', place: 'worktree', taskId: 'a' });
+    expect(fake.spawned[2]?.options.env.TURBO_CACHE_DIR).toBeUndefined();
+  });
+
   it('keeps a task run’s port across a restart while no other run holds it', async () => {
     const { terminals } = createTerminals();
     const service = terminals.addService('p1', SERVICE);

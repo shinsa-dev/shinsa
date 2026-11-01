@@ -184,7 +184,8 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   run this time keeps its last result.
 - **Who runs them.** Shinsa, in the task's checkout, each command through `sh -c` at low priority (`nice -n 10`
   where the machine has `nice`) with `CHECK_ENV` (`CI=1`, no colour), and stops one after 15 minutes
-  (`CHECK_TIMEOUT_MS`). The checks of one run run in parallel, and a command that appears twice runs once. There is
+  (`CHECK_TIMEOUT_MS`), with the shared Turbo cache in a Turbo repository (Where agents work → Turbo's cache is
+  shared per repository). The checks of one run run in parallel, and a command that appears twice runs once. There is
   no machine-wide limit or queue: tasks check at once, as they build at once (Scheduling, below).
 - **Load is not a failure.** When a failing check's output names its failing test files (Bun, Vitest or Jest), those
   files run again alone, once (`checks/reruns.ts`). When each of them passes, so does the check, with the note
@@ -524,6 +525,25 @@ modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behi
 - **Agents work where the strategy puts them.** For the main checkout a task's `worktreePath` is the repository
   itself, so every role works in your checkout; a read-only agent's edits are never set aside there, as in any shared
   checkout. Checks run in the same checkout.
+- **A new worktree comes with its dependencies.** `prepareWorktree` runs the install its lockfile names
+  (`resolveInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
+  agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
+  linker can fail on files it is still writing (`ERR_PNPM_EEXIST`) and pass the second time; only when that run fails
+  too is it logged, and the agent sets the dependencies up itself. Base checkouts for checks are prepared the same way.
+- **A removed worktree takes its processes with it.** `worktree.remove` closes the task's service runs, then stops
+  every process still working inside the worktree (`stopProcessesIn` in `git/processes.ts`: `lsof -d cwd` finds each
+  process whose working folder is the worktree or inside it; SIGTERM, then SIGKILL for any still alive after 3 s).
+  That catches a dev server an agent started from its shell, which outlives the agent's run and would otherwise keep
+  writing into the deleted folder. The engine and your own Shinsa terminals, with every process they started, are
+  spared (`Terminals.listTerminalPids`). Then `removeWorktree` runs `git worktree remove --force`, deletes whatever
+  is left of the folder and prunes, so a folder git could not remove never stays behind. A main checkout is never
+  reaped: it is your repository.
+- **Turbo's cache is shared per repository.** In a repository with a `turbo.json`, checks (and their run on the base
+  commit) and a task's service runs get `TURBO_CACHE_DIR` set to `data/caches/<repo id>/turbo`
+  (`resolveSharedCacheEnv` in `checks/caches.ts`), so a task reuses what another task's checkout already built
+  instead of filling a cache inside its own worktree. Turbo keys its cache by a hash of each task's inputs, so sharing
+  it changes no result. A service's own `TURBO_CACHE_DIR` wins, and your own runs and agents' shells keep Turbo's
+  default.
 - **Conflicts go to the agent in every mode.** A pull request that conflicts with its base is merged with the fetched
   base by the Agent in its own session (The pull request watch → Conflicts), and an update onto the base that
   conflicts before a push is resolved the same way (Pushing the branch).
@@ -2348,8 +2368,13 @@ beside your run (Runs for a task, below).
   (`docs/design.md`, 37). The preview runs while the task waits for review and the merge, and stops when the task settles:
   `settleTask` removes the worktree, and `worktree.remove` closes the task's runs (below).
 - **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
-  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), so no dev server keeps running in a
-  deleted folder; your own shells opened in that worktree are left as they are.
+  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), then stops every other process still
+  working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
+  worktree takes its processes with it), so no dev server keeps running in a deleted folder; your own shells opened
+  in that worktree, and what runs in them, are left as they are.
+- **A task run's own variables.** `resolveServiceRunIn` gives a task's run the shared Turbo cache in a Turbo
+  repository (`ServiceRun.env`, Where agents work → Turbo's cache is shared per repository), kept for the run's
+  restarts and under the service's own variables and its port.
 - **Across a restart of the engine.** `Terminals.stop()` saves a service that was running as running, and the next
   engine starts it again (`resumeServices`, from `serve.ts`), where its folder is still one of its project's; a
   task's run starts again only while the task is open and still holds the folder. Plain
@@ -4736,6 +4761,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  delegations (`delegations/<task>/<run>`)
     ├── scratch/       The working folder of each task with no repository (`<task id>`), where its answerer runs;
     │                  removed when the task settles (`scratch.remove`)
+    ├── check-bases/   The detached checkouts of base commits that checks compare with (Checks, above)
+    ├── caches/        Build caches a repository's checkouts share (`<repo id>/turbo`; Where agents work, above)
     ├── transcripts/   One JSONL chat transcript per run
     ├── evidence/      What agents attached as evidence, per task and round (`<task id>/round-<n>/`), and the
     │                  chat's tool images at the top (Evidence, above)
@@ -4762,6 +4789,14 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
 
 One folder instead of XDG's config and data split on purpose: it is one thing to back up, move or delete, a seeded or
 scratch copy is one directory, and the event log, worktrees and config.json only make sense together.
+
+- **What is not backed up.** `worktrees/`, `check-bases/`, `scratch/` and `caches/` hold what can be made again
+  (checkouts, installed dependencies, build output): on APFS they cost a fraction of their size, but a backup copies
+  every cloned file in full. `prepareDataDir` marks each with `.metadata_never_index` for Spotlight and with Time
+  Machine's exclusion, the `com.apple.metadata:com_apple_backup_excludeItem` attribute `tmutil addexclusion` writes,
+  set with `xattr` directly because `tmutil` takes seconds per folder. The marker says the folder is done, so a later
+  start does nothing; one Time Machine could not exclude is logged, and deleting its marker tries again. The event
+  log, evidence, transcripts and settings are backed up as before.
 
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
