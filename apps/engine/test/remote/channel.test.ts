@@ -16,6 +16,7 @@ import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } f
 interface Harness {
   channel: RemoteChannel;
   sent: (string | Bytes)[];
+  dropping: boolean;
   closed: { code: number; reason: string }[];
   hubOpened: HubSocket[];
   hubClosed: HubSocket[];
@@ -34,6 +35,7 @@ async function createHarness(respond?: (request: Request) => Promise<Response>, 
   const machineKey = await serializePublicKey(machine.publicKey);
   const harness = {
     sent: [],
+    dropping: false,
     closed: [],
     hubOpened: [],
     hubClosed: [],
@@ -70,7 +72,7 @@ async function createHarness(respond?: (request: Request) => Promise<Response>, 
   };
   harness.channel = new RemoteChannel(
     {
-      send: (data) => harness.sent.push(data),
+      send: (data) => (harness.dropping ? 0 : harness.sent.push(data)),
       close: (code, reason) => harness.closed.push({ code, reason }),
     },
     host
@@ -125,6 +127,17 @@ describe('the sealed channel', () => {
     harness.channel.close();
     expect(harness.hubClosed).toHaveLength(1);
     await harness.channel.receive('ignored once closed');
+  });
+
+  test('closes the channel and its app socket when a sealed frame is dropped', async () => {
+    const harness = await createHarness();
+    const { session } = await connect(harness);
+    harness.dropping = true;
+    await harness.channel.receive(await session.seal({ t: 'ready' }));
+    await until(() => harness.closed.length > 0);
+    expect(harness.closed[0]).toEqual({ code: 1008, reason: 'The channel dropped a frame.' });
+    expect(harness.channel.isOpen).toBe(false);
+    expect(harness.hubClosed).toHaveLength(1);
   });
 
   test('refuses a device that is not enrolled and has no enrollment proof', async () => {

@@ -50,6 +50,8 @@ import { serveStatic } from './static.ts';
 
 const ATTACHMENT_UPLOAD_PATH = '/api/attachments';
 
+const SOCKET_BACKPRESSURE_LIMIT_BYTES = 128 * 1024 * 1024;
+
 export interface HttpContext extends ApiContext {
   transcripts: Transcripts;
   terminals?: Terminals;
@@ -438,6 +440,7 @@ export function startServer(context: HttpContext) {
       websocket: {
         ...createSocketHandlers(hub, terminalSockets, remoteSockets, previewSockets),
         maxPayloadLength: MAX_BODY_BYTES,
+        backpressureLimit: SOCKET_BACKPRESSURE_LIMIT_BYTES,
       },
     })
   );

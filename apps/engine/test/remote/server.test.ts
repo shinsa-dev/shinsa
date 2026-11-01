@@ -1343,11 +1343,11 @@ describe('handing off a task', () => {
       token: 'handoff-token',
     });
     await channel.send({ t: 'ready' });
-    const opened = await readSocketUntil(channel, 'engine');
-    expect(opened.map((message) => message.type)).toEqual(['state', 'surfaces', 'engine']);
-    const state = opened[0]?.state as { tasks: Record<string, unknown> };
+    const opened = await readSocketUntil(channel, 'state');
+    expect(opened.map((message) => message.type)).toEqual(['surfaces', 'engine', 'state']);
+    const state = opened[2]?.state as { tasks: Record<string, unknown> };
     expect(Object.keys(state.tasks)).toEqual([taskId]);
-    const engineInfo = opened[2]?.engine as { commands: string[] };
+    const engineInfo = opened[1]?.engine as { commands: string[] };
     expect(engineInfo.commands).toContain('task.message');
     expect(engineInfo.commands).not.toContain('task.hand_off');
     expect(

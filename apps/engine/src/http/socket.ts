@@ -38,12 +38,21 @@ export interface SocketData {
 export interface HubSocket {
   data: SocketData;
   send: (payload: string) => unknown;
+  close?: () => void;
 }
 
 type Socket = HubSocket;
 
+const DROPPED = 0;
+
+function deliver(socket: Socket, payload: string) {
+  if (socket.send(payload) !== DROPPED) return;
+  log.warn('[Socket] Dropped a message, closing the socket', { bytes: Buffer.byteLength(payload) });
+  socket.close?.();
+}
+
 function send(socket: Socket, message: ServerMessage) {
-  socket.send(JSON.stringify(message));
+  deliver(socket, JSON.stringify(message));
 }
 
 const MAX_ID = 200;
@@ -111,7 +120,7 @@ export function createSocketHub(
 
   function broadcast(message: ServerMessage) {
     const payload = JSON.stringify(message);
-    for (const socket of sockets) if (!socket.data.guest) socket.send(payload);
+    for (const socket of sockets) if (!socket.data.guest) deliver(socket, payload);
   }
 
   function resolveSocketState(socket: Socket) {
@@ -175,7 +184,7 @@ export function createSocketHub(
     if (start === null) return;
     const payload = JSON.stringify({ type: 'transcript', runId, entries, start } satisfies ServerMessage);
     for (const socket of sockets) {
-      if (socket.data.transcripts.has(runId)) socket.send(payload);
+      if (socket.data.transcripts.has(runId)) deliver(socket, payload);
     }
   });
 
@@ -236,20 +245,20 @@ export function createSocketHub(
   return {
     open(socket: Socket) {
       sockets.add(socket);
-      send(socket, { type: 'state', state: resolveSocketState(socket) });
+      send(socket, { type: 'surfaces', desktop: desktopConnected });
       if (socket.data.guest) {
-        send(socket, { type: 'surfaces', desktop: desktopConnected });
         send(socket, { type: 'engine', engine: scopedEngineInfo });
+        send(socket, { type: 'state', state: resolveSocketState(socket) });
         return;
       }
+      send(socket, { type: 'engine', engine: engineInfo });
       if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
       if (terminals) send(socket, { type: 'terminals', terminals: terminals.snapshot() });
       if (remote) send(socket, { type: 'remote', remote: remote.snapshot() });
       if (teamFeeds) send(socket, { type: 'teams', teams: teamFeeds.snapshot() });
-      send(socket, { type: 'surfaces', desktop: desktopConnected });
-      send(socket, { type: 'engine', engine: engineInfo });
       const sampled = resources?.snapshot();
       if (sampled) send(socket, { type: 'resources', resources: sampled });
+      send(socket, { type: 'state', state: resolveSocketState(socket) });
       syncResources();
     },
     close(socket: Socket) {
