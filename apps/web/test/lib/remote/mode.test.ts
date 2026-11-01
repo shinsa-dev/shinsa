@@ -45,6 +45,9 @@ describe('the remote page’s mode', () => {
       claimCode: null,
     });
     expect(resolveRemoteView({ pathname: '/enroll', search: '', hash: '' })).toEqual({ kind: 'enroll' });
+    expect(resolveRemoteView({ pathname: '/claim', search: '', hash: '#a.b.c.d' })).toEqual({
+      kind: 'claim',
+    });
     expect(resolveRemoteView({ pathname: '/share/team', search: '', hash: '#x' })).toEqual({
       kind: 'team-join',
     });

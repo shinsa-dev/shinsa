@@ -12,6 +12,7 @@ import {
   NO_TEAM_FEED,
   type PlacementMachine,
   type RemoteSnapshot,
+  type RemoteUser,
   resolveEngineCommands,
   type ServerMessage,
   type StatePatch,
@@ -22,7 +23,7 @@ import {
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
 import { useSharedTranscript } from '@/lib/share/transcripts.ts';
@@ -56,10 +57,13 @@ export interface MachineView {
   id: string;
   name: string;
   current: boolean;
+  guest?: true;
+  handedBy?: RemoteUser;
 }
 
 export interface MachineChoice extends PlacementMachine {
   current: boolean;
+  guest?: true;
   resources?: MachineResources | null;
 }
 
@@ -599,8 +603,18 @@ export function replaceConnection(next: ShinsaConnection | null) {
   connection = next ?? localConnection;
 }
 
-export function useMachines() {
+function useListedMachines() {
   return useSyncExternalStore(connection.subscribe, connection.listMachines);
+}
+
+export function useMachines() {
+  const listed = useListedMachines();
+  return useMemo(() => listed.filter((machine) => !machine.guest), [listed]);
+}
+
+export function useGuestMachines() {
+  const listed = useListedMachines();
+  return useMemo(() => listed.filter((machine) => machine.guest), [listed]);
 }
 
 export function useUnreachableMachines() {

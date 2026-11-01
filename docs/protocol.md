@@ -63,7 +63,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | integration (of a project) | An MCP server from Integrations a project's agents read, with what it holds there and the repositories it covers | `WatchSource` (`Project.watchSources`), `watch_source.write`, `ScheduleSource` (`Schedule.source`) | integration |
 | watch | An automation that reads one of its project's integrations on a clock or a webhook and files a task per new report, from a home task no list shows | `Schedule.source`, `Task.watchHome`, `isWatchHome`, purpose `intake` | Watch, Show its reads |
 | suggested watch | A watch offered for one click, never running until you accept it: one per integration a project starts using, worded from what it holds, or one an agent asked for; accepting writes it as yours, dismissing keeps it from being offered again | `WatchSuggestion` (`state.watchSuggestions`), `watch_suggestion.record`, `watch_suggestion.accept`, `watch_suggestion.dismiss`, the effect `watch.suggest` | Suggested watch, Add the watch, Dismiss the suggested watch (the cross in Settings), Cancel (the chat card) |
-| report | One message or signal in an integration a watch or a watchdog read (a Slack message, a support email, an error) that it filed as a task, kept on that task with its id or link, author, time and text; the filed tasks are what dedupes the next read, a watch's and a watchdog's alike | `SourceReport` (`Task.sourceReport`), purposes `intake` and `watch`, `file_report`, `report_read`, `TaskCreator.kind: 'intake'` or `'watchdog'` | Reported in, N tasks filed |
+| report | One message or signal in an integration a watch or a watchdog read (a Slack message, a support email, an error) that it filed as a task, kept on that task with its id or link, author, time and text; the filed tasks are what dedupes the next read, a watch's and a watchdog's alike | `SourceReport` (`Task.sourceReport`), purposes `intake` and `watch`, `file_report`, `report_read`, `TaskCreator.kind: 'intake'` or `'watchdog'` | Reported in, Filed by, N tasks filed |
 | fork | A task whose Agent starts from a copy of another task's conversation | `Task.forkOf`, `Run.fork` | Fork into a new task, Forked from, Forked into |
 | point | Anything the Review tab marks for you to read: a spot, a judgement call, a risk or a finding | `ReviewItem` (web, `lib/review/report.ts`) | point, "Every point" |
 | ref | The commit the Code tab reads at: the head of the branch, the base, a commit between them, or the working copy (`working`) while the worktree exists | `TaskRefs`, `WORKING_REF` | "Head of the branch", "Working copy", "Base" |
@@ -72,7 +72,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | proposal | An inquiry's request to turn the task into a change or an operation, decided at your OK | `ChangeProposal`, gate type `proposal` | "Your OK", "What it would change" |
 | result | What an answer, an investigation, research or an operation hands over (the answer, the diagnosis, the report, the outcome) | `TaskResult` | Answer, Diagnosis, Report, Outcome |
 | delegation | Work a running step hands to another agent: a run of the same task with a parent run, never a new task | `RunDelegation` on `Run` | Delegations |
-| courier | A new task an agent files for work that belongs elsewhere (`create_task`), such as the part of a change in another repository, optionally making its own task wait on it (`this_task_waits`) or waiting on its own task (`after_this`) | `TaskCreator.kind: 'courier'` | a task |
+| courier | A new task an agent files for work that belongs elsewhere (`create_task`), such as the part of a change in another repository, optionally making its own task wait on it (`this_task_waits`) or waiting on its own task (`after_this`) | `TaskCreator.kind: 'courier'` | a task, Filed by |
 | memory | The rules you keep for every later agent, for every project or one; an agent proposes one with `remember` and only you keep it (`docs/engine.md` → Memory) | `MemoryEntry`, `state.memories`, `MEMORY_LIMITS` | Memory, "rule" |
 | feedback | A note on Shinsa itself, from you or an agent, that your agent drafts as a public issue on `shinsa-dev/shinsa` and only you open (`docs/engine.md` → Feedback) | `Feedback`, `state.feedback`, `FEEDBACK_LIMITS`, `FEEDBACK_REPOSITORY` | Feedback, "issue" |
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
@@ -91,6 +91,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | effect | Work with I/O that a decision asks for, run from the outbox, reporting back with commands | `ShinsaEffect` | not shown |
 | receipt | The stored answer to a command id, so a repeat is answered and never applied twice | `CommandReceipt` (engine) | not shown |
 | on your behalf | A user command an agent's management tool sent for you from its task, recorded with the acting task | `onBehalf`, `byTask`, `OnBehalfAction` | "‹handle› agent (on your behalf)" |
+| hand-off | A task given to someone by a link: the first GitHub account to open it steers that one task on your machine | `TaskHandoff`, `task.hand_off` | Hand off, "took this task over" |
+| guest | The account a task was handed to, and its device, scoped to that task | `TaskGuest`, `GuestActor`, `byGuest`, `role: 'guest'` | "@login", "A task handed to you by …" |
 | message kind | What the classifier read a message to be: feedback on the current round (a follow-up on a finished one), a message that needs nothing (thanks, "ok"), new work for the task (a new round), or work for another task (a split-off) | `MessageKind` (`feedback`, `acknowledge`, `new_round`, `separate_task`) | not shown |
 | split-off | A suggested task saying something you asked for in this chat belongs in a task of its own; you make it a task or keep it here, which sends it to this task now | `TaskSuggestion.splitOff` | "Make it a task", "Keep it here" |
 
@@ -217,6 +219,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
 | `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `preset` what it shows (`SharePreset`: `status`, `standard`, `full`, each a list of `ShareGroup`s in `SHARE_PRESET_GROUPS`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is; `description` the summary the writer wrote of what the task addresses when sharing started (`share.describe`) (`docs/engine.md` → Sharing a task) |
 | `previews?` | `PreviewShare[]` | the task's service runs shared by link, one per `serviceId`: `at`, `url` (`https://<label>.shinsa.page/?key=<key>` once the engine made it, null while `preview.link` runs), `limit` and `endsAt` as on `share`, `failure` the reason the link could not be made (`docs/engine.md` → Sharing a preview) |
+| `handoff?` | `TaskHandoff` \| null | handed off by a link since `at`: `url` once the engine made the link (null while `handoff.link` runs and once someone claimed it), `failure` the reason the link could not be made, `guest` the account that took it over (`TaskGuest`: `id`, `login`, `name`, `avatarUrl`) and `claimedAt` when (`docs/engine.md` → Handing off a task) |
 
 **Lifecycle and scheduling**
 
@@ -253,6 +256,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `returnBranch?` | string | main checkout: the branch the checkout was on when the task took it, where it goes back when the task settles |
 | `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
+| `approveAfterFix?` | boolean | you asked for changes with Fix N findings and approve (`gate.answered` with `thenApprove`): the next review gate that opens without an escalation is approved at once (`ahead`); written by every review answer, false in a new round |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
 | `untoldMessages?` | `UntoldMessage[]` (`at`, `text`, `sender`: `agent` \| `schedule`) | messages sent for you while a gate was open (`task.messaged` with `kept`), not yet told; the next run of the task's session is told them (`task.messages_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
@@ -311,7 +315,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (`file_report` in a watchdog check) or `intake` (`file_report` in a watch's read), with the task, the run and request key |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
 | `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskIds` its checks filed (forks of this task), the `linkedTaskIds` they found already filed by a watch or another watchdog, `endedAt` (`docs/engine.md` → Watchdogs) |
-| `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`) |
+| `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`); each of them shows Split from |
 | `scheduleId?` | string \| null | the schedule that started it, or whose read filed it |
 | `watchHome?` | boolean | the home a watch reads in: no handle, no triage, on no list, takes no messages (`docs/engine.md` → Schedules and webhooks) |
 | `slack?` | `SlackThreadLink` \| null | the Slack thread it was started from: `teamId`, `channelId`, `threadTs`, the author's `userId`, the mention's `messageTs`, the `permalink`, `statusTs`, the status message edited in place, and `reaction`, the one reaction on the mention (`docs/engine.md` → Slack) |
@@ -793,6 +797,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.unshare` | stops sharing it: every open link ends at once and the link stops working | `tasks unshare` | **human** |
 | `preview.share` | shares the task's run of a service (`serviceId`) by a link on `shinsa.page` (`preview.link` makes it), for `limit` (the `shareLimit` setting when left out); again with another `limit` it changes how long and keeps the link; again on a failed share it asks for the link once more; an automation's home or a finished task is refused (`share_refused`) | `services share <service> --task [--until]` | **human** |
 | `preview.unshare` | stops sharing that run: its open pages and sockets end at once and the link stops working | `services unshare <service> --task` | **human** |
+| `task.hand_off` | hands it to someone by a link (`handoff.link` makes it): the first GitHub account to open it takes the task over; again on a failed link it asks for the link once more; an automation's home or a finished task is refused (`handoff_refused`) | `tasks hand-off` | **human** |
+| `handoff.remove` | takes it back: the link stops working, and whoever took it over loses access at once (`handoff.revoke`) | `tasks hand-off-remove` | **human** |
 | `task.mark_duplicate` | closes it as a duplicate of `duplicateOf`: `task.duplicated`, then the cancel's settle; refused for itself (`duplicate_of_itself`), a finished task (`task_settled`) or an original that is a duplicate (`duplicate_of_duplicate`) | `tasks duplicate --of` | agent |
 | `task.clear_duplicate` | starts a duplicate again (`task.duplicate_cleared`): one that never ran an agent through `startWork`, as if triage had not closed it; one that did in a fresh round with the same request (`round.queued`, `round.started`); refused for a task that is no duplicate (`not_duplicate`) | `tasks not-duplicate` | agent |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
@@ -800,7 +806,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `watch_source.write`, `watch_source.remove` | adds, changes or removes an integration the project uses (`server`, `data`, `repoIds`); at most 20 (`too_many_sources`) | `sources write`, `sources remove` | agent |
 | `task.complete` | marks it done without merging, and stops its watchdogs; sent for you, refused while one watches or waits for a source (`task_open`) | `tasks done` | agent |
 | `task.bind_account` | binds it to an account, or any | `tasks bind` | agent |
-| `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below); approving a merge gate needs every step before the merge ticked, on every task of its bundle too (`merge_steps_open`) | `gates answer`, `plans *`, `reviews *`, `merges approve`, `merges reject`, `operations *`, `questions answer`, `command` | **human** |
+| `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below); at a review gate, `revise` may carry `thenApprove: true`, which approves the next review that opens without an escalation by itself (`then_approve_invalid`, `then_approve_conflict`); approving a merge gate needs every step before the merge ticked, on every task of its bundle too (`merge_steps_open`) | `gates answer`, `plans *`, `reviews *`, `merges approve`, `merges reject`, `operations *`, `questions answer`, `command` | **human** |
 | `merge_step.tick` | ticks or unticks a step around the merge (`key`, `done`); a step that is not due is refused (`merge_step_early`: one after the merge before its pull request merged, one before the merge once it merged), a step the task does not have is refused (`merge_step_not_found`), and a closed task's not at all (`task_settled`); ticking the last open step after the merge withdraws the Post-merge gate | `merges tick [--undo]` | **human** |
 | `suggestion.accept` | adds a suggested task, optionally waiting on this one or in the backlog (`backlog`) | `suggestions accept` | agent |
 | `suggestion.dismiss` | dismisses one | `suggestions dismiss` | agent |
@@ -927,6 +933,10 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `preview.record` | `preview.link` effect | the link the engine made (`url`, null when it kept the one recorded); clears the last failure |
 | `preview.fail` | `preview.link` effect, when it gives up; the engine, when the machine is paired again (`PREVIEW_LINK_LOST`) | the reason (`detail`), kept on `PreviewShare.failure` for Share preview; opens no gate |
 | `preview.expire` | `ShareClock`, at `PreviewShare.endsAt` | ends a preview whose time ran out (`preview.unshared`, `reason: 'expired'`); nothing before it |
+| `handoff.record` | `handoff.link` effect | the link the engine made (`url`); clears the last failure; ignored once claimed |
+| `handoff.fail` | `handoff.link` effect, when it gives up | the reason (`detail`), kept on `TaskHandoff.failure` for Share task; opens no gate |
+| `handoff.claim` | the engine, when a browser proves a hand-off link on the sealed channel | the account that opened it (`guest`); the same account again does nothing, another is refused (`handoff_claimed`), and a task no longer handed off too (`handoff_gone`) |
+| `handoff.leave` | the engine, when a heartbeat no longer lists a guest who holds the task | gives it back (`handoff.left`) and queues `handoff.revoke`; nothing when another account holds it (`guestId`) |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
 | `pull_request.record_push` | open and push effects | records a pushed commit |
 | `pull_request.record_step` | open and push effects | `step`: `{ kind: 'updating', base }`, `{ kind: 'pushing', hook }` or `{ kind: 'opening' }`; sets the stage reason while the task ships with a push pending |
@@ -969,7 +979,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 ## Events
 
-`ShinsaEvent` = a body + `seq`, `at`, and `onBehalf`, `byTask` when sent on your behalf. Only `decide` emits them;
+`ShinsaEvent` = a body + `seq`, `at`, and `onBehalf`, `byTask` when sent on your behalf, or `byGuest` (the login) when sent by the person a task was handed to. Only `decide` emits them;
 `applyEvent` folds them. Never removed or redefined.
 
 | Event | Recorded when |
@@ -987,6 +997,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `share.described` | the writer described a shared task (`description`) |
 | `preview.shared`, `preview.unshared` | you shared a service run by link or changed how long (`serviceId`, `limit`, `endsAt`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when the task settled, whatever its limit, `expired`; each adds an activity entry) |
 | `preview.recorded`, `preview.failed` | the engine made the preview's link (`url`, null when unchanged), or could not (`detail`) |
+| `task.handed_off`, `handoff.removed` | you handed a task off, or took it back (`guest`, null when no one had claimed it); each adds an activity entry |
+| `handoff.recorded`, `handoff.failed`, `handoff.claimed` | the engine made the hand-off link (`url`), or could not (`detail`), or an account took the task over (`guest`; adds an activity entry, "Handed this task to @login") |
+| `handoff.left` | the guest left the machine at app.shinsa.dev, so the task is no longer handed off (`guest`; adds an activity entry, "@login gave this task back") |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.retitled` | an accepted plan named the work anew (`round`, `title`): the round takes the title, and the task too when it is round 1; activity “Renamed to …” |
@@ -1050,7 +1063,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `evidence.attached` | evidence was attached (`checkId` on a check's output or a linked check; `replaces`: the ids of the pieces it replaced, which get `replacedBy`) |
 | `evidence.removed` | an agent removed evidence that no longer applies (`ids`, `reason`, `runId`; each piece gets `removedAt` and `removedReason`) |
 | `evidence.uploaded` | pieces were uploaded to GitHub for the pull request description (`taskId`, `uploads`; each piece gets `uploadUrl`) |
-| `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered, withdrawn, or replaced by your message |
+| `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered (`thenApprove` when you asked to approve after the fix, `ahead` when that approval was made for you), withdrawn, or replaced by your message |
 | `gate.noted` | the open operation gate's notes were replaced (`notes`, null clears them; the same gate, no new notification) |
 | `run.started`, `run.dispatched` | a run was created; it started |
 | `run.attempted`, `run.linked` | an attempt began; it linked its session |
@@ -1105,6 +1118,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `share.link` | replay_safe | `share:<id>` | `share.record`, or `share.fail` when it gives up: makes a share id and a key for this machine's instance, unless a link to it is recorded; not paired fails at once (`SHARE_NOT_PAIRED`) |
 | `share.describe` | replay_safe | `share:<id>` | `share.describe`, or nothing when the writer gave nothing: one writer quick call over the task's title and request, without attachments, when sharing starts (`remote/share-describe.ts`) |
 | `preview.link` | replay_safe | `preview:<id>` | `preview.record`, or `preview.fail` when it gives up: makes a preview id and a key for this machine's instance, unless a link to it is recorded; not paired (`PREVIEW_NOT_PAIRED`) or a service with no preview URL (`PREVIEW_NO_URL`) fails at once |
+| `handoff.link` | replay_safe | `handoff:<id>` | `handoff.record`, or `handoff.fail` at once when remote access is off: a hand-off token from app.shinsa.dev and a secret, kept with the task's id in `remote.json`, unless one is kept for the task |
+| `handoff.revoke` | replay_safe | `handoff:<id>` | nothing: turns the link off at app.shinsa.dev, forgets the task's devices and closes their channels, and removes the guest there (`guestId`) unless they hold another task on the machine |
 | `watch.suggest` | replay_safe | `suggest:<project id>` | `watch_suggestion.record`, after one Writer quick call words the watch from the integration's `server` and `data` (`schedules/suggest.ts`) |
 | `feedback.draft` | replay_safe | `feedback:<id>` | `feedback.record_draft`, after one quick call rewrites the note without anything private (`feedback/draft.ts`); `feedback.record_failure` when no usable draft comes back |
 | `feedback.file` | process_bound | `feedback:<id>` | `feedback.record_filed`, after `gh issue create --repo shinsa-dev/shinsa` (`feedback/file.ts`); `feedback.record_failure` with what `gh` said; never retried, and one a restart cut short is failed on start |
@@ -1340,13 +1355,16 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `POST /__remote/pair/start` | The engine | `{ name, publicKey, version }` → `{ claimCode, pollSecret, url, expiresAt }` |
 | `POST /__remote/pair/poll` | The engine | `{ claimCode, pollSecret }` → `pending`, `expired` or `claimed` with `MachineCredentials` and the owner's GitHub login, once |
 | `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
-| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version, signingKey? }` (`HeartbeatRequest`; `signingKey` the machine's ECDSA P-256 public key, raw and base64url, kept when left out, else 400 `body_invalid`) keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members }` (`HeartbeatResponse`, a `RemoteAccess`), which the engine reads leniently; a 401 means revoked |
+| `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version, signingKey? }` (`HeartbeatRequest`; `signingKey` the machine's ECDSA P-256 public key, raw and base64url, kept when left out, else 400 `body_invalid`) keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members, guests }` (`HeartbeatResponse`, a `RemoteAccess` and the machine's guests as `RemoteMember`s), which the engine reads leniently; a 401 means revoked |
 | `POST /__remote/machine/invites`, `POST /__remote/machine/invites/remove` | The engine, with its machine token | The machine's one reusable invite token, replacing the one before (`InviteCreateResponse`: `token`); removing it turns the invite off |
 | `POST /__remote/machine/requesters/find`, `POST /__remote/machine/members/add`, `POST /__remote/machine/members/remove` | The engine, with its machine token | `{ userId }` (`MemberRequest`): the GitHub user of an account that opened this machine's invite, a member, the owner or someone in a team with the owner (a `RemoteUser`, else 404); making such an account a member when you accept its request or give a teammate this machine (a `RemoteMember`, 409 `members_full` past 20); taking a member's access away |
 | `POST /__remote/invites/accept` | The enroll page | `{ token }` (`InviteAcceptRequest`) records that the signed-in account asked and answers the machine's `instanceId`, `name`, `owner`, the account's `user` and a `connect` (`ConnectResponse`) to ask the machine with (`InviteAcceptResponse`); it makes no member |
+| `POST /__remote/machine/handoffs`, `POST /__remote/machine/handoffs/remove` | The engine, with its machine token | A new hand-off token (`InviteCreateResponse`), one per hand-off; removing takes `{ token }` (`HandoffRemoveRequest`) and turns that one off |
+| `POST /__remote/machine/guests/add`, `POST /__remote/machine/guests/remove` | The engine, with its machine token | `{ userId }` (`MemberRequest`): makes an account that opened a hand-off link a guest (409 `guests_full` past `MAX_INSTANCE_GUESTS`, 20), or removes one |
+| `POST /__remote/handoffs/accept` | The claim page | `{ token }` answers as `invites/accept` does, for a hand-off token (404 `handoff_invalid`) |
 | `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
 | `GET /__remote/sign-in?client=native&redirect=…&code_challenge=…`, `POST /__remote/sign-in/token` | The iPhone app | GitHub sign-in that ends at `shinsa://` (or `shinsa-dev://`, `REMOTE_NATIVE_REDIRECT_SCHEMES`) with `?code=`, a one-time code bound to the app's S256 challenge, traded once within 60 s for `{ token, user }` (`NativeSignInTokenRequest`, `NativeSignInTokenResponse`); a failed sign-in ends at `?error=` |
-| `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove`, `POST …/<id>/leave` | The page | The instances you own or are a member of (`RemoteInstance`, with its `owner` and your `role`, `owner` or `member`), a connect token and the channel's URL (`ConnectResponse`), removal (the owner only), leaving (a member only) |
+| `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove`, `POST …/<id>/leave` | The page | The instances you own or are a member of (`RemoteInstance`, with its `owner` and your `role`, `owner`, `member` or `guest`), a connect token and the channel's URL (`ConnectResponse`), removal (the owner only), leaving (a member or a guest) |
 | `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
 | `POST /__remote/shares/<instance>/connect` | Anyone with a share link | `ShareConnectResponse` (`url`: `wss://t-<instance>.shinsa.dev`, `online`), no session, `X-Robots-Tag: noindex`; 404 when the instance does not exist (`resolveShareConnectPath`) |
 | `POST /__remote/machine/teams` | The engine, with its machine token | `{ name }` (`TeamCreateRequest`) makes a team its owner owns (409 `teams_full` past `MAX_OWNED_TEAMS`) and answers `TeamCreateResponse` (`team`, a `RemoteTeam`, and `invite`) |
@@ -1422,7 +1440,7 @@ Standard or Full access share's run, `transcript-<run id>-<page>` (`resolveShare
 `MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
 `resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
 key>.<secret>`, with `.<invite token>` after it for an invite (`EnrollFragment`, `resolveEnrollUrl`,
-`parseEnrollFragment`): everything after `#` stays in the browser. A GitHub account is a `RemoteUser` everywhere
+`parseEnrollFragment`): everything after `#` stays in the browser. A hand-off link is the same fragment at `/claim` with a hand-off token in place of the invite token (`resolveClaimUrl`). A GitHub account is a `RemoteUser` everywhere
 (`id`, `login`, `name`, `avatarUrl`); a machine's people are a `RemoteAccess` (`owner`, and `members`, each a
 `RemoteMember`: `user`, `addedAt`).
 
@@ -1461,6 +1479,8 @@ short, out of order or fails to open throws `FrameError` and the channel closes.
 | `{ t: 'body', id, chunk }` / `{ t: 'end', id }` | A body in base64url chunks of 256 KB (`CHANNEL_BODY_CHUNK_BYTES`), then its end |
 | `{ t: 'abort', id }` | The page gave up on a request |
 
+**One task for a guest** (`scope.ts`): a device with a task is a `GuestActor` (`taskId`, `login`). Its socket gets `resolveScopedState` and `resolveScopedPatch` (that task, its runs, gates, evidence, repository and project, accounts without their email, no share, previews or hand-off link) and `resolveScopedEngineInfo` (only `SCOPED_COMMANDS`); `resolveScopedRefusal` refuses any other command, another task's, a secret or sign-in gate's answer and a retry on a chosen account, with the code `handoff_scope` (`SCOPE_REFUSAL_CODE`, `SCOPE_MESSAGES`).
+
 **What stays at the keyboard** (`local-only.ts`): `isLocalOnlyCommand` names the user commands a remote request may
 not send (a human-only setting or repository field, `task.bind_account`); the refusal's code is `local_only`
 (`LOCAL_ONLY_CODE`, `LOCAL_ONLY_MESSAGE`). A request's `RequestOrigin` (`local` or `remote`) comes from how it
@@ -1469,7 +1489,7 @@ arrived, never from the page.
 **The engine's snapshot** (`status.ts`, `GET /api/remote`): `RemoteSnapshot` is `paired`, `enabled`, `status`
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,
 `machineKey`, `pairing` (`PairingView`: `claimCode`, `url`, `expiresAt`), `devices` (`RemoteDevice`: `publicKey`,
-`name`, `enrolledAt`, `lastSeenAt`, `userId`: the GitHub account the device was added for, null for a device from
+`name`, `enrolledAt`, `lastSeenAt`, `taskId` for a device a task was handed to, which reaches only that task, `userId`: the GitHub account the device was added for, null for a device from
 before members), `access` (the `RemoteAccess` the last heartbeat answered, null until one did), `link`
 (`RemoteLink`: `url` and `createdAt`, the one invite link, or null while it is off) and `requests` (`AccessRequest`:
 `id`, `publicKey`, `deviceName`, `user`, a `RemoteUser`, and `requestedAt`) and `teams` (`RemoteTeamEntry`: `id`,

@@ -3,15 +3,20 @@ import {
   type ClientMessage,
   DEVELOPMENT_VERSION,
   DomainError,
+  type GuestActor,
   isSurface,
   listSummarizedTasks,
   type RequestOrigin,
   resolveEngineInfo,
+  resolveScopedEngineInfo,
+  resolveScopedPatch,
+  resolveScopedState,
   resolveStatePatch,
   resolveTaskDetail,
   resolveViewPatch,
   type ServerMessage,
   type Surface,
+  serializeState,
   serializeViewState,
   type UserCommand,
 } from '@shinsa/core';
@@ -31,6 +36,7 @@ export interface SocketData {
   transcripts: Map<string, () => void>;
   surface: Surface | null;
   origin: RequestOrigin;
+  guest: GuestActor | null;
 }
 
 export interface HubSocket {
@@ -119,12 +125,18 @@ export function createSocketHub(
   const sockets = new Set<Socket>();
   const views = new WeakMap<SocketData, ReadonlySet<string>>();
   const engineInfo = resolveEngineInfo(version);
+  const scopedEngineInfo = resolveScopedEngineInfo(version);
   let desktopConnected = false;
   let unsubscribeResources: (() => void) | null = null;
 
   function broadcast(message: ServerMessage) {
     const payload = JSON.stringify(message);
-    for (const socket of sockets) deliver(socket, payload);
+    for (const socket of sockets) if (!socket.data.guest) deliver(socket, payload);
+  }
+
+  function isVisibleRun(socket: Socket, runId: string) {
+    const { guest } = socket.data;
+    return !guest || engine.state.runs[runId]?.taskId === guest.taskId;
   }
 
   function selectView(socket: Socket): ReadonlySet<string> {
@@ -132,6 +144,11 @@ export function createSocketHub(
   }
 
   function sendState(socket: Socket) {
+    const { guest } = socket.data;
+    if (guest) {
+      send(socket, { type: 'state', state: serializeState(resolveScopedState(engine.state, guest.taskId)) });
+      return;
+    }
     const summarized = listSummarizedTasks(engine.state);
     views.set(socket.data, summarized);
     send(socket, { type: 'state', state: serializeViewState(engine.state, summarized) });
@@ -181,6 +198,14 @@ export function createSocketHub(
     const patch = resolveStatePatch(previous, state, changes);
     let shared: string | null = null;
     for (const socket of sockets) {
+      const { guest } = socket.data;
+      if (guest) {
+        send(socket, {
+          type: 'state.patch',
+          patch: resolveScopedPatch(previous, state, changes, guest.taskId),
+        });
+        continue;
+      }
       const view = resolveViewPatch(patch, previous, state, selectView(socket));
       views.set(socket.data, view.summarized);
       if (view.patch !== patch) {
@@ -214,12 +239,20 @@ export function createSocketHub(
   async function handleMessage(socket: Socket, message: ClientMessage) {
     switch (message.type) {
       case 'hello':
+        if (socket.data.guest) return;
         socket.data.surface = message.surface;
         syncSurfaces();
         return;
       case 'command': {
         try {
-          await dispatchUserCommand(engine, message.command, message.id, classify, socket.data.origin);
+          await dispatchUserCommand(
+            engine,
+            message.command,
+            message.id,
+            classify,
+            socket.data.origin,
+            socket.data.guest
+          );
           send(socket, { type: 'ack', id: message.id, error: null });
         } catch (error) {
           const code = error instanceof DomainError ? error.code : 'command_failed';
@@ -231,9 +264,11 @@ export function createSocketHub(
         sendState(socket);
         return;
       case 'task.detail':
+        if (socket.data.guest) return;
         sendTaskDetail(socket, message.taskId);
         return;
       case 'transcript.subscribe': {
+        if (!isVisibleRun(socket, message.runId)) return;
         if (!socket.data.transcripts.has(message.runId)) {
           socket.data.transcripts.set(message.runId, transcripts.follow(message.runId));
         }
@@ -252,6 +287,11 @@ export function createSocketHub(
     open(socket: Socket) {
       sockets.add(socket);
       send(socket, { type: 'surfaces', desktop: desktopConnected });
+      if (socket.data.guest) {
+        send(socket, { type: 'engine', engine: scopedEngineInfo });
+        sendState(socket);
+        return;
+      }
       send(socket, { type: 'engine', engine: engineInfo });
       if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
       if (terminals) send(socket, { type: 'terminals', terminals: terminals.snapshot() });

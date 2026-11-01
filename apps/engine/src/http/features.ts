@@ -17,4 +17,5 @@ export const ENGINE_FEATURE_ROUTES: Record<EngineFeature, readonly string[]> = {
     'POST /api/remote/teams/remove',
     'GET /api/teams/tasks',
   ],
+  'review.approve_after_fix': [],
 };

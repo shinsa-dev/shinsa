@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { SlackGroup, SlackSettings } from '@/components/settings/slack.tsx';
 import type { SlackActions } from '@/lib/connection/slack.ts';
 import { resetSlack } from '@/lib/connection/slack.ts';
+import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 
 const CONNECT_URL = 'https://app.shinsa.dev/slack/connect?instance=k3x9';
 
@@ -98,5 +99,21 @@ describe('SlackSettings', () => {
       </TooltipProvider>
     );
     expect(await screen.findByText('Overclock')).toBeTruthy();
+  });
+
+  it('leaves Slack out, and reads nothing, when this browser reaches only tasks handed to it', () => {
+    const machines = [{ id: 'm4', name: 'Studio', current: false, guest: true as const, state: {} }];
+    replaceConnection({ ...connection, listMachines: () => machines } as never);
+    try {
+      const { container } = render(
+        <TooltipProvider>
+          <SlackSettings />
+        </TooltipProvider>
+      );
+      expect(container.textContent).toBe('');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      replaceConnection(null);
+    }
   });
 });

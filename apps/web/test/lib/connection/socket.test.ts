@@ -30,6 +30,7 @@ import {
   useEngineCommand,
   useEngineCommands,
   useEngineFeature,
+  useGuestMachines,
   useMachine,
   useMachineAccess,
   useMachines,
@@ -940,14 +941,14 @@ describe('the shared connection', () => {
   it('uses the connection a remote page put in place, with the machine of each task, until it is taken away', () => {
     const local = connection;
     const machine = { id: 'm2', name: 'Laptop', current: false };
-    const machines = [
-      {
-        id: 'm2',
-        name: 'Laptop',
-        current: false,
-        state: { tasks: {}, projects: {}, repos: {}, settings: {} },
-      },
-    ];
+    const laptop = {
+      id: 'm2',
+      name: 'Laptop',
+      current: false,
+      state: { tasks: {}, projects: {}, repos: {}, settings: {} },
+    };
+    const handed = { ...laptop, id: 'm4', name: 'Mona’s Studio', guest: true as const };
+    const machines = [laptop, handed];
     expect(renderHook(() => useMachines()).result.current).toEqual([]);
     expect(renderHook(() => useUnreachableMachines()).result.current).toEqual([]);
     expect(renderHook(() => useMachineAccess()).result.current).toEqual([]);
@@ -962,7 +963,8 @@ describe('the shared connection', () => {
     };
     replaceConnection(fleet);
     expect(connection).toBe(fleet);
-    expect(renderHook(() => useMachines()).result.current).toBe(machines);
+    expect(renderHook(() => useMachines()).result.current).toEqual([laptop]);
+    expect(renderHook(() => useGuestMachines()).result.current).toEqual([handed]);
     expect(renderHook(() => useUnreachableMachines()).result.current).toBe(unreachable);
     expect(renderHook(() => useMachineAccess()).result.current).toBe(access);
     expect(renderHook(() => useMachine('task-1')).result.current).toBe(machine);

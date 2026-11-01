@@ -23,7 +23,13 @@ function createSocket() {
   const sent: ServerMessage[] = [];
   const payloads: string[] = [];
   const socket = {
-    data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' } satisfies SocketData,
+    data: {
+      kind: 'hub',
+      transcripts: new Map(),
+      surface: null,
+      origin: 'local',
+      guest: null,
+    } satisfies SocketData,
     send: (payload: string) => {
       payloads.push(payload);
       return sent.push(JSON.parse(payload) as ServerMessage);
@@ -307,7 +313,13 @@ describe('the socket hub', () => {
     const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
     let closed = 0;
     const full = {
-      data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'local' } satisfies SocketData,
+      data: {
+        kind: 'hub',
+        transcripts: new Map(),
+        surface: null,
+        origin: 'local',
+        guest: null,
+      } satisfies SocketData,
       send: () => 0,
       close: () => {
         closed += 1;
@@ -368,6 +380,31 @@ describe('the socket hub', () => {
     expect(replayState(detail.sent)).toEqual(plain(serializeViewState(engine.state, new Set([settled]))));
     hub.close(summary.socket);
     hub.close(detail.socket);
+    hub.stop();
+    engine.stop();
+    log.close();
+  });
+
+  test('sends a guest its own task whole, scoped patches and no detail', async () => {
+    const dir = createTempDir();
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const { settled } = await createSettledTask(engine);
+    const guest = createSocket();
+    guest.socket.data.guest = { taskId: settled, login: 'kai' };
+    hub.open(guest.socket);
+    const connected = guest.sent.find((message) => message.type === 'state');
+    expect(connected?.type === 'state' && Object.keys(connected.state.tasks)).toEqual([settled]);
+    expect(connected?.type === 'state' && connected.state.tasks[settled]?.summarized).toBeUndefined();
+
+    hub.message(guest.socket, JSON.stringify({ type: 'task.detail', taskId: settled }));
+    hub.message(guest.socket, JSON.stringify({ type: 'state.sync' }));
+    await Promise.resolve();
+    expect(guest.sent.some((message) => message.type === 'task.detail')).toBe(false);
+    await engine.dispatch({ type: 'task.prioritize', taskId: settled, priority: 'low' });
+    expect(replayState(guest.sent)?.tasks[settled]?.priority).toBe('low');
+    hub.close(guest.socket);
     hub.stop();
     engine.stop();
     log.close();

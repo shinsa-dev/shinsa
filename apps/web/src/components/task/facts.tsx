@@ -48,15 +48,19 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { describeMachineResources, listTaskUseLines } from '@/lib/remote/resources.ts';
+import { describeUserName } from '@/lib/remote/users.ts';
+import { HANDOFF_ICON, resolveHandoffFact } from '@/lib/share/handoff.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {
   describeDuplicateHint,
   describePullRequestFact,
   describeStarted,
+  type FiledByFact as FiledBy,
   listDuplicates,
-  listForkSources,
+  listForkSourcesBesides,
   listForks,
+  resolveFiledByFact,
   resolveReportFact,
   selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
@@ -128,6 +132,23 @@ function MachineFact({ task }: { task: Task }) {
         </InfoSection>
       )}
     </FactPopover>
+  );
+}
+
+function HandoffFact({ task }: { task: Task }) {
+  const machine = useMachine(task.id);
+  const fact = resolveHandoffFact(task, machine?.handedBy ?? null);
+  if (!fact) return null;
+  return (
+    <Hint label={fact.hint}>
+      <span className={cn(FACT, 'max-w-80')}>
+        <Icon size='sm' name={HANDOFF_ICON} />
+        <span className='flex min-w-0'>
+          <span className='shrink-0 whitespace-pre'>{`${fact.verb} `}</span>
+          <Truncate>{describeUserName(fact.user)}</Truncate>
+        </span>
+      </span>
+    </Hint>
   );
 }
 
@@ -471,12 +492,9 @@ function RelatedFact({
   );
 }
 
-function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
-  const report = resolveReportFact(state, task);
+function ReportFact({ task }: { task: Task }) {
+  const report = resolveReportFact(task);
   if (!report) return null;
-  const filedBy = report.filedBy;
-  const watchId = filedBy?.watchId ?? null;
-  const watchedTaskId = filedBy?.watchedTaskId ?? null;
   return (
     <FactPopover
       className='max-w-72'
@@ -493,22 +511,31 @@ function ReportFact({ state, task }: { state: ShinsaState; task: Task }) {
           {report.text}
         </blockquote>
       </InfoSection>
-      {filedBy && (
-        <InfoSection>
-          <InfoRow icon='IconArrowsRepeat' label={`${filedBy.label} “${filedBy.value}”`} />
-        </InfoSection>
-      )}
       {report.link && <InfoAction label='Open the report' href={report.link} />}
-      {watchId && (
-        <InfoAction label='Open the watch' onClick={() => navigate(resolveAutomationPath(watchId))} />
-      )}
-      {watchedTaskId && (
-        <InfoAction
-          label='Open the shipped task'
-          onClick={() => navigate(resolveTaskPath(resolveTaskTarget(state, watchedTaskId)))}
-        />
-      )}
     </FactPopover>
+  );
+}
+
+function FiledByFact({ state, filedBy }: { state: ShinsaState; filedBy: FiledBy | null }) {
+  if (!filedBy) return null;
+  const { target } = filedBy;
+  const open = () =>
+    navigate(
+      target.kind === 'task'
+        ? resolveTaskPath(resolveTaskTarget(state, target.taskId))
+        : resolveAutomationPath(target.scheduleId)
+    );
+  return (
+    <Hint label={filedBy.hint}>
+      <button type='button' onClick={open} className={cn(FACT, FACT_INTERACTIVE, 'max-w-80')}>
+        <Icon size='sm' name={filedBy.icon} />
+        <span className='flex min-w-0'>
+          <span className='shrink-0 whitespace-pre'>{filedBy.verb} </span>
+          {filedBy.handle && <span className='shrink-0 whitespace-pre tabular-nums'>{filedBy.handle} </span>}
+          <Truncate>{filedBy.name}</Truncate>
+        </span>
+      </button>
+    </Hint>
   );
 }
 
@@ -572,6 +599,7 @@ export function TaskFacts({
 }) {
   const readOnly = useReadOnly();
   const checks = resolveChecksView(state, task);
+  const filedBy = resolveFiledByFact(state, task);
   return (
     <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
       <HandleFact task={task} />
@@ -585,6 +613,7 @@ export function TaskFacts({
       {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
       <MachineFact task={task} />
+      <HandoffFact task={task} />
       {!readOnly && <TaskServicesFact state={state} task={task} />}
       <PriorityFact state={state} task={task} />
       <StartedFact state={state} task={task} />
@@ -598,8 +627,14 @@ export function TaskFacts({
         verb='Unblocks'
         tasks={listDependents(state, task.id)}
       />
-      <ReportFact state={state} task={task} />
-      <RelatedFact state={state} icon='IconFork' verb='Forked from' tasks={listForkSources(state, task)} />
+      <FiledByFact state={state} filedBy={filedBy} />
+      <ReportFact task={task} />
+      <RelatedFact
+        state={state}
+        icon='IconFork'
+        verb='Forked from'
+        tasks={listForkSourcesBesides(state, task, filedBy)}
+      />
       <RelatedFact state={state} icon='IconFork' verb='Forked into' tasks={listForks(state, task)} />
       <RelatedFact
         state={state}

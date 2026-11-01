@@ -279,6 +279,22 @@ describe('routing a command through the classifier', () => {
     expect(resolveTaskRounds(engine.state.tasks[taskId] ?? createTask())).toHaveLength(2);
   });
 
+  test('a guest’s message is classified and routed at once, never through the inbox, under their login', async () => {
+    const { engine, taskId } = await openEngine();
+    const classify = using(() => Promise.resolve({ kind: 'feedback', title: null, why: null, shape: 'fix' }));
+    const guest = { taskId, login: 'kai' };
+    const events = await routeUserCommand(engine, message(taskId, 'Use tabs'), 'guest:1', classify, {
+      guest,
+    });
+    expect(events.map((event) => event.type)).not.toContain('task.message_received');
+    const task = engine.state.tasks[taskId];
+    expect(task?.inbox ?? []).toEqual([]);
+    expect(task?.activity.find((entry) => entry.kind === 'message')).toMatchObject({
+      detail: 'Use tabs',
+      byGuest: 'kai',
+    });
+  });
+
   test('a message to a finished or missing task is refused before it reaches the inbox', async () => {
     const { engine, taskId } = await openEngine();
     await engine.dispatch({ type: 'task.cancel', taskId });

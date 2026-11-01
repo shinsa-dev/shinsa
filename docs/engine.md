@@ -338,7 +338,8 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
 - **Forking from the web.** Fork into a new task (the task menu, an All tasks row's menu and ⌘K, on every task but a
   cancelled one, a finished one included) opens a dialog for the new task's request (`ForkDialog`, `lib/tasks/fork.ts`),
   sent as `task.create` with the source's repository and project. The Overview's facts show Forked from and Forked
-  into, and a watchdog that finds an issue forks the task it watches (Watchdogs, below).
+  into (and Filed by, Split from or Started by when an agent, a split or an automation made the task), and a
+  watchdog that finds an issue forks the task it watches (Watchdogs, below).
 
 ### Who is who
 
@@ -1640,7 +1641,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   task (`fork_from` naming any other is refused, `fork_watchdog`), so the fix starts from this conversation and goes
   through every gate; it takes the task's repository unless one is named, and its priority. The filed task keeps
   `Task.sourceReport` with `scheduleId: null` and the `watchdogId`, `createdBy {kind: 'watchdog'}`, and its request
-  quotes the report ("Reported in <server> …"); its Reported in fact names the watchdog and opens the shipped task.
+  quotes the report ("Reported in <server> …"); its Filed by fact names the watchdog and opens the shipped task, and its Reported in card holds the report.
   The check ends with `report_read {summary}` (`PURPOSE_HAND_OVERS.watch`). One that filed nothing is healthy and
   kept (`watchdog.checked`, the last 20), and the next one is due an interval later; when that would fall past the
   window, the watchdog passes. One that filed or linked a report trips it (`tripped`, `forkTaskIds` the forks it
@@ -1776,6 +1777,17 @@ checks it ran.
   Code tab (Where agents work → Your edits). Fix N findings at an escalated review sends the drafted comments with the verdicts the same way. The
   comments are stored on `gate.answered` and on the decision's activity entry, so the task's activity lists each
   with its place. Comments with any other decision or at any other gate are refused.
+- Fix N findings and approve, from the Fix button's chevron, is the same `revise` with `thenApprove: true`
+  (refused at any other gate or with any other decision, `then_approve_invalid`, `then_approve_conflict`). The
+  `gate.answered` fold sets `task.approveAfterFix`; the fix then runs as any other: checks, the agent review and its
+  own fix rounds. While the flag is on, `reactToFindings` sends the agent review's `should_fix` findings to the Agent
+  as well as its blocking ones, the verdicts your review would have defaulted to, so the approval never passes a
+  finding you would have fixed; `optional` ones do not hold it. When the review gate would open again without an escalation, `openReviewGate` opens it and answers
+  it `approve` at once (`approveReviewAhead`, `gate.answered` with `ahead: true`), then approves as your click would:
+  the pull request opens, or every check runs first when you have uncommitted edits. The activity says "Approved after
+  the fix, as you asked". An escalated review, or a failure gate when checks run out of fixes, still stops for you.
+  Every later answer at a review gate writes the flag again (on only for another Fix N findings and approve), and a
+  new round clears it. The web shows the chevron only on an engine with `review.approve_after_fix`.
 - Dismissed findings are kept on the task (`dismissedFindings`, the last 30) and every later
   reviewer is told not to report them again unless the code around them changed. Your decision
   resets the round count.
@@ -2184,8 +2196,8 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
   (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog
   check. The home never shows as a task page: `/tasks/<home>` replaces itself with the watch's page,
-  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Reported in <server>", whose card has the report, its author and time, the
-  automation, a link to the report (an http or https link only, since an agent wrote it) and Open the watch.
+  so a queue row for a read's question lands where it can be answered. A filed task's facts show "Filed by “<automation>”", which opens the watch, and "Reported in <server>", whose card
+  has the report, its author and time and a link to the report (an http or https link only, since an agent wrote it).
 - **Agents set automations up.** Settings → Automations has no form: you ask for a schedule, a trigger or a watch
   in the home chat or any task, and its agent writes it (`set_schedule`, `schedules_write`); the page lists them,
   pauses, resumes and deletes them. A new watch an agent writes is a suggested watch for you to accept (below).
@@ -2884,8 +2896,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   machine for `feedback.write`. A command sent anyway is refused before it leaves the page, with "Update
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
-  `feedback` for `GET /api/feedback`, and `teams` for the team routes and `GET /api/teams/tasks`, today; Settings →
-  Teams shows only on an engine that has it). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, today; Settings → Teams and the review's Fix and approve
+  choice show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -3333,6 +3346,102 @@ online, and the last list of it their own machine kept while it is not (Offline 
 - **Agents read it, never change it.** `shinsa teams list` (`teams_list`) is every agent's tool; every other `teams`
   command and both project team commands are human-only.
 
+
+## Handing off a task
+
+A task you cannot work on any more can be handed to someone else by a link, `https://app.shinsa.dev/claim#<instance>.<machine
+key>.<secret>.<hand-off token>`. The first GitHub account to open it works on the task: from then on it reaches that
+one task on your machine through remote access, as you do, from its own dashboard on app.shinsa.dev, until you take it
+back. The task stays yours and keeps running on your machine, in its worktree, sessions and accounts; nothing moves,
+you see and do everything on it as before, and both pages say so (Share task, and the claim page's "The task stays
+theirs"). Sharing (above) is
+for watching; a hand-off is for steering. Teams are another matter (LOC-78).
+
+- **Handing off is yours alone.** `task.hand_off` and `handoff.remove` (Hand off in Share task's Share as, `shinsa tasks
+  hand-off|hand-off-remove`) are human-only: their surface specs are `humanOnly`, and core refuses them on your behalf
+  (`human_only`). An automation's home and a finished task are refused (`handoff_refused`). `task.hand_off` emits
+  `task.handed_off` (`TaskHandoff`: `at`, `url` null, `guest` null) and queues `handoff.link`; again on a failed link it
+  asks for the link once more, and otherwise does nothing.
+- **The link** (`apps/engine/src/remote/handoffs.ts`, `Remote.createHandoff`). Remote access must be on (else the link
+  fails at once with "Turn on remote access in Settings → General to hand off this task…", kept on
+  `TaskHandoff.failure` for Share task's Try again). The engine asks app.shinsa.dev for a hand-off token
+  (`POST /__remote/machine/handoffs`, `apps/cloud/CLAUDE.md` → Guests), makes a secret, keeps both with the task's id in
+  `remote.json` (`handoffs`), and records the URL with `handoff.record`. It is the enroll link's fragment with a
+  hand-off token in place of the invite token; app.shinsa.dev never learns which task it is for. One link a task.
+- **The claim** (`routes/remote/claim.tsx`, `lib/remote/enroll.ts`). Signed out, the link shows its own sign-in
+  ("Sign in to work on a task handed to you", the claim page's points, any GitHub account), not the dashboard's. The
+  page keeps the fragment through GitHub sign-in, says what working on it gives and that the task stays its owner's, and claims only when Work on this task
+  is pressed, so opening the link by
+  mistake spends nothing. It sends `POST /__remote/handoffs/accept`, which answers a connect token for that account,
+  makes a new device key and opens the sealed channel with the link's proof, as enrolling does. The machine finds the
+  hand-off whose secret proves it (`#matchHandoff`) and, with no request to accept: dispatches `handoff.claim` with the
+  account (`TaskGuest`: id, login, name, avatar), which core refuses for a second account ("Someone else already
+  opened this hand-off link. Ask the task’s owner for a new one."); then adds the account as a guest at app.shinsa.dev
+  (`/__remote/machine/guests/add`), unless it is the machine's owner or a member, who stay what they are and are never
+  counted as a guest who left; adds the browser as a device with the task's id (`RemoteDevice.taskId`), turns the
+  link off there and here, and answers `welcome`. The claim is recorded on the machine first, so two accounts racing
+  for one link cannot both get in; a failed step after it leaves the same account free to open the link again. Once
+  claimed, the link is gone: no second browser and no second person can use it. A browser that already reaches the
+  machine does not claim, and one browser takes at most one handed task per machine.
+- **One task, on the engine.** A device with a task is a guest (`GuestActor`: `taskId`, `login`), and its channel's hub
+  socket is scoped to that task (`apps/engine/src/http/socket.ts`):
+  - **State.** It gets `resolveScopedState` (core's `remote/scope.ts`): that task alone, its runs, gates and evidence,
+    its repository and project, nothing else (no other task, schedule, memory, setting or focus); the task without its
+    share, previews or hand-off link, and every account, the task's, a run's, an attempt's, a gate's or a usage wait's,
+    without its email. Patches are worked out over the scoped state (`resolveScopedPatch`), and the socket gets no
+    accounts, terminals or remote snapshot, nor a transcript of another task's run.
+  - **Commands.** Its `engine` hello lists only `SCOPED_COMMANDS`, so the UI hides the rest. Every command it sends is
+    checked by `resolveScopedRefusal` before `decide` (`dispatchUserCommand`, `handoff_scope`): only commands that act
+    on its task by `taskId`, a run or a gate (a message, a gate answer, retry, snooze, priority, a round, a merge step,
+    a suggestion and the like); never another task, a share, a hand-off, a setting, an account, a schedule or a new
+    task, nor a secret or sign-in gate ("Only the owner of the task can answer this, on their machine."), a retry on
+    a chosen account, or a message or round whose text carries an attachments block ("Only the owner of the task can
+    attach files to it."), so every file the task names was attached by you. Merges and operations are the guest's to approve, as yours are. What stays at the keyboard
+    (Remote access → What stays at the keyboard) stays there too.
+  - **Requests.** HTTP inside its channel reaches only `isGuestRoute` (`remote/guest-routes.ts`): `GET` of
+    `/api/health`, `/api/tasks/<its id>` and its `blob`, `chat`, `diff`, `paths`, `raw`, `refs`, `search` and `tree`, and
+    the files of that task alone: evidence in its own folder (`/api/evidence/<its id>/…`) or recorded for it, an
+    attachment of its request or inbox, and a tool image or a message attachment in the transcript of one of its runs;
+    a path that only appears in some text never counts. Anything else is 403 `handoff_scope`. So a guest uploads
+    no attachment and edits no file in Code: both write to your disk.
+- **Logged as theirs.** Everything a guest sends runs with `DecideContext.guest`, and each event it causes carries
+  `byGuest` (the login), which activity shows as `@login` ("Handed this task to @kai" for the claim). A guest's message
+  goes to the agent at once, without the message classifier, prefixed "From @kai, who the human handed this task to:",
+  so the agent knows who wrote it; the task's request and chat show it without the prefix.
+- **Their dashboard** (`lib/remote/fleet.ts`, `lib/remote/machines.ts`). app.shinsa.dev lists the machine for the
+  account with `role: 'guest'`, and the fleet joins it after your own machines, so settings, accounts and the machine a
+  command goes to by default still come from yours. It is left out of New task's machine picker, routing policies and
+  task capacity, and a command it does not list is refused with "This stays with the owner of the task…" rather than
+  asking to update Shinsa. Settings → Machines reads "A task handed to you by <owner> · In this dashboard · <task
+  title>", with Leave; a browser that reaches only handed machines leaves Slack out of Settings, since Slack links a
+  machine of its own. The task stays there once done, until you take it back or they leave.
+- **Share task** (`components/task/share-dialog.tsx`, `lib/share/dialog.ts`, `lib/share/handoff.ts`): Hand off is
+  the last choice of Share as, after Status, Standard and Full access (`listShareModeItems`), on an open task (and on
+  any task someone still holds) while remote access is on and the machine speaks `task.hand_off`; the dialog opens on
+  it for a task handed off (`resolveShareModeChoice`). It is not a preset of the share: picking it sends nothing and
+  never changes a live share, and picking a preset again shows the share as before. With it, Share for goes, the
+  description says the task stays yours, and the footer has Hand off; while the link is made, a busy button; then
+  Turn off link, Copy hand-off link and Done; a failure with its reason, Remove and Try again; once claimed, their
+  avatar, name, `@login` and when they opened the link, "<name> is working on this task. It stays yours…", with
+  Remove, which asks first and names who lost the task in its toast.
+- **Where it shows.** A hand-off has the handshake icon (`HANDOFF_ICON`, `IconHandshake`) everywhere. Its banner on
+  your task page (`HandoffBanner` in `components/task/sharing-banner.tsx`), apart from the sharing banner and below it
+  when the task is shared too, says who is working on it with Remove only, or that the first GitHub account to open the
+  link can, with Copy hand-off link and Turn off link; Manage stays on the sharing banner. The task's title in the task
+  list, Home and the Needs you queue carries the hand-off mark beside the share mark (`SharedMark`, `hasShareMark`:
+  "Handed to Kai Lane", "Hand-off link not opened yet"), and its facts row says "Handed to <name>"
+  (`resolveHandoffFact`). On the guest's side the same mark and fact say "Handed to you by <owner>", from the
+  machine's owner app.shinsa.dev lists (`MachineView.handedBy`).
+- **Taking it back.** `handoff.remove` emits `handoff.removed` and queues `handoff.revoke`, which turns the link off at
+  app.shinsa.dev, forgets every device of that task and closes their channels at once, then removes the guest there
+  (`/__remote/machine/guests/remove`) unless they still hold another task here, so app.shinsa.dev stops listing the
+  machine for them. Each heartbeat answers the machine's guests too, and a guest who left (Leave in their Settings →
+  Machines) loses their devices on the next one, and each task they held is given back: the engine sends
+  `handoff.leave`, which emits `handoff.left` ("@kai gave this task back") and queues `handoff.revoke`, so Share task
+  can hand it off again. A heartbeat whose answer was read before a claim here added its guest keeps the guests the
+  machine has, so a claim that lands while a heartbeat is out is never taken for a leave. Pausing remote access ends every channel, a guest's included; removing it or pairing again forgets every
+  guest and hand-off link.
+- **Agents read it, never change it.** An agent has no tool to hand off or take back a task.
 
 ## Sharing a preview
 
@@ -3967,7 +4076,10 @@ truth, and a snapshot only saves replaying it.
   `preset`, which become Standard shares (`preset: 'standard'`).
   Logs from before teams (log version 14, `TEAM_FOCUS_LOG_VERSION`) have `focus.changed` events without `teamId`,
   which gain `teamId: null`.
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 14) marks the log so
+  Logs from before agent-chosen checks (log version 15, `PLAN_CHECKS_LOG_VERSION`) can have `plan.proposed` events
+  whose `document.verification` is a list of prose strings; they carry no command, so they are dropped and only
+  `PlanCheck` records stay (the prose remains in the plan's `body`).
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 15) marks the log so
   each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
   its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
