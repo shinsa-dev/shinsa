@@ -25,7 +25,15 @@ const LINE_META = 'flex min-w-0 shrink whitespace-pre text-fg-2';
 
 export const CARD_LINE = 'flex h-9 min-w-0 shrink-0 items-center gap-1.25 bg-bg-a1 ps-3 pe-3 text-xs';
 
-export function CardLine({ icon, title, meta }: { icon: IconName; title: string; meta?: React.ReactNode }) {
+export function CardLine({
+  icon,
+  title,
+  meta,
+}: {
+  icon: IconName;
+  title: React.ReactNode;
+  meta?: React.ReactNode;
+}) {
   return (
     <h3 data-chat-line className={CARD_LINE}>
       <IconSlot>

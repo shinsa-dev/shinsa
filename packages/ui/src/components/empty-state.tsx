@@ -12,7 +12,7 @@ function EmptyState({
 }: {
   icon: IconName;
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   size?: 'default' | 'sm';
   className?: string;
   children?: React.ReactNode;

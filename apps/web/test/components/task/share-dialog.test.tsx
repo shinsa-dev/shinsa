@@ -227,12 +227,12 @@ describe('handing a task off as a kind of share', () => {
     showTask({ stage: 'done', handoff: { ...HANDED, guest: KAI, claimedAt: Date.now() } });
     const dialog = await findHandoff();
     const text = (await screen.findByRole('dialog')).textContent;
-    expect(text).toContain('Kai Lane is working on this task. It stays yours');
+    expect(text).toContain('Kai is working on this task. It stays yours');
     expect(text).toContain('Kai Lanekai');
     expect(text).toContain('Joined just now');
     fireEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     const confirm = await screen.findByRole('alertdialog');
-    expect(confirm.textContent).toContain('Remove Kai Lane?');
+    expect(confirm.textContent).toContain('Remove Kai?');
     expect(listSentCommands()).toEqual([]);
     fireEvent.click(within(confirm).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(listSentCommands()).toEqual([{ type: 'handoff.remove', taskId: 'source' }]));
@@ -314,7 +314,10 @@ describe('the hand-off banner', () => {
       </>
     );
     const [sharing, handing] = screen.getAllByRole('status') as [HTMLElement, HTMLElement];
-    expect(handing.textContent).toContain('Kai Lane is working on this task. It stays yours.');
+    expect(handing.textContent).toContain('Kai is working on this task. It stays yours.');
+    expect(within(handing).getByRole('link', { name: 'Kai' }).getAttribute('href')).toBe(
+      'https://github.com/kai'
+    );
     fireEvent.click(within(sharing).getByRole('button', { name: 'Manage' }));
     const shareDialog = await screen.findByRole('dialog');
     expect(within(shareDialog).getByRole('combobox', { name: 'Share as' }).textContent).toContain('Status');
@@ -322,7 +325,7 @@ describe('the hand-off banner', () => {
     await waitForGone(() => screen.queryByRole('dialog'));
     expect(within(handing).queryByRole('button', { name: 'Manage' })).toBeNull();
     fireEvent.click(within(handing).getByRole('button', { name: 'Remove' }));
-    expect((await screen.findByRole('alertdialog')).textContent).toContain('Remove Kai Lane?');
+    expect((await screen.findByRole('alertdialog')).textContent).toContain('Remove Kai?');
   });
 
   it('copies a link no one opened yet and turns it off', async () => {

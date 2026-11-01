@@ -13,9 +13,16 @@ import {
   resolveNowTitle,
   resolveResultPlace,
 } from '@/lib/overview/now.ts';
+import { describeMentionText } from '@/lib/remote/users.ts';
 import { createAgentEntry, createBrief, createCallEntry, createResultEntry } from '../../support/chat.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
+
+const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+
+const KAI_OWNER = { name: 'Kai', user: KAI };
+
+const UNKNOWN_OWNER = { name: 'The owner', user: null };
 
 function phase(overrides: Partial<DisplayPhase>): DisplayPhase {
   return { key: 'build', title: 'Build', detail: null, status: 'active', planned: false, ...overrides };
@@ -86,21 +93,34 @@ describe('resolveNowTitle', () => {
       cancelledFrom: 'awaiting_merge',
       stageReason: 'pull request closed',
     });
-    expect(resolveNowTitle(closed, [], null, undefined)).toBe(
-      'Cancelled at Merge: the pull request was closed without merging.'
-    );
+    expect(resolveNowTitle(closed, [], null, undefined)).toEqual([
+      'Cancelled at Merge: ',
+      'the pull request was closed without merging',
+      '.',
+    ]);
     const yours = { ...closed, cancelledFrom: 'planning' as const, stageReason: 'cancelled by you' };
-    expect(resolveNowTitle(yours, [], null, undefined)).toBe('Cancelled at Plan: you cancelled the task.');
-    expect(resolveNowTitle(yours, [], null, undefined, null, 'Kai')).toBe(
-      'Cancelled at Plan: Kai cancelled the task.'
-    );
-    expect(resolveNowTitle(yours, [], null, undefined, null, 'The owner')).toBe(
+    expect(resolveNowTitle(yours, [], null, undefined)).toEqual([
+      'Cancelled at Plan: ',
+      'you',
+      ' cancelled the task',
+      '.',
+    ]);
+    expect(resolveNowTitle(yours, [], null, undefined, null, KAI_OWNER)).toEqual([
+      'Cancelled at Plan: ',
+      { user: KAI, label: 'Kai' },
+      ' cancelled the task',
+      '.',
+    ]);
+    const unknown = resolveNowTitle(yours, [], null, undefined, null, UNKNOWN_OWNER);
+    expect(describeMentionText(typeof unknown === 'string' ? [unknown] : unknown)).toBe(
       'Cancelled at Plan: the owner cancelled the task.'
     );
     const failed = { ...closed, stageReason: 'cancelled after a failure' };
-    expect(resolveNowTitle(failed, [], null, undefined)).toBe(
-      'Cancelled at Merge: cancelled after a failure.'
-    );
+    expect(resolveNowTitle(failed, [], null, undefined)).toEqual([
+      'Cancelled at Merge: ',
+      'cancelled after a failure',
+      '.',
+    ]);
     const silent = { ...closed, stageReason: '' };
     expect(resolveNowTitle(silent, [], null, undefined)).toBe('Cancelled at Merge.');
   });
@@ -347,8 +367,12 @@ describe('what the now card shows', () => {
 describe('describeResultTitle', () => {
   it('names the owner whose question was answered, and leaves the other steps alone', () => {
     expect(describeResultTitle('answer')).toBe('Answered your question');
-    expect(describeResultTitle('answer', 'Kai')).toBe('Answered Kai’s question');
-    expect(describeResultTitle('answer', 'The owner')).toBe('Answered the owner’s question');
-    expect(describeResultTitle('research', 'Kai')).toBe('Wrote the report');
+    expect(describeResultTitle('answer', KAI_OWNER)).toEqual([
+      'Answered ',
+      { user: KAI, label: 'Kai’s' },
+      ' question',
+    ]);
+    expect(describeResultTitle('answer', UNKNOWN_OWNER)).toEqual(['Answered ', 'the owner’s', ' question']);
+    expect(describeResultTitle('research', KAI_OWNER)).toBe('Wrote the report');
   });
 });

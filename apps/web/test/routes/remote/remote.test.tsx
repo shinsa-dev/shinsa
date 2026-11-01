@@ -826,9 +826,10 @@ describe('the claim page', () => {
     );
     expect(await screen.findByText('Work on a task handed to you')).toBeTruthy();
     expect(screen.getByText('This one task')).toBeTruthy();
-    expect(
-      screen.getByText('As @kai. Only the first account to open this link gets this task.')
-    ).toBeTruthy();
+    const as = screen.getByText(/Only the first account to open this link gets this task/);
+    expect(as.textContent).toContain('As ');
+    expect(as.textContent).not.toContain('@');
+    expect(as.querySelector('a')?.getAttribute('href')).toBe('https://github.com/kai');
     fireEvent.click(screen.getByRole('button', { name: 'Work on this task' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
     expect(named).toEqual(['kai’s Chrome']);

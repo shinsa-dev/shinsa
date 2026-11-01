@@ -6,8 +6,10 @@ import {
   listActivityNewestFirst,
   resolveActivityActor,
   resolveActivityGlyph,
+  resolveActivityText,
   resolveOverviewSummary,
 } from '@/lib/overview/activity.ts';
+import { describeMentionText } from '@/lib/remote/users.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
 
 const PLAN: Plan = {
@@ -114,14 +116,14 @@ describe('activity marks', () => {
       evidenceId: null,
     };
     const state = createShinsaState({});
-    expect(resolveActivityActor(state, asked)).toEqual({ label: 'You', taskId: null });
+    expect(resolveActivityActor(state, asked)).toEqual({ link: null, mention: ['You'] });
     expect(resolveActivityActor(state, { ...asked, onBehalf: true })).toEqual({
-      label: 'Shinsa (on your behalf)',
-      taskId: null,
+      link: null,
+      mention: ['Shinsa (', 'on ', 'your', ' behalf', ')'],
     });
   });
 
-  it('names the person a task was handed to by their GitHub login', () => {
+  it('tags the person a task was handed to, with the profile the task knows', () => {
     const entry = {
       at: 1,
       actor: 'you' as const,
@@ -131,7 +133,37 @@ describe('activity marks', () => {
       evidenceId: null,
       byGuest: 'kai',
     };
-    expect(resolveActivityActor(createShinsaState({}), entry)).toEqual({ label: '@kai', taskId: null });
+    const state = createShinsaState({});
+    expect(resolveActivityActor(state, entry)).toEqual({
+      link: null,
+      mention: [{ user: { login: 'kai', name: null, avatarUrl: null } }],
+    });
+    const guest = { id: 'u1', login: 'kai', name: 'Kai Lane', avatarUrl: 'k.png' };
+    const handed = createTask({ id: 't', handoff: { at: 1, url: null, guest, claimedAt: 1 } });
+    expect(resolveActivityActor(state, { ...entry, byGuest: 'KAI' }, null, handed).mention).toEqual([
+      { user: guest },
+    ]);
+    const person = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    const back = createTask({
+      id: 't',
+      activity: [{ ...entry, actor: 'shinsa', kind: 'stage', text: 'Kai gave this task back', person }],
+    });
+    expect(resolveActivityActor(state, entry, null, back).mention).toEqual([{ user: person }]);
+  });
+
+  it('tags the person a hand-off line names, wherever the name falls', () => {
+    const person = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    const line = { at: 1, actor: 'shinsa' as const, kind: 'stage' as const, detail: null, evidenceId: null };
+    expect(resolveActivityText({ ...line, text: 'Plain' })).toBe('Plain');
+    expect(resolveActivityText({ ...line, text: 'Handed this task to Kai', person })).toEqual([
+      'Handed this task to ',
+      { user: person },
+    ]);
+    expect(resolveActivityText({ ...line, text: 'Kai gave this task back', person })).toEqual([
+      { user: person },
+      ' gave this task back',
+    ]);
+    expect(resolveActivityText({ ...line, text: 'Someone else', person })).toBe('Someone else');
   });
 
   it('names the task whose agent acted on your behalf, and links to it', () => {
@@ -151,14 +183,16 @@ describe('activity marks', () => {
       onBehalf: true,
     };
     expect(resolveActivityActor(state, { ...entry, byTask: 'a1' })).toEqual({
-      label: 'SW-142 agent (on your behalf)',
-      taskId: 'a1',
+      link: { label: 'SW-142 agent', taskId: 'a1' },
+      mention: [' (', 'on ', 'your', ' behalf', ')'],
     });
-    expect(resolveActivityActor(state, { ...entry, byTask: 'a2' })).toEqual({
-      label: '“Tidy the logs” agent (on your behalf)',
+    expect(resolveActivityActor(state, { ...entry, byTask: 'a2' }).link).toEqual({
+      label: '“Tidy the logs” agent',
       taskId: 'a2',
     });
-    expect(resolveActivityActor(state, { ...entry, byTask: 'gone' }).label).toBe('Shinsa (on your behalf)');
+    expect(describeMentionText(resolveActivityActor(state, { ...entry, byTask: 'gone' }).mention)).toBe(
+      'Shinsa (on your behalf)'
+    );
   });
 
   it('names the owner instead of you when someone else reads their shared task', () => {
@@ -171,16 +205,25 @@ describe('activity marks', () => {
       detail: null,
       evidenceId: null,
     };
-    expect(resolveActivityActor(state, entry, 'Kai')).toEqual({ label: 'Kai', taskId: null });
-    expect(resolveActivityActor(state, entry, 'The owner').label).toBe('The owner');
-    expect(resolveActivityActor(state, { ...entry, actor: 'agent' }, 'Kai').label).toBe('Agent');
-    expect(resolveActivityActor(state, { ...entry, onBehalf: true }, 'Kai').label).toBe(
-      'Shinsa (on Kai’s behalf)'
-    );
-    expect(resolveActivityActor(state, { ...entry, onBehalf: true, byTask: 'a1' }, 'The owner')).toEqual({
-      label: 'SW-142 agent (on the owner’s behalf)',
-      taskId: 'a1',
+    const user = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    const kai = { name: 'Kai', user };
+    const unknown = { name: 'The owner', user: null };
+    expect(resolveActivityActor(state, entry, kai)).toEqual({
+      link: null,
+      mention: [{ user, label: 'Kai' }],
     });
+    expect(resolveActivityActor(state, entry, unknown).mention).toEqual(['The owner']);
+    expect(resolveActivityActor(state, { ...entry, actor: 'agent' }, kai).mention).toEqual(['Agent']);
+    expect(resolveActivityActor(state, { ...entry, onBehalf: true }, kai).mention).toEqual([
+      'Shinsa (',
+      'on ',
+      { user, label: 'Kai’s' },
+      ' behalf',
+      ')',
+    ]);
+    const behalf = resolveActivityActor(state, { ...entry, onBehalf: true, byTask: 'a1' }, unknown);
+    expect(behalf.link?.label).toBe('SW-142 agent');
+    expect(describeMentionText(behalf.mention)).toBe(' (on the owner’s behalf)');
   });
 
   it('marks a setup problem and a sign-in with the same tile as the task’s status', () => {

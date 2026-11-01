@@ -1,5 +1,6 @@
 import type { Activity, ShinsaState, Task } from '@shinsa/core';
-import { describeOwnerPossessive } from '@/lib/share/page.ts';
+import { type Mention, resolveFirstName, resolveGuestProfile } from '@/lib/remote/users.ts';
+import { resolveOwnerPossessive, type SharedOwner } from '@/lib/share/page.ts';
 import { type Glyph, resolvePauseGlyph } from '@/lib/tasks/status.ts';
 
 const ACTIVITY_GLYPH: Record<Activity['kind'], Glyph> = {
@@ -47,23 +48,41 @@ export const ACTOR_LABEL: Record<Activity['actor'], string> = {
 };
 
 export interface ActivityActor {
-  label: string;
-  taskId: string | null;
+  link: { label: string; taskId: string } | null;
+  mention: Mention;
+}
+
+function resolveOwnActor(entry: Activity, owner: SharedOwner | null): Mention {
+  if (entry.actor !== 'you' || !owner) return [ACTOR_LABEL[entry.actor]];
+  return [owner.user ? { user: owner.user, label: owner.name } : owner.name];
 }
 
 export function resolveActivityActor(
   state: ShinsaState,
   entry: Activity,
-  owner: string | null = null
+  owner: SharedOwner | null = null,
+  task: Task | null = null
 ): ActivityActor {
-  if (entry.byGuest) return { label: `@${entry.byGuest}`, taskId: null };
-  if (!entry.onBehalf) {
-    return { label: entry.actor === 'you' && owner ? owner : ACTOR_LABEL[entry.actor], taskId: null };
-  }
-  const behalf = `on ${describeOwnerPossessive(owner)} behalf`;
+  if (entry.byGuest) return { link: null, mention: [{ user: resolveGuestProfile(task, entry.byGuest) }] };
+  if (!entry.onBehalf) return { link: null, mention: resolveOwnActor(entry, owner) };
+  const behalf = ['on ', resolveOwnerPossessive(owner), ' behalf'];
   const by = entry.byTask ? state.tasks[entry.byTask] : undefined;
-  if (!by) return { label: `Shinsa (${behalf})`, taskId: null };
-  return { label: `${by.handle ?? `“${by.title}”`} agent (${behalf})`, taskId: by.id };
+  if (!by) return { link: null, mention: ['Shinsa (', ...behalf, ')'] };
+  return {
+    link: { label: `${by.handle ?? `“${by.title}”`} agent`, taskId: by.id },
+    mention: [' (', ...behalf, ')'],
+  };
+}
+
+export function resolveActivityText(entry: Activity): string | Mention {
+  const person = entry.person;
+  if (!person) return entry.text;
+  const name = resolveFirstName(person);
+  const at = entry.text.indexOf(name);
+  if (at < 0) return entry.text;
+  const before = entry.text.slice(0, at);
+  const after = entry.text.slice(at + name.length);
+  return [...(before ? [before] : []), { user: person }, ...(after ? [after] : [])];
 }
 
 export function resolveOverviewSummary(task: Task) {

@@ -18,7 +18,8 @@ import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { resolveSteps, selectCancelledStep } from '@/lib/overview/progress.ts';
-import { describeOwnerInSentence, describeOwnerPossessive } from '@/lib/share/page.ts';
+import type { Mention } from '@/lib/remote/users.ts';
+import { resolveOwnerMention, resolveOwnerPossessive, type SharedOwner } from '@/lib/share/page.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 import { describeConflict } from '@/lib/tasks/now.ts';
 import { isPausedStatus, resolveTaskStatus } from '@/lib/tasks/status.ts';
@@ -43,26 +44,31 @@ const SETTLED_TITLE: Partial<Record<Task['stage'], string>> = {
   cancelled: 'Cancelled.',
 };
 
-export function describeResultTitle(step: DeliveringStep, owner: string | null = null) {
+export function describeResultTitle(
+  step: DeliveringStep,
+  owner: SharedOwner | null = null
+): string | Mention {
   if (step !== 'answer' || owner === null) return RESULT_TITLE[step];
-  return `Answered ${describeOwnerPossessive(owner)} question`;
+  return ['Answered ', resolveOwnerPossessive(owner), ' question'];
 }
 
 const CANCEL_REASON: Record<string, string> = {
   'pull request closed': 'the pull request was closed without merging',
 };
 
-function describeCancelReason(reason: string, owner: string | null) {
+function describeCancelReason(reason: string, owner: SharedOwner | null): Mention {
   if (reason === 'cancelled by you')
-    return `${owner === null ? 'you' : describeOwnerInSentence(owner)} cancelled the task`;
-  return CANCEL_REASON[reason] ?? reason;
+    return [owner === null ? 'you' : resolveOwnerMention(owner), ' cancelled the task'];
+  const known = CANCEL_REASON[reason] ?? reason;
+  return known ? [known] : [];
 }
 
-function describeCancelled(task: Task, owner: string | null) {
+function describeCancelled(task: Task, owner: SharedOwner | null): string | Mention {
   const step = selectCancelledStep(resolveSteps(resolveTaskProgress(task)));
   if (!step) return SETTLED_TITLE.cancelled ?? '';
   const reason = describeCancelReason(task.stageReason, owner);
-  return reason ? `Cancelled at ${step.label}: ${reason}.` : `Cancelled at ${step.label}.`;
+  if (reason.length === 0) return `Cancelled at ${step.label}.`;
+  return [`Cancelled at ${step.label}: `, ...reason, '.'];
 }
 
 const WATCHED_TITLE = 'Merged. Its watchdogs keep watching the change.';
@@ -73,8 +79,8 @@ export function resolveNowTitle(
   current: DisplayPhase | null,
   run: Run | undefined,
   bundle: string | null = null,
-  owner: string | null = null
-) {
+  owner: SharedOwner | null = null
+): string | Mention {
   if (waitsOn.length > 0) return describeWaitsOn(waitsOn);
   if (bundle && !run) return bundle;
   if (task.stage === 'checking') return capitalise(task.stageReason);
