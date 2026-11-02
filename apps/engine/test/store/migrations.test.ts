@@ -1,16 +1,12 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { Effect } from 'effect';
+import { SqlClient } from 'effect/sql';
 import { Engine } from '../../src/runtime/engine.ts';
 import { EventLog } from '../../src/store/index.ts';
-import {
-  LOG_BASELINE,
-  LOG_MIGRATIONS,
-  type LogMigration,
-  LogVersionError,
-  resolveLogVersion,
-  selectLogVersion,
-} from '../../src/store/migrations.ts';
+import { LOG_MIGRATIONS, resolveLogVersion } from '../../src/store/migrations/list.ts';
+import { LOG_BASELINE, type LogMigration, LogVersionError } from '../../src/store/migrations/schema.ts';
 import { commitEvents, createTempDir } from '../helpers/index.ts';
 
 function createLogPath() {
@@ -19,7 +15,7 @@ function createLogPath() {
 
 function readVersion(path: string) {
   const db = new Database(path);
-  const version = selectLogVersion(db);
+  const version = db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
   db.close();
   return version;
 }
@@ -36,10 +32,10 @@ function writeLog(path: string, version: number) {
 function renameProject(name: string, to: string): LogMigration {
   return {
     name,
-    migrate: (db) =>
-      db.run('UPDATE events SET payload = ? WHERE seq = 1', [
-        JSON.stringify({ type: 'project.removed', projectId: to }),
-      ]),
+    migrate: Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE events SET payload = ${JSON.stringify({ type: 'project.removed', projectId: to })} WHERE seq = 1`;
+    }),
   };
 }
 
@@ -72,10 +68,10 @@ describe('event log migrations', () => {
     const path = createLogPath();
     writeLog(path, version);
     const log = new EventLog(path);
-    const refusal = new LogVersionError(
-      `This event log is at version ${version}, from a Shinsa older than any this one reads (${LOG_BASELINE} and later). Move the data folder aside and start Shinsa again to begin a new log.`,
-      version
-    );
+    const refusal = new LogVersionError({
+      message: `This event log is at version ${version}, from a Shinsa older than any this one reads (${LOG_BASELINE} and later). Move the data folder aside and start Shinsa again to begin a new log.`,
+      version,
+    });
     expect(() => log.migrate()).toThrow(refusal);
     expect(() => log.assertCurrent()).toThrow(refusal);
     expect(() => new Engine(log)).toThrow(LogVersionError);
@@ -112,9 +108,7 @@ describe('event log migrations', () => {
     const log = new EventLog(path);
     const failing: LogMigration = {
       name: 'broken',
-      migrate: () => {
-        throw new Error('broken');
-      },
+      migrate: Effect.die(new Error('broken')),
     };
     expect(() => log.migrate([TWO_MIGRATIONS[0] as LogMigration, failing])).toThrow('broken');
     expect(log.readEvents().events[0]).toMatchObject({ projectId: 'a' });
@@ -127,10 +121,10 @@ describe('event log migrations', () => {
     writeLog(path, LOG_BASELINE);
     const log = new EventLog(path);
     expect(() => log.assertCurrent(TWO_MIGRATIONS)).toThrow(
-      new LogVersionError(
-        `This event log is at version ${LOG_BASELINE} and needs migrating to version ${LOG_BASELINE + 2}. Open it once with a Shinsa that can write to it, then inspect it again.`,
-        LOG_BASELINE
-      )
+      new LogVersionError({
+        message: `This event log is at version ${LOG_BASELINE} and needs migrating to version ${LOG_BASELINE + 2}. Open it once with a Shinsa that can write to it, then inspect it again.`,
+        version: LOG_BASELINE,
+      })
     );
     log.close();
     expect(readVersion(path)).toBe(LOG_BASELINE);

@@ -1,8 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { APP_IDENTITY } from '@shinsa/core';
-
-export type Env = Record<string, string | undefined>;
+import type { Env } from './schema.ts';
 
 export interface ShinsaPaths {
   home: string;

@@ -4106,7 +4106,7 @@ truth, and a snapshot only saves replaying it.
   (`readEvents(after)`, `replayEventLog(events, from)`). The snapshot is used only when its version is this code's, its
   anchor matches the row in the log and its checksum its JSON; otherwise the whole log is replayed (logged with the
   reason: `version`, `anchor`, `checksum` or `unreadable`) and a new snapshot written. The version is a hash of every
-  source file of `@shinsa/core` and the snapshot format (`resolveStateVersion`, `apps/engine/src/store/snapshot.ts`),
+  source file of `@shinsa/core` and the snapshot format (`resolveStateVersion`, `apps/engine/src/store/snapshot/version.ts`),
   so a change to how events fold into state never reads an old snapshot; where those files cannot be read the version
   is null and the engine replays the whole log every boot and writes no snapshot. A snapshot is written 3 s after a
   boot that replayed events past it, 3 s after the last of 2,000 events since the last one (so a burst of work is never
@@ -4114,11 +4114,11 @@ truth, and a snapshot only saves replaying it.
   server keeps one; inspect mode never writes one, and an engine without a version (most tests) neither. A snapshot is
   only a shortcut: one that cannot be written is logged and left for the next.
 - **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
-  `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations.ts`) and every migration after it is one entry
-  in `LOG_MIGRATIONS`, in order, whose position is its version, so the current version is the baseline plus the
+  `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations/schema.ts`) and every migration after it is
+  one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
   list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
   Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
-  in one transaction, the snapshot is dropped and the version raised; a migration that throws leaves the log as it
+  in one transaction, the snapshot is dropped and the version raised; a migration that fails leaves the log as it
   was and the engine does not start. A log older than the baseline, or written before versions existed (version 0
   with events), is refused with a `LogVersionError` naming its version, never rewritten. Inspect mode writes nothing:
   `EventLog.assertCurrent` refuses a log that still needs migrating instead of reading it in an old shape. A log a
@@ -5672,6 +5672,56 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   `inspect_read_only` (Inspect mode, below), so a seeded copy never touches the keychain or deletes a folder; the
   list as stored stays.
 
+## The Effect runtime
+
+The engine moves to Effect 4 one piece at a time (the `effect` skill is how it is written). Its foundation already
+has: the configuration, the log, the shell, the event log and the files beside it, the data folder lock and the
+start and stop of the engine itself. Each is a service with a layer (`apps/engine/CLAUDE.md` → Rules has the table);
+the rest of the engine has not moved yet and calls them through an edge.
+
+```
+startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
+                  ├─ ServeLock     data/serve.lock         scoped
+                  ├─ EventLog ───► StoreLayer: SqlClient   events, outbox,
+                  │                (sqlite-bun)            receipts, snapshot
+                  ├─ HTTP server
+                  ├─ Eunoe's forwarder
+                  └─ the work: runs, clocks, effects, …
+                stop() = dispose: finalizers in reverse
+
+unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell)
+  log.*, resolveConfig, runCommand, killProcessTree
+```
+
+- **Configuration.** `EngineConfig` reads the whole `ServerConfig` once, through one `ConfigProvider` that looks in
+  the environment first, then in config.json, then takes the default. config.json is decoded field by field with a
+  schema per field, so a bad field is dropped and named, as before (Configuration and data, below). A setting the
+  engine cannot use (`SHINSA_PORT=abc`) fails with the typed `SettingInvalid` and the same message as before. A secret
+  added to it later is read as `Config.Redacted`.
+- **The log.** `JsonLogger` is Effect's `Logger`: every `Effect.logInfo`, `logWarning` and `logError` becomes one JSON
+  line with `at`, `level` (info, warn, error), `message` and the log's annotations as fields, errors on stderr and the
+  rest on stdout, and the whole line goes through `redactSecrets`, so no URL credential or token reaches it.
+- **The shell.** `Shell` runs a command on Effect's `ChildProcessSpawner`: an argument list, never a shell string, in a
+  process group of its own. A timeout or an interrupt kills the whole group and still answers what the command wrote;
+  a program that does not exist fails with the typed `CommandNotFound`, which `runCommand` answers as exit code 127.
+  Processes a finished command left in its group are not stopped, so a browser `xdg-open` opened stays open.
+- **The store.** The event log runs on `@effect/sql-sqlite-bun`, one service per table (`Events`, `Outbox`, `Receipts`,
+  `Briefings`, `Snapshots`, `LogMigrator`) and `CommandLog`, which writes a command's events, effects, cancellations
+  and receipt in one transaction, all on one `SqlClient` (`StoreLayer`). Every row is decoded by a schema, and a row
+  that breaks it is reported as unreadable, as before (Recovery, below). Evidence and attachments are `Evidence` and
+  `Attachments` over their folders.
+- **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
+  its release as a finalizer: the lock, the log, the HTTP server, Eunoe's forwarder, the work. `stop()` disposes the
+  runtime, which runs them in reverse: the work (live runs first, then the clocks and the effects, The agent loop →
+  Restart continuation), Eunoe, HTTP, the log, then the lock. A start that fails partway disposes it as well, so
+  nothing it took stays held, and a second `stop()` waits for the first.
+- **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
+  helpers run the services through `edgeRuntime`, a `ManagedRuntime` of the logger and the shell for the process;
+  `EventLog`, `EvidenceStore` and `AttachmentStore` each run their layer in a runtime of their own; the CLI's
+  `acquireDataDirLock` builds `ServeLock` in a scope it closes on `release()`. Each throws the errors and messages it
+  threw before, so nothing behind it changed. A module that moves yields the service instead, and an edge nothing
+  calls any more is removed.
+
 ## Configuration and data
 
 Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shinsa` when that is set), on every
@@ -5811,7 +5861,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 ### One server per data directory
 
 Two servers on one data directory would both run every effect: two agents per run, two pushes, two merges. So
-`shinsa engine` takes `data/serve.lock` before it opens the event log (`apps/engine/src/instance/lock.ts`). The lock
+`shinsa engine` takes `data/serve.lock` before it opens the event log (`ServeLock`, a scoped layer in
+`apps/engine/src/instance/lock/`, given back when the engine's scope closes). The lock
 is created atomically (written to a draft file, then hard-linked into place, which fails when the lock exists) and
 records the holder: pid, port, URL, version, commit, install path, when it started and when the machine booted. A
 second server finds a live holder and refuses to start with `server_running`, naming it: "Shinsa is already running
@@ -6373,7 +6424,9 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   on SQLite: retries and backoff, failure gates, lane ordering and the side lane, restart recovery per class, effect
   keys, cancellation (a running effect aborted, its late result ignored), damaged effect and event
   rows, and command receipts (a repeat answered, a reused id refused, a refusal remembered, receipts across a restart
-  and pruned after a week). `test/runtime/snapshots.test.ts` and `test/store/snapshot.test.ts` cover snapshots: a boot
+  and pruned after a week). `test/store/service.test.ts` runs the store's Effect services themselves through `runTest`
+  (`apps/engine/test/harness.ts`) on SQLite in memory, as `test/config`, `test/shell` and `test/instance/lock-service.test.ts`
+  do for the configuration, the shell and the lock. `test/runtime/snapshots.test.ts` and `test/store/snapshot.test.ts` cover snapshots: a boot
   that replays only the events after one, one of another version, of a log changed under it or with a damaged payload
   replaced by a full replay, problems kept across one, none written read-only or without a version, a write once
   quiet after a boot or a burst, a failed write logged, the Home guide kept beside the log and back after a boot, and

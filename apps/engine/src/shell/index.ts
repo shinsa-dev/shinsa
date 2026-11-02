@@ -1,163 +1,77 @@
-import { describeError, log, redactSecrets } from '../log/index.ts';
+import { Duration, Effect } from 'effect';
+import { redactSecrets } from '../log/redact.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
+import { stopProcessGroup } from './processes.ts';
+import {
+  CANCELLED_BEFORE_START,
+  CANCELLED_EXIT_CODE,
+  COMMAND_TIMEOUT,
+  CommandFailed,
+  type CommandEnv,
+  type CommandResult,
+  NOT_STARTED_EXIT_CODE,
+} from './schema.ts';
+import { Shell } from './service.ts';
 
-export interface CommandResult {
-  ok: boolean;
-  code: number;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-}
+export { listDescendants } from './processes.ts';
+export type { CommandResult } from './schema.ts';
 
 export interface CommandOptions {
   input?: string;
-  env?: Record<string, string | undefined>;
+  env?: CommandEnv;
   timeoutMs?: number | null;
   signal?: AbortSignal;
   onLine?: (line: string) => void;
   onSpawn?: (pid: number) => void;
 }
 
-const COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
-
-const QUIET_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GH_PROMPT_DISABLED: '1' };
-
-function readErrorCode(error: unknown) {
-  return error instanceof Error && 'code' in error ? error.code : null;
+function resolveTimeout(timeoutMs: number | null | undefined) {
+  if (timeoutMs === undefined) return COMMAND_TIMEOUT;
+  return timeoutMs === null ? null : Duration.millis(timeoutMs);
 }
 
-function isLeaderSignalled(pid: number) {
-  try {
-    process.kill(pid, 'SIGKILL');
-    return true;
-  } catch {
-    return false;
-  }
-}
+const awaitAbort = (signal: AbortSignal) =>
+  Effect.callback<void>((resume) => {
+    if (signal.aborted) return resume(Effect.void);
+    const onAbort = () => resume(Effect.void);
+    signal.addEventListener('abort', onAbort, { once: true });
+    return Effect.sync(() => signal.removeEventListener('abort', onAbort));
+  });
 
-export function killProcessGroup(pid: number) {
-  try {
-    process.kill(-pid, 'SIGKILL');
-  } catch (error) {
-    const code = readErrorCode(error);
-    if (code === 'ESRCH' || (code === 'EPERM' && isLeaderSignalled(pid))) return;
-    log.warn('[Shell] Could not stop a command', { pid, error: describeError(error) });
-  }
-}
+const notStarted = (stderr: string, code = NOT_STARTED_EXIT_CODE): CommandResult => ({
+  ok: false,
+  code,
+  stdout: '',
+  stderr,
+  timedOut: false,
+});
 
-function killProcess(pid: number) {
-  try {
-    process.kill(pid, 'SIGKILL');
-  } catch (error) {
-    if (readErrorCode(error) === 'ESRCH') return;
-    log.warn('[Shell] Could not stop a process', { pid, error: describeError(error) });
-  }
-}
-
-export function listDescendants(table: string, root: number) {
-  const children = new Map<number, number[]>();
-  for (const line of table.split('\n')) {
-    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
-    if (!pid || ppid === undefined || Number.isNaN(ppid)) continue;
-    children.set(ppid, [...(children.get(ppid) ?? []), pid]);
-  }
-  const found: number[] = [];
-  const queue = [root];
-  for (let parent = queue.shift(); parent !== undefined; parent = queue.shift()) {
-    for (const child of children.get(parent) ?? []) {
-      if (found.includes(child) || child === root) continue;
-      found.push(child);
-      queue.push(child);
-    }
-  }
-  return found;
-}
-
-export async function killProcessTree(pid: number) {
-  const table = await runCommand(['ps', '-A', '-o', 'pid=,ppid='], process.cwd(), { timeoutMs: 5_000 });
-  const descendants = table.ok ? listDescendants(table.stdout, pid) : [];
-  killProcessGroup(pid);
-  for (const child of descendants) killProcess(child);
-}
-
-function spawn(command: string[], cwd: string, options: CommandOptions) {
-  try {
-    return Bun.spawn(command, {
-      cwd,
-      stdin: options.input === undefined ? 'ignore' : new TextEncoder().encode(options.input),
-      stdout: 'pipe',
-      stderr: 'pipe',
-      detached: true,
-      env: { ...Bun.env, ...QUIET_ENV, ...options.env },
-    });
-  } catch (error) {
-    return describeError(error);
-  }
-}
-
-async function readOutput(stream: ReadableStream<Uint8Array>, onLine: ((line: string) => void) | undefined) {
-  if (!onLine) return new Response(stream).text();
-  const decoder = new TextDecoder();
-  let text = '';
-  let pending = '';
-  const take = (part: string) => {
-    text += part;
-    const lines = `${pending}${part}`.split(/\r\n|\r|\n/);
-    pending = lines.pop() ?? '';
-    for (const line of lines) if (line.trim()) onLine(line);
-  };
-  for await (const chunk of stream) take(decoder.decode(chunk, { stream: true }));
-  take(decoder.decode());
-  if (pending.trim()) onLine(pending);
-  return text;
-}
-
-export async function runCommand(
+const runEdgeCommand = Effect.fn('runCommand')(function* (
   command: string[],
   cwd: string,
-  options: CommandOptions = {}
-): Promise<CommandResult> {
-  if (options.signal?.aborted) {
-    return {
-      ok: false,
-      code: 130,
-      stdout: '',
-      stderr: 'The command was cancelled before it started.',
-      timedOut: false,
-    };
-  }
-  const child = spawn(command, cwd, options);
-  if (typeof child === 'string') return { ok: false, code: 127, stdout: '', stderr: child, timedOut: false };
-  options.onSpawn?.(child.pid);
-  let timedOut = false;
-  let stopped = false;
-  const stop = () => {
-    stopped = true;
-    killProcessGroup(child.pid);
-  };
-  const timeoutMs = options.timeoutMs === undefined ? COMMAND_TIMEOUT_MS : options.timeoutMs;
-  const timer =
-    timeoutMs === null
-      ? undefined
-      : setTimeout(() => {
-          timedOut = true;
-          stop();
-        }, timeoutMs);
-  options.signal?.addEventListener('abort', stop, { once: true });
-  const exited = child.exited.then((code) => {
-    if (stopped) killProcessGroup(child.pid);
-    return code;
-  });
-  try {
-    const [stdout, stderr, code] = await Promise.all([
-      readOutput(child.stdout, options.onLine),
-      readOutput(child.stderr, options.onLine),
-      exited,
-    ]);
-    return { ok: code === 0 && !timedOut, code, stdout: stdout.trim(), stderr: stderr.trim(), timedOut };
-  } finally {
-    clearTimeout(timer);
-    options.signal?.removeEventListener('abort', stop);
-  }
+  options: CommandOptions
+) {
+  const { signal, onLine, onSpawn } = options;
+  if (signal?.aborted) return notStarted(CANCELLED_BEFORE_START, CANCELLED_EXIT_CODE);
+  const [program, ...args] = command;
+  if (program === undefined) return notStarted('No command was given.');
+  const shell = yield* Shell;
+  return yield* shell
+    .run({
+      argv: [program, ...args],
+      cwd,
+      input: options.input,
+      env: options.env,
+      timeout: resolveTimeout(options.timeoutMs),
+      cancel: signal ? awaitAbort(signal) : undefined,
+      onLine: onLine ? (line) => Effect.sync(() => onLine(line)) : undefined,
+      onSpawn: onSpawn ? (pid) => Effect.sync(() => onSpawn(pid)) : undefined,
+    })
+    .pipe(Effect.catchTag('CommandNotFound', (missing) => Effect.succeed(notStarted(missing.message))));
+});
+
+export function runCommand(command: string[], cwd: string, options: CommandOptions = {}) {
+  return edgeRuntime.runPromise(runEdgeCommand(command, cwd, options));
 }
 
 export function describeFailure(command: string[], result: CommandResult) {
@@ -167,8 +81,20 @@ export function describeFailure(command: string[], result: CommandResult) {
   return redactSecrets(`${command.slice(0, 3).join(' ')} failed: ${reason}`);
 }
 
-export async function runCommandOrThrow(command: string[], cwd: string, options?: CommandOptions) {
-  const result = await runCommand(command, cwd, options);
-  if (!result.ok) throw new Error(describeFailure(command, result));
-  return result.stdout;
+export function runCommandOrThrow(command: string[], cwd: string, options: CommandOptions = {}) {
+  return edgeRuntime.runPromise(
+    Effect.flatMap(runEdgeCommand(command, cwd, options), (result) =>
+      result.ok
+        ? Effect.succeed(result.stdout)
+        : Effect.fail(new CommandFailed({ message: describeFailure(command, result) }))
+    )
+  );
+}
+
+export function killProcessGroup(pid: number) {
+  edgeRuntime.runSync(stopProcessGroup(pid));
+}
+
+export function killProcessTree(pid: number) {
+  return edgeRuntime.runPromise(Shell.use((shell) => shell.stopTree(pid)));
 }

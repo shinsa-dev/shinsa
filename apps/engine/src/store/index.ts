@@ -4,7 +4,11 @@ export {
   ATTACHMENT_ROUTE,
   AttachmentStore,
   readAttachmentUpload,
-} from './attachments.ts';
-export { type CancelledEffect, type CommandReceipt, EventLog, type StoredEffect } from './event-log.ts';
-export { EvidenceStore } from './evidence.ts';
-export { type LogProblem, resolveStateVersion } from './snapshot.ts';
+} from './attachments/index.ts';
+export { EventLog } from './event-log.ts';
+export { EvidenceStore } from './evidence/index.ts';
+export type { CancelledEffect, StoredEffect } from './outbox/schema.ts';
+export { SETTLED_RETENTION_MS } from './outbox/schema.ts';
+export type { CommandReceipt } from './receipts/schema.ts';
+export type { LogProblem } from './snapshot/schema.ts';
+export { resolveStateVersion } from './snapshot/version.ts';

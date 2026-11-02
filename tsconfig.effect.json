@@ -12,8 +12,11 @@
           "effect/http",
           "effect/http-api",
           "effect/sql",
+          "effect/process",
+          "effect/PlatformError",
           "@effect/sql-d1",
-          "@effect/sql-sqlite-bun"
+          "@effect/sql-sqlite-bun",
+          "@effect/platform-bun"
         ],
         "allowedExperimentalApis": [],
         "diagnosticSeverity": {

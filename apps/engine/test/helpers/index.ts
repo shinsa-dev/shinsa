@@ -23,6 +23,7 @@ import { createConfigAt } from './config.ts';
 import { createTempDir } from './temp.ts';
 
 export { createTempDir };
+export { captureLogs } from './logs.ts';
 
 export function commitEvents(
   log: EventLog,

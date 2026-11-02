@@ -11,7 +11,7 @@ import {
   type WatchdogSpec,
 } from '@shinsa/core';
 import { resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
-import type { EvidenceFolder } from '../store/evidence.ts';
+import type { EvidenceFolder } from '../store/evidence/index.ts';
 import type { EvidenceStore } from '../store/index.ts';
 
 export const HANDED_OVER =

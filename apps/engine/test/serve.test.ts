@@ -4,12 +4,14 @@ import { join } from 'node:path';
 import type { AccountsSnapshot } from '@shinsa/core';
 import { Cswap } from '../src/accounts/cswap.ts';
 import type { ModelSource } from '../src/agents/index.ts';
+import { RunSupervisor } from '../src/agents/index.ts';
 import {
   type AgentProvider,
   type CompletionRequest,
   ProviderRegistry,
 } from '../src/agents/providers/index.ts';
 import { resolveConfig } from '../src/config/index.ts';
+import { EunoeServer } from '../src/eunoe/index.ts';
 import { SIGN_IN_CALLBACK_PATH } from '../src/extensions/sign-in.ts';
 import { inspectRepo } from '../src/git/index.ts';
 import {
@@ -24,7 +26,14 @@ import { REMOTE_FILE } from '../src/remote/index.ts';
 import { EffectRunner, Engine } from '../src/runtime/index.ts';
 import { type Shinsa, startShinsa } from '../src/serve.ts';
 import { EventLog, resolveStateVersion } from '../src/store/index.ts';
-import { createGitRepo, createTempDir, createTestConfig, overrideEnv, until } from './helpers/index.ts';
+import {
+  captureLogs,
+  createGitRepo,
+  createTempDir,
+  createTestConfig,
+  overrideEnv,
+  until,
+} from './helpers/index.ts';
 
 setDefaultTimeout(30_000);
 
@@ -396,17 +405,16 @@ describe('one Shinsa per data directory', () => {
         bootedAt: resolveBootedAt(),
       })
     );
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const shinsa = await startShinsa(config, { models });
       started.push(shinsa);
       expect(selectLockHolder(config.dataDir)).toMatchObject({ pid: process.pid, url: shinsa.url });
-      expect(warn).toHaveBeenCalledWith('[Serve] Took over the lock a stopped Shinsa left behind', {
-        path: join(config.dataDir, LOCK_FILE),
-        pid: crashed.pid,
-      });
+      expect(logs.fieldsOf('[Serve] Took over the lock a stopped Shinsa left behind')).toEqual([
+        { path: join(config.dataDir, LOCK_FILE), pid: crashed.pid },
+      ]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 
@@ -419,6 +427,64 @@ describe('one Shinsa per data directory', () => {
     } finally {
       await taken.stop(true);
     }
+  });
+
+  test('a Shinsa whose start fails after it listens stops what it started and gives the port and the lock back', async () => {
+    const config = createTestConfig(createTempDir());
+    const broken = new Error('recovery broke');
+    const recover = spyOn(RunSupervisor.prototype, 'recover').mockRejectedValue(broken);
+    const close = spyOn(EventLog.prototype, 'close');
+    try {
+      await expect(startShinsa(config, { models })).rejects.toBe(broken);
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      recover.mockRestore();
+      close.mockRestore();
+    }
+    expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
+    const again = await startShinsa(config, { models });
+    started.push(again);
+    expect(selectLockHolder(config.dataDir)?.url).toBe(again.url);
+  });
+
+  test('stopping releases the effects, then Eunoe, then the server, then the log, then the lock', async () => {
+    const config = createTestConfig(createTempDir());
+    const shinsa = await startShinsa(config, { models });
+    const order: string[] = [];
+    const { settle } = Engine.prototype;
+    const { stop: stopEunoe } = EunoeServer.prototype;
+    const { close } = EventLog.prototype;
+    const isListening = () =>
+      fetch(`${shinsa.url}/api/health`).then(
+        () => true,
+        () => false
+      );
+    const spies = [
+      spyOn(Engine.prototype, 'settle').mockImplementation(function (this: Engine) {
+        order.push('effects settled');
+        return settle.call(this);
+      }),
+      spyOn(EunoeServer.prototype, 'stop').mockImplementation(async function (this: EunoeServer) {
+        order.push(`eunoe stopped while serving: ${await isListening()}`);
+        return stopEunoe.call(this);
+      }),
+      spyOn(EventLog.prototype, 'close').mockImplementation(function (this: EventLog) {
+        order.push(`log closed with the lock held: ${existsSync(join(config.dataDir, LOCK_FILE))}`);
+        close.call(this);
+      }),
+    ];
+    try {
+      await shinsa.stop();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    expect(order).toEqual([
+      'effects settled',
+      'eunoe stopped while serving: true',
+      'log closed with the lock held: true',
+    ]);
+    expect(await isListening()).toBe(false);
+    expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
   });
 
   test('inspect mode takes no lock, so it reads the data of a Shinsa that is running', async () => {

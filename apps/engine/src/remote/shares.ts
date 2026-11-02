@@ -41,7 +41,7 @@ import { readPullRequestDiff, readRepoFile, resolveRepoSlug } from '../github/in
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
 import { EffectError } from '../runtime/failures.ts';
-import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence.ts';
+import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence/index.ts';
 import type { ChannelPeer } from './channel.ts';
 import type { Remote } from './index.ts';
 import {
