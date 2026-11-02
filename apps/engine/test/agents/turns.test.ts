@@ -9,6 +9,7 @@ import {
   type ShinsaEvent,
   type ShinsaState,
 } from '@shinsa/core';
+import { Result } from 'effect';
 import { Transcripts } from '../../src/agents/index.ts';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
 import type { AgentProvider } from '../../src/agents/providers/index.ts';
@@ -211,7 +212,7 @@ describe('forking a task', () => {
 
 describe('a message kept for the next agent', () => {
   function send(state: ShinsaState, command: ShinsaCommand, onBehalf = false) {
-    const decision = decide(state, command, { now: 50, newId: () => 'fix-run', onBehalf });
+    const decision = Result.getOrThrow(decide(state, command, { now: 50, newId: () => 'fix-run', onBehalf }));
     return decision.events.reduce(
       (next, event) => applyEvent(next, { ...event, seq: next.seq + 1, at: 50 } as ShinsaEvent),
       state

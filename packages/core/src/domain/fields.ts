@@ -2,9 +2,9 @@ import { identity, Option, Schema, SchemaTransformation } from 'effect';
 
 export const ID_LIMIT = 200;
 
-export const TEXT_LIMIT = 200_000;
+const TEXT_LIMIT = 200_000;
 
-export const LIST_LIMIT = 500;
+const LIST_LIMIT = 500;
 
 export const NOTE_LIMIT = 2_000;
 

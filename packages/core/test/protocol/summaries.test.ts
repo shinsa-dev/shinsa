@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
   applyStatePatch,
   applyTaskDetail,
-  decide,
   isSummarizedTask,
   listSummarizedTasks,
   resolveStatePatch,
@@ -20,7 +19,7 @@ import {
   summarizeTask,
   type WireState,
 } from '../../src/index.ts';
-import { createHarness, createTask, registerRepo, shipAndMerge } from '../harness.ts';
+import { createHarness, createTask, registerRepo, shipAndMerge, decideOrThrow } from '../harness.ts';
 
 type Harness = ReturnType<typeof createHarness>;
 
@@ -53,7 +52,7 @@ function seed() {
 
 function decideNext(state: ShinsaState, command: ShinsaCommand, now: number) {
   let counter = 0;
-  return decide(state, command, { now, newId: () => `view-${now}-${++counter}` });
+  return decideOrThrow(state, command, { now, newId: () => `view-${now}-${++counter}` });
 }
 
 describe('the view state a socket gets on connect', () => {

@@ -25,7 +25,10 @@ describe('isQuietSurface', () => {
 describe('parseClientMessage', () => {
   test('reads each message a page sends, without the fields it does not know', () => {
     const read = (message: unknown): unknown => parseClientMessage(JSON.stringify(message));
-    expect(read({ type: 'hello', surface: 'desktop', extra: 1 })).toEqual({ type: 'hello', surface: 'desktop' });
+    expect(read({ type: 'hello', surface: 'desktop', extra: 1 })).toEqual({
+      type: 'hello',
+      surface: 'desktop',
+    });
     expect(read({ type: 'state.sync' })).toEqual({ type: 'state.sync' });
     expect(read({ type: 'task.detail', taskId: 't-1' })).toEqual({ type: 'task.detail', taskId: 't-1' });
     expect(read({ type: 'command', id: 'c-1', command: { type: 'task.cancel' } })).toEqual({
@@ -44,7 +47,8 @@ describe('parseClientMessage', () => {
     const read = (from: unknown): unknown =>
       parseClientMessage(JSON.stringify({ type: 'transcript.subscribe', runId: 'r-1', from }));
     expect(read(40)).toEqual({ type: 'transcript.subscribe', runId: 'r-1', from: 40 });
-    for (const from of [-1, 1.5, 'x', null]) expect(read(from)).toEqual({ type: 'transcript.subscribe', runId: 'r-1', from: 0 });
+    for (const from of [-1, 1.5, 'x', null])
+      expect(read(from)).toEqual({ type: 'transcript.subscribe', runId: 'r-1', from: 0 });
     expect(parseClientMessage(JSON.stringify({ type: 'transcript.subscribe', runId: 'r-1' }))?.type).toBe(
       'transcript.subscribe'
     );

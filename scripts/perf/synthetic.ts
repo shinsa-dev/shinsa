@@ -77,10 +77,12 @@ class Writer {
 
   send(command: ShinsaCommand) {
     this.clock += 7_000;
-    const decision = decide(this.state, command, {
+    const result = decide(this.state, command, {
       now: this.clock,
       newId: () => `0199${(++this.counter).toString(16).padStart(8, '0')}-0000-7000-8000-000000000000`,
     });
+    if (result._tag === 'Failure') throw result.failure;
+    const decision = result.success;
     const committed = this.log.commitCommand({
       events: decision.events,
       effects: [],

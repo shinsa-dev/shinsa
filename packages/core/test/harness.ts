@@ -30,6 +30,10 @@ export function parseCommand(body: unknown): UserCommand {
   return Result.getOrThrow(parseUserCommand(body));
 }
 
+export function decideOrThrow(...input: Parameters<typeof decide>) {
+  return Result.getOrThrow(decide(...input));
+}
+
 export function readInstruction(run: Run) {
   const prompt = run.rolePrompt ?? run.prompt ?? '';
   return splitHouseRules(prompt)?.instruction ?? prompt;
@@ -47,7 +51,7 @@ export function createHarness() {
     options: { onBehalf?: boolean; byTask?: string | null; guest?: GuestActor | null } = {}
   ) {
     clock += 1;
-    const decision = decide(state, command, { now: clock, newId: () => `id${++counter}`, ...options });
+    const decision = decideOrThrow(state, command, { now: clock, newId: () => `id${++counter}`, ...options });
     for (const event of decision.events) {
       const applied = { ...event, seq: state.seq + 1, at: clock } as ShinsaEvent;
       events.push(applied);
