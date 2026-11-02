@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { realpathSync } from 'node:fs';
 import { Duration, Effect } from 'effect';
-import { stopProcess } from '../../src/shell/processes.ts';
+import { stopProcess, stopProcessGroup } from '../../src/shell/processes.ts';
 import { CommandNotFound } from '../../src/shell/schema.ts';
 import { Shell } from '../../src/shell/service.ts';
 import { runTest } from '../harness.ts';
@@ -113,6 +113,27 @@ describe('Shell', () => {
     }
     await leader.exited;
     await until('the leader to stop', () => !isRunning(leader.pid));
+  });
+});
+
+describe('stopProcessGroup', () => {
+  test('a group the system will not signal is stopped through its leader, with nothing reported', async () => {
+    const leader = Bun.spawn(['sleep', '30'], { detached: true });
+    const real = process.kill.bind(process);
+    const kill = spyOn(process, 'kill').mockImplementation((pid: number, signal?: string | number) => {
+      if (pid < 0) throw Object.assign(new Error('not permitted'), { code: 'EPERM' });
+      return real(pid, signal);
+    });
+    const logs = captureLogs();
+    try {
+      await runTest(stopProcessGroup(leader.pid));
+      expect(logs.fieldsOf('[Shell] Could not stop a command')).toEqual([]);
+    } finally {
+      kill.mockRestore();
+      logs.restore();
+    }
+    await leader.exited;
+    expect(isRunning(leader.pid)).toBe(false);
   });
 });
 

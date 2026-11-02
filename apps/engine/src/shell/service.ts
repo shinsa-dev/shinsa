@@ -1,4 +1,5 @@
 import { Context, Effect, Exit, Layer, type PlatformError, Ref, Scope, Stream } from 'effect';
+import { constFalse } from 'effect/Function';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { listDescendants, stopProcess, stopProcessGroup } from './processes.ts';
 import {
@@ -72,9 +73,8 @@ export class Shell extends Context.Service<
                 Effect.mapError((error) => new CommandNotFound({ command: program, message: error.message }))
               );
             yield* Effect.addFinalizer(() =>
-              Effect.flatMap(
-                Effect.orElseSucceed(handle.isRunning, () => false),
-                (running) => (running ? stopProcessGroup(handle.pid) : Effect.void)
+              Effect.flatMap(Effect.orElseSucceed(handle.isRunning, constFalse), (running) =>
+                running ? stopProcessGroup(handle.pid) : Effect.void
               )
             );
             if (request.onSpawn) yield* request.onSpawn(handle.pid);
