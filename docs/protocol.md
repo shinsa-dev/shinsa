@@ -132,7 +132,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 
 ## Naming decisions
 
-All twenty are decided and in the code. Shinsa has never shipped, so nothing reads the old names: every event,
+All twenty-one are decided and in the code. Shinsa has never shipped, so nothing reads the old names: every event,
 command, stored shape and route uses the current one. Old shapes already in the user's log are rewritten once on start
 (`apps/engine/src/store/legacy.ts`, `docs/engine.md` → State in memory), so code never reads them.
 
@@ -182,6 +182,12 @@ command, stored shape and route uses the current one. Old shapes already in the 
     remove-from-backlog`, `--backlog`); the list of every task is All tasks, its groups `TaskGroup` (`resolveTaskGroup`,
     `TASK_GROUPS`, `components/tasks/`, the disclosure scope `tasks:group:`). "Roadmap" names nothing, in code, tools,
     the command line or on screen.
+21. **Effect names** (since 2026-11-02): Shinsa's I/O is Effect 4 (the `effect` skill). A service is a
+    `Context.Service` named for what it owns (`Machines`, `Tunnel`), its key `shinsa/<package>/<folder>/<Name>` and its
+    methods' spans `<Name>.<method>`. An error is a `Schema.TaggedError` whose `_tag` is its class name and says what
+    happened (`MachineNotFound`, `PairingExpired`), never a generic error with a code string. A schema and the type
+    it derives share one name (`MachineId`, `typeof MachineId.Type`). In Effect code `find*` fails with a `*NotFound`
+    error and `select*` returns an `Option`.
 
 ## The task
 

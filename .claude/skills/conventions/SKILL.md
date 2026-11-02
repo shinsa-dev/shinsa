@@ -5,7 +5,7 @@ description: Shinsa code conventions — load before writing or reviewing code a
 
 # Shinsa conventions
 
-`CLAUDE.md` carries the law; this skill carries the worked examples. When they disagree, `CLAUDE.md` wins, and fix the drift in the same change. For UI work also load `design`; for any string a person or an agent reads, load `copy`. Adapted from Buzzkit's `conventions`; when this is silent, do what Buzzkit does.
+`CLAUDE.md` carries the law; this skill carries the worked examples. When they disagree, `CLAUDE.md` wins, and fix the drift in the same change. For any code that imports `effect`, also load `effect`, which wins for Effect code; for UI work also load `design`; for any string a person or an agent reads, load `copy`. Adapted from Buzzkit's `conventions`; when this is silent, do what Buzzkit does.
 
 ## Where things live
 
@@ -40,7 +40,7 @@ description: Shinsa code conventions — load before writing or reviewing code a
 
 Banned in `apps/engine/src`, `apps/web/src` and `packages/core` (lint-enforced): `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*`.
 
-**The `find*`/`select*` split is a contract callers rely on.** If you null-check the result it must be `select*`; if absence is an error it must be `find*`.
+**The `find*`/`select*` split is a contract callers rely on.** If you null-check the result it must be `select*`; if absence is an error it must be `find*`. In Effect code `find*` fails with a `*NotFound` tagged error and `select*` succeeds with an `Option` (the `effect` skill → Errors).
 
 **The decider has its own vocabulary**, one verb per kind of step, so a reader can tell what a function does to a task without opening it: `start*` begins a step (`startPlanning`, `startFix`), `reactTo*` decides what a fact means (`reactToPullRequest`), `answer*` handles a gate, `settle*` ends a task, `retry*` restarts the current step, `open*` / `withdraw*` gates, `request*` asks for an effect (`requestPush`).
 
@@ -83,6 +83,8 @@ export function waitOnTasks(state: ShinsaState, command: CommandOf<'task.wait_on
 6. **Narrow types, no `any`.** Untrusted input is `unknown` and narrowed once (`readField` in `briefing/parse.ts`, `Reader` in `report/validate.ts`); a cast is allowed only right after the runtime check that justifies it.
 
 ## Errors and logs (apps/engine)
+
+Effect code fails with `Schema.TaggedError`s and logs with `Effect.log*` instead (the `effect` skill → Errors, Running and observability); what follows is for code not yet moved.
 
 - One JSON line per log entry: `log.info/warn/error('[Area] Sentence', fields)` with every id in scope and `error: describeError(error)`. Never `console` outside `scripts/`.
 - A `catch` rethrows, converts to a typed result, or logs with context. `.catch(() => undefined)` is a silent swallow and is not allowed.

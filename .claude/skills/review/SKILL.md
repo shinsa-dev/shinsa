@@ -5,7 +5,7 @@ description: How to run a cleanup or review pass over a change in Shinsa — sco
 
 # Running a review pass
 
-Load `conventions` first. This skill is the method; that one is the standard you judge against. For UI also load `design`, for strings `copy`. Adapted from Buzzkit's `review`.
+Load `conventions` first. This skill is the method; that one is the standard you judge against. For code that imports `effect` also load `effect`, for UI `design`, for strings `copy`. Adapted from Buzzkit's `review`.
 
 A finding you cannot reproduce is a guess. A fix you have not watched fail without it is a hope. Everything below exists to keep those two out of the report.
 

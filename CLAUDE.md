@@ -134,7 +134,14 @@ log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cw
 
 - **No comments.** Names and structure carry the meaning; the reasons live here and in `docs/`. `bun lint:conventions` enforces it (`biome-ignore` and `@ts-` are allowed; `packages/ui`, a reusable kit, is exempt).
 - **The verb catalog**: `find*` throws, `select*` returns null, `list*`, `count*`, `resolve*` derives, `create*`/`update*`, `upsert*`/`write*`/`replace*`, `remove*`, `assert*`, `serialize*`, `request*`/`sync*`/`apply*`/`record*`. No `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*` (lint-enforced). The `conventions` skill has the examples.
-- **Skills** (`.claude/skills`): `conventions` is the pattern catalog, load it before writing code; `review` is the method for a cleanup or review pass (scope the diff, prove every finding by reverting its fix); `copy` for any string a person or an agent reads; `design` for UI.
+- **Effect 4 for everything that does I/O** (`effect` pinned at the same exact version in every workspace): every
+  shape that crosses a boundary is a `Schema`, every expected failure a `Schema.TaggedError` in the type, every
+  dependency a service provided by a `Layer`, every resource scoped and every retry a named `Schedule`. Pure logic
+  (core's `decide`, the folds) stays plain functions over those schemas, never wrapped in an effect. The `effect`
+  skill is the one way to write it, every pattern compiled and tested in `scripts/effect-guide/`, and
+  `bun lint:conventions` checks every file that imports `effect` (`scripts/lint-effect.ts`). The apps move one service
+  at a time; code not yet moved keeps its current style until its task.
+- **Skills** (`.claude/skills`): `conventions` is the pattern catalog, load it before writing code; `effect` before any code that imports `effect`; `review` is the method for a cleanup or review pass (scope the diff, prove every finding by reverting its fix); `copy` for any string a person or an agent reads; `design` for UI.
 - **`packages/core` stays pure**: no `node:*`, no Bun, no I/O (Biome bans the imports). New behaviour is a command, events and effects there, and the I/O for the effect in `apps/engine`.
 - **Icons** are Central Icons through `<Icon name='Icon…' />` (`@shinsa/ui/components/icon`); run `bun run --cwd packages/ui generate:icons` after using a new name. Primitives size their icons; don't pass a size inside a Button, Badge, tab or menu row.
 - **UI copy** follows the `copy` skill: sentence case, full sentences, no em dashes, plain professional words (task, review, workspace), never playful labels (the two layout names in `LAYOUT_NAMES`, Desk and Shelf, are names chosen on purpose, each with a plain hint line).
