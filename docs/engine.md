@@ -5676,7 +5676,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
 
 The engine moves to Effect 4 one piece at a time (the `effect` skill is how it is written). Its foundation already
 has: the configuration, the log, the shell, the event log and the files beside it, the data folder lock and the
-start and stop of the engine itself. Each is a service with a layer (`apps/engine/CLAUDE.md` → Rules has the table);
+start and stop of the engine itself; on top of it, the JSON files the engine keeps and git. Each is a service with a layer (`apps/engine/CLAUDE.md` → Rules has the table);
 the rest of the engine has not moved yet and calls them through an edge.
 
 ```
@@ -5689,8 +5689,8 @@ startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
                   └─ the work: runs, clocks, effects, …
                 stop() = dispose: finalizers in reverse
 
-unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell)
-  log.*, resolveConfig, runCommand, killProcessTree
+unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, Git and its services)
+  log.*, resolveConfig, runCommand, killProcessTree, writeJsonFile, the git/ functions
 ```
 
 - **Configuration.** `EngineConfig` reads the whole `ServerConfig` once, through one `ConfigProvider` that looks in
@@ -5710,13 +5710,28 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell)
   and receipt in one transaction, all on one `SqlClient` (`StoreLayer`). Every row is decoded by a schema, and a row
   that breaks it is reported as unreadable, as before (Recovery, below). Evidence and attachments are `Evidence` and
   `Attachments` over their folders.
+- **JSON files.** `JsonFile` is the one reader and writer of the JSON files Shinsa keeps (config.json, accounts.json,
+  extensions.json and the rest): `read(path, schema)` answers nothing for a missing file and the typed
+  `JsonFileUnreadable` for text that is not JSON or breaks the schema, `keepAside` copies a broken file to
+  `<name>.unreadable-<time>`, and `write` writes through a staging file and a rename, mode 600, so a crash never
+  leaves half a file.
+- **Git.** `Git` runs git: `attempt` answers the result, `run` fails with the typed `GitFailed`, and `read` answers the
+  raw bytes of a read with its byte or line cap, its timeout and its cancel. A write that meets another process's
+  `index.lock` is tried again on `LOCK_RETRY` (50 ms, doubled, five times), and nothing else is retried. On it stand
+  `Checkout` (commits, worktrees, delegations' checkouts, installing dependencies), `Remote` (pushes with
+  `PushError` typed as hook, network, non-fast-forward or other, the update onto the base, the bundle check, a
+  repository's root, origin and default branch), `History` (a task's refs, its changed files and the diffs, the
+  working diff on a scratch index that is a scoped resource), `CodeFiles` (the Code tab's reads, each failure the
+  typed `CodeReadFailed` with its code) and `LeftoverProcesses` (the processes a worktree still runs, stopped after a
+  grace period polled on a schedule).
 - **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
   its release as a finalizer: the lock, the log, the HTTP server, Eunoe's forwarder, the work. `stop()` disposes the
   runtime, which runs them in reverse: the work (live runs first, then the clocks and the effects, The agent loop →
   Restart continuation), Eunoe, HTTP, the log, then the lock. A start that fails partway disposes it as well, so
   nothing it took stays held, and a second `stop()` waits for the first.
 - **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
-  helpers run the services through `edgeRuntime`, a `ManagedRuntime` of the logger and the shell for the process;
+  helpers, `writeJsonFile` and the functions of `git/` run the services through `edgeRuntime`, a `ManagedRuntime` of
+  the logger, the shell, `JsonFile` and git's services for the process;
   `EventLog`, `EvidenceStore` and `AttachmentStore` each run their layer in a runtime of their own; the CLI's
   `acquireDataDirLock` builds `ServeLock` in a scope it closes on `release()`. Each throws the errors and messages it
   threw before, so nothing behind it changed. A module that moves yields the service instead, and an edge nothing

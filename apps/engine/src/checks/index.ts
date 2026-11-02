@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { type CheckToRun, describeCount, type ReportCheck } from '@shinsa/core';
 import { type CommandResult, runCommand } from '../shell/index.ts';
@@ -10,6 +9,8 @@ import {
   listFailedTests,
   resolveRerunCommand,
 } from './reruns.ts';
+
+export { resolveInstallCommand } from './install.ts';
 
 export const CHECK_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -28,20 +29,6 @@ const COVERAGE_FLOOR_ONLY =
 
 const NO_TESTS =
   /did not match any test files|had no matches|No test files found|No tests found|no tests ran|no test files/i;
-
-const PACKAGE_MANAGERS: { lockfiles: string[]; install: string[] | null }[] = [
-  { lockfiles: ['bun.lock', 'bun.lockb'], install: ['bun', 'install'] },
-  { lockfiles: ['pnpm-lock.yaml'], install: ['pnpm', 'install', '--frozen-lockfile'] },
-  { lockfiles: ['yarn.lock'], install: null },
-  { lockfiles: ['package-lock.json'], install: ['npm', 'ci'] },
-];
-
-export function resolveInstallCommand(path: string) {
-  const managers = PACKAGE_MANAGERS.filter((manager) =>
-    manager.lockfiles.some((file) => existsSync(join(path, file)))
-  );
-  return managers.find((manager) => manager.install)?.install ?? null;
-}
 
 export function tailOutput(text: string) {
   const trimmed = text.trim();

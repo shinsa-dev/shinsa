@@ -126,7 +126,7 @@ src/
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
-├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger and Shell that code not yet
+├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile and GitLayer that code not yet
 │                        moved to Effect calls the foundation through), Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
@@ -266,23 +266,42 @@ src/
 │                        the latest from the npm registry (registry.ts), each program's own updater, found from
 │                        where its binary lives (updaters.ts), /api/versions with the streamed update
 │                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
-├── git/                 refs (assertRefName, slugify), bundle.ts (checkBundleMerge: a bundle merged into the default
-│                        branch with git merge-tree, no working tree, and the lowest branch behind its base on a
-│                        conflict), conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
-│                        resolveCommitType from a branch, serializeConventionalSubject: the commit and pull request
-│                        subjects), repo, worktree, commit, diff, push.ts (runPush, pushBranch and
-│                        PushError: a failed push typed as hook, network, non_fast_forward or other by
-│                        classifyPushFailure; hasPrePushHook, core.hooksPath and husky's stubs followed; the output's
-│                        tail), update.ts (updateOntoBase: fetch the base, merge it in when the branch lacks it, or
-│                        list the conflicts and abort the merge), isolation.ts (detached
-│                        checkouts for isolated delegations), run.ts (git writes that wait out another process's
-│                        index.lock); the Code tab's reads: read.ts (readGit: raw bytes, a 5 s timeout, a byte or line cap,
-│                        each chunk as it comes, the request's abort, literal pathspecs), files.ts (paths, a folder, a file at a commit or in
-│                        the working copy, `git grep` with case folded into the pattern and its matches streamed), task-refs.ts (a task's head, base and commits, also once its
-│                        worktree is gone), objects.ts (ObjectCache, the 64 MB cache of what a commit addresses),
-│                        diff.ts (commit to commit, and the working copy against a base: the file list from
-│                        `--raw --numstat`, the patches of the small files only, or of the files named), changed-files.ts (the
-│                        files a task's branch committed since its base plus what its checkout has not committed)
+├── files/               service.ts (JsonFile: read(path, schema), a missing file Option.none and broken text or a
+│                        breaking value the typed JsonFileUnreadable; keepAside, the `<name>.unreadable-<time>` copy;
+│                        write, atomic through `<name>.writing-<pid>` and mode 600), schema.ts, index.ts (the edge:
+│                        writeJsonFile, keepJsonFileAside; config/file.ts re-exports writeJsonFile)
+├── git/                 service.ts (Git: attempt answers a CommandResult, run fails with GitFailed and retries a held
+│                        index.lock on LOCK_RETRY, read answers a command's raw bytes with its byte or line cap, a
+│                        5 s timeout, each chunk as it comes and the request's abort, literal pathspecs), schema.ts
+│                        (GitFailed, RefName and RefNameInvalid, GitRead, LOCK_RETRY), ref-name.ts (decodeRefName),
+│                        layers.ts (GitLayer: the services below on Git), and one folder per service with its
+│                        schema.ts: checkout/ (Checkout: commits, a merge's MERGE_HEAD, stashes, worktrees made,
+│                        refreshed and removed, a free branch name, the start point, delegations' detached
+│                        checkouts, installing dependencies; MergeUnresolved, CommitInvalid; paths.ts), remote/
+│                        (Remote: pushes and PushError typed as hook, network, non_fast_forward or other by
+│                        classifyPushFailure in output.ts, hasPrePushHook with core.hooksPath and husky's stubs
+│                        followed, the output's tail; updateOntoBase: fetch the base, merge it in when the branch
+│                        lacks it, or list the conflicts and abort the merge; checkBundleMerge: a bundle merged into
+│                        the default branch with git merge-tree, no working tree, and the lowest branch behind its
+│                        base on a conflict; a repository's root, origin and default branch), history/ (History: a
+│                        task's head, base and commits, also once its worktree is gone, CodeUnavailable; the files its
+│                        branch committed since its base plus what its checkout has not; diffs commit to commit and
+│                        the working copy against a base on a scratch index acquired and released in a scope, the
+│                        file list from `--raw --numstat`, the patches of the small files only or of the files named,
+│                        DiffFailed), tree/ (CodeFiles: the Code tab's paths, folders, files at a commit or in the
+│                        working copy, `git grep` with case folded into the pattern and its matches streamed, each
+│                        failure CodeReadFailed with its code; entries.ts the pure parsers), leftovers/
+│                        (LeftoverProcesses: the processes still working in a folder, stopped with a grace period
+│                        polled on STOP_POLL_SCHEDULE). conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
+│                        resolveCommitType, serializeConventionalSubject) and refs.ts (assertRefName, slugify) are
+│                        pure. The other files are the edges, the same exports as before for the folders not moved
+│                        yet: index.ts, run.ts (runGitOrThrow), read.ts (readGit), commit.ts, worktree.ts,
+│                        isolation.ts, push.ts, update.ts, bundle.ts, repo.ts, task-refs.ts, changed-files.ts,
+│                        diff.ts, files.ts and processes.ts, each failure the error it threw before (a DomainError
+│                        for the Code tab's reads). blobs.ts (CatFile, CatFilePool: one long-lived
+│                        `git cat-file --batch-command` per repository) and objects.ts (ObjectCache, the 64 MB cache
+│                        of what a commit addresses) stay as they were: only http/code.ts holds them, and they move
+│                        with its routes
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one WorkspaceStrategy per mode
 │                        (types.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
 │                        before a push), worktrees.ts, main-checkout.ts, index.ts (Workspaces.resolve, the setup
@@ -406,10 +425,13 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `Events`, `Outbox`, `Receipts`, `Briefings`, `Snapshots`, `LogMigrator`, `CommandLog` (`store/`) | `StoreLayer(path)` | the event log's tables on one `SqlClient`, every row decoded |
   | `Evidence`, `Attachments` (`store/`) | `Evidence.layer(dir)`, `Attachments.layer(dir)` | the files beside the log |
   | `ServeLock` (`instance/lock/service.ts`) | `ServeLock.acquire(dataDir, owner)` in a scope, or `ServeLock.layer` | `data/serve.lock`, tried at most three times while a stopped holder's file is taken over (`TAKEOVER_SCHEDULE`), and given back when its scope closes; `ServerRunning`, `LockContended` |
+  | `JsonFile` (`files/service.ts`) | `JsonFile.layer` | the JSON files Shinsa keeps: `read(path, schema)` → `Option` or `JsonFileUnreadable`, `keepAside`, an atomic `write`; `JsonFileWriteFailed` |
+  | `Git` (`git/service.ts`) | `Git.layer`, needs `Shell` and `BunServices.layer` | `attempt`, `run` (`GitFailed`, `LOCK_RETRY` on a held index.lock), `read` (raw bytes, caps, timeout, abort) |
+  | `Checkout`, `Remote`, `History`, `CodeFiles`, `LeftoverProcesses` (`git/`) | `GitLayer` (`git/layers.ts`), needs `Shell` and `BunServices.layer` | worktrees and commits; pushes (`PushError`), the base and bundles; refs, changed files and diffs; the Code tab's reads (`CodeReadFailed`); processes left in a worktree |
   | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order; fails with the lock's `ServerRunning` or `LockContended`, which `startShinsa` turns into its `DomainError` |
 
-  Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand` and the kill
-  helpers run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
+  Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
+  helpers, `writeJsonFile` and the functions of `git/` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
   `EventLog`, `EvidenceStore` and `AttachmentStore` each own a `ManagedRuntime` over their layer and `runSync` it;
   `acquireDataDirLock` builds `ServeLock` in a scope of its own. Each edge throws the errors and messages it threw
   before. A module that moves to Effect yields the service instead and stops calling its edge; once nothing calls an

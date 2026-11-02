@@ -1,79 +1,27 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { runCommand, runCommandOrThrow } from '../shell/index.ts';
-import { runGitOrThrow } from './run.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
+import type { PendingMerge } from './checkout/schema.ts';
+import { Checkout } from './checkout/service.ts';
 
-async function resolveGitPath(path: string, name: string) {
-  return resolve(path, await runCommandOrThrow(['git', 'rev-parse', '--git-path', name], path));
+export function commitWorktree(path: string, message: string) {
+  return edgeRuntime.runPromise(Checkout.use((checkout) => checkout.commit(path, message)));
 }
 
-function resolveMergeHeadPath(path: string) {
-  return resolveGitPath(path, 'MERGE_HEAD');
+export function writeMergeHead(path: string, merge: PendingMerge) {
+  return edgeRuntime.runPromise(Checkout.use((checkout) => checkout.writeMergeHead(path, merge)));
 }
 
-async function readMergeHead(path: string) {
-  const file = await resolveMergeHeadPath(path);
-  return existsSync(file) ? readFileSync(file, 'utf8') : null;
+export function listChangedFiles(path: string, from: string, to: string) {
+  return edgeRuntime.runPromise(Checkout.use((checkout) => checkout.listCommitFiles(path, from, to)));
 }
 
-async function resolveMergeMessage(path: string, fallback: string) {
-  const file = await resolveGitPath(path, 'MERGE_MSG');
-  const subject = existsSync(file) ? (readFileSync(file, 'utf8').split('\n')[0]?.trim() ?? '') : '';
-  if (!subject) return fallback;
-  return subject.replace(/^Merge remote-tracking branch '[^/']+\/([^']+)'/, "Merge branch '$1'");
-}
-
-interface PendingMerge {
-  mergeHead: string;
-  mergeMessage: string;
-}
-
-export async function writeMergeHead(path: string, merge: PendingMerge) {
-  writeFileSync(await resolveMergeHeadPath(path), merge.mergeHead);
-  writeFileSync(await resolveGitPath(path, 'MERGE_MSG'), `${merge.mergeMessage}\n`);
-}
-
-async function assertMergeResolved(path: string) {
-  const unmerged = await runCommandOrThrow(['git', 'diff', '--name-only', '--diff-filter=U'], path);
-  if (!unmerged) return;
-  throw new Error(
-    `The merge still has conflicts in ${unmerged.split('\n').join(', ')}. Resolve them and \`git add\` the files, then hand over again.`
-  );
-}
-
-export async function commitWorktree(path: string, message: string) {
-  const mergeHead = await readMergeHead(path);
-  const status = await runCommandOrThrow(['git', 'status', '--porcelain'], path);
-  if (status.length === 0 && mergeHead === null) return null;
-  if (mergeHead !== null) await assertMergeResolved(path);
-  await runGitOrThrow(['add', '-A'], path);
-  let merge: PendingMerge | null = null;
-  if (mergeHead !== null) merge = { mergeHead, mergeMessage: await resolveMergeMessage(path, message) };
-  await runGitOrThrow(['commit', '--no-verify', '-q', '-F', '-'], path, {
-    input: merge?.mergeMessage ?? message,
-  });
-  return { merge };
-}
-
-export async function listChangedFiles(path: string, from: string, to: string) {
-  const names = await runCommandOrThrow(
-    ['git', '-c', 'core.quotePath=false', 'diff', '--name-only', '--no-renames', from, to],
-    path
-  );
-  return names.split('\n').filter((name) => name.length > 0);
-}
-
-export async function stashEdits(path: string, message: string) {
-  const status = await runCommand(['git', 'status', '--porcelain'], path);
-  if (!status.ok || status.stdout.length === 0) return false;
-  await runGitOrThrow(['stash', 'push', '--include-untracked', '-m', message], path);
-  return true;
+export function stashEdits(path: string, message: string) {
+  return edgeRuntime.runPromise(Checkout.use((checkout) => checkout.stash(path, message)));
 }
 
 export function resolveHead(path: string) {
-  return runCommandOrThrow(['git', 'rev-parse', 'HEAD'], path);
+  return edgeRuntime.runPromise(Checkout.use((checkout) => checkout.head(path)));
 }
 
 export function resolveTree(path: string) {
-  return runCommandOrThrow(['git', 'rev-parse', 'HEAD^{tree}'], path);
+  return edgeRuntime.runPromise(Checkout.use((checkout) => checkout.tree(path)));
 }
