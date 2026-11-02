@@ -4916,9 +4916,11 @@ what it costs at the start of every run, so you can turn off what you do not use
   the description cut at Claude Code's 1,536 characters), a plugin's agents and commands plus its skills that are on,
   and a server's tool definitions as it listed them at its last check (nothing until it was checked). Claude Code may
   defer the schemas of a large tool set, so a server can cost less than its estimate.
-- **Health** (`health.ts`): `POST /api/extensions/check` connects to every server that is on (or one), lists its tools
-  and keeps the result: connected with its tools, needs sign-in (a 401 or the SDK's `UnauthorizedError`) or failing
-  with the error and the last 400 characters a command printed; 15 s at most each. Nothing is probed until asked;
+- **Health** (`McpClients` in `health/service.ts`): `POST /api/extensions/check` connects to every server that is on
+  (or one), lists its tools and keeps the result: connected with its tools, needs sign-in (a 401 or the SDK's
+  `UnauthorizedError`) or failing with the error and the last 400 characters a command printed; 15 s at most each
+  (`MCP_CHECK_TIMEOUT`). Each client is scoped, so it closes when its check ends, and every MCP call, the loader's
+  too, runs under its timeout and fails as the typed `McpServerFailed`. Nothing is probed until asked;
   the web asks once when Settings opens. A server is measured only by a check that lists its tools, so the web says
   why one has no estimate: "Sign in to measure", "Can’t measure while failing", "Checking…", or "Not measured while
   off" for one that is off and was never checked.

@@ -2,6 +2,7 @@ import { BunServices } from '@effect/platform-bun';
 import { Layer, ManagedRuntime } from 'effect';
 import { ChecksLayer } from '../checks/layers.ts';
 import { MachineConfigFile } from '../config/machine/service.ts';
+import { ExtensionsLayer } from '../extensions/layers.ts';
 import { JsonFile } from '../files/service.ts';
 import { GitLayer } from '../git/layers.ts';
 import { GitHubLayer } from '../github/layers.ts';
@@ -17,7 +18,7 @@ export const edgeRuntime = ManagedRuntime.make(
   Layer.mergeAll(
     JsonLogger,
     MachineConfigFile.layer,
-    Layer.mergeAll(ReposLayer, WorkspacesLayer, ChecksLayer, TerminalsLayer).pipe(
+    Layer.mergeAll(ReposLayer, WorkspacesLayer, ChecksLayer, TerminalsLayer, ExtensionsLayer).pipe(
       Layer.provideMerge(JsonFile.layer),
       Layer.provideMerge(Layer.merge(GitLayer, GitHubLayer)),
       Layer.provideMerge(ShellLayer)

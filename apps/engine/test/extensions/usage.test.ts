@@ -16,7 +16,7 @@ import {
   UsageIndex,
   type UsageIndexOptions,
 } from '../../src/extensions/usage.ts';
-import { log } from '../../src/log/index.ts';
+import { captureLogs } from '../helpers/index.ts';
 import { serializeClaudeToolUse, serializeShinsaToolCall, writeFile } from './fixtures.ts';
 
 const DAY = 86_400_000;
@@ -146,13 +146,12 @@ describe('reading which servers and skills agents used', () => {
     const dirs = createDirs();
     mkdirSync(join(dirs.root, 'data'), { recursive: true });
     writeFileSync(dirs.cache, '{broken');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const index = createIndex(dirs);
-    expect(warn).toHaveBeenCalledWith(
-      '[Extensions] The usage cache could not be read; reading the sessions again',
-      expect.objectContaining({ path: dirs.cache })
-    );
-    warn.mockRestore();
+    logs.restore();
+    expect(
+      logs.fieldsOf('[Extensions] The usage cache could not be read; reading the sessions again')
+    ).toEqual([expect.objectContaining({ path: dirs.cache })]);
     writeFileSync(dirs.cache, JSON.stringify([1]));
     expect(createIndex(dirs).read()).toEqual({ readAt: null, since: null });
     writeFileSync(
@@ -176,28 +175,34 @@ describe('reading which servers and skills agents used', () => {
     const file = spyOn(Bun, 'file').mockImplementation(() => {
       throw new Error('denied');
     });
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const index = createIndex(dirs);
-    await index.refresh();
-    expect(warn).toHaveBeenCalledWith(
-      '[Extensions] Could not read a session for usage',
-      expect.objectContaining({ error: 'denied' })
-    );
-    file.mockRestore();
-    warn.mockRestore();
+    await index.refresh().finally(() => {
+      file.mockRestore();
+      logs.restore();
+    });
+    expect(logs.fieldsOf('[Extensions] Could not read a session for usage')).toEqual([
+      expect.objectContaining({ error: 'denied' }),
+    ]);
   });
 
   test('a transcript line it cannot read is logged and skipped', async () => {
     const dirs = createDirs();
     const transcript = join(dirs.shinsa, 'task.jsonl');
     writeFile(transcript, '{"type":"tool_call","tool":{"kind":"mcp",\n');
-    const warn = spyOn(log, 'warn');
-    await createIndex(dirs).refresh();
-    expect(warn).toHaveBeenCalledWith(
-      '[Extensions] Skipped a transcript line it could not read for usage',
-      expect.objectContaining({ path: transcript })
-    );
-    warn.mockRestore();
+    const logs = captureLogs();
+    await createIndex(dirs)
+      .refresh()
+      .finally(() => logs.restore());
+    expect(logs.fieldsOf('[Extensions] Skipped a transcript line it could not read for usage')).toEqual([
+      expect.objectContaining({ path: transcript }),
+    ]);
+  });
+
+  test('a usage cache it cannot write fails the read', async () => {
+    const dirs = createDirs();
+    mkdirSync(dirs.cache, { recursive: true });
+    await expect(createIndex(dirs).refresh()).rejects.toThrow();
   });
 
   test('one read at a time, and a stop ends a read before it records anything', async () => {

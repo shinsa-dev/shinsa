@@ -46,6 +46,7 @@ import {
 import type { OpenClient } from './loader.ts';
 import { McpOAuth } from './oauth.ts';
 import { resolvePluginSummary } from './plugins.ts';
+import { EXTENSIONS_FILE, USAGE_FILE, USAGE_MAX_AGE_MS } from './schema.ts';
 import {
   createSessionLoader,
   listSkillsInPlace,
@@ -86,8 +87,6 @@ const UNCHECKED: McpServerStatus = {
   tokens: null,
 };
 
-const USAGE_MAX_AGE_MS = 10 * 60 * 1000;
-
 const SEEN_BEFORE_WATCHING = 0;
 
 export class Extensions {
@@ -104,7 +103,7 @@ export class Extensions {
 
   constructor(options: ExtensionsOptions) {
     this.#options = options;
-    this.#store = new ExtensionStore(join(options.config.home, 'extensions.json'));
+    this.#store = new ExtensionStore(join(options.config.home, EXTENSIONS_FILE));
     this.#now = options.now ?? Date.now;
     this.#env = options.env ?? process.env;
     this.#check = options.check ?? createServerCheck();
@@ -124,7 +123,7 @@ export class Extensions {
         { dir: join(claudeDir, 'projects'), kind: 'claude' },
         ...(config.transcriptsDir ? [{ dir: config.transcriptsDir, kind: 'shinsa' as const }] : []),
       ],
-      cachePath: config.dataDir ? join(config.dataDir, 'extension-usage.json') : null,
+      cachePath: config.dataDir ? join(config.dataDir, USAGE_FILE) : null,
       now: this.#now,
     });
   }

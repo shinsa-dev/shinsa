@@ -253,15 +253,24 @@ src/
 │                        the machine token; SlackRelayError, retried only when the relay is down or busy)
 ├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,
 │                        MCP sign-ins
-├── extensions/          MCP servers, plugins and skills (docs/engine.md → MCP servers, plugins and skills): what
-│                        Claude Code, Codex, plugins and repositories set up (discover.ts, definitions.ts, skills.ts,
-│                        plugins.ts), one row per server however many places define it (catalog.ts),
-│                        extensions.json (store.ts), checking and redacting what you send (input.ts), health checks
-│                        and the MCP client (health.ts), sign-in (oauth.ts, and sign-in.ts: the callback page),
-│                        when agents last used each server and skill (usage.ts: Claude Code sessions and Shinsa's
-│                        transcripts, read incrementally), what a run loads and leaves out and what it is told about
-│                        it (session.ts), loading what the context optimizer left out mid-run, by any name
-│                        (loader.ts), /api/extensions (routes.ts), the Extensions service (index.ts)
+├── extensions/          MCP servers, plugins and skills (docs/engine.md → MCP servers, plugins and skills): schema.ts
+│                        (every shape read from outside: Claude Code's and Codex's settings, plugin manifests, skill
+│                        front matter, extensions.json, extension-usage.json, transcript lines, stored OAuth
+│                        credentials, each decoded leniently; McpServerFailed; MCP_CHECK_TIMEOUT and the other
+│                        timeouts), discovery/ (ExtensionDiscovery: what Claude Code, Codex, plugins and repositories
+│                        set up, servers.ts and skills.ts its pure steps), store/ (ExtensionFiles: extensions.json and
+│                        the usage cache through JsonFile), health/ (McpClients: open, a scoped MCP client closed with
+│                        its scope; request, any MCP call under its timeout as McpServerFailed; check, a server's
+│                        health), usage/ (ExtensionUsage: when agents last used each server and skill, from Claude
+│                        Code sessions and Shinsa's transcripts read incrementally; names.ts), tools.ts (tool lists,
+│                        their tokens and what counts as unauthorized), credentials.ts (stored sign-ins decoded),
+│                        layers.ts (ExtensionsLayer, in runtime/edge.ts). The edges keep their exports: discover.ts,
+│                        definitions.ts, skills.ts, plugins.ts, store.ts, health.ts, usage.ts; one row per server
+│                        however many places define it (catalog.ts), checking and redacting what you send
+│                        (input.ts), sign-in (oauth.ts, and sign-in.ts: the callback page), what a run loads and
+│                        leaves out and what it is told about it (session.ts), loading what the context optimizer
+│                        left out mid-run, by any name (loader.ts), /api/extensions (routes.ts), the Extensions
+│                        service (index.ts)
 ├── versions/            The agent programs' versions and their updates (docs/engine.md → Versions and updates):
 │                        the latest from the npm registry (registry.ts), each program's own updater, found from
 │                        where its binary lives (updaters.ts), /api/versions with the streamed update
