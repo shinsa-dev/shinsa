@@ -131,9 +131,32 @@ describe('the team join page on app.shinsa.dev', () => {
       <TeamJoinPage link={LINK} dashboard={DASHBOARD} teamKeys={TEAM_KEYS} openMachines={late} />
     );
     expect(screen.getByText('Reading your projects')).toBeTruthy();
+    expect(screen.getByText(/Teammates see the projects you pick below/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ask to join' }).hasAttribute('disabled')).toBe(false);
     second.unmount();
     resolve({ machines: [], close });
     await waitFor(() => expect(close).toHaveBeenCalled());
+  });
+
+  it('asks to join without sharing while it still reads your projects', async () => {
+    const request = mock(() =>
+      Promise.resolve({ name: 'Platform', owner: KAI, status: 'requested' as const })
+    );
+    const pending = () => new Promise<never>(() => undefined);
+    render(
+      <TeamJoinPage
+        link={LINK}
+        dashboard={DASHBOARD}
+        teamKeys={TEAM_KEYS}
+        openMachines={pending}
+        request={request}
+      />
+    );
+    expect(screen.getByText('Reading your projects').className).toContain('text-xs');
+    fireEvent.click(screen.getByRole('button', { name: 'Ask to join' }));
+    expect(await screen.findByText('Request sent')).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Paste this link into the team’s card.')).toBeTruthy();
   });
 
   it('welcomes someone already in the team, and shows a refusal on the page', async () => {

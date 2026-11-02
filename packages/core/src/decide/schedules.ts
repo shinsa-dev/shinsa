@@ -120,7 +120,18 @@ function assertTimeZone(timeZone: string) {
 
 function resolveTarget(decider: Decider, input: ScheduleTargetInput, task: Task): ScheduleTarget {
   if (input.kind === 'new_task') {
-    return { kind: 'new_task', repoId: task.repoId, priority: input.priority, mode: input.mode };
+    if (input.repoId !== null && !decider.state.repos[input.repoId]) {
+      throw new DomainError({
+        code: 'repo_not_found',
+        message: `No repository ${input.repoId}. Name one of the project's.`,
+      });
+    }
+    return {
+      kind: 'new_task',
+      repoId: input.repoId ?? task.repoId,
+      priority: input.priority,
+      mode: input.mode,
+    };
   }
   const target = decider.state.tasks[input.taskId ?? task.id];
   if (!target)
@@ -152,10 +163,10 @@ function selectOwnSchedule(decider: Decider, scheduleId: string, task: Task) {
   return schedule;
 }
 
-function assertScheduleRoom(decider: Decider, task: Task | null) {
+function assertScheduleRoom(decider: Decider, taskId: string | null) {
   const live = Object.values(decider.state.schedules).filter(isScheduleLive);
   const own = live.filter(
-    (schedule) => schedule.createdBy.kind === 'agent' && schedule.createdBy.taskId === task?.id
+    (schedule) => schedule.createdBy.kind === 'agent' && schedule.createdBy.taskId === taskId
   );
   if (own.length >= SCHEDULE_LIMITS.perTask || live.length >= SCHEDULE_LIMITS.live) {
     throw new DomainError({ code: 'schedule_limit', message: 'Too many schedules. Delete one first.' });
@@ -399,7 +410,7 @@ export function writeSchedule(decider: Decider, command: CommandOf<'agent.set_sc
       return;
     }
   }
-  if (!existing) assertScheduleRoom(decider, task);
+  if (!existing) assertScheduleRoom(decider, task.id);
   const body = resolveBody(decider, command, task, existing);
   emitWritten(decider, existing, body, { kind: 'agent', taskId: task.id, runId: run.id });
 }
@@ -444,6 +455,11 @@ function selectWrittenTarget(
   throw new DomainError({ code: 'schedule_invalid', message: 'Pick a new task or a task to message.' });
 }
 
+function resolveUserCreator(decider: Decider): ScheduleCreator {
+  const taskId = decider.context.onBehalf ? decider.context.byTask : null;
+  return taskId ? { kind: 'agent', taskId, runId: null } : { kind: 'you' };
+}
+
 export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule.write'>) {
   assertTimeZone(command.timeZone);
   const existing = command.scheduleId ? (decider.state.schedules[command.scheduleId] ?? null) : null;
@@ -457,7 +473,8 @@ export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule
     suggestWatch(decider, resolveSuggestion(decider, command, source, origin));
     return;
   }
-  if (!existing) assertScheduleRoom(decider, null);
+  const createdBy = resolveUserCreator(decider);
+  if (!existing) assertScheduleRoom(decider, createdBy.kind === 'agent' ? createdBy.taskId : null);
   const body = resolveWrittenBody(
     decider,
     command,
@@ -465,7 +482,7 @@ export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule
     selectWrittenTarget(decider, command, existing, source),
     source
   );
-  emitWritten(decider, existing, body, { kind: 'you' });
+  emitWritten(decider, existing, body, createdBy);
 }
 
 export function acceptWatchSuggestion(decider: Decider, command: CommandOf<'watch_suggestion.accept'>) {

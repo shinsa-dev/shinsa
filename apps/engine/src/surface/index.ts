@@ -23,7 +23,12 @@ import { TEAM_SPECS } from './teams.ts';
 import { WATCHDOG_SPECS } from './watchdogs.ts';
 import { WORK_SPECS } from './work.ts';
 
-export { type CommandReceipt, resolveCommandKey, type SurfaceClient } from './client.ts';
+export {
+  type CommandReceipt,
+  resolveCommandKey,
+  type SurfaceClient,
+  type SurfaceHookSecrets,
+} from './client.ts';
 export { readArgv, readToolInput, resolveInputSchema, type Values } from './fields.ts';
 export type { SurfaceSpec } from './spec.ts';
 export { describeQueue, describeUptime, QUEUE_EMPTY } from './system.ts';

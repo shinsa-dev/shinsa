@@ -17,14 +17,18 @@ import {
   type CommandResult,
   createEngineManifest,
   createLauncherManifest,
+  createPublishRetry,
   isPublished,
+  NPM_PUBLISH_DELAYS,
   publishNpmPackages,
   resolveDistTag,
   resolveEnginePackageName,
   runCommand,
   runReleaseNpm,
+  summarizeNpmError,
   writeNpmPackages,
 } from './release-npm.ts';
+import type { RetryFailure } from './release-retry.ts';
 
 const launcher = require('../apps/engine/npm/shinsa.js') as {
   ENGINE_PACKAGES: Record<string, string>;
@@ -84,6 +88,26 @@ function createRunner(answers: (argv: string[]) => Partial<CommandResult> = () =
   };
   return { calls, run };
 }
+
+function createRetry() {
+  const waits: number[] = [];
+  const failures: RetryFailure[] = [];
+  const retry = {
+    sleep: async (milliseconds: number) => {
+      waits.push(milliseconds);
+    },
+    onRetry: (failure: RetryFailure) => {
+      failures.push(failure);
+    },
+  };
+  return { waits, failures, retry };
+}
+
+const TLOG_CONFLICT = [
+  'npm warn Unknown user config "always-auth".',
+  'npm error code TLOG_CREATE_ENTRY_ERROR',
+  'npm error error creating tlog entry - (409) an equivalent entry already exists in the transparency log',
+].join('\n');
 
 afterEach(() => {
   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -199,51 +223,156 @@ describe('publishing', () => {
     { name: 'shinsa', dir: '/out/shinsa' },
   ];
 
-  it('publishes each package in order, public, under the channel’s tag', () => {
+  it('publishes each package in order, public, under the channel’s tag', async () => {
     const { calls, run } = createRunner((argv) => (argv[1] === 'view' ? { exitCode: 1 } : {}));
-    expect(publishNpmPackages(packages, { version: VERSION, tag: 'canary', dryRun: false, run })).toEqual([
-      `Published @shinsa/linux-x64@${VERSION} as canary`,
-      `Published shinsa@${VERSION} as canary`,
-    ]);
+    const { waits, retry } = createRetry();
+    expect(
+      await publishNpmPackages(packages, { version: VERSION, tag: 'canary', dryRun: false, run, retry })
+    ).toEqual([`Published @shinsa/linux-x64@${VERSION} as canary`, `Published shinsa@${VERSION} as canary`]);
     expect(calls.filter((argv) => argv[1] === 'publish')).toEqual([
       ['npm', 'publish', '/out/shinsa-linux-x64', '--access', 'public', '--tag', 'canary'],
       ['npm', 'publish', '/out/shinsa', '--access', 'public', '--tag', 'canary'],
     ]);
+    expect(waits).toEqual([]);
   });
 
-  it('skips a version already on npm, so a rerun finishes the rest', () => {
+  it('skips a version already on npm, so a rerun finishes the rest', async () => {
     const { calls, run } = createRunner((argv) =>
-      argv[1] === 'view' && argv[2]?.startsWith('@shinsa/') ? { stdout: `${VERSION}\n` } : { exitCode: 1 }
+      argv[1] === 'view' && argv[2]?.startsWith('@shinsa/') ? { stdout: `${VERSION}\n` } : {}
     );
-    expect(() => publishNpmPackages(packages, { version: VERSION, tag: 'beta', dryRun: false, run })).toThrow(
-      'npm publish of shinsa'
-    );
+    const { retry } = createRetry();
+    expect(
+      await publishNpmPackages(packages, { version: VERSION, tag: 'beta', dryRun: false, run, retry })
+    ).toEqual([`@shinsa/linux-x64@${VERSION} is already on npm`, `Published shinsa@${VERSION} as beta`]);
     expect(calls.filter((argv) => argv[1] === 'publish').map((argv) => argv[2])).toEqual(['/out/shinsa']);
     expect(isPublished('shinsa', VERSION, createRunner(() => ({ stdout: '9.9.9' })).run)).toBe(false);
   });
 
-  it('passes a dry run on to npm without asking what is published', () => {
-    const { calls, run } = createRunner();
-    expect(publishNpmPackages(packages, { version: VERSION, tag: 'latest', dryRun: true, run })[1]).toBe(
-      `Published shinsa@${VERSION} as latest (dry run)`
+  it('tries a failed publish again after each delay and recovers', async () => {
+    let publishes = 0;
+    const { calls, run } = createRunner((argv) => {
+      if (argv[1] === 'view') return { exitCode: 1 };
+      publishes += 1;
+      return publishes <= 2 ? { exitCode: 1, stderr: TLOG_CONFLICT } : {};
+    });
+    const { waits, failures, retry } = createRetry();
+    expect(
+      await publishNpmPackages(packages.slice(1), {
+        version: VERSION,
+        tag: 'canary',
+        dryRun: false,
+        run,
+        retry,
+      })
+    ).toEqual([`Published shinsa@${VERSION} as canary`]);
+    expect(waits).toEqual([...NPM_PUBLISH_DELAYS]);
+    expect(failures.map((failure) => [failure.label, failure.attempt, failure.attempts])).toEqual([
+      [`Publish shinsa@${VERSION}`, 1, 3],
+      [`Publish shinsa@${VERSION}`, 2, 3],
+    ]);
+    expect(String(failures[0]?.error)).toContain('TLOG_CREATE_ENTRY_ERROR');
+    expect(String(failures[0]?.error)).not.toContain('always-auth');
+    expect(calls.filter((argv) => argv[1] === 'view')).toHaveLength(3);
+  });
+
+  it('counts a package as published when npm has it before a retry', async () => {
+    let published = false;
+    const { calls, run } = createRunner((argv) => {
+      if (argv[1] === 'view') return published ? { stdout: `${VERSION}\n` } : { exitCode: 1 };
+      published = true;
+      return { exitCode: 1, stderr: 'npm error network socket hang up' };
+    });
+    const { waits, retry } = createRetry();
+    expect(
+      await publishNpmPackages(packages.slice(1), {
+        version: VERSION,
+        tag: 'canary',
+        dryRun: false,
+        run,
+        retry,
+      })
+    ).toEqual([`shinsa@${VERSION} is already on npm`]);
+    expect(waits).toEqual([NPM_PUBLISH_DELAYS[0]]);
+    expect(calls.filter((argv) => argv[1] === 'publish')).toHaveLength(1);
+  });
+
+  it('fails with npm’s error after the last try', async () => {
+    const { calls, run } = createRunner((argv) =>
+      argv[1] === 'view' ? { exitCode: 1 } : { exitCode: 1, stderr: TLOG_CONFLICT }
     );
+    const { failures, retry } = createRetry();
+    await expect(
+      publishNpmPackages(packages, { version: VERSION, tag: 'canary', dryRun: false, run, retry })
+    ).rejects.toThrow(
+      `npm publish of @shinsa/linux-x64@${VERSION} failed (1): npm error code TLOG_CREATE_ENTRY_ERROR`
+    );
+    expect(failures).toHaveLength(2);
+    expect(calls.filter((argv) => argv[1] === 'publish').map((argv) => argv[2])).toEqual([
+      '/out/shinsa-linux-x64',
+      '/out/shinsa-linux-x64',
+      '/out/shinsa-linux-x64',
+    ]);
+  });
+
+  it('passes a dry run on to npm without asking what is published or trying again', async () => {
+    const { calls, run } = createRunner();
+    const { waits, retry } = createRetry();
+    const lines = await publishNpmPackages(packages, {
+      version: VERSION,
+      tag: 'latest',
+      dryRun: true,
+      run,
+      retry,
+    });
+    expect(lines[1]).toBe(`Published shinsa@${VERSION} as latest (dry run)`);
     expect(calls.every((argv) => argv.at(-1) === '--dry-run')).toBe(true);
+    const failing = createRunner(() => ({ exitCode: 1, stderr: 'npm error E403' }));
+    await expect(
+      publishNpmPackages(packages, { version: VERSION, tag: 'latest', dryRun: true, run: failing.run, retry })
+    ).rejects.toThrow('npm error E403');
+    expect(failing.calls).toHaveLength(1);
+    expect(waits).toEqual([]);
+  });
+
+  it('keeps only npm’s error lines, or all of stderr when it has none', () => {
+    expect(summarizeNpmError(TLOG_CONFLICT)).toBe(
+      'npm error code TLOG_CREATE_ENTRY_ERROR npm error error creating tlog entry - (409) an equivalent entry already exists in the transparency log'
+    );
+    expect(summarizeNpmError('  something else broke\n')).toBe('something else broke');
+  });
+
+  it('writes each retry as a GitHub Actions warning', () => {
+    const written: string[] = [];
+    const retry = createPublishRetry({ GITHUB_ACTIONS: 'true' }, { write: (text) => written.push(text) });
+    retry.onRetry({
+      label: 'Publish shinsa@1.2.3',
+      attempt: 1,
+      attempts: 3,
+      delay: 30_000,
+      error: new Error('npm error code E502'),
+    });
+    expect(written).toEqual([
+      '::warning title=Publish shinsa@1.2.3::Publish shinsa@1.2.3 failed on attempt 1 of 3 (npm error code E502). Trying again in 30s.\n',
+    ]);
+    expect(retry.sleep).toBe(Bun.sleep);
   });
 
   it('runs the whole release from its arguments and environment', async () => {
     const archives = await createArchives();
     const out = createDir();
     const { calls, run } = createRunner((argv) => (argv[1] === 'view' ? { exitCode: 1 } : {}));
-    const text = runReleaseNpm(
+    const { retry } = createRetry();
+    const text = await runReleaseNpm(
       [archives, out],
       { SHINSA_VERSION: `v${VERSION}`, RELEASE_CHANNEL: 'stable' },
-      run
+      run,
+      retry
     );
     expect(text.trim().split('\n')).toHaveLength(4);
     expect(calls.filter((argv) => argv[1] === 'publish').every((argv) => argv.includes('latest'))).toBe(true);
-    expect(() =>
-      runReleaseNpm([archives], { SHINSA_VERSION: VERSION, RELEASE_CHANNEL: 'beta' }, run)
-    ).toThrow('Usage:');
+    await expect(
+      runReleaseNpm([archives], { SHINSA_VERSION: VERSION, RELEASE_CHANNEL: 'beta' }, run, retry)
+    ).rejects.toThrow('Usage:');
   });
 
   it('hands npm an absolute folder for a relative out dir, so npm never reads it as a GitHub repository', async () => {
@@ -252,10 +381,11 @@ describe('publishing', () => {
     process.chdir(createDir());
     try {
       const { calls, run } = createRunner((argv) => (argv[1] === 'view' ? { exitCode: 1 } : {}));
-      runReleaseNpm(
+      await runReleaseNpm(
         ['--dry-run', archives, 'npm-packages'],
         { SHINSA_VERSION: VERSION, RELEASE_CHANNEL: 'canary' },
-        run
+        run,
+        createRetry().retry
       );
       const folders = calls.filter((argv) => argv[1] === 'publish').map((argv) => argv[2]);
       expect(folders).toEqual([

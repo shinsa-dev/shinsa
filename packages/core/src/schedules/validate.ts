@@ -12,6 +12,10 @@ import { parseTimeOfDay, serializeTimeOfDay } from './time.ts';
 
 const WHEN_KEYS = ['in_minutes', 'run_at', 'every_minutes', 'daily_at', 'webhook'] as const;
 
+const WEBHOOK_KEYS = ['signature', 'replay_key'];
+
+const SIGNATURE_KEYS = ['header', 'encoding', 'prefix', 'secret_ref'];
+
 export interface ScheduleRequest {
   scheduleId: string | null;
   name: string | null;
@@ -23,6 +27,7 @@ export interface ScheduleRequest {
   maxRuns: number | null;
   timeZone: string | null;
   secretRef: string | null;
+  repository: string | null;
 }
 
 function readWeekdays(reader: Reader, value: unknown) {
@@ -33,9 +38,31 @@ function readWeekdays(reader: Reader, value: unknown) {
   });
 }
 
+function assertKnownKeys(reader: Reader, record: Record<string, unknown>, known: string[], path: string) {
+  const unknown = Object.keys(record).filter((key) => !known.includes(key));
+  if (unknown.length === 0) return;
+  reader.errors.push(`${path} has no ${unknown.join(', ')}. Its fields are ${known.join(', ')}.`);
+}
+
+function assertWebhookKeys(reader: Reader, record: Record<string, unknown>) {
+  const misplaced = Object.keys(record).filter((key) => SIGNATURE_KEYS.includes(key));
+  if (misplaced.length > 0) {
+    reader.errors.push(
+      `${misplaced.join(', ')} go under webhook.signature, not on webhook itself: webhook: { signature: { header, encoding, prefix, secret_ref } }.`
+    );
+  }
+  const unknown = Object.keys(record).filter(
+    (key) => !WEBHOOK_KEYS.includes(key) && !SIGNATURE_KEYS.includes(key)
+  );
+  if (unknown.length > 0) {
+    reader.errors.push(`webhook has no ${unknown.join(', ')}. Its fields are ${WEBHOOK_KEYS.join(', ')}.`);
+  }
+}
+
 function readSignature(reader: Reader, value: unknown) {
   if (value === undefined || value === null) return { signature: null, secretRef: null };
   const record = reader.record(value, 'webhook.signature');
+  assertKnownKeys(reader, record, SIGNATURE_KEYS, 'webhook.signature');
   const signature: WebhookSignature = {
     header: reader.text(record.header, 'webhook.signature.header', SCHEDULE_LIMITS.header).toLowerCase(),
     encoding:
@@ -57,6 +84,7 @@ function readSignature(reader: Reader, value: unknown) {
 
 function readWebhook(reader: Reader, value: unknown): TriggerRead {
   const record = value === true ? {} : reader.record(value, 'webhook');
+  assertWebhookKeys(reader, record);
   const { signature, secretRef } = readSignature(reader, record.signature);
   const replayKey = reader.optionalText(record.replay_key, 'webhook.replay_key', SCHEDULE_LIMITS.replayKey);
   return { trigger: { kind: 'webhook', signature, replayKey }, secretRef };
@@ -124,9 +152,13 @@ function readTarget(reader: Reader, input: Record<string, unknown>): ScheduleTar
   const newTask = reader.flag(input.new_task, 'new_task');
   const taskId = reader.optionalText(input.task_id, 'task_id', SCHEDULE_LIMITS.reference);
   if (newTask && taskId !== null) reader.errors.push('Give new_task or task_id, not both.');
+  if (!newTask && input.repository !== undefined && input.repository !== null) {
+    reader.errors.push('repository only goes with new_task: it is where each new task starts.');
+  }
   if (newTask) {
     return {
       kind: 'new_task',
+      repoId: null,
       priority:
         input.priority === undefined ? 'normal' : reader.pick(input.priority, 'priority', TASK_PRIORITIES),
       mode: reader.flag(input.just_answer, 'just_answer') ? 'ask' : 'build',
@@ -158,6 +190,7 @@ export function validateScheduleRequest(
     maxRuns: reader.optionalCount(input.max_runs, 'max_runs', SCHEDULE_LIMITS.maxRuns),
     timeZone: reader.optionalText(input.time_zone, 'time_zone', SCHEDULE_LIMITS.timeZone),
     secretRef,
+    repository: reader.optionalText(input.repository, 'repository', SCHEDULE_LIMITS.reference),
   });
 }
 
