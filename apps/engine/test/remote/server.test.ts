@@ -18,6 +18,7 @@ import {
   serializeBase64Url,
 } from '@shinsa/core';
 import { GuestsFull, MembersFull, NotFound, Revoked } from '@shinsa/core/remote/errors';
+import { Effect, Layer } from 'effect';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { startServer } from '../../src/http/index.ts';
@@ -29,7 +30,7 @@ import {
   openRemoteUrl,
   Remote,
   type RemoteSnapshot,
-  requestHealth,
+  TunnelConnector,
   resolveMachineName,
   resolveRequestOrigin,
 } from '../../src/remote/index.ts';
@@ -138,15 +139,21 @@ async function start(
   const remote = new Remote({
     path,
     control: new RemoteControl({ origin: plane.origin, pairPollMs: 1 }),
-    connect: () => {
-      const connector = { stopped: false, exited: new Promise(() => undefined), stop: () => undefined };
-      connector.stop = () => {
-        connector.stopped = true;
-      };
-      connectors.push(connector);
-      return Promise.resolve(connector);
-    },
-    ping: () => Promise.resolve(true),
+    connector: Layer.succeed(TunnelConnector, {
+      open: () =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            const connector = { stopped: false };
+            connectors.push(connector);
+            return connector;
+          }),
+          (connector) =>
+            Effect.sync(() => {
+              connector.stopped = true;
+            })
+        ).pipe(Effect.as({ exited: Effect.never })),
+    }),
+    ping: () => Effect.succeed(true),
     localUrl: () => 'http://127.0.0.1:1',
     version: '1',
     maxBodyBytes: 1024 * 1024,
@@ -710,20 +717,6 @@ describe('the remote service', () => {
   });
 });
 
-describe('the health ping', () => {
-  test('is healthy only when the tunnel host answers 2xx', async () => {
-    const server = Bun.serve({
-      port: 0,
-      hostname: '127.0.0.1',
-      fetch: (request) => new Response('', { status: request.url.endsWith('/health') ? 200 : 503 }),
-    });
-    running.push(() => server.stop(true));
-    expect(await requestHealth(`http://127.0.0.1:${server.port}/health`)).toBe(true);
-    expect(await requestHealth(`http://127.0.0.1:${server.port}/down`)).toBe(false);
-    expect(await requestHealth('http://127.0.0.1:1/health')).toBe(false);
-  });
-});
-
 async function readSnapshot(response: Response) {
   return (await response.json()) as RemoteSnapshot;
 }
@@ -1166,10 +1159,10 @@ describe('links, access requests and members', () => {
     remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     const settled = pushes.length;
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(pushes.length).toBe(settled);
     plane.answers.set(REMOTE_PATHS.heartbeat, answerAccess(ACCESS));
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(remote.snapshot().access).toEqual(ACCESS);
     expect(remote.snapshot().devices).toEqual([]);
     expect(await channel.closed).toBe(1008);
@@ -1189,7 +1182,7 @@ describe('links, access requests and members', () => {
       { id: 'team1', name: 'Platform', status: 'member', onMachine: false, invite: false, team: TEAM },
     ]);
     const settled = pushes.length;
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(pushes.length).toBe(settled);
     release();
   });
@@ -1513,13 +1506,13 @@ describe('handing off a task', () => {
     );
     remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(remote.store.file.guests).toEqual([GUEST_MEMBER]);
     expect(remote.snapshot().devices).toHaveLength(1);
     plane.answers.set(REMOTE_PATHS.heartbeat, () =>
       Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
     );
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(remote.snapshot().devices).toEqual([]);
   });
 
@@ -1550,7 +1543,7 @@ describe('handing off a task', () => {
     expect(await channel.next()).toEqual({ t: 'ready' });
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineGuestAdd)).toBe(false);
     expect(remote.store.file.guests).toEqual([]);
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('kai');
     expect(remote.snapshot().devices).toMatchObject([{ userId: KAI.id, taskId }]);
   });
@@ -1564,7 +1557,7 @@ describe('handing off a task', () => {
     await until('connected', () => remote.snapshot().status === 'connected');
     const held = Promise.withResolvers<Response>();
     plane.answers.set(REMOTE_PATHS.heartbeat, () => held.promise);
-    const beat = remote.supervisor.requestHeartbeat();
+    const beat = remote.requestHeartbeat();
     const secret = readClaim(engine, taskId)?.secret ?? '';
     const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id });
     expect(await channel.next()).toEqual({ t: 'ready' });

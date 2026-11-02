@@ -214,7 +214,7 @@ export class Teams implements TeamLinks {
       addedAt: earlier?.addedAt ?? this.#now(),
     });
     this.#remote.publish();
-    if (answer.status === 'member') await this.#remote.supervisor.requestHeartbeat();
+    if (answer.status === 'member') await this.#remote.requestHeartbeat();
     return { status: answer.status, teamId: answer.teamId };
   }
 

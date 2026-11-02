@@ -10,7 +10,7 @@ import type {
 } from '../agents/index.ts';
 import type { ExtensionsOptions } from '../extensions/index.ts';
 import type { AccountSource, CommandRunner } from '../onboarding/index.ts';
-import type { StartConnector } from '../remote/index.ts';
+import type { TunnelConnectorLayer } from '../remote/index.ts';
 import type { PlacementAsker } from '../remote/placement.ts';
 import type { Discoverer, LoginResolver } from '../repos/index.ts';
 import type { Engine, StateClockOptions } from '../runtime/index.ts';
@@ -40,7 +40,7 @@ export interface ShinsaOptions {
   extensions?: Pick<ExtensionsOptions, 'check' | 'env' | 'fetch'>;
   versions?: VersionsOptions;
   terminals?: Pick<TerminalsOptions, 'spawn' | 'readForeground' | 'env'>;
-  remoteConnect?: StartConnector;
+  remoteConnector?: TunnelConnectorLayer;
   openRemoteUrl?: (url: string) => Promise<void>;
   byService?: boolean;
   exit?: (code: number) => void;

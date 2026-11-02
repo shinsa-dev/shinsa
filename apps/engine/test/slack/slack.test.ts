@@ -12,6 +12,7 @@ import {
 } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
+import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
 import type { EffectContext } from '../../src/runtime/engine.ts';
 import { Engine } from '../../src/runtime/index.ts';
@@ -93,7 +94,7 @@ function createRemote(options: { enabled?: boolean; paired?: boolean; fetch?: Re
       origin: ORIGIN,
       ...(options.fetch ? { fetch: createFetch(options.fetch) } : {}),
     }),
-    connect: () => Promise.reject(new Error('no tunnel in tests')),
+    connector: createRefusedConnector('no tunnel in tests'),
     localUrl: () => 'http://127.0.0.1:7446',
     version: '1',
     maxBodyBytes: 1024,

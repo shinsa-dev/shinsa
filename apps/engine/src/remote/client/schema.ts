@@ -76,8 +76,6 @@ export const REMOTE_CALL_TIMEOUT = '15 seconds';
 
 export const OFFLINE_CALL_TIMEOUT = '2 seconds';
 
-export const PAIR_POLL_INTERVAL = '2 seconds';
-
 export const RemoteOrigin = Context.Reference<string>('shinsa/engine/remote/client/RemoteOrigin', {
   defaultValue: () => REMOTE_APP_ORIGIN,
 });
@@ -86,9 +84,9 @@ export class MachineToken extends Context.Service<MachineToken, Redacted.Redacte
   'shinsa/engine/remote/client/MachineToken'
 ) {}
 
-export type RemoteCall<A, E = never> = Effect.Effect<A, E | NotFound | RemoteUnreachable>;
+type RemoteCall<A, E = never> = Effect.Effect<A, E | NotFound | RemoteUnreachable>;
 
-export type MachineCall<A, E = never> = RemoteCall<A, E | Revoked>;
+type MachineCall<A, E = never> = RemoteCall<A, E | Revoked>;
 
 export type Token = Redacted.Redacted<string>;
 

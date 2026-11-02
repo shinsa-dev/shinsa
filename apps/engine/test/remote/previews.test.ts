@@ -25,6 +25,7 @@ import {
 } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
+import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
 import {
   PREVIEW_LINK_LOST,
@@ -138,7 +139,7 @@ function setUp(options: SetUp = {}) {
   const remote = new Remote({
     path,
     control: new RemoteControl({ origin: plane.origin }),
-    connect: () => Promise.reject(new Error('no tunnel in this test')),
+    connector: createRefusedConnector('no tunnel in this test'),
     localUrl: () => 'http://127.0.0.1:1',
     version: '1',
     maxBodyBytes: 1024,

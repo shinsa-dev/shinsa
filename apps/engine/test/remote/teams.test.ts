@@ -24,6 +24,7 @@ import {
 import { MembersFull, NotFound, NotOwner, TeamsFull } from '@shinsa/core/remote/errors';
 import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
+import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
 import { TEAM_GONE_REASON, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
@@ -104,7 +105,7 @@ function setUp(options: SetUp = {}) {
   const remote = new Remote({
     path,
     control: new RemoteControl({ origin: plane.origin }),
-    connect: () => Promise.reject(new Error('no tunnel in this test')),
+    connector: createRefusedConnector('no tunnel in this test'),
     localUrl: () => 'http://127.0.0.1:1',
     version: '1',
     maxBodyBytes: 1024,
@@ -445,7 +446,7 @@ describe('making and joining teams', () => {
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'team1', name: 'Platform', owner: MONA, status: 'member' })
     );
-    const heartbeat = spyOn(remote.supervisor, 'requestHeartbeat').mockResolvedValue();
+    const heartbeat = spyOn(remote, 'requestHeartbeat').mockResolvedValue();
     expect(await teams.join(url)).toEqual({ status: 'member', teamId: 'team1' });
     expect(heartbeat).toHaveBeenCalled();
     expect(remote.store.selectTeamKey('team1')).toMatchObject({ invite: 'invite-1', key: TEAM_KEY });

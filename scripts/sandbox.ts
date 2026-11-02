@@ -11,7 +11,12 @@ import { normalizeRemote } from '../apps/engine/src/git/repo.ts';
 import { startServer } from '../apps/engine/src/http/index.ts';
 import { Onboarding } from '../apps/engine/src/onboarding/index.ts';
 import { Handoffs } from '../apps/engine/src/remote/handoffs.ts';
-import { REMOTE_FILE, Remote, RemoteControl } from '../apps/engine/src/remote/index.ts';
+import {
+  createRefusedConnector,
+  REMOTE_FILE,
+  Remote,
+  RemoteControl,
+} from '../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../apps/engine/src/remote/placement.ts';
 import { Previews } from '../apps/engine/src/remote/previews.ts';
 import { ShareClock } from '../apps/engine/src/remote/share-clock.ts';
@@ -413,7 +418,7 @@ async function startMachine(id: string, name: string, dataDir: string) {
   const remote = new Remote({
     path: join(dataDir, REMOTE_FILE),
     control: new RemoteControl({ origin: ORIGIN }),
-    connect: () => Promise.reject(new Error('The preview runs no tunnel.')),
+    connector: createRefusedConnector('The preview runs no tunnel.'),
     localUrl: () => ORIGIN,
     version: 'preview',
     maxBodyBytes: 32 * 1024 * 1024,

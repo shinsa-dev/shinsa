@@ -1,5 +1,4 @@
 import {
-  type HeartbeatRequest,
   type InstanceId,
   type PairStartRequest,
   type PairStartResponse,
@@ -18,8 +17,7 @@ import { Pairings } from '../pairing/service.ts';
 import { RemoteOrigin } from './schema.ts';
 import { RemoteClient } from './service.ts';
 
-export { RemoteUnreachable } from './schema.ts';
-export type { PairedMachine, PairingEnd } from '../pairing/schema.ts';
+export type { PairedMachine } from '../pairing/schema.ts';
 
 export interface RemoteControlOptions {
   origin?: string;
@@ -46,6 +44,7 @@ export function isRemoteRetryable(error: unknown) {
 
 export class RemoteControl {
   readonly origin: string;
+  readonly layer: Layer.Layer<RemoteClient | Pairings>;
   readonly #runtime: ManagedRuntime.ManagedRuntime<RemoteClient | Pairings, never>;
 
   constructor(options: RemoteControlOptions = {}) {
@@ -55,9 +54,8 @@ export class RemoteControl {
       options.pairPollMs === undefined ? Layer.empty : Layer.succeed(PairPollInterval, options.pairPollMs)
     );
     const client = RemoteClient.layer.pipe(Layer.provide(FetchHttpClient.layer));
-    this.#runtime = ManagedRuntime.make(
-      Pairings.layer.pipe(Layer.provideMerge(client), Layer.provide(settings), Layer.provideMerge(JsonLogger))
-    );
+    this.layer = Pairings.layer.pipe(Layer.provideMerge(client), Layer.provide(settings));
+    this.#runtime = ManagedRuntime.make(this.layer.pipe(Layer.provideMerge(JsonLogger)));
     this.origin = this.#runtime.runSync(RemoteClient.use((remote) => Effect.succeed(remote.origin)));
   }
 
@@ -77,14 +75,6 @@ export class RemoteControl {
       )
     );
     return { done, cancel: () => this.#runtime.runFork(Fiber.interrupt(fiber)) };
-  }
-
-  recordHeartbeat(machineToken: string, request: HeartbeatRequest) {
-    return this.#run((client) => client.machine.heartbeat(Redacted.make(machineToken), request));
-  }
-
-  recordOffline(machineToken: string) {
-    return this.#run((client) => client.machine.offline(Redacted.make(machineToken)));
   }
 
   requestRemoval(machineToken: string) {

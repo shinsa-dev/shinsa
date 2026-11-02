@@ -100,7 +100,7 @@ export function createServices(
   const remote = new Remote({
     path: join(config.dataDir, REMOTE_FILE),
     control: new RemoteControl({ origin: config.remoteOrigin }),
-    connect: options.remoteConnect ?? createInstalledConnector(config.dataDir),
+    connector: options.remoteConnector ?? createInstalledConnector(config.dataDir),
     localUrl: () => address.url,
     version: instance.version,
     maxBodyBytes: ATTACHMENT_REQUEST_LIMIT_BYTES,

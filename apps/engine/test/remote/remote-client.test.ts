@@ -38,6 +38,24 @@ function start() {
   return { plane: current, control: new RemoteControl({ origin: current.origin }) };
 }
 
+function callClient<A, E>(
+  plane: FakeControlPlane,
+  call: (client: RemoteClient['Service']) => Effect.Effect<A, E>
+) {
+  return Effect.runPromise(
+    RemoteClient.use(call).pipe(
+      Effect.provide(
+        RemoteClient.layer.pipe(
+          Layer.provide(FetchHttpClient.layer),
+          Layer.provide(Layer.succeed(RemoteOrigin, plane.origin))
+        )
+      )
+    )
+  );
+}
+
+const BEAT = { localUrl: 'http://127.0.0.1:7446', version: '1' };
+
 function answer(plane: FakeControlPlane, path: string, body: unknown) {
   plane.answers.set(path, () => Response.json(body));
 }
@@ -64,10 +82,10 @@ describe('the client for app.shinsa.dev', () => {
     answer(plane, REMOTE_PATHS.machineMemberAdd, MEMBER);
     answer(plane, REMOTE_PATHS.machineHandoffs, { token: 'handoff-token' });
     answer(plane, REMOTE_PATHS.machineGuestAdd, MEMBER);
-    expect(await control.recordHeartbeat('m', { localUrl: 'http://127.0.0.1:7446', version: '1' })).toEqual(
+    expect(await callClient(plane, (client) => client.machine.heartbeat(Redacted.make('m'), BEAT))).toEqual(
       HEARTBEAT
     );
-    await control.recordOffline('m');
+    await callClient(plane, (client) => client.machine.offline(Redacted.make('m')));
     await control.requestRemoval('m');
     expect(await control.requestInvite('m')).toEqual({ token: 'invite-token' });
     await control.requestInviteRemoval('m');
@@ -135,7 +153,7 @@ describe('the client for app.shinsa.dev', () => {
     const { plane, control } = start();
     plane.answers.set(REMOTE_PATHS.heartbeat, () => refuse(Revoked, 'Removed.'));
     await expect(
-      control.recordHeartbeat('m', { localUrl: 'http://127.0.0.1:7446', version: '1' })
+      callClient(plane, (client) => client.machine.heartbeat(Redacted.make('m'), BEAT))
     ).rejects.toMatchObject({
       _tag: 'Revoked',
       message: 'Removed.',

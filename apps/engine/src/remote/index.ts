@@ -17,6 +17,7 @@ import {
   MAX_INSTANCE_MEMBERS,
   type RemoteAccess,
   type RequestOrigin,
+  type TunnelStatus,
   resolveClaimUrl,
   resolveEnrollUrl,
   resolveRemoteHookUrl,
@@ -36,15 +37,18 @@ import {
 } from './client/index.ts';
 import { isOwnerOnlyRoute } from './local-only.ts';
 import { listTeamEntries, RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
-import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
+import { Tunnel, type TunnelConnectorLayer, type TunnelPing } from './tunnel/index.ts';
 
 export { type ChannelPeer, RemoteChannel } from './channel.ts';
-export { createInstalledConnector } from './connector.ts';
+export { createInstalledConnector } from './connector/installed.ts';
+export { createRefusedConnector } from './connector/refused.ts';
+export { TunnelConnectFailed } from './connector/schema.ts';
+export { TunnelConnector } from './connector/service.ts';
+export type { TunnelConnectorLayer } from './tunnel/index.ts';
 export { RemoteControl } from './client/index.ts';
 export { isTunnelRequest, resolveChannelOriginRefusal, resolveTunnelRoute } from './guard.ts';
 export { resolveLocalOnlyRoute } from './local-only.ts';
 export { REMOTE_FILE, RemoteStore } from './store.ts';
-export { type StartConnector, TunnelSupervisor } from './supervisor.ts';
 
 const remoteRequests = new WeakSet<Request>();
 
@@ -72,12 +76,11 @@ type ProofKeys = Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>;
 export interface RemoteOptions {
   path: string;
   control?: RemoteControl;
-  connect: StartConnector;
-  ping?: (url: string) => Promise<boolean>;
+  connector: TunnelConnectorLayer;
+  ping?: TunnelPing;
   localUrl: () => string;
   version: string;
   maxBodyBytes: number;
-  timings?: TunnelTimings;
   now?: () => number;
   machineName: string;
   openUrl: (url: string) => Promise<void>;
@@ -113,19 +116,11 @@ export function createUrlOpener(cwd: string) {
   return (url: string) => openRemoteUrl(url, cwd);
 }
 
-export async function requestHealth(url: string) {
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
 export class Remote {
   readonly store: RemoteStore;
   readonly control: RemoteControl;
-  readonly supervisor: TunnelSupervisor;
+  readonly #tunnel: Tunnel;
+  #tunnelStatus: TunnelStatus = 'off';
   readonly #options: RemoteOptions;
   readonly #now: () => number;
   readonly #channels = new Set<RemoteChannel>();
@@ -141,25 +136,25 @@ export class Remote {
     this.#now = options.now ?? Date.now;
     this.store = new RemoteStore(options.path);
     this.control = options.control ?? new RemoteControl();
-    this.supervisor = new TunnelSupervisor({
-      control: {
-        recordHeartbeat: (token, request) => this.#recordHeartbeat(token, request),
-        recordOffline: (token) => this.control.recordOffline(token),
-      },
-      connect: options.connect,
-      ping: options.ping ?? requestHealth,
-      localUrl: options.localUrl,
+    this.#tunnel = new Tunnel({
+      control: this.control,
+      connector: options.connector,
+      ping: options.ping,
       version: options.version,
+      localUrl: options.localUrl,
       signingKey: async () => (await this.store.resolveSigningKey()).publicKey,
-      onRevoked: () => this.#forget(),
+      guestRevision: () => this.#guestRevision,
+      guests: () => this.store.file.guests,
       onAccess: (access, guests) => this.#recordAccess(access, guests),
       onTeams: (teams) => {
         if (this.store.recordTeams(teams)) this.#publish();
       },
-      ...(options.timings ? { timings: options.timings } : {}),
-      now: this.#now,
+      onStatus: (status) => {
+        this.#tunnelStatus = status;
+        this.#publish();
+      },
+      onRevoked: () => this.#forget(),
     });
-    this.supervisor.subscribe(() => this.#publish());
   }
 
   get appOrigin() {
@@ -180,7 +175,7 @@ export class Remote {
     return {
       paired: file.credentials !== null,
       enabled: this.isEnabled,
-      status: this.supervisor.status,
+      status: this.#tunnelStatus,
       instanceId: file.credentials?.instanceId ?? null,
       owner: file.owner,
       machineName: this.#options.machineName,
@@ -340,13 +335,6 @@ export class Remote {
 
   handleLeaves(leaver: GuestLeaver) {
     this.#leaver = leaver;
-  }
-
-  async #recordHeartbeat(...[token, request]: Parameters<RemoteControl['recordHeartbeat']>) {
-    const revision = this.#guestRevision;
-    const answer = await this.control.recordHeartbeat(token, request);
-    if (revision === this.#guestRevision) return answer;
-    return { ...answer, guests: this.store.file.guests };
   }
 
   #updateGuests(change: (guests: RemoteMember[]) => RemoteMember[]) {
@@ -701,13 +689,17 @@ export class Remote {
   start() {
     const { credentials } = this.store.file;
     if (!(this.isEnabled && credentials)) return;
-    this.supervisor.start(credentials);
+    this.#tunnel.start(credentials);
+  }
+
+  requestHeartbeat() {
+    return this.#tunnel.requestHeartbeat();
   }
 
   async stop() {
     this.#pairing?.run.cancel();
     this.#closeChannels(isAnyChannel);
-    await this.supervisor.stop();
+    await this.#tunnel.stop();
   }
 
   #forget() {
