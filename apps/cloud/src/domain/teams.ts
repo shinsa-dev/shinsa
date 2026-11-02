@@ -16,7 +16,7 @@ import type { Team } from '../store/teams/schema.ts';
 import { Teams } from '../store/teams/service.ts';
 import { createConnectAnswer, isMachineOnline } from './machines.ts';
 
-export const findTeamOwner = Effect.fn('findTeamOwner')(function* (team: Team) {
+const findTeamOwner = Effect.fn('findTeamOwner')(function* (team: Team) {
   const accounts = yield* Accounts;
   const owner = yield* accounts.selectUser(team.userId);
   if (Option.isNone(owner)) return yield* new NotFound({ message: 'No such team.' });

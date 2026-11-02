@@ -7,7 +7,7 @@ import {
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
   REMOTE_SESSION_COOKIE,
-  type RemoteUserId,
+  RemoteUserId,
   serializeBase64Url,
 } from '@shinsa/core';
 import { InvalidChallenge, InvalidRedirect, SignInFailed } from '@shinsa/core/remote/errors';
@@ -40,6 +40,8 @@ export const SignInRoutes = Layer.unwrap(
     const github = yield* GitHub;
     const accounts = yield* Accounts;
     const decodeOAuthCookie = Schema.decodeUnknownOption(OAuthCookie);
+    const encodeOAuthCookie = Schema.encodeSync(OAuthCookie);
+    const decodeUserId = Schema.decodeEffect(RemoteUserId);
 
     const selectNativeRedirect = (value: string | null) => {
       if (!value || value.length > NATIVE_REDIRECT_LIMIT || !URL.canParse(value)) return null;
@@ -103,7 +105,7 @@ export const SignInRoutes = Layer.unwrap(
       authorize.searchParams.set('allow_signup', 'false');
       const cookie = serializeBase64Url(
         encodeText(
-          JSON.stringify({
+          encodeOAuthCookie({
             state,
             verifier: Redacted.value(verifier),
             returnPath: resolveReturnPath(url.searchParams.get('return')),
@@ -144,7 +146,7 @@ export const SignInRoutes = Layer.unwrap(
         return yield* new SignInFailed({ message: SIGN_IN_EXPIRED });
       const user = yield* github.signIn(code, Redacted.make(oauth.value.verifier));
       yield* accounts.upsertUser(user);
-      const userId = user.id as RemoteUserId;
+      const userId = yield* decodeUserId(user.id).pipe(Effect.orDie);
       if (oauth.value.native) return yield* respondNativeCallback(userId, oauth.value.native);
       const token = yield* createSession(userId);
       return respondRedirect(resolveReturnPath(oauth.value.returnPath), {

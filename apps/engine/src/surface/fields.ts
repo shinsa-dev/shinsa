@@ -24,7 +24,7 @@ export interface ParsedArgs {
 const GLOBAL_FLAGS = new Set(['--json', '--help', '-h']);
 
 function refuse(message: string): never {
-  throw new DomainError({ code: 'arguments_invalid', message: message });
+  throw new DomainError({ code: 'arguments_invalid', message });
 }
 
 export function serializeFlag(name: string) {

@@ -2,13 +2,7 @@ import { CloudflareFailed } from '@shinsa/core/remote/errors';
 import { Context, Effect, Layer, Option, Redacted, Ref, Schema } from 'effect';
 import { HttpClient, HttpClientRequest } from 'effect/http';
 import { CloudConfig } from '../../config/service.ts';
-import {
-  CLOUDFLARE_API,
-  type CloudflareMethod,
-  type CreatedTunnel,
-  decodeEnvelope,
-  Identified,
-} from './schema.ts';
+import { CLOUDFLARE_API, type CloudflareMethod, type CreatedTunnel, Envelope, Identified } from './schema.ts';
 
 export class Cloudflare extends Context.Service<
   Cloudflare,
@@ -34,6 +28,7 @@ export class Cloudflare extends Context.Service<
         HttpClient.mapRequest(HttpClientRequest.bearerToken(config.cloudflareApiToken))
       );
       const zoneId = yield* Ref.make(Option.none<string>());
+      const decodeEnvelope = Schema.decodeUnknownOption(Envelope);
       const account = `/accounts/${config.cloudflareAccountId}`;
 
       const call = Effect.fn('Cloudflare.call')(function* <A, I>(

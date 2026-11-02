@@ -8,8 +8,6 @@ export const Envelope = Schema.Struct({
   errors: Schema.optional(Schema.Array(Schema.Struct({ message: Schema.optional(Schema.String) }))),
 });
 
-export const decodeEnvelope = Schema.decodeUnknownOption(Envelope);
-
 export const Identified = Schema.Struct({ id: Schema.NonEmptyString });
 
 export interface CreatedTunnel {

@@ -1,5 +1,6 @@
 import {
   createPreviewAccessToken,
+  InstanceId,
   PREVIEW_ACCESS_PARAM,
   PREVIEW_KEY_PARAM,
   PREVIEW_OPEN_TTL_MS,
@@ -7,17 +8,17 @@ import {
   REMOTE_PATHS,
 } from '@shinsa/core';
 import { UrlInvalid } from '@shinsa/core/remote/errors';
-import { Clock, Effect, Layer, Option, Redacted } from 'effect';
+import { Clock, Effect, Layer, Option, Redacted, Schema } from 'effect';
 import { HttpRouter } from 'effect/http';
 import { findMachineAccess } from '../../auth/access.ts';
 import { selectRequestUser } from '../../auth/tokens.ts';
 import { CloudConfig } from '../../config/service.ts';
 import { CurrentUrl } from '../../http/request.ts';
 import { respondRedirect } from '../../http/responses.ts';
-import { decodeInstanceId } from '../previews/schema.ts';
 
 export const PreviewOpenRoutes = Layer.unwrap(
   Effect.gen(function* () {
+    const decodeInstanceId = Schema.decodeUnknownOption(InstanceId);
     const readPreviewTarget = Effect.fn('previews.readTarget')(function* (url: URL, previewOrigin: string) {
       const value = url.searchParams.get('url');
       const target = value && URL.canParse(value) ? new URL(value) : null;

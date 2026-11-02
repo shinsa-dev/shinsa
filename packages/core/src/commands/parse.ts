@@ -101,7 +101,7 @@ const MAX_FEEDBACK = 20_000;
 const MAX_STEP_KEY = 120;
 
 function refuse(message: string): never {
-  throw new DomainError({ code: 'command_invalid', message: message });
+  throw new DomainError({ code: 'command_invalid', message });
 }
 
 function isFields(value: unknown): value is Fields {

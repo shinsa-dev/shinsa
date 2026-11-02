@@ -1,13 +1,13 @@
-import { isSameSecret, type PairPollResponse, parsePublicKey, REMOTE_PATHS } from '@shinsa/core';
+import { ClaimCode, isSameSecret, type PairPollResponse, parsePublicKey, REMOTE_PATHS } from '@shinsa/core';
 import { RemoteApi } from '@shinsa/core/remote/api';
 import { BodyInvalid, RateLimited } from '@shinsa/core/remote/errors';
-import { Clock, Duration, Effect, Option, Redacted } from 'effect';
+import { Clock, Duration, Effect, Option, Redacted, Schema } from 'effect';
 import { HttpServerRequest } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
 import { CloudConfig } from '../../config/service.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
 import { Pairings } from '../../store/pairings/service.ts';
-import { decodeClaimCode, EXPIRED, MAX_PENDING_PAIRS_PER_ADDRESS, PAIR_TTL } from './schema.ts';
+import { EXPIRED, MAX_PENDING_PAIRS_PER_ADDRESS, PAIR_TTL } from './schema.ts';
 
 export const PairingHandlers = HttpApiBuilder.group(
   RemoteApi,
@@ -16,6 +16,7 @@ export const PairingHandlers = HttpApiBuilder.group(
     const config = yield* CloudConfig;
     const crypto = yield* CloudCrypto;
     const pairings = yield* Pairings;
+    const decodeClaimCode = Schema.decodeUnknownOption(ClaimCode);
 
     return handlers
       .handle(

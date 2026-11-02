@@ -131,9 +131,15 @@ describe('Effect code is held to the house style', () => {
     expect(
       listEffectViolations(
         'a/schema.ts',
-        'export function read() {}\nconst a = () => 1;\nexport const b = Effect.gen(function* () {});\nconst c = Effect.fn("c")(function* () {});'
+        'export function read() {}\nconst a = () => 1;\nexport const b = Effect.gen(function* () {});\nconst c = Effect.fn("c")(function* () {});\nexport const d = Schema.decodeUnknownOption(Row);'
       )
-    ).toEqual([1, 2, 3, 4].map((line) => ({ line, message: EFFECT_SCHEMA_FILE_MESSAGE })));
+    ).toEqual([1, 2, 3, 4, 5].map((line) => ({ line, message: EFFECT_SCHEMA_FILE_MESSAGE })));
     expect(listEffectViolations('a/schema.ts', 'let a;')).toEqual([]);
+    expect(listEffectViolations('a/schema.ts', 'export const Row = Schema.decodeTo(Schema.String);')).toEqual(
+      []
+    );
+    expect(listEffectViolations('a/schema.ts', 'export const Row = Other.decode(Schema.String);')).toEqual(
+      []
+    );
   });
 });

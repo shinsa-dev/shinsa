@@ -7,8 +7,7 @@ import type { Teams } from './teams.ts';
 
 function readText(fields: JsonObject, name: string, message: string) {
   const value = fields[name];
-  if (typeof value !== 'string' || !value.trim())
-    throw new DomainError({ code: `${name}_invalid`, message: message });
+  if (typeof value !== 'string' || !value.trim()) throw new DomainError({ code: `${name}_invalid`, message });
   return value;
 }
 

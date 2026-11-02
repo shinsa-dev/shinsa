@@ -1,5 +1,6 @@
 import {
   createPreviewAccessToken,
+  InstanceId,
   isPreviewKey,
   PREVIEW_ACCESS_HEADER,
   PREVIEW_ACCESS_PARAM,
@@ -15,7 +16,7 @@ import {
   serializePreviewPage,
   verifyPreviewAccessToken,
 } from '@shinsa/core';
-import { Clock, Context, Duration, Effect, Layer, Option, Redacted } from 'effect';
+import { Clock, Context, Duration, Effect, Layer, Option, Redacted, Schema } from 'effect';
 import { HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { CloudConfig } from '../../config/service.ts';
 import { isMachineOnline } from '../../domain/machines.ts';
@@ -29,7 +30,6 @@ import { Machines } from '../../store/machines/service.ts';
 import { resolveForwardCookie } from './address.ts';
 import {
   BODILESS_METHODS,
-  decodeInstanceId,
   FORWARDED_AWAY,
   PREVIEW_ACCESS_COOKIE,
   PREVIEW_COOKIE,
@@ -51,6 +51,7 @@ export class PreviewHost extends Context.Service<
       const config = yield* CloudConfig;
       const tunnels = yield* Tunnels;
       const machines = yield* Machines;
+      const decodeInstanceId = Schema.decodeUnknownOption(InstanceId);
 
       const respondPage = (kind: PreviewPageKind, status: 404 | 503) => {
         return respondText(serializePreviewPage(kind), {

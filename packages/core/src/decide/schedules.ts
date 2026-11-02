@@ -52,7 +52,7 @@ interface Delivery {
 
 function assertInteger(value: number, min: number, max: number, message: string) {
   if (!Number.isInteger(value) || value < min || value > max)
-    throw new DomainError({ code: 'schedule_invalid', message: message });
+    throw new DomainError({ code: 'schedule_invalid', message });
 }
 
 function assertWebhook(trigger: Extract<ScheduleTrigger, { kind: 'webhook' }>) {

@@ -44,6 +44,9 @@ const LOGIC_FILES = /(?:^|\/)(?:handler|service|middleware)\.tsx?$/;
 
 const SCHEMA_FILE = /(?:^|\/)schema\.tsx?$/;
 
+const SCHEMA_PARSER =
+  /^(?:(?:decode|encode)(?:Unknown)?(?:Sync|Option|Effect|Exit|Promise|Result)?|is|asserts)$/;
+
 function listChildren(node: Node): Node[] {
   return Object.values(node).flatMap((value) =>
     (Array.isArray(value) ? value : [value]).filter(
@@ -131,6 +134,14 @@ function returnsOnlyEffectGen(node: Node) {
   return statements.length === 1 && only?.type === 'ReturnStatement' && isEffectGen(only.argument);
 }
 
+function isSchemaParser(node: unknown) {
+  const call = node as Node | null;
+  if (call?.type !== 'CallExpression') return false;
+  const callee = call.callee as Node;
+  if (callee.type !== 'MemberExpression' || readName(callee.object) !== 'Schema') return false;
+  return SCHEMA_PARSER.test(readName(callee.property) ?? '');
+}
+
 function isEffectFnCall(node: unknown) {
   const call = node as Node | null;
   if (call?.type !== 'CallExpression') return false;
@@ -188,7 +199,9 @@ function isFunctionValue(node: Node) {
   if (declaration.type !== 'VariableDeclaration') return false;
   return (declaration.declarations as Node[]).some((declarator) => {
     const init = declarator.init as Node | undefined;
-    return Boolean(init && (isFunction(init) || isEffectGen(init) || isEffectFnCall(init)));
+    return Boolean(
+      init && (isFunction(init) || isEffectGen(init) || isEffectFnCall(init) || isSchemaParser(init))
+    );
   });
 }
 

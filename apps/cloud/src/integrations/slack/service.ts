@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Option, type Redacted, Schema } from 'effect';
 import { HttpBody, HttpClient, HttpClientRequest } from 'effect/http';
 import {
-  decodeEnvelope,
+  Envelope,
   SLACK_API_ORIGIN,
   SLACK_BOT_SCOPES,
   SLACK_JSON,
@@ -27,6 +27,7 @@ export class SlackApi extends Context.Service<
     SlackApi,
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
+      const decodeEnvelope = Schema.decodeUnknownOption(Envelope);
 
       const resolveBody = (body: SlackBody) => {
         if ('form' in body) return HttpBody.urlParams(new URLSearchParams({ ...body.form }));

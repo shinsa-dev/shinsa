@@ -30,8 +30,6 @@ export interface SlackCall {
 
 export const Envelope = Schema.Struct({ ok: Schema.Boolean, error: Schema.optional(Schema.String) });
 
-export const decodeEnvelope = Schema.decodeUnknownOption(Envelope);
-
 const NonEmpty = Schema.optional(Schema.NullOr(Schema.String));
 
 export const UserInfo = Schema.Struct({
