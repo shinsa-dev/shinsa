@@ -9,6 +9,9 @@ none of it is task data: a shared task is read live from its machine, never stor
 
 ## Layout
 
+The route modules (`router.ts` to `slack-api.ts`) still run on `world.ts` and `database.ts`; they move onto the
+Effect services in `config/`, `crypto/`, `store/` and `integrations/` with the HttpApi handlers, and those files go.
+
 ```
 src/
 ├── index.ts       The Worker's entry: the bindings (DB, ASSETS, the variables and secrets) into a CloudWorld. The only
@@ -37,12 +40,37 @@ src/
 ├── http.ts        CloudError, JSON bodies, cookies, the same-origin check, the security headers
 ├── crypto.ts      Random tokens, claim codes and instance ids, token hashes, the bot tokens sealed with AES-GCM,
 │                  Slack's request signature (hex and constant-time comparison are core's serializeHex, isSameSecret)
-└── log.ts         recordFailure: the one console call (Workers Logs)
+├── log.ts         recordFailure: the one console call (Workers Logs)
+├── layers.ts      CloudServices: every service below as one Layer, needing only the SQL client and the
+│                  configuration provider (the Worker gives D1 and its bindings, the tests SQLite and TEST_ENV)
+├── config/        CloudConfig: every variable read once with Effect's Config, the secrets Redacted, the defaults
+│                  in one place; an unreadable MAX_INSTANCES stops the Worker instead of falling back
+├── crypto/        CloudCrypto: random tokens (Redacted), claim codes and the instance and team ids, TokenHash (the
+│                  only shape a table keeps a token in), PKCE challenges, the bot tokens sealed with AES-GCM under
+│                  SLACK_TOKEN_KEY (imported once), Slack's request signature (none without a signing secret, so an
+│                  empty key cannot be forged)
+├── store/         The D1 tables as services over SqlClient, every row decoded and every value encoded by a Schema
+│                  (SqlSchema), ids branded, `orDie` at each method: Accounts (users, sessions, sign-in codes),
+│                  Pairings, Machines (instances, with SharedMachine for a user's list), MachineAccess (invites,
+│                  requesters, members, guests, hand-offs), Teams (and their invites, requesters, members),
+│                  SlackStore; tables.ts the shared column lists, SQL_NAMES (snake_case tables, camelCase schemas)
+│                  and the two shapes several tables share: createMembership and createInvites; index.ts StoreLayer.
+│                  A method that records a time reads Clock itself
+└── integrations/  The outside world, each a service over HttpClient (http.ts: OutboundHttp, fetch with trace
+                   headers off, so no request to GitHub, Cloudflare or Slack carries ours): GitHub (signIn: the code
+                   and verifier to an account, SignInFailed when refused, a defect when unreachable), Cloudflare
+                   (createTunnel, which removes a half-made tunnel, updateIngress, removeTunnel; the zone looked up
+                   once; every refusal a CloudflareFailed naming the call), SlackApi (call with the answer's Schema,
+                   SlackCallFailed with Slack's code, selectUserName, hasBotScopes) and the scopes
 migrations/        D1's schema (wrangler d1 migrations), applied in order
 slack-manifest.json The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts
                    keeps its scopes, redirects and events in step with the code
 test/              One file per route group, against harness.ts: D1 on bun:sqlite with every migration, and
-                   GitHub, the Cloudflare API, Slack and a machine's tunnel as fakes
+                   GitHub, the Cloudflare API, Slack and a machine's tunnel as fakes; config/, crypto/, store/ and
+                   integrations/ test each service against layers.ts: runTest and flipTest provide CloudServices on
+                   SQLite in memory with every migration, TEST_ENV, a TestClock at TEST_NOW and an Upstream (the
+                   fetch every outbound call reaches, its calls recorded, its answers in handlers); createLogRecorder
+                   keeps what a test logs
 ```
 
 ## How it works

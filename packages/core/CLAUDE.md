@@ -8,7 +8,9 @@ caller. It runs in the browser too, so the web reads the same queue, progress an
 
 ```
 src/
-├── index.ts         The public barrel. Everything it exports stays importable by the same name
+├── index.ts         The public barrel. Everything it exports stays importable by the same name; the Worker's API and
+│                    its failures are subpaths of their own (`@shinsa/core/remote/api`, `@shinsa/core/remote/errors`),
+│                    so their generic names (`NotFound`, `Forbidden`) never reach the barrel
 ├── domain/          Entity types (types.ts), stage sets and priority order (stages.ts), settings, their defaults and
 │                    SETTINGS_KEYS (settings.ts; resolveAgentFastMode: a role's fast mode, else the global one;
 │                    resolveDelegationLimit: delegations at once under one step, null for no limit;
