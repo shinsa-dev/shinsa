@@ -1,139 +1,31 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { APP_IDENTITY, PREVIEW_ORIGIN, REMOTE_APP_ORIGIN } from '@shinsa/core';
-import { BUNDLE, resolveBundlePath, type ShinsaBundle } from '../instance/bundle.ts';
+import { join } from 'node:path';
+import { ConfigProvider, Effect } from 'effect';
+import { BUNDLE, type ShinsaBundle } from '../instance/bundle.ts';
 import { log } from '../log/index.ts';
-import { type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
-import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
+import { readMachineConfig } from './machine.ts';
+import { resolveShinsaPaths } from './paths.ts';
+import { createConfigProvider } from './provider.ts';
+import { BACKUP_EXCLUSION, type Env, NEVER_INDEX_MARKER, type ServerConfig } from './schema.ts';
+import { EngineConfig } from './service.ts';
+import { readServerAddress } from './settings.ts';
 
 export { ConfigStore, writeJsonFile } from './file.ts';
-export { type Env, resolveScratchPath, resolveShinsaPaths } from './paths.ts';
-
-export interface ServerConfig {
-  home: string;
-  configPath: string;
-  dataDir: string;
-  databasePath: string;
-  worktreesDir: string;
-  checkBasesDir: string;
-  scratchDir: string;
-  cachesDir: string;
-  evidenceDir: string;
-  attachmentsDir: string;
-  transcriptsDir: string;
-  pluginDir: string;
-  webDir: string;
-  port: number;
-  hostname: string;
-  allowedHosts: string[];
-  userHome: string;
-  machine: MachineConfigRead;
-  roots: string[];
-  inspect: boolean;
-  simulateMissing: string[];
-  editor: string | null;
-  terminal: string;
-  settleDelayMs: number;
-  pushRetryMs: number;
-  overloadRetryMs: number;
-  remoteOrigin: string;
-  previewOrigin: string;
-}
-
-const DATABASE_FILE = 'shinsa.sqlite';
-const NEVER_INDEX_MARKER = '.metadata_never_index';
-const BACKUP_EXCLUSION = {
-  name: 'com.apple.metadata:com_apple_backup_excludeItem',
-  value:
-    '62706c69737430305f1011636f6d2e6170706c652e6261636b75706408000000000000010100000000000000010000000000000000000000000000001c',
-};
-
-const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
-
-const WILDCARD_HOSTS = new Set(['0.0.0.0', '::', '[::]']);
-
-function readList(value: string | undefined, separator: string) {
-  return (value ?? '')
-    .split(separator)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function readNumber(env: Env, key: string, fallback: number) {
-  const raw = env[key];
-  if (raw === undefined || raw === '') return fallback;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 0) throw new Error(`${key} must be a whole number, not "${raw}".`);
-  return value;
-}
-
-function resolvePortFrom(env: Env, machine: MachineConfig) {
-  const port = readNumber(env, 'SHINSA_PORT', machine.port ?? APP_IDENTITY.port);
-  if (port > 65_535) throw new Error(`SHINSA_PORT must be a port number, not "${port}".`);
-  return port;
-}
-
-function resolveHostname(env: Env, machine: MachineConfig) {
-  return env.SHINSA_HOST || machine.hostname || '127.0.0.1';
-}
+export { resolveScratchPath, resolveShinsaPaths } from './paths.ts';
+export type { Env, ServerConfig } from './schema.ts';
 
 export function resolveServerAddress(env: Env) {
   const machine = readMachineConfig(resolveShinsaPaths(env).configPath).config;
-  const hostname = resolveHostname(env, machine);
-  return {
-    hostname: WILDCARD_HOSTS.has(hostname) ? '127.0.0.1' : hostname,
-    port: resolvePortFrom(env, machine),
-  };
-}
-
-function resolveDataPaths(dataDir: string, env: Env) {
-  return {
-    dataDir,
-    databasePath: join(dataDir, DATABASE_FILE),
-    worktreesDir: env.SHINSA_WORKTREES_DIR || join(dataDir, 'worktrees'),
-    checkBasesDir: join(dataDir, 'check-bases'),
-    scratchDir: join(dataDir, 'scratch'),
-    cachesDir: join(dataDir, 'caches'),
-    evidenceDir: join(dataDir, 'evidence'),
-    attachmentsDir: join(dataDir, 'attachments'),
-    transcriptsDir: join(dataDir, 'transcripts'),
-  };
+  return edgeRuntime.runSync(
+    readServerAddress().pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, createConfigProvider(env, machine))
+    )
+  );
 }
 
 export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): ServerConfig {
-  const paths = resolveShinsaPaths(env);
-  const read = readMachineConfig(paths.configPath);
-  const machine = read.config;
-  const hostname = resolveHostname(env, machine);
-  const configured = WILDCARD_HOSTS.has(hostname) ? [] : [hostname];
-  return {
-    home: paths.home,
-    configPath: paths.configPath,
-    ...resolveDataPaths(paths.dataDir, env),
-    pluginDir:
-      env.SHINSA_PLUGIN_DIR ||
-      (bundle ? resolveBundlePath(bundle, 'plugin') : resolve(import.meta.dirname, '../../plugin')),
-    webDir:
-      env.SHINSA_WEB_DIR ||
-      (bundle ? resolveBundlePath(bundle, 'web') : resolve(import.meta.dirname, '../../../web/dist')),
-    port: resolvePortFrom(env, machine),
-    hostname,
-    allowedHosts: [
-      ...new Set([...LOOPBACK_HOSTS, ...configured, ...readList(env.SHINSA_ALLOWED_HOSTS, ',')]),
-    ],
-    userHome: resolveUserHome(env),
-    machine: read,
-    roots: readList(env.SHINSA_ROOTS, ':'),
-    inspect: env.SHINSA_INSPECT === '1',
-    simulateMissing: readList(env.SHINSA_SIMULATE_MISSING, ','),
-    editor: env.SHINSA_EDITOR || machine.editor,
-    terminal: env.SHINSA_TERMINAL || machine.terminal || 'Terminal',
-    settleDelayMs: readNumber(env, 'SHINSA_SETTLE_DELAY_MS', 15_000),
-    pushRetryMs: readNumber(env, 'SHINSA_PUSH_RETRY_MS', 30_000),
-    overloadRetryMs: readNumber(env, 'SHINSA_OVERLOAD_RETRY_MS', 15_000),
-    remoteOrigin: env.SHINSA_REMOTE_ORIGIN || REMOTE_APP_ORIGIN,
-    previewOrigin: env.SHINSA_PREVIEW_ORIGIN || PREVIEW_ORIGIN,
-  };
+  return edgeRuntime.runSync(Effect.provide(EngineConfig, EngineConfig.layer(env, bundle)));
 }
 
 function excludeFromBackups(dir: string, platform: NodeJS.Platform) {
