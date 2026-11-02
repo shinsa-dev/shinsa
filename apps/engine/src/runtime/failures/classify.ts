@@ -15,8 +15,7 @@ export function isEffectFailure(error: unknown): error is EffectFailure {
 
 export function resolveEffectFailure(error: unknown): EffectFailure {
   if (isEffectFailure(error)) return error;
-  const message = describeError(error);
-  return new EffectFailed({ message, detail: message, retryable: true, delayMs: null });
+  return createEffectFailed(describeError(error));
 }
 
 export function resolveShippingFailure(step: ShippingStepKind, error: unknown, networkDelayMs: number) {
@@ -35,4 +34,8 @@ export function resolveShippingFailure(step: ShippingStepKind, error: unknown, n
     retryable: failure.retryable,
     delayMs: failure.delayMs,
   });
+}
+
+export function createEffectFailed(message: string) {
+  return new EffectFailed({ message, detail: message, retryable: true, delayMs: null });
 }

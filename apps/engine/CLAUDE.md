@@ -136,8 +136,17 @@ src/
 │                        receipts.ts), engine.ts (the Engine class edge: the same methods as before over EngineCore's
 │                        own ManagedRuntime on the EventLog's services; a promise handler runs in Effect.tryPromise,
 │                        so an interrupt aborts its signal, and settle waits for it to return),
-│                        EffectRunner (effects.ts: one handler per ShinsaEffect, the pull request watcher, the push's
-│                        steps, conflicts, hook rejections and reportRetry), failures/ (EffectFailed and ShippingFailed,
+│                        effects/ (one service per area, each handler an Effect.fn failing with EffectFailed or
+│                        ShippingFailed: setup/ TaskSetup (triage, setup check, worktree), checks/ CheckRuns,
+│                        shipping/ Shipping (the push's steps, conflicts, hook rejections as HookRejected),
+│                        merging/ Merging (merge, stacks, bundles, close), cleanup/ Cleanup, pull-requests/
+│                        PullRequestSync (the watch fiber, a sync soon after a push, one sync per task at a time on
+│                        a semaphore per task, pure reads in news.ts), edits/ EditCommits, reports/ EffectReports
+│                        (retries and failures for good), runner/ EffectHandlers (routes each kind), world/
+│                        EffectWorld (the engine, config and unmoved pieces they stand on, and bridge: a promise
+│                        API given the fiber's AbortSignal, waited for on interrupt); the shapes in schema.ts),
+│                        effects.ts (the EffectRunner class edge over them: apply settles quietly once its signal
+│                        aborts, stop interrupts the watch and the background syncs), failures/ (EffectFailed and ShippingFailed,
 │                        the push's step, in schema.ts with the EFFECT_RETRY schedule; resolveEffectFailure and
 │                        resolveShippingFailure in classify.ts; retry.ts steps the schedule), StateClock (clock.ts: the
 │                        base of every timer that fires from state), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
@@ -437,9 +446,11 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   re-arms on every state change, fires each due entry once at a time, and skips an entry core refused with a
   `DomainError`, or answered with no events (`refuse`), until it leaves `listEntries`, so a refused or no-op command
   is never sent again and again.
-- **Effects can be cancelled.** A running effect's `context.signal` aborts when a decision cancels it or the server
-  stops. A handler that does outside work checks the signal before the step it must not take after a cancel (a merge,
-  a push, opening a pull request) and passes it to the commands it runs (checks, `git push`, `gh`).
+- **Effects can be cancelled.** A running effect's fiber is interrupted when a decision cancels it or the server
+  stops, so it takes no step after the cancel (a merge, a push, opening a pull request). A handler calls code not yet
+  moved to Effect through `EffectWorld.bridge`, which passes the commands it runs (checks, the push, `gh`) an
+  `AbortSignal` the interrupt aborts; a pair of steps that must happen together (a commit and its record) is
+  `Effect.uninterruptible`.
 - **Effects that touch the outside world must be safe to run twice** (a worktree is reused, an open pull request is
   reused, a merge reads GitHub first): replay-safe effects run again after a crash (`docs/engine.md` → Recovery).
 - **Rounds share the task's worktree and push where their round says** (`docs/engine.md` → Rounds): a later round's
@@ -494,7 +505,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   and a read of a data source (purposes `watch` and `intake`) in the repository itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
   task's worktree. Edits a read-only run leaves (the agent's while it plans included) are set aside, never in the
   repository itself: that is the human's own checkout. Setup verification asks for a default branch only when the
-  pipeline needs a worktree, and never for check commands (`runtime/effects.ts`); a worktree reused
+  pipeline needs a worktree, and never for check commands (`runtime/effects/setup/service.ts`); a worktree reused
   before any phase report is reset, which is how an investigation's scratch edits are dropped before its fix is
   planned.
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the

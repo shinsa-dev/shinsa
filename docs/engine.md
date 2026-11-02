@@ -4251,14 +4251,14 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
   command and settles.
 - **Damaged rows.** A stored effect that is not JSON, or whose payload does not match its kind,
   is failed when it is claimed and the next effect in its lane runs in the same claim.
-- **No gap between claim and cancel.** A claimed effect registers its abort controller in the
-  same synchronous step that claims it, and commits run on the same thread, so a cancellation can
+- **No gap between claim and cancel.** A claimed effect's fiber is registered in the engine's `FiberMap` in the
+  same step that claims it, before it starts, and commits run on the same thread, so a cancellation can
   never land between the two (T3 re-reads the row for this; one process with one connection does
   not need to).
 
 ## Pushing the branch
 
-`pull_request.open` and `pull_request.push` (`apps/engine/src/runtime/effects.ts`) take the branch from "approved" to
+`pull_request.open` and `pull_request.push` (`Shipping`, `apps/engine/src/runtime/effects/shipping/service.ts`) take the branch from "approved" to
 GitHub in four steps, and report each one to the task as `pull_request.record_step`, which core turns into the stage
 reason (`describeShippingStep`) while the task ships with a push pending and no failure gate open:
 
@@ -5713,6 +5713,15 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell)
   and receipt in one transaction, all on one `SqlClient` (`StoreLayer`). Every row is decoded by a schema, and a row
   that breaks it is reported as unreadable, as before (Recovery, below). Evidence and attachments are `Evidence` and
   `Attachments` over their folders.
+- **The effects.** Each effect kind has one handler, an `Effect.fn` that fails only with `EffectFailed` or
+  `ShippingFailed`: `EffectHandlers` routes a kind to the service of its area (`TaskSetup`, `CheckRuns`,
+  `Shipping`, `Merging`, `Cleanup`, `PullRequestSync`, all under `runtime/effects/`), and `EffectReports` reports a
+  retry and a failure for good. Cancelling an effect interrupts its fiber. Code not moved yet (git, `gh`, the checks)
+  is called through `EffectWorld.bridge`, which hands it an `AbortSignal` that the interrupt aborts and waits for it
+  to return, so the processes it started have stopped when the interrupt ends; a cancelled effect settles without
+  an error. The pull request watch is a fiber on `Schedule.spaced` (45 s), a sync soon after a push is a fiber in the
+  same `FiberSet`, and `stop` interrupts both; syncs of one task take turns on a semaphore per task (`RcMap`), and a
+  full sync runs once however many ask for it. `EffectRunner` is the class edge over them.
 - **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
   its release as a finalizer: the lock, the log, the HTTP server, Eunoe's forwarder, the work. `stop()` disposes the
   runtime, which runs them in reverse: the work (live runs first, then the clocks and the effects, The agent loop →

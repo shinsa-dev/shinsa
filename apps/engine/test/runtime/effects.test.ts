@@ -17,7 +17,6 @@ import { resolveScratchPath, type ServerConfig } from '../../src/config/index.ts
 import { NO_DRAFT, STOPPED_WHILE_FILING } from '../../src/feedback/index.ts';
 import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
-import { log } from '../../src/log/index.ts';
 import { ProcessLedger } from '../../src/resources/index.ts';
 import { resolveEffectFailure } from '../../src/runtime/failures/classify.ts';
 import { EffectFailed, ShippingFailed } from '../../src/runtime/failures/schema.ts';
@@ -27,6 +26,7 @@ import { EventLog } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
 import type { Workspaces } from '../../src/workspaces/index.ts';
 import {
+  captureLogs,
   createGitRepo,
   createTempDir,
   createTestConfig,
@@ -168,6 +168,18 @@ function createRuns() {
       calls.push(`quiesce:${taskId}`);
       return Promise.resolve();
     },
+    wake: (runId: string, generation: number) => {
+      calls.push(`wake:${runId}:${generation}`);
+      return Promise.resolve();
+    },
+    deliver: (runId: string, generation: number) => {
+      calls.push(`deliver:${runId}:${generation}`);
+      return Promise.resolve();
+    },
+    replyToDelegate: (runId: string, questionId: string) => {
+      calls.push(`reply:${runId}:${questionId}`);
+      return Promise.resolve();
+    },
   };
   return { runs: runs as unknown as RunSupervisor, calls };
 }
@@ -256,6 +268,14 @@ describe('routing effects', () => {
     await runner.apply({ kind: 'briefing.request', projectId: null }, createContext());
     expect(calls).toEqual(['execute:r1', 'cancel:r1', `steer:r1:hi:${steer.key}`, 'question:g1']);
     expect(scheduled()).toBe(1);
+  });
+
+  test('waking a run, steering a delegation and replying to one go to the supervisor', async () => {
+    const { runner, calls } = setup();
+    await runner.apply({ kind: 'run.wake', runId: 'r1', generation: 2 }, createContext());
+    await runner.apply({ kind: 'delegation.steer', runId: 'r2', generation: 3 }, createContext());
+    await runner.apply({ kind: 'delegation.reply', runId: 'r2', questionId: 'q1' }, createContext());
+    expect(calls).toEqual(['wake:r1:2', 'deliver:r2:3', 'reply:r2:q1']);
   });
 
   test('an effect that failed for good opens one failure gate on its task, under an id the effect decides', async () => {
@@ -754,7 +774,7 @@ describe('the setup check', () => {
       createContext(controller.signal)
     );
     expect([...moved.dispatched, ...cancelled.dispatched]).toEqual([]);
-    expect(asked).toEqual(['asked']);
+    expect(asked).toEqual([]);
   });
 
   test('a cancelled setup check stops the fetch it runs and records nothing', async () => {
@@ -835,7 +855,7 @@ describe('worktrees', () => {
     );
     await until('the fetch to start', () => readPid() > 0);
     controller.abort();
-    await expect(running).rejects.toThrow('The command was cancelled before it started.');
+    await running;
     await until('the fetch to stop', () => !isRunning(readPid()));
     expect(dispatched).toEqual([]);
   });
@@ -845,13 +865,13 @@ describe('worktrees', () => {
     const { runner, config, dispatched } = setup(withTask({ worktreePath: worktree }, repo));
     mkdirSync(join(config.worktreesDir, 'delegations'), { recursive: true });
     writeFileSync(join(config.worktreesDir, 'delegations', 'task-1'), 'not a folder');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
-    expect(warn).toHaveBeenCalledWith('[Effects] Could not remove the checkouts of delegations', {
+    expect(logs.fieldsOf('[Effects] Could not remove the checkouts of delegations')).toContainEqual({
       taskId: 'task-1',
       error: expect.stringContaining('ENOTDIR'),
     });
-    warn.mockRestore();
+    logs.restore();
     expect(dispatched).toEqual([{ type: 'worktree.gone', taskId: 'task-1' }]);
   });
 
@@ -886,12 +906,12 @@ describe('worktrees', () => {
     expect(existsSync(join(config.dataDir, 'caches', 'removed-repo'))).toBe(false);
     const broken = setup(withTask({ worktreePath: createTempDir() }, repo));
     writeFileSync(join(broken.config.dataDir, 'caches'), '');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
-    expect(warn).toHaveBeenCalledWith('[Effects] Could not prune the shared build caches', {
+    expect(logs.fieldsOf('[Effects] Could not prune the shared build caches')).toContainEqual({
       error: expect.stringContaining('ENOTDIR'),
     });
-    warn.mockRestore();
+    logs.restore();
   });
 
   test('removing a worktree reports it gone even when git cannot remove it', async () => {
@@ -912,13 +932,13 @@ describe('worktrees', () => {
     const failing = { mode: 'worktrees', remove: () => Promise.reject(new Error('Device busy')) };
     const workspaces = { resolve: () => failing } as unknown as Workspaces;
     const broken = setup(withTask({ worktreePath: createTempDir() }, repo), { workspaces });
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
-    expect(warn).toHaveBeenCalledWith('[Effects] Could not remove a worktree', {
+    expect(logs.fieldsOf('[Effects] Could not remove a worktree')).toContainEqual({
       taskId: 'task-1',
       error: expect.stringContaining('Device busy'),
     });
-    warn.mockRestore();
+    logs.restore();
     const none = setup(withTask({ worktreePath: null }));
     await none.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
     expect([...dispatched, ...broken.dispatched, ...none.dispatched]).toEqual([
@@ -1137,13 +1157,13 @@ describe('checks', () => {
     const { runner, dispatched } = setup(
       withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, coverage })
     );
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     await runner.apply(checksEffect(['true'], true), createContext());
-    expect(warn).toHaveBeenCalledWith('[Coverage] Could not measure the changed lines', {
+    expect(logs.fieldsOf('[Coverage] Could not measure the changed lines')).toContainEqual({
       taskId: 'task-1',
       reason: expect.stringContaining('wrote no report'),
     });
-    warn.mockRestore();
+    logs.restore();
     expect(dispatched[0]).toMatchObject({
       type: 'checks.record',
       results: [{ outcome: 'pass' }],
@@ -1379,16 +1399,15 @@ describe('pull requests', () => {
       'pull_request.record',
     ]);
     await first.runner.stop();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    restores.push(() => warn.mockRestore());
+    const logs = captureLogs();
+    restores.push(logs.restore);
     const second = setup(withTask({ stage: 'shipping', worktreePath: worktree, pullRequest: PULL }, repo));
     await second.runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     expect(second.dispatched.map((command) => command.type)).toEqual([
       'pull_request.record_step',
       'pull_request.record_push',
     ]);
-    expect(warn).toHaveBeenCalledWith(
-      '[GitHub] Could not refresh the pull request description',
+    expect(logs.fieldsOf('[GitHub] Could not refresh the pull request description')).toContainEqual(
       expect.objectContaining({ taskId: 'task-1', number: PULL.number })
     );
     await second.runner.stop();
@@ -1428,8 +1447,8 @@ describe('pull requests', () => {
   });
 
   test('closing on cancel closes each pull request and reports the ones that failed', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    restores.push(() => warn.mockRestore());
+    const logs = captureLogs();
+    restores.push(logs.restore);
     const readGitHub = useFakeGitHub([fakePull('fix/tab-scroll'), fakePull('fix/other', { number: 8 })]);
     const { repo } = await createGitRepo();
     const { runner, dispatched } = setup(withTask({ stage: 'cancelled', pullRequest: PULL }, repo));
@@ -1443,8 +1462,7 @@ describe('pull requests', () => {
         failed: [{ number: 9, detail: expect.any(String) }],
       },
     ]);
-    expect(warn).toHaveBeenCalledWith(
-      '[Effects] Could not close a pull request',
+    expect(logs.fieldsOf('[Effects] Could not close a pull request')).toContainEqual(
       expect.objectContaining({ number: 9 })
     );
   });
@@ -1659,12 +1677,10 @@ describe('merging a stack of pull requests', () => {
       controller.abort();
     });
     try {
-      await expect(
-        runner.apply(
-          { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
-          createContext(controller.signal)
-        )
-      ).rejects.toThrow();
+      await runner.apply(
+        { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
+        createContext(controller.signal)
+      );
     } finally {
       spy.mockRestore();
     }
@@ -1826,14 +1842,14 @@ describe('merging a bundle of tasks', () => {
     useFakeGitHub(bundlePulls());
     const { runner, dispatched, created } = await setupBundle('shipping');
     await git(created.path, 'push', '-q', 'origin', '--delete', 'feat/top');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     try {
       await runner.syncPullRequest('task-1', true);
-      expect(warn.mock.calls.map((call) => call[0])).toContain(
-        '[Watch] Could not check that the bundle merges into the default branch'
-      );
+      expect(
+        logs.fieldsOf('[Watch] Could not check that the bundle merges into the default branch')
+      ).toHaveLength(1);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
     expect(dispatched.some((command) => command.type === 'bundle.record_check')).toBe(false);
   });
@@ -2034,6 +2050,32 @@ describe('watching pull requests', () => {
     await runner.stop();
   });
 
+  test('a sync that cannot read the opened issues logs it and goes on', async () => {
+    useFakeGitHub([], { failIssues: 'HTTP 502' } as Partial<FakeGitHub>);
+    const { runner } = setup((state) => {
+      state.feedback.f1 = {
+        id: 'f1',
+        source: 'human',
+        note: 'The plan tab hides changes.',
+        title: 'Plan tab hides changes',
+        body: 'It hides them.',
+        status: 'filed',
+        failure: null,
+        issue: { number: 1, url: 'https://github.com/acme/app/issues/1', openedAt: 1, closedAt: null },
+        taskId: null,
+        runId: null,
+        createdAt: 1,
+        updatedAt: 1,
+      };
+    });
+    const logs = captureLogs();
+    await runner.syncAll();
+    expect(logs.fieldsOf('[Feedback] Could not read the state of opened issues')).toEqual([
+      { error: 'gh issue list failed: HTTP 502' },
+    ]);
+    logs.restore();
+  });
+
   test('stopping aborts the sync in flight and waits for it, so no gh outlives the runner', async () => {
     useFakeGitHub([fakePull('fix/tab-scroll')]);
     const readPid = useHangingGh('pr view');
@@ -2072,8 +2114,8 @@ describe('watching pull requests', () => {
   test('a sync that fails in the background is logged, not thrown', async () => {
     useFakeGitHub([fakePull('fix/tab-scroll')]);
     const { repo, worktree } = await createShippingRepo();
-    const warn = spyOn(log, 'warn');
-    restores.push(() => warn.mockRestore());
+    const logs = captureLogs();
+    restores.push(logs.restore);
     const { runner, reject } = setup(
       withTask({ stage: 'shipping', worktreePath: worktree, pullRequest: PULL }, repo),
       { watchIntervalMs: 10, config: { settleDelayMs: 5 } }
@@ -2082,11 +2124,7 @@ describe('watching pull requests', () => {
     runner.startWatching();
     await runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     const failed = (taskId?: string) =>
-      warn.mock.calls.some(
-        ([message, fields]) =>
-          message === '[Watch] Pull request sync failed' &&
-          (fields as { taskId?: string } | undefined)?.taskId === taskId
-      );
+      logs.fieldsOf('[Watch] Pull request sync failed').some((fields) => fields.taskId === taskId);
     await until('the follow-up sync to fail', () => failed('task-1'), GH_WAIT_MS);
     await until('the interval sync to fail', () => failed(undefined), GH_WAIT_MS);
     await runner.stop();
