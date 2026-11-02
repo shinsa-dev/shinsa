@@ -83,7 +83,7 @@ export class Teams implements TeamLinks {
   readonly #held: TeamsOptions['held'];
   readonly #now: () => number;
   readonly #random: (bytes: number) => Uint8Array<ArrayBuffer>;
-  readonly #channels = new Set<ShareChannel<TeamSubject>>();
+  readonly #channels = new Map<ShareChannel<TeamSubject>, () => void>();
 
   constructor(options: TeamsOptions) {
     this.#engine = options.engine;
@@ -99,14 +99,14 @@ export class Teams implements TeamLinks {
   }
 
   #pushLists() {
-    for (const channel of this.#channels) {
+    for (const channel of this.#channels.keys()) {
       if (channel.subject?.view.kind === 'list') void channel.push();
     }
   }
 
   #pushTranscript(runId: string) {
     const taskId = this.#engine.state.runs[runId]?.taskId;
-    for (const channel of this.#channels) {
+    for (const channel of this.#channels.keys()) {
       const view = channel.subject?.view;
       if (view?.kind === 'task' && view.taskId === taskId) void channel.push();
     }
@@ -326,13 +326,28 @@ export class Teams implements TeamLinks {
       authorize: (hello) => this.#authorize(hello, userId),
       resolveLive: (subject) => this.#resolveLive(subject),
     });
-    this.#channels.add(channel);
+    const release = this.#remote.access.acquire(() => {
+      if (this.#channels.delete(channel)) this.#endChannel(channel, TEAM_REMOTE_CHANGED);
+    });
+    this.#channels.set(channel, release);
     return channel;
   }
 
   closeChannel(channel: ShareChannel<TeamSubject>) {
     channel.close();
+    this.#releaseChannel(channel);
+  }
+
+  #releaseChannel(channel: ShareChannel<TeamSubject>) {
+    const release = this.#channels.get(channel);
     this.#channels.delete(channel);
+    release?.();
+  }
+
+  #endChannel(channel: ShareChannel<TeamSubject>, reason: string) {
+    channel.end(reason).catch((error: unknown) => {
+      log.warn('[Teams] Could not close a team view', { error: describeError(error) });
+    });
   }
 
   #isAllowed(subject: TeamSubject) {
@@ -396,18 +411,15 @@ export class Teams implements TeamLinks {
   }
 
   #syncChannels() {
-    for (const channel of [...this.#channels]) {
+    for (const channel of [...this.#channels.keys()]) {
       const subject = channel.subject;
       if (!subject) continue;
-      if (this.#remote.isEnabled && this.#isAllowed(subject)) {
+      if (this.#isAllowed(subject)) {
         void channel.push();
         continue;
       }
-      this.#channels.delete(channel);
-      const reason = this.#remote.isEnabled ? TEAM_GONE_REASON : TEAM_REMOTE_CHANGED;
-      channel.end(reason).catch((error: unknown) => {
-        log.warn('[Teams] Could not close a team view', { error: describeError(error) });
-      });
+      this.#releaseChannel(channel);
+      this.#endChannel(channel, TEAM_GONE_REASON);
     }
   }
 }

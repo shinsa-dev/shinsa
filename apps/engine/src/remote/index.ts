@@ -28,6 +28,7 @@ import {
 import { describeError, log } from '../log/index.ts';
 import { resolveBrowserCommand } from '../shell/browser.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
+import { RemoteAccessScope } from './access/index.ts';
 import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
 import {
   type PairedMachine,
@@ -52,9 +53,7 @@ export { REMOTE_FILE, RemoteStore } from './store.ts';
 
 const remoteRequests = new WeakSet<Request>();
 
-function isAnyChannel() {
-  return true;
-}
+const REMOTE_ACCESS_CHANGED = 'Remote access to this machine changed.';
 
 export function markRemoteRequest(request: Request) {
   remoteRequests.add(request);
@@ -119,11 +118,12 @@ export function createUrlOpener(cwd: string) {
 export class Remote {
   readonly store: RemoteStore;
   readonly control: RemoteControl;
+  readonly access = new RemoteAccessScope();
   readonly #tunnel: Tunnel;
   #tunnelStatus: TunnelStatus = 'off';
   readonly #options: RemoteOptions;
   readonly #now: () => number;
-  readonly #channels = new Set<RemoteChannel>();
+  readonly #channels = new Map<RemoteChannel, () => void>();
   readonly #listeners = new Set<() => void>();
   readonly #waiters = new Map<string, ((approved: boolean) => void)[]>();
   #pairing: { view: PairingView; run: PairingRun } | null = null;
@@ -698,7 +698,7 @@ export class Remote {
 
   async stop() {
     this.#pairing?.run.cancel();
-    this.#closeChannels(isAnyChannel);
+    this.access.end();
     await this.#tunnel.stop();
   }
 
@@ -715,7 +715,7 @@ export class Remote {
       teamKeys: [],
       grants: [],
     }));
-    this.#closeChannels(isAnyChannel);
+    this.access.end();
     this.#publish();
   }
 
@@ -737,7 +737,10 @@ export class Remote {
       recordSeen: (device) => this.store.recordDeviceSeen(device, this.#now()),
       maxBodyBytes: this.#options.maxBodyBytes,
     });
-    this.#channels.add(channel);
+    const release = this.access.acquire(() => {
+      if (this.#channels.delete(channel)) channel.fail(REMOTE_ACCESS_CHANGED);
+    });
+    this.#channels.set(channel, release);
     return channel;
   }
 
@@ -755,14 +758,20 @@ export class Remote {
 
   closeChannel(channel: RemoteChannel) {
     channel.close();
+    this.#releaseChannel(channel);
+  }
+
+  #releaseChannel(channel: RemoteChannel) {
+    const release = this.#channels.get(channel);
     this.#channels.delete(channel);
+    release?.();
   }
 
   #closeChannels(match: (channel: RemoteChannel) => boolean) {
-    for (const channel of [...this.#channels]) {
+    for (const channel of [...this.#channels.keys()]) {
       if (!match(channel)) continue;
-      channel.fail('Remote access to this machine changed.');
-      this.#channels.delete(channel);
+      this.#releaseChannel(channel);
+      channel.fail(REMOTE_ACCESS_CHANGED);
     }
   }
 
