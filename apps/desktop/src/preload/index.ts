@@ -5,7 +5,7 @@ import {
   type DesktopStart,
   type DesktopUpdate,
   type DesktopWindowState,
-} from '../lib/bridge.ts';
+} from '../bridge/schema.ts';
 
 function subscribe<T>(channel: string, listener: (value: T) => void) {
   const handler = (_event: IpcRendererEvent, value: T) => listener(value);

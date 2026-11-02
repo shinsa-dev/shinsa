@@ -1,13 +1,10 @@
 import { cpus, freemem, totalmem } from 'node:os';
-import { isTaskSettled, type MachineResources, type ShinsaState, type TaskResources } from '@shinsa/core';
+import { isTaskSettled, type MachineResources, type TaskResources } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
-import { type CommandResult, runCommand } from '../shell/index.ts';
-import type { ProcessLedger } from './ledger.ts';
+import { runCommand } from '../shell/index.ts';
+import { startPolling } from './poller.ts';
 import {
-  type CpuTimes,
   createProcessUse,
-  type DiskReading,
-  type MemoryReading,
   parseDiskFree,
   parseDiskUsage,
   parseMemInfo,
@@ -16,44 +13,24 @@ import {
   resolveCpuPercent,
   resolveTaskUse,
 } from './sample.ts';
+import {
+  type Baseline,
+  type CpuTimes,
+  DISK_INTERVAL_MS,
+  type DiskSample,
+  MEMINFO_PATH,
+  type MemoryReading,
+  PRIME_DELAY_MS,
+  PROCESS_TABLE,
+  RESOURCE_COMMAND_TIMEOUT_MS,
+  RESOURCE_INTERVAL_MS,
+  type ResourceCommand,
+  type ResourceListener,
+  type ResourceMonitorOptions,
+} from './schema.ts';
 
-export { ProcessLedger, type ProcessTracker } from './ledger.ts';
-
-type ResourceListener = (resources: MachineResources) => void;
-
-export type ResourceCommand = (argv: string[]) => Promise<CommandResult>;
-
-export interface ResourceMonitorOptions {
-  ledger: ProcessLedger;
-  state: () => Pick<ShinsaState, 'tasks'>;
-  dataDir: string;
-  run?: ResourceCommand;
-  readCpuTimes?: () => CpuTimes;
-  readMemory?: () => Promise<MemoryReading | null>;
-  cores?: number;
-  now?: () => number;
-  intervalMs?: number;
-  primeMs?: number;
-  diskIntervalMs?: number;
-}
-
-interface DiskSample {
-  at: number;
-  disk: DiskReading | null;
-  worktrees: Map<string, number | null>;
-}
-
-interface Baseline {
-  at: number;
-  cpu: CpuTimes;
-  processes: Map<number, number>;
-}
-
-const RESOURCE_INTERVAL_MS = 5_000;
-const PRIME_MS = 1_000;
-const DISK_INTERVAL_MS = 10 * 60 * 1000;
-const COMMAND_TIMEOUT_MS = 60_000;
-const PROCESS_TABLE = ['ps', '-A', '-o', 'pid=,ppid=,pgid=,rss=,time='];
+export { ProcessLedger } from './ledger.ts';
+export type { ProcessTracker, ResourceCommand, ResourceMonitorOptions } from './schema.ts';
 
 export function readCpuTimes(): CpuTimes {
   return cpus().reduce(
@@ -75,7 +52,7 @@ export function createMemoryReader(
   readText: (path: string) => Promise<string> = readTextFile
 ) {
   return async (): Promise<MemoryReading | null> => {
-    if (platform === 'linux') return parseMemInfo(await readText('/proc/meminfo'));
+    if (platform === 'linux') return parseMemInfo(await readText(MEMINFO_PATH));
     if (platform === 'darwin') {
       const result = await run(['vm_stat']);
       return result.ok ? parseVmStat(result.stdout, totalmem()) : null;
@@ -102,14 +79,14 @@ export class ResourceMonitor {
   #disk: DiskSample | null = null;
   #measuringDisk: Promise<void> | null = null;
   #sampling: Promise<void> | null = null;
-  #timer: ReturnType<typeof setTimeout> | null = null;
-  #generation = 0;
+  #stopPolling: (() => void) | null = null;
   #stopped = false;
 
   constructor(options: ResourceMonitorOptions) {
     this.#options = options;
     this.#run =
-      options.run ?? ((argv) => runCommand(argv, options.dataDir, { timeoutMs: COMMAND_TIMEOUT_MS }));
+      options.run ??
+      ((argv) => runCommand(argv, options.dataDir, { timeoutMs: RESOURCE_COMMAND_TIMEOUT_MS }));
     this.#readCpuTimes = options.readCpuTimes ?? readCpuTimes;
     this.#readMemory = options.readMemory ?? createMemoryReader(process.platform, this.#run);
     this.#now = options.now ?? Date.now;
@@ -159,23 +136,17 @@ export class ResourceMonitor {
   #resume() {
     if (this.#stopped) return;
     void this.refresh();
-    this.#schedule(this.#options.primeMs ?? PRIME_MS);
+    this.#stopPolling = startPolling(
+      () => this.refresh(),
+      this.#options.primeMs ?? PRIME_DELAY_MS,
+      this.#options.intervalMs ?? RESOURCE_INTERVAL_MS
+    );
   }
 
   #pause() {
-    if (this.#timer) clearTimeout(this.#timer);
-    this.#timer = null;
-    this.#generation += 1;
+    this.#stopPolling?.();
+    this.#stopPolling = null;
     this.#baseline = null;
-  }
-
-  #schedule(delayMs: number) {
-    const generation = this.#generation;
-    this.#timer = setTimeout(() => {
-      void this.refresh().then(() => {
-        if (generation === this.#generation) this.#schedule(this.#options.intervalMs ?? RESOURCE_INTERVAL_MS);
-      });
-    }, delayMs);
   }
 
   #openTasks() {

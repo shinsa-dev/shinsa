@@ -1,4 +1,4 @@
-const SAFE_REF = /^(?!-)(?!.*\.\.)(?!.*\/\/)[A-Za-z0-9._/-]+(?<!\.lock)(?<![./])$/;
+import { SAFE_REF } from './schema.ts';
 
 export function assertRefName(name: string) {
   if (!SAFE_REF.test(name)) throw new Error(`"${name}" is not a branch name Shinsa will pass to git.`);

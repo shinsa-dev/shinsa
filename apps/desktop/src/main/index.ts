@@ -1,292 +1,103 @@
 import { join } from 'node:path';
-import { ENGINE_PROTOCOL } from '@shinsa/core';
-import { app, clipboard, ipcMain, session, shell } from 'electron';
-import { resolveBadgeText } from '../lib/badge.ts';
-import { CHANNELS, type DesktopStart } from '../lib/bridge.ts';
-import { findDeepLink, parseDeepLink, URL_SCHEME } from '../lib/deep-link.ts';
-import { APP_NAME, resolveUserDataDir } from '../lib/dev-bundle.ts';
-import {
-  APP_ID,
-  describeEngineScreen,
-  type EngineAction,
-  type EngineScreen,
-  LOGIN_ITEMS_URL,
-  PRIVACY_URL,
-} from '../lib/engine.ts';
-import { describeServer, type ServerHealth } from '../lib/health.ts';
-import { isPermissionAllowed } from '../lib/navigation.ts';
-import { parseNotice, resolveNotificationSettingsUrl } from '../lib/notice.ts';
-import { describeAppVersion, parseUpdateChannel } from '../lib/update-channel.ts';
-import { syncCommandLine } from './command-line.ts';
-import { EngineSupervisor } from './engine.ts';
-import { applyMenu } from './menu.ts';
-import { showNotice, watchNoticeFailures } from './notifications.ts';
-import { requestHealth, requestTrayQueue, resolveAppServerUrl } from './server.ts';
-import { StatusTray } from './tray.ts';
-import { Updater } from './updater.ts';
-import { MainWindow } from './window.ts';
+import { Effect, Layer, ManagedRuntime } from 'effect';
+import { FetchHttpClient } from 'effect/http';
+import { app, session } from 'electron';
+import { resolveUserDataDir } from '../app/dev-bundle.ts';
+import { APP_NAME } from '../app/schema.ts';
+import { AppLifecycle } from '../app/service.ts';
+import { PageBridge } from '../bridge/service.ts';
+import { CommandLine } from '../command-line/service.ts';
+import { Connection } from '../connection/service.ts';
+import { URL_SCHEME } from '../deep-links/schema.ts';
+import { EngineActions } from '../engine-actions/service.ts';
+import { EngineSupervisor } from '../engine/service.ts';
+import { FirstHealth } from '../first-health/service.ts';
+import { DesktopHost } from '../host/service.ts';
+import { AppMenu } from '../menu/service.ts';
+import { isPermissionAllowed } from '../navigation/origin.ts';
+import { Notifications } from '../notifications/service.ts';
+import { Prefs } from '../prefs/service.ts';
+import { EngineServer } from '../server/service.ts';
+import { StatusTray } from '../tray/service.ts';
+import { UpdateLog } from '../update-log/service.ts';
+import { Updater } from '../updates/service.ts';
+import { AppWindow } from '../window/service.ts';
+import { DialogsLive } from './dialogs.ts';
+import { FilesLive } from './files.ts';
+import { DesktopHostLive } from './host.ts';
+import { LaunchctlLive } from './launchctl.ts';
+import { LoginItemsLive } from './login-items.ts';
+import { LoginShellLive } from './login-shell.ts';
+import { NativeNoticesLive } from './native-notices.ts';
+import { NativeTrayLive } from './native-tray.ts';
+import { NativeWindowLive } from './native-window.ts';
+import { PageChannelLive } from './page-channel.ts';
+import { DesktopShellLive } from './shell.ts';
+import { UpdateClientLive } from './update-client.ts';
 
-const RETRY_MS = 2000;
+const AppReady = Layer.effectDiscard(Effect.promise(() => app.whenReady()));
 
-const WATCH_MS = 5000;
+const ElectronLayer = Layer.mergeAll(
+  FetchHttpClient.layer,
+  DesktopHostLive,
+  FilesLive,
+  LaunchctlLive,
+  LoginItemsLive,
+  LoginShellLive,
+  UpdateClientLive,
+  DialogsLive,
+  DesktopShellLive
+);
 
-const MISSES_BEFORE_WAITING = 3;
+const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, CommandLine.layer).pipe(
+  Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer, EngineActions.layer)),
+  Layer.provideMerge(ElectronLayer)
+);
 
-let main: MainWindow | null = null;
-let engine: EngineSupervisor | null = null;
-let pendingPath: string | null = null;
-let connecting = false;
-let misses = 0;
-let shownScreen = '';
-let menuActions: Omit<Parameters<typeof applyMenu>[0], 'update'> | null = null;
-let updater: Updater | null = null;
-let tray: StatusTray | null = null;
-let firstHealth: Promise<ServerHealth | null> | null = null;
-let aboutCredits: string | undefined;
+const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AppMenu.layer, StatusTray.layer).pipe(
+  Layer.provideMerge(Updater.layer),
+  Layer.provideMerge(Notifications.layer),
+  Layer.provideMerge(AppWindow.layer),
+  Layer.provideMerge(
+    Layer.mergeAll(NativeWindowLive, NativeTrayLive, NativeNoticesLive, PageChannelLive).pipe(
+      Layer.provide(AppReady)
+    )
+  ),
+  Layer.provideMerge(EngineLayer)
+);
+
+const Main = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const host = yield* DesktopHost;
+    const { origin } = yield* EngineServer;
+    const updater = yield* Updater;
+    const commandLine = yield* CommandLine;
+    const connection = yield* Connection;
+    yield* Effect.sync(() => {
+      if (host.packaged) app.setAsDefaultProtocolClient(URL_SCHEME);
+      else app.dock?.setIcon(join(app.getAppPath(), 'resources', 'icon.png'));
+      session.defaultSession.setPermissionRequestHandler((_contents, permission, callback, details) =>
+        callback(isPermissionAllowed(permission, details.requestingUrl, origin))
+      );
+      session.defaultSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
+        isPermissionAllowed(permission, requestingOrigin, origin)
+      );
+    });
+    yield* updater.start;
+    yield* Effect.forkScoped(commandLine.sync);
+    yield* Effect.forkScoped(connection.start);
+  })
+).pipe(Layer.provide(Connection.layer.pipe(Layer.provideMerge(WindowLayer))));
 
 app.setName(APP_NAME);
 app.setPath('userData', resolveUserDataDir(app.getPath('appData'), app.isPackaged));
 
 if (app.requestSingleInstanceLock()) {
-  watchApp();
+  const runtime = ManagedRuntime.make(Main);
+  runtime.runFork(Effect.logDebug('Shinsa started'));
+  app.on('will-quit', () => {
+    Effect.runFork(runtime.disposeEffect);
+  });
 } else {
   app.exit(0);
-}
-
-function watchApp() {
-  pendingPath = parseDeepLink(findDeepLink(process.argv) ?? '');
-  app.on('second-instance', (_event, argv) => openLink(findDeepLink(argv)));
-  app.on('open-url', (event, url) => {
-    event.preventDefault();
-    openLink(url);
-  });
-  app.on('activate', () => main?.show());
-  app.on('before-quit', () => main?.markQuitting());
-  watchPage();
-  firstHealth = requestHealth(resolveAppServerUrl());
-  void app.whenReady().then(start);
-}
-
-function openLink(raw: string | null) {
-  const path = raw ? parseDeepLink(raw) : null;
-  if (!main) {
-    pendingPath = path ?? pendingPath;
-    return;
-  }
-  if (path) main.open(path);
-  main.show();
-}
-
-async function start() {
-  if (app.isPackaged) app.setAsDefaultProtocolClient(URL_SCHEME);
-  else app.dock?.setIcon(join(app.getAppPath(), 'resources', 'icon.png'));
-  applyAboutPanel();
-  const origin = resolveAppServerUrl();
-  engine = new EngineSupervisor(origin);
-  main = new MainWindow(
-    origin,
-    () => void connect(),
-    (action) => void runEngineAction(action)
-  );
-  if (pendingPath) main.open(pendingPath);
-  tray = new StatusTray(
-    (action) => {
-      if (action === 'open') main?.show();
-      else app.quit();
-    },
-    (path) => {
-      main?.show();
-      main?.open(path);
-    }
-  );
-  applySessionPolicy(origin);
-  menuActions = {
-    show: () => main?.show(),
-    open: (path) => main?.open(path),
-    step: (offset) => main?.step(offset),
-    reload: () => main?.reload(),
-    restartEngine: () => void restartEngine(),
-  };
-  updater = new Updater(
-    publishUpdate,
-    () => main?.show(),
-    () => main?.markQuitting()
-  );
-  refreshMenu();
-  updater.start();
-  void syncCommandLine();
-  await connect();
-  setInterval(() => void watchEngine(), WATCH_MS);
-}
-
-function refreshMenu() {
-  if (menuActions && updater) applyMenu({ ...menuActions, update: updater.menuItem });
-}
-
-function publishUpdate() {
-  refreshMenu();
-  applyAboutPanel();
-  if (updater) main?.win.webContents.send(CHANNELS.update, updater.pageState);
-}
-
-function applySessionPolicy(origin: string) {
-  const policy = session.defaultSession;
-  policy.setPermissionRequestHandler((_contents, permission, callback, details) =>
-    callback(isPermissionAllowed(permission, details.requestingUrl, origin))
-  );
-  policy.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
-    isPermissionAllowed(permission, requestingOrigin, origin)
-  );
-}
-
-function watchPage() {
-  ipcMain.on(CHANNELS.start, (event) => {
-    const payload: DesktopStart | null =
-      main && event.sender === main.win.webContents
-        ? {
-            version: app.getVersion(),
-            protocol: ENGINE_PROTOCOL,
-            update: updater?.pageState ?? { status: 'none' },
-            channel: updater?.channel ?? 'stable',
-            windowState: main.windowState,
-          }
-        : null;
-    event.returnValue = payload;
-  });
-  ipcMain.on(CHANNELS.installUpdate, (event) => {
-    if (main?.isAppSender(event)) updater?.install();
-  });
-  ipcMain.on(CHANNELS.checkForUpdates, (event) => {
-    if (main?.isAppSender(event)) void updater?.check(true);
-  });
-  ipcMain.on(CHANNELS.updateChannel, (event, value: unknown) => {
-    const channel = main?.isAppSender(event) ? parseUpdateChannel(value) : null;
-    if (channel) void updater?.applyChannel(channel);
-  });
-  ipcMain.on(CHANNELS.downgrade, (event, accept: unknown) => {
-    if (main?.isAppSender(event)) void updater?.answerDowngrade(accept === true);
-  });
-  ipcMain.on(CHANNELS.badge, (event, count: unknown) => {
-    if (main?.isAppSender(event)) app.dock?.setBadge(resolveBadgeText(count));
-  });
-  ipcMain.on(CHANNELS.notify, (event, payload: unknown) => {
-    const notice = main?.isAppSender(event) ? parseNotice(payload) : null;
-    if (!notice) return;
-    showNotice(notice, (path) => {
-      if (path) main?.open(path);
-      main?.show();
-    });
-  });
-  watchNoticeFailures(() => {
-    if (main?.showsApp) main.win.webContents.send(CHANNELS.notifyFailed);
-  });
-  ipcMain.on(CHANNELS.notificationSettings, (event) => {
-    if (main?.isAppSender(event)) void shell.openExternal(resolveNotificationSettingsUrl(APP_ID));
-  });
-}
-
-function applyAboutPanel(credits = aboutCredits) {
-  aboutCredits = credits;
-  const version = updater ? describeAppVersion(app.getVersion(), updater.channel) : app.getVersion();
-  app.setAboutPanelOptions({ applicationName: APP_NAME, applicationVersion: version, credits });
-}
-
-function showApp(current: MainWindow, health: ServerHealth) {
-  void refreshTray(current.origin, health);
-  applyAboutPanel(describeServer(current.origin, health));
-  misses = 0;
-  shownScreen = '';
-  void current.showServerPage();
-}
-
-function showScreen(current: MainWindow, screen: EngineScreen) {
-  const view = describeEngineScreen(screen);
-  const key = JSON.stringify(view);
-  if (current.showsWaiting && key === shownScreen) return;
-  shownScreen = key;
-  app.dock?.setBadge('');
-  void current.showWaiting(view);
-}
-
-async function connect() {
-  const current = main;
-  const supervisor = engine;
-  if (!current || !supervisor || connecting) return;
-  connecting = true;
-  const found = await (firstHealth ?? requestHealth(current.origin));
-  firstHealth = null;
-  if (found) {
-    connecting = false;
-    showApp(current, found);
-    return;
-  }
-  for (;;) {
-    const result = await supervisor.ensure(() => showScreen(current, { kind: 'starting' }));
-    if ('health' in result) {
-      connecting = false;
-      showApp(current, result.health);
-      return;
-    }
-    showScreen(current, result.screen);
-    if (result.screen.kind !== 'dev' && result.screen.kind !== 'approval') {
-      connecting = false;
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
-  }
-}
-
-async function watchEngine() {
-  const current = main;
-  if (!current || connecting) return;
-  if (current.showsWaiting) {
-    const health = await requestHealth(current.origin);
-    await refreshTray(current.origin, health);
-    if (health) await connect();
-    return;
-  }
-  if (!current.showsApp) return;
-  const health = await requestHealth(current.origin);
-  await refreshTray(current.origin, health);
-  misses = health ? 0 : misses + 1;
-  if (misses >= MISSES_BEFORE_WAITING) {
-    misses = 0;
-    await connect();
-  }
-}
-
-async function refreshTray(origin: string, health: ServerHealth | null) {
-  if (!health) {
-    tray?.update(null, null);
-    return;
-  }
-  tray?.update(health, await requestTrayQueue(origin));
-}
-
-async function restartEngine() {
-  const current = main;
-  if (!current || !engine) return;
-  showScreen(current, { kind: 'starting' });
-  await engine.restart();
-  await connect();
-}
-
-async function runEngineAction(action: EngineAction) {
-  switch (action) {
-    case 'open-login-items':
-      await shell.openExternal(LOGIN_ITEMS_URL);
-      return;
-    case 'open-privacy':
-      await shell.openExternal(PRIVACY_URL);
-      return;
-    case 'copy-details':
-      void clipboard.writeText(engine?.readDetails() ?? '');
-      return;
-    case 'restart':
-      await restartEngine();
-      return;
-    case 'retry':
-      await connect();
-      return;
-  }
 }

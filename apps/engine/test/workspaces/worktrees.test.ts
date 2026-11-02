@@ -98,4 +98,13 @@ describe('worktrees', () => {
       'The task has no worktree.'
     );
   });
+
+  test('the base is brought into the task’s worktree, and a task without one is refused', async () => {
+    const { repo, strategy, task } = await startTask();
+    const onBehind = () => Promise.resolve();
+    expect(await strategy.syncBase(repo, task, 'main', { onBehind })).toEqual({ status: 'current' });
+    await expect(
+      strategy.syncBase(repo, createTask({ worktreePath: null }), 'main', { onBehind })
+    ).rejects.toThrow('The task has no worktree.');
+  });
 });

@@ -18,10 +18,10 @@ import {
   resolveDecisionProperty,
 } from '../agents/quick/decide.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
-import { describeError, log } from '../log/index.ts';
+import { log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
-
-const DEBOUNCE_MS = 4_000;
+import { createDebouncedWrite } from './debounce.ts';
+import { BRIEFING_DEBOUNCE_MS, type DebouncedWrite } from './schema.ts';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -179,31 +179,23 @@ export interface BriefingOptions {
 export class Briefings {
   readonly #engine: Engine;
   readonly #ask: QuickJson;
-  readonly #debounceMs: number;
-  #timer: ReturnType<typeof setTimeout> | null = null;
+  readonly #writes: DebouncedWrite;
   #stopped = false;
 
   constructor(engine: Engine, options: BriefingOptions) {
     this.#engine = engine;
     this.#ask = options.ask;
-    this.#debounceMs = options.debounceMs ?? DEBOUNCE_MS;
+    this.#writes = createDebouncedWrite(options.debounceMs ?? BRIEFING_DEBOUNCE_MS, () => this.#write());
   }
 
   schedule() {
     if (this.#stopped) return;
-    if (this.#timer) clearTimeout(this.#timer);
-    this.#timer = setTimeout(() => {
-      this.#timer = null;
-      this.#write().catch((error: unknown) => {
-        log.warn('[Briefing] Could not write the briefing', { error: describeError(error) });
-      });
-    }, this.#debounceMs);
+    this.#writes.schedule();
   }
 
   stop() {
     this.#stopped = true;
-    if (this.#timer) clearTimeout(this.#timer);
-    this.#timer = null;
+    this.#writes.cancel();
   }
 
   async #write() {

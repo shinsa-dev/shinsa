@@ -1,9 +1,9 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ExtensionStore, parseScope } from '../../src/extensions/store.ts';
-import { log } from '../../src/log/index.ts';
+import { captureLogs } from '../helpers/index.ts';
 
 function createPath() {
   return join(mkdtempSync(join(tmpdir(), 'shinsa-extensions-')), 'extensions.json');
@@ -161,10 +161,12 @@ describe('Shinsa’s own MCP and skill settings', () => {
   test('a file that is not JSON starts from nothing and says so in the log', () => {
     const path = createPath();
     writeFileSync(path, '{ broken');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     expect(new ExtensionStore(path).listServers()).toEqual([]);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Extensions] extensions.json could not be read; starting from none')).toEqual([
+      expect.objectContaining({ path }),
+    ]);
     writeFileSync(path, '[1]');
     expect(new ExtensionStore(path).listServers()).toEqual([]);
     writeFileSync(path, '{}');

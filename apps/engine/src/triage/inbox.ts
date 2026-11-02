@@ -1,11 +1,9 @@
 import { DomainError, type InboxMessage, type MessageRoute, needsMessageKind, type Task } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
+import { requestWithin } from './classify.ts';
 import { type MessageClassifier, resolveMessageRoute } from './message.ts';
-
-const CLASSIFY_TIMEOUT_MS = 30_000;
-
-const UNDELIVERED_REASON = 'Shinsa could not deliver it. Send it again.';
+import { CLASSIFY_TIMEOUT_MS, UNDELIVERED_REASON } from './schema.ts';
 
 interface InboxOptions {
   classifyTimeoutMs?: number;
@@ -69,23 +67,16 @@ export class MessageInbox {
   async #resolveRoute(task: Task, batch: InboxMessage[]): Promise<MessageRoute> {
     if (!needsMessageKind(this.#engine.state, task)) return {};
     const text = batch.map((message) => message.text).join('\n\n');
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`The classifier did not answer within ${this.#classifyTimeoutMs} ms.`)),
-        this.#classifyTimeoutMs
-      );
-    });
     try {
-      return resolveMessageRoute(await Promise.race([this.#classify(task, text), timeout]));
+      return resolveMessageRoute(
+        await requestWithin(() => this.#classify(task, text), this.#classifyTimeoutMs)
+      );
     } catch (error) {
       log.warn(
         '[Inbox] Could not classify a message; it goes to the task unclassified, as a follow-up when the task rests',
         { taskId: task.id, messageIds: batch.map((message) => message.id), error: describeError(error) }
       );
       return {};
-    } finally {
-      clearTimeout(timer);
     }
   }
 

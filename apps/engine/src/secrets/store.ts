@@ -1,113 +1,21 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { DomainError, SECRET_REF_PATTERN } from '@shinsa/core';
-import { writeJsonFile } from '../config/index.ts';
-import { describeError, log } from '../log/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
+import { SecretFiles } from './files/service.ts';
+import {
+  HOOK_TOKEN_BYTES,
+  type McpCredentials,
+  REF_LENGTH,
+  REF_PREFIX,
+  SECRET_REF_TTL_MS,
+  type SecretFile,
+  type WebhookCredentials,
+} from './schema.ts';
 
-const SECRET_REF_TTL_MS = 24 * 60 * 60 * 1000;
-
-const REF_PREFIX = 'secret-ref:';
-
-interface StoredRef {
-  value: string;
-  taskId: string;
-  savedAt: number;
-}
-
-export interface WebhookCredentials {
-  token: string;
-  secret: string | null;
-}
-
-export type McpCredentials = Record<string, unknown>;
-
-interface SecretFile {
-  version: 1;
-  salt: string;
-  refs: Record<string, StoredRef>;
-  hooks: Record<string, WebhookCredentials>;
-  mcp: Record<string, McpCredentials>;
-}
+export type { McpCredentials, WebhookCredentials } from './schema.ts';
 
 export interface SecretStoreOptions {
   now?: () => number;
-}
-
-type Fields = Record<string, unknown>;
-
-function isFields(value: unknown): value is Fields {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function readRefs(value: unknown) {
-  if (!isFields(value)) return {};
-  const refs: Record<string, StoredRef> = {};
-  for (const [ref, entry] of Object.entries(value)) {
-    if (!isFields(entry)) continue;
-    if (
-      typeof entry.value !== 'string' ||
-      typeof entry.taskId !== 'string' ||
-      typeof entry.savedAt !== 'number'
-    )
-      continue;
-    refs[ref] = { value: entry.value, taskId: entry.taskId, savedAt: entry.savedAt };
-  }
-  return refs;
-}
-
-function readHooks(value: unknown) {
-  if (!isFields(value)) return {};
-  const hooks: Record<string, WebhookCredentials> = {};
-  for (const [scheduleId, entry] of Object.entries(value)) {
-    if (!isFields(entry) || typeof entry.token !== 'string') continue;
-    hooks[scheduleId] = {
-      token: entry.token,
-      secret: typeof entry.secret === 'string' ? entry.secret : null,
-    };
-  }
-  return hooks;
-}
-
-function readMcp(value: unknown) {
-  if (!isFields(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, Fields] => isFields(entry[1]))
-  );
-}
-
-function createFile(): SecretFile {
-  return { version: 1, salt: randomBytes(32).toString('hex'), refs: {}, hooks: {}, mcp: {} };
-}
-
-function replaceUnreadable(path: string, problem: string): SecretFile {
-  const copy = `${path}.unreadable-${Date.now()}`;
-  copyFileSync(path, copy);
-  log.warn('[Secrets] The secret store could not be read; it was kept aside and an empty one started', {
-    path,
-    copy,
-    problem,
-  });
-  return createFile();
-}
-
-function readFile(path: string): SecretFile {
-  if (!existsSync(path)) return createFile();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(path, 'utf8'));
-  } catch (error) {
-    return replaceUnreadable(path, describeError(error));
-  }
-  if (!isFields(parsed) || typeof parsed.salt !== 'string' || parsed.salt.length === 0) {
-    return replaceUnreadable(path, 'It has no salt.');
-  }
-  return {
-    version: 1,
-    salt: parsed.salt,
-    refs: readRefs(parsed.refs),
-    hooks: readHooks(parsed.hooks),
-    mcp: readMcp(parsed.mcp),
-  };
 }
 
 export class SecretStore {
@@ -118,16 +26,16 @@ export class SecretStore {
   constructor(path: string, options: SecretStoreOptions = {}) {
     this.#path = path;
     this.#now = options.now ?? Date.now;
-    this.#file = readFile(path);
+    this.#file = edgeRuntime.runSync(SecretFiles.use((files) => files.read(path)));
   }
 
   #write(next: SecretFile) {
-    writeJsonFile(this.#path, next);
+    edgeRuntime.runSync(SecretFiles.use((files) => files.write(this.#path, next)));
     this.#file = next;
   }
 
   resolveRef(gateId: string) {
-    return `${REF_PREFIX}${createHmac('sha256', this.#file.salt).update(gateId).digest('hex').slice(0, 32)}`;
+    return `${REF_PREFIX}${createHmac('sha256', this.#file.salt).update(gateId).digest('hex').slice(0, REF_LENGTH)}`;
   }
 
   writeRef(gateId: string, taskId: string, value: string) {
@@ -185,7 +93,7 @@ export class SecretStore {
   upsertHook(scheduleId: string): WebhookCredentials {
     const existing = this.selectHook(scheduleId);
     if (existing) return existing;
-    const created = { token: randomBytes(24).toString('base64url'), secret: null };
+    const created = { token: randomBytes(HOOK_TOKEN_BYTES).toString('base64url'), secret: null };
     this.#write({ ...this.#file, hooks: { ...this.#file.hooks, [scheduleId]: created } });
     return created;
   }

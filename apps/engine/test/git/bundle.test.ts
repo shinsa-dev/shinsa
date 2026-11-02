@@ -68,4 +68,16 @@ describe('checkBundleMerge', () => {
       checkBundleMerge(repo, [...BRANCHES, { taskId: 'gone', branch: 'feat/gone', base: 'feat/top' }])
     ).rejects.toThrow();
   });
+
+  test('a branch git cannot merge at all fails the check instead of reading as a conflict', async () => {
+    const { repo, path } = await createBundle();
+    await git(path, 'checkout', '-q', '--orphan', 'feat/unrelated');
+    writeFiles(path, { 'alone.txt': 'alone\n' });
+    await git(path, 'add', '-A');
+    await git(path, 'commit', '-q', '-m', 'feat: unrelated');
+    await git(path, 'push', '-q', '-f', 'origin', 'feat/unrelated');
+    await expect(
+      checkBundleMerge(repo, [{ taskId: 'unrelated', branch: 'feat/unrelated', base: 'main' }])
+    ).rejects.toThrow('merge-tree');
+  });
 });

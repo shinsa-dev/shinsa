@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AccountUsage, ChatNotice, UsageWindow } from '@shinsa/core';
@@ -9,8 +9,7 @@ import {
   type UsageReader,
 } from '../../src/accounts/limits.ts';
 import type { UsageRead } from '../../src/accounts/usage.ts';
-import { log } from '../../src/log/index.ts';
-import { createTempDir } from '../helpers/index.ts';
+import { captureLogs, createTempDir } from '../helpers/index.ts';
 
 type RateLimitNotice = Extract<ChatNotice, { kind: 'rate_limit' }>;
 
@@ -311,15 +310,15 @@ describe('usage limits', () => {
     expect(createLimits([], { path }).limits.snapshot('c')).toEqual(createUnknownUsage());
 
     writeFileSync(path, '{ not json');
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       expect(createLimits([], { path }).limits.snapshot('a')).toEqual(createUnknownUsage());
-      expect(warn.mock.calls[0]?.[0]).toBe(
-        '[Accounts] The usage cache could not be read; starting without it'
-      );
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
+    expect(logs.entries[0]?.message).toBe(
+      '[Accounts] The usage cache could not be read; starting without it'
+    );
   });
 
   test('a cache that cannot be written is logged and the reading is still kept', async () => {
@@ -328,14 +327,14 @@ describe('usage limits', () => {
     const { limits } = createLimits([{ ok: true, windows: [SESSION] }], {
       path: join(dir, 'file', 'usage.json'),
     });
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       await limits.refresh(['a']);
       expect(limits.snapshot('a').status).toBe('ok');
-      expect(warn.mock.calls[0]?.[0]).toBe('[Accounts] Could not keep the usage cache');
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
+    expect(logs.entries[0]?.message).toBe('[Accounts] Could not keep the usage cache');
   });
 
   test('removing an account forgets its usage; an unknown one changes nothing', async () => {
