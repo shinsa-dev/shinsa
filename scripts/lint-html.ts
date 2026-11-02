@@ -99,7 +99,7 @@ export function listHtmlRules(config: { rules: Record<string, unknown> }) {
 }
 
 export function resolveHtmlReport(output: string, folder: string) {
-  return output.replaceAll(`${folder}/`, '').replaceAll('.html.tsx', '.html');
+  return Bun.stripANSI(output).replaceAll(`${folder}/`, '').replaceAll('.html.tsx', '.html');
 }
 
 export function runHtmlLint(files: string[], oxlint: string) {

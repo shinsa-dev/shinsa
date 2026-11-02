@@ -76,6 +76,12 @@ describe('the HTML lint', () => {
     );
   });
 
+  test('a report read through a coloured terminal names its lines in plain text', () => {
+    expect(resolveHtmlReport('\u001b[1m/tmp/x/page.html.tsx\u001b[0m:2:2 error', '/tmp/x')).toBe(
+      'page.html:2:2 error'
+    );
+  });
+
   test('a page with the faults Biome caught fails, on their lines', () => {
     const file = writeHtml(
       [
