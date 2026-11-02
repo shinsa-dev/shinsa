@@ -67,6 +67,8 @@ export class EffectReports extends Context.Service<
               { id: `${key}:preview.fail` }
             );
             return;
+          default:
+            break;
         }
         const title = FAILURE_TITLE[effect.kind];
         if (!title || !('taskId' in effect) || effect.taskId === null) return;

@@ -7,7 +7,7 @@ import { ServeLock } from '../instance/lock/service.ts';
 import type { Engine } from '../runtime/index.ts';
 import { EventLog } from '../store/index.ts';
 import type { ShinsaOptions } from './schema.ts';
-import { createServices, startHttp, startWork, stopWork } from './wiring.ts';
+import { createServices, disposeRuntime, startHttp, startWork, stopWork } from './wiring.ts';
 
 export class Serve extends Context.Service<Serve, { readonly url: string; readonly engine: Engine }>()(
   'shinsa/engine/serve/Serve'
@@ -30,6 +30,7 @@ export class Serve extends Context.Service<Serve, { readonly url: string; readon
           (log) => Effect.sync(() => log.close())
         );
         const services = yield* Effect.sync(() => createServices(config, options, instance, eventLog));
+        yield* Effect.addFinalizer(() => Effect.promise(() => disposeRuntime(services)));
         const http = yield* Effect.acquireRelease(
           Effect.sync(() => startHttp(services, options, instance, stop)),
           (server) => Effect.promise(() => server.stop())

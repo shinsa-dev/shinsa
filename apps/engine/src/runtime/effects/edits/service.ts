@@ -20,12 +20,12 @@ export class EditCommits extends Context.Service<
         attempt: EffectAttempt
       ) {
         if ((task.editedPaths ?? []).length === 0) return;
-        const commit = yield* world.bridge(() =>
+        const committed = yield* world.bridge(() =>
           world.workspaces.resolve(task).commit(repo, task, EDITS_COMMIT_MESSAGE)
         );
         yield* world.dispatch(
-          { type: 'task.commit_edits', taskId: task.id, treeHash: commit.treeHash },
-          { id: `${attempt.key}:task.commit_edits:${commit.treeHash ?? 'none'}` }
+          { type: 'task.commit_edits', taskId: task.id, treeHash: committed.treeHash },
+          { id: `${attempt.key}:task.commit_edits:${committed.treeHash ?? 'none'}` }
         );
       }, Effect.uninterruptible);
 

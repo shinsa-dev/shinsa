@@ -524,6 +524,21 @@ describe('engine lifecycle', () => {
     ).toBe(true);
   });
 
+  test('disposing releases the engine’s runtime once it has settled, and it takes no command after', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'shinsa-engine-'));
+    dirs.push(dir);
+    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    engine.start();
+    await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
+    engine.stop();
+    await engine.settle();
+    await engine.dispose();
+    await engine.dispose();
+    await expect(engine.dispatch({ type: 'task.create', request: 'Again', repoId: null })).rejects.toThrow();
+    expect(log.listEventsBetween(1, 1)).toHaveLength(1);
+  });
+
   test('stopping aborts every running effect, and settle waits until its handler has returned', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'shinsa-engine-'));
     dirs.push(dir);

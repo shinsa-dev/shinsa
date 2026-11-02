@@ -488,6 +488,40 @@ describe('one Shinsa per data directory', () => {
     expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
   });
 
+  test('stopping releases the engine’s and the effects’ runtimes after the server stops and before the log closes', async () => {
+    const config = createTestConfig(createTempDir());
+    const shinsa = await startShinsa(config, { models });
+    const order: string[] = [];
+    const { dispose: disposeEngine } = Engine.prototype;
+    const { dispose: disposeEffects } = EffectRunner.prototype;
+    const { close } = EventLog.prototype;
+    const isListening = () =>
+      fetch(`${shinsa.url}/api/health`).then(
+        () => true,
+        () => false
+      );
+    const spies = [
+      spyOn(EffectRunner.prototype, 'dispose').mockImplementation(async function (this: EffectRunner) {
+        order.push(`effects released while serving: ${await isListening()}`);
+        return disposeEffects.call(this);
+      }),
+      spyOn(Engine.prototype, 'dispose').mockImplementation(function (this: Engine) {
+        order.push('engine released');
+        return disposeEngine.call(this);
+      }),
+      spyOn(EventLog.prototype, 'close').mockImplementation(function (this: EventLog) {
+        order.push('log closed');
+        close.call(this);
+      }),
+    ];
+    try {
+      await shinsa.stop();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    expect(order).toEqual(['effects released while serving: false', 'engine released', 'log closed']);
+  });
+
   test('inspect mode takes no lock, so it reads the data of a Shinsa that is running', async () => {
     const config = createTestConfig(createTempDir());
     const live = await startShinsa(config, { models });

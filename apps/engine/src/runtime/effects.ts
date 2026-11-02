@@ -100,4 +100,8 @@ export class EffectRunner {
   syncPullRequest(taskId: string, force = false) {
     return this.#runtime.runPromise(PullRequestSync.use((sync) => sync.sync(taskId, force)));
   }
+
+  dispose() {
+    return this.#runtime.dispose();
+  }
 }

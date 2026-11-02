@@ -258,6 +258,13 @@ async function createShippingRepo(): Promise<TestRepo & { worktree: string }> {
 }
 
 describe('routing effects', () => {
+  test('disposing releases the runner’s services, so a sync asked for after shutdown is refused', async () => {
+    const { runner } = setup();
+    await runner.stop();
+    await runner.dispose();
+    await expect(runner.syncAll()).rejects.toThrow();
+  });
+
   test('run effects go to the supervisor, a steer with its effect key as the cause, and a briefing request to the briefings', async () => {
     const { runner, calls, scheduled } = setup();
     await runner.apply({ kind: 'run.execute', runId: 'r1' }, createContext());

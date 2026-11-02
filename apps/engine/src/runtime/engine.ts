@@ -145,4 +145,8 @@ export class Engine {
   hasReceipt(id: string) {
     return this.#runtime.runSync(this.#core.hasReceipt(id));
   }
+
+  dispose() {
+    return this.#runtime.dispose();
+  }
 }

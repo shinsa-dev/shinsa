@@ -315,3 +315,8 @@ export async function stopWork(services: Services) {
   services.engine.stop();
   await services.engine.settle();
 }
+
+export async function disposeRuntime(services: Services) {
+  await services.effects.dispose();
+  await services.engine.dispose();
+}

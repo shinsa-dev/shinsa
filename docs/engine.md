@@ -5687,6 +5687,8 @@ startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
                   ├─ ServeLock     data/serve.lock         scoped
                   ├─ EventLog ───► StoreLayer: SqlClient   events, outbox,
                   │                (sqlite-bun)            receipts, snapshot
+                  ├─ Engine, EffectRunner  runtimes of their own,
+                  │                        released after HTTP
                   ├─ HTTP server
                   ├─ Eunoe's forwarder
                   └─ the work: runs, clocks, effects, …
@@ -5722,10 +5724,31 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell)
   an error. The pull request watch is a fiber on `Schedule.spaced` (45 s), a sync soon after a push is a fiber in the
   same `FiberSet`, and `stop` interrupts both; syncs of one task take turns on a semaphore per task (`RcMap`), and a
   full sync runs once however many ask for it. `EffectRunner` is the class edge over them.
+- **The dispatch.** `EngineCore` (`runtime/engine/`) takes one command at a time on a `Semaphore`: the receipt,
+  `decide`, the commit, the decided state, then the listeners, and the same update on its `updates` stream. The pump
+  is one fiber that claims what is due from the outbox and waits at least `PUMP_FLOOR` (1 ms) between rounds, since a
+  zero-length sleep never lets a timer or I/O run; each running effect is a fiber in a `FiberMap` keyed by its effect
+  key, so a decision that cancels it interrupts it, and `dispatch` returns once that interrupt has ended. `Engine` is
+  the class edge, with the same methods as before.
+- **The clocks.** A timer that fires from state (`StateClock`, `runtime/clock/`) keeps one timer fiber in a
+  `FiberHandle`, re-armed when a state change moves its earliest due time and left alone when it does not. The run's
+  two-hour clock (`agents/clock/`) is a countdown fiber that a question pauses, and the quiet-run check
+  (`agents/silence/`) a fiber on its interval.
+- **The agents.** The registry is the `Providers` service, which fails with `NoAgentProvider` for an id it does not
+  have. A session is a scoped resource (`acquireAgentSession`): closing its scope cancels it and waits for it to end.
+  Every task has a scope, and every attempt of a run a child scope that holds its session (`agents/supervisor/`), so
+  ending an attempt, cancelling the task or stopping the engine closes them and the processes they started stop. The
+  `codex app-server` client is a scoped resource of its own (`makeCodexClient`), its process group killed when the
+  scope closes. A question's reply is a `Deferred`; idle release and idle compaction are fibers per run and per task.
+  Quick calls and every tool call run as effects with typed failures (`QuickAttemptFailed`, `ToolCallFailed`) that
+  answer the same text as before. A session's system prompt and tool list are decided when it starts and never
+  change (Caching).
 - **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
-  its release as a finalizer: the lock, the log, the HTTP server, Eunoe's forwarder, the work. `stop()` disposes the
-  runtime, which runs them in reverse: the work (live runs first, then the clocks and the effects, The agent loop →
-  Restart continuation), Eunoe, HTTP, the log, then the lock. A start that fails partway disposes it as well, so
+  its release as a finalizer: the lock, the log, the runtimes of `Engine` and `EffectRunner`, the HTTP server, Eunoe's
+  forwarder, the work. `stop()` disposes the runtime, which runs them in reverse: the work (live runs first, then the
+  clocks and the effects, The agent loop → Restart continuation), Eunoe, HTTP, the effects' and then the engine's
+  runtime, the log, then the lock. The two runtimes go only once HTTP has stopped, since a request still answers from
+  the engine until then. A start that fails partway disposes it as well, so
   nothing it took stays held, and a second `stop()` waits for the first.
 - **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
   helpers run the services through `edgeRuntime`, a `ManagedRuntime` of the logger and the shell for the process;

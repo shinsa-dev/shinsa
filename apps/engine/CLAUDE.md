@@ -543,7 +543,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   the pull request syncs, the clocks and every running effect, and waits for them and for every running effect
   handler (`Engine.settle`) before it closes
   the log, so no `claude`, check or `gh` outlives the server (`docs/engine.md` → The agent loop → Restart
-  continuation). Eunoe's forwarder stops after the effects, once no `claude` can still talk to it. Your terminals' shells
+  continuation). Eunoe's forwarder stops after the effects, once no `claude` can still talk to it. Once HTTP has
+  stopped, `disposeRuntime` (`serve/wiring.ts`) releases the `EffectRunner`'s and then the `Engine`'s own
+  `ManagedRuntime`, before the log closes, so no fiber of theirs outlives the engine. Your terminals' shells
   are hung up before the clocks stop, and their screens saved. Anything new that starts a process or a timer is
   stopped there too.
 - **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
