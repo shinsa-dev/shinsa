@@ -10,7 +10,21 @@ caller. It runs in the browser too, so the web reads the same queue, progress an
 src/
 ├── index.ts         The public barrel. Everything it exports stays importable by the same name; the Worker's API and
 │                    its failures are imported from paths of their own (`@shinsa/core/remote/api`, `@shinsa/core/remote/errors`),
-│                    so their generic names (`NotFound`, `Forbidden`) never reach the barrel
+│                    and so is the engine's (`@shinsa/core/engine-api`, `/engine-api/schema`, `/engine-api/errors`,
+│                    `/engine-api/routes`), so their generic names (`NotFound`, `Forbidden`) never reach the barrel
+├── engine-api/      The engine's HTTP API, declared once for the engine that serves it and every client that
+│                    calls it (the command line, the agents' management tools, the web and desktop apps): api.ts
+│                    (EngineApi, an HttpApi of every /api route in 18 groups behind one EngineGate middleware, each
+│                    endpoint with its params, query, payload, answer and failures), schema.ts (the payloads and
+│                    answers, the limits ENGINE_BODY_LIMIT_BYTES and ATTACHMENT_UPLOAD_LIMIT_BYTES, the fixed
+│                    failures as Schema.TaggedError with their code and status, and the route annotations:
+│                    EngineFeatureRoute, LocalOnlyRoute, OwnerOnlyRoute, GuestRoute, BrowserOnlyRoute,
+│                    RequestBodyLimit, RouteFieldFailures), errors.ts (resolveEngineFailureWire: a failure as
+│                    `{ error: { code, message } }`, RequestFailedWire for a code core or a service gave,
+│                    EditConflictWire, serializeEngineFailure), routes.ts (listEngineRoutes reads EngineApi with
+│                    HttpApi.reflect: each route's key and annotations; resolveEngineFeatureRoutes, which the
+│                    engine's ENGINE_FEATURE_ROUTES is, and listEngineBaselineRoutes). A new route is an endpoint
+│                    here, never a path written by hand on either side
 ├── domain/          Entity types (types.ts), stage sets and priority order (stages.ts), settings, their defaults and
 │                    SETTINGS_KEYS (settings.ts; resolveAgentFastMode: a role's fast mode, else the global one;
 │                    resolveDelegationLimit: delegations at once under one step, null for no limit;
@@ -409,7 +423,7 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
 - **Untrusted input is read with a schema.** Every parser of input from outside (a command, a hand-over, a socket
   message, a review link, a placement answer, a resource summary, a Slack mention or evaluation, a briefing answer,
   engine info, a terminal frame) decodes one Effect `Schema` per shape, its type derived from it, never a reader by
-  hand. A folder's shapes live in its `schema.ts` (`commands/`, `domain/`, `report/`, `schedules/`, `remote/`,
+  hand. A folder's shapes live in its `schema.ts` (`commands/`, `domain/`, `report/`, `schedules/`, `remote/`, `engine-api/`,
   `slack/`, `protocol/`, `briefing/`, `test-coverage/`): schemas, the types derived from them and the constants they
   read, never a function (`bun lint:conventions` refuses one), as the effect skill's File layout has it. The parser or
   validator that decodes them, and its decoder, sits in the logic file beside it; the builders the schemas are made of

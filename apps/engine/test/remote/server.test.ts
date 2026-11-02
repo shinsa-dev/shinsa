@@ -17,18 +17,20 @@ import {
   resolveMachineTeamPath,
   serializeBase64Url,
 } from '@shinsa/core';
+import { GuestsFull, MembersFull, NotFound, Revoked } from '@shinsa/core/remote/errors';
+import { Effect, Layer } from 'effect';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { startServer } from '../../src/http/index.ts';
 import { log } from '../../src/log/index.ts';
 import { Handoffs } from '../../src/remote/handoffs.ts';
 import {
-  ControlClient,
+  RemoteControl,
   createUrlOpener,
   openRemoteUrl,
   Remote,
   type RemoteSnapshot,
-  requestHealth,
+  TunnelConnector,
   resolveMachineName,
 } from '../../src/remote/index.ts';
 import type { PreviewLinks, PreviewPeer } from '../../src/remote/previews.ts';
@@ -47,8 +49,9 @@ import {
   overrideEnv,
   until,
 } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
-import { startFakeControlPlane } from './control-plane.ts';
+import { refuse, startFakeControlPlane } from './control-plane.ts';
 
 const CONNECT_KEY = serializeBase64Url(new Uint8Array(32).fill(9));
 
@@ -135,16 +138,22 @@ async function start(
   const connectors: { stopped: boolean }[] = [];
   const remote = new Remote({
     path,
-    control: new ControlClient({ origin: plane.origin }),
-    connect: () => {
-      const connector = { stopped: false, exited: new Promise(() => undefined), stop: () => undefined };
-      connector.stop = () => {
-        connector.stopped = true;
-      };
-      connectors.push(connector);
-      return Promise.resolve(connector);
-    },
-    ping: () => Promise.resolve(true),
+    control: new RemoteControl({ origin: plane.origin, pairPollMs: 1 }),
+    connector: Layer.succeed(TunnelConnector, {
+      open: () =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            const connector = { stopped: false };
+            connectors.push(connector);
+            return connector;
+          }),
+          (connector) =>
+            Effect.sync(() => {
+              connector.stopped = true;
+            })
+        ).pipe(Effect.as({ exited: Effect.never })),
+    }),
+    ping: () => Effect.succeed(true),
     localUrl: () => 'http://127.0.0.1:1',
     version: '1',
     maxBodyBytes: 1024 * 1024,
@@ -155,7 +164,6 @@ async function start(
         opened.push(url);
         return Promise.resolve();
       }),
-    pairPollMs: 1,
   });
   const engine = new Engine(new EventLog(config.databasePath));
   const teams = options.teams
@@ -690,7 +698,7 @@ describe('the remote service', () => {
     });
     expect(remote.tunnelHost).toBe('t-k3x9.shinsa.dev');
     expect(await remote.verifyConnect(null)).toBeNull();
-    plane.answers.set('/__remote/machine/heartbeat', () => new Response('', { status: 401 }));
+    plane.answers.set('/__remote/machine/heartbeat', () => refuse(Revoked));
     remote.start();
     const deadline = performance.now() + 2_000;
     while (remote.snapshot().paired && performance.now() < deadline) await Bun.sleep(1);
@@ -702,20 +710,6 @@ describe('the remote service', () => {
     expect(connectors).toHaveLength(1);
     expect(remote.tunnelHost).toBeNull();
     warn.mockRestore();
-  });
-});
-
-describe('the health ping', () => {
-  test('is healthy only when the tunnel host answers 2xx', async () => {
-    const server = Bun.serve({
-      port: 0,
-      hostname: '127.0.0.1',
-      fetch: (request) => new Response('', { status: request.url.endsWith('/health') ? 200 : 503 }),
-    });
-    running.push(() => server.stop(true));
-    expect(await requestHealth(`http://127.0.0.1:${server.port}/health`)).toBe(true);
-    expect(await requestHealth(`http://127.0.0.1:${server.port}/down`)).toBe(false);
-    expect(await requestHealth('http://127.0.0.1:1/health')).toBe(false);
   });
 });
 
@@ -851,7 +845,7 @@ describe('managing remote access on the machine', () => {
 
 describe('links, access requests and members', () => {
   function answerAccess(access: RemoteAccess) {
-    return () => Response.json({ ok: true, ...access });
+    return () => Response.json({ ok: true, ...access, guests: [], teams: [] });
   }
 
   function readLink(remote: Remote) {
@@ -1026,7 +1020,7 @@ describe('links, access requests and members', () => {
   test('accepting a request on a machine with every member place taken says so and keeps the request', async () => {
     const { remote, local, port, plane } = await start();
     plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
-    plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => new Response('', { status: 409 }));
+    plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => refuse(MembersFull));
     await local('/api/remote/link/create', {});
     const machine = await remote.store.resolveMachineKey();
     void openChannel(remote.appOrigin, port, readLink(remote)?.secret ?? '', machine.publicKey, {
@@ -1086,7 +1080,7 @@ describe('links, access requests and members', () => {
   test('a request is refused when the machine cannot check who asked', async () => {
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const { remote, local, port, plane } = await start();
-    plane.answers.set(REMOTE_PATHS.machineRequester, () => new Response('', { status: 404 }));
+    plane.answers.set(REMOTE_PATHS.machineRequester, () => refuse(NotFound));
     await local('/api/remote/link/create', {});
     const machine = await remote.store.resolveMachineKey();
     await expect(
@@ -1161,28 +1155,47 @@ describe('links, access requests and members', () => {
     remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     const settled = pushes.length;
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(pushes.length).toBe(settled);
     plane.answers.set(REMOTE_PATHS.heartbeat, answerAccess(ACCESS));
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(remote.snapshot().access).toEqual(ACCESS);
     expect(remote.snapshot().devices).toEqual([]);
     expect(await channel.closed).toBe(1008);
     release();
   });
 
+  test('a signing key that cannot be read is logged and the heartbeat goes without it', async () => {
+    const { remote, plane } = await start();
+    spyOn(remote.store, 'resolveSigningKey').mockRejectedValue(new Error('disk full'));
+    const logs = captureLogs();
+    try {
+      remote.start();
+      await until('connected', () => remote.snapshot().status === 'connected');
+      await remote.requestHeartbeat();
+      const beats = plane.calls.filter((call) => call.path === REMOTE_PATHS.heartbeat);
+      expect(beats.length).toBeGreaterThan(0);
+      expect(beats.every((call) => !('signingKey' in (call.body as object)))).toBe(true);
+      expect(logs.fieldsOf('[Remote] Could not read the signing key').length).toBeGreaterThan(0);
+    } finally {
+      logs.restore();
+    }
+  });
+
   test('a heartbeat with the account’s teams shows them at once, and a repeat changes nothing', async () => {
     const { remote, plane } = await start();
     const pushes: number[] = [];
     const release = remote.subscribe(() => pushes.push(1));
-    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, teams: [TEAM] }));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () =>
+      Response.json({ ok: true, ...ACCESS, guests: [], teams: [TEAM] })
+    );
     remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     expect(remote.snapshot().teams).toEqual([
       { id: 'team1', name: 'Platform', status: 'member', onMachine: false, invite: false, team: TEAM },
     ]);
     const settled = pushes.length;
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(pushes.length).toBe(settled);
     release();
   });
@@ -1441,7 +1454,7 @@ describe('handing off a task', () => {
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const claimAs = () =>
       settleChannel(openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id }));
-    plane.answers.set(REMOTE_PATHS.machineGuestAdd, () => new Response('', { status: 409 }));
+    plane.answers.set(REMOTE_PATHS.machineGuestAdd, () => refuse(GuestsFull));
     expect(await claimAs()).toContain('This machine already has 20 people working on its tasks');
     plane.answers.set(REMOTE_PATHS.machineGuestAdd, () => new Response('', { status: 500 }));
     expect(await claimAs()).toContain('This machine cannot hand off tasks right now');
@@ -1468,7 +1481,7 @@ describe('handing off a task', () => {
     expect(
       await settleChannel(openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id }))
     ).toContain('This machine cannot hand off tasks right now');
-    plane.answers.set(REMOTE_PATHS.heartbeat, () => new Response('', { status: 401 }));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () => refuse(Revoked));
     remote.start();
     await until('forgotten', () => remote.store.file.credentials === null);
     expect(remote.store.file.handoffs).toEqual([]);
@@ -1502,15 +1515,17 @@ describe('handing off a task', () => {
     const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, userId: KAI.id, taskId };
     remote.store.upsertDevice({ ...device, publicKey: 'guest' });
     plane.answers.set(REMOTE_PATHS.heartbeat, () =>
-      Response.json({ ok: true, ...ACCESS, guests: [GUEST_MEMBER] })
+      Response.json({ ok: true, ...ACCESS, guests: [GUEST_MEMBER], teams: [] })
     );
     remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(remote.store.file.guests).toEqual([GUEST_MEMBER]);
     expect(remote.snapshot().devices).toHaveLength(1);
-    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
-    await remote.supervisor.requestHeartbeat();
+    plane.answers.set(REMOTE_PATHS.heartbeat, () =>
+      Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
+    );
+    await remote.requestHeartbeat();
     expect(remote.snapshot().devices).toEqual([]);
   });
 
@@ -1518,7 +1533,9 @@ describe('handing off a task', () => {
     const { remote, engine, plane, taskId } = await startHandoff();
     await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
     remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
-    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () =>
+      Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
+    );
     remote.start();
     await until('given back', () => engine.state.tasks[taskId]?.handoff === null);
     expect(engine.state.tasks[taskId]?.activity.at(-1)?.text).toBe('kai gave this task back');
@@ -1529,7 +1546,9 @@ describe('handing off a task', () => {
   test('a member who takes a task over stays a member, and the next heartbeat keeps the task with them', async () => {
     const { remote, engine, port, plane, taskId, machine } = await startHandoff();
     const access = { ...ACCESS, members: [GUEST_MEMBER] };
-    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...access, guests: [] }));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () =>
+      Response.json({ ok: true, ...access, guests: [], teams: [] })
+    );
     remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     const secret = readClaim(engine, taskId)?.secret ?? '';
@@ -1537,23 +1556,25 @@ describe('handing off a task', () => {
     expect(await channel.next()).toEqual({ t: 'ready' });
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineGuestAdd)).toBe(false);
     expect(remote.store.file.guests).toEqual([]);
-    await remote.supervisor.requestHeartbeat();
+    await remote.requestHeartbeat();
     expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('kai');
     expect(remote.snapshot().devices).toMatchObject([{ userId: KAI.id, taskId }]);
   });
 
   test('a heartbeat Shinsa Cloud answered before a claim landed keeps the guest it just added', async () => {
     const { remote, engine, port, plane, taskId, machine } = await startHandoff();
-    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () =>
+      Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
+    );
     remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     const held = Promise.withResolvers<Response>();
     plane.answers.set(REMOTE_PATHS.heartbeat, () => held.promise);
-    const beat = remote.supervisor.requestHeartbeat();
+    const beat = remote.requestHeartbeat();
     const secret = readClaim(engine, taskId)?.secret ?? '';
     const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id });
     expect(await channel.next()).toEqual({ t: 'ready' });
-    held.resolve(Response.json({ ok: true, ...ACCESS, guests: [] }));
+    held.resolve(Response.json({ ok: true, ...ACCESS, guests: [], teams: [] }));
     await beat;
     expect(remote.store.file.guests).toEqual([GUEST_MEMBER]);
     expect(remote.snapshot().devices).toHaveLength(1);
@@ -1568,7 +1589,9 @@ describe('handing off a task', () => {
     const dispatch = spyOn(engine, 'dispatch').mockImplementation(() =>
       Promise.reject(new Error('disk full'))
     );
-    plane.answers.set(REMOTE_PATHS.heartbeat, () => Response.json({ ok: true, ...ACCESS, guests: [] }));
+    plane.answers.set(REMOTE_PATHS.heartbeat, () =>
+      Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
+    );
     remote.start();
     await until('logged', () =>
       warn.mock.calls.some((call) => call[0] === '[Handoff] Could not give a task back')

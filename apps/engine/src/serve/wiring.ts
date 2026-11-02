@@ -20,7 +20,7 @@ import { Onboarding } from '../onboarding/index.ts';
 import { createProjectChanges } from '../projects/routes.ts';
 import { Handoffs } from '../remote/handoffs.ts';
 import {
-  ControlClient,
+  RemoteControl,
   createInstalledConnector,
   createUrlOpener,
   REMOTE_FILE,
@@ -99,8 +99,8 @@ export function createServices(
   });
   const remote = new Remote({
     path: join(config.dataDir, REMOTE_FILE),
-    control: new ControlClient({ origin: config.remoteOrigin }),
-    connect: options.remoteConnect ?? createInstalledConnector(config.dataDir),
+    control: new RemoteControl({ origin: config.remoteOrigin }),
+    connector: options.remoteConnector ?? createInstalledConnector(config.dataDir),
     localUrl: () => address.url,
     version: instance.version,
     maxBodyBytes: ATTACHMENT_REQUEST_LIMIT_BYTES,

@@ -1,15 +1,14 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { REMOTE_PATHS } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
-import { ControlClient } from '../../src/remote/control.ts';
-import { Pairing } from '../../src/remote/pairing.ts';
+import { RemoteControl } from '../../src/remote/client/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
 
 const START = {
   claimCode: 'K7PQ',
   pollSecret: 'poll',
   url: 'https://app.shinsa.dev/pair',
-  expiresAt: 10_000,
+  expiresAt: Date.now() + 60_000,
 };
 
 const CREDENTIALS = {
@@ -26,11 +25,11 @@ afterEach(async () => {
   for (const plane of planes.splice(0)) await plane.stop();
 });
 
-function startPairing(now = () => 0) {
+function startPairing(start = START) {
   const plane = startFakeControlPlane();
   planes.push(plane);
-  const control = new ControlClient({ origin: plane.origin });
-  return { plane, pairing: new Pairing({ control, start: START, pollMs: 1, now }) };
+  const control = new RemoteControl({ origin: plane.origin, pairPollMs: 1 });
+  return { plane, pairing: control.startPairing(start) };
 }
 
 function answerPolls(fake: FakeControlPlane, ...bodies: unknown[]) {
@@ -44,32 +43,31 @@ function answerPolls(fake: FakeControlPlane, ...bodies: unknown[]) {
 
 describe('pairing', () => {
   test('polls with the secret until the instance is claimed, through failed polls', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const { plane: fake, pairing } = startPairing();
     answerPolls(fake, { status: 'pending' }, 500, {
       status: 'claimed',
       credentials: CREDENTIALS,
       owner: 'mona',
     });
-    expect(pairing.view).toEqual({ claimCode: 'K7PQ', url: START.url, expiresAt: START.expiresAt });
     expect(await pairing.done).toEqual({
       status: 'claimed',
       machine: { credentials: CREDENTIALS, owner: 'mona' },
     });
+    logs.restore();
     expect(fake.calls.map((call) => call.body)).toEqual([
       { claimCode: 'K7PQ', pollSecret: 'poll' },
       { claimCode: 'K7PQ', pollSecret: 'poll' },
       { claimCode: 'K7PQ', pollSecret: 'poll' },
     ]);
-    expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
+    expect(logs.fieldsOf('[Remote] Could not check on pairing; trying again')).toHaveLength(1);
   });
 
   test('ends when app.shinsa.dev says the code expired, or once its time is up', async () => {
     const answered = startPairing();
     answerPolls(answered.plane, { status: 'expired' });
     expect(await answered.pairing.done).toEqual({ status: 'expired' });
-    const timed = startPairing(() => START.expiresAt);
+    const timed = startPairing({ ...START, expiresAt: Date.now() - 1 });
     expect(await timed.pairing.done).toEqual({ status: 'expired' });
     expect(timed.plane.calls).toHaveLength(0);
   });
