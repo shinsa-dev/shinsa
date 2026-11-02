@@ -3230,8 +3230,10 @@ online, and the last list of it their own machine kept while it is not (Offline 
 - **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page names the team
   and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing), keeps the key in the browser
   and, on Ask to join, sends `POST /__remote/teams/join { invite }`, which records that the account asked
-  (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads their
-  projects over the sealed channel (`lib/teams/join-machines.ts`) and asks which to share, one or more being required;
+  (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads the
+  projects of those online over the sealed channel (`lib/teams/join-machines.ts`, giving up on one after 4 s) and asks
+  which to share, one or more being required once any arrive (Ask to join stays open while they load, and joins
+  without sharing if pressed before they do);
   Ask to join then sends each machine with a pick `POST /api/remote/teams/join { url }` (the one team route the
   dashboard may call, and only from a device of the machine's owner: a member's device is refused with `not_owner`,
   since joining your account to a team and sharing your projects is yours alone, `Remote.openChannel`) and `project.add_to_team` for each pick, so the key
