@@ -49,6 +49,10 @@ describe('EngineApi shapes', () => {
       handle: null,
     });
     expect(() => Schema.decodeUnknownSync(OkAnswer)({ ok: false })).toThrow();
+    expect(Schema.decodeUnknownSync(CommandAnswer)({ ok: true, taskId: 't' })).toEqual({
+      ok: true,
+      taskId: 't',
+    });
     expect(Schema.decodeUnknownSync(TeamCreateAnswer)({ teamId: 't', url: 'u' })).toEqual({
       teamId: 't',
       url: 'u',

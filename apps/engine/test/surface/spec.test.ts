@@ -44,22 +44,23 @@ describe('defining surface specs', () => {
   });
 
   test('a read formats what the server answered; humanOnly marks it hidden from task agents', async () => {
-    const spec = defineRead<{ n: number }>({
+    const spec = defineRead({
       path: ['x', 'count'],
       summary: 'Count.',
       fields: [],
       humanOnly: true,
-      request: () => '/api/count',
-      format: ({ n }) => `${n} things.`,
+      read: (_values, client) => client.api.state.memory(),
+      format: ({ memory }) => `${memory.length} things.`,
     });
     expect(spec).toMatchObject({ access: 'read', humanOnly: true });
-    const fake = createFakeClient({ '/api/count': { n: 3 } });
-    expect(await spec.run(fake.client, {})).toEqual({ data: { n: 3 }, text: '3 things.' });
+    const fake = createFakeClient({ '/api/memory': { memory: [1, 2, 3] } });
+    expect(await spec.run(fake.client, {})).toEqual({ data: { memory: [1, 2, 3] }, text: '3 things.' });
+    expect(fake.reads).toEqual(['/api/memory']);
     const shown = defineRead({
       path: ['y'],
       summary: 'Y.',
       fields: [],
-      request: () => '/',
+      read: () => Promise.resolve(null),
       format: () => '',
     });
     expect(shown).not.toHaveProperty('humanOnly');

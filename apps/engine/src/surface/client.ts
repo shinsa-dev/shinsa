@@ -1,10 +1,11 @@
 import type { UserCommand } from '@shinsa/core';
+import type { EngineCalls } from '../cli/client/schema.ts';
 
 export interface CommandReceipt {
-  ok: true;
-  taskId: string | null;
-  handle?: string | null;
-  scheduleId?: string;
+  readonly ok: true;
+  readonly taskId: string | null;
+  readonly handle?: string | null | undefined;
+  readonly scheduleId?: string;
 }
 
 export interface SurfaceHookSecrets {
@@ -19,8 +20,7 @@ interface SurfaceProjectChanges {
 
 export interface SurfaceClient {
   base: string;
-  read: <T>(path: string) => Promise<T>;
-  post: <T>(path: string, body: unknown) => Promise<T>;
+  api: EngineCalls;
   send: (command: UserCommand) => Promise<CommandReceipt>;
   projects?: SurfaceProjectChanges;
   hookSecrets?: SurfaceHookSecrets;

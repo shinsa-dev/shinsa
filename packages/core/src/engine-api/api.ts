@@ -81,6 +81,7 @@ import {
   ServiceRunBody,
   ServiceSuggestionsQuery,
   SettingsAnswer,
+  SignInAnswer,
   SlackAnswer,
   TaskDetailAnswer,
   TaskListQuery,
@@ -260,7 +261,7 @@ class OnboardingGroup extends HttpApiGroup.make('onboarding')
     HttpApiEndpoint.get('roots', '/api/onboarding/roots', { query: RefreshQuery, success: RootsAnswer }),
     HttpApiEndpoint.post('setup', '/api/onboarding/setup', {
       payload: AnyBody,
-      success: ObjectAnswer,
+      success: OnboardingAnswer,
     }).annotate(LocalOnlyRoute, true),
     HttpApiEndpoint.get('prerequisites', '/api/onboarding/prerequisites', { success: ObjectAnswer }),
     HttpApiEndpoint.post('privacy', '/api/onboarding/privacy', { success: ObjectAnswer }).annotate(
@@ -282,33 +283,33 @@ class AccountsGroup extends HttpApiGroup.make('accounts')
   .add(
     HttpApiEndpoint.post('refresh', '/api/accounts/refresh', {
       payload: Schema.Struct({ scope: Field }),
-      success: ObjectAnswer,
+      success: AccountsAnswer,
     }),
     HttpApiEndpoint.post('login', '/api/accounts/login', {
       payload: AccountLoginRequest,
-      success: ObjectAnswer,
+      success: AccountsAnswer,
     }).annotate(RouteFieldFailures, {
       accountId: { code: 'account_invalid', message: 'Name the account to sign in to.' },
     }),
     HttpApiEndpoint.post('loginCode', '/api/accounts/login/code', {
       payload: Schema.Struct({ loginId: Field, code: Field }),
-      success: ObjectAnswer,
+      success: AccountsAnswer,
     }),
     HttpApiEndpoint.post('loginCancel', '/api/accounts/login/cancel', {
       payload: Schema.Struct({ loginId: Field }),
-      success: ObjectAnswer,
+      success: AccountsAnswer,
     }),
     HttpApiEndpoint.post('import', '/api/accounts/import', {
       payload: Schema.Struct({ origin: Field, email: Field }),
-      success: ObjectAnswer,
+      success: AccountsAnswer,
     }),
     HttpApiEndpoint.post('update', '/api/accounts/update', {
       payload: Schema.Struct({ accountId: Field, patch: Field }),
-      success: ObjectAnswer,
+      success: AccountsAnswer,
     }),
     HttpApiEndpoint.post('remove', '/api/accounts/remove', {
       payload: Schema.Struct({ accountId: Field }),
-      success: ObjectAnswer,
+      success: AccountsAnswer,
     })
   )
   .annotateEndpoints(LocalOnlyRoute, true)
@@ -338,43 +339,43 @@ class ExtensionsGroup extends HttpApiGroup.make('extensions')
   .add(
     HttpApiEndpoint.post('check', '/api/extensions/check', {
       payload: Schema.Struct({ serverId: Field }),
-      success: ObjectAnswer,
+      success: ExtensionsAnswer,
     }),
     HttpApiEndpoint.post('addServer', '/api/extensions/servers/add', {
       payload: Schema.Struct({ server: Field }),
-      success: ObjectAnswer,
+      success: ExtensionsAnswer,
     }),
     HttpApiEndpoint.post('updateServer', '/api/extensions/servers/update', {
       payload: Schema.Struct({ serverId: Field, server: Field }),
-      success: ObjectAnswer,
+      success: ExtensionsAnswer,
     }),
     HttpApiEndpoint.post('removeServer', '/api/extensions/servers/remove', {
       payload: Schema.Struct({ serverId: Field }),
-      success: ObjectAnswer,
+      success: ExtensionsAnswer,
     }),
     HttpApiEndpoint.post('chooseServer', '/api/extensions/servers/choose', {
       payload: AnyBody,
-      success: ObjectAnswer,
+      success: ExtensionsAnswer,
     }),
     HttpApiEndpoint.post('signIn', '/api/extensions/servers/sign-in', {
       payload: Schema.Struct({ serverId: Field }),
-      success: ObjectAnswer,
+      success: SignInAnswer,
     }),
     HttpApiEndpoint.post('signOut', '/api/extensions/servers/sign-out', {
       payload: Schema.Struct({ serverId: Field }),
-      success: ObjectAnswer,
+      success: ExtensionsAnswer,
     }),
     HttpApiEndpoint.post('chooseSkill', '/api/extensions/skills/choose', {
       payload: Schema.Struct({ skillId: Field, enabled: Field }),
-      success: ObjectAnswer,
+      success: ExtensionsAnswer,
     }),
     HttpApiEndpoint.post('choosePlugin', '/api/extensions/plugins/choose', {
       payload: Schema.Struct({ pluginId: Field, enabled: Field }),
-      success: ObjectAnswer,
+      success: ExtensionsAnswer,
     }),
     HttpApiEndpoint.post('optimizer', '/api/extensions/optimizer', {
       payload: AnyBody,
-      success: ObjectAnswer,
+      success: ExtensionsAnswer,
     })
   )
   .annotateEndpoints(LocalOnlyRoute, true)

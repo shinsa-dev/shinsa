@@ -1,4 +1,5 @@
 import type { UserCommand } from '@shinsa/core';
+import { createEngineCalls } from '../../src/cli/client/index.ts';
 import { readArgv, type SurfaceClient, type SurfaceSpec, selectSpec } from '../../src/surface/index.ts';
 import type { Display } from '../../src/terminal/index.ts';
 import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
@@ -22,21 +23,33 @@ export function createFakeClient(
   const reads: string[] = [];
   const posts: { path: string; body: unknown }[] = [];
   const sent: UserCommand[] = [];
-  const answer = (path: string, body?: unknown) => {
-    if (!(path in responses)) return Promise.reject(new Error(`No canned answer for ${path}`));
+  const answer = async (request: Request) => {
+    const url = new URL(request.url);
+    const path = `${url.pathname}${url.search}`;
+    const text = await request.text();
+    const body: unknown = text ? JSON.parse(text) : undefined;
+    if (request.method === 'GET') reads.push(path);
+    else posts.push({ path, body });
+    if (!(path in responses)) {
+      return Response.json(
+        { error: { code: 'not_found', message: `No canned answer for ${path}` } },
+        { status: 404 }
+      );
+    }
     const responder = responses[path];
-    return Promise.resolve(typeof responder === 'function' ? responder(path, body) : responder);
+    return Response.json(typeof responder === 'function' ? responder(path, body) : responder);
   };
   const client: SurfaceClient = {
     base: BASE,
-    read: <T>(path: string) => {
-      reads.push(path);
-      return answer(path) as Promise<T>;
-    },
-    post: <T>(path: string, body: unknown) => {
-      posts.push({ path, body });
-      return answer(path, body) as Promise<T>;
-    },
+    api: createEngineCalls({
+      base: BASE,
+      fetch: Object.assign(
+        (input: string | URL | Request, init?: RequestInit) => answer(new Request(String(input), init)),
+        {
+          preconnect: fetch.preconnect,
+        }
+      ),
+    }),
     send: (command) => {
       sent.push(command);
       return Promise.resolve({ ok: true, taskId, ...(handle ? { handle } : {}) });

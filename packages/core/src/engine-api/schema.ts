@@ -2,11 +2,14 @@ import { Context, Predicate, Schema, SchemaGetter } from 'effect';
 import type { AgentModel, AgentProviderInfo } from '../agent-models/index.ts';
 import type { ChatEntry } from '../chat/protocol.ts';
 import type { UserCommand } from '../commands/schema.ts';
+import type { Feedback, FeedbackLeak } from '../domain/feedback.ts';
 import type { MemoryEntry } from '../domain/memory.ts';
 import type { OnBehalfAction } from '../domain/on-behalf.ts';
 import type { Schedule, WatchSuggestion } from '../domain/schedules.ts';
+import type { WebhookSignature } from '../domain/schema.ts';
 import type { Settings } from '../domain/settings.ts';
-import type { Gate, Project, Repo, Run, Task, TaskSuggestion } from '../domain/types.ts';
+import type { Focus, Gate, Project, Repo, Run, Task, TaskSuggestion } from '../domain/types.ts';
+import type { Watchdog } from '../domain/watchdogs.ts';
 import type { AccountsSnapshot } from '../protocol/accounts.ts';
 import type {
   FileContent,
@@ -28,7 +31,7 @@ import type { TeamJoinStatus } from '../remote/contract.ts';
 import type { PlacementAnswer } from '../remote/placement.ts';
 import type { RemoteSnapshot } from '../remote/status.ts';
 import type { TeamFeedSnapshot } from '../remote/teams.ts';
-import type { MergeStep } from '../report/types.ts';
+import type { MergeStepView } from '../report/merge-steps.ts';
 import type { SlackSnapshot } from '../slack/relay.ts';
 import type { CoverageDetection } from '../test-coverage/types.ts';
 
@@ -298,8 +301,8 @@ export const TaskListQuery = {
 export const ChatQuery = {
   run: Schema.optionalKey(Schema.String),
   kinds: Schema.optionalKey(Schema.String),
-  limit: Schema.optionalKey(Schema.String),
   after: Schema.optionalKey(Schema.String),
+  limit: Schema.optionalKey(Schema.String),
 };
 
 export const CodeQuery = {
@@ -364,7 +367,7 @@ export const OpenAnswer = Schema.Struct({ ok: Schema.Boolean });
 export const CommandAnswer = Schema.Struct({
   ok: Schema.Literal(true),
   taskId: Schema.NullOr(Schema.String),
-  handle: Schema.NullOr(Schema.String),
+  handle: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
 export type CommandAnswer = typeof CommandAnswer.Type;
@@ -434,8 +437,8 @@ export interface TaskDetailView {
   readonly summary: Task['summary'];
   readonly result: Task['result'] | null;
   readonly findings: Task['findings'];
-  readonly mergeSteps: readonly MergeStep[];
-  readonly watchdogs: readonly unknown[];
+  readonly mergeSteps: readonly MergeStepView[];
+  readonly watchdogs: readonly Watchdog[];
   readonly gates: readonly Gate[];
   readonly waitsOn: readonly { readonly id: string; readonly title: string }[];
   readonly runs: readonly RunView[];
@@ -468,9 +471,9 @@ export interface LocalRepoView {
 
 export interface WebhookView {
   readonly url: string;
-  readonly signature: unknown;
+  readonly signature: WebhookSignature | null;
   readonly hasSecret: boolean;
-  readonly replayKey: unknown;
+  readonly replayKey: string | null;
 }
 
 export const ObjectAnswer = Schema.Unknown.pipe(
@@ -500,7 +503,7 @@ export const ReposAnswer = Schema.Unknown.pipe(
 );
 
 export const ProjectsAnswer = Schema.Unknown.pipe(
-  Schema.refine((value): value is { readonly projects: readonly ProjectView[]; readonly focus: unknown } =>
+  Schema.refine((value): value is { readonly projects: readonly ProjectView[]; readonly focus: Focus } =>
     Predicate.isObject(value)
   )
 );
@@ -524,7 +527,16 @@ export const MemoryAnswer = Schema.Unknown.pipe(
 );
 
 export const FeedbackAnswer = Schema.Unknown.pipe(
-  Schema.refine((value): value is { readonly feedback: readonly object[] } => Predicate.isObject(value))
+  Schema.refine(
+    (
+      value
+    ): value is {
+      readonly feedback: readonly (Feedback & {
+        readonly task: string | null;
+        readonly leaks: readonly FeedbackLeak[];
+      })[];
+    } => Predicate.isObject(value)
+  )
 );
 
 export const DelegationsAnswer = Schema.Unknown.pipe(
@@ -630,6 +642,10 @@ export const PlacementAnswerBody = Schema.Unknown.pipe(
 
 export const SlackAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is SlackSnapshot => Predicate.isObject(value))
+);
+
+export const SignInAnswer = Schema.Unknown.pipe(
+  Schema.refine((value): value is { readonly authorizationUrl: string | null } => Predicate.isObject(value))
 );
 
 export const OnboardingAnswer = Schema.Unknown.pipe(

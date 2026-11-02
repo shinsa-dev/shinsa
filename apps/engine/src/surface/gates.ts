@@ -2,7 +2,7 @@ import type { FindingVerdict, GateDecision, GateType, UserCommand } from '@shins
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findMergeStep, findOpenGate } from './resolve.ts';
-import { defineAction, defineCommand, encode, readValue, type SurfaceSpec } from './spec.ts';
+import { defineAction, defineCommand, readValue, type SurfaceSpec } from './spec.ts';
 import { TASK_FIELD } from './tasks.ts';
 
 const DECISIONS = ['approve', 'revise', 'reject', 'reply'] as const;
@@ -255,8 +255,9 @@ export const GATE_SPECS: SurfaceSpec[] = [
       { name: 'value', kind: 'text', positional: 'one', required: true, description: 'The secret.' },
     ],
     act: async (client, values) => {
-      const data = await client.post(`/api/secrets/${encode(values.gate)}`, {
-        value: readValue(values, 'value'),
+      const data = await client.api.secrets.answer({
+        params: { gateId: readValue(values, 'gate') },
+        payload: { value: readValue(values, 'value') },
       });
       return { data, text: 'Saved. The agent gets a reference, never the value.' };
     },
@@ -267,7 +268,10 @@ export const GATE_SPECS: SurfaceSpec[] = [
     humanOnly: true,
     fields: [GATE_FIELD],
     act: async (client, values) => {
-      const data = await client.post(`/api/secrets/${encode(values.gate)}`, { decline: true });
+      const data = await client.api.secrets.answer({
+        params: { gateId: readValue(values, 'gate') },
+        payload: { decline: true },
+      });
       return { data, text: 'Declined.' };
     },
   }),

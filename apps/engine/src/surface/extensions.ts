@@ -74,7 +74,7 @@ function findEntry<T extends { id: string; name: string }>(entries: T[], referen
 }
 
 async function findServer(client: SurfaceClient, values: Values) {
-  const snapshot = await client.read<ExtensionsSnapshot>('/api/extensions');
+  const snapshot = await client.api.extensions.snapshot();
   return findEntry(snapshot.servers, readValue(values, 'server'), 'server');
 }
 
@@ -98,30 +98,30 @@ function defineSwitch(
 
 async function switchServer(client: SurfaceClient, values: Values, enabled: boolean) {
   const server = await findServer(client, values);
-  await client.post<ExtensionsSnapshot>('/api/extensions/servers/choose', { serverId: server.id, enabled });
+  await client.api.extensions.chooseServer({ payload: { serverId: server.id, enabled } });
   return `Turned ${server.name} ${enabled ? 'on' : 'off'} for agents.`;
 }
 
 async function switchSkill(client: SurfaceClient, values: Values, enabled: boolean) {
-  const snapshot = await client.read<ExtensionsSnapshot>('/api/extensions');
+  const snapshot = await client.api.extensions.snapshot();
   const skill = findEntry(snapshot.skills, readValue(values, 'skill'), 'skill');
-  await client.post<ExtensionsSnapshot>('/api/extensions/skills/choose', { skillId: skill.id, enabled });
+  await client.api.extensions.chooseSkill({ payload: { skillId: skill.id, enabled } });
   return `Turned the ${skill.name} skill ${enabled ? 'on' : 'off'}.`;
 }
 
 async function switchPlugin(client: SurfaceClient, values: Values, enabled: boolean) {
-  const snapshot = await client.read<ExtensionsSnapshot>('/api/extensions');
+  const snapshot = await client.api.extensions.snapshot();
   const plugin = findEntry(snapshot.plugins, readValue(values, 'plugin'), 'plugin');
-  await client.post<ExtensionsSnapshot>('/api/extensions/plugins/choose', { pluginId: plugin.id, enabled });
+  await client.api.extensions.choosePlugin({ payload: { pluginId: plugin.id, enabled } });
   return `Turned the ${plugin.name} plugin ${enabled ? 'on' : 'off'}.`;
 }
 
 export const EXTENSION_SPECS: SurfaceSpec[] = [
-  defineRead<ExtensionsSnapshot>({
+  defineRead({
     path: ['mcp', 'list'],
     summary: 'List the MCP servers agents can load, with their health and roughly what their tools cost.',
     fields: [],
-    request: () => '/api/extensions',
+    read: (_values, client) => client.api.extensions.snapshot(),
     format: formatServers,
   }),
   defineAction({
@@ -132,7 +132,7 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
     act: async (client, values) => {
       let body = {};
       if (readValue(values, 'server')) body = { serverId: (await findServer(client, values)).id };
-      const data = await client.post<ExtensionsSnapshot>('/api/extensions/check', body);
+      const data = await client.api.extensions.check({ payload: body });
       return { data, text: formatServers(data) };
     },
   }),
@@ -162,7 +162,7 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
             command: words[0] ?? '',
             args: words.slice(1),
           };
-      const data = await client.post<ExtensionsSnapshot>('/api/extensions/servers/add', { server });
+      const data = await client.api.extensions.addServer({ payload: { server } });
       return { data, text: `Added ${server.name}. Agents load it from their next run.` };
     },
   }),
@@ -173,8 +173,10 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
     fields: [SERVER_FIELD],
     act: async (client, values) => {
       const server = await findServer(client, values);
-      const data = await client.post<ExtensionsSnapshot>('/api/extensions/servers/remove', {
-        serverId: server.id,
+      const data = await client.api.extensions.removeServer({
+        payload: {
+          serverId: server.id,
+        },
       });
       return { data, text: `Removed ${server.name}.` };
     },
@@ -188,8 +190,10 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
     fields: [SERVER_FIELD],
     act: async (client, values) => {
       const server = await findServer(client, values);
-      const data = await client.post<{ authorizationUrl: string | null }>('/api/extensions/servers/sign-in', {
-        serverId: server.id,
+      const data = await client.api.extensions.signIn({
+        payload: {
+          serverId: server.id,
+        },
       });
       return {
         data,
@@ -206,26 +210,28 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
     fields: [SERVER_FIELD],
     act: async (client, values) => {
       const server = await findServer(client, values);
-      const data = await client.post<ExtensionsSnapshot>('/api/extensions/servers/sign-out', {
-        serverId: server.id,
+      const data = await client.api.extensions.signOut({
+        payload: {
+          serverId: server.id,
+        },
       });
       return { data, text: `Signed out of ${server.name}.` };
     },
   }),
-  defineRead<ExtensionsSnapshot>({
+  defineRead({
     path: ['skills', 'list'],
     summary: 'List the skills agents can load, on or off, with roughly what each costs.',
     fields: [],
-    request: () => '/api/extensions',
+    read: (_values, client) => client.api.extensions.snapshot(),
     format: formatSkills,
   }),
   defineSwitch('skills', true, SKILL_FIELD, switchSkill),
   defineSwitch('skills', false, SKILL_FIELD, switchSkill),
-  defineRead<ExtensionsSnapshot>({
+  defineRead({
     path: ['plugins', 'list'],
     summary: 'List the Claude Code plugins agents can load, with what each brings.',
     fields: [],
-    request: () => '/api/extensions',
+    read: (_values, client) => client.api.extensions.snapshot(),
     format: formatPlugins,
   }),
   defineSwitch('plugins', true, PLUGIN_FIELD, switchPlugin),

@@ -1,27 +1,22 @@
 import {
-  type AccountsSnapshot,
   DomainError,
   type Focus,
   type Gate,
   type MergeStepView,
-  type Project,
-  type Repo,
   type RunAccount,
   type Watchdog,
 } from '@shinsa/core';
+import type { ProjectView } from '@shinsa/core/engine-api/schema';
 import type { resolveTaskView } from '../http/task-views.ts';
 import type { SurfaceClient } from './client.ts';
-import { encode } from './spec.ts';
 
 export type TaskView = ReturnType<typeof resolveTaskView>;
 
-export interface ProjectView extends Project {
-  repos: { id: string; name: string; path: string }[];
-}
+export type { ProjectView };
 
 export interface ProjectsRead {
-  projects: ProjectView[];
-  focus: Focus;
+  readonly projects: readonly ProjectView[];
+  readonly focus: Focus;
 }
 
 export interface TaskDetail {
@@ -34,7 +29,7 @@ export interface TaskDetail {
 }
 
 export function readTask(client: SurfaceClient, ref: string) {
-  return client.read<TaskDetail>(`/api/tasks/${encode(ref)}`);
+  return client.api.tasks.read({ params: { taskRef: ref } });
 }
 
 export async function findTaskId(client: SurfaceClient, ref: string) {
@@ -97,7 +92,7 @@ export async function findWatchdog(client: SurfaceClient, ref: string, watchdog:
 }
 
 export async function findAccount(client: SurfaceClient, ref: string): Promise<RunAccount> {
-  const snapshot = await client.read<AccountsSnapshot>('/api/accounts');
+  const snapshot = await client.api.accounts.list();
   const lower = ref.toLowerCase();
   const account = snapshot.accounts.find(
     (candidate) => candidate.id === ref || candidate.email?.toLowerCase() === lower
@@ -112,7 +107,7 @@ export async function findAccount(client: SurfaceClient, ref: string): Promise<R
 }
 
 export async function findRepoId(client: SurfaceClient, ref: string) {
-  const { repos } = await client.read<{ repos: Repo[] }>('/api/repos');
+  const { repos } = await client.api.state.repos();
   const repo = repos.find((candidate) => candidate.id === ref || candidate.name === ref);
   if (!repo)
     throw new DomainError({
@@ -122,7 +117,7 @@ export async function findRepoId(client: SurfaceClient, ref: string) {
   return repo.id;
 }
 
-export function selectProject(projects: ProjectView[], ref: string) {
+export function selectProject(projects: readonly ProjectView[], ref: string) {
   const lower = ref.trim().toLowerCase();
   return (
     projects.find(
@@ -135,7 +130,7 @@ export function selectProject(projects: ProjectView[], ref: string) {
 }
 
 export async function findProject(client: SurfaceClient, ref: string) {
-  const { projects } = await client.read<ProjectsRead>('/api/projects');
+  const { projects } = await client.api.state.projects();
   const project = selectProject(projects, ref);
   if (!project) {
     throw new DomainError({
