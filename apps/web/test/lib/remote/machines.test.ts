@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import { type RemoteInstance, serializePublicKey } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
+import { Effect, Layer } from 'effect';
+import { Socket } from 'effect/socket';
 import { Connection } from '@/lib/connection/socket.ts';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import type { EnrolledDevice } from '@/lib/remote/devices.ts';
@@ -119,16 +121,17 @@ describe('a machine in the dashboard', () => {
       respond: () => new Response('from Studio'),
     });
     const device: EnrolledDevice = { instanceId: STUDIO.id, machineKey: mac.machineKey, keys, enrolledAt: 1 };
-    const sockets: (() => WebSocket)[] = [];
+    const sockets: (() => Socket.WebSocketLike)[] = [];
     const member = createFleetMember(STUDIO, device, {
       dashboard: {
         requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
       },
       onRefused: () => undefined,
       openChannel: (options) => openRemoteChannel({ ...options, openSocket: mac.openSocket }),
-      createConnection: (openSocket) => {
-        sockets.push(openSocket);
-        return new Connection({ openSocket, retry: () => undefined });
+      createConnection: (transport) => {
+        const open = Effect.runSync(Effect.provide(Socket.WebSocketConstructor.use(Effect.succeed), transport));
+        sockets.push(() => open(''));
+        return new Connection({ transport });
       },
     });
     expect(member).toMatchObject({ id: 'k3x9', name: 'Studio', online: true });
@@ -137,7 +140,9 @@ describe('a machine in the dashboard', () => {
       dashboard: { requestConnect: () => Promise.reject(new Error('unused')) },
       onRefused: () => undefined,
       createConnection: () =>
-        new Connection({ openSocket: () => new WebSocket('ws://x'), retry: () => undefined }),
+        new Connection({
+          transport: Layer.succeed(Socket.WebSocketConstructor, () => new WebSocket('ws://x')),
+        }),
     });
     expect(handed.guest).toBe(true);
     expect(handed.handedBy).toEqual(STUDIO.owner);

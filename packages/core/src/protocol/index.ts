@@ -192,7 +192,7 @@ export type {
   VersionsSnapshot,
 } from './versions.ts';
 export {
-  type ClientMessage,
+  ClientMessage,
   CommandRefusal,
   DEVELOPMENT_VERSION,
   type EngineInfo,

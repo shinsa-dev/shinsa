@@ -26,3 +26,7 @@ export const appRuntime = ManagedRuntime.make(AppLayer);
 export function runApp<A, E>(effect: Effect.Effect<A, E, AppServices>) {
   return appRuntime.runPromise(effect);
 }
+
+export function forkApp<A, E>(effect: Effect.Effect<A, E, AppServices>) {
+  return appRuntime.runFork(effect);
+}

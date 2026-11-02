@@ -121,7 +121,7 @@ describe('opening the command menu', () => {
 
   it('renders nothing before the first state arrives', () => {
     startFakeServer();
-    pushState(null as unknown as ShinsaState);
+    pushState(null);
     renderMenu();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
     expect(screen.queryByRole('combobox')).toBeNull();

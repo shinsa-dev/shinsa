@@ -1,5 +1,6 @@
 import { type RemoteInstance, resolveMachineLoad, type Task } from '@shinsa/core';
-import { Connection, type MachineChoice, retryLater } from '@/lib/connection/socket.ts';
+import type { SocketTransport } from '@/lib/connection/engine-socket/schema.ts';
+import { Connection, type MachineChoice, resolveSocketTransport } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { describeMachineLoad } from '@/lib/new-task.ts';
 import type { ChannelError } from './channel.ts';
@@ -79,7 +80,7 @@ export interface FleetMemberOptions {
   dashboard: Pick<DashboardClient, 'requestConnect'>;
   onRefused: (instanceId: string, error: ChannelError) => void;
   onRemoved?: (instanceId: string) => void;
-  createConnection?: (openSocket: () => WebSocket) => Connection;
+  createConnection?: (transport: SocketTransport) => Connection;
   openChannel?: RemoteLinkOptions['openChannel'];
 }
 
@@ -96,9 +97,8 @@ export function createFleetMember(
     onRemoved: () => options.onRemoved?.(instance.id),
     ...(options.openChannel ? { openChannel: options.openChannel } : {}),
   });
-  const openSocket = () => link.openSocket();
-  const connection =
-    options.createConnection?.(openSocket) ?? new Connection({ openSocket, retry: retryLater });
+  const transport = resolveSocketTransport(() => link.openSocket());
+  const connection = options.createConnection?.(transport) ?? new Connection({ transport });
   return {
     id: instance.id,
     name: instance.name,
