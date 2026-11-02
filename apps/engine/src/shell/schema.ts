@@ -59,6 +59,8 @@ export const CANCELLED_EXIT_CODE = 130;
 
 export const KILLED_EXIT_CODE = 137;
 
+export const GROUP_LEFT_RUNNING_SIGNAL = 'SIGCONT';
+
 export const CANCELLED_BEFORE_START = 'The command was cancelled before it started.';
 
 export const SystemError = Schema.Struct({ code: Schema.String });

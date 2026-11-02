@@ -4,6 +4,7 @@ import { listDescendants, stopProcess, stopProcessGroup } from './processes.ts';
 import {
   CommandNotFound,
   type CommandRequest,
+  GROUP_LEFT_RUNNING_SIGNAL,
   type CommandResult,
   KILLED_EXIT_CODE,
   PROCESS_TABLE_COMMAND,
@@ -56,11 +57,18 @@ export class Shell extends Context.Service<
                       ? 'ignore'
                       : Stream.make(new TextEncoder().encode(request.input)),
                   detached: true,
+                  killSignal: GROUP_LEFT_RUNNING_SIGNAL,
                 })
               )
               .pipe(
                 Effect.mapError((error) => new CommandNotFound({ command: program, message: error.message }))
               );
+            yield* Effect.addFinalizer(() =>
+              Effect.flatMap(
+                Effect.orElseSucceed(handle.isRunning, () => false),
+                (running) => (running ? stopProcessGroup(handle.pid) : Effect.void)
+              )
+            );
             if (request.onSpawn) yield* request.onSpawn(handle.pid);
             const stopped = yield* Ref.make<StopReason | null>(null);
             const timeout =
@@ -86,7 +94,6 @@ export class Shell extends Context.Service<
               [readOutput(handle.stdout, request.onLine), readOutput(handle.stderr, request.onLine), exited],
               { concurrency: 'unbounded' }
             );
-            if (code === 0) yield* Effect.ignore(handle.unref);
             const timedOut = (yield* Ref.get(stopped)) === 'timeout';
             return {
               ok: code === 0 && !timedOut,

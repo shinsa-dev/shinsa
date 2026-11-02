@@ -23,6 +23,42 @@ describe('Shell', () => {
     expect(result).toEqual({ ok: false, code: 2, stdout: realpathSync(cwd), stderr: '', timedOut: false });
   });
 
+  test.each([0, 1])('a command that exits %i leaves the processes it started running', async (code) => {
+    const cwd = createTempDir();
+    const result = await runTest(
+      Shell.use((shell) =>
+        shell.run({
+          argv: ['sh', '-c', `(sleep 0.3; echo late > late.txt) & echo early; exit ${code}`],
+          cwd,
+          timeout: null,
+        })
+      )
+    );
+    expect(result).toMatchObject({ code, stdout: 'early' });
+    await until('the leftover process writes', () => Bun.file(`${cwd}/late.txt`).size > 0);
+    expect(await Bun.file(`${cwd}/late.txt`).text()).toBe('late\n');
+  });
+
+  test('an interrupted command has its whole group stopped', async () => {
+    const cwd = createTempDir();
+    let pid = 0;
+    await runTest(
+      Shell.use((shell) =>
+        shell.run({
+          argv: ['sh', '-c', 'sleep 30'],
+          cwd,
+          timeout: null,
+          onSpawn: (spawned) =>
+            Effect.sync(() => {
+              pid = spawned;
+            }),
+        })
+      ).pipe(Effect.timeoutOption(Duration.millis(200)))
+    );
+    await until('the group is stopped', () => !isRunning(pid));
+    expect(isRunning(pid)).toBe(false);
+  });
+
   test('a program that is not installed fails with CommandNotFound', async () => {
     const error = await runTest(
       Effect.flip(

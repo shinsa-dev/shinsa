@@ -92,7 +92,8 @@ src/
 │                        `error` run Effect.log* with the fields as annotations through runtime/edge.ts)
 ├── shell/               service.ts (Shell on Effect's ChildProcessSpawner: run(request) takes argv only, never a shell
 │                        string, in its own process group; a timeout or an interrupt kills the whole group and still
-│                        answers its output; a missing program is the typed CommandNotFound; stopTree), schema.ts
+│                        answers its output, and a command that ends on its own leaves what it started running (the
+│                        spawner's own clean-up gets GROUP_LEFT_RUNNING_SIGNAL, SIGCONT, which stops nothing); a missing program is the typed CommandNotFound; stopTree), schema.ts
 │                        (CommandRequest, CommandResult, CommandNotFound, COMMAND_TIMEOUT, QUIET_ENV, the exit
 │                        codes), processes.ts (stopping a group or a process, the ps table's descendants), errno.ts
 │                        (selectErrnoCode: a system error's code, read by the SystemError schema; the lock uses it too),
