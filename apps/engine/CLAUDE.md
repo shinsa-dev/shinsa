@@ -126,7 +126,7 @@ src/
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
-├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile, GitLayer, GitHubLayer, ReposLayer, WorkspacesLayer, ChecksLayer and TerminalsLayer that code not yet
+├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile, GitLayer, GitHubLayer, ReposLayer, WorkspacesLayer, ChecksLayer, TerminalsLayer, ExtensionsLayer, SecretFiles and AccountsLayer that code not yet
 │                        moved to Effect calls the foundation through), Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
@@ -191,17 +191,25 @@ src/
 │                        structured output with a fallback across the registry's providers, the default one
 │                        first (index.ts, createQuickCalls), the typed decision questions (decide.ts: choice and
 │                        choices) triage and the briefing answer
-├── accounts/            Claude accounts and usage limits: store.ts (accounts.json, one CLAUDE_CONFIG_DIR per
-│                        account, shared entries linked), paths.ts (folders, the Claude config dir and
-│                        resolveAccountEnv, the environment every command for an account runs with), login.ts
-│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder, read only),
-│                        usage.ts and limits.ts (reading and caching usage), rotation.ts (leases, the spent marks in
-│                        account-marks.json and the one retry budget; the picker itself is core's `pickAccount`),
-│                        renewal.ts (a login Claude could not refresh: read again, the Sign in gate's text,
-│                        noticing it works again),
-│                        imports.ts and cswap.ts (imports), patch.ts (an account's settings from the API),
-│                        resume.ts (the usage-wait clock), routes.ts (/api/accounts), index.ts (the Accounts
-│                        service: sign-ins, snapshot, notices, the weekly reading a run is charged against)
+├── accounts/            Claude accounts and usage limits: schema.ts (every shape read from outside, decoded
+│                        leniently: accounts.json's accounts, `claude auth status`, the stored login, claude-swap's
+│                        list, Claude's usage answer, the usage caches and the spent marks; UsageReadFailed,
+│                        SharedEntryUnlinked; every interval and timeout a named Duration with its _MS), answers.ts (the
+│                        pure decoders: parseAuthStatus, parseStoredLogin, parseCswapList), registry/
+│                        (AccountRegistry: accounts.json, usage-limits.json, provider-usage.json and account-marks.json
+│                        on JsonFile), folders/ (AccountFolders: an account's CLAUDE_CONFIG_DIR made, seeded, linked to
+│                        the shared entries, written and removed, its .credentials.json read), usage/ (UsageApi: Claude's
+│                        usage over HttpClient; answer.ts the windows, fast mode and Retry-After), layers.ts
+│                        (AccountsLayer, in runtime/edge.ts). The edges keep their exports: store.ts (AccountStore),
+│                        paths.ts (folders, the Claude config dir and resolveAccountEnv, the environment every command
+│                        for an account runs with), login.ts (`claude auth login` on TerminalPty), status.ts,
+│                        credentials.ts (the keychain entry per folder, read only), usage.ts (requestUsage) and
+│                        limits.ts (UsageLimits), rotation.ts (leases, the spent marks and the one retry budget; the
+│                        picker itself is core's `pickAccount`), renewal.ts (a login Claude could not refresh: read
+│                        again, the Sign in gate's text, noticing it works again), imports.ts and cswap.ts (imports),
+│                        patch.ts (an account's settings from the API), resume.ts (the usage-wait clock), routes.ts
+│                        (/api/accounts), index.ts (the Accounts service: sign-ins, snapshot, notices, the weekly
+│                        reading a run is charged against)
 ├── eunoe/               Eunoe's core (`@chroxify/eunoe`) served inside the engine for its Claude sessions: server.ts
 │                        (EunoeServer: the forwarder on a loopback port of its own, started on first use; thread state
 │                        and the request log in data/eunoe; compaction notices and the stuck signal per session)
@@ -251,8 +259,9 @@ src/
 │                        thread's status, links
 │                        and unlink on app.shinsa.dev with
 │                        the machine token; SlackRelayError, retried only when the relay is down or busy)
-├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,
-│                        MCP sign-ins
+├── secrets/             secrets.json: webhook tokens and signing secrets, one-use secret refs, MCP sign-ins. schema.ts
+│                        (each entry's schema, SECRET_REF_TTL), files/ (SecretFiles: read and written on JsonFile, a
+│                        file without a salt kept aside), store.ts the edge (SecretStore)
 ├── extensions/          MCP servers, plugins and skills (docs/engine.md → MCP servers, plugins and skills): schema.ts
 │                        (every shape read from outside: Claude Code's and Codex's settings, plugin manifests, skill
 │                        front matter, extensions.json, extension-usage.json, transcript lines, stored OAuth
@@ -462,12 +471,14 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `RepoFolders`, `RepoSetup`, `GitHubLogins` (`repos/`) | `ReposLayer` (`repos/layers.ts`), needs `GitLayer` and `GitHubLayer` | finding repositories and their origin, the setup check, the GitHub login |
   | `WorktreeWorkspaces`, `MainCheckoutWorkspace` (`workspaces/`) | `WorkspacesLayer` (`workspaces/layers.ts`), needs `GitLayer` | the two places agents work (`TaskCheckoutMissing`, `CheckoutDirty`, `CheckoutOffBranch`) |
   | `CheckRunner`, `BaseCheckoutPools`, `SharedCaches` (`checks/`), `TaskCoverage` (`test-coverage/`) | `ChecksLayer` (`checks/layers.ts`), needs `GitLayer` | checks, their re-runs and base comparison, the turbo cache, changed-line coverage (`CoverageReportUnreadable`) |
+  | `AccountRegistry`, `AccountFolders`, `UsageApi` (`accounts/`) | `AccountsLayer` (`accounts/layers.ts`), needs `JsonFile` | the accounts' JSON files decoded, each account's Claude folder, Claude's usage over `HttpClient` (`UsageReadFailed`) |
+  | `SecretFiles` (`secrets/files/service.ts`) | `SecretFiles.layer`, needs `JsonFile` | secrets.json decoded, a file without a salt kept aside |
   | `TerminalFiles`, `TerminalPty` (`terminals/`) | `TerminalsLayer` (`terminals/layers.ts`), needs `JsonFile` and `Shell` | data/terminals/ decoded by schemas; the PTY as a scoped resource, the foreground program, a free port (`PortUnavailable`) |
   | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order; fails with the lock's `ServerRunning` or `LockContended`, which `startShinsa` turns into its `DomainError` |
 
   Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
-  terminals' store and PTY, and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
+  terminals' store and PTY, the accounts' and secrets' stores, and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
   `EventLog`, `EvidenceStore` and `AttachmentStore` each own a `ManagedRuntime` over their layer and `runSync` it;
   `acquireDataDirLock` builds `ServeLock` in a scope of its own. Each edge throws the errors and messages it threw
   before. A module that moves to Effect yields the service instead and stops calling its edge; once nothing calls an

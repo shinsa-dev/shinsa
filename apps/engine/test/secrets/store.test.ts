@@ -1,9 +1,8 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { log } from '../../src/log/index.ts';
 import { SecretStore } from '../../src/secrets/index.ts';
-import { createTempDir } from '../helpers/index.ts';
+import { captureLogs, createTempDir } from '../helpers/index.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -110,7 +109,7 @@ describe('reading the store', () => {
   });
 
   test('a file that is not JSON, or has no salt, is kept aside before the next write replaces it', () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     for (const content of ['{not json', JSON.stringify({ refs: 'x', hooks: { s1: { token: 't1' } } })]) {
       const dir = createTempDir();
       const path = join(dir, 'secrets.json');
@@ -122,12 +121,26 @@ describe('reading the store', () => {
       expect(kept).toHaveLength(1);
       expect(readFileSync(join(dir, kept[0] ?? ''), 'utf8')).toBe(content);
     }
-    expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn).toHaveBeenCalledWith(
-      '[Secrets] The secret store could not be read; it was kept aside and an empty one started',
-      expect.objectContaining({ problem: 'It has no salt.' })
+    logs.restore();
+    const kept = logs.fieldsOf(
+      '[Secrets] The secret store could not be read; it was kept aside and an empty one started'
     );
-    warn.mockRestore();
+    expect(kept).toHaveLength(2);
+    expect(kept).toContainEqual(expect.objectContaining({ problem: 'It has no salt.' }));
+  });
+
+  test('a section that is not a map reads as empty, and a signing secret that is not text as none', () => {
+    const path = join(createTempDir(), 'secrets.json');
+    writeFileSync(
+      path,
+      JSON.stringify({ salt: 'abc', refs: 'x', hooks: { s1: { token: 't1', secret: 5 } }, mcp: 'junk' })
+    );
+    const store = new SecretStore(path);
+    expect(store.hasRef('x')).toBe(false);
+    expect(store.selectHook('s1')).toEqual({ token: 't1', secret: null });
+    expect(store.selectMcpCredentials('junk')).toEqual({});
+    writeFileSync(path, JSON.stringify({ salt: 'abc', hooks: [] }));
+    expect(new SecretStore(path).selectHook('0')).toBeNull();
   });
 
   test('a store without refs or hooks reads as empty', () => {

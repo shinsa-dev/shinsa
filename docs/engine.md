@@ -5511,8 +5511,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   attempt and sign-in, and a folder that went missing is made again first (mode 700, with a fresh `.claude.json`),
   so signing in again never starts `claude` in a folder that is not there. Because `projects/` is shared, a session
   started on one account resumes on another.
-- **Signing in** (`accounts/login.ts`). `claude auth login --claudeai` runs in a PTY (`Bun.spawn` with `terminal`,
-  200×50, `xterm-256color`) with the account's `CLAUDE_CONFIG_DIR`. Claude opens the browser itself; the sign-in link
+- **Signing in** (`accounts/login.ts`). `claude auth login --claudeai` runs in a PTY (`TerminalPty`, the one your
+  terminals use, 200×50, `xterm-256color`, hung up when the sign-in ends) with the account's `CLAUDE_CONFIG_DIR`. Claude opens the browser itself; the sign-in link
   is read from the output (an OSC-8 link first, then plain text containing `oauth` and `authorize`) and shown, and a
   code the page shows is pasted back (`code\r`). After 5 s without a link Shinsa presses Enter once (a menu), after
   30 s it gives up with the keychain hint, after 16 minutes the whole sign-in stops. When `claude` exits,
@@ -5754,16 +5754,29 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   through `Shell`, and picks a free port with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
+- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `provider-usage.json` and
+  `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
+  that breaks it is dropped, a broken `accounts.json` is kept aside, and a cache or a mark that cannot be written is
+  logged. `AccountFolders` makes and removes each account's `CLAUDE_CONFIG_DIR`: the folder, its seeded `.claude.json`,
+  the links to the shared entries and the `.credentials.json` read back. `UsageApi` reads Claude's usage over Effect's
+  `HttpClient`, its answer decoded by `UsageBody`, a 401, a 429, any other status, no answer within `USAGE_TIMEOUT`
+  (5 s) or an unreadable body the typed `UsageReadFailed` with its reason. `claude auth status`, the keychain's stored
+  login and claude-swap's list are decoded in `accounts/answers.ts`. Signing in runs on `TerminalPty`, the PTY your
+  terminals use. `SecretFiles` reads and writes `secrets.json` on `JsonFile`, its refs, hooks and MCP sign-ins each
+  decoded, and a file without a salt kept aside. Every interval and timeout is a named `Duration` in its folder's
+  `schema.ts`.
 - **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
   its release as a finalizer: the lock, the log, the HTTP server, Eunoe's forwarder, the work. `stop()` disposes the
   runtime, which runs them in reverse: the work (live runs first, then the clocks and the effects, The agent loop →
   Restart continuation), Eunoe, HTTP, the log, then the lock. A start that fails partway disposes it as well, so
   nothing it took stays held, and a second `stop()` waits for the first.
 - **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
-  helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, and the
-  terminals' store and PTY run the services through `edgeRuntime`, a `ManagedRuntime` of the logger, the shell,
-  `JsonFile`, git's, GitHub's, the repositories', the workspaces', the checks' and the terminals' services for the
-  process; `BaseCheckouts` holds the pool its service made, and `Terminals` and `ServiceRefiner` stay the objects
+  helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
+  terminals' store and PTY, and the accounts' and secrets' files run the services through `edgeRuntime`, a
+  `ManagedRuntime` of the logger, the shell, `JsonFile`, git's, GitHub's, the repositories', the workspaces', the
+  checks', the terminals', the extensions', the accounts' and the secrets' services for the process; `Accounts`, its
+  `AccountStore`, `UsageLimits`, `AccountRotation` and `AccountLogins`, and `SecretStore` stay the objects their
+  callers hold; `BaseCheckouts` holds the pool its service made, and `Terminals` and `ServiceRefiner` stay the objects
   their callers hold, over those services; `Workspaces` hands out one `WorkspaceStrategy` of promises per mode over the
   services, and `RepoCiCache` and `PullRequestDescriptions` each hold the cache their service made;
   `EventLog`, `EvidenceStore` and `AttachmentStore` each run their layer in a runtime of their own; the CLI's
