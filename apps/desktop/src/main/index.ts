@@ -19,19 +19,29 @@ import { parseNotice, resolveBadgeText, resolveNotificationSettingsUrl } from '.
 import type { ServerHealth } from '../server/schema.ts';
 import { describeServer } from '../server/url.ts';
 import { describeAppVersion, parseUpdateChannel } from '../updates/channel.ts';
+import type { UpdateSnapshot } from '../updates/schema.ts';
+import { describeUpdateItem, resolveDesktopUpdate } from '../updates/state.ts';
 import { syncCommandLine } from './command-line.ts';
 import { applyMenu } from './menu.ts';
 import { showNotice, watchNoticeFailures } from './notifications.ts';
+import { openWindows } from './open-windows.ts';
 import {
+  answerDowngrade,
+  applyUpdateChannel,
+  checkForUpdates,
   ensureEngine,
+  installUpdate,
   readEngineDetails,
   readOrigin,
+  readPrefs,
+  readUpdates,
   requestHealth,
   requestTrayQueue,
   restartEngine as kickEngine,
+  startUpdater,
+  watchUpdates,
 } from './runtime.ts';
 import { StatusTray } from './tray.ts';
-import { Updater } from './updater.ts';
 import { MainWindow } from './window.ts';
 
 const RETRY_MS = 2000;
@@ -46,7 +56,7 @@ let connecting = false;
 let misses = 0;
 let shownScreen = '';
 let menuActions: Omit<Parameters<typeof applyMenu>[0], 'update'> | null = null;
-let updater: Updater | null = null;
+let updates: UpdateSnapshot | null = null;
 let tray: StatusTray | null = null;
 let firstHealth: Promise<ServerHealth | null> | null = null;
 let aboutCredits: string | undefined;
@@ -89,11 +99,14 @@ async function start() {
   else app.dock?.setIcon(join(app.getAppPath(), 'resources', 'icon.png'));
   applyAboutPanel();
   const origin = await readOrigin();
+  const prefs = await readPrefs();
   main = new MainWindow(
     origin,
+    prefs.windowBounds,
     () => void connect(),
     (action) => void runEngineAction(action)
   );
+  openWindows.main = main;
   if (pendingPath) main.open(pendingPath);
   tray = new StatusTray(
     (action) => {
@@ -113,26 +126,33 @@ async function start() {
     reload: () => main?.reload(),
     restartEngine: () => void restartEngine(),
   };
-  updater = new Updater(
-    publishUpdate,
-    () => main?.show(),
-    () => main?.markQuitting()
-  );
+  updates = await readUpdates();
+  watchUpdates(publishUpdate);
   refreshMenu();
-  updater.start();
+  startUpdater();
   void syncCommandLine();
   await connect();
   setInterval(() => void watchEngine(), WATCH_MS);
 }
 
 function refreshMenu() {
-  if (menuActions && updater) applyMenu({ ...menuActions, update: updater.menuItem });
+  if (!menuActions || !updates) return;
+  const item = describeUpdateItem(updates.state);
+  applyMenu({
+    ...menuActions,
+    update: {
+      ...item,
+      visible: updates.supported,
+      click: () => (item.install ? installUpdate() : checkForUpdates(true)),
+    },
+  });
 }
 
-function publishUpdate() {
+function publishUpdate(snapshot: UpdateSnapshot) {
+  updates = snapshot;
   refreshMenu();
   applyAboutPanel();
-  if (updater) main?.win.webContents.send(CHANNELS.update, updater.pageState);
+  main?.win.webContents.send(CHANNELS.update, resolveDesktopUpdate(snapshot.state));
 }
 
 function applySessionPolicy(origin: string) {
@@ -152,25 +172,25 @@ function watchPage() {
         ? {
             version: app.getVersion(),
             protocol: ENGINE_PROTOCOL,
-            update: updater?.pageState ?? { status: 'none' },
-            channel: updater?.channel ?? 'stable',
+            update: updates ? resolveDesktopUpdate(updates.state) : { status: 'none' },
+            channel: updates?.channel ?? 'stable',
             windowState: main.windowState,
           }
         : null;
     event.returnValue = payload;
   });
   ipcMain.on(CHANNELS.installUpdate, (event) => {
-    if (main?.isAppSender(event)) updater?.install();
+    if (main?.isAppSender(event)) installUpdate();
   });
   ipcMain.on(CHANNELS.checkForUpdates, (event) => {
-    if (main?.isAppSender(event)) void updater?.check(true);
+    if (main?.isAppSender(event)) checkForUpdates(true);
   });
   ipcMain.on(CHANNELS.updateChannel, (event, value: unknown) => {
     const channel = main?.isAppSender(event) ? parseUpdateChannel(value) : null;
-    if (channel) void updater?.applyChannel(channel);
+    if (channel) applyUpdateChannel(channel);
   });
   ipcMain.on(CHANNELS.downgrade, (event, accept: unknown) => {
-    if (main?.isAppSender(event)) void updater?.answerDowngrade(accept === true);
+    if (main?.isAppSender(event)) answerDowngrade(accept === true);
   });
   ipcMain.on(CHANNELS.badge, (event, count: unknown) => {
     if (main?.isAppSender(event)) app.dock?.setBadge(resolveBadgeText(count));
@@ -193,7 +213,7 @@ function watchPage() {
 
 function applyAboutPanel(credits = aboutCredits) {
   aboutCredits = credits;
-  const version = updater ? describeAppVersion(app.getVersion(), updater.channel) : app.getVersion();
+  const version = updates ? describeAppVersion(app.getVersion(), updates.channel) : app.getVersion();
   app.setAboutPanelOptions({ applicationName: APP_NAME, applicationVersion: version, credits });
 }
 

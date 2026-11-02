@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { describeStateChange, formatLogLine, needsLogRotation } from '../../src/updates/log.ts';
-import { UPDATE_LOG } from '../../src/updates/schema.ts';
+import { formatLogLine, needsLogRotation } from '../../src/update-log/log.ts';
+import { UPDATE_LOG } from '../../src/update-log/schema.ts';
+import { describeStateChange } from '../../src/updates/state.ts';
 
 const AT = new Date('2026-10-28T10:49:09.484Z');
 

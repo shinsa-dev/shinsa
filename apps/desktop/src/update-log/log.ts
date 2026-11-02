@@ -1,4 +1,4 @@
-import { type LogLevel, UPDATE_LOG, type UpdateState } from './schema.ts';
+import { type LogLevel, UPDATE_LOG } from './schema.ts';
 
 function describeLogMessage(message: unknown) {
   if (message instanceof Error) return message.stack ?? message.message;
@@ -8,13 +8,6 @@ function describeLogMessage(message: unknown) {
 
 export function formatLogLine(level: LogLevel, message: unknown, at: Date) {
   return `${at.toISOString()} ${level} ${describeLogMessage(message)}\n`;
-}
-
-export function describeStateChange(previous: UpdateState, next: UpdateState) {
-  if (previous.status === next.status) return null;
-  const version = 'version' in next ? ` ${next.version}` : '';
-  const message = next.status === 'failed' ? `: ${next.message}` : '';
-  return `state ${previous.status} -> ${next.status}${version}${message}`;
 }
 
 export function needsLogRotation(size: number) {

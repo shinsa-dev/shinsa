@@ -140,3 +140,10 @@ export function resolveDesktopUpdate(state: UpdateState): DesktopUpdate {
       return { status: 'none' };
   }
 }
+
+export function describeStateChange(previous: UpdateState, next: UpdateState) {
+  if (previous.status === next.status) return null;
+  const version = 'version' in next ? ` ${next.version}` : '';
+  const message = next.status === 'failed' ? `: ${next.message}` : '';
+  return `state ${previous.status} -> ${next.status}${version}${message}`;
+}

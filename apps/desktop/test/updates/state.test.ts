@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { DOWNGRADE_ACCEPT, INSTALL_TIMEOUT_MS, UPDATE_CHECK_MS } from '../../src/updates/schema.ts';
+import { Duration } from 'effect';
+import { DOWNGRADE_ACCEPT, INSTALL_TIMEOUT, UPDATE_CHECK_INTERVAL } from '../../src/updates/schema.ts';
 import {
   describeDowngradeDialog,
   describeInstallError,
@@ -25,7 +26,7 @@ describe('isUpdateSupported', () => {
   });
 
   it('checks every four hours', () => {
-    expect(UPDATE_CHECK_MS).toBe(14_400_000);
+    expect(Duration.toMillis(UPDATE_CHECK_INTERVAL)).toBe(14_400_000);
   });
 });
 
@@ -106,7 +107,7 @@ describe('resolvePreparedUpdate', () => {
 
 describe('resolveInstallTimeout', () => {
   it('offers the restart again when the app is still running after it', () => {
-    expect(INSTALL_TIMEOUT_MS).toBe(15_000);
+    expect(Duration.toMillis(INSTALL_TIMEOUT)).toBe(15_000);
     expect(resolveInstallTimeout({ status: 'installing', version: '0.3.0' })).toEqual({
       status: 'ready',
       version: '0.3.0',

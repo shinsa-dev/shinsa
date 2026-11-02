@@ -9,7 +9,7 @@ import type { Navigation } from '../navigation/schema.ts';
 import { resolveWindowBounds } from '../window/bounds.ts';
 import { resolveCloseAction } from '../window/close.ts';
 import { MIN_SIZE } from '../window/schema.ts';
-import { readPrefs, writePrefs } from './prefs.ts';
+import { writeWindowBounds } from './runtime.ts';
 
 type Page = 'none' | 'app' | 'waiting';
 
@@ -35,14 +35,19 @@ export class MainWindow {
   #onLoadFailed: () => void;
   #onEngineAction: (action: EngineAction) => void;
 
-  constructor(origin: string, onLoadFailed: () => void, onEngineAction: (action: EngineAction) => void) {
+  constructor(
+    origin: string,
+    savedBounds: unknown,
+    onLoadFailed: () => void,
+    onEngineAction: (action: EngineAction) => void
+  ) {
     this.origin = origin;
     this.#onLoadFailed = onLoadFailed;
     this.#onEngineAction = onEngineAction;
     const display = screen.getPrimaryDisplay();
     this.win = new BrowserWindow({
       ...resolveWindowBounds(
-        readPrefs().windowBounds,
+        savedBounds,
         screen.getAllDisplays().map((each) => each.workArea),
         display.workArea
       ),
@@ -70,7 +75,7 @@ export class MainWindow {
     const win = this.win;
     win.once('ready-to-show', () => win.show());
     win.on('close', (event) => {
-      writePrefs({ windowBounds: win.getNormalBounds() });
+      writeWindowBounds(win.getNormalBounds());
       const action = resolveCloseAction({ quitting: this.#quitting, fullScreen: win.isFullScreen() });
       if (action === 'close') return;
       event.preventDefault();
