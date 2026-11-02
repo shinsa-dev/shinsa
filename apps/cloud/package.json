@@ -13,6 +13,7 @@
     "test": "bun test --randomize"
   },
   "dependencies": {
+    "@effect/sql-d1": "4.1.1",
     "@shinsa/core": "workspace:*",
     "effect": "4.1.1"
   },

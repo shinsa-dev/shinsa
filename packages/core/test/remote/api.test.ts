@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect, Layer, Redacted, type Scope } from 'effect';
+import { Context, Effect, Layer, Redacted, type Scope } from 'effect';
 import { HttpClientRequest, HttpServer } from 'effect/http';
 import { HttpApi, HttpApiBuilder, HttpApiMiddleware, HttpApiTest } from 'effect/http-api';
-import { CurrentUser, MachineSession, PageSession, RemoteApi } from '../../src/remote/api.ts';
+import {
+  BodyLimit,
+  CurrentUser,
+  MachineSession,
+  PageSession,
+  REMOTE_BODY_LIMIT_BYTES,
+  RemoteApi,
+  RequestGate,
+  SLACK_RELAY_POST_LIMIT_BYTES,
+} from '../../src/remote/api.ts';
 import { InstanceId, RemoteUserId } from '../../src/remote/contract.ts';
 import {
   HandoffInvalid,
@@ -146,7 +155,13 @@ const pageClient = (token: string) =>
 const machineClient = HttpApiMiddleware.layerClient(MachineSession, ({ next, request }) => next(request));
 
 const Handlers = Layer.mergeAll(PairingHandlers, InstancesHandlers).pipe(
-  Layer.provideMerge(Layer.mergeAll(PageSessionLayer, MachineSessionLayer))
+  Layer.provideMerge(
+    Layer.mergeAll(
+      PageSessionLayer,
+      MachineSessionLayer,
+      Layer.succeed(RequestGate, (effect) => effect)
+    )
+  )
 );
 
 const TestLayer = Layer.mergeAll(Handlers, HttpServer.layerServices, machineClient);
@@ -162,6 +177,19 @@ function run<A, E>(effect: Effect.Effect<A, E, TestServices>, token = 'session')
 describe('the remote API', () => {
   test('declares exactly the routes the Worker answers', () => {
     expect(listRoutes().sort()).toEqual([...ROUTES].sort());
+  });
+
+  test('every endpoint passes the request gate, and the Slack post may carry a larger body', () => {
+    const limits = new Map<string, number>();
+    HttpApi.reflect(RemoteApi, {
+      onGroup: () => undefined,
+      onEndpoint: ({ endpoint }) => {
+        expect(endpoint.middlewares.has(RequestGate)).toBe(true);
+        limits.set(endpoint.path, Context.get(endpoint.annotations, BodyLimit));
+      },
+    });
+    expect(limits.get('/__remote/slack/post')).toBe(SLACK_RELAY_POST_LIMIT_BYTES);
+    expect(limits.get('/__remote/pair/start')).toBe(REMOTE_BODY_LIMIT_BYTES);
   });
 
   test('a typed client gets the answer and the typed failure through the wire', async () => {

@@ -3197,7 +3197,7 @@ link for a whole project, on the same projection and the same one-way channel, w
 nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its tunnel while it is
 online, and the last list of it their own machine kept while it is not (Offline teammates, below). Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
 
-- **What app.shinsa.dev keeps** (`apps/cloud/src/teams.ts`, `migrations/0005_teams.sql`): who is in which team. A
+- **What app.shinsa.dev keeps** (`apps/cloud/src/routes/teams.ts`, `migrations/0005_teams.sql`): who is in which team. A
   team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
   up to 20 members (`MAX_TEAM_MEMBERS`), who asked to join, and one reusable invite kept as its SHA-256. An account
   owns at most 10 teams (`MAX_OWNED_TEAMS`). It keeps no task, no title, no project and no key but each machine's

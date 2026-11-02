@@ -48,10 +48,10 @@ describe('pairings', () => {
         const pairings = yield* Pairings;
         yield* seedUsers(MONA, KAI);
         yield* pairings.create(PAIRING, '203.0.113.1');
-        const first = yield* pairings.reserve(CODE, MONA.id);
-        const second = yield* pairings.reserve(CODE, KAI.id);
+        const first = yield* pairings.reserve(CODE, MONA.login);
+        const second = yield* pairings.reserve(CODE, KAI.login);
         yield* pairings.release(CODE);
-        const afterRelease = yield* pairings.reserve(CODE, KAI.id);
+        const afterRelease = yield* pairings.reserve(CODE, KAI.login);
         return [first, second, afterRelease] as const;
       })
     );
@@ -64,13 +64,13 @@ describe('pairings', () => {
         const pairings = yield* Pairings;
         yield* seedUsers(MONA);
         yield* pairings.create(PAIRING, '203.0.113.1');
-        yield* pairings.reserve(CODE, MONA.id);
+        yield* pairings.reserve(CODE, MONA.login);
         yield* pairings.recordClaim(CODE, CREDENTIALS);
         yield* pairings.release(CODE);
         return yield* pairings.select(CODE);
       })
     );
-    expect(pairing).toEqual(Option.some({ ...PAIRING, credentials: CREDENTIALS, owner: MONA.id }));
+    expect(pairing).toEqual(Option.some({ ...PAIRING, credentials: CREDENTIALS, owner: MONA.login }));
   });
 
   test('expired and removed pairings are gone', async () => {

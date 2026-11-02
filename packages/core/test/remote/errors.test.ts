@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { Schema } from 'effect';
 import * as failures from '../../src/remote/errors.ts';
-import { NotFound, resolveRemoteFailureWire, SignedOut } from '../../src/remote/errors.ts';
+import {
+  NotFound,
+  RateLimited,
+  resolveRemoteFailureWire,
+  SERVER_ERROR_MESSAGE,
+  SignedOut,
+  serializeRemoteFailure,
+} from '../../src/remote/errors.ts';
 
 const WIRE = [
   ['BodyInvalid', 'body_invalid', 400],
@@ -42,7 +49,7 @@ const WIRE = [
 
 describe('remote failures', () => {
   test('every failure the Worker answers has one class, its code and its status', () => {
-    const classes = new Map(Object.entries(failures).filter(([name]) => name !== 'resolveRemoteFailureWire'));
+    const classes = new Map(Object.entries(failures).filter(([name]) => /^[A-Z][a-z]/.test(name)));
     expect([...classes.keys()].sort()).toEqual(WIRE.map(([tag]) => tag).sort());
     for (const [tag, code, status] of WIRE) {
       const failure = classes.get(tag) as (typeof failures)[typeof tag];
@@ -71,5 +78,16 @@ describe('remote failures', () => {
     const wire = resolveRemoteFailureWire(SignedOut);
     expect(Schema.decodeUnknownOption(wire)({ error: { code: 'revoked', message: 'x' } })._tag).toBe('None');
     expect(Schema.decodeUnknownOption(wire)({ error: { code: 'signed_out' } })._tag).toBe('None');
+  });
+
+  test('a failure becomes its status and body in one place, and anything else a plain server error', () => {
+    expect(serializeRemoteFailure(new RateLimited({ message: 'Wait a minute.' }))).toEqual({
+      status: 429,
+      body: { error: { code: 'rate_limited', message: 'Wait a minute.' } },
+    });
+    expect(serializeRemoteFailure({ _tag: 'SqlError', message: 'no such table: sessions' })).toEqual({
+      status: 500,
+      body: { error: { code: 'server_error', message: SERVER_ERROR_MESSAGE } },
+    });
   });
 });

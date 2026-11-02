@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import { isSigningPublicKey } from './keys.ts';
 
 export const REMOTE_APP_ORIGIN = 'https://app.shinsa.dev';
 
@@ -141,10 +142,26 @@ export const PairPollResponse = Schema.Union([
 
 export type PairPollResponse = typeof PairPollResponse.Type;
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+function isLoopbackUrl(value: string) {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
+}
+
 export const HeartbeatRequest = Schema.Struct({
-  localUrl: RemoteText(REMOTE_TEXT_LIMITS.localUrl),
+  localUrl: RemoteText(REMOTE_TEXT_LIMITS.localUrl).check(
+    Schema.makeFilter(
+      (value) => isLoopbackUrl(value) || 'The local address must be this machine’s loopback address.'
+    )
+  ),
   version: Schema.optionalKey(Schema.String),
-  signingKey: Schema.optionalKey(Schema.String),
+  signingKey: Schema.optionalKey(
+    Schema.String.check(
+      Schema.makeFilter((value) => isSigningPublicKey(value) || 'The signing key must be a P-256 public key.')
+    )
+  ),
 });
 
 export type HeartbeatRequest = typeof HeartbeatRequest.Type;
@@ -369,14 +386,6 @@ export function resolveRemoteHookUrl(
   origin: string = REMOTE_APP_ORIGIN
 ) {
   return `${origin}${REMOTE_PATHS.hooks}${[instanceId, scheduleId, token].map(encodeURIComponent).join('/')}`;
-}
-
-export function parseRemoteHookPath(pathname: string) {
-  if (!pathname.startsWith(REMOTE_PATHS.hooks)) return null;
-  const parts = pathname.slice(REMOTE_PATHS.hooks.length).split('/');
-  if (parts.length !== 3 || parts.some((part) => part === '')) return null;
-  const [instanceId, scheduleId, token] = parts as [string, string, string];
-  return { instanceId, enginePath: `${REMOTE_ENGINE_HOOK_PREFIX}${scheduleId}/${token}` };
 }
 
 export interface EnrollFragment {

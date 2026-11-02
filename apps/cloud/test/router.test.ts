@@ -1,7 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { REMOTE_PATHS } from '@shinsa/core';
-import { readCookie } from '../src/http.ts';
-import { resolveCloudConfig } from '../src/world.ts';
 import { createHarness } from './harness.ts';
 
 describe('the router', () => {
@@ -27,6 +25,32 @@ describe('the router', () => {
     const harness = createHarness();
     expect((await harness.call('/__remote/nothing')).status).toBe(404);
     expect((await harness.call(REMOTE_PATHS.session, { method: 'POST' })).status).toBe(404);
+  });
+
+  test('answers 404 for an id in the path that is not one, after the session is checked', async () => {
+    const harness = createHarness();
+    const session = await harness.signIn();
+    const malformed = await harness.call('/__remote/instances/not.an.id/connect', {
+      method: 'POST',
+      session,
+      sameOrigin: true,
+    });
+    expect(malformed.status).toBe(404);
+    expect(await malformed.json()).toEqual({ error: { code: 'not_found', message: 'No such endpoint.' } });
+    const signedOut = await harness.call('/__remote/instances/not.an.id/connect', {
+      method: 'POST',
+      sameOrigin: true,
+    });
+    expect(signedOut.status).toBe(401);
+  });
+
+  test('names the field a body gets wrong', async () => {
+    const harness = createHarness();
+    const missing = await harness.post(REMOTE_PATHS.pairStart, { name: 'Studio', version: '1' });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toEqual({
+      error: { code: 'body_invalid', message: expect.stringContaining('The field publicKey is not valid') },
+    });
   });
 
   test('refuses a body that is not JSON, too large, or not an object', async () => {
@@ -65,59 +89,5 @@ describe('the router', () => {
     harness.db.sqlite.exec('DROP TABLE instances');
     expect((await harness.call('/hooks/a/b/c', { method: 'POST', body: 'x' })).status).toBe(500);
     logged.mockRestore();
-  });
-});
-
-describe('the helpers', () => {
-  test('reads one cookie among many', () => {
-    const request = new Request('https://x', { headers: { cookie: 'a=1; b=two=2' } });
-    expect(readCookie(request, 'b')).toBe('two=2');
-    expect(readCookie(request, 'c')).toBeNull();
-  });
-
-  test('reads the Worker’s settings with defaults', () => {
-    expect(resolveCloudConfig({})).toEqual({
-      origin: 'https://app.shinsa.dev',
-      githubClientId: '',
-      githubClientSecret: '',
-      cloudflareAccountId: '',
-      cloudflareApiToken: '',
-      tunnelZone: 'shinsa.dev',
-      previewOrigin: 'https://shinsa.page',
-      maxInstances: 50,
-      slackClientId: '',
-      slackClientSecret: '',
-      slackSigningSecret: '',
-      slackTokenKey: '',
-    });
-    expect(
-      resolveCloudConfig({
-        APP_ORIGIN: 'http://localhost:5183',
-        GITHUB_CLIENT_ID: 'id',
-        GITHUB_CLIENT_SECRET: 'secret',
-        CLOUDFLARE_ACCOUNT_ID: 'account',
-        CLOUDFLARE_API_TOKEN: 'token',
-        TUNNEL_ZONE: 'example.dev',
-        PREVIEW_ZONE: 'example.page',
-        MAX_INSTANCES: '3',
-        SLACK_CLIENT_ID: 'slack-id',
-        SLACK_CLIENT_SECRET: 'slack-secret',
-        SLACK_SIGNING_SECRET: 'signing',
-        SLACK_TOKEN_KEY: 'key',
-      })
-    ).toEqual({
-      origin: 'http://localhost:5183',
-      githubClientId: 'id',
-      githubClientSecret: 'secret',
-      cloudflareAccountId: 'account',
-      cloudflareApiToken: 'token',
-      tunnelZone: 'example.dev',
-      previewOrigin: 'https://example.page',
-      maxInstances: 3,
-      slackClientId: 'slack-id',
-      slackClientSecret: 'slack-secret',
-      slackSigningSecret: 'signing',
-      slackTokenKey: 'key',
-    });
   });
 });

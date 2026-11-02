@@ -82,7 +82,6 @@ export {
   resolveSlackLinkedPath,
   resolveSlackReadableText,
   resolveSlackTaskUrl,
-  SLACK_BLOCKS_REFUSED,
   SLACK_RELAY_MESSAGE_LIMITS,
   SLACK_RELAY_PATHS,
   SLACK_SESSION_STATUSES,

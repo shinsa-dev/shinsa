@@ -16,8 +16,6 @@ export const SLACK_RELAY_PATHS = {
   react: '/__remote/slack/react',
 } as const;
 
-export const SLACK_BLOCKS_REFUSED = 'slack_blocks_refused';
-
 export const SLACK_RELAY_MESSAGE_LIMITS = {
   text: 40_000,
   blocks: SLACK_BLOCK_LIMITS.blocks,

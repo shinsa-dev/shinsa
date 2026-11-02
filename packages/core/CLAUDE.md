@@ -9,7 +9,7 @@ caller. It runs in the browser too, so the web reads the same queue, progress an
 ```
 src/
 ├── index.ts         The public barrel. Everything it exports stays importable by the same name; the Worker's API and
-│                    its failures are subpaths of their own (`@shinsa/core/remote/api`, `@shinsa/core/remote/errors`),
+│                    its failures are imported from paths of their own (`@shinsa/core/remote/api`, `@shinsa/core/remote/errors`),
 │                    so their generic names (`NotFound`, `Forbidden`) never reach the barrel
 ├── domain/          Entity types (types.ts), stage sets and priority order (stages.ts), settings, their defaults and
 │                    SETTINGS_KEYS (settings.ts; resolveAgentFastMode: a role's fast mode, else the global one;
@@ -278,10 +278,13 @@ src/
 │                    every request and answer as an Effect Schema with its type beside it: RemoteUser, RemoteTeam,
 │                    HeartbeatResponse…, their limits in REMOTE_TEXT_LIMITS, the branded path ids InstanceId, TeamId,
 │                    RemoteUserId and ClaimCode), the Worker's failures (errors.ts: one Schema.TaggedError per wire
-│                    code with its status, resolveRemoteFailureWire for its `{ error: { code, message } }` body), the
-│                    Worker's API declared once (api.ts: RemoteApi, an HttpApi of every /__remote/* route with its
-│                    params, payload, answer and failures; PageSession, a bearer or the session cookie, and
-│                    MachineSession, the machine token, providing CurrentUser and CurrentMachine), keys
+│                    code with its status, resolveRemoteFailureWire for its `{ error: { code, message } }` body, and
+│                    serializeRemoteFailure, the status and body the Worker answers any failure with, a plain
+│                    server_error for one it does not know), the Worker's API declared once (api.ts: RemoteApi, an
+│                    HttpApi of every /__remote/* route with its params, payload, answer and failures; PageSession, a
+│                    bearer or the session cookie, and MachineSession, the machine token, providing CurrentUser and
+│                    CurrentMachine; RequestGate, inside each group's sign-in, with the body failures, and BodyLimit,
+│                    the body an endpoint takes, 16 KB unless it says more, as the Slack post does), keys
 │                    (keys.ts: P-256 ECDH, fingerprints), the handshake (handshake.ts: the hellos, ee/es/se ECDH and
 │                    HKDF into one AES-GCM key per direction, the enrollment proof), sealed frames (frames.ts: a
 │                    counter nonce, in order, closed after one bad frame), the channel's messages (channel.ts: the app

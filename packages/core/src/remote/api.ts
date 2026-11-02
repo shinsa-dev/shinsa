@@ -99,6 +99,18 @@ export class PageSession extends HttpApiMiddleware.Service<
   error: [wire(SignedOut), wire(Forbidden)],
 }) {}
 
+export const REMOTE_BODY_LIMIT_BYTES = 16 * 1024;
+
+export const SLACK_RELAY_POST_LIMIT_BYTES = 128 * 1024;
+
+export const BodyLimit = Context.Reference<number>('shinsa/core/remote/BodyLimit', {
+  defaultValue: () => REMOTE_BODY_LIMIT_BYTES,
+});
+
+export class RequestGate extends HttpApiMiddleware.Service<RequestGate>()('shinsa/core/remote/RequestGate', {
+  error: [wire(BodyInvalid), wire(BodyTooLarge), wire(ContentTypeInvalid), wire(NotFound)],
+}) {}
+
 export class MachineSession extends HttpApiMiddleware.Service<
   MachineSession,
   { provides: CurrentMachine; requires: never }
@@ -108,34 +120,35 @@ export class MachineSession extends HttpApiMiddleware.Service<
   error: wire(Revoked),
 }) {}
 
-const BODY_FAILURES = [wire(BodyInvalid), wire(BodyTooLarge), wire(ContentTypeInvalid)];
-
 const InstanceParams = { instanceId: InstanceId };
 
 const TeamParams = { teamId: TeamId };
 
-class SessionGroup extends HttpApiGroup.make('session').add(
-  HttpApiEndpoint.get('read', REMOTE_PATHS.session, { success: RemoteSession }),
-  HttpApiEndpoint.post('signOut', REMOTE_PATHS.signOut, { success: RemoteOk, error: wire(Forbidden) }),
-  HttpApiEndpoint.post('signInToken', REMOTE_PATHS.signInToken, {
-    payload: NativeSignInTokenRequest,
-    success: NativeSignInTokenResponse,
-    error: [...BODY_FAILURES, wire(SignInFailed)],
-  })
-) {}
+class SessionGroup extends HttpApiGroup.make('session')
+  .add(
+    HttpApiEndpoint.get('read', REMOTE_PATHS.session, { success: RemoteSession }),
+    HttpApiEndpoint.post('signOut', REMOTE_PATHS.signOut, { success: RemoteOk, error: wire(Forbidden) }),
+    HttpApiEndpoint.post('signInToken', REMOTE_PATHS.signInToken, {
+      payload: NativeSignInTokenRequest,
+      success: NativeSignInTokenResponse,
+      error: wire(SignInFailed),
+    })
+  )
+  .middleware(RequestGate) {}
 
-class PairingGroup extends HttpApiGroup.make('pairing').add(
-  HttpApiEndpoint.post('start', REMOTE_PATHS.pairStart, {
-    payload: PairStartRequest,
-    success: PairStartResponse,
-    error: [...BODY_FAILURES, wire(RateLimited)],
-  }),
-  HttpApiEndpoint.post('poll', REMOTE_PATHS.pairPoll, {
-    payload: PairPollRequest,
-    success: PairPollResponse,
-    error: BODY_FAILURES,
-  })
-) {}
+class PairingGroup extends HttpApiGroup.make('pairing')
+  .add(
+    HttpApiEndpoint.post('start', REMOTE_PATHS.pairStart, {
+      payload: PairStartRequest,
+      success: PairStartResponse,
+      error: wire(RateLimited),
+    }),
+    HttpApiEndpoint.post('poll', REMOTE_PATHS.pairPoll, {
+      payload: PairPollRequest,
+      success: PairPollResponse,
+    })
+  )
+  .middleware(RequestGate) {}
 
 class PairsGroup extends HttpApiGroup.make('pairs')
   .add(
@@ -156,6 +169,7 @@ class PairsGroup extends HttpApiGroup.make('pairs')
       ],
     })
   )
+  .middleware(RequestGate)
   .middleware(PageSession) {}
 
 class InstancesGroup extends HttpApiGroup.make('instances')
@@ -179,23 +193,26 @@ class InstancesGroup extends HttpApiGroup.make('instances')
     HttpApiEndpoint.post('inviteAccept', REMOTE_PATHS.inviteAccept, {
       payload: InviteAcceptRequest,
       success: InviteAcceptResponse,
-      error: [...BODY_FAILURES, wire(InviteInvalid)],
+      error: wire(InviteInvalid),
     }),
     HttpApiEndpoint.post('handoffAccept', REMOTE_PATHS.handoffAccept, {
       payload: InviteAcceptRequest,
       success: InviteAcceptResponse,
-      error: [...BODY_FAILURES, wire(HandoffInvalid)],
+      error: wire(HandoffInvalid),
     })
   )
+  .middleware(RequestGate)
   .middleware(PageSession) {}
 
-class SharesGroup extends HttpApiGroup.make('shares').add(
-  HttpApiEndpoint.post('connect', `${REMOTE_PATHS.shares}/:instanceId/connect`, {
-    params: InstanceParams,
-    success: ShareConnectResponse,
-    error: wire(NotFound),
-  })
-) {}
+class SharesGroup extends HttpApiGroup.make('shares')
+  .add(
+    HttpApiEndpoint.post('connect', `${REMOTE_PATHS.shares}/:instanceId/connect`, {
+      params: InstanceParams,
+      success: ShareConnectResponse,
+      error: wire(NotFound),
+    })
+  )
+  .middleware(RequestGate) {}
 
 class TeamsGroup extends HttpApiGroup.make('teams')
   .add(
@@ -203,12 +220,12 @@ class TeamsGroup extends HttpApiGroup.make('teams')
     HttpApiEndpoint.post('join', REMOTE_PATHS.teamJoin, {
       payload: TeamJoinRequest,
       success: TeamJoinResponse,
-      error: [...BODY_FAILURES, wire(InviteInvalid), wire(NotFound)],
+      error: [wire(InviteInvalid), wire(NotFound)],
     }),
     HttpApiEndpoint.post('preview', REMOTE_PATHS.teamPreview, {
       payload: TeamJoinRequest,
       success: TeamPreviewResponse,
-      error: [...BODY_FAILURES, wire(InviteInvalid), wire(NotFound)],
+      error: [wire(InviteInvalid), wire(NotFound)],
     }),
     HttpApiEndpoint.post('leave', `${REMOTE_PATHS.teams}/:teamId/leave`, {
       params: TeamParams,
@@ -219,9 +236,10 @@ class TeamsGroup extends HttpApiGroup.make('teams')
       params: TeamParams,
       payload: TeamConnectRequest,
       success: ConnectResponse,
-      error: [...BODY_FAILURES, wire(NotFound)],
+      error: wire(NotFound),
     })
   )
+  .middleware(RequestGate)
   .middleware(PageSession) {}
 
 class MachineGroup extends HttpApiGroup.make('machine')
@@ -229,7 +247,7 @@ class MachineGroup extends HttpApiGroup.make('machine')
     HttpApiEndpoint.post('heartbeat', REMOTE_PATHS.heartbeat, {
       payload: HeartbeatRequest,
       success: HeartbeatResponse,
-      error: [...BODY_FAILURES, wire(NotFound), wire(CloudflareFailed)],
+      error: [wire(NotFound), wire(CloudflareFailed)],
     }),
     HttpApiEndpoint.post('offline', REMOTE_PATHS.offline, { success: RemoteOk }),
     HttpApiEndpoint.post('remove', REMOTE_PATHS.machineRemove, {
@@ -241,35 +259,33 @@ class MachineGroup extends HttpApiGroup.make('machine')
     HttpApiEndpoint.post('requesterFind', REMOTE_PATHS.machineRequester, {
       payload: MemberRequest,
       success: RemoteUser,
-      error: [...BODY_FAILURES, wire(NotFound)],
+      error: wire(NotFound),
     }),
     HttpApiEndpoint.post('memberAdd', REMOTE_PATHS.machineMemberAdd, {
       payload: MemberRequest,
       success: RemoteMember,
-      error: [...BODY_FAILURES, wire(NotFound), wire(MembersFull)],
+      error: [wire(NotFound), wire(MembersFull)],
     }),
     HttpApiEndpoint.post('memberRemove', REMOTE_PATHS.machineMemberRemove, {
       payload: MemberRequest,
       success: RemoteOk,
-      error: BODY_FAILURES,
     }),
     HttpApiEndpoint.post('handoffCreate', REMOTE_PATHS.machineHandoffs, { success: InviteCreateResponse }),
     HttpApiEndpoint.post('handoffRemove', REMOTE_PATHS.machineHandoffRemove, {
       payload: HandoffRemoveRequest,
       success: RemoteOk,
-      error: BODY_FAILURES,
     }),
     HttpApiEndpoint.post('guestAdd', REMOTE_PATHS.machineGuestAdd, {
       payload: MemberRequest,
       success: RemoteMember,
-      error: [...BODY_FAILURES, wire(NotFound), wire(GuestsFull)],
+      error: [wire(NotFound), wire(GuestsFull)],
     }),
     HttpApiEndpoint.post('guestRemove', REMOTE_PATHS.machineGuestRemove, {
       payload: MemberRequest,
       success: RemoteOk,
-      error: BODY_FAILURES,
     })
   )
+  .middleware(RequestGate)
   .middleware(MachineSession) {}
 
 const OWNER_FAILURES = [wire(NotFound), wire(NotOwner)];
@@ -282,12 +298,12 @@ class MachineTeamsGroup extends HttpApiGroup.make('machineTeams')
     HttpApiEndpoint.post('create', REMOTE_PATHS.machineTeams, {
       payload: TeamCreateRequest,
       success: TeamCreateResponse,
-      error: [...BODY_FAILURES, wire(TeamsFull)],
+      error: wire(TeamsFull),
     }),
     HttpApiEndpoint.post('join', REMOTE_PATHS.machineTeamJoin, {
       payload: TeamJoinRequest,
       success: TeamJoinResponse,
-      error: [...BODY_FAILURES, wire(InviteInvalid), wire(NotFound)],
+      error: [wire(InviteInvalid), wire(NotFound)],
     }),
     HttpApiEndpoint.post('invite', machineTeamPath('invite'), {
       params: TeamParams,
@@ -303,19 +319,19 @@ class MachineTeamsGroup extends HttpApiGroup.make('machineTeams')
       params: TeamParams,
       payload: MemberRequest,
       success: RemoteMember,
-      error: [...BODY_FAILURES, ...OWNER_FAILURES, wire(MembersFull)],
+      error: [...OWNER_FAILURES, wire(MembersFull)],
     }),
     HttpApiEndpoint.post('memberRemove', machineTeamPath('members/remove'), {
       params: TeamParams,
       payload: MemberRequest,
       success: RemoteOk,
-      error: [...BODY_FAILURES, ...OWNER_FAILURES],
+      error: [...OWNER_FAILURES],
     }),
     HttpApiEndpoint.post('requestDecline', machineTeamPath('requests/decline'), {
       params: TeamParams,
       payload: MemberRequest,
       success: RemoteOk,
-      error: [...BODY_FAILURES, ...OWNER_FAILURES],
+      error: [...OWNER_FAILURES],
     }),
     HttpApiEndpoint.post('leave', machineTeamPath('leave'), {
       params: TeamParams,
@@ -331,9 +347,10 @@ class MachineTeamsGroup extends HttpApiGroup.make('machineTeams')
       params: TeamParams,
       payload: TeamConnectRequest,
       success: ConnectResponse,
-      error: [...BODY_FAILURES, wire(NotFound)],
+      error: wire(NotFound),
     })
   )
+  .middleware(RequestGate)
   .middleware(MachineSession) {}
 
 const THREAD_FAILURES = [wire(ThreadNotForwarded), wire(SlackNotInstalled)];
@@ -345,25 +362,20 @@ class SlackRelayGroup extends HttpApiGroup.make('slackRelay')
     HttpApiEndpoint.post('post', SLACK_RELAY_PATHS.post, {
       payload: SlackRelayPost,
       success: SlackRelayPosted,
-      error: [
-        ...BODY_FAILURES,
-        ...THREAD_FAILURES,
-        wire(PostNotYours),
-        wire(SlackFailed),
-        wire(SlackBlocksRefused),
-      ],
-    }),
+      error: [...THREAD_FAILURES, wire(PostNotYours), wire(SlackFailed), wire(SlackBlocksRefused)],
+    }).annotate(BodyLimit, SLACK_RELAY_POST_LIMIT_BYTES),
     HttpApiEndpoint.post('session', SLACK_RELAY_PATHS.session, {
       payload: SlackRelaySession,
       success: SlackRelaySessionSet,
-      error: [...BODY_FAILURES, ...THREAD_FAILURES, wire(SlackFailed)],
+      error: [...THREAD_FAILURES, wire(SlackFailed)],
     }),
     HttpApiEndpoint.post('react', SLACK_RELAY_PATHS.react, {
       payload: SlackRelayReaction,
       success: SlackRelayReacted,
-      error: [...BODY_FAILURES, ...THREAD_FAILURES],
+      error: [...THREAD_FAILURES],
     })
   )
+  .middleware(RequestGate)
   .middleware(MachineSession) {}
 
 export class RemoteApi extends HttpApi.make('remote').add(

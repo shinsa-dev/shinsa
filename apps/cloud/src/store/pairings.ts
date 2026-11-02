@@ -1,4 +1,4 @@
-import { ClaimCode, MachineCredentials, RemoteUserId } from '@shinsa/core';
+import { ClaimCode, MachineCredentials } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Option, Schema } from 'effect';
 import { SqlClient, SqlSchema } from 'effect/sql';
 import { TokenHash } from '../crypto/crypto.ts';
@@ -18,7 +18,7 @@ export type NewPairing = typeof NewPairing.Type;
 export const Pairing = Schema.Struct({
   ...NewPairing.fields,
   credentials: Schema.NullOr(Schema.fromJsonString(MachineCredentials)),
-  owner: Schema.NullOr(RemoteUserId),
+  owner: Schema.NullOr(Schema.String),
 });
 
 export type Pairing = typeof Pairing.Type;
@@ -30,7 +30,7 @@ export class Pairings extends Context.Service<
     readonly removeExpired: Effect.Effect<void>;
     countFrom(clientIp: string): Effect.Effect<number>;
     select(claimCode: ClaimCode): Effect.Effect<Option.Option<Pairing>>;
-    reserve(claimCode: ClaimCode, owner: RemoteUserId): Effect.Effect<boolean>;
+    reserve(claimCode: ClaimCode, ownerLogin: string): Effect.Effect<boolean>;
     release(claimCode: ClaimCode): Effect.Effect<void>;
     recordClaim(claimCode: ClaimCode, credentials: MachineCredentials): Effect.Effect<void>;
     remove(claimCode: ClaimCode): Effect.Effect<void>;
@@ -62,7 +62,7 @@ export class Pairings extends Context.Service<
           sql`SELECT claim_code, poll_secret_hash, name, public_key, version, expires_at, credentials, owner FROM pair_sessions WHERE claim_code = ${code}`,
       });
       const reservation = SqlSchema.findOneOption({
-        Request: Schema.Struct({ claimCode: ClaimCode, owner: RemoteUserId }),
+        Request: Schema.Struct({ claimCode: ClaimCode, owner: Schema.String }),
         Result: Schema.Struct({ claimCode: ClaimCode }),
         execute: (row) =>
           sql`UPDATE pair_sessions SET owner = ${row.owner} WHERE claim_code = ${row.claimCode} AND owner IS NULL RETURNING claim_code`,
@@ -100,8 +100,8 @@ export class Pairings extends Context.Service<
         ),
         select: Effect.fn('Pairings.select')((code: ClaimCode) => byCode(code), Effect.orDie),
         reserve: Effect.fn('Pairings.reserve')(
-          (claimCode: ClaimCode, owner: RemoteUserId) =>
-            Effect.map(reservation({ claimCode, owner }), Option.isSome),
+          (claimCode: ClaimCode, ownerLogin: string) =>
+            Effect.map(reservation({ claimCode, owner: ownerLogin }), Option.isSome),
           Effect.orDie
         ),
         release: Effect.fn('Pairings.release')((code: ClaimCode) => release(code), Effect.orDie),

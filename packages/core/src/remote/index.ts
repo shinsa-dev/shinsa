@@ -49,7 +49,6 @@ export {
   PairStartResponse,
   PairView,
   parseEnrollFragment,
-  parseRemoteHookPath,
   REMOTE_APP_ORIGIN,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,

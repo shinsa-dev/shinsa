@@ -5,9 +5,12 @@ interface RemoteFailureWire<Code extends string> {
   readonly status: number;
 }
 
+const WIRE_BY_TAG = new Map<string, RemoteFailureWire<string>>();
+
 const RemoteFailure =
   <Self>() =>
   <const Tag extends string, const Code extends string>(tag: Tag, wire: RemoteFailureWire<Code>) => {
+    WIRE_BY_TAG.set(tag, wire);
     const Base = Schema.TaggedError<Self>()(tag, { message: Schema.String }, { httpApiStatus: wire.status });
     const body = Schema.Struct({
       error: Schema.Struct({ code: Schema.Literal(wire.code), message: Schema.String }),
@@ -166,6 +169,18 @@ export class PostNotYours extends RemoteFailure<PostNotYours>()('PostNotYours', 
   code: 'post_not_yours',
   status: 403,
 }) {}
+
+export const SERVER_ERROR_MESSAGE = 'Something went wrong on app.shinsa.dev. Try again.';
+
+export function serializeRemoteFailure(error: { readonly _tag: string; readonly message: string }) {
+  const wire = WIRE_BY_TAG.get(error._tag);
+  if (!wire)
+    return {
+      status: ServerError.status,
+      body: { error: { code: ServerError.code, message: SERVER_ERROR_MESSAGE } },
+    };
+  return { status: wire.status, body: { error: { code: wire.code, message: error.message } } };
+}
 
 interface RemoteFailureClass<Tag extends string, Code extends string>
   extends Schema.Codec<unknown, { readonly _tag: Tag; readonly message: string }> {

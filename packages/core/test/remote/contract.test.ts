@@ -7,7 +7,6 @@ import {
   PairPollResponse,
   PairStartRequest,
   parseEnrollFragment,
-  parseRemoteHookPath,
   REMOTE_PATHS,
   REMOTE_TEXT_LIMITS,
   RemoteUserId,
@@ -45,13 +44,10 @@ describe('the remote contract', () => {
     expect(resolvePairApprovePath('WXYZ2345')).toBe('/__remote/pairs/WXYZ2345/approve');
   });
 
-  test('gives a webhook one stable URL on app.shinsa.dev and maps it to the engine path', () => {
-    const url = resolveRemoteHookUrl('k3x9', 'schedule-1', 'tok');
-    expect(url).toBe('https://app.shinsa.dev/hooks/k3x9/schedule-1/tok');
-    expect(parseRemoteHookPath(new URL(url).pathname)).toEqual({
-      instanceId: 'k3x9',
-      enginePath: '/api/hooks/schedule-1/tok',
-    });
+  test('gives a webhook one stable URL on app.shinsa.dev', () => {
+    expect(resolveRemoteHookUrl('k3x9', 'schedule-1', 'tok')).toBe(
+      'https://app.shinsa.dev/hooks/k3x9/schedule-1/tok'
+    );
   });
 
   test('builds the webhook and enrollment links on another origin, such as a local wrangler dev', () => {
@@ -68,13 +64,6 @@ describe('the remote contract', () => {
     expect(REMOTE_PATHS.app).toBe('/');
     expect(REMOTE_PATHS.pairPage).toBe('/pair');
     expect(REMOTE_PATHS.enrollPage).toBe('/enroll');
-  });
-
-  test('refuses a hook path of another shape', () => {
-    expect(parseRemoteHookPath('/api/hooks/a/b')).toBeNull();
-    expect(parseRemoteHookPath('/hooks/a/b')).toBeNull();
-    expect(parseRemoteHookPath('/hooks/a//c')).toBeNull();
-    expect(parseRemoteHookPath('/hooks/a/b/c/d')).toBeNull();
   });
 
   test('puts the secret, the machine key and the invite token in the fragment, never the path', () => {
@@ -117,6 +106,15 @@ describe('the remote contract schemas', () => {
     expect(Schema.decodeUnknownSync(HeartbeatRequest)({ localUrl: 'http://127.0.0.1:7446' })).toEqual({
       localUrl: 'http://127.0.0.1:7446',
     });
+    const decodeHeartbeat = Schema.decodeUnknownResult(HeartbeatRequest);
+    const refusal = (input: unknown) => {
+      const result = decodeHeartbeat(input);
+      return Result.isFailure(result) ? result.failure.message : null;
+    };
+    expect(refusal({ localUrl: 'http://10.0.0.2:7446' })).toContain('loopback address');
+    expect(refusal({ localUrl: 'not a url' })).toContain('loopback address');
+    expect(refusal({ localUrl: 'http://[::1]:7446', signingKey: 'short' })).toContain('P-256 public key');
+    expect(refusal({ localUrl: 'http://localhost:7446', signingKey: 'A'.repeat(87) })).toBeNull();
     const decodePoll = Schema.decodeUnknownOption(PairPollResponse);
     expect(Option.isSome(decodePoll({ status: 'pending' }))).toBe(true);
     expect(Option.isNone(decodePoll({ status: 'claimed' }))).toBe(true);

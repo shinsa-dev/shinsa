@@ -18,10 +18,10 @@ import {
   serializeSlackAnswerValue,
   verifySlackForwardSignature,
 } from '@shinsa/core';
-import { createSlackSignature } from '../src/crypto.ts';
-import { SLACK_EVENT_BODY_LIMIT_BYTES } from '../src/slack.ts';
-import { SLACK_BOT_SCOPES, SLACK_USER_SCOPES } from '../src/slack-api.ts';
-import { createHarness, type Harness, readJson, TEST_CONFIG } from './harness.ts';
+import { SLACK_BOT_SCOPES } from '../src/integrations/slack.ts';
+import { SLACK_USER_SCOPES } from '../src/routes/slack-link.ts';
+import { SLACK_EVENT_BODY_LIMIT_BYTES } from '../src/slack/requests.ts';
+import { createHarness, createSlackSignature, type Harness, readJson, TEST_CONFIG } from './harness.ts';
 
 type Fields = Record<string, unknown>;
 
