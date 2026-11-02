@@ -30,7 +30,7 @@ export interface NotarySubmission {
   status: string;
 }
 
-export async function retryStep<T>(step: (attempt: number) => Promise<T>, options: RetryOptions) {
+export async function retryStep<T>(step: (attempt: number) => T | Promise<T>, options: RetryOptions) {
   const attempts = options.delays.length + 1;
   for (let attempt = 1; ; attempt += 1) {
     try {
