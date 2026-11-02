@@ -255,12 +255,20 @@ export class HandOverReader {
 
   private readList(ast: SchemaAST.Arrays, value: unknown, path: HandOverPath) {
     const { min, max } = ast.annotations ?? {};
-    if (value === undefined && min === 0) return [];
+    const filters = listFilters(ast.checks);
+    if (value === undefined && min === 0) {
+      this.runFilters(
+        filters.filter((filter) => filter.annotations?.raw !== true),
+        [],
+        ast,
+        path
+      );
+      return [];
+    }
     if (!Array.isArray(value)) {
       this.errors.push(NOT_LIST.replaceAll('{path}', resolveIssuePath(path)));
       return [];
     }
-    const filters = listFilters(ast.checks);
     this.runFilters(
       filters.filter((filter) => filter.annotations?.raw === true),
       value,

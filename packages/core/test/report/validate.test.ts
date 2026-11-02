@@ -692,6 +692,13 @@ describe('validatePlanHandOver reads the plan document', () => {
     { title: 'Fix it', detail: 'Clamp and verify.' },
   ];
 
+  test('a plan that leaves out its phases is still told it needs two', () => {
+    expect(validatePlanHandOver({ goal: 'x' })).toEqual({
+      ok: false,
+      errors: ['phases: at least 2 phases.', 'approach is required.'],
+    });
+  });
+
   test('reads the snake_case lists and keeps questions with their options', () => {
     const value = readValue(
       validatePlanDocument({
