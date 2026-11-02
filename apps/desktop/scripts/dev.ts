@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import electronBinary from 'electron';
-import { listPlistEdits, resolveDevBundle, serializeDevBundleStamp } from '../src/lib/dev-bundle.ts';
+import { listPlistEdits, resolveDevBundle, serializeDevBundleStamp } from '../src/app/dev-bundle.ts';
 
 const desktopDir = resolve(import.meta.dirname, '..');
 

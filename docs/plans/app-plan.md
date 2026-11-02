@@ -104,7 +104,7 @@ Shinsa.app/Contents/
   Desktop and its engine, and Tailscale's app and `tailscaled` do it: no separate engine release, no table of which
   app works with which engine. Some changes touch only the app, some only the engine, some both; all of them ship as
   the next Shinsa version.
-- **The app updates itself** (built: `apps/desktop/src/main/updater.ts`, `lib/update.ts`). electron-updater checks
+- **The app updates itself** (built: `apps/desktop/src/updates/service.ts`, `updates/state.ts`). electron-updater checks
   the release feed when the app starts and every four hours, downloads a new version in the background and installs
   it the next time you quit; Shinsa → Restart to Update installs it now, and a notification says it is ready. Shinsa
   → Check for Updates… checks by hand and says when you are up to date. Quitting or restarting the app never stops
@@ -143,7 +143,7 @@ Shinsa.app/Contents/
   when the Apple secrets are set, and publishes the release with the update files of both channels (`latest-mac.yml`
   and `beta-mac.yml` for a stable release, `beta-mac.yml` for a beta) and notes from the merged pull requests.
   Nothing to bump by hand: the version lives in the tag, not in `package.json`.
-- **Two update channels** (built: `apps/desktop/src/lib/update-channel.ts`). Stable follows the release marked
+- **Two update channels** (built: `apps/desktop/src/updates/channel.ts`). Stable follows the release marked
   latest; Beta follows the newest release, pre-releases included, so it gets every stable release once it is newer.
   Leaving Beta on a beta newer than the latest stable offers to go back to that stable (Settings → General →
   Updates, and a dialog after the switch); otherwise, and if you stay, the beta stays until a stable release passes
@@ -210,7 +210,7 @@ and every page shows what it finds in the health banner at the top (`lib/connect
 | A folder it needs is blocked | the engine reports `EPERM` on a chosen folder | Shinsa cannot read ‹folder›; **Open Privacy & Security** |
 | The engine is older than the app, after an update | `version` and `protocol` in `/api/health` | None: the page restarts the engine at once and Settings → Updates shows "Moving to ‹version›…"; only a failed restart shows a banner (Versions and updates, above) |
 
-Built as the app's status page (`apps/desktop/src/lib/engine.ts`), each state with its fix button and the engine
+Built as the app's status page (`apps/desktop/src/engine/screen.ts`), each state with its fix button and the engine
 log's warnings and errors; the version row is the web's engine view (`lib/connection/engine.ts`). Not yet: a short guide per row
 (`docs/troubleshooting.md`, and the same text on shinsa.dev) with the steps by hand, for when the button is not
 enough. A crash also leaves a line in the task's chat for any run it cut off ("The engine
