@@ -39,26 +39,27 @@ describe('Shell', () => {
     expect(await Bun.file(`${cwd}/late.txt`).text()).toBe('late\n');
   });
 
-  test.each([0, 1])(
-    'a command that exits %i answers without waiting for what it left running',
-    async (code) => {
-      const cwd = createTempDir();
-      const elapsed = await runTest(
-        Effect.gen(function* () {
-          const started = performance.now();
-          yield* Shell.use((shell) =>
-            shell.run({
-              argv: ['sh', '-c', `sleep 1.5 >/dev/null 2>&1 & echo early; exit ${code}`],
-              cwd,
-              timeout: null,
-            })
-          );
-          return performance.now() - started;
+  test.each([0, 1])('a command that exits %i answers while what it left running still runs', async (code) => {
+    const cwd = createTempDir();
+    const result = await runTest(
+      Shell.use((shell) =>
+        shell.run({
+          argv: [
+            'sh',
+            '-c',
+            `while [ ! -f go ]; do sleep 0.02; done >/dev/null 2>&1 & echo $!; exit ${code}`,
+          ],
+          cwd,
+          timeout: null,
         })
-      );
-      expect(elapsed).toBeLessThan(500);
-    }
-  );
+      )
+    );
+    const leftover = Number(result.stdout);
+    expect(result.code).toBe(code);
+    expect(isRunning(leftover)).toBe(true);
+    await Bun.write(`${cwd}/go`, '');
+    await until('the leftover process ends', () => !isRunning(leftover));
+  });
 
   test('an interrupted command has its whole group stopped', async () => {
     const cwd = createTempDir();
