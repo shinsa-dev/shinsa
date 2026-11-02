@@ -39,6 +39,27 @@ describe('Shell', () => {
     expect(await Bun.file(`${cwd}/late.txt`).text()).toBe('late\n');
   });
 
+  test.each([0, 1])(
+    'a command that exits %i answers without waiting for what it left running',
+    async (code) => {
+      const cwd = createTempDir();
+      const elapsed = await runTest(
+        Effect.gen(function* () {
+          const started = performance.now();
+          yield* Shell.use((shell) =>
+            shell.run({
+              argv: ['sh', '-c', `sleep 1.5 >/dev/null 2>&1 & echo early; exit ${code}`],
+              cwd,
+              timeout: null,
+            })
+          );
+          return performance.now() - started;
+        })
+      );
+      expect(elapsed).toBeLessThan(500);
+    }
+  );
+
   test('an interrupted command has its whole group stopped', async () => {
     const cwd = createTempDir();
     let pid = 0;

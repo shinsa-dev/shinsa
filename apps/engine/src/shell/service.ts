@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, type PlatformError, Ref, Stream } from 'effect';
+import { Context, Effect, Exit, Layer, type PlatformError, Ref, Scope, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { listDescendants, stopProcess, stopProcessGroup } from './processes.ts';
 import {
@@ -24,6 +24,7 @@ export class Shell extends Context.Service<
     Shell,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const shellScope = yield* Effect.scope;
 
       const readOutput = Effect.fnUntraced(function* (
         stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>,
@@ -46,6 +47,12 @@ export class Shell extends Context.Service<
         const [program, ...args] = request.argv;
         return yield* Effect.scoped(
           Effect.gen(function* () {
+            const processScope = yield* Scope.make();
+            yield* Effect.addFinalizer((exit) =>
+              Exit.isSuccess(exit)
+                ? Effect.asVoid(Effect.forkIn(Scope.close(processScope, exit), shellScope))
+                : Scope.close(processScope, exit)
+            );
             const handle = yield* spawner
               .spawn(
                 ChildProcess.make(program, args, {
@@ -61,6 +68,7 @@ export class Shell extends Context.Service<
                 })
               )
               .pipe(
+                Scope.provide(processScope),
                 Effect.mapError((error) => new CommandNotFound({ command: program, message: error.message }))
               );
             yield* Effect.addFinalizer(() =>
