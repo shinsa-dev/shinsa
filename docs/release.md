@@ -342,6 +342,18 @@ workflow on every branch, three times each, so it is not used. Set two repositor
 schedule's URL (Settings → Schedules in Shinsa), and `SHINSA_WATCH_SECRET`, its signing secret. Without them the
 workflow passes with a warning.
 
+## Watching issues
+
+`.github/workflows/watch-issues.yml` (Watch issues) runs when an issue is opened in this repository, and for nothing
+else: an edit, a comment, a label, a close or a reopen sends nothing. It sends that issue's `issues` event, as GitHub
+would send a webhook, to the Shinsa webhook schedule "New feedback issue on shinsa-dev/shinsa (signed)", which opens a
+task for it: signed with HMAC-SHA256 in `x-hub-signature-256`, with `x-github-event: issues` and `x-github-delivery`
+set to `issue-` and the issue's number, so a re-run of the job for the same issue opens nothing. The issue's title and
+body reach the job only inside the event file, never in its script. It runs with `permissions: {}`, so it never
+comments on, labels or changes the issue. Set two repository secrets: `SHINSA_ISSUES_URL`, the schedule's URL
+(Settings → Schedules in Shinsa), and `SHINSA_WATCH_SECRET`, the signing secret Watch main uses, which the schedule
+must check against too. Without either the workflow passes with a warning.
+
 ## The first releases
 
 1. Set the five secrets (or knowingly ship unsigned betas that will not update themselves).
