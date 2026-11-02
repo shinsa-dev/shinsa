@@ -20,6 +20,8 @@ export const PageBridge = Layer.effectDiscard(
     const updater = yield* Updater;
     const notifications = yield* Notifications;
     const shell = yield* DesktopShell;
+    const scope = yield* Effect.scope;
+    const inBackground = (effect: Effect.Effect<void>) => Effect.asVoid(Effect.forkIn(effect, scope));
     const decodeRequest = Schema.decodeUnknownOption(PageRequest);
     const answer = Effect.fn('PageBridge.answer')(function* (message: PageMessage) {
       if (!window.isAppSender(message.frame)) return;
@@ -30,11 +32,11 @@ export const PageBridge = Layer.effectDiscard(
         case CHANNELS.installUpdate:
           return yield* updater.install;
         case CHANNELS.checkForUpdates:
-          return yield* updater.check(true);
+          return yield* inBackground(updater.check(true));
         case CHANNELS.updateChannel:
-          return yield* updater.applyChannel(request.payload);
+          return yield* inBackground(updater.applyChannel(request.payload));
         case CHANNELS.downgrade:
-          return yield* updater.answerDowngrade(request.payload);
+          return yield* inBackground(updater.answerDowngrade(request.payload));
         case CHANNELS.badge:
           return yield* shell.setBadge(resolveBadgeText(request.payload));
         case CHANNELS.notify:

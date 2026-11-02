@@ -97,4 +97,16 @@ describe('the app menu', () => {
     expect(world.actions).toEqual(['retry', 'restart']);
     expect(world.checks).toBe(1);
   });
+
+  it('carries out menu commands while an update check waits on the network', async () => {
+    const world = createWorld({ onCheck: () => ({ hang: true }) });
+    await run(world, () =>
+      Effect.gen(function* () {
+        yield* offer(world.menuCommands, { _tag: 'Update', install: false });
+        yield* offer(world.menuCommands, { _tag: 'RestartEngine' });
+      })
+    );
+    expect(world.checks).toBe(1);
+    expect(world.actions).toEqual(['restart']);
+  });
 });

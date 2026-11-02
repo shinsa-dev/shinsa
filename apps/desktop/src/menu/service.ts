@@ -60,7 +60,7 @@ export class AppMenu extends Context.Service<
             return yield* actions.request('restart');
           case 'Update':
             if (command.install) return yield* updater.install;
-            return yield* updater.check(true);
+            return yield* Effect.asVoid(Effect.forkIn(updater.check(true), scope));
         }
       });
       yield* Effect.forkIn(Stream.runForEach(updater.changes, refresh), scope, { startImmediately: true });

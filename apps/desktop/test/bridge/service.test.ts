@@ -114,6 +114,27 @@ describe('the page bridge', () => {
     expect(world.checks).toBe(0);
   });
 
+  it('keeps answering the page while an update check waits on the network', async () => {
+    const world = createWorld({ onCheck: () => ({ hang: true }) });
+    await run(world, () =>
+      Effect.gen(function* () {
+        yield* send(world, CHANNELS.checkForUpdates);
+        yield* send(world, CHANNELS.updateChannel, 'beta');
+        yield* send(world, CHANNELS.downgrade, true);
+        yield* send(world, CHANNELS.badge, 2);
+        yield* send(world, CHANNELS.notify, {
+          title: 'Done',
+          body: 'LOC-4 merged',
+          tag: 'LOC-4',
+          path: null,
+        });
+      })
+    );
+    expect(world.checks).toBeGreaterThan(0);
+    expect(world.shell).toEqual(['badge 2']);
+    expect(world.notices).toEqual([{ title: 'Done', body: 'LOC-4 merged', tag: 'LOC-4', path: null }]);
+  });
+
   it('sends each update state to the page', async () => {
     const world = createWorld({ onCheck: () => ({ events: [{ _tag: 'Available', version: '1.3.0' }] }) });
     await run(world, (updater) =>

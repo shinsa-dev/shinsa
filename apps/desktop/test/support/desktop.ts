@@ -48,7 +48,7 @@ import { AppWindow } from '../../src/window/service.ts';
 
 export type HttpAnswer = { status: number; body: string } | 'refuse' | 'hang';
 
-export type CheckScript = { events?: UpdateEvent[]; download?: boolean } | { fail: string };
+export type CheckScript = { events?: UpdateEvent[]; download?: boolean } | { fail: string } | { hang: true };
 
 export interface DesktopWorld {
   packaged: boolean;
@@ -313,6 +313,7 @@ function makeUpdateLayer(world: DesktopWorld) {
             world.checks += 1;
             const script = world.onCheck();
             if ('fail' in script) return yield* new UpdateCheckFailed({ message: script.fail });
+            if ('hang' in script) return yield* Effect.never;
             yield* PubSub.publishAll(events, script.events ?? []);
             if (!script.download) return Option.none();
             return Option.some({
