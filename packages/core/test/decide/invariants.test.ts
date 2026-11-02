@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Result } from 'effect';
 import { isTaskLive } from '../../src/decide/liveness.ts';
 import {
   applyEvent,
@@ -6,7 +7,7 @@ import {
   applyTaskDetail,
   type ConfigProblem,
   createState,
-  DomainError,
+  type Decision,
   decide,
   type Gate,
   type GateDecision,
@@ -1225,11 +1226,7 @@ const SETTLED = new Set(['merged', 'done', 'cancelled']);
 
 const CLOSING_EVENTS = new Set(['gate.answered', 'gate.withdrawn', 'gate.superseded']);
 
-function assertHumanGatesKept(
-  prior: ShinsaState,
-  events: ReturnType<typeof decide>['events'],
-  command: ShinsaCommand
-) {
+function assertHumanGatesKept(prior: ShinsaState, events: Decision['events'], command: ShinsaCommand) {
   const open = new Map(listOpenGates(prior).map((gate) => [gate.id, gate]));
   const settledIds = new Set(
     events.flatMap((event) =>
@@ -1406,13 +1403,9 @@ function simulate(
     newId: () => string,
     onBehalf = false
   ) => {
-    let decision: ReturnType<typeof decide>;
-    try {
-      decision = decide(state, command, { now, newId, onBehalf });
-    } catch (error) {
-      if (!(error instanceof DomainError)) throw error;
-      return;
-    }
+    const result = decide(state, command, { now, newId, onBehalf });
+    if (Result.isFailure(result)) return;
+    const decision = result.success;
     const prior = state;
     if (onBehalf) assertHumanGatesKept(prior, decision.events, command);
     for (const event of decision.events) {
@@ -1821,15 +1814,9 @@ describe('decide under random command sequences', () => {
       };
       expect(attempt()).toBe(attempt());
       let counter = 0;
-      const result = (() => {
-        try {
-          return decide(state, command, { now: 5_000, newId: () => `d-${step}-${++counter}` });
-        } catch {
-          return null;
-        }
-      })();
-      if (!result) continue;
-      for (const event of result.events)
+      const result = decide(state, command, { now: 5_000, newId: () => `d-${step}-${++counter}` });
+      if (Result.isFailure(result)) continue;
+      for (const event of result.success.events)
         state = applyEvent(state, { ...event, seq: state.seq + 1, at: 5_000 } as ShinsaEvent);
     }
   });

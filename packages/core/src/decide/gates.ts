@@ -272,6 +272,7 @@ export function answerGate(
     ...thenApprove,
   });
   decider.requestBriefing(gate.taskId);
+  // oxlint-disable-next-line typescript/switch-exhaustiveness-check -- a Post-merge gate takes no decision, so assertDecision refuses it before this switch
   switch (gate.type) {
     case 'question':
     case 'secret':

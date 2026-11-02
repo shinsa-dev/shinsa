@@ -121,15 +121,14 @@ export function SearchPanel({
                 onPrefetch={() => onPrefetch(row.match.path)}
               >
                 <Truncate className='flex-1 font-mono'>
-                  {listKeyedParts(splitMatchText(row.match.text.trim(), delayed.query, delayed)).map(
-                    (part) =>
-                      part.hit ? (
-                        <mark key={part.key} className='rounded-xs bg-amber-a2 text-fg-4'>
-                          {part.text}
-                        </mark>
-                      ) : (
-                        <React.Fragment key={part.key}>{part.text}</React.Fragment>
-                      )
+                  {listKeyedParts(splitMatchText(row.match.text.trim(), delayed.query, delayed)).map((part) =>
+                    part.hit ? (
+                      <mark key={part.key} className='rounded-xs bg-amber-a2 text-fg-4'>
+                        {part.text}
+                      </mark>
+                    ) : (
+                      <React.Fragment key={part.key}>{part.text}</React.Fragment>
+                    )
                   )}
                 </Truncate>
               </TreeRow>

@@ -138,8 +138,8 @@ packages/
 | --- | --- |
 | `bun dev` | Start the engine and the interface |
 | `bun run test` | Run every unit suite, at 100% coverage |
-| `bun lint` | Biome, the repository's conventions checker and spelling |
-| `bun check-types` | TypeScript across every package |
+| `bun lint` | Oxlint, stylelint, the repository's conventions checker and spelling |
+| `bun check-types` | TypeScript and the Effect language service across every package |
 | `bun format:fix` | Format |
 | `bun scripts/screenshots/readme.ts` | Take the screenshots above again, from the Mac app on seeded data |
 

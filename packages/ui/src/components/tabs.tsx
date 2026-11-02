@@ -84,7 +84,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     <TabsPrimitive.Tab
       data-slot='tabs-trigger'
       className={cn(
-        'relative inline-flex cursor-pointer select-none items-center justify-center gap-1.5 whitespace-nowrap font-medium text-fg-2 text-xs outline-none',
+        'relative inline-flex cursor-pointer items-center justify-center gap-1.5 text-xs font-medium whitespace-nowrap text-fg-2 outline-none select-none',
         'hover:text-fg-4 active:text-fg-4 data-active:text-fg-4',
         'disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
         'group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start',
@@ -93,10 +93,10 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         'group-data-[variant=default]/tabs-list:h-full group-data-[variant=default]/tabs-list:rounded-segment group-data-[variant=default]/tabs-list:px-2',
         // Underline: regular weight; the selected tab gains a hairline stroke
         // (faux-medium) so it reads medium without its width changing.
-        'group-data-[variant=underline]/tabs-list:data-active:faux-medium group-data-[variant=underline]/tabs-list:h-full group-data-[variant=underline]/tabs-list:px-2 group-data-[variant=underline]/tabs-list:font-normal',
+        'group-data-[variant=underline]/tabs-list:h-full group-data-[variant=underline]/tabs-list:px-2 group-data-[variant=underline]/tabs-list:font-normal group-data-[variant=underline]/tabs-list:data-active:faux-medium',
         // Ghost: bare text switchers — no indicator, so the content itself
         // takes the press, exactly like the link button.
-        'group-data-[variant=ghost]/tabs-list:enabled:active:scale-[0.975] group-data-[variant=ghost]/tabs-list:[will-change:scale]',
+        'group-data-[variant=ghost]/tabs-list:[will-change:scale] group-data-[variant=ghost]/tabs-list:enabled:active:scale-[0.975]',
         className
       )}
       {...props}

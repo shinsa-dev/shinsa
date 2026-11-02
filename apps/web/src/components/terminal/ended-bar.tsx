@@ -14,8 +14,8 @@ export function EndedBar({
   const ended = describeTerminalEnd(terminal);
   if (!ended) return null;
   return (
-    <div className='flex w-full shrink-0 items-center gap-2 border-border border-t px-3 py-1.5'>
-      <span className='min-w-0 flex-1 truncate text-fg-2 text-xs'>{ended}</span>
+    <div className='flex w-full shrink-0 items-center gap-2 border-t border-border px-3 py-1.5'>
+      <span className='min-w-0 flex-1 truncate text-xs text-fg-2'>{ended}</span>
       <Button variant='secondary' size='sm' onClick={onClose}>
         Close
       </Button>

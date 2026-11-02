@@ -1,13 +1,87 @@
 import { describe, expect, test } from 'bun:test';
+import { Result } from 'effect';
 import {
   type CommandOf,
   DomainError,
+  type GateId,
   parseUserCommand,
   SETTINGS_KEYS,
+  type TaskId,
   USER_COMMAND_TYPES,
 } from '../../src/index.ts';
+import { parseCommand } from '../harness.ts';
 
 describe('parseUserCommand', () => {
+  test('returns the command with its ids branded, or the refusal, instead of throwing', () => {
+    const parsed = parseUserCommand({ type: 'gate.answer', gateId: 'g1', decision: 'approve' });
+    expect(Result.isSuccess(parsed)).toBe(true);
+    const command = Result.getOrThrow(parsed);
+    if (command.type === 'gate.answer') {
+      const gateId: GateId = command.gateId;
+      expect(gateId === 'g1').toBe(true);
+    }
+    const cancel = Result.getOrThrow(parseUserCommand({ type: 'task.cancel', taskId: 't1' }));
+    if (cancel.type === 'task.cancel') {
+      const taskId: TaskId = cancel.taskId;
+      expect(taskId === 't1').toBe(true);
+    }
+    expect(parseUserCommand({ type: 'task.cancel' })).toEqual(
+      Result.fail(new DomainError({ code: 'command_invalid', message: 'taskId must be text.' }))
+    );
+    expect(parseUserCommand({ type: 'task.reshape' })).toEqual(
+      Result.fail(new DomainError({ code: 'command_forbidden', message: 'Unknown command.' }))
+    );
+    expect(parseUserCommand([])).toEqual(
+      Result.fail(new DomainError({ code: 'command_invalid', message: 'A command must be an object.' }))
+    );
+  });
+
+  test('reads a field given as undefined as one left out, as it did before', () => {
+    expect(
+      parseCommand({
+        type: 'task.create',
+        request: 'x',
+        repoId: undefined,
+        projectId: undefined,
+        mode: undefined,
+      })
+    ).toEqual({ type: 'task.create', request: 'x', repoId: null });
+    expect(
+      parseCommand({
+        type: 'schedule.write',
+        timeZone: 'UTC',
+        target: { kind: 'new_task', priority: undefined },
+      })
+    ).toMatchObject({ target: { kind: 'new_task', repoId: null, priority: 'normal', mode: 'build' } });
+  });
+
+  test('a data source written without repositories covers none, in a list of its own each time', () => {
+    const first = parseCommand({
+      type: 'watch_source.write',
+      projectId: 'p1',
+      server: 'slack',
+      data: 'Bugs.',
+    });
+    const second = parseCommand({
+      type: 'watch_source.write',
+      projectId: 'p1',
+      server: 'slack',
+      data: 'Bugs.',
+    });
+    expect(first).toEqual({
+      type: 'watch_source.write',
+      projectId: 'p1',
+      server: 'slack',
+      data: 'Bugs.',
+      repoIds: [],
+    });
+    expect(
+      first.type === 'watch_source.write' &&
+        second.type === 'watch_source.write' &&
+        first.repoIds !== second.repoIds
+    ).toBe(true);
+  });
+
   test('accepts every user command and keeps only the fields it knows', () => {
     const accepted: [unknown, unknown][] = [
       [
@@ -254,7 +328,7 @@ describe('parseUserCommand', () => {
         { type: 'gate.answer', gateId: 'g1', decision: 'approve', response: null },
       ],
     ];
-    for (const [input, output] of accepted) expect(parseUserCommand(input)).toEqual(output as never);
+    for (const [input, output] of accepted) expect(parseCommand(input)).toEqual(output as never);
   });
 
   test('refuses a malformed command with a message saying what is wrong', () => {
@@ -368,13 +442,13 @@ describe('parseUserCommand', () => {
       ],
     ];
     for (const [input, message] of refused) {
-      expect(() => parseUserCommand(input)).toThrow(message);
+      expect(() => parseCommand(input)).toThrow(message);
     }
-    expect(() => parseUserCommand({ type: 'task.cancel' })).toThrow(DomainError);
+    expect(() => parseCommand({ type: 'task.cancel' })).toThrow(DomainError);
   });
 
   test('never carries prototype keys into the command', () => {
-    const parsed = parseUserCommand(JSON.parse('{"type":"task.cancel","taskId":"t1","__proto__":{"x":1}}'));
+    const parsed = parseCommand(JSON.parse('{"type":"task.cancel","taskId":"t1","__proto__":{"x":1}}'));
     expect(Object.keys(parsed)).toEqual(['type', 'taskId']);
     expect(({} as Record<string, unknown>).x).toBeUndefined();
   });
@@ -383,13 +457,13 @@ describe('parseUserCommand', () => {
 describe('parseUserCommand for the process commands', () => {
   test('a new task takes no shape: only triage and the agent shape a task', () => {
     expect(
-      parseUserCommand({ type: 'task.create', request: 'Why?', repoId: null, shape: 'investigate' })
+      parseCommand({ type: 'task.create', request: 'Why?', repoId: null, shape: 'investigate' })
     ).toEqual({ type: 'task.create', request: 'Why?', repoId: null });
   });
 
   test('reads plan versions, verdicts, modes, suggestions, monitors, silence and the cost limit', () => {
     expect(
-      parseUserCommand({
+      parseCommand({
         type: 'gate.answer',
         gateId: 'g',
         decision: 'revise',
@@ -411,18 +485,18 @@ describe('parseUserCommand for the process commands', () => {
         { index: 1, verdict: 'fix', note: null },
       ],
     });
-    expect(parseUserCommand({ type: 'task.create', request: 'How?', repoId: null, mode: 'ask' })).toEqual({
+    expect(parseCommand({ type: 'task.create', request: 'How?', repoId: null, mode: 'ask' })).toEqual({
       type: 'task.create',
       request: 'How?',
       repoId: null,
       mode: 'ask',
     });
-    expect(() => parseUserCommand({ type: 'task.reshape', taskId: 't', shape: 'fix' })).toThrow(DomainError);
+    expect(() => parseCommand({ type: 'task.reshape', taskId: 't', shape: 'fix' })).toThrow(DomainError);
     expect(
-      parseUserCommand({ type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true })
+      parseCommand({ type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true })
     ).toEqual({ type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true });
     expect(
-      parseUserCommand({
+      parseCommand({
         type: 'suggestion.accept',
         taskId: 't',
         suggestionId: 's',
@@ -436,41 +510,39 @@ describe('parseUserCommand for the process commands', () => {
       waitsOnThis: false,
       backlog: true,
     });
-    expect(parseUserCommand({ type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' })).toEqual({
+    expect(parseCommand({ type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' })).toEqual({
       type: 'suggestion.dismiss',
       taskId: 't',
       suggestionId: 's',
     });
-    expect(parseUserCommand({ type: 'monitor.check_in_now', taskId: 't' })).toEqual({
+    expect(parseCommand({ type: 'monitor.check_in_now', taskId: 't' })).toEqual({
       type: 'monitor.check_in_now',
       taskId: 't',
     });
-    expect(parseUserCommand({ type: 'run.snooze_silence', runId: 'r', until: 5 })).toEqual({
+    expect(parseCommand({ type: 'run.snooze_silence', runId: 'r', until: 5 })).toEqual({
       type: 'run.snooze_silence',
       runId: 'r',
       until: 5,
     });
-    expect(parseUserCommand({ type: 'run.dismiss_silence', runId: 'r' })).toEqual({
+    expect(parseCommand({ type: 'run.dismiss_silence', runId: 'r' })).toEqual({
       type: 'run.dismiss_silence',
       runId: 'r',
     });
-    expect(parseUserCommand({ type: 'settings.change', patch: { taskBudgetUsd: 25 } })).toEqual({
+    expect(parseCommand({ type: 'settings.change', patch: { taskBudgetUsd: 25 } })).toEqual({
       type: 'settings.change',
       patch: { taskBudgetUsd: 25 },
     });
-    expect(parseUserCommand({ type: 'settings.change', patch: { taskBudgetUsd: null } })).toEqual({
+    expect(parseCommand({ type: 'settings.change', patch: { taskBudgetUsd: null } })).toEqual({
       type: 'settings.change',
       patch: { taskBudgetUsd: null },
     });
-    expect(parseUserCommand({ type: 'repo.update', repoId: 'r', patch: { workspace: 'worktrees' } })).toEqual(
-      {
-        type: 'repo.update',
-        repoId: 'r',
-        patch: { workspace: 'worktrees' },
-      }
-    );
+    expect(parseCommand({ type: 'repo.update', repoId: 'r', patch: { workspace: 'worktrees' } })).toEqual({
+      type: 'repo.update',
+      repoId: 'r',
+      patch: { workspace: 'worktrees' },
+    });
     expect(
-      parseUserCommand({
+      parseCommand({
         type: 'repo.update',
         repoId: 'r',
         patch: {
@@ -483,23 +555,23 @@ describe('parseUserCommand for the process commands', () => {
       patch: { coverage: { mode: 'custom', command: 'make cover', report: 'out/cover.data', format: 'go' } },
     });
     expect(
-      parseUserCommand({
+      parseCommand({
         type: 'repo.update',
         repoId: 'r',
         patch: { coverage: { mode: 'custom', command: 'npm run cover', report: 'coverage/lcov.info' } },
       })
     ).toMatchObject({ patch: { coverage: { format: null } } });
-    expect(
-      parseUserCommand({ type: 'repo.update', repoId: 'r', patch: { coverage: { mode: 'auto' } } })
-    ).toEqual({ type: 'repo.update', repoId: 'r', patch: { coverage: { mode: 'auto' } } });
-    expect(
-      parseUserCommand({ type: 'settings.change', patch: { agentModels: { answerer: 'sonnet' } } })
-    ).toEqual({ type: 'settings.change', patch: { agentModels: { answerer: 'sonnet' } } });
+    expect(parseCommand({ type: 'repo.update', repoId: 'r', patch: { coverage: { mode: 'auto' } } })).toEqual(
+      { type: 'repo.update', repoId: 'r', patch: { coverage: { mode: 'auto' } } }
+    );
+    expect(parseCommand({ type: 'settings.change', patch: { agentModels: { answerer: 'sonnet' } } })).toEqual(
+      { type: 'settings.change', patch: { agentModels: { answerer: 'sonnet' } } }
+    );
   });
 
   test('reads fast mode per role as true or false for a known role, and refuses anything else', () => {
     expect(
-      parseUserCommand({
+      parseCommand({
         type: 'settings.change',
         patch: { fastMode: false, agentFastModes: { agent: true, classifier: false } },
       })
@@ -520,7 +592,7 @@ describe('parseUserCommand for the process commands', () => {
       [{ type: 'settings.change', patch: { agentFastModes: null } }, 'agentFastModes must be an object.'],
     ];
     for (const [input, message] of refused) {
-      expect(() => parseUserCommand(input)).toThrow(message);
+      expect(() => parseCommand(input)).toThrow(message);
     }
   });
 
@@ -580,7 +652,7 @@ describe('parseUserCommand for the process commands', () => {
       [{ type: 'settings.change', patch: { taskBudgetUsd: '5' } }, 'taskBudgetUsd must be a number.'],
     ];
     for (const [body, message] of refused) {
-      expect(() => parseUserCommand(body)).toThrow(new DomainError({ code: 'command_invalid', message }));
+      expect(() => parseCommand(body)).toThrow(new DomainError({ code: 'command_invalid', message }));
     }
   });
 });
@@ -590,7 +662,7 @@ describe('parseUserCommand for line comments', () => {
 
   test('reads each comment with its side, lines and words', () => {
     expect(
-      parseUserCommand({
+      parseCommand({
         ...answer,
         comments: [
           { path: 'src/a.ts', side: 'new', line: 3, endLine: 4, text: 'Name it.' },
@@ -625,7 +697,7 @@ describe('parseUserCommand for line comments', () => {
       [{ ...answer, comments: [{ ...comment, suggestion: 'x' }] }, 'A comment cannot change suggestion.'],
     ];
     for (const [input, message] of refused) {
-      expect(() => parseUserCommand(input)).toThrow(message);
+      expect(() => parseCommand(input)).toThrow(message);
     }
   });
 });
@@ -634,9 +706,9 @@ describe('parseUserCommand for approving after a fix', () => {
   const answer = { type: 'gate.answer', gateId: 'g', decision: 'revise', response: null } as const;
 
   test('reads thenApprove as a yes or no, and leaves it out when absent', () => {
-    expect(parseUserCommand({ ...answer, thenApprove: true })).toEqual({ ...answer, thenApprove: true });
-    expect(parseUserCommand(answer)).toEqual(answer);
-    expect(() => parseUserCommand({ ...answer, thenApprove: 'yes' })).toThrow(
+    expect(parseCommand({ ...answer, thenApprove: true })).toEqual({ ...answer, thenApprove: true });
+    expect(parseCommand(answer)).toEqual(answer);
+    expect(() => parseCommand({ ...answer, thenApprove: 'yes' })).toThrow(
       'thenApprove must be true or false.'
     );
   });
@@ -645,37 +717,37 @@ describe('parseUserCommand for approving after a fix', () => {
 describe('parseUserCommand for accounts and usage limits', () => {
   test('reads account bindings, usage waits, the account of a new task and the limit settings', () => {
     expect(
-      parseUserCommand({
+      parseCommand({
         type: 'task.bind_account',
         taskId: 't1',
         account: { id: 'acc-1', email: 'a@b.com' },
         extra: true,
       })
     ).toEqual({ type: 'task.bind_account', taskId: 't1', account: { id: 'acc-1', email: 'a@b.com' } });
-    expect(parseUserCommand({ type: 'task.bind_account', taskId: 't1', account: null })).toEqual({
+    expect(parseCommand({ type: 'task.bind_account', taskId: 't1', account: null })).toEqual({
       type: 'task.bind_account',
       taskId: 't1',
       account: null,
     });
-    expect(parseUserCommand({ type: 'task.bind_account', taskId: 't1', account: { id: 'acc-1' } })).toEqual({
+    expect(parseCommand({ type: 'task.bind_account', taskId: 't1', account: { id: 'acc-1' } })).toEqual({
       type: 'task.bind_account',
       taskId: 't1',
       account: { id: 'acc-1', email: null },
     });
-    expect(parseUserCommand({ type: 'usage_wait.change', taskId: 't1', autoResume: false })).toEqual({
+    expect(parseCommand({ type: 'usage_wait.change', taskId: 't1', autoResume: false })).toEqual({
       type: 'usage_wait.change',
       taskId: 't1',
       autoResume: false,
     });
-    expect(parseUserCommand({ type: 'usage_wait.resume_now', taskId: 't1' })).toEqual({
+    expect(parseCommand({ type: 'usage_wait.resume_now', taskId: 't1' })).toEqual({
       type: 'usage_wait.resume_now',
       taskId: 't1',
     });
     expect(
-      parseUserCommand({ type: 'task.create', request: 'x', repoId: null, account: { id: 'a', email: null } })
+      parseCommand({ type: 'task.create', request: 'x', repoId: null, account: { id: 'a', email: null } })
     ).toEqual({ type: 'task.create', request: 'x', repoId: null, account: { id: 'a', email: null } });
     expect(
-      parseUserCommand({
+      parseCommand({
         type: 'settings.change',
         patch: { autoResume: false, snoozeLimited: true, accountSwitchAt: 95 },
       })
@@ -704,71 +776,67 @@ describe('parseUserCommand for accounts and usage limits', () => {
       ],
       [{ type: 'settings.change', patch: { snoozeLimited: 1 } }, 'snoozeLimited must be true or false.'],
     ];
-    for (const [body, message] of refused) expect(() => parseUserCommand(body)).toThrow(message);
+    for (const [body, message] of refused) expect(() => parseCommand(body)).toThrow(message);
   });
 });
 
 describe('stopping a delegated task from the task page', () => {
   test('takes the delegated run’s id and nothing else', () => {
-    expect(parseUserCommand({ type: 'delegation.cancel', runId: 'r1', extra: true })).toEqual({
+    expect(parseCommand({ type: 'delegation.cancel', runId: 'r1', extra: true })).toEqual({
       type: 'delegation.cancel',
       runId: 'r1',
     });
-    expect(() => parseUserCommand({ type: 'delegation.cancel', runId: '' })).toThrow(
-      'runId must not be empty.'
-    );
+    expect(() => parseCommand({ type: 'delegation.cancel', runId: '' })).toThrow('runId must not be empty.');
   });
 });
 
 describe('schedules and idle compaction from Settings', () => {
   test('pausing, resuming and removing a schedule take its id and nothing else', () => {
-    expect(parseUserCommand({ type: 'schedule.enable', scheduleId: 's1', enabled: false, extra: 1 })).toEqual(
-      {
-        type: 'schedule.enable',
-        scheduleId: 's1',
-        enabled: false,
-      }
-    );
-    expect(parseUserCommand({ type: 'schedule.remove', scheduleId: 's1' })).toEqual({
+    expect(parseCommand({ type: 'schedule.enable', scheduleId: 's1', enabled: false, extra: 1 })).toEqual({
+      type: 'schedule.enable',
+      scheduleId: 's1',
+      enabled: false,
+    });
+    expect(parseCommand({ type: 'schedule.remove', scheduleId: 's1' })).toEqual({
       type: 'schedule.remove',
       scheduleId: 's1',
     });
-    expect(() => parseUserCommand({ type: 'schedule.enable', scheduleId: 's1', enabled: 'no' })).toThrow(
+    expect(() => parseCommand({ type: 'schedule.enable', scheduleId: 's1', enabled: 'no' })).toThrow(
       'enabled must be true or false.'
     );
-    expect(() => parseUserCommand({ type: 'schedule.remove', scheduleId: '' })).toThrow(
+    expect(() => parseCommand({ type: 'schedule.remove', scheduleId: '' })).toThrow(
       'scheduleId must not be empty.'
     );
   });
 
   test('takes the idle compaction switch and its lead time', () => {
     expect(
-      parseUserCommand({
+      parseCommand({
         type: 'settings.change',
         patch: { idleCompaction: false, compactionLeadMinutes: 3 },
       })
     ).toEqual({ type: 'settings.change', patch: { idleCompaction: false, compactionLeadMinutes: 3 } });
-    expect(() =>
-      parseUserCommand({ type: 'settings.change', patch: { compactionLeadMinutes: '3' } })
-    ).toThrow('compactionLeadMinutes must be a whole number.');
+    expect(() => parseCommand({ type: 'settings.change', patch: { compactionLeadMinutes: '3' } })).toThrow(
+      'compactionLeadMinutes must be a whole number.'
+    );
   });
 
   test('takes the watchdog defaults: how long, the first check and the longest gap', () => {
     const patch = { watchdogHours: 72, watchdogFirstCheckMinutes: 30, watchdogMaxGapHours: 6 };
-    expect(parseUserCommand({ type: 'settings.change', patch })).toEqual({ type: 'settings.change', patch });
-    expect(() => parseUserCommand({ type: 'settings.change', patch: { watchdogHours: 'long' } })).toThrow(
+    expect(parseCommand({ type: 'settings.change', patch })).toEqual({ type: 'settings.change', patch });
+    expect(() => parseCommand({ type: 'settings.change', patch: { watchdogHours: 'long' } })).toThrow(
       'watchdogHours must be a whole number.'
     );
   });
 
   test('takes the compaction choice and the fast mode switch, and refuses anything else', () => {
     expect(
-      parseUserCommand({ type: 'settings.change', patch: { compaction: 'compact', fastMode: false } })
+      parseCommand({ type: 'settings.change', patch: { compaction: 'compact', fastMode: false } })
     ).toEqual({ type: 'settings.change', patch: { compaction: 'compact', fastMode: false } });
-    expect(() => parseUserCommand({ type: 'settings.change', patch: { compaction: 'summary' } })).toThrow(
+    expect(() => parseCommand({ type: 'settings.change', patch: { compaction: 'summary' } })).toThrow(
       'compaction must be one of fold, compact, provider, off.'
     );
-    expect(() => parseUserCommand({ type: 'settings.change', patch: { fastMode: 'on' } })).toThrow(
+    expect(() => parseCommand({ type: 'settings.change', patch: { fastMode: 'on' } })).toThrow(
       'fastMode must be true or false.'
     );
   });
@@ -778,7 +846,7 @@ describe('writing a schedule from Settings', () => {
   const base = { type: 'schedule.write', timeZone: 'Europe/Berlin' };
 
   function parsed(fields: Record<string, unknown>) {
-    return parseUserCommand({ ...base, ...fields }) as CommandOf<'schedule.write'>;
+    return parseCommand({ ...base, ...fields }) as CommandOf<'schedule.write'>;
   }
 
   test('reads every field and leaves the ones not given empty', () => {
@@ -965,63 +1033,63 @@ describe('writing a schedule from Settings', () => {
 
 describe('memory commands', () => {
   test('reads a rule to write, with or without its id and project', () => {
-    expect(parseUserCommand({ type: 'memory.write', text: 'Keep plans short.' })).toEqual({
+    expect(parseCommand({ type: 'memory.write', text: 'Keep plans short.' })).toEqual({
       type: 'memory.write',
       memoryId: null,
       projectId: null,
       text: 'Keep plans short.',
     });
-    expect(
-      parseUserCommand({ type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' })
-    ).toEqual({ type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' });
+    expect(parseCommand({ type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' })).toEqual(
+      { type: 'memory.write', memoryId: 'm1', projectId: 'p1', text: 'Use bun.' }
+    );
   });
 
   test('reads keeping and removing a rule by its id', () => {
-    expect(parseUserCommand({ type: 'memory.accept', memoryId: 'm1' })).toEqual({
+    expect(parseCommand({ type: 'memory.accept', memoryId: 'm1' })).toEqual({
       type: 'memory.accept',
       memoryId: 'm1',
     });
-    expect(parseUserCommand({ type: 'memory.remove', memoryId: 'm1' })).toEqual({
+    expect(parseCommand({ type: 'memory.remove', memoryId: 'm1' })).toEqual({
       type: 'memory.remove',
       memoryId: 'm1',
     });
-    expect(() => parseUserCommand({ type: 'memory.write', text: 3 })).toThrow('text must be text.');
+    expect(() => parseCommand({ type: 'memory.write', text: 3 })).toThrow('text must be text.');
   });
 });
 
 describe('feedback commands', () => {
   test('reads a note to write, with or without its id, and a draft to change', () => {
-    expect(parseUserCommand({ type: 'feedback.write', note: 'The plan tool refused a phase.' })).toEqual({
+    expect(parseCommand({ type: 'feedback.write', note: 'The plan tool refused a phase.' })).toEqual({
       type: 'feedback.write',
       feedbackId: null,
       note: 'The plan tool refused a phase.',
     });
-    expect(parseUserCommand({ type: 'feedback.write', feedbackId: 'f1', note: 'Again.' })).toEqual({
+    expect(parseCommand({ type: 'feedback.write', feedbackId: 'f1', note: 'Again.' })).toEqual({
       type: 'feedback.write',
       feedbackId: 'f1',
       note: 'Again.',
     });
-    expect(parseUserCommand({ type: 'feedback.update', feedbackId: 'f1', title: 'T', body: 'B.' })).toEqual({
+    expect(parseCommand({ type: 'feedback.update', feedbackId: 'f1', title: 'T', body: 'B.' })).toEqual({
       type: 'feedback.update',
       feedbackId: 'f1',
       title: 'T',
       body: 'B.',
     });
-    expect(() => parseUserCommand({ type: 'feedback.write', note: 'x'.repeat(20_001) })).toThrow(
+    expect(() => parseCommand({ type: 'feedback.write', note: 'x'.repeat(20_001) })).toThrow(
       'note is longer than 20000 characters.'
     );
   });
 
   test('reads opening and dismissing an issue by its id', () => {
-    expect(parseUserCommand({ type: 'feedback.file', feedbackId: 'f1' })).toEqual({
+    expect(parseCommand({ type: 'feedback.file', feedbackId: 'f1' })).toEqual({
       type: 'feedback.file',
       feedbackId: 'f1',
     });
-    expect(parseUserCommand({ type: 'feedback.dismiss', feedbackId: 'f1' })).toEqual({
+    expect(parseCommand({ type: 'feedback.dismiss', feedbackId: 'f1' })).toEqual({
       type: 'feedback.dismiss',
       feedbackId: 'f1',
     });
-    expect(() => parseUserCommand({ type: 'feedback.file' })).toThrow('feedbackId must be text.');
+    expect(() => parseCommand({ type: 'feedback.file' })).toThrow('feedbackId must be text.');
   });
 });
 
@@ -1031,22 +1099,22 @@ describe('the command and settings catalog', () => {
     expect(USER_COMMAND_TYPES).toContain('task.create');
     for (const type of USER_COMMAND_TYPES) {
       try {
-        parseUserCommand({ type });
+        parseCommand({ type });
       } catch (error) {
         expect(error instanceof DomainError && error.code).toBe('command_invalid');
       }
     }
-    expect(() => parseUserCommand({ type: 'task.triage' })).toThrow('Unknown command.');
+    expect(() => parseCommand({ type: 'task.triage' })).toThrow('Unknown command.');
   });
 
   test('names every setting a change may carry', () => {
     expect(SETTINGS_KEYS).toContain('maxFixRounds');
     for (const key of SETTINGS_KEYS) {
-      expect(() => parseUserCommand({ type: 'settings.change', patch: { [key]: Symbol.iterator } })).toThrow(
+      expect(() => parseCommand({ type: 'settings.change', patch: { [key]: Symbol.iterator } })).toThrow(
         DomainError
       );
     }
-    expect(() => parseUserCommand({ type: 'settings.change', patch: { worktreesDir: '/tmp' } })).toThrow(
+    expect(() => parseCommand({ type: 'settings.change', patch: { worktreesDir: '/tmp' } })).toThrow(
       'Settings cannot change worktreesDir.'
     );
   });

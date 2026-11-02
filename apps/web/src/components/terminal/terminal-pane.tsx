@@ -62,7 +62,7 @@ export function TerminalFindBar({ view }: { view: TerminalView }) {
   }, []);
   const search = (text: string, next: SearchOptions, previous = false) => view.find(text, next, previous);
   return (
-    <div className='flex items-center gap-1.5 border-border border-b px-2 py-1.5'>
+    <div className='flex items-center gap-1.5 border-b border-border px-2 py-1.5'>
       <SearchField
         value={query}
         options={options}

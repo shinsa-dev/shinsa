@@ -44,12 +44,13 @@ For a whole batch, run the new tests against the old source: copy `test/` into t
 
 ## 5. Run what CI runs, not something like it
 
-Copy the command out of `.github/workflows/*.yml`. Approximations hide failures. CI runs `bunx biome ci .` (not `check`), `bun lint:conventions`, `bun lint:spelling`, `sherif`, `knip`, `bun check-types` and `bun run test`.
+Copy the command out of `.github/workflows/*.yml`. Approximations hide failures. CI runs `bun format` (oxfmt `--check`, which writes nothing), `bun lint:oxlint`, `bun lint:html`, `bun lint:styles`, `bun lint:conventions`, `bun lint:spelling`, `sherif`, `knip`, `bun check-types` and `bun run test`.
 
 | Command | Catches |
 |---|---|
-| `bun lint` | Biome, the Grit plugins, the comments ban, the verb catalog, the class checks, spelling |
-| `bun check-types` | every workspace and `scripts/`; one broken package hides the rest, so also run `tsc --noEmit` in the ones you touched |
+| `bun format` | formatting, Tailwind class order and import order (oxfmt) |
+| `bun lint` | Oxlint with the `shinsa` plugin, the markup rules on HTML, stylelint, the comments ban, the verb catalog, the class checks, spelling |
+| `bun check-types` | every workspace and `scripts/`; one broken package hides the rest, so also run `bun run check-types` (`effect-tsgo tsc --noEmit`) in the ones you touched |
 | `bun run test` | every suite with its coverage floor (`bunfig.toml` in each workspace, and the root one for `scripts/*.test.ts`) |
 | `bunx knip` | dead exports, files and dependencies — **run it after exporting anything** |
 | `bun deps` | dependency version drift |

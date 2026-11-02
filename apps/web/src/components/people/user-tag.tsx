@@ -31,7 +31,7 @@ function UserAvatar({ user, size }: { user: UserProfile; size: keyof typeof USER
   return (
     <span
       aria-hidden
-      className={cn('grid place-items-center font-medium text-2xs text-fg-2 leading-none', className)}
+      className={cn('grid place-items-center text-2xs leading-none font-medium text-fg-2', className)}
     >
       <span className={USER_INITIAL[size]}>{resolveUserInitial(user)}</span>
     </span>
@@ -119,7 +119,7 @@ export function MentionText({ mention }: { mention: Mention }) {
     typeof part === 'string' ? (
       part
     ) : (
-      // biome-ignore lint/suspicious/noArrayIndexKey: one sentence can name the same person twice
+      // oxlint-disable-next-line shinsa/no-array-index-key -- one sentence can name the same person twice
       <UserTag key={index} user={part.user} label={part.label} />
     )
   );

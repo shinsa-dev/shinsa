@@ -17,8 +17,8 @@ export function Section({
   return (
     <section id={id} className='flex scroll-mt-8 flex-col gap-4'>
       <div className='flex flex-col'>
-        <h2 className='font-medium text-fg-4 text-lg'>{title}</h2>
-        {description && <p className='max-w-xl text-fg-2 text-sm'>{description}</p>}
+        <h2 className='text-lg font-medium text-fg-4'>{title}</h2>
+        {description && <p className='max-w-xl text-sm text-fg-2'>{description}</p>}
       </div>
       <div className={cn('flex flex-wrap items-center gap-3', className)}>{children}</div>
     </section>

@@ -18,8 +18,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - run: bun install --frozen-lockfile
-      - run: bunx biome ci .
+      - run: bun format
+      - run: bun lint:oxlint
+      - run: bun lint:html
+      - run: bun lint:styles
       - run: bun lint:conventions
       - run: bun lint:spelling
       - run: bunx sherif -i @types/node

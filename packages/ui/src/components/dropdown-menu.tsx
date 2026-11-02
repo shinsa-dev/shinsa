@@ -80,7 +80,7 @@ function DropdownMenuContent({
           data-slot='dropdown-menu-content'
           className={cn(
             // Anchor width is a floor, not a cage: long items grow the popup.
-            'corner-superellipse/1.125 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 z-50 max-h-(--available-height) min-w-[max(8rem,var(--anchor-width))] origin-(--transform-origin) overflow-y-auto overflow-x-hidden whitespace-nowrap rounded-popup bg-popover text-popover-foreground shadow-md outline-none duration-200 data-closed:animate-out data-open:animate-in data-closed:overflow-hidden',
+            'corner-superellipse/1.125 z-50 max-h-(--available-height) min-w-[max(8rem,var(--anchor-width))] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-popup bg-popover whitespace-nowrap text-popover-foreground shadow-md duration-200 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95',
             className
           )}
           {...props}
@@ -108,7 +108,7 @@ function DropdownMenuLabel({
       data-slot='dropdown-menu-label'
       data-inset={inset}
       className={cn(
-        'select-none px-2 pt-1.5 pb-0.5 font-medium text-fg-2 text-xs data-inset:pl-7',
+        'px-2 pt-1.5 pb-0.5 text-xs font-medium text-fg-2 select-none data-inset:pl-7',
         className
       )}
       {...props}
@@ -172,7 +172,7 @@ function DropdownMenuSubTrigger({
     <MenuPrimitive.SubmenuTrigger
       data-slot='dropdown-menu-sub-trigger'
       data-inset={inset}
-      className={cn(ITEM_BASE, 'pr-2 data-open:text-fg-4 data-popup-open:text-fg-4', className)}
+      className={cn(ITEM_BASE, 'pr-2 data-popup-open:text-fg-4 data-open:text-fg-4', className)}
       {...props}
     >
       {children}
@@ -280,7 +280,7 @@ function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'spa
   return (
     <span
       data-slot='dropdown-menu-shortcut'
-      className={cn('ml-auto text-fg-2 text-xs tracking-widest', className)}
+      className={cn('ml-auto text-xs tracking-widest text-fg-2', className)}
       {...props}
     />
   );

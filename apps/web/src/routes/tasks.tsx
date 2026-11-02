@@ -59,7 +59,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
       <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>
         <div
           className={cn(
-            'grid h-7 shrink-0 items-center gap-4 border-border border-b px-3 font-medium text-2xs text-fg-2',
+            'grid h-7 shrink-0 items-center gap-4 border-b border-border px-3 text-2xs font-medium text-fg-2',
             columns
           )}
         >

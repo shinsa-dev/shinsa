@@ -3,7 +3,7 @@ import type * as React from 'react';
 
 export function Toolbar({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn('flex h-9 shrink-0 items-center gap-2 border-border border-b ps-3 pe-2', className)}>
+    <div className={cn('flex h-9 shrink-0 items-center gap-2 border-b border-border ps-3 pe-2', className)}>
       {children}
     </div>
   );

@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from 'effect';
 import { SLACK_BLOCK_LIMITS } from './blocks.ts';
-import { SLACK_LIMITS } from './contract.ts';
+import { SlackId } from './schema.ts';
 
 export const SLACK_RELAY_PATHS = {
   connect: '/slack/connect',
@@ -22,12 +22,6 @@ export const SLACK_RELAY_MESSAGE_LIMITS = {
 } as const;
 
 export const SLACK_SESSION_STATUSES = ['processing', 'suspended', 'active', 'closed'] as const;
-
-const SlackId = Schema.String.check(
-  Schema.isNonEmpty(),
-  Schema.isMaxLength(SLACK_LIMITS.id),
-  Schema.isPattern(/^[A-Za-z0-9._-]+$/)
-);
 
 const SlackReactionName = Schema.String.check(Schema.isPattern(/^[a-z0-9_+-]{1,64}$/));
 

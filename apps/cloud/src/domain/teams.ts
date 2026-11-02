@@ -27,16 +27,14 @@ export const serializeTeam = Effect.fn('serializeTeam')(function* (team: Team, u
   const teams = yield* Teams;
   const now = yield* Clock.currentTimeMillis;
   const role: RemoteRole = team.userId === userId ? 'owner' : 'member';
-  const machines = (yield* teams.listMachines(team.id)).map(
-    (machine): TeamMachine => ({
-      id: machine.id,
-      name: machine.name,
-      userId: machine.userId,
-      online: isMachineOnline(machine, now),
-      lastSeenAt: machine.lastSeenAt,
-      ...(machine.signingKey ? { signingKey: machine.signingKey } : {}),
-    })
-  );
+  const machines = (yield* teams.listMachines(team.id)).map((machine): TeamMachine => ({
+    id: machine.id,
+    name: machine.name,
+    userId: machine.userId,
+    online: isMachineOnline(machine, now),
+    lastSeenAt: machine.lastSeenAt,
+    ...(machine.signingKey ? { signingKey: machine.signingKey } : {}),
+  }));
   return {
     id: team.id,
     name: team.name,

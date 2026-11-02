@@ -81,14 +81,14 @@ function CommandInput({
   return (
     <div
       data-slot='command-input-wrapper'
-      className='flex h-10 shrink-0 items-center gap-2 border-bg-3 border-b px-3'
+      className='flex h-10 shrink-0 items-center gap-2 border-b border-bg-3 px-3'
     >
       <Icon name='IconMagnifyingGlass' size='md' className='text-fg-2' />
       {start}
       <CommandPrimitive.Input
         data-slot='command-input'
         className={cn(
-          'min-w-0 flex-1 bg-transparent font-medium text-fg-4 text-xs outline-none placeholder:font-normal placeholder:text-fg-2 disabled:cursor-not-allowed disabled:opacity-50',
+          'min-w-0 flex-1 bg-transparent text-xs font-medium text-fg-4 outline-none placeholder:font-normal placeholder:text-fg-2 disabled:cursor-not-allowed disabled:opacity-50',
           className
         )}
         {...props}
@@ -172,7 +172,7 @@ function CommandList({
         ref={listRef}
         data-slot='command-list'
         className={cn(
-          'scrollbar-hide relative isolate max-h-[min(--spacing(96),60dvh)] scroll-py-1 overflow-y-auto overscroll-contain p-1',
+          'relative isolate scrollbar-hide max-h-[min(--spacing(96),60dvh)] scroll-py-1 overflow-y-auto overscroll-contain p-1',
           className
         )}
         {...props}
@@ -195,7 +195,7 @@ function CommandEmpty({ className, ...props }: React.ComponentProps<typeof Comma
   return (
     <CommandPrimitive.Empty
       data-slot='command-empty'
-      className={cn('py-6 text-center text-fg-2 text-xs', className)}
+      className={cn('py-6 text-center text-xs text-fg-2', className)}
       {...props}
     />
   );
@@ -206,7 +206,7 @@ function CommandGroup({ className, ...props }: React.ComponentProps<typeof Comma
     <CommandPrimitive.Group
       data-slot='command-group'
       className={cn(
-        'scroll-my-1 overflow-hidden [&_[cmdk-group-heading]]:select-none [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-fg-2 [&_[cmdk-group-heading]]:text-xs [[cmdk-group]:not([hidden])~&]:mt-1',
+        'scroll-my-1 overflow-hidden [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-fg-2 [&_[cmdk-group-heading]]:select-none [[cmdk-group]:not([hidden])~&]:mt-1',
         className
       )}
       {...props}
@@ -241,7 +241,7 @@ function CommandItem({
       data-icon={position}
       data-variant={variant}
       className={cn(
-        'relative flex cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-2 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden [--icon-size:var(--icon-size-sm)] data-[disabled=true]:pointer-events-none data-indicator-here:text-fg-4 data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none',
+        'relative flex cursor-pointer items-center gap-1.5 rounded-item py-1 pr-2 pl-2 text-xs leading-4 font-medium text-fg-3 outline-hidden select-none [--icon-size:var(--icon-size-sm)] data-indicator-here:text-fg-4 data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none',
         DESTRUCTIVE_ITEM,
         className
       )}
@@ -276,7 +276,7 @@ function CommandFooter({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot='command-footer'
       className={cn(
-        'flex h-7 shrink-0 items-center gap-3 border-bg-3 border-t px-3 text-fg-2 text-xs [&_kbd]:bg-bg-2',
+        'flex h-7 shrink-0 items-center gap-3 border-t border-bg-3 px-3 text-xs text-fg-2 [&_kbd]:bg-bg-2',
         className
       )}
       {...props}

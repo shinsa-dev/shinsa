@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { PROJECT_LIMITS, parseUserCommand, resolveQueue } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, registerRepo } from '../harness.ts';
+import { PROJECT_LIMITS, resolveQueue } from '../../src/index.ts';
+import { parseCommand, createHarness, createTask, type Harness, registerRepo } from '../harness.ts';
 
 function registerAt(
   harness: Harness,
@@ -359,10 +359,13 @@ describe('focus', () => {
   });
 
   test('a team focus on your behalf says it focused a team, and parses from the wire', () => {
-    expect(
-      parseUserCommand({ type: 'focus.change', projectId: null, teamId: 'team-1', until: null })
-    ).toEqual({ type: 'focus.change', projectId: null, teamId: 'team-1', until: null });
-    expect(parseUserCommand({ type: 'focus.change', projectId: null, until: null })).toEqual({
+    expect(parseCommand({ type: 'focus.change', projectId: null, teamId: 'team-1', until: null })).toEqual({
+      type: 'focus.change',
+      projectId: null,
+      teamId: 'team-1',
+      until: null,
+    });
+    expect(parseCommand({ type: 'focus.change', projectId: null, until: null })).toEqual({
       type: 'focus.change',
       projectId: null,
       until: null,

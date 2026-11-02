@@ -445,7 +445,7 @@ export class EffectRunner {
       () => undefined
     );
     this.#taskSyncs.set(taskId, settled);
-    settled.then(() => {
+    void settled.then(() => {
       if (this.#taskSyncs.get(taskId) === settled) this.#taskSyncs.delete(taskId);
     });
     return sync;
@@ -565,7 +565,7 @@ export class EffectRunner {
         log.warn('[Watch] Pull request sync failed', { taskId, error: describeError(error) });
       });
       this.#background.add(sync);
-      sync.then(() => this.#background.delete(sync));
+      void sync.then(() => this.#background.delete(sync));
     }, this.#config.settleDelayMs);
     timer.unref();
     this.#timers.add(timer);

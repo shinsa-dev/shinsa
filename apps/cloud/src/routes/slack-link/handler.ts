@@ -34,7 +34,7 @@ import {
 } from './schema.ts';
 
 export const SlackLinkRoutes = Layer.unwrap(
-  Effect.gen(function* () {
+  Effect.sync(() => {
     const decodeInstanceId = Schema.decodeUnknownOption(InstanceId);
 
     const present = (value: string | undefined) => (value ? value : null);

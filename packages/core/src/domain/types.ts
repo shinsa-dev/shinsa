@@ -13,11 +13,12 @@ import type {
   WorkReport,
 } from '../report/types.ts';
 import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
-import type { RunAccount, UsageWait, WeeklyReading } from './accounts.ts';
+import type { UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
 import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
+import type { FindingVerdict, ReviewComment, RunAccount } from './schema.ts';
 import type { ShareLimit, SharePreset } from './settings.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
 import type { SlackThreadLink } from './slack.ts';
@@ -51,7 +52,9 @@ export type TaskStage =
 
 export type TaskSize = 'small' | 'large';
 
-export type TaskMode = 'build' | 'ask';
+export const TASK_MODES = ['build', 'ask'] as const;
+
+export type TaskMode = (typeof TASK_MODES)[number];
 
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 
@@ -158,23 +161,15 @@ export type GateCause = 'budget' | 'monitor' | 'push_hook';
 
 export type EditsApproval = 'review' | 'merge';
 
-export type FindingVerdictKind = 'fix' | 'dismiss';
+export const FINDING_VERDICT_KINDS = ['fix', 'dismiss'] as const;
 
-export interface FindingVerdict {
-  index: number;
-  verdict: FindingVerdictKind;
-  note: string | null;
-}
+export type FindingVerdictKind = (typeof FINDING_VERDICT_KINDS)[number];
 
-export type CommentSide = 'old' | 'new';
+export const COMMENT_SIDES = ['old', 'new'] as const;
 
-export interface ReviewComment {
-  path: string;
-  side: CommentSide;
-  line: number;
-  endLine: number | null;
-  text: string;
-}
+export type CommentSide = (typeof COMMENT_SIDES)[number];
+
+export const COMMENT_PATH_LIMIT = 1_024;
 
 export type ReviewEscalationReason = 'rounds' | 'stalled' | 'exhausted';
 

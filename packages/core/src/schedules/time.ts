@@ -1,4 +1,5 @@
-import { SCHEDULE_LIMITS, type ScheduleTrigger } from '../domain/schedules.ts';
+import { SCHEDULE_LIMITS } from '../domain/schedules.ts';
+import { type ScheduleTrigger } from '../domain/schema.ts';
 import { HOUR_MS, MINUTE_MS } from '../domain/time.ts';
 
 const TRANSITION_REACH = 36 * HOUR_MS;

@@ -14,7 +14,8 @@ import {
   selectFolderProject,
   WATCHDOG_SETTING_LIMITS,
 } from '../domain/index.ts';
-import { isPlacementPoliciesValid, PLACEMENT_POLICY_LIMITS } from '../remote/placement.ts';
+import { isPlacementPoliciesValid } from '../remote/placement.ts';
+import { PLACEMENT_POLICY_LIMITS } from '../remote/schema.ts';
 import { releaseBudgetHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';

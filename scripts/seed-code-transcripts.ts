@@ -1,4 +1,5 @@
 import type { ChatEvent, ChatTool, JudgementCall, ReviewFinding } from '../packages/core/src/index.ts';
+import { listEditHunks, resolveLine, serializeNumberedLines } from './seed-code-kit.ts';
 import {
   type CodeSample,
   LIVE_PLAN,
@@ -20,7 +21,6 @@ import {
   SAMPLE_REVIEW,
   type SamplePhase,
 } from './seed-code.ts';
-import { listEditHunks, resolveLine, serializeNumberedLines } from './seed-code-kit.ts';
 import {
   callTool,
   MINUTE,

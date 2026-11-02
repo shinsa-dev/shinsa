@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseUserCommand } from '../../src/index.ts';
-import { createHarness, type Harness, registerRepo } from '../harness.ts';
+import { parseCommand, createHarness, type Harness, registerRepo } from '../harness.ts';
 
 function teamProject(harness: Harness) {
   const repoId = registerRepo(harness);
@@ -60,12 +59,12 @@ describe('a project in a team', () => {
       'No project gone'
     );
     for (const type of ['project.add_to_team', 'project.remove_from_team'] as const) {
-      expect(parseUserCommand({ type, projectId: 'p', teamId: 't' })).toEqual({
+      expect(parseCommand({ type, projectId: 'p', teamId: 't' })).toEqual({
         type,
         projectId: 'p',
         teamId: 't',
       });
-      expect(() => parseUserCommand({ type, projectId: 'p' })).toThrow();
+      expect(() => parseCommand({ type, projectId: 'p' })).toThrow();
     }
   });
 });

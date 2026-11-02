@@ -8,7 +8,7 @@ export function DiffStats({
   muted?: boolean;
 }) {
   return (
-    <span className='flex w-fit shrink-0 items-center gap-1.5 font-normal text-2xs tabular-nums'>
+    <span className='flex w-fit shrink-0 items-center gap-1.5 text-2xs font-normal tabular-nums'>
       <span className={muted ? 'text-fg-1' : 'text-green-text'}>+{added.toLocaleString('en-US')}</span>
       <span className={muted ? 'text-fg-1' : 'text-red-text'}>−{removed.toLocaleString('en-US')}</span>
     </span>

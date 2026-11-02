@@ -77,12 +77,12 @@ export function waitOnTasks(state: ShinsaState, command: CommandOf<'task.wait_on
 
 ## Readability
 
-1. **No comments.** Names and structure carry the meaning; the reasons live in `CLAUDE.md` and `docs/`. Only functional directives (`biome-ignore`, `@ts-expect-error`) are allowed (lint-enforced everywhere but `packages/ui`, a reusable kit that keeps Buzzkit's comments).
+1. **No comments.** Names and structure carry the meaning; the reasons live in `CLAUDE.md` and `docs/`. Only functional directives with their reason (`oxlint-disable-next-line`, `stylelint-disable-next-line`, `@ts-expect-error`) are allowed (lint-enforced everywhere but `packages/ui`, a reusable kit that keeps Buzzkit's comments).
 2. **Never wrap a call chain in a ternary.** Guards and early returns; ternaries are for small value picks.
 3. **Multi-line arrow bodies get a block and an explicit `return`.** One-liners stay expressions.
 4. **Blank lines separate phases in long functions only.** A guard and a return read as one unit.
 5. **No dead parameters.** When an argument stops meaning anything (a `required = true` nobody passes), remove it.
-6. **Narrow types, no `any`.** Untrusted input is `unknown` and narrowed once (`readField` in `briefing/parse.ts`, `Reader` in `report/validate.ts`); a cast is allowed only right after the runtime check that justifies it.
+6. **Narrow types, no `any`.** Untrusted input is `unknown` and decoded once by its Effect Schema defined in its folder's `schema.ts` (`UserCommand` in `commands/schema.ts`, the hand-over schemas in `report/schema.ts` read by `HandOverReader`); a cast is allowed only right after the runtime check that justifies it.
 
 ## Errors and logs (apps/engine)
 
@@ -107,9 +107,9 @@ A behaviour change updates `docs/engine.md` (core and server rules), `docs/spec.
 ## Before you finish
 
 ```sh
-bunx biome check --write .     # lint, format, Grit plugins
-bun lint                       # + comments ban, verb catalog, class checks
-bun check-types
+bun format:fix                 # oxfmt: formatting, class order, import order
+bun lint                       # Oxlint, stylelint, comments ban, verb catalog, class checks, spelling
+bun check-types                # TypeScript and the Effect language service
 bun run test                   # every workspace and scripts/, with the coverage floor
 bunx knip                      # dead exports: run it after exporting anything
 bun deps                       # dependency drift (sherif)

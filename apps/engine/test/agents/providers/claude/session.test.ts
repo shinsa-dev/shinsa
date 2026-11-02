@@ -470,7 +470,7 @@ describe('how a turn ends', () => {
   test('a login Claude could not refresh ends the run as an auth failure, even when the process then exits with an error', async () => {
     const expired = 'Failed to authenticate: OAuth session expired and could not be refreshed';
     const exited =
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: Claude Code prints the hook command unexpanded
+      // oxlint-disable-next-line eslint/no-template-curly-in-string -- Claude Code prints the hook command unexpanded
       'Claude Code process exited with code 1. stderr: SessionEnd hook [node "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.mjs"] failed: Hook cancelled';
     const signedOut = sdkMessage({
       type: 'assistant',

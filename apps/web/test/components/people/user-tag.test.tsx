@@ -21,8 +21,7 @@ describe('the user tag', () => {
   it('shows a first name and opens a card with the full name, login and GitHub profile', async () => {
     const onRow = { clicks: 0 };
     render(
-      // biome-ignore lint/a11y/noStaticElementInteractions: a stand-in for a clickable row
-      // biome-ignore lint/a11y/useKeyWithClickEvents: a stand-in for a clickable row
+      // oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- a stand-in for a clickable row; a stand-in for a clickable row
       <div onClick={() => onRow.clicks++}>
         <UserTag user={{ login: 'kai', name: 'Kai Tanaka', avatarUrl: 'https://avatars.example/kai' }} />
       </div>

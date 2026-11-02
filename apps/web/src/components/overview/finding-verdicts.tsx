@@ -7,7 +7,7 @@ export function FindingVerdicts({ findings, task }: { findings: ReviewFinding[];
     <ul className='flex flex-col divide-y divide-border'>
       {findings.map((finding, index) => (
         <li
-          // biome-ignore lint/suspicious/noArrayIndexKey: findings are positional; a verdict names its index
+          // oxlint-disable-next-line shinsa/no-array-index-key -- findings are positional; a verdict names its index
           key={index}
           className='flex py-2 first:pt-0 last:pb-0'
         >

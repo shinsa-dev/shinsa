@@ -104,14 +104,12 @@ function listClockCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
 function listAnswerCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
   const answers = listOpenGates(state)
     .filter((gate) => gate.secret)
-    .map(
-      (gate): ShinsaCommand => ({
-        type: 'gate.answer',
-        gateId: gate.id,
-        decision: chance(random, 0.7) ? 'reply' : 'reject',
-        response: REF,
-      })
-    );
+    .map((gate): ShinsaCommand => ({
+      type: 'gate.answer',
+      gateId: gate.id,
+      decision: chance(random, 0.7) ? 'reply' : 'reject',
+      response: REF,
+    }));
   const compactions = Object.values(state.runs).flatMap((run): ShinsaCommand[] =>
     run.endedAt !== null && run.sessionId
       ? [{ type: 'run.compact', runId: run.id, sessionId: run.sessionId }]

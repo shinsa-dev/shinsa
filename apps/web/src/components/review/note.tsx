@@ -39,7 +39,7 @@ function Alternatives({ item }: { item: ReviewItem }) {
         {item.alternatives.map((alternative) => (
           <li key={alternative.option} className='flex min-w-0 gap-1.5 text-xs'>
             <Icon size='sm' name='IconSplit' className='mt-0.5' />
-            <span className='selectable flex min-w-0 flex-1 flex-col gap-px'>
+            <span className='flex min-w-0 flex-1 selectable flex-col gap-px'>
               <InlineMarkdown text={alternative.option} className='font-medium text-fg-4' />
               <InlineMarkdown text={alternative.rejected} className='text-fg-3' />
             </span>
@@ -208,7 +208,7 @@ export function ReviewNote({
       {!finding && disclosure.open && (
         <div className='flex flex-col gap-2 p-3'>
           {item.lead && (
-            <InlineMarkdown text={item.lead} className='font-medium text-fg-4 text-xs leading-5' />
+            <InlineMarkdown text={item.lead} className='text-xs leading-5 font-medium text-fg-4' />
           )}
           <Markdown text={item.body} className={cn('text-xs', item.lead ? 'text-fg-3' : 'text-fg-4')} />
           <NoteDetails persistId={persistId} task={task} item={item} compact={compact} />

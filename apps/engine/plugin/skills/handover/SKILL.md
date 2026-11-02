@@ -25,7 +25,7 @@ your claim. Choose them like evidence, for what this change touches, and scope e
 [
   { "label": "Transcript tests", "command": "bun test --cwd apps/engine test/agents/transcripts", "phases": [1, 2] },
   { "label": "Web types", "command": "bun run --cwd apps/web check-types", "phases": [2] },
-  { "label": "Lint the changed files", "command": "bunx biome check apps/web/src/lib/chat", "phases": [2] }
+  { "label": "Lint the changed files", "command": "bunx oxlint apps/web/src/lib/chat", "phases": [2] }
 ]
 ```
 

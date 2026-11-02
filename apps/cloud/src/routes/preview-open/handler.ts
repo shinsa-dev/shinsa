@@ -17,7 +17,7 @@ import { CurrentUrl } from '../../http/request.ts';
 import { respondRedirect } from '../../http/responses.ts';
 
 export const PreviewOpenRoutes = Layer.unwrap(
-  Effect.gen(function* () {
+  Effect.sync(() => {
     const decodeInstanceId = Schema.decodeUnknownOption(InstanceId);
     const readPreviewTarget = Effect.fn('previews.readTarget')(function* (url: URL, previewOrigin: string) {
       const value = url.searchParams.get('url');

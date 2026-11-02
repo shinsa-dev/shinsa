@@ -47,7 +47,7 @@ export function Panel({
         {meta && <span className='ms-auto shrink-0 ps-3'>{meta}</span>}
       </DisclosureHeader>
       {disclosure.open && (
-        <div className={cn('flex flex-col border-border border-t', !flush && 'gap-3 p-3')}>{children}</div>
+        <div className={cn('flex flex-col border-t border-border', !flush && 'gap-3 p-3')}>{children}</div>
       )}
     </section>
   );

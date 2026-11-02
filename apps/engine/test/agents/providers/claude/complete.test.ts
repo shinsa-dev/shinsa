@@ -12,6 +12,7 @@ const SCHEMA = { type: 'object' as const, properties: { size: { type: 'string' }
 
 function hangUntilAborted() {
   return createFakeQuery((params) => ({
+    // oxlint-disable-next-line eslint/require-yield -- a stream that only ends when it is aborted
     async *[Symbol.asyncIterator]() {
       await new Promise((resolve) =>
         params.options?.abortController?.signal.addEventListener('abort', resolve)

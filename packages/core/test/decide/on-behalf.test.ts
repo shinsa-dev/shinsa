@@ -351,19 +351,15 @@ describe('acting for the human', () => {
       coverage: { mode: 'off' },
     };
     const refused: ShinsaCommand[] = [
-      ...HUMAN_ONLY_SETTINGS.map(
-        (key): ShinsaCommand => ({
-          type: 'settings.change',
-          patch: { maxFixRounds: 4, [key]: settings[key] },
-        })
-      ),
-      ...HUMAN_ONLY_REPO_FIELDS.map(
-        (field): ShinsaCommand => ({
-          type: 'repo.update',
-          repoId,
-          patch: { name: 'renamed', [field]: fields[field] },
-        })
-      ),
+      ...HUMAN_ONLY_SETTINGS.map((key): ShinsaCommand => ({
+        type: 'settings.change',
+        patch: { maxFixRounds: 4, [key]: settings[key] },
+      })),
+      ...HUMAN_ONLY_REPO_FIELDS.map((field): ShinsaCommand => ({
+        type: 'repo.update',
+        repoId,
+        patch: { name: 'renamed', [field]: fields[field] },
+      })),
     ];
     for (const command of refused) {
       const before = harness.events.length;

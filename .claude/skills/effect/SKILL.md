@@ -15,7 +15,7 @@ Shinsa is written in Effect 4 (`effect` pinned at **4.1.1**, the same exact vers
 
 All code that does I/O, holds a resource, reads time, config or randomness, or crosses a boundary (HTTP, SQL, a process, a socket, a file) is Effect code. Every shape that crosses a boundary is a `Schema`.
 
-**Pure logic stays plain functions.** Core's `decide`, the folds and the derivations take values and return values: they use Schema types and return a `Result` instead of throwing once they move, but they are not wrapped in `Effect.succeed`, take no services and never `yield*`. Wrapping pure code in an Effect adds a runtime and hides nothing. Effect code calls pure code directly.
+**Pure logic stays plain functions.** Core's `decide`, the folds and the derivations take values and return values: they use Schema types and return a `Result` instead of throwing (`decide` returns `Result<Decision, DomainError>`), but they are not wrapped in `Effect.succeed`, take no services and never `yield*`. Wrapping pure code in an Effect adds a runtime and hides nothing. Effect code calls pure code directly.
 
 ## Imports
 
@@ -28,13 +28,17 @@ import { camelToSnake } from 'effect/String';
 ```
 
 - Modules by name from `effect`; subsystems from their subpath (`effect/http`, `effect/http-api`, `effect/sql`, `effect/testing`, `effect/process`, `effect/crypto`, `effect/encoding`, `effect/observability`).
-- A module whose name shadows a global (`String`, `Array`, `Number`, `Boolean`, `Record`, `Function`) is imported as functions from its subpath (`import { camelToSnake } from 'effect/String'`), so no file shadows a global (Biome's `noShadowRestrictedNames`).
+- A module whose name shadows a global (`String`, `Array`, `Number`, `Boolean`, `Record`, `Function`) is imported as functions from its subpath (`import { camelToSnake } from 'effect/String'`), so no file shadows a global (Oxlint's `no-shadow-restricted-names`).
 - Drivers and platforms are `@effect/*` at the same version: `@effect/sql-d1` in the Worker, `@effect/sql-sqlite-bun` in the engine and in tests, `@effect/platform-bun` for the engine's runtime.
 - No aliases, no namespace imports (`import * as E`). The lint rules below match `Effect.`, `Schema.` and the rest by name.
 
 ## File layout
 
 A module is a folder. Its shapes and its logic live in separate files, and a logic file holds exactly one thing.
+
+**One layout in every package and app.** Core, the engine, the Worker, the web app and the desktop app all use it: a folder per module, its shapes in `schema.ts`, its logic in `handler.ts`, `service.ts` or `middleware.ts` (or one pure module named for its concern), the same names for the same roles. A move to Effect never invents a layout of its own for one app or code path; when one fits badly, change this section for every app at once.
+
+**Rewrite into Effect, never translate.** A move is not the same code with `Effect.gen` around it: a hand-written check becomes a schema, a thrown error a tagged error in the type, a module-level singleton a service with its layer, a `try`/`finally` a scoped resource, a retry loop a `Schedule`, a callback or event emitter a `Stream`, an ad hoc timeout `Effect.timeout`. Redesign a module when Effect has the better shape for it; behaviour and the tests' expectations stay.
 
 ```
 routes/teams/                       store/machines/
@@ -46,6 +50,7 @@ routes/teams/                       store/machines/
 - **`handler.ts`** (an HttpApi group or a set of plain routes), **`service.ts`** (a service and its layer) and **`middleware.ts`** hold one export and nothing beside it: no helper above it, no constant, no type. Its steps live **inside** its body, after the services it yields once, so each step sees them without yielding them again. Plain routes are `Layer.unwrap(Effect.gen(function* () { …; return Layer.mergeAll(HttpRouter.add(…)) }))`; an HttpApi group's steps go in `HttpApiBuilder.group`'s builder.
 - **Read untrusted input with a schema, never by hand.** A webhook body, a cookie, a third party's answer is a `Schema.Struct` of the fields the code reads (`Schema.NonEmptyString` for an id, `Schema.optionalKey(Schema.Never)` for a field that must be absent, `Schema.Literal` for a type tag), decoded once with `Schema.decodeUnknownOption` or `Effect`. No `readString(fields, 'key')` helpers.
 - **A step two modules need is a module of its own**, named for what it does and exporting peers only (`domain/machines.ts`: `removeMachine`, `createConnectAnswer`; `auth/tokens.ts`: `createSession`, `selectRequestUser`; `http/cookies.ts`: `serializeCookie`). A module like that has no private helper above its exports.
+- Core follows the same split: each folder keeps its shapes in its `schema.ts` (`commands/schema.ts`, `report/schema.ts`, `protocol/schema.ts`…) and its parsers, validators and decoders in the logic file beside it; the builders the schemas are made of (`domain/fields.ts`, `report/reading.ts`) are pure modules of their own.
 - A pure module of functions (`http/cookies.ts`, `routes/previews/address.ts`) is plain TypeScript and that is right: pure code is never wrapped in an effect. What makes it clean is that it is one concern, named for it.
 
 ```ts
@@ -88,7 +93,7 @@ const open = async () => { await connect(); };
 - `Effect.gen` for inline code; `Effect.fn('Service.method')` for every reusable function, named exactly like the service and method so traces read as the code; `Effect.fnUntraced` only on hot paths that are not a useful span.
 - Combinators for an `Effect.fn` go in as extra arguments, `Effect.fn('a')(function* () { … }, Effect.orDie)`, never as a `.pipe` after it.
 - `return yield* new SomeError(…)` to fail, so TypeScript knows the branch ends.
-- A generator with nothing to `yield*` is not an effect function: return `Effect.succeed(value)` or `Effect.sync(() => …)` (Biome's `useYield` catches it).
+- A generator with nothing to `yield*` is not an effect function: return `Effect.succeed(value)` or `Effect.sync(() => …)` (Oxlint's `require-yield` catches it).
 - A promise API is entered once, in `Effect.tryPromise({ try, catch })` with the rejection mapped to a tagged error; `Effect.promise` only for one that cannot reject. Nothing else awaits, chains `.then`, or builds a `new Promise`; a callback API is `Effect.callback` with a finalizer that cancels it.
 - Code that may throw (a library, `new URL`) goes in `Effect.try({ try, catch })`. Effect code itself never throws and never catches.
 - Add behaviour with combinators: `Effect.timeout`, `Effect.retry`, `Effect.withSpan`, `Effect.annotateLogs`, `Effect.tap`.
@@ -100,7 +105,7 @@ const open = async () => { await connect(); };
 export const MachineId = Schema.String.check(Schema.isPattern(/^[a-z0-9-]{3,64}$/)).pipe(Schema.brand('MachineId'));
 export type MachineId = typeof MachineId.Type;
 
-export class Machine extends Schema.Class<Machine>('shinsa/guide/Machine')({
+export class Machine extends Schema.Class<Machine, { readonly brand: unique symbol }>('shinsa/guide/Machine')({
   id: MachineId,
   name: Schema.NonEmptyString.check(Schema.isMaxLength(64)),
   status: Schema.Literals(['online', 'offline']),
@@ -119,6 +124,7 @@ if (typeof body.name !== 'string' || body.name.length > 64) …
 
 - **One schema per shape, defined once, imported everywhere.** The type is `typeof X.Type` (and `typeof X.Encoded` for the wire form); a hand-written interface beside a schema is a second definition and drifts. Reuse fields (`Machine.fields.name`) instead of restating a check.
 - `Schema.Class` for a domain record, `Schema.Struct` for a payload, `Schema.Literals` for a closed set, `Schema.TaggedStruct` and `Schema.Union` for variants. Every id is branded (`Schema.brand('TaskId')`); build one in a test with `TaskId.make('…')`.
+- Every `Schema.Class`, `Schema.TaggedClass` and `Schema.TaggedError` takes a brand as its second type argument (`{ readonly brand: unique symbol }`), so two classes of the same shape never pass for each other (`schemaClassMissingBrand`, an error in `bun check-types`). A subclass never overrides the constructor (`overriddenSchemaConstructor`): build one with a `static create` that returns `Object.assign(new X({ … }), { … })`, its extra fields `declare readonly`.
 - Every limit lives in the schema (`isMaxLength`, `isPattern`, `isInt`), so the check, the type and the error message are the same everywhere it is used.
 - Decode untrusted input once, at the edge, into the typed value; inside, everything is already typed. Hoist decoders (`const decodeX = Schema.decodeUnknownEffect(X)`) instead of building one per call. Text is decoded with `Schema.fromJsonString(Shape)`, never `JSON.parse`.
 - Map a decode failure to the edge's own tagged error (`InvalidPayload`), never pass a `SchemaError` to a caller who cannot act on it.
@@ -128,7 +134,7 @@ if (typeof body.name !== 'string' || body.name.length > 64) …
 
 ```ts
 // right
-export class MachineNotFound extends Schema.TaggedError<MachineNotFound>()(
+export class MachineNotFound extends Schema.TaggedError<MachineNotFound, { readonly brand: unique symbol }>()(
   'MachineNotFound',
   { machineId: MachineId },
   { httpApiStatus: 404 }
@@ -248,7 +254,20 @@ test('find fails with MachineNotFound', async () => {
 
 ## Lint
 
-`bun lint:conventions` checks every source file that imports `effect` or `@effect/*` (never tests), `apps/cloud` included, with `scripts/lint-effect.ts`:
+Three tools check Effect code, and each catches what the others cannot:
+
+- **The Effect language service** (`@effect/tsgo`), run by every `check-types` as `effect-tsgo tsc --noEmit` with the
+  severities in `tsconfig.effect.json`: every correctness rule is an error and a warning fails the build. It reads
+  types, so it catches an effect nobody runs (`floatingEffect`), a missing `yield*`, an error or a service left out of
+  a signature (`missingEffectError`, `missingEffectContext`, `missingLayerContext`), `any` or `unknown` in an error
+  channel, a schema class without its brand, an unstable API outside the allowed list (`effect/http`,
+  `effect/http-api`, `effect/sql` and the SQL drivers), and `Data.TaggedError` (`preferSchemaTaggedError`).
+- **Oxlint**, run type-aware as `effect-tsgo oxlint --type-aware` (`bun lint:oxlint`), for the house rules every file
+  meets: `no-console`, `require-yield`, `no-shadow-restricted-names`, floating promises and the rest of
+  `.oxlintrc.json`.
+- **`scripts/lint-effect.ts`**, in `bun lint:conventions`, for what no diagnostic expresses: it checks every source
+  file that imports `effect` or `@effect/*` (never tests), wherever it is, while the language service's matching
+  rules only look inside a generator or at every file of the repository:
 
 | Caught | Write instead |
 |---|---|
@@ -257,10 +276,8 @@ test('find fails with MachineNotFound', async () => {
 | `await`, `async`, `new Promise`, `.then` / `.catch` / `.finally` outside `Effect.try`, `Effect.tryPromise` or `Effect.promise` | `Effect.gen`, `Effect.fn` |
 | a function that only returns `Effect.gen` | `Effect.fn('name')(function* () { … })` |
 | `.pipe` after `Effect.fn` | combinators as more arguments to `Effect.fn` |
-| `Data.TaggedError`, `Data.Error` | `Schema.TaggedError` |
+| `Data.Error` | `Schema.TaggedError` |
 | `Date.now()`, `new Date()` | `Clock`, `DateTime` |
 | `JSON.parse` | `Schema.fromJsonString(Shape)` |
 | anything beside the one export of a `handler.ts`, `service.ts` or `middleware.ts` | its steps inside the export's body, its shapes and constants in `schema.ts` |
 | a function or an effect in a `schema.ts` | a schema transform, or the step next to the code that runs it |
-
-Biome adds `noConsole`, `useYield`, `noShadowRestrictedNames` and the rest of the house set.

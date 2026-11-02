@@ -151,7 +151,7 @@ export function GatesDemo() {
   return (
     <DemoRoot>
       <div ref={ref} className='demo-static demo-try flex h-full flex-col items-center gap-4'>
-        <p className='flex h-7 shrink-0 items-center justify-center gap-2 text-fg-2 text-sm'>
+        <p className='flex h-7 shrink-0 items-center justify-center gap-2 text-sm text-fg-2'>
           <WorkStatus step={step} onRestart={restart} />
         </p>
         <Window

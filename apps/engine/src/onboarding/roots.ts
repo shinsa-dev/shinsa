@@ -23,17 +23,16 @@ export const PRIVACY_SETTINGS_URL =
   'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
 
 export class PrivateFoldersError extends DomainError {
-  readonly folders: string[];
-  readonly picked: string[];
+  declare readonly folders: string[];
+  declare readonly picked: string[];
 
-  constructor(folders: string[], picked: string[], userHome: string) {
+  static create(folders: string[], picked: string[], userHome: string) {
     const names = folders.map((folder) => resolveDisplayPath(folder, userHome));
-    super({
+    const error = new PrivateFoldersError({
       code: 'roots_private',
       message: `macOS keeps ${describeList(names, 'and')} private. Turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then check again.`,
     });
-    this.folders = folders;
-    this.picked = picked;
+    return Object.assign(error, { folders, picked });
   }
 }
 
@@ -76,6 +75,6 @@ export function resolveChosenRoots(
     if (isReadable(root, read)) roots.push(root);
     else refused.push(root);
   }
-  if (refused.length > 0) throw new PrivateFoldersError(refused, picked, userHome);
+  if (refused.length > 0) throw PrivateFoldersError.create(refused, picked, userHome);
   return roots;
 }

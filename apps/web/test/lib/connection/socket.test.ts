@@ -15,6 +15,7 @@ import {
   type UserCommand,
 } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
+import { Result } from 'effect';
 import {
   Connection,
   connection,
@@ -302,7 +303,7 @@ describe('Connection state', () => {
   }
 
   function patchFor(state: ShinsaState, command: UserCommand) {
-    const decision = decide(state, command, { now: 10, newId: () => 'n1' });
+    const decision = Result.getOrThrow(decide(state, command, { now: 10, newId: () => 'n1' }));
     return { next: decision.state, patch: resolveStatePatch(state, decision.state, decision.changes) };
   }
 

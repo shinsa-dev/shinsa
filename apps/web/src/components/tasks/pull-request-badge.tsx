@@ -27,7 +27,7 @@ export function PullRequestBadge({ task }: { task: Task }) {
         rel='noreferrer'
         onClick={(event) => event.stopPropagation()}
         className={cn(
-          'corner-superellipse/1.125 inline-flex h-5 items-center gap-1 rounded-control-sm px-1.5 font-medium text-2xs tabular-nums',
+          'corner-superellipse/1.125 inline-flex h-5 items-center gap-1 rounded-control-sm px-1.5 text-2xs font-medium tabular-nums',
           TONE_SURFACE[tone],
           TONE_SURFACE_HOVER[tone]
         )}

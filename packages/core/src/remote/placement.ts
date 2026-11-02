@@ -1,13 +1,18 @@
+import { Option, Schema } from 'effect';
 import type { Settings } from '../domain/settings.ts';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { Project, Repo, Task } from '../domain/types.ts';
+import { describeResourceSummary, resolveResourceHeadroom, resolveResourceSummary } from './resources.ts';
 import {
-  describeResourceSummary,
-  parseResourceSummary,
+  PLACEMENT_LIMITS,
+  PLACEMENT_PROJECT_LIMITS,
+  type PlacementCandidate,
+  PlacementPolicies,
+  type PlacementProject,
+  PlacementQuestion,
+  PlacementReply,
   type ResourceSummary,
-  resolveResourceHeadroom,
-  resolveResourceSummary,
-} from './resources.ts';
+} from './schema.ts';
 
 export interface PlacementMachine {
   id: string;
@@ -21,16 +26,7 @@ export interface PlacementMachine {
   resources?: ResourceSummary | null;
 }
 
-export const PLACEMENT_POLICY_LIMITS = { text: 240, perMachine: 20 } as const;
-
-export function isPlacementPoliciesValid(policies: readonly string[]) {
-  return (
-    policies.length <= PLACEMENT_POLICY_LIMITS.perMachine &&
-    policies.every(
-      (policy) => policy.trim().length > 0 && policy.trim().length <= PLACEMENT_POLICY_LIMITS.text
-    )
-  );
-}
+export const isPlacementPoliciesValid = Schema.is(PlacementPolicies);
 
 export interface MachineLoad {
   id: string;
@@ -92,41 +88,10 @@ export function resolveRoutedPlacement(
   return chosen.full && loads.some((load) => !load.full) ? fallback : chosen.id;
 }
 
-export interface PlacementProject {
-  name: string;
-  description: string;
-  repositories: string[];
-}
-
-const PLACEMENT_PROJECT_LIMITS = {
-  perMachine: 50,
-  name: 120,
-  description: 300,
-  repositories: 30,
-} as const;
-
-export interface PlacementCandidate {
-  id: string;
-  name: string;
-  policies: string[];
-  projects: PlacementProject[];
-  repositories: string[];
-  open: number;
-  capacity: number | null;
-  resources: ResourceSummary | null;
-}
-
-export interface PlacementQuestion {
-  request: string;
-  machines: PlacementCandidate[];
-}
-
 export interface PlacementAnswer {
   machineId: string;
   reason: string;
 }
-
-export const PLACEMENT_LIMITS = { request: 20_000, machines: 20, reason: 240 } as const;
 
 export const NO_PLACEMENT_MACHINE = 'none';
 
@@ -239,79 +204,16 @@ export function serializePlacementPrompt(question: PlacementQuestion) {
   ].join('\n');
 }
 
+const decodePlacementReply = Schema.decodeUnknownOption(PlacementReply);
+
+const decodePlacementQuestion = Schema.decodeUnknownOption(PlacementQuestion);
+
 export function parsePlacementAnswer(question: PlacementQuestion, value: unknown): PlacementAnswer | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const { machine, reason } = value as { machine?: unknown; reason?: unknown };
-  if (typeof machine !== 'string' || !question.machines.some((candidate) => candidate.id === machine))
-    return null;
-  const said = typeof reason === 'string' ? reason.trim().slice(0, PLACEMENT_LIMITS.reason) : '';
-  return { machineId: machine, reason: said };
-}
-
-function readCandidate(value: unknown): PlacementCandidate | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const { id, name, policies, projects, repositories, open, capacity, resources } = value as Record<
-    string,
-    unknown
-  >;
-  if (typeof id !== 'string' || !id || typeof name !== 'string') return null;
-  if (!Array.isArray(policies) || !policies.every((policy) => typeof policy === 'string')) return null;
-  if (!isPlacementPoliciesValid(policies)) return null;
-  const held = readPlacementProjects(projects);
-  const loose = readNames(repositories, PLACEMENT_PROJECT_LIMITS.repositories);
-  if (!held || !loose) return null;
-  if (typeof open !== 'number' || !Number.isInteger(open) || open < 0) return null;
-  if (capacity !== null && (typeof capacity !== 'number' || !Number.isInteger(capacity) || capacity < 1))
-    return null;
-  const reported = resources !== null && resources !== undefined;
-  const use = reported ? parseResourceSummary(resources) : null;
-  if (reported && !use) return null;
-  return {
-    id,
-    name: name.slice(0, 120),
-    policies,
-    projects: held,
-    repositories: loose,
-    open,
-    capacity,
-    resources: use,
-  };
-}
-
-function readNames(value: unknown, limit: number) {
-  if (!Array.isArray(value) || value.length > limit) return null;
-  if (!value.every((entry) => typeof entry === 'string')) return null;
-  return value.map((entry: string) => entry.slice(0, PLACEMENT_PROJECT_LIMITS.name));
-}
-
-function readPlacementProject(value: unknown): PlacementProject | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const { name, description, repositories } = value as Record<string, unknown>;
-  if (typeof name !== 'string' || typeof description !== 'string') return null;
-  const names = readNames(repositories, PLACEMENT_PROJECT_LIMITS.repositories);
-  if (!names) return null;
-  return {
-    name: name.slice(0, PLACEMENT_PROJECT_LIMITS.name),
-    description: description.slice(0, PLACEMENT_PROJECT_LIMITS.description),
-    repositories: names,
-  };
-}
-
-function readPlacementProjects(value: unknown) {
-  if (!Array.isArray(value) || value.length > PLACEMENT_PROJECT_LIMITS.perMachine) return null;
-  const projects = value.map(readPlacementProject);
-  return projects.every((project): project is PlacementProject => project !== null) ? projects : null;
+  const reply = Option.getOrNull(decodePlacementReply(value));
+  if (!reply || !question.machines.some((candidate) => candidate.id === reply.machine)) return null;
+  return { machineId: reply.machine, reason: reply.reason.trim().slice(0, PLACEMENT_LIMITS.reason) };
 }
 
 export function parsePlacementQuestion(value: unknown): PlacementQuestion | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const { request, machines } = value as Record<string, unknown>;
-  if (typeof request !== 'string' || !request.trim() || request.length > PLACEMENT_LIMITS.request)
-    return null;
-  if (!Array.isArray(machines) || machines.length < 2 || machines.length > PLACEMENT_LIMITS.machines)
-    return null;
-  const candidates = machines.map(readCandidate);
-  if (!candidates.every((candidate): candidate is PlacementCandidate => candidate !== null)) return null;
-  if (new Set(candidates.map((candidate) => candidate.id)).size !== candidates.length) return null;
-  return { request, machines: candidates };
+  return Option.getOrNull(decodePlacementQuestion(value));
 }

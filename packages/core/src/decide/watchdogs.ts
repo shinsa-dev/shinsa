@@ -19,8 +19,8 @@ import {
 } from '../domain/index.ts';
 import { resolveAgentPrompt, resolveWatchPrompt } from '../prompts/index.ts';
 import { assembleReport } from '../report/assemble.ts';
+import { PROTOCOL_LIMITS } from '../report/schema.ts';
 import type { WatchdogSource, WatchdogSpec } from '../report/types.ts';
-import { PROTOCOL_LIMITS } from '../report/validate.ts';
 import { listChangedIds } from '../state/draft.ts';
 import type { Decider } from './decider.ts';
 import { settleTask } from './lifecycle.ts';

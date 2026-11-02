@@ -58,7 +58,7 @@ export function InstallTerminal({
 }
 
 export function InstallEnd({ text }: { text: string }) {
-  return <p className='selectable px-3 pb-2 text-2xs text-destructive-text'>{text}</p>;
+  return <p className='text-destructive-text selectable px-3 pb-2 text-2xs'>{text}</p>;
 }
 
 function CheckRow({
@@ -75,7 +75,7 @@ function CheckRow({
   return (
     <div className={cn(SETTING_ROW, 'gap-2')}>
       <CheckOutcomeIcon outcome={resolveCheckOutcome(check)} className='size-3.5' />
-      <span className='min-w-0 flex-1 truncate text-fg-4 text-xs'>{check.label}</span>
+      <span className='min-w-0 flex-1 truncate text-xs text-fg-4'>{check.label}</span>
       {check.command && isInstallable(check) ? (
         <span className='flex shrink-0 items-center gap-1'>
           <CopyButton text={check.command} className='size-6' />
@@ -90,7 +90,7 @@ function CheckRow({
           </Button>
         </span>
       ) : (
-        <Truncate className={cn(TOKEN_TEXT, 'min-w-0 max-w-1/2 shrink text-end')}>{check.detail}</Truncate>
+        <Truncate className={cn(TOKEN_TEXT, 'max-w-1/2 min-w-0 shrink text-end')}>{check.detail}</Truncate>
       )}
     </div>
   );
@@ -109,7 +109,7 @@ function InstallAllRow({
 }) {
   return (
     <div className={cn(SETTING_ROW, 'gap-2')}>
-      <span className='min-w-0 flex-1 truncate text-fg-3 text-xs'>{count} tools are missing</span>
+      <span className='min-w-0 flex-1 truncate text-xs text-fg-3'>{count} tools are missing</span>
       <Button variant='primary' size='sm' icon='IconConsole' loading={installing} onClick={onInstall}>
         Install all
       </Button>
@@ -157,7 +157,7 @@ export function OnboardingChecks({
   return (
     <SettingsCard>
       {allShown && (
-        <div className='border-border border-b'>
+        <div className='border-b border-border'>
           {missing > 1 && (
             <InstallAllRow
               count={missing}

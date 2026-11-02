@@ -197,7 +197,7 @@ function AgentsFact({ state, task }: { state: ShinsaState; task: Task }) {
       }
     >
       <InfoHeader title='Who worked on this' description='Each agent role, and the agents it delegated to.' />
-      <HoverHighlight className='border-border border-t p-1' indicatorClassName='rounded-item'>
+      <HoverHighlight className='border-t border-border p-1' indicatorClassName='rounded-item'>
         <ul aria-label='Who worked on this' className='flex flex-col'>
           {agents.map((agent) => (
             <li key={agent.key}>
@@ -417,7 +417,7 @@ function AccountFact({ task }: { task: Task }) {
         <Icon size='sm' name='IconUser' />
         <span className='truncate'>{describeRunsOn(task.account)}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='start' className='min-w-48 max-w-80'>
+      <DropdownMenuContent align='start' className='max-w-80 min-w-48'>
         <AccountChoiceItems task={task} />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -563,7 +563,7 @@ function RelatedFact({
       }
     >
       <InfoHeader title={`${verb} ${count}`} />
-      <div className='border-border border-t p-1'>
+      <div className='border-t border-border p-1'>
         <TaskPopoverRows state={state} tasks={tasks} />
       </div>
     </FactPopover>
@@ -585,7 +585,7 @@ function ReportFact({ task }: { task: Task }) {
     >
       <InfoHeader title={report.label} description={report.byline} />
       <InfoSection>
-        <blockquote className='max-h-48 overflow-y-auto whitespace-pre-wrap px-3 py-1.5 text-fg-3 text-xs'>
+        <blockquote className='max-h-48 overflow-y-auto px-3 py-1.5 text-xs whitespace-pre-wrap text-fg-3'>
           {report.text}
         </blockquote>
       </InfoSection>
@@ -635,7 +635,7 @@ function WaitsOnFact({ state, task }: { state: ShinsaState; task: Task }) {
   return (
     <DropdownMenu>
       {why ? <Hint label={why}>{trigger}</Hint> : trigger}
-      <DropdownMenuContent align='start' className='min-w-56 max-w-80'>
+      <DropdownMenuContent align='start' className='max-w-80 min-w-56'>
         <WaitsOnItems state={state} task={task} waitsOn={waitsOn} />
       </DropdownMenuContent>
     </DropdownMenu>

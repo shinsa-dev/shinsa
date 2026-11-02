@@ -205,7 +205,7 @@ function EntryBody({
     <div className='flex w-full flex-col gap-3 text-left' data-feedback={entry.id}>
       <EntrySource state={state} entry={entry} />
       {entry.status === 'drafting' && (
-        <div className='flex items-center gap-1.5 text-fg-3 text-xs'>
+        <div className='flex items-center gap-1.5 text-xs text-fg-3'>
           <Spinner size='sm' />
           <span>{status}</span>
         </div>
@@ -215,13 +215,13 @@ function EntryBody({
       ) : (
         entry.title !== null && (
           <div className={cn(CARD, 'flex flex-col gap-1.5 p-3')}>
-            <p className='selectable font-medium text-fg-4 text-sm'>{entry.title}</p>
-            {entry.body !== null && <Markdown text={entry.body} className='selectable text-fg-3 text-xs' />}
+            <p className='selectable text-sm font-medium text-fg-4'>{entry.title}</p>
+            {entry.body !== null && <Markdown text={entry.body} className='selectable text-xs text-fg-3' />}
           </div>
         )
       )}
-      {entry.status === 'drafting' && <p className='selectable text-fg-2 text-xs'>{entry.note}</p>}
-      {entry.status === 'filing' && <p className='text-fg-3 text-xs'>{status}</p>}
+      {entry.status === 'drafting' && <p className='selectable text-xs text-fg-2'>{entry.note}</p>}
+      {entry.status === 'filing' && <p className='text-xs text-fg-3'>{status}</p>}
       {entry.status === 'failed' && (
         <p className={cn(TONE_INSET.red, TONE_TEXT.red, 'selectable px-2.5 py-2 text-xs')}>{status}</p>
       )}

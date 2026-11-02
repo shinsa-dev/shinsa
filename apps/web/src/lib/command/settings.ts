@@ -36,6 +36,13 @@ import {
 } from '@/lib/preferences/code.ts';
 import type { AlertPreference, NotificationPreferences, SoundId } from '@/lib/preferences/notifications.ts';
 import {
+  findSettingsTab,
+  resolveSectionRank,
+  resolveSectionTab,
+  resolveSettingsPath,
+  resolveSettingsTab,
+} from '@/lib/settings-tabs.ts';
+import {
   AGENT_GROUPS,
   AGENT_ROLES,
   type AgentGroup,
@@ -89,13 +96,6 @@ import {
   USAGE_LIMIT_TITLE,
   updateSettings,
 } from '@/lib/settings.ts';
-import {
-  findSettingsTab,
-  resolveSectionRank,
-  resolveSectionTab,
-  resolveSettingsPath,
-  resolveSettingsTab,
-} from '@/lib/settings-tabs.ts';
 import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';

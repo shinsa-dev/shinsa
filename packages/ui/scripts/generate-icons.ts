@@ -12,14 +12,14 @@ const current = readFileSync(OUT, 'utf8');
 
 if (process.argv.includes('--check')) {
   if (current !== module) {
-    // biome-ignore lint/suspicious/noConsole: build script output
+    // oxlint-disable-next-line eslint/no-console -- build script output
     console.error('[icons] paths.ts is out of date. Run: bun run --cwd packages/ui generate:icons');
     process.exit(1);
   }
-  // biome-ignore lint/suspicious/noConsole: build script output
+  // oxlint-disable-next-line eslint/no-console -- build script output
   console.log(`[icons] paths.ts is current (${icons} icons)`);
 } else {
   if (current !== module) writeFileSync(OUT, module);
-  // biome-ignore lint/suspicious/noConsole: build script output
+  // oxlint-disable-next-line eslint/no-console -- build script output
   console.log(`[icons] ${icons} icons written to paths.ts`);
 }

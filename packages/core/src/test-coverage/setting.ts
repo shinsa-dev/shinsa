@@ -1,13 +1,6 @@
 import type { Repo } from '../domain/types.ts';
-import type { CoverageFormat, CoverageSetting } from './types.ts';
-
-const FORMAT_BY_EXTENSION: [RegExp, CoverageFormat][] = [
-  [/(^|[/\\])lcov[^/\\]*$|\.(info|lcov)$/i, 'lcov'],
-  [/\.xml$/i, 'cobertura'],
-  [/\.(out|coverprofile)$/i, 'go'],
-];
-
-export const DEFAULT_COVERAGE: CoverageSetting = { mode: 'auto' };
+import { type CoverageSetting, DEFAULT_COVERAGE, FORMAT_BY_EXTENSION } from './schema.ts';
+import type { CoverageFormat } from './types.ts';
 
 export function resolveRepoCoverage(repo: Pick<Repo, 'coverage'> | null | undefined): CoverageSetting {
   return repo?.coverage ?? { ...DEFAULT_COVERAGE };

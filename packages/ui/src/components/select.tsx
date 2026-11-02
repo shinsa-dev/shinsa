@@ -102,7 +102,7 @@ function SelectTrigger({
         onClick?.(event);
       }}
       className={cn(
-        'group/select-trigger relative isolate flex w-fit cursor-pointer select-none items-center justify-between gap-1.5 whitespace-nowrap font-medium text-fg-4',
+        'group/select-trigger relative isolate flex w-fit cursor-pointer items-center justify-between gap-1.5 font-medium whitespace-nowrap text-fg-4 select-none',
         // Heights match the button's: default 26, sm 24.
         size === 'sm'
           ? 'corner-superellipse/1.125 h-6 rounded-control-sm px-1.5 text-xs [--icon-size:var(--icon-size-sm)]'
@@ -110,8 +110,8 @@ function SelectTrigger({
         "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] before:content-['']",
         'enabled:active:before:inset-x-(--press-inset-x) enabled:active:before:inset-y-(--press-inset-y)',
         variant === 'ghost'
-          ? 'enabled:active:before:bg-bg-a2/70 enabled:hover:before:bg-bg-a2/70 aria-expanded:before:bg-bg-a2'
-          : 'before:bg-input enabled:active:before:bg-input-hover/80 enabled:hover:before:bg-input-hover/80 aria-expanded:before:bg-input-hover/80',
+          ? 'enabled:hover:before:bg-bg-a2/70 enabled:active:before:bg-bg-a2/70 aria-expanded:before:bg-bg-a2'
+          : 'before:bg-input enabled:hover:before:bg-input-hover/80 enabled:active:before:bg-input-hover/80 aria-expanded:before:bg-input-hover/80',
         'outline-none',
         'disabled:cursor-not-allowed disabled:opacity-50',
         'data-placeholder:text-fg-2',
@@ -163,7 +163,7 @@ function SelectContent({
             // and the positioner picks the side with room for it. The popup is a
             // static shell: the list scrolls, and the surface lives on ::before so
             // only the background animates while text lands instantly.
-            'corner-superellipse/1.125 relative isolate z-50 flex max-h-(--available-height) min-w-(--anchor-width) flex-col whitespace-nowrap rounded-popup text-popover-foreground',
+            'corner-superellipse/1.125 relative isolate z-50 flex max-h-(--available-height) min-w-(--anchor-width) flex-col rounded-popup whitespace-nowrap text-popover-foreground',
             "before:corner-superellipse/1.125 before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] before:bg-popover before:shadow-md before:content-['']",
             // Entry only; closing is instant.
             'before:origin-(--transform-origin) before:duration-150 before:ease-out data-open:before:animate-in',
@@ -172,13 +172,13 @@ function SelectContent({
             // Over the trigger (Base UI reports side "none" when the selected item
             // is aligned with it): the surface takes over from the trigger's press,
             // growing 0.975 → 1 in place, no fade.
-            'data-open:data-[side=none]:before:fade-in-100 data-open:data-[side=none]:before:zoom-in-[0.975] data-[side=none]:before:origin-center',
+            'data-[side=none]:before:origin-center data-open:data-[side=none]:before:fade-in-100 data-open:data-[side=none]:before:zoom-in-[0.975]',
             className
           )}
           {...props}
         >
           <SelectScrollUpButton />
-          <SelectPrimitive.List className='min-h-0 flex-1 overflow-y-auto overflow-x-hidden'>
+          <SelectPrimitive.List className='min-h-0 flex-1 overflow-x-hidden overflow-y-auto'>
             <HighlightList>{children}</HighlightList>
           </SelectPrimitive.List>
           <SelectScrollDownButton />
@@ -192,7 +192,7 @@ function SelectLabel({ className, ...props }: SelectPrimitive.GroupLabel.Props) 
   return (
     <SelectPrimitive.GroupLabel
       data-slot='select-label'
-      className={cn('select-none px-2 pt-1.5 pb-0.5 font-medium text-fg-2 text-xs', className)}
+      className={cn('px-2 pt-1.5 pb-0.5 text-xs font-medium text-fg-2 select-none', className)}
       {...props}
     />
   );
@@ -213,7 +213,7 @@ function SelectItem({
         // The sliding indicator draws the highlight; items only shift text color.
         // pl-2 is load-bearing: list p-1 (4px) + pl-2 (8px) puts the item's
         // text 12px in, which is what the aligned popup is positioned from.
-        'relative flex w-full cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-7 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden [--icon-size:var(--icon-size-sm)] data-disabled:pointer-events-none data-indicator-here:text-fg-4 data-disabled:opacity-50 [&[data-indicator-here]_span]:text-fg-4 [&_svg]:pointer-events-none *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2',
+        'relative flex w-full cursor-pointer items-center gap-1.5 rounded-item py-1 pr-7 pl-2 text-xs leading-4 font-medium text-fg-3 outline-hidden select-none [--icon-size:var(--icon-size-sm)] data-indicator-here:text-fg-4 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2 [&[data-indicator-here]_span]:text-fg-4',
         className
       )}
       {...props}

@@ -1,30 +1,12 @@
+import type { ScheduleSource, ScheduleTarget, ScheduleTrigger } from './schema.ts';
 import { DAY_MS, MINUTE_MS } from './time.ts';
-import type { Task, TaskMode, TaskPriority } from './types.ts';
+import type { Task } from './types.ts';
 
-export type WebhookEncoding = 'hex' | 'base64';
+export const WEBHOOK_ENCODINGS = ['hex', 'base64'] as const;
 
-export interface WebhookSignature {
-  header: string;
-  encoding: WebhookEncoding;
-  prefix: string;
-}
+export type WebhookEncoding = (typeof WEBHOOK_ENCODINGS)[number];
 
-export type ScheduleTrigger =
-  | { kind: 'once'; at: number }
-  | { kind: 'interval'; everyMinutes: number }
-  | { kind: 'daily'; time: string; weekdays: number[] }
-  | { kind: 'webhook'; signature: WebhookSignature | null; replayKey: string | null };
-
-export type ScheduleTriggerKind = ScheduleTrigger['kind'];
-
-export type ScheduleTarget =
-  | { kind: 'new_task'; repoId: string | null; priority: TaskPriority; mode: TaskMode }
-  | { kind: 'task'; taskId: string };
-
-export interface ScheduleSource {
-  projectId: string;
-  server: string;
-}
+export const SCHEDULE_TRIGGER_KINDS = ['once', 'interval', 'daily', 'webhook'] as const;
 
 export interface SourceReport {
   scheduleId: string | null;

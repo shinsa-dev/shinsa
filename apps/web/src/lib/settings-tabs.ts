@@ -1,6 +1,6 @@
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
-import { isRemoteBuild, MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
+import { isRemoteBuild, MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { FOLDERS_TITLE, MODELS_TITLE, resolveHashSectionId, resolveSectionId } from '@/lib/settings.ts';
 import { SLACK_SECTION } from '@/lib/slack.ts';
 import { SHIPPING_SECTION } from '@/lib/stats/shipping.ts';

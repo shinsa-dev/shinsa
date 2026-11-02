@@ -6,9 +6,12 @@ export const TokenHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/))
 
 export type TokenHash = typeof TokenHash.Type;
 
-export class CryptoFailed extends Schema.TaggedError<CryptoFailed>()('CryptoFailed', {
-  message: Schema.String,
-}) {}
+export class CryptoFailed extends Schema.TaggedError<CryptoFailed, { readonly brand: unique symbol }>()(
+  'CryptoFailed',
+  {
+    message: Schema.String,
+  }
+) {}
 
 const CONFUSABLE = new Set(['I', 'O', '0', '1']);
 

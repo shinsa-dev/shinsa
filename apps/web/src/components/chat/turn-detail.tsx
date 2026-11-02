@@ -12,11 +12,11 @@ import { useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 
 export function ErrorLine({ text, count = 1 }: { text: string; count?: number }) {
   return (
-    <div data-message className='flex min-w-0 items-start gap-1.25 text-red-text text-xs leading-relaxed'>
+    <div data-message className='flex min-w-0 items-start gap-1.25 text-xs leading-relaxed text-red-text'>
       <IconSlot>
         <Icon size='sm' name='IconExclamationCircle' />
       </IconSlot>
-      <span className='selectable min-w-0 whitespace-pre-wrap break-words'>{text}</span>
+      <span className='min-w-0 selectable break-words whitespace-pre-wrap'>{text}</span>
       {count > 1 && (
         <span className='shrink-0 text-fg-2 tabular-nums'>{formatCount(count, 'time', 'times')}</span>
       )}

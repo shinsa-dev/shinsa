@@ -26,7 +26,7 @@ export const EFFECT_FN_PIPE_MESSAGE =
   'A .pipe after Effect.fn. Pass the combinators as more arguments to Effect.fn instead (the effect skill → Writing effects)';
 
 export const EFFECT_DATA_ERROR_MESSAGE =
-  'An error from Data. Define every error with Schema.TaggedError, so it is a schema that can cross a boundary (the effect skill → Errors)';
+  'A Data.Error. Define every error with Schema.TaggedError, so it is a schema that can cross a boundary (the effect skill → Errors)';
 
 export const EFFECT_CLOCK_MESSAGE =
   'The wall clock in Effect code. Read the time from Clock or DateTime, so a test controls it with TestClock (the effect skill → Time and ids)';
@@ -161,7 +161,7 @@ function isPipeAfterFn(node: Node) {
 }
 
 function isDataError(node: Node) {
-  return isMember(node, 'Data', new Set(['TaggedError', 'Error']));
+  return isMember(node, 'Data', new Set(['Error']));
 }
 
 function isWallClock(node: Node) {

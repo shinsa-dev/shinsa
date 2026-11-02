@@ -20,13 +20,7 @@ export {
   removeIsolatedWorktrees,
   resolveIsolatedPath,
 } from './isolation.ts';
-export {
-  hasPrePushHook,
-  PushError,
-  pushBranch,
-  resolveOutputTail,
-  runPush,
-} from './push.ts';
+export { hasPrePushHook, PushError, pushBranch, resolveOutputTail, runPush } from './push.ts';
 export { assertRefName, slugify } from './refs.ts';
 export { inspectRepo, resolveRepoRemote, resolveRepoRoot } from './repo.ts';
 export { updateOntoBase } from './update.ts';

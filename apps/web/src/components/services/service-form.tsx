@@ -89,7 +89,7 @@ function AdvancedFields({ disclosure, children }: { disclosure: Disclosure; chil
         label='Advanced'
         strip='line'
         chevron='glyph'
-        className='w-fit gap-1 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
+        className='w-fit gap-1 text-2xs font-medium text-fg-2 hover:text-fg-4 active:text-fg-4'
       >
         Advanced
       </DisclosureHeader>

@@ -26,8 +26,8 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
   }
 
   return (
-    <nav className='flex h-full w-full select-none flex-col bg-sidebar'>
-      <div data-window-drag className='flex h-11 shrink-0 items-center gap-2 desktop:ps-20 ps-3.5 pe-2'>
+    <nav className='flex h-full w-full flex-col bg-sidebar select-none'>
+      <div data-window-drag className='flex h-11 shrink-0 items-center gap-2 ps-3.5 pe-2 desktop:ps-20'>
         <HomeLink onNavigate={onNavigate} />
         <ErrorBoundary size='icon' resetKey={resetKey}>
           <ConnectionStatus />
@@ -82,13 +82,13 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
         </HoverHighlight>
       </div>
       {route.name !== 'onboarding' && (
-        <div className='flex flex-col border-border border-t px-2 py-2'>
+        <div className='flex flex-col border-t border-border px-2 py-2'>
           <ErrorBoundary size='inline' resetKey={resetKey}>
             <FocusMenu state={state} />
           </ErrorBoundary>
         </div>
       )}
-      <div className='flex min-h-0 flex-1 flex-col overflow-y-auto border-border border-t'>
+      <div className='flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border'>
         <ErrorBoundary size='inline' resetKey={resetKey} className='p-2'>
           <TaskQueue state={state} variant='compact' activeTaskId={activeTaskId} onNavigate={onNavigate} />
         </ErrorBoundary>

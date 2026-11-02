@@ -48,6 +48,32 @@ export {
 } from './duplicates.ts';
 export { DomainError } from './errors.ts';
 export {
+  FeedbackId,
+  GateId,
+  IdText,
+  MemoryId,
+  ProjectId,
+  RepoId,
+  RunId,
+  ScheduleId,
+  ServiceId,
+  SuggestionId,
+  TaskId,
+  type FindingVerdict,
+  type ReviewComment,
+  type RunAccount,
+  type ScheduleSource,
+  type ScheduleTarget,
+  type ScheduleTrigger,
+  type ScheduleTriggerKind,
+  type SettingsPatch,
+  type Unbranded,
+  WatchdogId,
+  type WebhookSignature,
+} from './schema.ts';
+export { ID_LIMIT } from './fields.ts';
+export { listIssueMessages, resolveIssuePath } from './issues.ts';
+export {
   type CurrentEvidenceItem,
   type EarlierEvidenceItem,
   type EvidenceItem,
@@ -88,11 +114,7 @@ export {
 } from './memory.ts';
 export { ON_BEHALF_ACTION_LIMIT, type OnBehalfAction } from './on-behalf.ts';
 export { selectWelcomeTask, WELCOME_TASK } from './onboarding.ts';
-export {
-  describeOverlaps,
-  listNewOverlapPaths,
-  type OverlapNote,
-} from './overlaps.ts';
+export { describeOverlaps, listNewOverlapPaths, type OverlapNote } from './overlaps.ts';
 export { resolveFirstName, resolveGuestFirstName, selectTaskPerson } from './people.ts';
 export {
   type ProjectSuggestion,

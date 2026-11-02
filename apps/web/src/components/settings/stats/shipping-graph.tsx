@@ -77,7 +77,7 @@ export function ShippingGraph({ year }: { year: Stats }) {
           {grid.weeks.map((cells, week) => (
             <span
               key={cells.find(Boolean)?.day}
-              className='overflow-visible whitespace-nowrap text-2xs text-fg-2'
+              className='overflow-visible text-2xs whitespace-nowrap text-fg-2'
             >
               {grid.months.find((entry) => entry.week === week)?.label ?? ''}
             </span>
@@ -94,7 +94,7 @@ export function ShippingGraph({ year }: { year: Stats }) {
             <span
               key={weekday}
               aria-hidden
-              className='flex items-center overflow-visible text-2xs text-fg-2 leading-none'
+              className='flex items-center overflow-visible text-2xs leading-none text-fg-2'
             >
               {weekday}
             </span>

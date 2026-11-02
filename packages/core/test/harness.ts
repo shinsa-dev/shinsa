@@ -1,3 +1,4 @@
+import { Result } from 'effect';
 import {
   type AgentReply,
   applyEvent,
@@ -7,6 +8,7 @@ import {
   type GuestActor,
   listActiveRuns,
   listOpenGates,
+  parseUserCommand,
   type PlanDocument,
   type PullRequest,
   type ReportCheck,
@@ -17,11 +19,20 @@ import {
   type ShinsaEvent,
   type ShinsaEventInput,
   type ShinsaState,
+  type UserCommand,
   selectOpenIteration,
   splitHouseRules,
 } from '../src/index.ts';
 
 export type Harness = ReturnType<typeof createHarness>;
+
+export function parseCommand(body: unknown): UserCommand {
+  return Result.getOrThrow(parseUserCommand(body));
+}
+
+export function decideOrThrow(...input: Parameters<typeof decide>) {
+  return Result.getOrThrow(decide(...input));
+}
 
 export function readInstruction(run: Run) {
   const prompt = run.rolePrompt ?? run.prompt ?? '';
@@ -40,7 +51,7 @@ export function createHarness() {
     options: { onBehalf?: boolean; byTask?: string | null; guest?: GuestActor | null } = {}
   ) {
     clock += 1;
-    const decision = decide(state, command, { now: clock, newId: () => `id${++counter}`, ...options });
+    const decision = decideOrThrow(state, command, { now: clock, newId: () => `id${++counter}`, ...options });
     for (const event of decision.events) {
       const applied = { ...event, seq: state.seq + 1, at: clock } as ShinsaEvent;
       events.push(applied);

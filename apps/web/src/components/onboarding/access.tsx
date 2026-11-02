@@ -30,7 +30,7 @@ export function OnboardingAccess({
         <Icon name='IconLock' size='sm' className='mt-px text-fg-3' />
         <div className='flex min-w-0 flex-1 flex-col gap-2'>
           <div className='flex flex-col gap-px'>
-            <p className='text-fg-4 text-xs'>{describeAccessTitle(access, userHome)}</p>
+            <p className='text-xs text-fg-4'>{describeAccessTitle(access, userHome)}</p>
             <p className='text-2xs text-fg-3'>
               Shinsa needs no other permission. To use {many ? 'these folders' : 'this folder'}, turn on
               Shinsa under Full Disk Access in System Settings. Shinsa checks again when you come back.

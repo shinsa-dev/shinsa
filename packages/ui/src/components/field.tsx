@@ -28,7 +28,7 @@ function FieldLegend({
       data-slot='field-legend'
       data-variant={variant}
       className={cn(
-        'mb-1.5 font-medium text-fg-4 leading-tighter data-[variant=label]:text-xs data-[variant=legend]:text-sm',
+        'mb-1.5 leading-tighter font-medium text-fg-4 data-[variant=label]:text-xs data-[variant=legend]:text-sm',
         className
       )}
       {...props}
@@ -56,7 +56,7 @@ const fieldVariants = cva('group/field flex w-full gap-2 data-[invalid=true]:tex
       horizontal:
         'flex-row items-center has-[>[data-slot=field-content]]:items-start *:data-[slot=field-label]:flex-auto has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px',
       responsive:
-        '@md/field-group:flex-row flex-col @md/field-group:items-center *:w-full @md/field-group:*:w-auto @md/field-group:has-[>[data-slot=field-content]]:items-start @md/field-group:*:data-[slot=field-label]:flex-auto [&>.sr-only]:w-auto @md/field-group:has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px',
+        'flex-col *:w-full @md/field-group:flex-row @md/field-group:items-center @md/field-group:*:w-auto @md/field-group:has-[>[data-slot=field-content]]:items-start @md/field-group:*:data-[slot=field-label]:flex-auto [&>.sr-only]:w-auto @md/field-group:has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px',
     },
   },
   defaultVariants: {
@@ -95,7 +95,7 @@ function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>)
     <Label
       data-slot='field-label'
       className={cn(
-        'group/field-label peer/field-label corner-superellipse/1.125 flex w-fit gap-2 leading-tighter has-[>[data-slot=field]]:rounded-xl has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-bg-3 has-data-checked:border-primary-a3 has-data-checked:bg-primary-a1 *:data-[slot=field]:p-2.5 group-data-[disabled=true]/field:opacity-50',
+        'group/field-label peer/field-label corner-superellipse/1.125 flex w-fit gap-2 leading-tighter group-data-[disabled=true]/field:opacity-50 has-data-checked:border-primary-a3 has-data-checked:bg-primary-a1 has-[>[data-slot=field]]:rounded-xl has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-bg-3 *:data-[slot=field]:p-2.5',
         'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col',
         className
       )}
@@ -109,7 +109,7 @@ function FieldTitle({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot='field-label'
       className={cn(
-        'flex w-fit items-center gap-2 font-medium text-xs leading-tighter group-data-[disabled=true]/field:opacity-50',
+        'flex w-fit items-center gap-2 text-xs leading-tighter font-medium group-data-[disabled=true]/field:opacity-50',
         className
       )}
       {...props}
@@ -122,9 +122,9 @@ function FieldDescription({ className, ...props }: React.ComponentProps<'p'>) {
     <p
       data-slot='field-description'
       className={cn(
-        'text-pretty text-left text-fg-2 text-xs [[data-variant=legend]+&]:-mt-1.5',
-        'nth-last-2:-mt-1 last:mt-0',
-        '[&>a:active]:text-fg-4 [&>a:hover]:text-fg-4 [&>a]:underline [&>a]:underline-offset-4',
+        'text-left text-xs text-pretty text-fg-2 [[data-variant=legend]+&]:-mt-1.5',
+        'last:mt-0 nth-last-2:-mt-1',
+        '[&>a]:underline [&>a]:underline-offset-4 [&>a:active]:text-fg-4 [&>a:hover]:text-fg-4',
         className
       )}
       {...props}
@@ -194,7 +194,7 @@ function FieldError({
   }
 
   return (
-    <div role='alert' data-slot='field-error' className={cn('text-red-text text-xs', className)} {...props}>
+    <div role='alert' data-slot='field-error' className={cn('text-xs text-red-text', className)} {...props}>
       {content}
     </div>
   );

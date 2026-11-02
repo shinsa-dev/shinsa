@@ -27,7 +27,7 @@ function ErrorMessage({ message }: { message: string }) {
     <pre
       className={cn(
         INSET,
-        'selectable max-h-32 w-full min-w-0 overflow-auto whitespace-pre-wrap break-words bg-bg-2 px-3 py-2 text-left font-mono text-2xs text-fg-3 leading-relaxed'
+        'max-h-32 w-full min-w-0 selectable overflow-auto bg-bg-2 px-3 py-2 text-left font-mono text-2xs leading-relaxed break-words whitespace-pre-wrap text-fg-3'
       )}
     >
       {message}
@@ -97,7 +97,7 @@ function InlineBody({
     <>
       <div className='flex min-w-0 items-center gap-2'>
         <Icon size='sm' name='IconExclamationTriangle' className='text-orange-text' />
-        <span className='min-w-0 flex-1 font-medium text-fg-4 text-xs'>{title}</span>
+        <span className='min-w-0 flex-1 text-xs font-medium text-fg-4'>{title}</span>
       </div>
       <ErrorMessage message={error.message} />
       <ErrorActions error={error} size='xs' onRetry={onRetry} onReload={onReload} />

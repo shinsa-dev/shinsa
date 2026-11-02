@@ -147,37 +147,37 @@ export function InputSpecimens() {
       >
         <Specimen label='clipped · hover for the full text'>
           <div className='flex w-56 flex-col rounded-xl bg-bg-2 px-3 py-2'>
-            <Truncate className='font-medium text-fg-4 text-sm'>
+            <Truncate className='text-sm font-medium text-fg-4'>
               Rework the embedded chat on top of MCP v2 and drop the old transport
             </Truncate>
-            <Truncate className='text-fg-2 text-xs'>
+            <Truncate className='text-xs text-fg-2'>
               paywall-next · feat/embedded-chat-v2 · on top of MCP v2
             </Truncate>
           </div>
         </Specimen>
         <Specimen label='fits · no tooltip'>
           <div className='flex w-56 flex-col rounded-xl bg-bg-2 px-3 py-2'>
-            <Truncate className='font-medium text-fg-4 text-sm'>Fix scroll</Truncate>
-            <Truncate className='text-fg-2 text-xs'>kanna</Truncate>
+            <Truncate className='text-sm font-medium text-fg-4'>Fix scroll</Truncate>
+            <Truncate className='text-xs text-fg-2'>kanna</Truncate>
           </div>
         </Specimen>
         <Specimen label='middle · both ends of an id stay readable'>
           <div className='flex w-56 flex-col rounded-xl bg-bg-2 px-3 py-2'>
-            <Truncate middle className='text-fg-4 text-xs'>
+            <Truncate middle className='text-xs text-fg-4'>
               task_9RmZ0hVQb2xKcT4wLpN7s
             </Truncate>
-            <Truncate middle className='text-fg-4 text-xs'>
+            <Truncate middle className='text-xs text-fg-4'>
               worktrees/paywall-next-embedded-chat
             </Truncate>
           </div>
         </Specimen>
         <Specimen label='middle · several ids sharing one line'>
           <div className='flex w-80 items-center gap-1.5 rounded-xl bg-bg-2 px-3 py-2'>
-            <Truncate middle className='min-w-0 flex-1 basis-0 text-fg-4 text-xs'>
+            <Truncate middle className='min-w-0 flex-1 basis-0 text-xs text-fg-4'>
               task_9RmZ0hVQb2xKcT4wLpN7s
             </Truncate>
             <span className='shrink-0 text-fg-1'>·</span>
-            <Truncate middle className='min-w-0 flex-1 basis-0 text-fg-4 text-xs'>
+            <Truncate middle className='min-w-0 flex-1 basis-0 text-xs text-fg-4'>
               task_e54621c03bbe4cd49dff9
             </Truncate>
           </div>
@@ -232,13 +232,13 @@ export function InputSpecimens() {
           ))}
         </Specimen>
         <Specimen label='surfaces'>
-          <p className='selectable rounded-xl bg-bg-2 px-3 py-2 text-fg-3 text-sm'>
+          <p className='selectable rounded-xl bg-bg-2 px-3 py-2 text-sm text-fg-3'>
             Neutral surface, neutral selection.
           </p>
-          <p className='selectable selection-amber rounded-xl bg-amber-a2 px-3 py-2 text-fg-3 text-sm'>
+          <p className='selectable rounded-xl bg-amber-a2 px-3 py-2 text-sm text-fg-3 selection-amber'>
             Amber surface selects amber.
           </p>
-          <p className='selectable selection-inverse rounded-xl bg-fg-4 px-3 py-2 text-background text-sm'>
+          <p className='selectable rounded-xl bg-fg-4 px-3 py-2 text-sm text-background selection-inverse'>
             Solid surface flips the selection to light.
           </p>
         </Specimen>

@@ -79,7 +79,7 @@ export function SuggestedSourceWatchRow({
         </span>
       </Hint>
       <span className='flex min-w-0 flex-1 items-baseline gap-1.5'>
-        <Truncate className='min-w-0 text-fg-4 text-xs'>{suggestion.text}</Truncate>
+        <Truncate className='min-w-0 text-xs text-fg-4'>{suggestion.text}</Truncate>
         <Truncate className='min-w-0 shrink-[2] text-2xs text-fg-2'>
           {describeSuggestionDetail(suggestion, null)}
         </Truncate>
@@ -111,7 +111,7 @@ export function SuggestedWatchRow({
           detail={SUGGESTED_HINT}
         />
         <div className='flex min-w-0 flex-1 flex-col'>
-          <span className='selectable text-fg-4 text-xs'>{suggestion.text}</span>
+          <span className='selectable text-xs text-fg-4'>{suggestion.text}</span>
           <Truncate className='text-2xs text-fg-2'>
             {describeSuggestionDetail(
               suggestion,

@@ -303,13 +303,11 @@ export function resolveEvidenceListLayout(
     if (members.length === 0) return [];
     return [{ kind, label: describeEvidenceKind(kind, members.length), entries: members }];
   });
-  const earlier = listEarlierEvidenceItems(others).map(
-    (item): EarlierEvidenceEntry => ({
-      ...resolveEntry(item, null),
-      key: `${EARLIER}${item.id}`,
-      status: describeEarlierStatus(item),
-    })
-  );
+  const earlier = listEarlierEvidenceItems(others).map((item): EarlierEvidenceEntry => ({
+    ...resolveEntry(item, null),
+    key: `${EARLIER}${item.id}`,
+    status: describeEarlierStatus(item),
+  }));
   return {
     count: entries.length,
     groups,

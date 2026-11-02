@@ -93,7 +93,7 @@ function QueuedRow({
       data-queued-message
       className={cn('flex min-w-0 items-start gap-2 py-1.5 ps-3 pe-1.5', busy && 'opacity-60')}
     >
-      <p className='selectable line-clamp-3 min-w-0 flex-1 whitespace-pre-wrap break-words py-px text-fg-3 text-xs leading-relaxed'>
+      <p className='line-clamp-3 min-w-0 flex-1 selectable py-px text-xs leading-relaxed break-words whitespace-pre-wrap text-fg-3'>
         {message.text}
       </p>
       <span className='flex shrink-0 gap-px'>
@@ -150,7 +150,7 @@ export function MessageQueue({
         </span>
         <span className='truncate text-fg-2'>· {describeQueue(state, task)}</span>
       </header>
-      <ScrollArea className='border-border border-t' viewportClassName='max-h-44'>
+      <ScrollArea className='border-t border-border' viewportClassName='max-h-44'>
         <ul className='flex flex-col divide-y divide-border'>
           {messages.map((message) =>
             message.number === editing ? (

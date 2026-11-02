@@ -96,7 +96,7 @@ export default function CodeDiffView({ source, numbered = false, selected = null
   return (
     <>
       <div
-        className='selectable min-w-0 overflow-hidden'
+        className='min-w-0 selectable overflow-hidden'
         style={clamp.maxHeight === null ? undefined : { maxHeight: clamp.maxHeight }}
       >
         <FileDiff

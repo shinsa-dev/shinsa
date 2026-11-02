@@ -26,7 +26,7 @@ function SandboxGroup({ section }: { section: SandboxSection }) {
       <Card className='gap-0 p-1.5'>
         {section.links.map((link) => (
           <a key={link.url} href={link.url} className={LINK_ROW}>
-            <span className='truncate text-fg-4 text-xs'>{link.label}</span>
+            <span className='truncate text-xs text-fg-4'>{link.label}</span>
             <code className='truncate font-mono text-2xs text-fg-2'>{link.url}</code>
           </a>
         ))}

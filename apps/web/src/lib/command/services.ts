@@ -2,8 +2,8 @@ import type { ServiceView, ShinsaState, TerminalsSnapshot } from '@shinsa/core';
 import { type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { listServiceCommands } from '@/lib/command/terminal.ts';
 import { restartService, startAllServices, startService, stopService } from '@/lib/connection/terminals.ts';
-import { describeStartAll, listServiceGroups, resolveServicesProjects } from '@/lib/terminal/services.ts';
 import { requestServicesPanel } from '@/lib/terminal/services-panel.ts';
+import { describeStartAll, listServiceGroups, resolveServicesProjects } from '@/lib/terminal/services.ts';
 
 const ACTIONS = {
   startService: (view: ServiceView) => void startService(view.service.id, view.taskId),

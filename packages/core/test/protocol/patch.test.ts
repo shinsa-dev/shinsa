@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
   applyStatePatch,
   createState,
-  decide,
   resolveStatePatch,
   type ShinsaCommand,
   type ShinsaState,
@@ -10,7 +9,16 @@ import {
   serializeState,
   type WireState,
 } from '../../src/index.ts';
-import { buildAll, createHarness, createTask, failing, PASSING, PLAN, registerRepo } from '../harness.ts';
+import {
+  buildAll,
+  createHarness,
+  createTask,
+  failing,
+  PASSING,
+  PLAN,
+  registerRepo,
+  decideOrThrow,
+} from '../harness.ts';
 
 function roundTrip(patch: StatePatch) {
   return JSON.parse(JSON.stringify(patch)) as StatePatch;
@@ -36,7 +44,10 @@ describe('state patches', () => {
       { type: 'repo.remove', repoId },
     ];
     for (const [index, command] of commands.entries()) {
-      const decision = decide(state, command, { now: harness.now + index, newId: () => crypto.randomUUID() });
+      const decision = decideOrThrow(state, command, {
+        now: harness.now + index,
+        newId: () => crypto.randomUUID(),
+      });
       const patch = roundTrip(resolveStatePatch(state, decision.state, decision.changes));
       expect(patch.from).toBe(state.seq);
       expect(patch.to).toBe(decision.state.seq);
@@ -53,7 +64,7 @@ describe('state patches', () => {
     const taskId = createTask(harness, { repoId });
     const other = createTask(harness, { repoId, request: 'Another task' });
     const client = plain(harness.state);
-    const decision = decide(
+    const decision = decideOrThrow(
       harness.state,
       { type: 'task.prioritize', taskId, priority: 'low' },
       { now: harness.now + 1, newId: () => 'unused' }
@@ -153,7 +164,7 @@ describe('state patches', () => {
     const taskId = createTask(harness);
     buildAll(harness, taskId);
     const before = harness.state;
-    const decision = decide(
+    const decision = decideOrThrow(
       before,
       { type: 'checks.record', taskId, results: failing() },
       { now: harness.now + 1, newId: () => 'fix-run' }

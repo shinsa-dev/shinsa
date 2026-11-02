@@ -8,12 +8,14 @@ export type MachineId = typeof MachineId.Type;
 
 const MachineStatus = Schema.Literals(['online', 'offline']);
 
-export class Machine extends Schema.Class<Machine>('shinsa/guide/Machine')({
-  id: MachineId,
-  name: Schema.NonEmptyString.check(Schema.isMaxLength(64)),
-  status: MachineStatus,
-  pairedAt: Schema.Int,
-}) {}
+export class Machine extends Schema.Class<Machine, { readonly brand: unique symbol }>('shinsa/guide/Machine')(
+  {
+    id: MachineId,
+    name: Schema.NonEmptyString.check(Schema.isMaxLength(64)),
+    status: MachineStatus,
+    pairedAt: Schema.Int,
+  }
+) {}
 
 export const PairRequest = Schema.Struct({
   id: MachineId,
@@ -22,23 +24,22 @@ export const PairRequest = Schema.Struct({
 
 export type PairRequest = typeof PairRequest.Type;
 
-class InvalidPayload extends Schema.TaggedError<InvalidPayload>()(
+class InvalidPayload extends Schema.TaggedError<InvalidPayload, { readonly brand: unique symbol }>()(
   'InvalidPayload',
   { message: Schema.String },
   { httpApiStatus: 400 }
 ) {}
 
-export class MachineNotFound extends Schema.TaggedError<MachineNotFound>()(
+export class MachineNotFound extends Schema.TaggedError<MachineNotFound, { readonly brand: unique symbol }>()(
   'MachineNotFound',
   { machineId: MachineId },
   { httpApiStatus: 404 }
 ) {}
 
-export class MachineAlreadyPaired extends Schema.TaggedError<MachineAlreadyPaired>()(
-  'MachineAlreadyPaired',
-  { machineId: MachineId },
-  { httpApiStatus: 409 }
-) {}
+export class MachineAlreadyPaired extends Schema.TaggedError<
+  MachineAlreadyPaired,
+  { readonly brand: unique symbol }
+>()('MachineAlreadyPaired', { machineId: MachineId }, { httpApiStatus: 409 }) {}
 
 const decodePairRequestText = Schema.decodeUnknownEffect(Schema.fromJsonString(PairRequest));
 

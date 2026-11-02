@@ -224,7 +224,7 @@ function Stop({
 }
 
 function Prose({ text, className }: { text: string; className?: string }) {
-  return <Markdown text={text} className={cn('text-fg-4 text-xs', className)} />;
+  return <Markdown text={text} className={cn('text-xs text-fg-4', className)} />;
 }
 
 function BuiltPart({
@@ -346,7 +346,7 @@ function RiskRow({ task, item, selection }: { task: Task; item: ReviewItem; sele
         SKIPPED_OFFSCREEN_ROW
       )}
     >
-      {item.title && <span className='font-medium text-fg-4 text-xs leading-5'>{item.title}</span>}
+      {item.title && <span className='text-xs leading-5 font-medium text-fg-4'>{item.title}</span>}
       <Prose text={item.body} />
       {place && task.repoId && (
         <ChangeSnippet
@@ -442,12 +442,12 @@ const AgentReview = React.memo(function AgentReviewPanel({
       {reviewed || chapter ? (
         <div className='flex flex-col gap-1'>
           {task.reviewSummary && <Prose text={task.reviewSummary} />}
-          <p className='text-fg-3 text-xs'>
+          <p className='text-xs text-fg-3'>
             {describeAgentReview(task.findings)} A signal for you, never the approval.
           </p>
         </div>
       ) : (
-        <p className='text-fg-2 text-xs'>The agent review has not run yet.</p>
+        <p className='text-xs text-fg-2'>The agent review has not run yet.</p>
       )}
       {items.map((item) => (
         <PointCard key={item.key} task={task} item={item} selection={selection} className='rounded-lg' />
@@ -571,8 +571,8 @@ function ReviewSummary({
       title={report.headline}
       action={gate && <ReviewActions state={state} task={task} gate={gate} />}
     >
-      {gate?.escalation && <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>}
-      <p className='text-fg-3 text-xs'>{describePointCount(points)}</p>
+      {gate?.escalation && <p className='text-xs text-fg-3'>{describeEscalationBody(gate.escalation)}</p>}
+      <p className='text-xs text-fg-3'>{describePointCount(points)}</p>
       {!task.report && (
         <p className='text-2xs text-fg-2'>
           The agent handed over no report, so Shinsa marked the riskiest changes.
@@ -696,7 +696,7 @@ export function ReviewTab({
       <div className='flex min-h-0 flex-1 flex-col'>
         <PageScroll>
           <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
-            <p className='text-fg-2 text-xs'>{diff.message}</p>
+            <p className='text-xs text-fg-2'>{diff.message}</p>
             <EvidenceSection state={state} task={task} showEmpty />
           </div>
         </PageScroll>
@@ -706,7 +706,7 @@ export function ReviewTab({
   }
   if (!report) {
     return (
-      <div className={cn(PAGE_COLUMN, 'flex items-center gap-2 py-5 text-fg-2 text-xs')}>
+      <div className={cn(PAGE_COLUMN, 'flex items-center gap-2 py-5 text-xs text-fg-2')}>
         <LoadingLine label='Reading the changes' />
       </div>
     );

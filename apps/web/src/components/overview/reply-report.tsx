@@ -26,7 +26,7 @@ import { describeMentionText } from '@/lib/remote/users.ts';
 
 function SentQuote({ text, className }: { text: string; className?: string }) {
   return (
-    <div className={cn('prose-shinsa selectable min-w-0 text-xs', className)}>
+    <div className={cn('prose-shinsa min-w-0 selectable text-xs', className)}>
       <blockquote className='whitespace-pre-wrap'>{text}</blockquote>
     </div>
   );
@@ -45,7 +45,7 @@ function SentFold({ task, iteration }: { task: Task; iteration: Iteration }) {
       <DisclosureHeader
         disclosure={disclosure}
         label={lowerFirst(label)}
-        className='gap-1.5 text-fg-2 text-xs'
+        className='gap-1.5 text-xs text-fg-2'
       >
         <span className='group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4'>{label}</span>
         <DisclosureChevron />
@@ -78,7 +78,7 @@ export function WorkingRequest({ iteration }: { iteration: Iteration }) {
   if (!text) return null;
   return (
     <div className='flex flex-col gap-1'>
-      <span className='text-fg-2 text-xs'>
+      <span className='text-xs text-fg-2'>
         <MentionText mention={label} />
       </span>
       <SentQuote text={text} className='line-clamp-4' />

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "bun run --cwd ../web build:remote",
-    "check-types": "tsc --noEmit",
+    "check-types": "effect-tsgo tsc --noEmit",
     "deploy": "wrangler deploy",
     "dev:worker": "bun run --cwd ../web build:remote && wrangler dev --port 5183",
     "migrate": "wrangler d1 migrations apply shinsa-cloud --remote",

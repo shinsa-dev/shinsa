@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import type { UserCommand } from '@shinsa/core';
+import { DomainError, type UserCommand } from '@shinsa/core';
 import { type CommandRouter, createManageClient } from '../../../src/agents/manage/client.ts';
 import { createProjectChanges } from '../../../src/projects/routes.ts';
 import type { DispatchOptions } from '../../../src/runtime/engine.ts';
@@ -43,6 +43,27 @@ describe('what an agent changes through its management tools', () => {
         options: { id: 'agent:run:1:call:7:1', onBehalf: true, byTask: 'task-1' },
       },
     ]);
+  });
+
+  test('a command that does not parse is refused with its code and routes nothing', async () => {
+    const routed: UserCommand[] = [];
+    const client = createManageClient({
+      engine: createEngine(),
+      base: 'http://127.0.0.1:1',
+      key: null,
+      byTask: 'task-1',
+      route: (command) => {
+        routed.push(command);
+        return Promise.resolve([]);
+      },
+    });
+    const refusal = await client.send({ type: 'task.message', taskId: 7, text: 'Rebase.' } as never).then(
+      () => null,
+      (error: unknown) => error
+    );
+    expect(refusal).toBeInstanceOf(DomainError);
+    expect(refusal).toMatchObject({ code: 'command_invalid', message: 'taskId must be text.' });
+    expect(routed).toEqual([]);
   });
 
   test('without a router, a command it sends goes straight to the engine on your behalf', async () => {

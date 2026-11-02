@@ -6,8 +6,8 @@ import {
   type WatchSource,
 } from '../domain/index.ts';
 import { HOUR_MS } from '../domain/time.ts';
+import { PROTOCOL_LIMITS } from '../report/schema.ts';
 import type { WatchdogSpec } from '../report/types.ts';
-import { PROTOCOL_LIMITS } from '../report/validate.ts';
 import { resolveReadPrompt } from './reads.ts';
 
 function describeHours(ms: number) {

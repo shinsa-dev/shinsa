@@ -27,6 +27,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - run: bun install --frozen-lockfile
       - name: Bundle the engine entry
         run: bun build apps/engine/scripts/engine-main.ts --target=bun --outdir "$RUNNER_TEMP/engine-entry"

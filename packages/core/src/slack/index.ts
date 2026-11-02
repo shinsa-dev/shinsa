@@ -25,19 +25,11 @@ export {
   type SlackMessage,
   type SlackMrkdwn,
 } from './blocks.ts';
-export {
-  parseSlackMention,
-  resolveSlackMentionThread,
-  SLACK_ENGINE_EVENTS_PATH,
-  SLACK_LIMITS,
-  type SlackMention,
-  type SlackThreadMessage,
-} from './contract.ts';
+export { parseSlackMention, resolveSlackMentionThread, SLACK_ENGINE_EVENTS_PATH } from './contract.ts';
 export {
   parseSlackEvaluation,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
-  type SlackEvaluation,
   serializeSlackEvaluationPrompt,
 } from './evaluation.ts';
 export {
@@ -98,3 +90,4 @@ export {
   type SlackSnapshot,
 } from './relay.ts';
 export { serializeSlackMessage, serializeSlackRequest, serializeSlackThread } from './thread.ts';
+export { SLACK_LIMITS, type SlackEvaluation, type SlackMention, type SlackThreadMessage } from './schema.ts';

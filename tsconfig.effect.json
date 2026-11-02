@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "ignoreEffectSuggestionsInTscExitCode": true,
+        "ignoreEffectWarningsInTscExitCode": false,
+        "ignoreEffectErrorsInTscExitCode": false,
+        "includeSuggestionsInTsc": false,
+        "allowedUnstableApis": [
+          "effect/http",
+          "effect/http-api",
+          "effect/sql",
+          "@effect/sql-d1",
+          "@effect/sql-sqlite-bun"
+        ],
+        "allowedExperimentalApis": [],
+        "diagnosticSeverity": {
+          "anyUnknownInErrorContext": "error",
+          "classSelfMismatch": "error",
+          "duplicatePackage": "error",
+          "effectFnImplicitAny": "error",
+          "errorPayloadShadowsName": "error",
+          "experimentalApiUsage": "error",
+          "floatingEffect": "error",
+          "floatingEffectInVitest": "error",
+          "genericEffectServices": "error",
+          "missingEffectContext": "error",
+          "missingEffectError": "error",
+          "missingLayerContext": "error",
+          "missingReturnYieldStar": "error",
+          "missingStarInYieldEffectGen": "error",
+          "nonObjectEffectServiceType": "error",
+          "obsoleteMatchImport": "error",
+          "obsoleteSchemaImport": "error",
+          "outdatedApi": "error",
+          "overriddenSchemaConstructor": "error",
+          "preferSchemaTaggedError": "error",
+          "promiseInEffectSuccess": "error",
+          "schemaClassMissingBrand": "error",
+          "schemaClassObjectLiteral": "error",
+          "schemaLiteralNonFinite": "error",
+          "schemaOpaqueInstanceMember": "error",
+          "unsafeEffectTypeAssertion": "error",
+          "unstableApiUsage": "error"
+        },
+        "overrides": []
+      }
+    ]
+  }
+}

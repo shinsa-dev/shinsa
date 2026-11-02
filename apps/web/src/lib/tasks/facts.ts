@@ -85,15 +85,13 @@ export function listTeammateDuplicates(local: ShinsaState | null, feed: TeamFeed
     .map((listing) => ({ task: listing.task, listing }));
   return [...own, ...shared]
     .sort((a, b) => a.task.createdAt - b.task.createdAt)
-    .map(
-      ({ task: duplicate, listing }): KeptOverTeammateLink => ({
-        key: listing ? `${listing.instanceId} ${duplicate.id}` : duplicate.id,
-        handle: duplicate.handle ?? null,
-        title: duplicate.title,
-        path: listing ? resolveTeamTaskPath(resolveTeamTaskTarget(listing)) : resolveTaskPath(duplicate),
-        listing,
-      })
-    );
+    .map(({ task: duplicate, listing }): KeptOverTeammateLink => ({
+      key: listing ? `${listing.instanceId} ${duplicate.id}` : duplicate.id,
+      handle: duplicate.handle ?? null,
+      title: duplicate.title,
+      path: listing ? resolveTeamTaskPath(resolveTeamTaskTarget(listing)) : resolveTaskPath(duplicate),
+      listing,
+    }));
 }
 
 export function describeDuplicateHint(

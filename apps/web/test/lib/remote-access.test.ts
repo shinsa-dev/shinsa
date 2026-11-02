@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import { describeMentionText } from '@/lib/remote/users.ts';
 import {
   canEnrollDevices,
   describeAcceptOutcome,
@@ -11,6 +10,7 @@ import {
   LINK_COPY,
   resolveQrImage,
 } from '@/lib/remote-access.ts';
+import { describeMentionText } from '@/lib/remote/users.ts';
 import { createRemoteSnapshot } from '../support/remote-access.ts';
 
 const NOW = 1_800_000_000_000;

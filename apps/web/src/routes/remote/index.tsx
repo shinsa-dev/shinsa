@@ -10,8 +10,8 @@ import {
   stashEnrollFragment,
 } from '@/lib/remote/mode.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
-import { createTeamKeyStore, selectTeamJoinFragment, stashTeamJoinFragment } from '@/lib/teams/join.ts';
 import { createJoinMachinesSource } from '@/lib/teams/join-machines.ts';
+import { createTeamKeyStore, selectTeamJoinFragment, stashTeamJoinFragment } from '@/lib/teams/join.ts';
 import { ClaimPage } from './claim.tsx';
 import { EnrollPage } from './enroll.tsx';
 import { FleetApp } from './fleet.tsx';
@@ -66,7 +66,7 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
   const content = (() => {
     if (failure)
       return (
-        <p role='alert' className='text-destructive text-xs'>
+        <p role='alert' className='text-xs text-destructive'>
           {failure}
         </p>
       );

@@ -56,6 +56,7 @@ export function changeDependencies(
   const task = decider.task(taskId);
   if (isSameList(waitsOn, task.waitsOn)) return;
   decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
+  // oxlint-disable-next-line typescript/switch-exhaustiveness-check -- a task that is watching has merged, so what it waits on changes nothing
   switch (task.stage) {
     case 'waiting_on_tasks':
       decider.withdrawGates(taskId, (gate) => gate.type === 'failure');

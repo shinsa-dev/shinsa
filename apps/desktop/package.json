@@ -9,7 +9,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "build": "bun scripts/build.ts",
-    "check-types": "tsc --noEmit",
+    "check-types": "effect-tsgo tsc --noEmit",
     "dev": "bun run build && bun scripts/dev.ts",
     "dmg-background": "bun scripts/dmg-background.ts",
     "icon": "bun scripts/icon.ts",

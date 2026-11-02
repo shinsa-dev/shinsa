@@ -172,7 +172,7 @@ function ScrollArea({
             onScroll?.(event);
           }}
           className={cn(
-            'size-full overflow-y-auto overflow-x-hidden rounded-[inherit] outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+            'size-full [scrollbar-width:none] overflow-x-hidden overflow-y-auto rounded-[inherit] outline-none [&::-webkit-scrollbar]:hidden',
             fade && 'scroll-fade-source',
             viewportClassName
           )}
@@ -185,7 +185,7 @@ function ScrollArea({
         aria-hidden
         data-slot='scroll-area-scrollbar'
         onPointerDown={onTrackDown}
-        className='group/scrollbar absolute inset-y-0 right-0 z-20 w-3 py-1 pr-0.75 pl-1 opacity-0 transition-[opacity,padding] delay-300 duration-200 hover:pl-0.5 hover:opacity-100 hover:delay-0 active:pl-0.5 active:opacity-100 active:delay-0 data-hidden:hidden data-dragging:pl-0.5 data-dragging:opacity-100 data-scrolling:opacity-100 data-scrolling:delay-0'
+        className='group/scrollbar absolute inset-y-0 right-0 z-20 w-3 py-1 pr-0.75 pl-1 opacity-0 transition-[opacity,padding] delay-300 duration-200 hover:pl-0.5 hover:opacity-100 hover:delay-0 active:pl-0.5 active:opacity-100 active:delay-0 data-dragging:pl-0.5 data-dragging:opacity-100 data-hidden:hidden data-scrolling:opacity-100 data-scrolling:delay-0'
       >
         <div
           ref={thumb}

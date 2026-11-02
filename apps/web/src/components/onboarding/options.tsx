@@ -99,7 +99,7 @@ export function OptionList({
             {options.map((option, index) => {
               const selected = values.includes(option.value);
               return (
-                // biome-ignore lint/a11y/useKeyWithClickEvents: the listbox takes the keys for its options
+                // oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- the listbox takes the keys for its options
                 <div
                   key={option.value}
                   id={`${id}-${index}`}

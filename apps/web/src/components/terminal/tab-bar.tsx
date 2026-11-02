@@ -169,7 +169,7 @@ function TerminalTab({
         }
       }}
       onDoubleClick={onRename}
-      className='group/tab min-w-0 max-w-56 shrink-0 data-dragging:opacity-50 group-data-[variant=default]/tabs-list:pe-0.5'
+      className='group/tab max-w-56 min-w-0 shrink-0 group-data-[variant=default]/tabs-list:pe-0.5 data-dragging:opacity-50'
     >
       {service ? (
         <ServiceTabLabel label={label} service={service} now={now} ended={ended} active={active} />

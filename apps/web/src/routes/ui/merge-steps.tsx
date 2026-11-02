@@ -52,7 +52,7 @@ function MergeGate({ state, initial }: { state: ShinsaState; initial: Task }) {
         </>
       }
     >
-      <p className='text-fg-3 text-xs'>All 6 checks passed on GitHub and nothing is unresolved.</p>
+      <p className='text-xs text-fg-3'>All 6 checks passed on GitHub and nothing is unresolved.</p>
       <MergeStepsBlock task={task} when='pre_merge' onTick={tick} />
     </NowFrame>
   );

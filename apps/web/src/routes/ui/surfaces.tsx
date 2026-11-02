@@ -63,7 +63,7 @@ export function SurfaceSpecimens() {
             <Input defaultValue='Superwall' />
           </CardContent>
           <CardFooter>
-            <span className='text-fg-2 text-sm'>Max. 100 characters</span>
+            <span className='text-sm text-fg-2'>Max. 100 characters</span>
             <Button size='xs'>Save</Button>
           </CardFooter>
         </Card>
@@ -81,8 +81,8 @@ export function SurfaceSpecimens() {
             ).map(([title, pr, when]) => (
               <li key={title} className='flex items-center gap-2.5 px-4 py-2'>
                 <Icon size='md' name='IconMerged' className='text-purple-4' />
-                <span className='min-w-0 flex-1 truncate text-fg-4 text-sm'>{title}</span>
-                <span className='shrink-0 text-fg-2 text-xs tabular-nums'>
+                <span className='min-w-0 flex-1 truncate text-sm text-fg-4'>{title}</span>
+                <span className='shrink-0 text-xs text-fg-2 tabular-nums'>
                   {pr} · {when}
                 </span>
               </li>
@@ -120,14 +120,14 @@ export function SurfaceSpecimens() {
         </Specimen>
         <Specimen label='separator'>
           <div className='flex w-48 flex-col gap-2'>
-            <span className='text-fg-3 text-sm'>Above</span>
+            <span className='text-sm text-fg-3'>Above</span>
             <Separator />
-            <span className='text-fg-3 text-sm'>Below</span>
+            <span className='text-sm text-fg-3'>Below</span>
           </div>
           <div className='flex h-10 items-center gap-3'>
-            <span className='text-fg-3 text-sm'>Left</span>
+            <span className='text-sm text-fg-3'>Left</span>
             <Separator orientation='vertical' />
-            <span className='text-fg-3 text-sm'>Right</span>
+            <span className='text-sm text-fg-3'>Right</span>
           </div>
         </Specimen>
       </Section>
@@ -202,11 +202,11 @@ export function SurfaceSpecimens() {
         className='items-start'
       >
         <div className='flex flex-col gap-2'>
-          <span className='text-fg-2 text-xs'>ScrollArea</span>
+          <span className='text-xs text-fg-2'>ScrollArea</span>
           <ScrollArea className='h-40 w-64 rounded-xl bg-bg-2 p-3'>
             <div className='flex flex-col gap-2'>
               {SCROLL_ROWS.map((row) => (
-                <div key={row.id} className='text-fg-3 text-sm'>
+                <div key={row.id} className='text-sm text-fg-3'>
                   {row.label}
                 </div>
               ))}
@@ -214,11 +214,11 @@ export function SurfaceSpecimens() {
           </ScrollArea>
         </div>
         <div className='flex flex-col gap-2'>
-          <span className='text-fg-2 text-xs'>ScrollFade</span>
+          <span className='text-xs text-fg-2'>ScrollFade</span>
           <ScrollFade className='h-40 w-64 rounded-xl bg-bg-2 p-3'>
             <div className='flex flex-col gap-2'>
               {FADE_ROWS.map((row) => (
-                <div key={row.id} className='text-fg-3 text-sm'>
+                <div key={row.id} className='text-sm text-fg-3'>
                   {row.label}
                 </div>
               ))}
@@ -237,12 +237,12 @@ export function SurfaceSpecimens() {
         </Button>
         <SizeAnimator className='w-72 rounded-xl bg-bg-2'>
           <div className='flex flex-col gap-2 p-3'>
-            <span className='text-fg-3 text-sm'>Always visible</span>
+            <span className='text-sm text-fg-3'>Always visible</span>
             {expanded && (
               <>
-                <span className='text-fg-3 text-sm'>Revealed row one</span>
-                <span className='text-fg-3 text-sm'>Revealed row two</span>
-                <span className='text-fg-3 text-sm'>Revealed row three</span>
+                <span className='text-sm text-fg-3'>Revealed row one</span>
+                <span className='text-sm text-fg-3'>Revealed row two</span>
+                <span className='text-sm text-fg-3'>Revealed row three</span>
               </>
             )}
           </div>

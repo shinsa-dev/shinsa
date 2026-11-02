@@ -280,7 +280,7 @@ async function runEngineAction(action: EngineAction) {
       await shell.openExternal(PRIVACY_URL);
       return;
     case 'copy-details':
-      clipboard.writeText(engine?.readDetails() ?? '');
+      void clipboard.writeText(engine?.readDetails() ?? '');
       return;
     case 'restart':
       await restartEngine();

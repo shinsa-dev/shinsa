@@ -142,12 +142,12 @@ function ScrollFade({
         data-fade-scope=''
         data-fade-orientation={orientation}
         style={{ ...timelines, '--fade-size': dim } as React.CSSProperties}
-        className='scroll-fade size-full rounded-[inherit]'
+        className='size-full scroll-fade rounded-[inherit]'
       >
         <div
           ref={internalRef}
           data-slot='scroll-fade-viewport'
-          className={cn('scroll-fade-source scrollbar-hide size-full rounded-[inherit]', overflow)}
+          className={cn('scrollbar-hide size-full rounded-[inherit] scroll-fade-source', overflow)}
         >
           {children}
         </div>

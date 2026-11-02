@@ -1,5 +1,6 @@
 import { describeList } from '../chat/text.ts';
-import type { Schedule, ScheduleTrigger } from '../domain/schedules.ts';
+import type { Schedule } from '../domain/schedules.ts';
+import type { ScheduleTrigger } from '../domain/schema.ts';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 

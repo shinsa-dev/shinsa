@@ -1,7 +1,7 @@
 import { resolveSlackThreadKey, type SlackThreadRef } from '../domain/slack.ts';
 import type { BundlePullRequest } from '../domain/types.ts';
-import type { SlackMention } from '../slack/contract.ts';
 import type { SlackPost } from '../slack/posts.ts';
+import type { SlackMention } from '../slack/schema.ts';
 
 export interface CheckToRun {
   id: string;

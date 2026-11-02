@@ -93,7 +93,7 @@ function resolveProgramStatus(
 }
 
 function cleanOutputLine(line: string) {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: updaters colour and redraw their output with escape codes
+  // oxlint-disable-next-line eslint/no-control-regex -- updaters colour and redraw their output with escape codes
   return redactSecrets(line.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '').trim());
 }
 

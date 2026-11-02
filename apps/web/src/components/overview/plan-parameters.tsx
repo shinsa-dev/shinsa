@@ -34,12 +34,12 @@ export function PlanParameterList({
     <div className='flex flex-col gap-3'>
       {view.impact && (
         <Parameter title='Impact' headingClassName={headingClassName}>
-          <Markdown text={view.impact} className='text-fg-3 text-xs' />
+          <Markdown text={view.impact} className='text-xs text-fg-3' />
         </Parameter>
       )}
       {view.evidence.length > 0 && (
         <Parameter title='Evidence' headingClassName={headingClassName}>
-          <span className='text-fg-3 text-xs'>{view.evidence.join(' · ')}</span>
+          <span className='text-xs text-fg-3'>{view.evidence.join(' · ')}</span>
         </Parameter>
       )}
       {view.checks.length > 0 && (
@@ -48,10 +48,10 @@ export function PlanParameterList({
             {view.checks.map((check) => (
               <li key={check.command} className='flex min-w-0 flex-col gap-1'>
                 <span className='flex min-w-0 flex-wrap items-baseline gap-x-1.5'>
-                  <span className='text-fg-3 text-xs'>{check.label}</span>
+                  <span className='text-xs text-fg-3'>{check.label}</span>
                   {check.phases && <span className='text-2xs text-fg-2'>{check.phases}</span>}
                 </span>
-                <span className={cn(CHIP, 'selectable break-all font-mono text-2xs')}>{check.command}</span>
+                <span className={cn(CHIP, 'selectable font-mono text-2xs break-all')}>{check.command}</span>
               </li>
             ))}
           </ul>
