@@ -918,7 +918,10 @@ describe('links, access requests and members', () => {
     const laptop = settleChannel(
       openChannel(remote.appOrigin, port, secret, machine.publicKey, { name: 'Laptop' })
     );
-    await until('both requests', () => remote.snapshot().requests.length === 2);
+    await until('both requests, the phone’s renamed', () => {
+      const { requests } = remote.snapshot();
+      return requests.length === 2 && requests.some((request) => request.deviceName === 'Phone');
+    });
     expect(
       remote.snapshot().requests.map((request) => [request.id === requestId, request.deviceName])
     ).toEqual([
