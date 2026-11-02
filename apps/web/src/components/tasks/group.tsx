@@ -32,7 +32,7 @@ export function TaskGroupSection({
         disclosure={disclosure}
         strip='block'
         chevron='glyph'
-        className='sticky top-0 z-10 w-full gap-2 bg-bg-1 ps-3 font-medium text-2xs text-fg-3 after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-border hover:text-fg-4 active:text-fg-4'
+        className='sticky top-0 z-10 w-full gap-2 bg-bg-1 ps-3 text-2xs font-medium text-fg-3 after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-border hover:text-fg-4 active:text-fg-4'
       >
         <Icon size='sm' name={group.icon} className={TONE_TEXT[group.tone]} />
         {group.title}

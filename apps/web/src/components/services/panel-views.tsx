@@ -59,9 +59,9 @@ export function PanelHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className='flex shrink-0 items-center gap-2 border-border border-b py-3 ps-3 pe-1.5'>
+    <div className='flex shrink-0 items-center gap-2 border-b border-border py-3 ps-3 pe-1.5'>
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
-        <h2 className='truncate font-medium text-fg-4 text-xs'>{title}</h2>
+        <h2 className='truncate text-xs font-medium text-fg-4'>{title}</h2>
         {description && <p className='text-2xs text-fg-2'>{description}</p>}
       </span>
       {children}
@@ -111,8 +111,7 @@ function SuggestionRow({
   onToggle: () => void;
 }) {
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the checkbox inside takes the keys
-    // biome-ignore lint/a11y/noStaticElementInteractions: the whole row toggles its checkbox
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the checkbox inside takes the keys; the whole row toggles its checkbox
     <div data-highlight-item='' onClick={onToggle} className={cn(LIST_ROW, LIST_ROW_LINES, 'px-1.5')}>
       <span className={ICON_SLOT}>
         <Checkbox
@@ -183,7 +182,7 @@ function ServicePicker({
           type='button'
           data-highlight-item=''
           onClick={onCustom}
-          className={cn(LIST_ROW, LIST_ROW_LINE, 'px-1.5 text-fg-3 text-xs')}
+          className={cn(LIST_ROW, LIST_ROW_LINE, 'px-1.5 text-xs text-fg-3')}
         >
           <span className={ICON_SLOT}>
             <Icon name='IconPlusMedium' size='sm' />

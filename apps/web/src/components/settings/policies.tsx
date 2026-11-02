@@ -147,7 +147,7 @@ function PolicyRow({
   const { run } = useBusy<'remove'>();
   return (
     <div className={cn(SETTING_ROW, 'gap-2')}>
-      <span className='selectable min-w-0 flex-1 py-1 text-fg-4 text-xs'>{text}</span>
+      <span className='min-w-0 flex-1 selectable py-1 text-xs text-fg-4'>{text}</span>
       <div className='flex shrink-0 items-center gap-1'>
         <IconAction label='Edit' icon='IconPencil' onClick={onEdit} />
         <IconAction label='Remove' icon='IconCrossSmall' onClick={() => void run('remove', onRemove)} />
@@ -207,7 +207,7 @@ export function PolicySettings({
             key={machine.id}
             header={
               <>
-                <Truncate className='min-w-0 flex-1 font-medium text-fg-4 text-xs'>
+                <Truncate className='min-w-0 flex-1 text-xs font-medium text-fg-4'>
                   {resolveMachineLabel(machine)}
                 </Truncate>
                 <span className={TOKEN_TEXT}>{describePolicyCount(policies.length)}</span>

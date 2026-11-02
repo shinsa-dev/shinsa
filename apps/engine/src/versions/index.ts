@@ -93,13 +93,13 @@ function resolveProgramStatus(
 }
 
 function cleanOutputLine(line: string) {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: updaters colour and redraw their output with escape codes
+  // oxlint-disable-next-line eslint/no-control-regex -- updaters colour and redraw their output with escape codes
   return redactSecrets(line.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '').trim());
 }
 
 function readProgramId(value: unknown): ProgramId {
   if (value === 'claude' || value === 'codex') return value;
-  throw new DomainError('program_invalid', 'Update claude or codex.');
+  throw new DomainError({ code: 'program_invalid', message: 'Update claude or codex.' });
 }
 
 function describeRunFailure(label: string, result: CommandResult) {
@@ -205,11 +205,15 @@ export class Versions {
     if (this.#options.inspect) {
       throw createReadOnlyError();
     }
-    if (this.#running.has(id)) throw new DomainError('update_running', `${label} is already updating.`);
+    if (this.#running.has(id))
+      throw new DomainError({ code: 'update_running', message: `${label} is already updating.` });
     const { path, override } = (this.#options.locate ?? locateInstalledProgram)(id);
-    if (!path) throw new DomainError('program_missing', `${label} is not installed.`);
+    if (!path) throw new DomainError({ code: 'program_missing', message: `${label} is not installed.` });
     if (override) {
-      throw new DomainError('program_override', `Update ${label} yourself (${overrideEnv}).`);
+      throw new DomainError({
+        code: 'program_override',
+        message: `Update ${label} yourself (${overrideEnv}).`,
+      });
     }
     this.#running.add(id);
     return (onLine) => this.#update(id, path, onLine).finally(() => this.#running.delete(id));

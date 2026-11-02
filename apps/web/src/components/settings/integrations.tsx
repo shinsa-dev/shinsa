@@ -55,7 +55,7 @@ export function IntegrationSettings({ state }: { state: ShinsaState }) {
         aria-label={EXTENSION_LABEL.search}
       />
       {searching && isEmptyMatch(matches) && (
-        <p className='px-1 text-fg-2 text-xs'>{EXTENSION_LABEL.nothingMatches}</p>
+        <p className='px-1 text-xs text-fg-2'>{EXTENSION_LABEL.nothingMatches}</p>
       )}
       {!searching && <ContextOptimizerGroup snapshot={snapshot} actions={EXTENSION_ACTIONS} />}
       {(!searching || matches.servers.length > 0) && (

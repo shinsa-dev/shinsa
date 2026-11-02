@@ -5,6 +5,7 @@ import {
   buildAll,
   createHarness,
   createTask,
+  decideOrThrow,
   failing,
   type Harness,
   PASSING,
@@ -253,5 +254,22 @@ describe('when the wait ends', () => {
       summary: 'crash',
     });
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix', monitorId });
+  });
+  test('a run left live on a finished task cannot wait', () => {
+    const { harness, taskId } = building();
+    const run = harness.activeRun(taskId);
+    const task = { ...harness.task(taskId), stage: 'merged' as const };
+    const state = { ...harness.state, tasks: { ...harness.state.tasks, [taskId]: task } };
+    const command = {
+      type: 'agent.wait_for' as const,
+      runId: run.id,
+      checkInMinutes: 10,
+      notes: 'Check that the staging deploy finished.',
+      timeoutMinutes: null,
+      maxAttempts: null,
+    };
+    expect(() => decideOrThrow(state, command, { now: 2_000, newId: () => 'id' })).toThrow(
+      'This task is finished. End your turn.'
+    );
   });
 });

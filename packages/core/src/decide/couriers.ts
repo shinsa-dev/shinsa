@@ -15,24 +15,27 @@ function selectCreated(decider: Decider, task: Task, requestKey: string) {
 
 function assertCanWait(run: Run) {
   if (run.purpose === 'build' || run.purpose === 'fix') return;
-  throw new DomainError(
-    'cannot_wait',
-    'Only a task that is building can wait on a task it creates. Create it with this_task_waits once you build, or now with after_this when it should merge after this task; otherwise create it without either and say how the two relate in your hand-over.'
-  );
+  throw new DomainError({
+    code: 'cannot_wait',
+    message:
+      'Only a task that is building can wait on a task it creates. Create it with this_task_waits once you build, or now with after_this when it should merge after this task; otherwise create it without either and say how the two relate in your hand-over.',
+  });
 }
 
 function assertOneOrder(command: CommandOf<'agent.create_task'>) {
   if (command.stackOnThis && (command.thisWaits || command.afterThis)) {
-    throw new DomainError(
-      'dependency_cycle',
-      'Set stack_on_this alone: the new task already waits for this one to be ready, and this task cannot wait for it.'
-    );
+    throw new DomainError({
+      code: 'dependency_cycle',
+      message:
+        'Set stack_on_this alone: the new task already waits for this one to be ready, and this task cannot wait for it.',
+    });
   }
   if (!command.thisWaits || !command.afterThis) return;
-  throw new DomainError(
-    'dependency_cycle',
-    'Set this_task_waits or after_this, not both: two tasks cannot each wait for the other to merge.'
-  );
+  throw new DomainError({
+    code: 'dependency_cycle',
+    message:
+      'Set this_task_waits or after_this, not both: two tasks cannot each wait for the other to merge.',
+  });
 }
 
 interface SpawnOptions {
@@ -98,10 +101,10 @@ export function splitTask(decider: Decider, command: CommandOf<'agent.split_task
   const version = task.plan?.version ?? 0;
   if (task.splits?.some((split) => split.planVersion === version)) return;
   if (command.requests.length === 0 || command.requests.length > DELEGATION_LIMITS.splitTasks) {
-    throw new DomainError(
-      'split_size',
-      `Split the plan into 1 to ${DELEGATION_LIMITS.splitTasks} tasks; this asked for ${command.requests.length}.`
-    );
+    throw new DomainError({
+      code: 'split_size',
+      message: `Split the plan into 1 to ${DELEGATION_LIMITS.splitTasks} tasks; this asked for ${command.requests.length}.`,
+    });
   }
   const requestKey = `plan:${version}`;
   const taskIds = command.requests.map((request) =>

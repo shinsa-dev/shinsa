@@ -88,14 +88,12 @@ function storeComparison(
   const resolved = parts.map((part) => ({ ...part, path: resolveSourcePath(part.path, worktreePath) }));
   const missing = resolved.find((part) => !existsSync(part.path));
   if (missing) throw new Error(`No file at ${missing.path}.`);
-  const stored = resolved.map(
-    ({ path, stage, label }): EvidencePart => ({
-      kind: VIDEO.test(path) ? 'recording' : 'screenshot',
-      uri: evidence.copyFile(path, folder, `${facts.title} ${label ?? stage}`),
-      stage,
-      label,
-    })
-  );
+  const stored = resolved.map(({ path, stage, label }): EvidencePart => ({
+    kind: VIDEO.test(path) ? 'recording' : 'screenshot',
+    uri: evidence.copyFile(path, folder, `${facts.title} ${label ?? stage}`),
+    stage,
+    label,
+  }));
   return { type: 'agent.attach_comparison' as const, ...facts, parts: stored };
 }
 

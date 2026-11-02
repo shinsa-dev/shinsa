@@ -10,7 +10,10 @@ const MAX_SECRET = 10_000;
 function readSecret(fields: JsonObject, key: string) {
   const value = fields[key];
   if (typeof value !== 'string' || value.length === 0 || value.length > MAX_SECRET) {
-    throw new DomainError('secret_invalid', `Paste the secret: 1 to ${MAX_SECRET} characters.`);
+    throw new DomainError({
+      code: 'secret_invalid',
+      message: `Paste the secret: 1 to ${MAX_SECRET} characters.`,
+    });
   }
   return value;
 }
@@ -18,15 +21,17 @@ function readSecret(fields: JsonObject, key: string) {
 function findWebhook(state: ShinsaState, scheduleId: string) {
   const schedule = state.schedules[scheduleId];
   if (schedule?.trigger.kind !== 'webhook') {
-    throw new DomainError('schedule_not_found', 'This schedule has no webhook.');
+    throw new DomainError({ code: 'schedule_not_found', message: 'This schedule has no webhook.' });
   }
   return { schedule, trigger: schedule.trigger };
 }
 
 function findSecretGate(state: ShinsaState, gateId: string) {
   const gate = state.gates[gateId];
-  if (!gate?.secret) throw new DomainError('gate_not_found', 'No secret was asked for here.');
-  if (gate.status !== 'open') throw new DomainError('gate_closed', 'This has already been answered.');
+  if (!gate?.secret)
+    throw new DomainError({ code: 'gate_not_found', message: 'No secret was asked for here.' });
+  if (gate.status !== 'open')
+    throw new DomainError({ code: 'gate_closed', message: 'This has already been answered.' });
   return gate;
 }
 

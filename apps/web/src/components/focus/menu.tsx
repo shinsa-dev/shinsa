@@ -47,7 +47,7 @@ export function ProjectMenuTrigger({
         <button
           type='button'
           className={cn(
-            'corner-superellipse/1.125 flex cursor-pointer items-center text-left text-fg-3 text-xs outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2',
+            'corner-superellipse/1.125 flex cursor-pointer items-center text-left text-xs text-fg-3 outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2',
             compact
               ? 'h-6 gap-1 rounded-control-sm ps-1 pe-1.5'
               : 'h-7 w-full gap-2 rounded-control ps-1.5 pe-2.5'

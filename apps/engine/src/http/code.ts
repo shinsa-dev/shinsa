@@ -70,9 +70,12 @@ function readSearch(url: URL): SearchQuery {
   const query = url.searchParams.get('q') ?? '';
   const glob = url.searchParams.get('glob')?.trim() || null;
   if (!query || query.length > CODE_LIMITS.queryLength || query.includes('\0'))
-    throw new DomainError('query_invalid', `Search for up to ${CODE_LIMITS.queryLength} characters.`);
+    throw new DomainError({
+      code: 'query_invalid',
+      message: `Search for up to ${CODE_LIMITS.queryLength} characters.`,
+    });
   if (glob && (glob.length > MAX_GLOB_LENGTH || /^[-:]|\0/.test(glob)))
-    throw new DomainError('glob_invalid', 'Use a pattern such as src/**/*.ts.');
+    throw new DomainError({ code: 'glob_invalid', message: 'Use a pattern such as src/**/*.ts.' });
   return {
     query,
     regex: readFlag(url, 'regex'),
@@ -104,7 +107,7 @@ export function createCodeRoutes(
 
   function resolveRefs(found: CodeTask, signal: AbortSignal): Promise<TaskRefs> {
     const repo = engine.state.repos[found.task.repoId ?? ''];
-    if (!repo) throw new DomainError('code_unavailable', 'This task has no repository.');
+    if (!repo) throw new DomainError({ code: 'code_unavailable', message: 'This task has no repository.' });
     return resolveTaskRefs(repo, found.task, resolveRoundBase(found.task), signal);
   }
 
@@ -114,7 +117,8 @@ export function createCodeRoutes(
     signal: AbortSignal
   ): Promise<ResolvedRef> {
     if (value === WORKING_REF) {
-      if (!found.worktree) throw new DomainError('ref_invalid', 'This task has no working copy any more.');
+      if (!found.worktree)
+        throw new DomainError({ code: 'ref_invalid', message: 'This task has no working copy any more.' });
       return { kind: 'working', worktree: found.worktree };
     }
     const sha = value || (await resolveRefs(found, signal)).head;
@@ -150,7 +154,8 @@ export function createCodeRoutes(
     const reader = blobs.select(found.repoPath);
     if (ref.kind === 'commit') return readCommitFile(found.repoPath, ref.sha, path, cache, signal, reader);
     const absolute = resolveInside(ref.worktree, path);
-    if (!absolute) throw new DomainError('path_invalid', 'That path leaves the working copy.');
+    if (!absolute)
+      throw new DomainError({ code: 'path_invalid', message: 'That path leaves the working copy.' });
     return Promise.resolve(readWorkingFile(absolute, path));
   }
 

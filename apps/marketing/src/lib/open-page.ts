@@ -1,6 +1,6 @@
 import type { ReviewPayload, ShinsaState, Task } from '@shinsa/core';
-import { type InviteHeader, readReviewFragment, resolveInviteHeader } from './open.ts';
 import { createOpenState } from './open-scene.ts';
+import { type InviteHeader, readReviewFragment, resolveInviteHeader } from './open.ts';
 
 export interface OpenScene {
   state: ShinsaState;

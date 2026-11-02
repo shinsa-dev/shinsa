@@ -9,40 +9,104 @@ none of it is task data: a shared task is read live from its machine, never stor
 
 ## Layout
 
+Every line is Effect 4 (the `effect` skill). The API the pages and machines call is core's `RemoteApi`
+(`@shinsa/core/remote/api`): each `/__remote/*` endpoint declared once with its params, payload, answer and failures,
+which `routes/` implements with `HttpApiBuilder.group`. What no API can declare (redirects, raw bodies, a whole host)
+is a plain `HttpRouter` route beside it. Every request passes the same three gates, in this order: the `Ingress`
+(`http/ingress/`), the sign-in middleware its group names (`PageSession` or `MachineSession`, `auth/`) and the
+`RequestGate` (`http/gate/`), so a body is read only once the caller is known.
+
+**A module is a folder of a `schema.ts` and one logic file** (the `effect` skill → File layout, lint-enforced):
+`schema.ts` holds the module's schemas, the types from them, its errors, interfaces and constants and no function;
+`handler.ts`, `service.ts` and `middleware.ts` hold one export with its steps inside its body, after the services it
+yields once. Untrusted input (Slack's events, GitHub's answers, the OAuth cookie) is read with a schema, never by
+hand, and a row that becomes another shape is a schema transform (`store/shared/schema.ts`: `Count`, `MemberRow`).
+
 ```
 src/
-├── index.ts       The Worker's entry: the bindings (DB, ASSETS, the variables and secrets) into a CloudWorld. The only
-│                  file outside coverage
-├── router.ts      respond: /__remote/* routes (JSON, errors as { error: { code, message } }), /hooks/*, and every other
-│                  GET to the assets with the security headers; createWorld
-├── world.ts       CloudWorld (store, fetch, assets, now, config) and resolveCloudConfig from the Worker's environment
-├── database.ts    The D1 queries (createStore) over the Database interface D1 and the tests' SQLite both meet
-├── session.ts     GitHub OAuth (sign-in, callback, sign-out), the native app's code and token, the session cookie
-│                  or bearer
-├── pairing.ts     Pair start and poll (the machine), the pair view and approval (you, signed in)
-├── instances.ts   Your machines, connect tokens, removal; the machine's heartbeat, offline and removal
-├── members.ts     A machine's members and guests: its invite and hand-off links, who asked through them, adding
-│                  and removing members and guests, Leave
-├── teams.ts       Teams: made by a machine for its owner, one reusable invite, requests, members, Leave, team
-│                  connect tokens to a teammate's /team channel, and the teams in the heartbeat
-├── cloudflare.ts  The Cloudflare API: a named tunnel, its ingress, its DNS record, removing both
-├── hooks.ts       /hooks/<instance>/<schedule>/<token> forwarded to the machine's tunnel
-├── previews.ts    *.shinsa.page: the link's key or the open route's access token into a per-host cookie, then HTTP
-│                  and WebSockets forwarded to the machine's /__preview/<id> route; the open route
-│                  for a private address
-├── slack-link.ts  Connecting Slack: Sign in with Slack, adding the app to a workspace, the link to a machine
-├── slack.ts       Slack's events (signature, dedupe, uninstall), a mention forwarded to its author's machine with
-│                  the thread, a question's choice clicked, and the machine's links, unlink and posts
-├── slack-api.ts   The Slack Web API (requestSlack, SlackApiError) and the scopes
-├── http.ts        CloudError, JSON bodies, cookies, the same-origin check, the security headers
-├── crypto.ts      Random tokens, claim codes and instance ids, token hashes, the bot tokens sealed with AES-GCM,
-│                  Slack's request signature (hex and constant-time comparison are core's serializeHex, isSameSecret)
-└── log.ts         recordFailure: the one console call (Workers Logs)
-migrations/        D1's schema (wrangler d1 migrations), applied in order
-slack-manifest.json The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts
-                   keeps its scopes, redirects and events in step with the code
-test/              One file per route group, against harness.ts: D1 on bun:sqlite with every migration, and
-                   GitHub, the Cloudflare API, Slack and a machine's tunnel as fakes
+├── index.ts         The Worker's entry: one handler per isolate's bindings (D1 through @effect/sql-d1, ASSETS, the
+│                    variables and secrets as the ConfigProvider), and each request's waitUntil as its
+│                    WorkerContext. The only file outside coverage
+├── app.ts           makeCloudHandler: the API's groups with the three middlewares, the plain routes and the Ingress
+│                    over CloudServices, given the platform (the SQL client and the assets), as one web handler
+├── layers.ts        CloudServices: every service below as one Layer, needing only the SQL client and the
+│                    configuration provider (the Worker gives D1 and its bindings, the tests SQLite and TEST_ENV)
+├── config/          CloudConfig (service.ts): every variable read once with Effect's Config (CLOUD_CONFIG in
+│                    schema.ts), the secrets Redacted, the defaults in one place; an unreadable MAX_INSTANCES stops
+│                    the Worker instead of falling back
+├── crypto/          CloudCrypto (service.ts): random tokens (Redacted), claim codes and the instance and team ids,
+│                    PKCE challenges, the bot tokens sealed with AES-GCM under SLACK_TOKEN_KEY (imported once),
+│                    Slack's request signature (none without a signing secret, so an empty key cannot be forged);
+│                    schema.ts: TokenHash (the only shape a table keeps a token in), CryptoFailed, the alphabets
+├── http/            The edge. ingress/ (Ingress: a preview host goes to PreviewHost before any route; a route that
+│                    is not there is the app's page for a GET, 404 under /__remote/ and 405 otherwise; every failure
+│                    becomes its { error: { code, message } } through core's serializeRemoteFailure, anything
+│                    unexpected the plain server_error, logged; the security headers on all but /hooks/*), gate/
+│                    (RequestGate: application/json, the endpoint's BodyLimit, 16 KB unless it says more, and a body
+│                    or path id its schema refuses as body_invalid or not_found; every failure of 500 or more
+│                    logged); the edge's own modules: cookies.ts (the one cookie format: Path=/, Max-Age,
+│                    HttpOnly, Secure, SameSite=Lax), responses.ts (redirects with their cookies, a failure as JSON,
+│                    text, a header on an API answer), request.ts (the request's URL and a cookie), forward.ts (what
+│                    never reaches a machine: hop-by-hop, Cloudflare's and proxies' headers; the tunnel statuses that
+│                    mean offline), worker.ts (WorkerContext and deferWork, Assets, WorkerLogger: Workers Logs'
+│                    console, errors to console.error)
+├── auth/            page-session/ (PageSession: the bearer, or the session cookie with the same-origin check on a
+│                    POST and never when a bearer was sent), machine-session/ (MachineSession: the machine token),
+│                    tokens.ts (the session's steps: selectSessionToken, selectRequestUser for the routes that work
+│                    signed out too, assertPageRequest, createSession), access.ts (findMachineAccess: owner, member
+│                    or guest, else not_found; findOwnMachine; findTeamAccess and findOwnTeam), schema.ts (the access
+│                    grants, BEARER, SESSION_TTL, SIGN_IN_EXPIRED)
+├── domain/          The Worker's own steps several routes share: machines.ts (isMachineOnline, a RemoteInstance,
+│                    a connect token's answer for the /remote or /team channel, a machine's owner, members and
+│                    guests, removeMachine: its tunnel, then its row), teams.ts (a RemoteTeam with its machines and,
+│                    for its owner, the requests; a user's teams; an invite replaced, a team found by its invite,
+│                    joining, leaving and a team connect token), schema.ts (ONLINE_WINDOW, ChannelKind)
+├── routes/          One folder per group of the API and per set of plain routes, each a handler.ts and, when it has
+│                    shapes of its own, a schema.ts: session/, sign-in/ (GitHub OAuth, the native app's code and
+│                    token), pairing/ (pair start and poll, the machine's), pairs/ (the pair view and approval,
+│                    yours), instances/ (your machines, connect, remove, leave, accepting an invite or a hand-off),
+│                    shares/ (a share's connect), machine/ (every machine-token route: heartbeat, offline, removal,
+│                    invites, hand-offs, members, guests), teams/ and machine-teams/ (a page's teams and the
+│                    machine's), slack-relay/ (a machine's links, posts, thread status and reactions), slack-link/
+│                    (Sign in with Slack, adding the app), slack-events/ (events and a question's choice clicked,
+│                    each Slack payload a schema: EventEnvelope, MentionEnvelope, UninstallEvent, ThreadMessage,
+│                    BlockActions), hooks/ (/hooks/<instance>/<schedule>/<token> to the machine), preview-open/ (the
+│                    open route for a private address), previews/ (PreviewHost, service.ts: *.shinsa.page forwarded
+│                    to its machine; address.ts: isPreviewHost and resolveForwardCookie)
+├── slack/           What the Slack routes share: signed-body.ts (readSignedBody: its size, Slack's signature within
+│                    five minutes), workspace.ts (a workspace's bot token, opened; a request to a machine signed with
+│                    its connect key), schema.ts (the limits)
+├── store/           The D1 tables as services over SqlClient, one folder each (schema.ts: the row schemas and
+│                    column lists; service.ts: the service), every row decoded and every value encoded by a Schema
+│                    (SqlSchema), ids branded, `orDie` at each method: accounts/ (users, sessions, sign-in codes),
+│                    pairings/, machines/ (instances, with SharedMachine for a user's list), access/ (invites,
+│                    requesters, members, guests, hand-offs), teams/ (and their invites, requesters, members),
+│                    slack/; shared/ (schema.ts: SQL_NAMES, USER_COLUMNS, Found, Count and MemberRow as schema
+│                    transforms; membership.ts and invites.ts: createMembership and createInvites, the two shapes
+│                    several tables share); index.ts StoreLayer. A method that records a time reads Clock itself
+└── integrations/    The outside world, each a folder (schema.ts: its answers as schemas; service.ts: the service)
+                     over HttpClient (http.ts: OutboundHttp, fetch with trace headers off, so no request to GitHub,
+                     Cloudflare or Slack carries ours): github/ (signIn: the code and verifier to an account, the
+                     answer decoded straight to a RemoteUser by GitHubUser, SignInFailed when refused, a defect when
+                     unreachable), cloudflare/ (createTunnel, which removes a half-made tunnel, updateIngress,
+                     removeTunnel; the zone looked up once; every refusal a CloudflareFailed naming the call),
+                     slack/ (SlackApi: call with the answer's Schema, SlackCallFailed with Slack's code,
+                     selectUserName, hasBotScopes; the scopes), tunnels/ (Tunnels: the one way anything reaches a
+                     machine's t-<instance>.shinsa.dev: webhooks, previews and Slack, never following a redirect;
+                     TunnelUnreachable when it does not answer)
+migrations/          D1's schema (wrangler d1 migrations), applied in order
+slack-manifest.json  The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts
+                     keeps its scopes, redirects and events in step with the code
+test/                One file per route group, against harness.ts: makeCloudHandler on a SQLite file with every
+                     migration in a temporary folder test/preload.ts removes (it also gives every test 30 s, since CI runs every workspace at once; harness.db.sqlite reads the same rows), a clock a test moves
+                     (harness.clock.now), the configuration a test may change (harness.world.config, which builds
+                     the handler again), waitUntil collected for settle(), and GitHub, the Cloudflare API, Slack and
+                     a machine's tunnel as fakes behind one fetch (harness.world.fetch, its calls in harness.calls,
+                     answers in handlers); http/ tests the logger and deferWork; config/, crypto/, store/ and
+                     integrations/ test each service against layers.ts: runTest and flipTest provide CloudServices on
+                     SQLite in memory with every migration, TEST_ENV, a TestClock at TEST_NOW and an Upstream (the
+                     fetch every outbound call reaches, its calls recorded, its answers in handlers);
+                     createLogRecorder keeps what a test logs
 ```
 
 ## How it works
@@ -118,7 +182,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `guests_full` past the limit; an owner or member stays what they are. A guest sees the machine with
   `role: 'guest'`, gets connect tokens for it and can leave it; the machine removes one with
   `/__remote/machine/guests/remove { userId }`.
-- **Teams** (`teams.ts`, `0005_teams.sql`; `docs/engine.md` → Teams). Who is in which team, and nothing else: no task,
+- **Teams** (`routes/teams/`, `routes/machine-teams/`, `0005_teams.sql`; `docs/engine.md` → Teams). Who is in which team, and nothing else: no task,
   project, title or key is ever sent here. A team (`teams`) has one owner, the account whose machine made it with
   `POST /__remote/machine/teams { name }` (machine token; at most 10 owned, 409 `teams_full`), a name of 60 characters
   at most and up to 20 members (`team_members`, 409 `members_full`). It mirrors a machine's members: one reusable
@@ -158,7 +222,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   `respond` matches a preview host (`isPreviewHost`, the zone from
   `PREVIEW_ZONE`) before any other route, so nothing of the app is ever served there, and skips the app's security
   headers, which would break most dev servers. Listing `shinsa.page` makes each label a site of its own, which stops
-  that; until then the gap is a page's own script, never a dev server's header. `respondPreview` answers
+  that; until then the gap is a page's own script, never a dev server's header. `PreviewHost.respond` answers
   `/robots.txt` on every host, the bare zone and unknown labels included, with `User-agent: *` and `Disallow: /` before
   any key or machine is checked, so a dev server's own robots file is never served there. It then reads the instance
   and the preview id from the label (`parsePreviewHost`); a `?key=` on any path is set as `__Host-shinsa_preview` (HttpOnly, Secure, SameSite=Lax, 30
@@ -175,7 +239,7 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   Traffic is plain to the Worker: unlike a task's share, a preview is not sealed end to end, and nothing of it is kept.
 - **Private service addresses.** Every running service of a machine with remote access has a private address on
   `shinsa.page` too (`docs/engine.md` → Private service addresses). `GET /__remote/previews/open?url=<address>`
-  (`respondPreviewOpen`, `REMOTE_PATHS.previewOpen`) takes only a `shinsa.page` preview address, sends a signed-out
+  (`routes/preview-open/`, `REMOTE_PATHS.previewOpen`) takes only a `shinsa.page` preview address, sends a signed-out
   browser to sign in and back, answers 404 to anyone but the machine's owner or a member, and otherwise redirects
   (303) to the address with `?access=` a token from `createPreviewAccessToken` signed with the instance's connect key,
   valid 60 seconds. On the preview host the Worker checks that token against the instance's connect key and sets a
@@ -191,12 +255,12 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
 - **The Slack bot** (`docs/engine.md` → Slack). One Slack app for everyone, on the Events API at `/slack/events`.
   Connecting (`/slack/connect?instance=<id>`, signed in with GitHub, the machine one you own, never one shared with you, else the one you own seen last)
   signs you in with Slack (OpenID Connect, `openid profile`), and when the workspace has no Shinsa yet, or its bot
-  token lacks one of the scopes (`hasSlackBotScopes`, Slack's `x-oauth-scopes` on `auth.test`), goes on to add
+  token lacks one of the scopes (`SlackApi.hasBotScopes`, Slack's `x-oauth-scopes` on `auth.test`), goes on to add
   the app (OAuth v2, the bot scopes in `SLACK_BOT_SCOPES`); either way it writes the link of your Slack user to that
   machine and lands on `/slack/linked?team=` or `?error=`. The state rides in a 10-minute `__Host-shinsa_slack`
   cookie, checked in constant time. A bot token is kept sealed with AES-GCM under `SLACK_TOKEN_KEY`, never in clear.
   An event is checked against Slack's signature (`SLACK_SIGNING_SECRET`, five minutes), kept by id for a day so a
-  redelivery does nothing, and answered at once; the work runs after (`world.defer`, `waitUntil`). Removing the app
+  redelivery does nothing, and answered at once; the work runs after (`deferWork`, `waitUntil`). Removing the app
   or revoking its bot token forgets the workspace and its links. A mention from someone with no link gets a private
   reply with the link to connect; from someone linked, the Worker reads the thread (100 messages), names the people
   in it, turns Slack's markup into text and posts it to `https://t-<instance>.shinsa.dev/api/slack/events`, signed
@@ -211,8 +275,8 @@ test/              One file per route group, against harness.ts: D1 on bun:sqlit
   Agent Sessions (`agent_view` stays off) and `feature_disabled`; any other refusal is logged and answered 502); `/__remote/slack/links` and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
 - **Requests from a page.** Every signed-in route reads the session from `Authorization: Bearer` first, then the
-  cookie (`findSessionUser`). Every POST a page makes (sign-out, approve, connect, remove, accept, leave) needs an `Origin` of the
-  Worker's own origin, unless it carries a bearer token (`findPageUser`, `assertPageRequest`): a forged cross-site
+  cookie (`PageSession`; a bearer that does not open a session is refused, never retried as the cookie). Every POST a page makes (sign-out, approve, connect, remove, accept, leave) needs an `Origin` of the
+  Worker's own origin, unless it carries a bearer token (`PageSession`'s cookie half, `assertPageRequest`): a forged cross-site
   request can send the cookie but never the token. Every response carries a strict content security policy (scripts only from the site, sockets
   only to `wss://*.shinsa.dev` (and `blob:` reads and media, a share page's files), no framing), Strict-Transport-Security, `nosniff` and `Referrer-Policy: no-referrer`.
 

@@ -78,7 +78,7 @@ export function ImageStrip({
     <div className={cn('flex min-w-0 flex-wrap gap-2', className)}>
       {shown.map((image, index) => (
         <ImageThumb
-          // biome-ignore lint/suspicious/noArrayIndexKey: the same image can appear twice in one strip
+          // oxlint-disable-next-line shinsa/no-array-index-key -- the same image can appear twice in one strip
           key={`${index}-${image.src}`}
           image={image}
           size={size}

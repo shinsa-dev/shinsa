@@ -182,10 +182,11 @@ export function resolveHandoff(request: HandoffRequest): Handoff | null {
   const cut = resolveCut(blocks, budget);
   const included = blocks.slice(cut);
   if (!included.some((block) => block.entry.type === 'user' || block.entry.type === 'agent')) {
-    throw new DomainError(
-      'handoff_too_large',
-      'The conversation so far is too large to hand to a fresh session, even after leaving out older turns.'
-    );
+    throw new DomainError({
+      code: 'handoff_too_large',
+      message:
+        'The conversation so far is too large to hand to a fresh session, even after leaving out older turns.',
+    });
   }
   const paths = [...new Set(request.sources.map((source) => source.transcriptPath))];
   const body = [

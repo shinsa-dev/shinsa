@@ -34,7 +34,7 @@ interface RowProps {
 }
 
 function ToolName({ name, description }: { name: string; description: string | null }) {
-  const text = <span className='min-w-0 cursor-default truncate font-mono text-fg-3 text-xs'>{name}</span>;
+  const text = <span className='min-w-0 cursor-default truncate font-mono text-xs text-fg-3'>{name}</span>;
   if (!description) return text;
   return <Hint label={description}>{text}</Hint>;
 }
@@ -43,7 +43,7 @@ function ServerDetail({ server, snapshot, places, now }: RowProps) {
   const detail = resolveServerDetail(server, snapshot, places, now);
   return (
     <div className='flex flex-col gap-1.5 pr-2 pb-2.5 pl-7'>
-      {detail.error && <p className={cn('break-words text-2xs', TONE_TEXT.red)}>{detail.error}</p>}
+      {detail.error && <p className={cn('text-2xs break-words', TONE_TEXT.red)}>{detail.error}</p>}
       {detail.tools.length > 0 && (
         <ul className='grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-4 gap-y-1'>
           {detail.tools.map((tool) => (

@@ -40,7 +40,7 @@ export function SuggestionRow({
   return (
     <li className='flex items-start gap-3 py-2 first:pt-0 last:pb-0'>
       <div className='flex min-w-0 flex-1 flex-col gap-px text-xs'>
-        <InlineMarkdown text={suggestion.title} className='font-medium text-fg-4 leading-5' />
+        <InlineMarkdown text={suggestion.title} className='leading-5 font-medium text-fg-4' />
         <InlineMarkdown text={suggestion.why} className='text-fg-3' />
       </div>
       {!readOnly && (

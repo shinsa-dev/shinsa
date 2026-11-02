@@ -25,7 +25,7 @@ function ChecklistHeader({
       className={cn('flex items-baseline justify-between gap-3', className)}
       {...props}
     >
-      <span className='font-medium text-fg-4 text-xs leading-5'>{title}</span>
+      <span className='text-xs leading-5 font-medium text-fg-4'>{title}</span>
       {progress !== undefined && <span className='text-2xs text-fg-2 tabular-nums'>{progress}</span>}
     </div>
   );
@@ -71,14 +71,14 @@ function ChecklistTitle({
       className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-px', className)}
       {...props}
     >
-      <span className='font-medium in-data-done:text-fg-3 text-fg-4 text-xs leading-5'>{children}</span>
+      <span className='text-xs leading-5 font-medium text-fg-4 in-data-done:text-fg-3'>{children}</span>
       {meta && <span className='flex items-center gap-1 text-2xs text-fg-2'>{meta}</span>}
     </div>
   );
 }
 
 function ChecklistDetail({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div data-slot='checklist-detail' className={cn('text-fg-3 text-xs', className)} {...props} />;
+  return <div data-slot='checklist-detail' className={cn('text-xs text-fg-3', className)} {...props} />;
 }
 
 // What a row offers under its words: a command to copy, a button to run it.

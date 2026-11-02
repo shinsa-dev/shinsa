@@ -486,8 +486,9 @@ A fresh codebase in the Polis/Buzzkit shape, enforced as strictly:
   wire protocol, all pure), `packages/ui` (design system). Provider adapters live in
   `apps/engine/src/agents/providers/<id>/` (Claude and Codex), since each one spawns and talks to a
   local process.
-- Biome at Polis's settings (`noFloatingPromises`, exhaustive switches, sorted classes, no
-  `lucide-react`), `lint-conventions.ts` (the comment ban, the verb catalog, class rules), knip,
+- Oxlint, type-aware with the Effect rules (`effect-tsgo oxlint`: floating promises, exhaustive switches, no
+  `lucide-react`, the `shinsa` plugin's rules), stylelint on the CSS, oxfmt (formatting, sorted classes and
+  imports), the Effect language service in every type check (`@effect/tsgo`), `lint-conventions.ts` (the comment ban, the verb catalog, class rules), knip,
   sherif, cspell (`bun lint:spelling`, British and American English with the project's words in
   `cspell.json`), strict tsconfig with `noUncheckedIndexedAccess`, Husky hooks, CI mirroring hooks. Root and per-app
   `CLAUDE.md`, `.claude/skills/` for conventions, review, copy, design.

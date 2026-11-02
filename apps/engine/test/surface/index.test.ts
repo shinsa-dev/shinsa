@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { parseUserCommand, USER_COMMAND_TYPES } from '@shinsa/core';
+import { Result } from 'effect';
 import { resolveCommandKey } from '../../src/surface/client.ts';
 import {
   describeGroup,
@@ -66,7 +67,7 @@ describe('shinsa command', () => {
   });
 
   test('what it sends is still checked by the server’s command parser', () => {
-    expect(() => parseUserCommand({ type: 'task.cancel' })).toThrow();
+    expect(Result.isFailure(parseUserCommand({ type: 'task.cancel' }))).toBe(true);
   });
 });
 

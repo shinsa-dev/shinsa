@@ -66,7 +66,7 @@ function Card({
   return (
     <section data-message className={cn(CARD, 'flex min-w-0 flex-col overflow-hidden')}>
       <CardLine icon={icon} title={title} meta={meta} />
-      {children && <div className='flex min-w-0 flex-col gap-3 border-border border-t p-3'>{children}</div>}
+      {children && <div className='flex min-w-0 flex-col gap-3 border-t border-border p-3'>{children}</div>}
     </section>
   );
 }
@@ -77,7 +77,7 @@ function ReplyFirst({ args, children }: { args: ChatToolArgs; children: React.Re
   return (
     <>
       <AgentReplyBlock reply={reply} />
-      <div className='flex min-w-0 flex-col gap-3 border-border border-t pt-3'>{children}</div>
+      <div className='flex min-w-0 flex-col gap-3 border-t border-border pt-3'>{children}</div>
     </>
   );
 }
@@ -100,13 +100,13 @@ function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; a
             {phases.map((phase, index) => {
               const title = readString(phase, 'title') ?? `Phase ${index + 1}`;
               return (
-                // biome-ignore lint/suspicious/noArrayIndexKey: plan phases are positional
+                // oxlint-disable-next-line shinsa/no-array-index-key -- plan phases are positional
                 <li key={index} className='flex gap-2.5'>
                   <StepNumber index={index} />
                   <div className='flex min-w-0 flex-col gap-px'>
                     <PlanPhaseTitle title={title} change={resolvePhaseChange(changes, title)} />
                     {readString(phase, 'detail') && (
-                      <span className='selectable text-fg-3 text-xs'>
+                      <span className='selectable text-xs text-fg-3'>
                         <InlineMarkdown text={readString(phase, 'detail') ?? ''} />
                       </span>
                     )}
@@ -167,12 +167,12 @@ function SummaryCard({
             <span className='text-2xs text-fg-2'>Judgement calls</span>
             <ul className='flex flex-col gap-1.5'>
               {calls.map((call, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: judgement calls are positional
+                // oxlint-disable-next-line shinsa/no-array-index-key -- judgement calls are positional
                 <li key={index} className='flex gap-1.25 text-xs leading-5'>
                   <IconSlot>
                     <Icon size='sm' name='IconLightbulbGlow' className='text-fg-4' />
                   </IconSlot>
-                  <span className='selectable min-w-0'>
+                  <span className='min-w-0 selectable'>
                     {readString(call, 'title') && (
                       <span className='font-medium text-fg-4'>
                         <InlineMarkdown text={readString(call, 'title') ?? ''} />
@@ -197,7 +197,7 @@ function SummaryCard({
         {task && hasHandOverWalkthrough(args) && (
           <InAppLink
             path={resolveReviewPath(task)}
-            className='w-fit font-medium text-primary-text text-xs hover:opacity-80 active:opacity-80'
+            className='w-fit text-xs font-medium text-primary-text hover:opacity-80 active:opacity-80'
           >
             Read the walkthrough
           </InAppLink>
@@ -215,7 +215,7 @@ function ReviewCard({ args, task }: { args: ChatToolArgs; task: Task | null }) {
     <Card icon='IconShieldCheck' title={title} meta={meta}>
       <ul className='flex flex-col gap-2.5'>
         {findings.map((finding, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: findings are positional
+          // oxlint-disable-next-line shinsa/no-array-index-key -- findings are positional
           <li key={index} className='flex'>
             <FindingText finding={finding} task={task} />
           </li>
@@ -242,7 +242,7 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
       }
       meta={resolveAskMeta(call, delegated)}
     >
-      <span className='selectable text-fg-4 text-xs'>
+      <span className='selectable text-xs text-fg-4'>
         <InlineMarkdown text={call.description.target ?? ''} />
       </span>
       {context && <Markdown text={context} className='text-fg-3' />}
@@ -256,7 +256,7 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
         </ul>
       )}
       {answer !== null && (
-        <div className='flex gap-2 border-border border-t pt-2.5 text-xs'>
+        <div className='flex gap-2 border-t border-border pt-2.5 text-xs'>
           <span className='shrink-0 text-fg-2'>
             {delegated ? (
               'Its answer'
@@ -266,7 +266,7 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
           </span>
           <div className='flex min-w-0 flex-1 flex-col gap-2'>
             {answer.text && (
-              <span className='selectable min-w-0 whitespace-pre-wrap text-fg-4'>{answer.text}</span>
+              <span className='min-w-0 selectable whitespace-pre-wrap text-fg-4'>{answer.text}</span>
             )}
             <MessageAttachments attachments={answer.attachments} align='start' size='sm' />
           </div>
@@ -286,7 +286,7 @@ function SuggestionsCard({ args }: { args: ChatToolArgs }) {
     >
       <ul className='flex flex-col gap-2'>
         {tasks.map((task, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: suggestions are positional
+          // oxlint-disable-next-line shinsa/no-array-index-key -- suggestions are positional
           <li key={index} className='flex flex-col gap-px text-xs'>
             <InlineMarkdown text={readString(task, 'title') ?? ''} className='font-medium text-fg-4' />
             <InlineMarkdown text={readString(task, 'why') ?? ''} className='text-fg-3' />
@@ -345,7 +345,7 @@ function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArg
       <ReplyFirst args={args}>
         <Markdown text={readString(args, field) ?? ''} />
         {proposal && (
-          <div className='flex flex-col gap-px border-border border-t pt-2.5 text-xs'>
+          <div className='flex flex-col gap-px border-t border-border pt-2.5 text-xs'>
             <span className='text-2xs text-fg-2'>Proposed a change</span>
             <InlineMarkdown text={proposal.why} className='selectable text-fg-4' />
           </div>
@@ -361,7 +361,7 @@ function ReshapeCard({ args }: { args: ChatToolArgs }) {
     <Card icon='IconSplit' title={steps.length > 0 ? 'Set the steps' : 'Changed the kind of task'}>
       <Markdown text={readString(args, 'reason') ?? ''} />
       {steps.length > 0 && (
-        <div className='flex flex-col gap-px border-border border-t pt-2.5 text-xs'>
+        <div className='flex flex-col gap-px border-t border-border pt-2.5 text-xs'>
           <span className='text-2xs text-fg-2'>Steps</span>
           <span className='text-fg-4'>{capitalise(describeSteps(steps))}</span>
         </div>
@@ -397,7 +397,7 @@ export function HandoverCard({
     return (
       <div className={cn('flex min-w-0 flex-col gap-1', CHAT_INSET)}>
         <ToolRow call={call} live={live} />
-        <p className={cn('selectable line-clamp-3 whitespace-pre-wrap text-red-text text-xs', ROW_INDENT)}>
+        <p className={cn('line-clamp-3 selectable text-xs whitespace-pre-wrap text-red-text', ROW_INDENT)}>
           {call.result}
         </p>
       </div>
@@ -456,5 +456,17 @@ export function HandoverCard({
     case 'note':
     case 'wait_for':
       return <InsetToolRow call={call} live={live} />;
+    case 'create_task':
+    case 'delegate_task':
+    case 'delegation_answer':
+    case 'delegation_cancel':
+    case 'delegation_status':
+    case 'delete_schedule':
+    case 'file_report':
+    case 'list_schedules':
+    case 'report_feedback':
+    case 'request_secret':
+    case 'split_task':
+      return null;
   }
 }

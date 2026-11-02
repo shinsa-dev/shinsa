@@ -98,7 +98,7 @@ function WatchdogRow({
       <div className='flex items-start gap-3'>
         <div className='flex min-w-0 flex-1 flex-col gap-px text-xs'>
           <div className='flex min-w-0 items-baseline gap-2'>
-            <span className='min-w-0 truncate font-medium text-fg-4 leading-5'>{watchdog.title}</span>
+            <span className='min-w-0 truncate leading-5 font-medium text-fg-4'>{watchdog.title}</span>
             <InfoPopover
               render={
                 <button
@@ -110,13 +110,13 @@ function WatchdogRow({
               className='w-80'
             >
               <InfoHeader
-                title={<Markdown text={watchdog.check} className='text-fg-4 text-xs' />}
+                title={<Markdown text={watchdog.check} className='text-xs text-fg-4' />}
                 description={`${describeWatchdogSchedule(watchdog)}${watchdog.source ? ` · ${watchdog.source.server}` : ''}`}
               />
             </InfoPopover>
             {meta && <span className='shrink-0 text-fg-2 tabular-nums'>{meta}</span>}
           </div>
-          <Markdown text={describeWatchdogSummary(state, watchdog, now)} className='text-fg-3 text-xs' />
+          <Markdown text={describeWatchdogSummary(state, watchdog, now)} className='text-xs text-fg-3' />
         </div>
         {active && !readOnly && (
           <Button
@@ -148,7 +148,7 @@ export function WatchdogsPanel({
   const watching = resolveWatchingReason(task, now);
   return (
     <Panel persistId={resolveOverviewPanelId(task, 'watchdogs')} title={WATCHDOGS_TITLE} icon='IconRadar'>
-      <p className='text-fg-3 text-xs'>
+      <p className='text-xs text-fg-3'>
         {watching ? `${watching}. ` : ''}Once the change is live, each watchdog checks it soon and then less
         often as it holds up. An issue it finds becomes a new task that starts from this task’s conversation.
       </p>

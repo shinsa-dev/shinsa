@@ -1,13 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ServerWebSocket } from 'bun';
-import {
-  isPreviewHost,
-  PREVIEW_ACCESS_COOKIE,
-  PREVIEW_COOKIE,
-  respondPreview,
-} from '../apps/cloud/src/previews.ts';
-import type { CloudWorld } from '../apps/cloud/src/world.ts';
+import { isPreviewHost } from '../apps/cloud/src/routes/previews/address.ts';
+import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE } from '../apps/cloud/src/routes/previews/schema.ts';
 import { Transcripts } from '../apps/engine/src/agents/index.ts';
 import { ProviderRegistry } from '../apps/engine/src/agents/providers/index.ts';
 import { createQuickCalls } from '../apps/engine/src/agents/quick/index.ts';
@@ -74,6 +69,7 @@ import {
   type TeamJoinResponse,
   type TeamPreviewResponse,
 } from '../packages/core/src/index.ts';
+import { createSandboxCloud } from './sandbox-cloud.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PORT = Number(Bun.env.PORT ?? 5195);
@@ -857,29 +853,6 @@ function startSharedService(shared: SharedService) {
   terminals.startService(serviceId, run);
 }
 
-function createPreviewWorld(machines: Machine[]): CloudWorld {
-  return {
-    store: {
-      selectInstance: (id: string) => {
-        const machine = machines.find((entry) => entry.id === id);
-        return Promise.resolve(
-          machine ? { online: 1, last_seen_at: Date.now(), connect_key: machine.connectKey } : null
-        );
-      },
-    },
-    fetch: (target: string, init?: RequestInit) => {
-      const url = new URL(target);
-      const machine = machines.find((entry) => url.host === `t-${entry.id}.shinsa.dev`);
-      if (!machine) return Promise.reject(new Error('No such tunnel.'));
-      const headers = new Headers(init?.headers);
-      headers.set('cf-connecting-ip', '127.0.0.1');
-      return fetch(`http://127.0.0.1:${machine.port}${url.pathname}${url.search}`, { ...init, headers });
-    },
-    now: Date.now,
-    config: { previewOrigin: PREVIEW_ZONE },
-  } as unknown as CloudWorld;
-}
-
 function upgradePreview(request: Request, url: URL, machines: Machine[], server: Bun.Server<TunnelData>) {
   const address = parsePreviewHost(url.host, PREVIEW_ZONE);
   const machine = machines.find((entry) => entry.id === address?.instanceId);
@@ -945,12 +918,12 @@ function respondPreviewHost(
   request: Request,
   url: URL,
   machines: Machine[],
-  world: CloudWorld,
+  cloud: ReturnType<typeof createSandboxCloud>,
   server: Bun.Server<TunnelData>
 ) {
   if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
     return upgradePreview(request, url, machines, server);
-  return respondPreview(request, url, world);
+  return cloud.respond(request);
 }
 
 function readCookie(request: Request, cookie: string) {
@@ -1431,14 +1404,14 @@ async function main() {
     original: teamTask?.handle ?? null,
   });
   let page = serializeSandboxPage(sections, findRemoteStylesheet());
-  const world = createPreviewWorld(machines);
+  const cloud = createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, machines);
   Bun.serve<TunnelData>({
     port: PORT,
     hostname: HOST,
     fetch(request, server) {
       const url = new URL(request.url);
       if (isPreviewHost(url.host, PREVIEW_ZONE))
-        return respondPreviewHost(request, url, machines, world, server);
+        return respondPreviewHost(request, url, machines, cloud, server);
       if (url.pathname === SANDBOX_PATH)
         return new Response(page, { headers: { 'content-type': 'text/html; charset=utf-8' } });
       const toggled = respondToggle(shared, url);

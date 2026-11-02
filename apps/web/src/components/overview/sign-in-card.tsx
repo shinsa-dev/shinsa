@@ -20,7 +20,7 @@ function ProviderFix({ login }: { login: ProviderLogin }) {
   if (!view.fix) return null;
   return (
     <div className={cn(INSET, 'flex items-center gap-1.5 bg-bg-a1 py-1 pr-1 pl-2')}>
-      <span className='min-w-0 flex-1 text-fg-3 text-xs'>
+      <span className='min-w-0 flex-1 text-xs text-fg-3'>
         <InlineMarkdown text={view.fix} />
       </span>
       {view.command && <CopyButton text={view.command} />}
@@ -85,7 +85,7 @@ export function SignInCard({
         </FooterNote>
       }
     >
-      {gate.body && <Markdown text={gate.body} className='text-fg-3 text-xs' />}
+      {gate.body && <Markdown text={gate.body} className='text-xs text-fg-3' />}
       {login && <ProviderFix login={login} />}
     </NowFrame>
   );

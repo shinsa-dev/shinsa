@@ -32,7 +32,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   override componentDidCatch(error: unknown, info: React.ErrorInfo) {
     const resolved = resolveRenderError(error, info.componentStack ?? null);
-    // biome-ignore lint/suspicious/noConsole: a caught render error is reported to the browser console with where it happened
+    // oxlint-disable-next-line eslint/no-console -- a caught render error is reported to the browser console with where it happened
     console.error('[ErrorBoundary] A render error was caught', error, info.componentStack);
     this.setState((state) => (state.caught === error ? { error: resolved } : null));
     this.props.onError?.(resolved);

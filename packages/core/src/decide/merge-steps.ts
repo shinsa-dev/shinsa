@@ -31,22 +31,23 @@ function describeEarly(task: Task, step: MergeStepView) {
 }
 
 function assertCanTick(task: Task, step: MergeStepView) {
-  if (isTaskClosed(task)) throw new DomainError('task_settled', 'This task is finished.');
+  if (isTaskClosed(task)) throw new DomainError({ code: 'task_settled', message: 'This task is finished.' });
   if (step.due) return;
-  throw new DomainError('merge_step_early', describeEarly(task, step));
+  throw new DomainError({ code: 'merge_step_early', message: describeEarly(task, step) });
 }
 
 export function tickMergeStep(decider: Decider, command: CommandOf<'merge_step.tick'>) {
   if (decider.context.onBehalf) {
-    throw new DomainError(
-      'human_only',
-      'Only the human ticks a step around the merge, once they did it. Tell them it is waiting in Shinsa.'
-    );
+    throw new DomainError({
+      code: 'human_only',
+      message:
+        'Only the human ticks a step around the merge, once they did it. Tell them it is waiting in Shinsa.',
+    });
   }
   const task = decider.task(command.taskId);
   const step = listMergeSteps(task).find((candidate) => candidate.key === command.key);
   if (!step) {
-    throw new DomainError('merge_step_not_found', 'This step is no longer there.');
+    throw new DomainError({ code: 'merge_step_not_found', message: 'This step is no longer there.' });
   }
   assertCanTick(task, step);
   if (step.done === command.done) return;
@@ -64,28 +65,28 @@ export function assertMergeStepsDone(decider: Decider, gate: Gate, decision: Gat
   const task = decider.task(gate.taskId);
   const open = listOpenMergeSteps(task, 'pre_merge');
   if (open.length > 0) {
-    throw new DomainError(
-      'merge_steps_open',
-      `Tick the ${describeCount(open.length, 'pre-merge step')} first.`
-    );
+    throw new DomainError({
+      code: 'merge_steps_open',
+      message: `Tick the ${describeCount(open.length, 'pre-merge step')} first.`,
+    });
   }
   for (const above of listBundleAbove(decider.state, task)) {
     const steps = listOpenMergeSteps(above, 'pre_merge');
     if (steps.length === 0) continue;
-    throw new DomainError(
-      'merge_steps_open',
-      `Tick the ${describeCount(steps.length, 'pre-merge step')} of “${above.title}” first: it merges with this bundle.`
-    );
+    throw new DomainError({
+      code: 'merge_steps_open',
+      message: `Tick the ${describeCount(steps.length, 'pre-merge step')} of “${above.title}” first: it merges with this bundle.`,
+    });
   }
 }
 
 export function assertNoMergeStepsLeft(task: Task) {
   const open = listDuePostMergeSteps(task);
   if (open.length === 0) return;
-  throw new DomainError(
-    'task_open',
-    `${describeCount(open.length, 'post-merge step is', 'post-merge steps are')} left.`
-  );
+  throw new DomainError({
+    code: 'task_open',
+    message: `${describeCount(open.length, 'post-merge step is', 'post-merge steps are')} left.`,
+  });
 }
 
 function resolveListedTimings(steps: readonly MergeStepView[], round: number) {

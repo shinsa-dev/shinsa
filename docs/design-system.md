@@ -299,8 +299,8 @@ Run through this before calling any UI done. Each line is a rule from this file;
 
 **Ship it**
 
-- [ ] What CI runs passes: `bunx biome ci .`, `bun lint:conventions`, `bun lint:spelling`, `bunx knip`,
-      `bun check-types`, `bun run test` (100% line and function coverage).
+- [ ] What CI runs passes: `bun format`, `bun lint`, `bunx knip`, `bun check-types`, `bun run test` (100% line
+      and function coverage).
 - [ ] This file and the `/ui` catalog changed in the same change as the code.
 
 The rest of this file, section by section:
@@ -5608,7 +5608,7 @@ The CSS is `desktop.css`, verbatim in Appendix B. Its five rules, all under `htm
 | Slider drag | `body:has([data-slot="slider-thumb"][data-dragging])` and everything in it | `cursor: grabbing !important` |
 | No rubber-band | `html[data-desktop]` and its `body` | `overscroll-behavior: none` |
 
-Every `!important` carries a `biome-ignore lint/complexity/noImportantStyles` comment naming why.
+Every `!important` carries a `stylelint-disable-next-line declaration-no-important` comment naming why.
 
 What each rule does: interactive elements and their descendants show the arrow (`!important` beats every utility,
 kit rule, inline style and third-party sheet) unless they ask for a specific cursor (default, text, move, grab,
@@ -9765,17 +9765,20 @@ greys at chroma 0.001 to 0.003. Every value is in the Tokens tables.
 ## 16. Enforced rules
 
 Most rules in this file are taste. The ones below are also machine-checked: a change that breaks one fails
-`bun lint`, the pre-commit hook or CI. They come from five places:
+`bun lint`, `bun format`, `bun check-types`, the pre-commit hook or CI. They come from these places:
 
 | Gate | Command | What runs |
 | --- | --- | --- |
-| Biome | `biome check .` locally, `bunx biome ci .` in CI | Biome 2.5.9 lint and format, the `useSortedClasses` class order, one GritQL plugin |
+| Oxlint | `bun lint:oxlint` (`effect-tsgo oxlint --type-aware --report-unused-disable-directives`) | Oxlint 1.90.0, type-aware through oxlint-tsgolint 7.0.2005, the rules in `.oxlintrc.json` and the tested `shinsa` JS plugin in `scripts/oxlint/` for the rules Oxlint lacks |
+| HTML | `bun lint:html` (`scripts/lint-html.ts`) | The markup rules of `.oxlintrc.json` (`jsx-a11y/*`, duplicate attributes, button types, semantic elements) on every `.html` file, each read as JSX on its own lines |
+| Stylelint | `bun lint:styles` | The CSS rules in `.stylelintrc.json` |
+| oxfmt | `bun format` (`oxfmt --check`; `bun format:fix` writes) | Formatting, Tailwind class order, import order (`.oxfmtrc.json`) |
 | Conventions | `bun lint:conventions` (`bun scripts/lint-conventions.ts`) | A Babel-parsed custom linter: comment ban, verb catalog, every design and class rule below |
 | Spelling | `bun lint:spelling` | cspell 10.4.0, British and American English |
-| Hygiene and types | `bunx knip`, `bunx sherif -i @types/node`, `bun check-types` | Dead files, exports and dependencies; workspace dependency drift; strict TypeScript |
+| Hygiene and types | `bunx knip`, `bunx sherif -i @types/node`, `bun check-types` | Dead files, exports and dependencies; workspace dependency drift; strict TypeScript 7 with the Effect language service |
 | Tests | `bun run test` | Every workspace's `bun test` with a 100% line and function coverage floor |
 
-`bun lint` is `biome check . && bun lint:conventions && bun lint:spelling`.
+`bun lint` is `bun lint:oxlint && bun lint:html && bun lint:styles && bun lint:conventions && bun lint:spelling`.
 
 ### How the conventions linter reads code
 
@@ -10380,12 +10383,12 @@ const disclosure = useDisclosure(createDisclosureId('home', 'section', section),
 return <DisclosureHeader disclosure={disclosure}>…</DisclosureHeader>;
 ```
 
-#### Class order (Biome)
+#### Class order (oxfmt)
 
-- **Rule:** `nursery/useSortedClasses`, level error, safe fix, in `packages/ui/src/**`, `apps/web/src/**`,
-  `apps/marketing/src/**`. It sorts `className`/`class` strings and the arguments of `cn`, `cva` and `clsx`.
-- **Why:** one order, so a diff shows only real class changes. `biome check --write` (and the pre-commit hook)
-  fixes it.
+- **Rule:** oxfmt's `sortTailwindcss`, in `packages/ui/src/**`, `apps/web/src/**`, `apps/marketing/src/**`, reading
+  the theme from `apps/web/src/app.css`. It sorts `className`/`class` strings and the arguments of `cn`, `cva` and
+  `clsx` in Tailwind's own order; `bun format` fails on an unsorted list.
+- **Why:** one order, so a diff shows only real class changes. `bun format:fix` (and the pre-commit hook) fixes it.
 
 ```tsx
 // bad
@@ -10394,9 +10397,9 @@ return <DisclosureHeader disclosure={disclosure}>…</DisclosureHeader>;
 <div className='flex px-2 text-xs'>
 ```
 
-#### Icons come from Central only (Biome)
+#### Icons come from Central only (Oxlint)
 
-- **Rule:** `style/noRestrictedImports` with `lucide-react` banned everywhere: "Icons come exclusively from
+- **Rule:** `eslint/no-restricted-imports` with `lucide-react` banned everywhere: "Icons come exclusively from
   @shinsa/ui <Icon /> (Central Icons)."
 
 ```tsx
@@ -10412,9 +10415,9 @@ import { Icon } from '@shinsa/ui/components/icon';
 #### No comments
 
 - **Matches** (conventions linter, every checked file in every root): any comment, line or block, whose trimmed
-  text is not empty and does not start with `biome-ignore` or `@ts-` (`/^\s*(biome-ignore|@ts-)/`).
+  text is not empty and does not start with `oxlint-disable` or `@ts-` (`/^\s*(oxlint-disable|@ts-)/`).
 - **Exempt:** `packages/ui` (a reusable kit that keeps its upstream comments). Empty comments pass. CSS files are not
-  checked. Biome's `suspicious/noCommentText` separately rejects comment-like text written as JSX children.
+  checked. Oxlint's `react/jsx-no-comment-textnodes` separately rejects comment-like text written as JSX children.
 - **Why:** names and structure carry the meaning, and the docs carry the reasons.
 
 ```ts
@@ -10424,7 +10427,7 @@ await send(command);
 // good
 await sendWhenOpen(command);
 // allowed
-// biome-ignore lint/suspicious/noConsole: build script output
+// oxlint-disable-next-line eslint/no-console -- build script output
 console.log(summary);
 ```
 
@@ -10474,19 +10477,11 @@ export function findTask(state: ShinsaState, id: string): Task { … }
 const readSettings = async () => { … };
 ```
 
-#### No await in a ternary (GritQL plugin)
+#### No await in a ternary (Oxlint plugin)
 
-- **Rule:** the Biome plugin `no-await-in-ternary.grit`, applied to every file Biome checks:
-
-```grit
-language js
-
-`$condition ? $consequence : $alternative` where {
-  or { $consequence <: contains `await $_`, $alternative <: contains `await $_` },
-  register_diagnostic(span=$condition, message="Ternaries never wrap awaited calls. Branch with an if or an early return instead (the conventions skill).")
-}
-```
-
+- **Rule:** `shinsa/no-await-in-ternary` (`scripts/oxlint/rules/no-await-in-ternary.ts`), applied to every file
+  Oxlint checks, reported on the condition with "Ternaries never wrap awaited calls. Branch with an if or an early
+  return instead (the conventions skill)."
 - **Matches:** any conditional expression whose consequence or alternative contains an `await`. The condition may
   contain one.
 - **Why:** ternaries are for small value picks; guards and early returns carry control flow.
@@ -10501,75 +10496,75 @@ return await readTask(id);
 
 #### Imports
 
-| Rule (Biome) | Where | Matches | Why |
+| Rule (Oxlint unless named) | Where | Matches | Why |
 | --- | --- | --- | --- |
-| `style/noRestrictedImports` | everywhere | `lucide-react` | Icons come only from `Icon` (Central) |
-| `style/noRestrictedImports` | `packages/core/src/**` | `node:fs`, `node:child_process`, `node:path`, `bun` | The core is pure: the server does I/O and hands the core events; side effects run in the server's effect workers; paths are the server's; the core runs in the browser too, Bun is the server's |
-| `correctness/noPrivateImports` | everywhere | importing a symbol marked private to its module | Folders expose a barrel |
-| `correctness/noUnusedImports` | everywhere but `*.astro` | unused imports | |
-| `style/useImportType` | everywhere | a value import used only as a type | |
-| `style/useNodejsImportProtocol` | everywhere | `fs` instead of `node:fs` | |
-| `assist/source/organizeImports` | everywhere | unsorted imports or imported names (an assist; `biome ci` fails on it) | |
+| `eslint/no-restricted-imports` | everywhere | `lucide-react` | Icons come only from `Icon` (Central) |
+| `eslint/no-restricted-imports` | `packages/core/src/**` | `node:fs`, `node:child_process`, `node:path`, `bun` | The core is pure: the server does I/O and hands the core events; side effects run in the server's effect workers; paths are the server's; the core runs in the browser too, Bun is the server's |
+| `eslint/no-unused-vars` | everywhere but `*.astro` | unused imports, variables and parameters (a leading `_` opts out) | |
+| `typescript/consistent-type-imports` | everywhere | a value import used only as a type (fixed inline, `import { type A }`) | |
+| `unicorn/prefer-node-protocol` | everywhere | `fs` instead of `node:fs` | |
+| oxfmt `sortImports` | everywhere oxfmt formats | unsorted imports or imported names | |
 
-The `packages/core/src` override replaces the root `noRestrictedImports` options there, so its list is the four
+The `packages/core/src` override replaces the root `no-restricted-imports` options there, so its list is the four
 Node/Bun modules only.
 
 Not lint-checked but stated next to these rules: packages import each other only by package name
 (`@shinsa/core`), importers outside a folder use its `index.ts` barrel, and files inside a folder import each other
 directly, never their own barrel.
 
-#### Every Biome rule set in the config
+#### Every lint rule the config sets
 
-The base is Biome's `recommended` preset. These are set explicitly (error unless noted):
-
-| Group | Rule | Level |
-| --- | --- | --- |
-| a11y | `noSvgWithoutTitle` | off |
-| correctness | `noChildrenProp`, `useHookAtTopLevel`, `useJsxKeyInIterable`, `noUnusedImports`, `noUnusedVariables`, `noUnusedFunctionParameters`, `noUnusedPrivateClassMembers`, `noPrivateImports` | error |
-| correctness | `useExhaustiveDependencies` | off |
-| security | `noBlankTarget` | error |
-| security | `noDangerouslySetInnerHtml` | off |
-| suspicious | `noConsole`, `noCommentText`, `noDuplicateJsxProps`, `useAwait`, `useErrorMessage`, `noEvolvingTypes`, `noShadow` | error |
-| suspicious | `noThenProperty` | off |
-| style | `noUselessElse`, `useCollapsedElseIf`, `useSingleVarDeclarator`, `useTemplate`, `noYodaExpression`, `useNodejsImportProtocol`, `useAtIndex`, `useExplicitLengthCheck`, `useThrowOnlyError`, `noParameterAssign`, `useImportType`, `noRestrictedImports` (lucide-react) | error |
-| style | `noNonNullAssertion` | off |
-| complexity | `noForEach` | warn |
-| complexity | `noUselessTernary`, `noStaticOnlyClass` | error |
-| complexity | `noExcessiveCognitiveComplexity`, `maxAllowedComplexity: 25` | warn |
-| performance | `noAccumulatingSpread` | error |
-| nursery | `noFloatingPromises`, `noMisusedPromises`, `useExhaustiveSwitchCases` | error |
+`.oxlintrc.json` turns Oxlint's own categories off and lists each rule it runs by name, and where Oxlint has no
+rule for a check, or its rule flags code the house allows, a rule of the `shinsa` plugin (`scripts/oxlint/`, each
+tested in `scripts/oxlint/rules.test.ts`): `cognitive-complexity` (warn, past 25), `no-accumulating-spread`,
+`no-array-index-key`, `no-await-in-ternary`, `no-confusing-void-type`, `no-dynamic-namespace-import-access`,
+`no-evolving-types`, `no-for-each` (warn), `no-invalid-builtin-instantiation`, `no-redundant-use-strict`,
+`no-suspicious-semicolon-in-jsx`, `no-this-in-static`, `no-useless-continue`, `no-useless-else`,
+`no-useless-string-raw`, `no-useless-undefined-initialization`, `use-await`, `use-optional-chain`,
+`use-semantic-elements`, `use-simple-number-keys`, `use-template`. A redeclared name, a duplicate parameter and an
+empty type parameter list are TypeScript's own errors, and the CSS rules are stylelint's.
 
 Overrides, in order:
 
 | Files | Change |
 | --- | --- |
-| `**/test/**`, `**/*.test.*` | `suspicious/noExplicitAny` off, `suspicious/useAwait` off |
-| `packages/core/src/**` | `noRestrictedImports`: `node:fs`, `node:child_process`, `node:path`, `bun` |
-| `packages/ui/src/**`, `apps/web/src/**`, `apps/marketing/src/**` | `nursery/useSortedClasses` error, safe fix, functions `cn`, `cva`, `clsx` |
-| `**/*.astro` | `noUnusedImports` off, `noUnusedVariables` off |
-| `scripts/**` | `suspicious/noConsole` off, `suspicious/noUndeclaredEnvVars` off |
-| `packages/ui/**` | `complexity/noExcessiveCognitiveComplexity` off |
-| `packages/ui/src/**/*.css` | `style/noDescendingSpecificity`, `complexity/noImportantStyles`, `correctness/noUnknownTypeSelector` off |
-| `packages/ui/src/**` | `suspicious/noArrayIndexKey`, `suspicious/useIterableCallbackReturn`, `suspicious/noShadow`, `complexity/noForEach`, `a11y/useSemanticElements`, `a11y/noStaticElementInteractions`, `a11y/useAriaPropsSupportedByRole`, `a11y/useValidAriaValues`, `a11y/noLabelWithoutControl`, `nursery/noFloatingPromises` off |
+| `apps/web/**`, `apps/marketing/**`, `packages/ui/**` | the React rules on: `react/jsx-key`, `react/no-children-prop`, `react/no-danger-with-children`, `react/no-render-return-value`, `react/no-string-refs`, `react/rules-of-hooks`, `shinsa/no-array-index-key` |
+| `**/test/**`, `**/*.test.*` | `shinsa/use-await` and `typescript/no-explicit-any` off |
+| `packages/core/src/**` | `no-restricted-imports`: `node:fs`, `node:child_process`, `node:path`, `bun` |
+| `**/*.astro` | `eslint/no-unused-vars` off |
+| `scripts/**` | `eslint/no-console` off |
+| `packages/ui/src/**` | `eslint/array-callback-return`, `eslint/no-shadow`, `jsx-a11y/aria-proptypes`, `jsx-a11y/label-has-associated-control`, `jsx-a11y/no-static-element-interactions`, `jsx-a11y/prefer-tag-over-role`, `jsx-a11y/role-supports-aria-props`, `shinsa/no-array-index-key`, `shinsa/no-for-each`, `shinsa/use-semantic-elements`, `typescript/no-floating-promises` off |
+| `packages/ui/**` | `shinsa/cognitive-complexity` off |
 
 What the less obvious ones mean in practice:
 
-- `noConsole`: never `console` outside `scripts/`; the engine logs one JSON line per entry
+- `eslint/no-console`: never `console` outside `scripts/`; the engine logs one JSON line per entry
   (`log.info/warn/error('[Area] Sentence', fields)`). A build script that must print uses
-  `// biome-ignore lint/suspicious/noConsole: build script output`.
-- `noFloatingPromises` / `noMisusedPromises`: every promise is awaited, returned or explicitly handled;
-  `.catch(() => undefined)` is not allowed by convention (a catch rethrows, converts or logs with context).
-- `useExhaustiveSwitchCases`: a `switch` over a union lists every member; no `default` that swallows a new one.
-- `useAwait`: an `async` function awaits something (off in tests).
-- `noShadow`: no variable shadows an outer one (off in the kit).
-- `useAtIndex`: `list.at(-1)`, not `list[list.length - 1]`.
-- `useExplicitLengthCheck`: `list.length > 0`, not `list.length`.
-- `useThrowOnlyError`, `useErrorMessage`: throw `Error` subclasses (`DomainError(code, message)`) with a message.
+  `// oxlint-disable-next-line eslint/no-console -- build script output`.
+- `typescript/no-floating-promises` / `typescript/no-misused-promises`: every promise is awaited, returned or
+  explicitly handled, read from the types; `.catch(() => undefined)` is not allowed by convention (a catch rethrows,
+  converts or logs with context).
+- `typescript/switch-exhaustiveness-check`: a `switch` over a union lists every member; no `default` that swallows a
+  new one.
+- `shinsa/use-await`: an `async` function awaits something (off in tests).
+- `eslint/no-shadow`: no variable shadows an outer one (off in the kit).
+- `unicorn/prefer-at`: `list.at(-1)`, not `list[list.length - 1]`.
+- `unicorn/explicit-length-check`: `list.length > 0`, not `list.length`.
+- `typescript/only-throw-error`, `unicorn/error-message`: throw `Error` subclasses (`DomainError`) with a message.
+- An exemption is `oxlint-disable-next-line <rule> -- <reason>` (`stylelint-disable-next-line <rule> -- <reason>` in
+  CSS); `--report-unused-disable-directives` fails one that no longer matches anything.
 
-Formatter (enforced by `biome ci`): 2-space indent, LF, line width 110, single quotes in JS and JSX
-(`jsxQuoteStyle: 'single'`), semicolons always, trailing commas `es5`, arrow parentheses always, bracket spacing on,
-`bracketSameLine: false`, quote properties as needed. CSS parses Tailwind directives. Biome follows `.gitignore` and
-skips `.claude`, every `dist`, every `.astro` folder and the kit's `globals.css`.
+The CSS rules (stylelint, `.stylelintrc.json`): unknown at-rules (Tailwind's own
+allowed), properties, functions, units, pseudo-classes, pseudo-elements, type selectors and media features;
+duplicates of properties, custom properties, font names, at-imports and keyframe selectors; shorthand overrides,
+empty blocks, `!important` (and in keyframes), descending specificity, a missing `var()`, an invalid gradient
+direction, grid area or at-import position, an unmatchable `An+B` selector, a deprecated media type and a missing
+generic font family. The kit's `globals.css` is skipped.
+
+Formatter (oxfmt, `.oxfmtrc.json`, enforced by `bun format`): 2-space indent, LF, line width 110, single quotes in JS
+and JSX (double in CSS), semicolons always, trailing commas `es5` (none in JSON), arrow parentheses always, bracket
+spacing on, `bracketSameLine: false`, quote properties as needed. It formats TypeScript, JavaScript, JSON and CSS,
+follows `.gitignore` and skips `.claude`, every `dist`, every `.astro` folder and the kit's `globals.css`.
 
 #### Unenforced conventions that sit beside these
 
@@ -10603,7 +10598,7 @@ above; a reviewer holds them.
   only; a guard and its return read as one unit.
 - **Docs ship with the behaviour.** A UI change updates this file (and `docs/design.md` in the repository) in the
   same change; a settled pattern goes back into the rules, so the next change starts where this one ended.
-- **Before calling it done**: `bunx biome check --write` on your own files, `bun lint`, `bun check-types`,
+- **Before calling it done**: `bun format:fix`, `bun lint`, `bun check-types`,
   `bun run test`, `bunx knip` after exporting anything, `bun deps`.
 
 ```tsx
@@ -10643,8 +10638,9 @@ const [stage, setStage] = useState(task.stage);
 
 #### Types
 
-- **Command:** `bun check-types` = every workspace's `check-types` (turbo) plus `tsc --noEmit -p tsconfig.json` for
-  `scripts/`.
+- **Command:** `bun check-types` = every workspace's `check-types` (turbo) plus `effect-tsgo tsc --noEmit -p
+  tsconfig.json` for `scripts/`. Each runs TypeScript 7 with the Effect language service (`@effect/tsgo`, the
+  severities in `tsconfig.effect.json`): every correctness rule is an error, and an Effect warning fails it too.
 - **Settings:** `strict: true` and `noUncheckedIndexedAccess: true` everywhere (an indexed read is `T | undefined`
   until narrowed), `isolatedModules`, `allowImportingTsExtensions` (imports name `.ts` files), `noEmit`.
 
@@ -10673,14 +10669,13 @@ const [stage, setStage] = useState(task.stage);
 | Stage | Runs |
 | --- | --- |
 | `commit-msg` | The first line must match `^(feat\|fix\|docs\|refactor\|test\|chore\|perf\|ci\|build\|style\|revert)(\([a-z0-9./-]+\))?!?: .{1,100}$`; lines starting `Merge`, `Revert`, `fixup!`, `squash!` pass. The hook reads only the first line; by convention a commit message is that one subject line and nothing else. |
-| `pre-commit` | `lint-staged` (`biome check --write --no-errors-on-unmatched --files-ignore-unknown=true` on staged `*.{ts,tsx,js,jsx,json,jsonc,css}`), `bun lint:conventions`, `bunx sherif -i @types/node` |
+| `pre-commit` | `lint-staged` (on staged scripts `effect-tsgo oxlint --type-aware --fix` then oxfmt, on CSS `stylelint --fix` then oxfmt, on JSON oxfmt, on HTML `bun scripts/lint-html.ts`), `bun lint:conventions`, `bunx sherif -i @types/node` |
 | `pre-push` | `bun check-types` (Turbo-cached, seconds). A hook stays a short validation: anything that takes minutes, like the full test suite, runs in CI. |
-| CI Lint | `bunx biome ci .`, `bun lint:conventions`, `bun lint:spelling`, `bunx sherif -i @types/node`, `bunx knip`; separately `bun check-types` |
+| CI Lint | `bun format`, `bun lint:oxlint`, `bun lint:html`, `bun lint:styles`, `bun lint:conventions`, `bun lint:spelling`, `bunx sherif -i @types/node`, `bunx knip`, `bun check-types` (Node 24 beside Bun, for Oxlint's JS plugin) |
 | CI Test | `bun run test`; and the loading walk: a production build, seeded and served, must show no loading state in normal use (two attempts) |
 
-Copy a command from CI rather than approximating it: CI runs `biome ci`, which checks lint, formatting and import
-order and writes nothing; `biome check --write` (what the pre-commit hook runs on staged files) fixes formatting,
-import order and class order in place.
+Copy a command from CI rather than approximating it: CI runs `bun format`, which checks formatting, import order
+and class order and writes nothing; `bun format:fix` and the pre-commit hook fix them in place.
 
 ### Every rule the linter runs, verbatim
 
@@ -10786,8 +10781,8 @@ the report. A reviewer is a signal for the person who decides, never the approva
    against the rules in this file. Diff against the base (`git diff $(git merge-base HEAD origin/main)`), or only a
    later round's commits. Read the porcelain columns right: `M ` is staged, ` M` is worktree only, `??` untracked.
    Other agents work in the same tree: say which changes are whose, and never revert a file you did not write.
-2. **Run what CI runs**, copied from the workflows, never an approximation: `bunx biome ci .` (not `check`),
-   `bun lint:conventions`, `bun lint:spelling`, `bunx sherif -i @types/node`, `bunx knip`, `bun check-types` and
+2. **Run what CI runs**, copied from the workflows, never an approximation: `bun format` (not `format:fix`),
+   `bun lint:oxlint`, `bun lint:html`, `bun lint:styles`, `bun lint:conventions`, `bun lint:spelling`, `bunx sherif -i @types/node`, `bunx knip`, `bun check-types` and
    `bun run test`. A claim in a summary that something passes is not evidence. A failing check is always blocking.
 3. **Look at it.** A green type check proves nothing about a screen: open every changed page with the console
    visible, in light and dark, at about 900px and at 1280px, on `/ui` and in the app, next to the existing screens.

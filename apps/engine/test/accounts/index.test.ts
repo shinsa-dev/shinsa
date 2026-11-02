@@ -179,17 +179,17 @@ async function addAccount(world: World, email: string, used: number, orgName?: s
   return world.accounts.store.find(account.id);
 }
 
-function writeLegacyAccount(root: string, origin: 'claude' | 'cswap', email: string) {
-  const configDir = origin === 'claude' ? null : join(root, 'accounts', 'legacy');
+function writeImportedAccount(root: string, origin: 'claude' | 'cswap', email: string) {
+  const configDir = origin === 'claude' ? null : join(root, 'accounts', 'imported');
   if (configDir) mkdirSync(configDir, { recursive: true });
   writeFileSync(
     join(root, 'accounts.json'),
     JSON.stringify({
       version: 1,
-      defaultAccountId: 'legacy',
+      defaultAccountId: 'imported',
       accounts: [
         {
-          id: 'legacy',
+          id: 'imported',
           configDir,
           email,
           organization: null,
@@ -542,13 +542,13 @@ describe('one login, one account', () => {
 
   test('an account that ran on your Claude Code login is kept behind a login of its own with the same email', async () => {
     const root = createTempDir();
-    writeLegacyAccount(root, 'claude', 'me@example.com');
+    writeImportedAccount(root, 'claude', 'me@example.com');
     const world = createWorld({ root });
     const own = world.accounts.store.create({ email: 'me@example.com' });
     world.statuses.set(own.configDir as string, { loggedIn: true, email: 'me@example.com' });
     const snapshot = await world.accounts.refresh();
     expect(snapshot.accounts.map((account) => account.id)).toEqual([own.id]);
-    expect(snapshot.duplicates).toEqual([{ id: 'legacy', email: 'me@example.com', keptId: own.id }]);
+    expect(snapshot.duplicates).toEqual([{ id: 'imported', email: 'me@example.com', keptId: own.id }]);
     expect(await lease(world)).toMatchObject({ id: own.id });
   });
 
@@ -919,12 +919,12 @@ describe('moving a rejected attempt to another account', () => {
 
   test('an account that ran on your Claude Code login needs signing in, is never leased, and gets a folder of its own when signed in', async () => {
     const root = createTempDir();
-    writeLegacyAccount(root, 'claude', 'me@example.com');
+    writeImportedAccount(root, 'claude', 'me@example.com');
     const world = createWorld({ root });
     world.statuses.set('default', { loggedIn: true, email: 'me@example.com' });
     const snapshot = await world.accounts.refresh();
     expect(snapshot.accounts[0]).toMatchObject({
-      id: 'legacy',
+      id: 'imported',
       origin: 'claude',
       signIn: 'signed_out',
       signInDetail:
@@ -937,34 +937,34 @@ describe('moving a rejected attempt to another account', () => {
       warn.mockRestore();
     }
 
-    await world.accounts.startLogin('legacy');
-    const dir = join(world.config.home, 'accounts', 'legacy');
-    expect(world.accounts.store.find('legacy').configDir).toBe(dir);
+    await world.accounts.startLogin('imported');
+    const dir = join(world.config.home, 'accounts', 'imported');
+    expect(world.accounts.store.find('imported').configDir).toBe(dir);
     expect(world.calls.at(-1)?.env.CLAUDE_CONFIG_DIR).toBe(dir);
     world.statuses.set(dir, { loggedIn: true, email: 'me@example.com' });
     world.processes.at(-1)?.exit(0);
     await until('the sign-in to finish', () => world.accounts.logins.current()?.phase === 'done');
-    expect(world.accounts.store.find('legacy')).toMatchObject({ origin: 'login', configDir: dir });
-    expect(await lease(world)).toMatchObject({ id: 'legacy', configDir: dir });
+    expect(world.accounts.store.find('imported')).toMatchObject({ origin: 'login', configDir: dir });
+    expect(await lease(world)).toMatchObject({ id: 'imported', configDir: dir });
   });
 
   test.each(['claude', 'cswap'] as const)(
     'signing in again to a %s account as another email changes nothing and signs the wrong login out',
     async (origin) => {
       const root = createTempDir();
-      writeLegacyAccount(root, origin, 'me@example.com');
+      writeImportedAccount(root, origin, 'me@example.com');
       const world = createWorld({ root });
       await world.accounts.refresh();
 
-      await world.accounts.startLogin('legacy');
-      const dir = world.accounts.store.find('legacy').configDir as string;
+      await world.accounts.startLogin('imported');
+      const dir = world.accounts.store.find('imported').configDir as string;
       world.statuses.set(dir, { loggedIn: true, email: 'other@example.com' });
       world.processes.at(-1)?.exit(0);
       await until('the sign-in to fail', () => world.accounts.logins.current()?.phase === 'failed');
       const message =
         'You signed in as other@example.com, not me@example.com. Sign in as me@example.com instead.';
       expect(world.accounts.snapshot().login?.message).toBe(message);
-      expect(world.accounts.store.find('legacy')).toMatchObject({ origin, email: 'me@example.com' });
+      expect(world.accounts.store.find('imported')).toMatchObject({ origin, email: 'me@example.com' });
       expect(world.accounts.snapshot().accounts[0]).toMatchObject({
         signIn: 'signed_out',
         signInDetail: message,
@@ -974,11 +974,11 @@ describe('moving a rejected attempt to another account', () => {
       ).toBe(true);
       expect(dispatched(world).some((command) => command.type === 'account.signed_in')).toBe(false);
 
-      await world.accounts.startLogin('legacy');
+      await world.accounts.startLogin('imported');
       world.statuses.set(dir, { loggedIn: true, email: 'ME@example.com' });
       world.processes.at(-1)?.exit(0);
       await until('the sign-in to finish', () => world.accounts.logins.current()?.phase === 'done');
-      expect(world.accounts.store.find('legacy')).toMatchObject({ origin: 'login', configDir: dir });
+      expect(world.accounts.store.find('imported')).toMatchObject({ origin: 'login', configDir: dir });
     }
   );
 
@@ -1345,9 +1345,9 @@ describe('changing and removing accounts', () => {
 
   test('removing an account that ran on your Claude Code login only takes it out of Shinsa, never signs it out', async () => {
     const root = createTempDir();
-    writeLegacyAccount(root, 'claude', 'me@example.com');
+    writeImportedAccount(root, 'claude', 'me@example.com');
     const world = createWorld({ root });
-    await world.accounts.remove('legacy');
+    await world.accounts.remove('imported');
     expect(world.accounts.store.list()).toEqual([]);
     expect(world.calls.some((call) => call.command[2] === 'logout')).toBe(false);
   });

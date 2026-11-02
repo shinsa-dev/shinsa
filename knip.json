@@ -3,7 +3,8 @@
   "ignoreBinaries": ["ditto", "spctl"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/*.ts", "scripts/perf/*.ts", "scripts/seed-media/*.ts", "scripts/screenshots/*.ts"]
+      "entry": ["scripts/*.ts", "scripts/perf/*.ts", "scripts/seed-media/*.ts", "scripts/screenshots/*.ts"],
+      "ignoreDependencies": ["@effect/language-service", "oxlint", "oxlint-tsgolint"]
     },
     "apps/web": {
       "entry": ["test/**/*.test.{ts,tsx}", "src/remote-sw.ts"],

@@ -12,7 +12,7 @@ export function recordSilence(decider: Decider, command: CommandOf<'run.silence'
 export function snoozeSilence(decider: Decider, command: CommandOf<'run.snooze_silence'>) {
   const run = findRun(decider.state, command.runId);
   if (command.until <= decider.context.now) {
-    throw new DomainError('snooze_invalid', 'Snooze until a time in the future.');
+    throw new DomainError({ code: 'snooze_invalid', message: 'Snooze until a time in the future.' });
   }
   if (run.silence?.snoozedUntil === command.until) return;
   decider.emit({ type: 'run.silence_snoozed', runId: run.id, until: command.until });

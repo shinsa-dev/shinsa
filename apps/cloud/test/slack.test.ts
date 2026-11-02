@@ -18,10 +18,10 @@ import {
   serializeSlackAnswerValue,
   verifySlackForwardSignature,
 } from '@shinsa/core';
-import { createSlackSignature } from '../src/crypto.ts';
-import { SLACK_EVENT_BODY_LIMIT_BYTES } from '../src/slack.ts';
-import { SLACK_BOT_SCOPES, SLACK_USER_SCOPES } from '../src/slack-api.ts';
-import { createHarness, type Harness, readJson, TEST_CONFIG } from './harness.ts';
+import { SLACK_BOT_SCOPES } from '../src/integrations/slack/schema.ts';
+import { SLACK_USER_SCOPES } from '../src/routes/slack-link/schema.ts';
+import { SLACK_EVENT_BODY_LIMIT_BYTES } from '../src/slack/schema.ts';
+import { createHarness, createSlackSignature, type Harness, readJson, TEST_CONFIG } from './harness.ts';
 
 type Fields = Record<string, unknown>;
 
@@ -531,7 +531,7 @@ describe('events from Slack', () => {
     expect(forwards).toHaveLength(1);
   });
 
-  test('removing the app forgets the workspace and every link in it; a revoked user token alone keeps it', async () => {
+  test('a revoked bot token forgets the workspace and every link in it; a revoked user token alone keeps it', async () => {
     const { harness } = await setUp();
     const count = () =>
       harness.db.sqlite.query('SELECT COUNT(*) AS n FROM slack_links').get() as { n: number };
@@ -540,9 +540,12 @@ describe('events from Slack', () => {
     expect(count().n).toBe(1);
     await sendEvent(harness, mentionEnvelope({ type: 'tokens_revoked', tokens: { bot: ['B0T'] } }));
     expect(count().n).toBe(0);
-    const { harness: other } = await setUp();
-    await sendEvent(other, mentionEnvelope({ type: 'app_uninstalled' }));
-    expect(other.db.sqlite.query('SELECT COUNT(*) AS n FROM slack_workspaces').get()).toEqual({ n: 0 });
+  });
+
+  test('removing the app forgets the workspace', async () => {
+    const { harness } = await setUp();
+    await sendEvent(harness, mentionEnvelope({ type: 'app_uninstalled' }));
+    expect(harness.db.sqlite.query('SELECT COUNT(*) AS n FROM slack_workspaces').get()).toEqual({ n: 0 });
   });
 });
 

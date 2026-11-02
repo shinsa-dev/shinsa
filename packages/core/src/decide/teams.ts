@@ -4,15 +4,16 @@ import type { Decider } from './decider.ts';
 
 function assertHumanTeams(decider: Decider) {
   if (!decider.context.onBehalf) return;
-  throw new DomainError(
-    'human_only',
-    'Only the human decides which projects a team sees. Tell them they can choose it in Settings → Teams.'
-  );
+  throw new DomainError({
+    code: 'human_only',
+    message:
+      'Only the human decides which projects a team sees. Tell them they can choose it in Settings → Teams.',
+  });
 }
 
 function findTeamProject(decider: Decider, projectId: string) {
   const project = decider.state.projects[projectId];
-  if (!project) throw new DomainError('project_not_found', `No project ${projectId}`);
+  if (!project) throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}` });
   return project;
 }
 

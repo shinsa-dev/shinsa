@@ -36,6 +36,6 @@ interface SurfaceToolCall {
 
 export function readSurfaceToolCall(name: string, input: Record<string, unknown>): SurfaceToolCall {
   const spec = listAgentSpecs().find((candidate) => resolveToolName(candidate) === name);
-  if (!spec) throw new DomainError('tool_unknown', `No tool ${name}.`);
+  if (!spec) throw new DomainError({ code: 'tool_unknown', message: `No tool ${name}.` });
   return { spec, values: readToolInput(spec.fields, input) };
 }

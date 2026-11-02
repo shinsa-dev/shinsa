@@ -1,7 +1,5 @@
 import type { DelegateRole, DelegationIsolation, DelegationMode, DelegationWake } from '../domain/index.ts';
 
-export type DelegationUserCommand = { type: 'delegation.cancel'; runId: string };
-
 export type DelegationAgentCommand =
   | {
       type: 'agent.delegate';

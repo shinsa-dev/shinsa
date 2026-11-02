@@ -26,7 +26,7 @@ export function ChartPanel({
   return (
     <div className={cn(STAT_PANEL, 'flex min-w-0 flex-col gap-3 px-3 pt-2.5 pb-2')}>
       <div className='flex min-h-5 items-center justify-between gap-3'>
-        <Truncate className='font-medium text-fg-4 text-xs'>{title}</Truncate>
+        <Truncate className='text-xs font-medium text-fg-4'>{title}</Truncate>
         {aside && <span className='flex shrink-0 items-center gap-3 text-2xs text-fg-2'>{aside}</span>}
       </div>
       {children}
@@ -107,7 +107,7 @@ export function ChartPlot({
   return (
     <div className='flex min-w-0 flex-col gap-2'>
       <div className='relative pt-4'>
-        <span aria-hidden className='absolute top-0 right-0 text-2xs text-fg-2 tabular-nums leading-4'>
+        <span aria-hidden className='absolute top-0 right-0 text-2xs leading-4 text-fg-2 tabular-nums'>
           {formatTick(max)}
         </span>
         <div
@@ -127,19 +127,19 @@ export function ChartPlot({
               .map((tick) => (
                 <span
                   key={tick}
-                  className='absolute inset-x-0 border-bg-4 border-t border-dashed'
+                  className='absolute inset-x-0 border-t border-dashed border-bg-4'
                   style={{ top: `${(1 - tick / max) * 100}%` }}
                 />
               ))}
           </div>
-          <span aria-hidden className='absolute inset-x-0 bottom-0 border-border border-t' />
+          <span aria-hidden className='absolute inset-x-0 bottom-0 border-t border-border' />
           {children(hovered?.index ?? null)}
           {hovered && layout === 'points' && (
             <>
               <span
                 aria-hidden
                 className={cn(
-                  'pointer-events-none absolute inset-y-0 border-fg-1 border-l border-dashed',
+                  'pointer-events-none absolute inset-y-0 border-l border-dashed border-fg-1',
                   GLIDE
                 )}
                 style={{ left: `${share * 100}%` }}

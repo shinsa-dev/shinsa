@@ -16,7 +16,7 @@ export function RoundDivider({ round, first }: { round: Round; first: boolean })
       <Hint label={divider.heading} detail={divider.time}>
         <span
           data-chat-line
-          className='inline-flex h-5 min-w-0 max-w-full cursor-default items-center gap-1.25 text-fg-2 text-xs'
+          className='inline-flex h-5 max-w-full min-w-0 cursor-default items-center gap-1.25 text-xs text-fg-2'
         >
           <IconSlot>
             <Icon size='sm' name={ROUND_ICON} className='text-fg-3' />

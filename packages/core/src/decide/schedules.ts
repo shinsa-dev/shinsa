@@ -52,25 +52,28 @@ interface Delivery {
 
 function assertInteger(value: number, min: number, max: number, message: string) {
   if (!Number.isInteger(value) || value < min || value > max)
-    throw new DomainError('schedule_invalid', message);
+    throw new DomainError({ code: 'schedule_invalid', message });
 }
 
 function assertWebhook(trigger: Extract<ScheduleTrigger, { kind: 'webhook' }>) {
   const signature = trigger.signature;
   if (signature) {
     if (!HEADER_NAME.test(signature.header) || signature.header.length > SCHEDULE_LIMITS.header) {
-      throw new DomainError('schedule_invalid', 'Name the header with letters and dashes.');
+      throw new DomainError({
+        code: 'schedule_invalid',
+        message: 'Name the header with letters and dashes.',
+      });
     }
     if (signature.prefix.length > SCHEDULE_LIMITS.prefix) {
-      throw new DomainError(
-        'schedule_invalid',
-        `The prefix is at most ${SCHEDULE_LIMITS.prefix} characters.`
-      );
+      throw new DomainError({
+        code: 'schedule_invalid',
+        message: `The prefix is at most ${SCHEDULE_LIMITS.prefix} characters.`,
+      });
     }
   }
   const replayKey = trigger.replayKey;
   if (replayKey !== null && (replayKey.length > SCHEDULE_LIMITS.replayKey || !PLACEHOLDER.test(replayKey))) {
-    throw new DomainError('schedule_invalid', 'The key needs a {{…}} placeholder.');
+    throw new DomainError({ code: 'schedule_invalid', message: 'The key needs a {{…}} placeholder.' });
   }
 }
 
@@ -78,10 +81,10 @@ function assertTrigger(trigger: ScheduleTrigger, now: number) {
   switch (trigger.kind) {
     case 'once':
       if (trigger.at < now - SCHEDULE_LIMITS.onceGraceMs) {
-        throw new DomainError('schedule_past', 'That time has already passed.');
+        throw new DomainError({ code: 'schedule_past', message: 'That time has already passed.' });
       }
       if (trigger.at > now + SCHEDULE_LIMITS.maxInMinutes * MINUTE_MS) {
-        throw new DomainError('schedule_invalid', 'Run it within a year from now.');
+        throw new DomainError({ code: 'schedule_invalid', message: 'Run it within a year from now.' });
       }
       return;
     case 'interval':
@@ -94,13 +97,13 @@ function assertTrigger(trigger: ScheduleTrigger, now: number) {
       return;
     case 'daily':
       if (!parseTimeOfDay(trigger.time)) {
-        throw new DomainError('schedule_invalid', 'Use 24-hour HH:MM, such as 09:00.');
+        throw new DomainError({ code: 'schedule_invalid', message: 'Use 24-hour HH:MM, such as 09:00.' });
       }
       if (
         new Set(trigger.weekdays).size !== trigger.weekdays.length ||
         trigger.weekdays.some((day) => !Number.isInteger(day) || day < 0 || day > 6)
       ) {
-        throw new DomainError('schedule_invalid', 'Weekdays run from 0 (Sunday) to 6.');
+        throw new DomainError({ code: 'schedule_invalid', message: 'Weekdays run from 0 (Sunday) to 6.' });
       }
       return;
     case 'webhook':
@@ -111,14 +114,17 @@ function assertTrigger(trigger: ScheduleTrigger, now: number) {
 
 function assertTimeZone(timeZone: string) {
   if (!isTimeZone(timeZone)) {
-    throw new DomainError('time_zone_invalid', 'Use a time zone such as Europe/Berlin.');
+    throw new DomainError({ code: 'time_zone_invalid', message: 'Use a time zone such as Europe/Berlin.' });
   }
 }
 
 function resolveTarget(decider: Decider, input: ScheduleTargetInput, task: Task): ScheduleTarget {
   if (input.kind === 'new_task') {
     if (input.repoId !== null && !decider.state.repos[input.repoId]) {
-      throw new DomainError('repo_not_found', `No repository ${input.repoId}. Name one of the project's.`);
+      throw new DomainError({
+        code: 'repo_not_found',
+        message: `No repository ${input.repoId}. Name one of the project's.`,
+      });
     }
     return {
       kind: 'new_task',
@@ -129,10 +135,13 @@ function resolveTarget(decider: Decider, input: ScheduleTargetInput, task: Task)
   }
   const target = decider.state.tasks[input.taskId ?? task.id];
   if (!target)
-    throw new DomainError('task_not_found', `No task ${input.taskId}. find_tasks lists the tasks.`);
+    throw new DomainError({
+      code: 'task_not_found',
+      message: `No task ${input.taskId}. find_tasks lists the tasks.`,
+    });
   assertNotWatchHome(target);
   if (isTaskClosed(target)) {
-    throw new DomainError('task_settled', 'That task is closed.');
+    throw new DomainError({ code: 'task_settled', message: 'That task is closed.' });
   }
   return { kind: 'task', taskId: target.id };
 }
@@ -140,16 +149,16 @@ function resolveTarget(decider: Decider, input: ScheduleTargetInput, task: Task)
 function selectOwnSchedule(decider: Decider, scheduleId: string, task: Task) {
   const schedule = decider.state.schedules[scheduleId];
   if (!schedule) {
-    throw new DomainError(
-      'schedule_not_found',
-      `No schedule ${scheduleId}. list_schedules shows the schedules that exist.`
-    );
+    throw new DomainError({
+      code: 'schedule_not_found',
+      message: `No schedule ${scheduleId}. list_schedules shows the schedules that exist.`,
+    });
   }
   if (schedule.createdBy.kind !== 'agent' || schedule.createdBy.taskId !== task.id) {
-    throw new DomainError(
-      'schedule_not_yours',
-      'That schedule belongs to another task. The human can change it in Settings → Schedules.'
-    );
+    throw new DomainError({
+      code: 'schedule_not_yours',
+      message: 'That schedule belongs to another task. The human can change it in Settings → Schedules.',
+    });
   }
   return schedule;
 }
@@ -160,7 +169,7 @@ function assertScheduleRoom(decider: Decider, taskId: string | null) {
     (schedule) => schedule.createdBy.kind === 'agent' && schedule.createdBy.taskId === taskId
   );
   if (own.length >= SCHEDULE_LIMITS.perTask || live.length >= SCHEDULE_LIMITS.live) {
-    throw new DomainError('schedule_limit', 'Too many schedules. Delete one first.');
+    throw new DomainError({ code: 'schedule_limit', message: 'Too many schedules. Delete one first.' });
   }
 }
 
@@ -181,9 +190,13 @@ type ScheduleWrite = Pick<
 
 function resolveText(command: ScheduleWrite, existing: Schedule | null) {
   const text = command.text?.trim() || existing?.text;
-  if (!text) throw new DomainError('schedule_invalid', 'A schedule needs a message to send.');
+  if (!text)
+    throw new DomainError({ code: 'schedule_invalid', message: 'A schedule needs a message to send.' });
   if (text.length > SCHEDULE_LIMITS.text) {
-    throw new DomainError('schedule_invalid', `The message is over ${SCHEDULE_LIMITS.text} characters.`);
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message: `The message is over ${SCHEDULE_LIMITS.text} characters.`,
+    });
   }
   return text;
 }
@@ -194,10 +207,10 @@ function resolveTrigger(command: ScheduleWrite, existing: Schedule | null, now: 
     return command.trigger;
   }
   if (existing) return existing.trigger;
-  throw new DomainError(
-    'schedule_invalid',
-    'Say when it runs: in_minutes, run_at, every_minutes, daily_at or webhook.'
-  );
+  throw new DomainError({
+    code: 'schedule_invalid',
+    message: 'Say when it runs: in_minutes, run_at, every_minutes, daily_at or webhook.',
+  });
 }
 
 function resolveMaxRuns(command: ScheduleWrite, existing: Schedule | null) {
@@ -216,16 +229,17 @@ function resolveWrittenName(command: ScheduleWrite, existing: Schedule | null, t
 function assertSourceChange(source: ScheduleSource | null, existing: Schedule | null, targeted: boolean) {
   if (!source) return;
   if (targeted) {
-    throw new DomainError(
-      'source_target',
-      'A watch reads in a home of its own, never in a task. Leave the target out.'
-    );
+    throw new DomainError({
+      code: 'source_target',
+      message: 'A watch reads in a home of its own, never in a task. Leave the target out.',
+    });
   }
   if (existing && !existing.source) {
-    throw new DomainError(
-      'source_change',
-      'This automation starts or messages a task, so it cannot become a watch. Create a new one that reads the integration.'
-    );
+    throw new DomainError({
+      code: 'source_change',
+      message:
+        'This automation starts or messages a task, so it cannot become a watch. Create a new one that reads the integration.',
+    });
   }
 }
 
@@ -288,10 +302,11 @@ function resolveAgentSource(
   const server = command.source?.trim();
   if (!server) return existing?.source ?? null;
   if (!task.projectId) {
-    throw new DomainError(
-      'project_required',
-      'This task belongs to no project, so it has no integration to watch. Ask the human to add one in Settings → Projects.'
-    );
+    throw new DomainError({
+      code: 'project_required',
+      message:
+        'This task belongs to no project, so it has no integration to watch. Ask the human to add one in Settings → Projects.',
+    });
   }
   const source = { projectId: task.projectId, server };
   findProjectSource(decider, source);
@@ -336,10 +351,10 @@ function createDraft(
 function assertRunnable(schedule: Schedule) {
   if (!schedule.enabled) return;
   if (schedule.trigger.kind !== 'webhook' && schedule.nextRunAt === null) {
-    throw new DomainError('schedule_past', 'That time has already passed.');
+    throw new DomainError({ code: 'schedule_past', message: 'That time has already passed.' });
   }
   if (schedule.maxRuns !== null && schedule.runCount >= schedule.maxRuns) {
-    throw new DomainError('schedule_invalid', 'It has used all its runs.');
+    throw new DomainError({ code: 'schedule_invalid', message: 'It has used all its runs.' });
   }
 }
 
@@ -403,15 +418,15 @@ export function writeSchedule(decider: Decider, command: CommandOf<'agent.set_sc
 function resolveUserTarget(decider: Decider, target: ScheduleTarget): ScheduleTarget {
   if (target.kind === 'new_task') {
     if (target.repoId !== null && !decider.state.repos[target.repoId]) {
-      throw new DomainError('repo_not_found', `No repository ${target.repoId}.`);
+      throw new DomainError({ code: 'repo_not_found', message: `No repository ${target.repoId}.` });
     }
     return target;
   }
   const task = decider.state.tasks[target.taskId];
-  if (!task) throw new DomainError('task_not_found', `No task ${target.taskId}.`);
+  if (!task) throw new DomainError({ code: 'task_not_found', message: `No task ${target.taskId}.` });
   assertNotWatchHome(task);
   if (isTaskClosed(task)) {
-    throw new DomainError('task_settled', 'That task is closed.');
+    throw new DomainError({ code: 'task_settled', message: 'That task is closed.' });
   }
   return target;
 }
@@ -437,7 +452,7 @@ function selectWrittenTarget(
   if (source) return resolveSourceTarget(decider, command, existing, source);
   if (command.target) return resolveUserTarget(decider, command.target);
   if (existing) return existing.target;
-  throw new DomainError('schedule_invalid', 'Pick a new task or a task to message.');
+  throw new DomainError({ code: 'schedule_invalid', message: 'Pick a new task or a task to message.' });
 }
 
 function resolveUserCreator(decider: Decider): ScheduleCreator {
@@ -449,7 +464,7 @@ export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule
   assertTimeZone(command.timeZone);
   const existing = command.scheduleId ? (decider.state.schedules[command.scheduleId] ?? null) : null;
   if (command.scheduleId && !existing) {
-    throw new DomainError('schedule_not_found', `No schedule ${command.scheduleId}.`);
+    throw new DomainError({ code: 'schedule_not_found', message: `No schedule ${command.scheduleId}.` });
   }
   const source = resolveUserSource(decider, command, existing);
   if (!existing && source && decider.context.onBehalf) {
@@ -472,10 +487,10 @@ export function writeUserSchedule(decider: Decider, command: CommandOf<'schedule
 
 export function acceptWatchSuggestion(decider: Decider, command: CommandOf<'watch_suggestion.accept'>) {
   if (decider.context.onBehalf) {
-    throw new DomainError(
-      'human_only',
-      'Only the human accepts a suggested watch. It waits for them in Settings → Automations.'
-    );
+    throw new DomainError({
+      code: 'human_only',
+      message: 'Only the human accepts a suggested watch. It waits for them in Settings → Automations.',
+    });
   }
   const suggestion = findOpenWatchSuggestion(decider, command.suggestionId);
   const source = { projectId: suggestion.projectId, server: suggestion.server };
@@ -507,17 +522,19 @@ function describeStopped(schedule: Schedule) {
 
 export function enableSchedule(decider: Decider, command: CommandOf<'schedule.enable'>) {
   const schedule = decider.state.schedules[command.scheduleId];
-  if (!schedule) throw new DomainError('schedule_not_found', 'This schedule no longer exists.');
+  if (!schedule)
+    throw new DomainError({ code: 'schedule_not_found', message: 'This schedule no longer exists.' });
   if (schedule.enabled === command.enabled) return;
   const now = decider.context.now;
   if (!command.enabled) {
     decider.emit({ type: 'schedule.written', schedule: { ...schedule, enabled: false, updatedAt: now } });
     return;
   }
-  if (schedule.stopped !== null) throw new DomainError('schedule_finished', describeStopped(schedule));
+  if (schedule.stopped !== null)
+    throw new DomainError({ code: 'schedule_finished', message: describeStopped(schedule) });
   const nextRunAt = resolveNextRun(schedule.trigger, now, schedule.timeZone);
   if (schedule.trigger.kind !== 'webhook' && nextRunAt === null) {
-    throw new DomainError('schedule_past', 'Its time has passed. Delete it.');
+    throw new DomainError({ code: 'schedule_past', message: 'Its time has passed. Delete it.' });
   }
   decider.emit({
     type: 'schedule.written',
@@ -670,7 +687,7 @@ export function deliverSchedule(decider: Decider, command: CommandOf<'schedule.d
   const key = command.replayKey;
   if (key !== null && (schedule.replayKeys[key] ?? 0) > decider.context.now) return;
   const text = command.text.trim();
-  if (!text) throw new DomainError('schedule_invalid', 'The filled-in prompt is empty.');
+  if (!text) throw new DomainError({ code: 'schedule_invalid', message: 'The filled-in prompt is empty.' });
   runSchedule(decider, schedule, {
     text,
     deliveryId: command.deliveryId,

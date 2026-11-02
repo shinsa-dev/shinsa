@@ -1,8 +1,8 @@
+import { Option, Schema } from 'effect';
 import { USER_COMMAND_TYPES, type UserCommand } from '../commands/index.ts';
+import { DEVELOPMENT_VERSION, EngineInfo } from './schema.ts';
 
 export const ENGINE_PROTOCOL = 1;
-
-export const DEVELOPMENT_VERSION = '0.0.0';
 
 export const ENGINE_FEATURES = ['task.share', 'feedback', 'teams', 'review.approve_after_fix'] as const;
 
@@ -59,13 +59,6 @@ export const ENGINE_BASELINE_COMMANDS: readonly EngineCommand[] = [
   'memory.accept',
   'memory.remove',
 ];
-
-export interface EngineInfo {
-  version: string;
-  protocol: number;
-  commands: string[];
-  features: string[];
-}
 
 export interface ShinsaBuild {
   version: string;
@@ -165,20 +158,10 @@ export function resolveEngineInfo(version: string): EngineInfo {
   };
 }
 
-function readStrings(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-}
+const decodeEngineInfo = Schema.decodeUnknownOption(EngineInfo);
 
 export function parseEngineInfo(value: unknown): EngineInfo | null {
-  if (!value || typeof value !== 'object') return null;
-  const fields = value as Record<string, unknown>;
-  if (typeof fields.protocol !== 'number' || !Number.isInteger(fields.protocol)) return null;
-  return {
-    version: typeof fields.version === 'string' ? fields.version : DEVELOPMENT_VERSION,
-    protocol: fields.protocol,
-    commands: readStrings(fields.commands),
-    features: readStrings(fields.features),
-  };
+  return Option.getOrNull(decodeEngineInfo(value));
 }
 
 export function resolveEngineCommands(engine: EngineInfo | null): ReadonlySet<string> {

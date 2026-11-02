@@ -20,7 +20,7 @@ import type { SharedView } from '@/lib/share/view.ts';
 
 function StatusSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className='flex flex-col gap-1.5 border-border border-t px-4 py-3'>
+    <section className='flex flex-col gap-1.5 border-t border-border px-4 py-3'>
       <h2 className='text-2xs text-fg-2'>{title}</h2>
       {children}
     </section>
@@ -43,7 +43,7 @@ function StatusTimeline({ steps }: { steps: StatusStep[] }) {
             <StepMark status={step.status} />
             <span
               className={cn(
-                'whitespace-nowrap text-2xs',
+                'text-2xs whitespace-nowrap',
                 step.status === 'pending' ? 'text-fg-2' : 'text-fg-4',
                 index !== reached && 'max-sm:sr-only'
               )}
@@ -72,7 +72,7 @@ export function StatusCardPage({ view }: { view: SharedView }) {
           <header className='flex flex-col gap-1.5 px-4 py-3'>
             <ToneLabel label={card.stage.label} tone={card.stage.tone} />
             <h1 className={cn(PAGE_TITLE, 'selectable')}>{card.title}</h1>
-            {card.description && <p className='selectable text-fg-3 text-xs'>{card.description}</p>}
+            {card.description && <p className='selectable text-xs text-fg-3'>{card.description}</p>}
           </header>
           <StatusSection title={STATUS_LATEST_TITLE}>
             <p className='selectable text-xs'>{card.latest}</p>

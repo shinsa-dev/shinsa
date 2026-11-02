@@ -12,7 +12,7 @@ import type { Decider } from './decider.ts';
 export function recordEdit(decider: Decider, command: CommandOf<'task.record_edit'>) {
   const task = decider.task(command.taskId);
   const refusal = resolveEditRefusal(task);
-  if (refusal) throw new DomainError('edit_refused', refusal);
+  if (refusal) throw new DomainError({ code: 'edit_refused', message: refusal });
   const edited = (task.editedPaths ?? []).includes(command.path);
   const untold = (task.untoldEdits ?? []).includes(command.path);
   if (command.changed ? edited && untold : !edited) return;

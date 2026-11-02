@@ -43,7 +43,8 @@ function createFakeEngine(patch: (state: ShinsaState) => void) {
         failNext = false;
         return Promise.reject(new Error('log full'));
       }
-      if (refuseAll) return Promise.reject(new DomainError('monitor_stale', 'That check is not due.'));
+      if (refuseAll)
+        return Promise.reject(new DomainError({ code: 'monitor_stale', message: 'That check is not due.' }));
       const task = command.type === 'monitor.fire' ? state.tasks[command.taskId] : undefined;
       if (task?.monitor && applyFires) task.monitor = { ...task.monitor, status: 'fired' };
       if (answerNothing || command.type !== 'monitor.fire') return Promise.resolve([]);

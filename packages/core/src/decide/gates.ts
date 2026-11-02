@@ -43,11 +43,12 @@ function describePlanChange(decider: Decider, gate: Gate) {
 
 function findOpenGate(decider: Decider, gateId: string) {
   const gate = decider.state.gates[gateId];
-  if (!gate) throw new DomainError('gate_not_found', `No gate ${gateId}`);
+  if (!gate) throw new DomainError({ code: 'gate_not_found', message: `No gate ${gateId}` });
   if (gate.status === 'withdrawn' && gate.type === 'plan' && !isTaskSettled(decider.task(gate.taskId))) {
-    throw new DomainError('plan_changed', describePlanChange(decider, gate));
+    throw new DomainError({ code: 'plan_changed', message: describePlanChange(decider, gate) });
   }
-  if (gate.status !== 'open') throw new DomainError('gate_closed', 'This has already been answered.');
+  if (gate.status !== 'open')
+    throw new DomainError({ code: 'gate_closed', message: 'This has already been answered.' });
   return gate;
 }
 
@@ -67,18 +68,19 @@ export function assertGatesStayOpen(decider: Decider, before: ShinsaState) {
     (gate) => decider.state.gates[gate.id]?.status !== 'open' && !isFollowedUp(decider, gate)
   );
   if (!closed) return;
-  throw new DomainError(
-    'human_only',
-    'This task waits for a decision only the human makes. It waits for them at its gate in Shinsa; tell them it is there.'
-  );
+  throw new DomainError({
+    code: 'human_only',
+    message:
+      'This task waits for a decision only the human makes. It waits for them at its gate in Shinsa; tell them it is there.',
+  });
 }
 
 export function assertHumanDecides(decider: Decider) {
   if (!decider.context.onBehalf) return;
-  throw new DomainError(
-    'human_only',
-    'Only the human decides this. It waits for them at its gate in Shinsa; tell them it is there.'
-  );
+  throw new DomainError({
+    code: 'human_only',
+    message: 'Only the human decides this. It waits for them at its gate in Shinsa; tell them it is there.',
+  });
 }
 
 function assertDecision(gate: Gate, decision: GateDecision, response: string | null) {
@@ -88,10 +90,10 @@ function assertDecision(gate: Gate, decision: GateDecision, response: string | n
   }
   const definition = resolveGateDefinition(gate);
   if (!definition.decisions.some((choice) => choice.decision === decision)) {
-    throw new DomainError('decision_invalid', definition.refusal);
+    throw new DomainError({ code: 'decision_invalid', message: definition.refusal });
   }
   if (decision === 'reply' && gate.type !== 'operation' && !response?.trim()) {
-    throw new DomainError('answer_required', 'Write an answer first.');
+    throw new DomainError({ code: 'answer_required', message: 'Write an answer first.' });
   }
 }
 
@@ -99,21 +101,21 @@ function assertCurrentPlan(decider: Decider, gate: Gate, decision: GateDecision,
   if (gate.type !== 'plan' || decision !== 'approve') return;
   const current = decider.task(gate.taskId).plan?.version ?? null;
   if (planVersion === undefined || planVersion === current) return;
-  throw new DomainError('plan_changed', 'The plan changed. Approve the new one.');
+  throw new DomainError({ code: 'plan_changed', message: 'The plan changed. Approve the new one.' });
 }
 
 function assertVerdicts(decider: Decider, gate: Gate, decision: GateDecision, verdicts?: FindingVerdict[]) {
   if (!verdicts || verdicts.length === 0) return;
   if (gate.type !== 'review' && gate.type !== 'merge') {
-    throw new DomainError('verdicts_invalid', 'Only review findings take a verdict.');
+    throw new DomainError({ code: 'verdicts_invalid', message: 'Only review findings take a verdict.' });
   }
   const count = decider.task(gate.taskId).findings.length;
   const indexes = verdicts.map((verdict) => verdict.index);
   if (indexes.some((index) => index >= count) || new Set(indexes).size !== indexes.length) {
-    throw new DomainError('verdicts_invalid', 'Each verdict needs its own finding.');
+    throw new DomainError({ code: 'verdicts_invalid', message: 'Each verdict needs its own finding.' });
   }
   if (decision === 'approve' && verdicts.some((verdict) => verdict.verdict === 'fix')) {
-    throw new DomainError('verdicts_conflict', 'To fix findings, ask for changes.');
+    throw new DomainError({ code: 'verdicts_conflict', message: 'To fix findings, ask for changes.' });
   }
 }
 
@@ -127,23 +129,29 @@ function describeCommentProblem(comment: ReviewComment) {
 function assertThenApprove(gate: Gate, decision: GateDecision, thenApprove?: boolean) {
   if (!thenApprove) return;
   if (gate.type !== 'review') {
-    throw new DomainError('then_approve_invalid', 'Only a review approves itself after a fix.');
+    throw new DomainError({
+      code: 'then_approve_invalid',
+      message: 'Only a review approves itself after a fix.',
+    });
   }
   if (decision !== 'revise') {
-    throw new DomainError('then_approve_conflict', 'Ask for changes to approve after the fix.');
+    throw new DomainError({
+      code: 'then_approve_conflict',
+      message: 'Ask for changes to approve after the fix.',
+    });
   }
 }
 
 function assertComments(gate: Gate, decision: GateDecision, comments?: ReviewComment[]) {
   if (!comments || comments.length === 0) return;
   if (gate.type !== 'review' && gate.type !== 'merge') {
-    throw new DomainError('comments_invalid', 'Only a review takes line comments.');
+    throw new DomainError({ code: 'comments_invalid', message: 'Only a review takes line comments.' });
   }
   if (decision !== 'revise') {
-    throw new DomainError('comments_conflict', 'Request changes to send line comments.');
+    throw new DomainError({ code: 'comments_conflict', message: 'Request changes to send line comments.' });
   }
   const problem = comments.map(describeCommentProblem).find((found) => found !== null);
-  if (problem) throw new DomainError('comments_invalid', problem);
+  if (problem) throw new DomainError({ code: 'comments_invalid', message: problem });
 }
 
 function answerQuestion(decider: Decider, gate: Gate) {
@@ -264,6 +272,7 @@ export function answerGate(
     ...thenApprove,
   });
   decider.requestBriefing(gate.taskId);
+  // oxlint-disable-next-line typescript/switch-exhaustiveness-check -- a Post-merge gate takes no decision, so assertDecision refuses it before this switch
   switch (gate.type) {
     case 'question':
     case 'secret':

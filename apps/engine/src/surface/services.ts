@@ -67,10 +67,10 @@ async function readServices(client: SurfaceClient, projectRef: string): Promise<
   ]);
   const project = projectRef ? selectProject(projects, projectRef) : null;
   if (projectRef && !project)
-    throw new DomainError(
-      'project_not_found',
-      `No project ${projectRef}. \`shinsa projects list\` lists them.`
-    );
+    throw new DomainError({
+      code: 'project_not_found',
+      message: `No project ${projectRef}. \`shinsa projects list\` lists them.`,
+    });
   const now = Date.now();
   const views = projects
     .filter((each) => !project || each.id === project.id)
@@ -115,16 +115,16 @@ async function findServiceView(client: SurfaceClient, values: Values) {
     (each) => each.service.id === reference || each.service.name.toLowerCase() === wanted
   );
   if (matches.length > 1)
-    throw new DomainError(
-      'service_ambiguous',
-      `More than one project has a service called ${reference}. Name the project with --project.`
-    );
+    throw new DomainError({
+      code: 'service_ambiguous',
+      message: `More than one project has a service called ${reference}. Name the project with --project.`,
+    });
   const [view] = matches;
   if (!view)
-    throw new DomainError(
-      'service_not_found',
-      `No service ${reference}. \`shinsa services list\` lists them.`
-    );
+    throw new DomainError({
+      code: 'service_not_found',
+      message: `No service ${reference}. \`shinsa services list\` lists them.`,
+    });
   return view;
 }
 

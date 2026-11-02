@@ -82,7 +82,7 @@ function resolveStepRefusal(run: Run) {
 
 function assertPurpose(run: Run, tool: ShinsaToolName) {
   if (!run.purpose || !isHandOverTool(tool) || PURPOSE_HAND_OVERS[run.purpose].includes(tool)) return;
-  throw new DomainError('wrong_step', PURPOSE_REFUSAL[run.purpose]);
+  throw new DomainError({ code: 'wrong_step', message: PURPOSE_REFUSAL[run.purpose] });
 }
 
 export function assertRunTool(run: Run, tool: ShinsaToolName) {
@@ -91,22 +91,24 @@ export function assertRunTool(run: Run, tool: ShinsaToolName) {
     return;
   }
   if (tool === 'delegate_task' && (run.delegation?.depth ?? 0) >= DELEGATION_LIMITS.depth) {
-    throw new DomainError(
-      'delegation_depth',
-      `Delegations nest at most ${DELEGATION_LIMITS.depth} deep, and this agent is already at that depth. Do the work yourself.`
-    );
+    throw new DomainError({
+      code: 'delegation_depth',
+      message: `Delegations nest at most ${DELEGATION_LIMITS.depth} deep, and this agent is already at that depth. Do the work yourself.`,
+    });
   }
   if (isTaskSessionRole(run.role) && !isDelegatedRun(run) && listToolNames(run.role).includes(tool)) {
-    throw new DomainError('wrong_step', resolveStepRefusal(run));
+    throw new DomainError({ code: 'wrong_step', message: resolveStepRefusal(run) });
   }
-  throw new DomainError('wrong_role', `A ${run.role} cannot do that.`);
+  throw new DomainError({ code: 'wrong_role', message: `A ${run.role} cannot do that.` });
 }
 
 export function findCurrentRun(decider: Decider, runId: string, tool: ShinsaToolName) {
   const run = findRun(decider.state, runId);
-  if (run.endedAt !== null) throw new DomainError('run_over', 'This step is already over. End your turn.');
+  if (run.endedAt !== null)
+    throw new DomainError({ code: 'run_over', message: 'This step is already over. End your turn.' });
   const task = decider.task(run.taskId);
-  if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished. End your turn.');
+  if (isTaskSettled(task))
+    throw new DomainError({ code: 'task_settled', message: 'This task is finished. End your turn.' });
   assertRunTool(run, tool);
   return { run, task };
 }
@@ -118,7 +120,10 @@ function isStaleAttempt(run: Run, attemptId: string | null | undefined) {
 export function assertCurrentAttempt(decider: Decider, runId: string, attemptId: string | null | undefined) {
   const run = decider.state.runs[runId];
   if (run && isStaleAttempt(run, attemptId)) {
-    throw new DomainError('attempt_stale', 'A newer attempt of this step has taken over. End your turn.');
+    throw new DomainError({
+      code: 'attempt_stale',
+      message: 'A newer attempt of this step has taken over. End your turn.',
+    });
   }
 }
 

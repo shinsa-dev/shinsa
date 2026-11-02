@@ -62,9 +62,9 @@ export interface TeamsOptions {
 
 type Refusals = Partial<Record<number, DomainError>>;
 
-const OWNER_ONLY = new DomainError('not_owner', 'Only the team’s owner can do this.');
+const OWNER_ONLY = new DomainError({ code: 'not_owner', message: 'Only the team’s owner can do this.' });
 
-const TEAM_GONE = new DomainError('team_not_found', 'This machine is not in that team.');
+const TEAM_GONE = new DomainError({ code: 'team_not_found', message: 'This machine is not in that team.' });
 
 function createRandom(bytes: number) {
   return new Uint8Array(randomBytes(bytes));
@@ -74,7 +74,7 @@ function isTeamViewer(team: RemoteTeam, userId: string) {
   return team.owner.id === userId || team.members.some((member) => member.user.id === userId);
 }
 
-function withoutUser(members: RemoteMember[], userId: string) {
+function withoutUser(members: readonly RemoteMember[], userId: string) {
   return members.filter((member) => member.user.id !== userId);
 }
 
@@ -121,10 +121,10 @@ export class Teams implements TeamLinks {
   #findMachineToken() {
     const credentials = this.#store.file.credentials;
     if (!credentials)
-      throw new DomainError(
-        'remote_not_paired',
-        'Turn on remote access in Settings → General first. Teams reach your teammates through it.'
-      );
+      throw new DomainError({
+        code: 'remote_not_paired',
+        message: 'Turn on remote access in Settings → General first. Teams reach your teammates through it.',
+      });
     return credentials.machineToken;
   }
 
@@ -167,10 +167,13 @@ export class Teams implements TeamLinks {
 
   async create(name: string) {
     const trimmed = name.trim();
-    if (!trimmed) throw new DomainError('name_invalid', 'Give the team a name.');
+    if (!trimmed) throw new DomainError({ code: 'name_invalid', message: 'Give the team a name.' });
     const token = this.#findMachineToken();
     const answer = await this.#call(this.#remote.control.requestTeamCreation(token, trimmed), {
-      409: new DomainError('teams_full', 'You own as many teams as you can. Remove one first.'),
+      409: new DomainError({
+        code: 'teams_full',
+        message: 'You own as many teams as you can. Remove one first.',
+      }),
     });
     this.#store.upsertTeamKey({
       teamId: answer.team.id,
@@ -186,22 +189,22 @@ export class Teams implements TeamLinks {
   async join(url: string): Promise<{ status: TeamJoinStatus; teamId: string }> {
     const fragment = parseTeamJoinUrl(url);
     if (!fragment)
-      throw new DomainError(
-        'team_link_invalid',
-        'That is not a team link. Copy the whole link, with everything after the #.'
-      );
+      throw new DomainError({
+        code: 'team_link_invalid',
+        message: 'That is not a team link. Copy the whole link, with everything after the #.',
+      });
     const token = this.#findMachineToken();
     const answer = await this.#call(this.#remote.control.requestTeamJoin(token, fragment.invite), {
-      404: new DomainError(
-        'team_link_off',
-        'This team link was turned off. Ask the team’s owner for a new one.'
-      ),
+      404: new DomainError({
+        code: 'team_link_off',
+        message: 'This team link was turned off. Ask the team’s owner for a new one.',
+      }),
     });
     if (answer.teamId !== fragment.teamId)
-      throw new DomainError(
-        'team_link_invalid',
-        'That team link does not match its team. Ask for a new one.'
-      );
+      throw new DomainError({
+        code: 'team_link_invalid',
+        message: 'That team link does not match its team. Ask for a new one.',
+      });
     const earlier = this.#store.selectTeamKey(answer.teamId);
     const owns = answer.owner.id === this.#store.file.access?.owner.id;
     this.#store.upsertTeamKey({
@@ -220,10 +223,10 @@ export class Teams implements TeamLinks {
     this.#findOwnTeam(teamId);
     const stored = this.#store.selectTeamKey(teamId);
     if (!stored)
-      throw new DomainError(
-        'team_key_missing',
-        'This machine does not hold the team’s key. Open the team link on this machine first.'
-      );
+      throw new DomainError({
+        code: 'team_key_missing',
+        message: 'This machine does not hold the team’s key. Open the team link on this machine first.',
+      });
     const invite = stored.invite ?? (await this.renewInvite(teamId));
     return resolveTeamJoinUrl({ teamId, invite, key: stored.key }, this.#remote.appOrigin);
   }
@@ -254,8 +257,14 @@ export class Teams implements TeamLinks {
       'members/add',
       { userId },
       {
-        404: new DomainError('request_not_found', 'No one with that account asked to join this team.'),
-        409: new DomainError('members_full', 'This team has as many members as it can. Remove one first.'),
+        404: new DomainError({
+          code: 'request_not_found',
+          message: 'No one with that account asked to join this team.',
+        }),
+        409: new DomainError({
+          code: 'members_full',
+          message: 'This team has as many members as it can. Remove one first.',
+        }),
       }
     );
     this.#replaceTeam({
@@ -274,7 +283,10 @@ export class Teams implements TeamLinks {
   async removeMember(teamId: string, userId: string) {
     const team = this.#findOwnTeam(teamId);
     if (!team.members.some((member) => member.user.id === userId))
-      throw new DomainError('member_not_found', 'No one with that account is in this team.');
+      throw new DomainError({
+        code: 'member_not_found',
+        message: 'No one with that account is in this team.',
+      });
     await this.#action(teamId, 'members/remove', { userId });
     this.#replaceTeam({ ...team, members: withoutUser(team.members, userId) });
   }
@@ -283,7 +295,7 @@ export class Teams implements TeamLinks {
     const team = this.#store.selectTeam(teamId);
     if (!(team || this.#store.selectTeamKey(teamId))) throw TEAM_GONE;
     if (team?.role === 'owner')
-      throw new DomainError('owner_cannot_leave', 'You own this team. Remove it instead.');
+      throw new DomainError({ code: 'owner_cannot_leave', message: 'You own this team. Remove it instead.' });
     await this.#endTeam(teamId, 'leave');
   }
 

@@ -58,7 +58,7 @@ function EscalatedReview({ state, task, gate }: { state: ShinsaState; task: Task
         </>
       }
     >
-      {gate.escalation && <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>}
+      {gate.escalation && <p className='text-xs text-fg-3'>{describeEscalationBody(gate.escalation)}</p>}
       <FindingVerdicts task={task} findings={task.findings} />
     </NowFrame>
   );

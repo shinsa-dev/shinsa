@@ -30,7 +30,7 @@ export function TaskMeta({ state, task }: { state: ShinsaState; task: Task }) {
 
 export function ToneLabel({ label, tone }: { label: string; tone: Tone }) {
   return (
-    <span className={cn('inline-flex shrink-0 items-center gap-1.5 font-medium text-2xs', TONE_TEXT[tone])}>
+    <span className={cn('inline-flex shrink-0 items-center gap-1.5 text-2xs font-medium', TONE_TEXT[tone])}>
       <span className={cn('size-1.5 rounded-full', TONE_FILL[tone])} />
       {label}
     </span>

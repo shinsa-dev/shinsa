@@ -137,11 +137,13 @@ export async function dispatchUserCommand(
   guest: GuestActor | null = null
 ) {
   if (engine.readOnly) throw createReadOnlyError();
-  const command = parseUserCommand(body);
+  const parsed = parseUserCommand(body);
+  if (parsed._tag === 'Failure') throw parsed.failure;
+  const command = parsed.success;
   const refusal = resolveLocalOnlyRefusal(origin, command);
-  if (refusal) throw new DomainError(LOCAL_ONLY_CODE, refusal);
+  if (refusal) throw new DomainError({ code: LOCAL_ONLY_CODE, message: refusal });
   const outside = guest ? resolveScopedRefusal(engine.state, guest.taskId, command) : null;
-  if (outside) throw new DomainError(SCOPE_REFUSAL_CODE, outside);
+  if (outside) throw new DomainError({ code: SCOPE_REFUSAL_CODE, message: outside });
   return selectCreatedTaskId(
     await routeUserCommand(
       engine,
@@ -156,14 +158,17 @@ export async function dispatchUserCommand(
 function readIdempotencyKey(request: Request) {
   const key = request.headers.get('idempotency-key')?.trim() ?? '';
   if (key.length > MAX_IDEMPOTENCY_KEY)
-    throw new DomainError('idempotency_key_invalid', 'The Idempotency-Key header is too long.');
+    throw new DomainError({
+      code: 'idempotency_key_invalid',
+      message: 'The Idempotency-Key header is too long.',
+    });
   return key || null;
 }
 
 function readOpenRequest(body: JsonObject) {
   const { target, path, line } = body;
   if (!OPEN_TARGETS.has(target as OpenTarget))
-    throw new DomainError('target_invalid', 'Pick the editor, Finder or Terminal.');
+    throw new DomainError({ code: 'target_invalid', message: 'Pick the editor, Finder or Terminal.' });
   return {
     target: target as OpenTarget,
     path: typeof path === 'string' && path ? path : null,
@@ -213,7 +218,7 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
 
 function readRestartWhen(body: JsonObject): EngineRestartWhen {
   if (body.when === 'now' || body.when === 'idle') return body.when;
-  throw new DomainError('when_invalid', 'Restart now or once agents are idle.');
+  throw new DomainError({ code: 'when_invalid', message: 'Restart now or once agents are idle.' });
 }
 
 function createServerRoutes(context: ApiContext): ApiRoute[] {
@@ -274,7 +279,10 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
       respond: async (_match, request) => {
         const when = readRestartWhen(await readJsonObject(request));
         if (!restarter) {
-          throw new DomainError('restart_unsupported', 'This Shinsa cannot restart its engine.');
+          throw new DomainError({
+            code: 'restart_unsupported',
+            message: 'This Shinsa cannot restart its engine.',
+          });
         }
         return respondJson(await restarter.request(when));
       },
@@ -356,7 +364,10 @@ function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
       pattern: /^\/api\/onboarding\/install$/,
       respond: async (_match, request) => {
         if (request.headers.get('origin') === null)
-          throw new DomainError('browser_only', 'Only Shinsa’s own page installs the tools setup checks.');
+          throw new DomainError({
+            code: 'browser_only',
+            message: 'Only Shinsa’s own page installs the tools setup checks.',
+          });
         return respondJson(await onboarding.openInstall(await readJsonObject(request)));
       },
     },

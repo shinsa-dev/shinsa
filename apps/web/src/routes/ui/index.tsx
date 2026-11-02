@@ -105,7 +105,7 @@ function SectionNav() {
             data-highlighted={highlighted ? '' : undefined}
             onPointerEnter={() => setHovered(s.id)}
             className={cn(
-              'rounded-lg px-2 py-1 font-medium text-sm data-indicator-here:text-fg-4',
+              'rounded-lg px-2 py-1 text-sm font-medium data-indicator-here:text-fg-4',
               active ? 'text-fg-4' : 'text-fg-2'
             )}
           >
@@ -150,7 +150,7 @@ export function UiPage() {
     <div className='mx-auto flex w-full max-w-6xl gap-10 px-5 pt-10 pb-24'>
       <a
         href='#content'
-        className='corner-superellipse/1.125 sr-only z-50 rounded-xl bg-primary px-3 py-2 font-medium text-primary-foreground text-sm focus-visible:not-sr-only focus-visible:fixed focus-visible:top-4 focus-visible:left-4'
+        className='corner-superellipse/1.125 sr-only z-50 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground focus-visible:not-sr-only focus-visible:fixed focus-visible:top-4 focus-visible:left-4'
       >
         Skip to content
       </a>
@@ -160,13 +160,13 @@ export function UiPage() {
         <main id='content' className='flex min-w-0 flex-1 flex-col gap-12'>
           <header className='flex items-start justify-between gap-4'>
             <div className='flex flex-col gap-1'>
-              <span className='flex h-6 w-fit items-center rounded-full bg-bg-a1 px-2 font-medium text-fg-2 text-sm'>
+              <span className='flex h-6 w-fit items-center rounded-full bg-bg-a1 px-2 text-sm font-medium text-fg-2'>
                 @shinsa/ui
               </span>
-              <h1 className='font-medium text-2xl text-fg-4 tracking-tight'>Design system</h1>
-              <p className='max-w-lg text-fg-2 text-sm'>
+              <h1 className='text-2xl font-medium tracking-tight text-fg-4'>Design system</h1>
+              <p className='max-w-lg text-sm text-fg-2'>
                 Every token, component and state. This page is the visual counterpart to{' '}
-                <span className='text-fg-3 text-xs'>docs/design.md</span>. If something is in the library, it
+                <span className='text-xs text-fg-3'>docs/design.md</span>. If something is in the library, it
                 is on this page.
               </p>
             </div>

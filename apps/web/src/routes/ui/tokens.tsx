@@ -118,7 +118,7 @@ export function TokenSpecimens() {
           {SURFACES.map((t) => (
             <div key={t.name} className='flex flex-col items-center gap-1.5'>
               <div className={cn('corner-superellipse/1.125 size-12 rounded-xl shadow-1', t.cls)} />
-              <span className='text-fg-2 text-xs'>{t.name}</span>
+              <span className='text-xs text-fg-2'>{t.name}</span>
             </div>
           ))}
         </Specimen>
@@ -126,7 +126,7 @@ export function TokenSpecimens() {
           {FOREGROUNDS.map((t) => (
             <div key={t.name} className='flex flex-col items-center gap-1.5'>
               <div className={cn('corner-superellipse/1.125 size-12 rounded-xl', t.cls)} />
-              <span className='text-fg-2 text-xs'>{t.name}</span>
+              <span className='text-xs text-fg-2'>{t.name}</span>
             </div>
           ))}
         </Specimen>
@@ -134,7 +134,7 @@ export function TokenSpecimens() {
           {ICON_INKS.map((t) => (
             <div key={t.name} className='flex flex-col items-center gap-1.5'>
               <div className={cn('corner-superellipse/1.125 size-12 rounded-xl', t.cls)} />
-              <span className='text-fg-2 text-xs'>{t.name}</span>
+              <span className='text-xs text-fg-2'>{t.name}</span>
             </div>
           ))}
         </Specimen>
@@ -147,7 +147,7 @@ export function TokenSpecimens() {
                 <div className='flex-1 bg-purple-4' />
                 <div className={cn('-ml-12 w-12', t.cls)} />
               </div>
-              <span className='text-fg-2 text-xs'>{t.name}</span>
+              <span className='text-xs text-fg-2'>{t.name}</span>
             </div>
           ))}
         </Specimen>
@@ -161,14 +161,14 @@ export function TokenSpecimens() {
                 {ramp.chip ? (
                   <span
                     className={cn(
-                      'ml-1 inline-flex h-6 shrink-0 items-center rounded-full px-2.5 font-medium text-sm',
+                      'ml-1 inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-sm font-medium',
                       ramp.chip
                     )}
                   >
                     Aa text
                   </span>
                 ) : null}
-                <span className='text-fg-2 text-xs'>{ramp.name}</span>
+                <span className='text-xs text-fg-2'>{ramp.name}</span>
               </div>
             ))}
           </div>
@@ -180,17 +180,17 @@ export function TokenSpecimens() {
         description='ABC Areal, with ABC Areal Mono for code. Medium (450) carries headings and labels; the fg ramp does the rest of the hierarchy. Weights are listed in the next section.'
         className='flex-col items-start gap-2'
       >
-        <p className='font-medium text-2xl text-fg-4 tracking-tight'>Page title, 2xl · fg-4</p>
-        <p className='font-medium text-fg-4 text-xl leading-tighter'>Dialog title, xl · fg-4</p>
+        <p className='text-2xl font-medium tracking-tight text-fg-4'>Page title, 2xl · fg-4</p>
+        <p className='text-xl leading-tighter font-medium text-fg-4'>Dialog title, xl · fg-4</p>
         <p className='font-medium text-fg-4'>Section heading, base · fg-4</p>
         <p className='text-fg-3'>Body text, base · fg-3 (the inherited default)</p>
-        <p className='text-fg-2 text-sm'>Secondary label, sm · fg-2</p>
-        <p className='text-fg-2 text-xs'>Caption, xs · fg-2</p>
-        <p className='text-fg-1 text-xs'>Decorative only, never text, xs · fg-1</p>
-        <p className='font-mono text-fg-3 text-xs'>feat/embedded-chat-v2 · mono, xs · fg-3</p>
+        <p className='text-sm text-fg-2'>Secondary label, sm · fg-2</p>
+        <p className='text-xs text-fg-2'>Caption, xs · fg-2</p>
+        <p className='text-xs text-fg-1'>Decorative only, never text, xs · fg-1</p>
+        <p className='font-mono text-xs text-fg-3'>feat/embedded-chat-v2 · mono, xs · fg-3</p>
         <div className='mt-3 flex flex-col gap-1'>
-          <span className='text-fg-2 text-xs'>weight without a shift · regular, faux-medium, medium</span>
-          <div className='flex items-center gap-4 text-fg-4 text-sm'>
+          <span className='text-xs text-fg-2'>weight without a shift · regular, faux-medium, medium</span>
+          <div className='flex items-center gap-4 text-sm text-fg-4'>
             <span>Changes</span>
             <span className='faux-medium'>Changes</span>
             <span className='font-medium'>Changes</span>
@@ -212,15 +212,15 @@ export function TokenSpecimens() {
           ] as const
         ).map(([weight, name, value]) => (
           <div key={weight} className='flex items-baseline gap-4'>
-            <span className='w-28 text-fg-2 text-xs'>
+            <span className='w-28 text-xs text-fg-2'>
               {name} · {value}
             </span>
             <span className={cn('text-base text-fg-4', weight)}>Approve and merge the embedded chat</span>
           </div>
         ))}
         <div className='flex items-baseline gap-4'>
-          <span className='w-28 text-fg-2 text-xs'>Faux-medium</span>
-          <span className='faux-medium text-base text-fg-4'>Approve and merge the embedded chat</span>
+          <span className='w-28 text-xs text-fg-2'>Faux-medium</span>
+          <span className='text-base text-fg-4 faux-medium'>Approve and merge the embedded chat</span>
         </div>
       </Section>
       <Section
@@ -232,7 +232,7 @@ export function TokenSpecimens() {
           <div
             key={s}
             className={cn(
-              'corner-superellipse/1.125 flex h-20 w-28 items-center justify-center rounded-2xl bg-background text-fg-2 text-xs dark:bg-bg-2',
+              'corner-superellipse/1.125 flex h-20 w-28 items-center justify-center rounded-2xl bg-background text-xs text-fg-2 dark:bg-bg-2',
               s
             )}
           >
@@ -290,7 +290,7 @@ export function TokenSpecimens() {
             {ICON_NAMES.map((name) => (
               <div key={name} className='flex flex-col items-center gap-1.5'>
                 <Icon name={name} size='lg' className='text-fg-3' />
-                <span className='w-full truncate text-center text-fg-2 text-xs'>
+                <span className='w-full truncate text-center text-xs text-fg-2'>
                   {name.replace('Icon', '')}
                 </span>
               </div>

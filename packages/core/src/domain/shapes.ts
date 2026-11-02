@@ -192,7 +192,11 @@ export function resolveWorkStep(steps: readonly PipelineStep[]): WorkStep | null
 
 export function findWorkStep(steps: readonly PipelineStep[]): WorkStep {
   const step = resolveWorkStep(steps);
-  if (!step) throw new DomainError('no_work_step', 'This task has no step that builds or operates.');
+  if (!step)
+    throw new DomainError({
+      code: 'no_work_step',
+      message: 'This task has no step that builds or operates.',
+    });
   return step;
 }
 
@@ -228,10 +232,10 @@ export function resolveInquiryStep(steps: readonly PipelineStep[]): InquiryStep 
 export function findInquiryStep(steps: readonly PipelineStep[]): InquiryStep {
   const step = resolveInquiryStep(steps);
   if (!step)
-    throw new DomainError(
-      'no_inquiry_step',
-      'This task has no step that answers, researches or investigates.'
-    );
+    throw new DomainError({
+      code: 'no_inquiry_step',
+      message: 'This task has no step that answers, researches or investigates.',
+    });
   return step;
 }
 

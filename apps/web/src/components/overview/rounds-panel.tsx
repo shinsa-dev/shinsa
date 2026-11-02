@@ -37,7 +37,7 @@ function RoundDetail({
   const readOnly = useReadOnly();
   return (
     <div className='flex flex-col gap-1.5 ps-7 pt-1.5'>
-      <InlineMarkdown text={resolveRoundSummary(state, task, round)} className='text-fg-3 text-xs' />
+      <InlineMarkdown text={resolveRoundSummary(state, task, round)} className='text-xs text-fg-3' />
       {run && !readOnly && (
         <button
           type='button'

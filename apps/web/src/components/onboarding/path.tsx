@@ -14,12 +14,12 @@ function PathStep({ item, onOpen }: { item: PathItem; onOpen: (stepId: Onboardin
       disabled={item.disabled}
       aria-current={item.status === 'current' ? 'step' : undefined}
       onClick={() => onOpen(item.id)}
-      className='-mx-1 flex w-fit items-center gap-1.5 rounded-item px-1 py-0.5 enabled:cursor-pointer enabled:active:bg-bg-a2 enabled:hover:bg-bg-a2'
+      className='-mx-1 flex w-fit items-center gap-1.5 rounded-item px-1 py-0.5 enabled:cursor-pointer enabled:hover:bg-bg-a2 enabled:active:bg-bg-a2'
     >
       <StepMark status={item.status} />
       <span
         className={cn(
-          'whitespace-nowrap text-2xs',
+          'text-2xs whitespace-nowrap',
           item.status === 'pending' ? 'text-fg-2' : 'text-fg-4',
           item.status === 'current' ? 'font-medium' : 'max-sm:hidden'
         )}

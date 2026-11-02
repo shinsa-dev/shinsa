@@ -33,7 +33,7 @@ export function StatusLetter({ status, muted = false }: { status: DiffFile['stat
     <Hint label={FILE_STATUS[status].name}>
       <span
         className={cn(
-          'inline-flex w-2 shrink-0 justify-center font-medium text-2xs',
+          'inline-flex w-2 shrink-0 justify-center text-2xs font-medium',
           muted ? 'text-fg-1' : FILE_STATUS[status].className
         )}
       >
@@ -157,7 +157,7 @@ const ChangeFileRow = React.memo(function ChangedFileRow({
       selected={selected}
       label={path}
       icon={resolveFileIcon(path)}
-      className={cn(muted && 'file-icons-muted text-fg-1')}
+      className={cn(muted && 'text-fg-1 file-icons-muted')}
       onOpen={() => actions.open(path)}
       onPrefetch={() => actions.prefetch(path)}
       end={

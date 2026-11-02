@@ -14,12 +14,12 @@ import { TaskQueue } from '@/components/queue/queue.tsx';
 import { ServicesPanel } from '@/components/services/menu.tsx';
 import type { ServicesPanelActions } from '@/components/services/panel-views.tsx';
 import type { ServiceHandlers } from '@/components/services/service-row.tsx';
-import type { ServiceGroup } from '@/lib/terminal/services.ts';
 import {
   createServicesPanel,
   reduceServicesPanel,
   type ServicesPanelMode,
 } from '@/lib/terminal/services-panel.ts';
+import type { ServiceGroup } from '@/lib/terminal/services.ts';
 import { createGate, createProject, createShinsaState, createTask, NOW } from '../../support/state.ts';
 import { createService, createTerminal } from '../../support/terminals.ts';
 

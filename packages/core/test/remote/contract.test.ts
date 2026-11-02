@@ -1,8 +1,15 @@
 import { describe, expect, test } from 'bun:test';
+import { Option, Result, Schema } from 'effect';
 import {
+  ClaimCode,
+  HeartbeatRequest,
+  InstanceId,
+  PairPollResponse,
+  PairStartRequest,
   parseEnrollFragment,
-  parseRemoteHookPath,
   REMOTE_PATHS,
+  REMOTE_TEXT_LIMITS,
+  RemoteUserId,
   resolveEnrollUrl,
   resolveInstanceConnectPath,
   resolveInstanceLeavePath,
@@ -12,6 +19,10 @@ import {
   resolvePairPath,
   resolveRemoteHookUrl,
   resolveTunnelHost,
+  TEAM_ACTIONS,
+  TEAM_NAME_LIMIT,
+  TeamCreateRequest,
+  TeamId,
 } from '../../src/remote/contract.ts';
 
 describe('the remote contract', () => {
@@ -33,13 +44,10 @@ describe('the remote contract', () => {
     expect(resolvePairApprovePath('WXYZ2345')).toBe('/__remote/pairs/WXYZ2345/approve');
   });
 
-  test('gives a webhook one stable URL on app.shinsa.dev and maps it to the engine path', () => {
-    const url = resolveRemoteHookUrl('k3x9', 'schedule-1', 'tok');
-    expect(url).toBe('https://app.shinsa.dev/hooks/k3x9/schedule-1/tok');
-    expect(parseRemoteHookPath(new URL(url).pathname)).toEqual({
-      instanceId: 'k3x9',
-      enginePath: '/api/hooks/schedule-1/tok',
-    });
+  test('gives a webhook one stable URL on app.shinsa.dev', () => {
+    expect(resolveRemoteHookUrl('k3x9', 'schedule-1', 'tok')).toBe(
+      'https://app.shinsa.dev/hooks/k3x9/schedule-1/tok'
+    );
   });
 
   test('builds the webhook and enrollment links on another origin, such as a local wrangler dev', () => {
@@ -58,13 +66,6 @@ describe('the remote contract', () => {
     expect(REMOTE_PATHS.enrollPage).toBe('/enroll');
   });
 
-  test('refuses a hook path of another shape', () => {
-    expect(parseRemoteHookPath('/api/hooks/a/b')).toBeNull();
-    expect(parseRemoteHookPath('/hooks/a/b')).toBeNull();
-    expect(parseRemoteHookPath('/hooks/a//c')).toBeNull();
-    expect(parseRemoteHookPath('/hooks/a/b/c/d')).toBeNull();
-  });
-
   test('puts the secret, the machine key and the invite token in the fragment, never the path', () => {
     const fragment = { instanceId: 'k3x9', machineKey: 'machine-key', secret: 'secret_1', invite: 'tok_2' };
     const url = resolveEnrollUrl(fragment);
@@ -78,5 +79,55 @@ describe('the remote contract', () => {
     expect(parseEnrollFragment('#a..c')).toBeNull();
     expect(parseEnrollFragment('#a.b.c=')).toBeNull();
     expect(parseEnrollFragment('#a.b.c.d.e')).toBeNull();
+  });
+});
+
+describe('the remote contract schemas', () => {
+  test('a request keeps every limit the Worker checks', () => {
+    const decode = Schema.decodeUnknownOption(PairStartRequest);
+    const request = { name: 'Laptop', publicKey: 'k', version: '1.0.0' };
+    expect(Option.getOrNull(decode(request))).toEqual(request);
+    expect(Option.isNone(decode({ ...request, name: 'x'.repeat(REMOTE_TEXT_LIMITS.machineName + 1) }))).toBe(
+      true
+    );
+    expect(Option.isNone(decode({ ...request, version: '' }))).toBe(true);
+    expect(Option.isNone(decode({ name: 'Laptop', publicKey: 'k' }))).toBe(true);
+  });
+
+  test('a team name is trimmed, and a blank one is refused with the words the Worker says', () => {
+    const decode = Schema.decodeUnknownResult(TeamCreateRequest);
+    expect(Result.getOrThrow(decode({ name: '  Platform  ' }))).toEqual({ name: 'Platform' });
+    const blank = decode({ name: '   ' });
+    expect(Result.isFailure(blank) && blank.failure.message).toContain('Give the team a name.');
+    expect(Result.isFailure(decode({ name: 'x'.repeat(TEAM_NAME_LIMIT + 1) }))).toBe(true);
+  });
+
+  test('a heartbeat may leave the signing key out, and a poll answer is one of its three states', () => {
+    expect(Schema.decodeUnknownSync(HeartbeatRequest)({ localUrl: 'http://127.0.0.1:7446' })).toEqual({
+      localUrl: 'http://127.0.0.1:7446',
+    });
+    const decodeHeartbeat = Schema.decodeUnknownResult(HeartbeatRequest);
+    const refusal = (input: unknown) => {
+      const result = decodeHeartbeat(input);
+      return Result.isFailure(result) ? result.failure.message : null;
+    };
+    expect(refusal({ localUrl: 'http://10.0.0.2:7446' })).toContain('loopback address');
+    expect(refusal({ localUrl: 'not a url' })).toContain('loopback address');
+    expect(refusal({ localUrl: 'http://[::1]:7446', signingKey: 'short' })).toContain('P-256 public key');
+    expect(refusal({ localUrl: 'http://localhost:7446', signingKey: 'A'.repeat(87) })).toBeNull();
+    const decodePoll = Schema.decodeUnknownOption(PairPollResponse);
+    expect(Option.isSome(decodePoll({ status: 'pending' }))).toBe(true);
+    expect(Option.isNone(decodePoll({ status: 'claimed' }))).toBe(true);
+    expect(Option.isNone(decodePoll({ status: 'lost' }))).toBe(true);
+  });
+
+  test('an id in a path is one segment, branded so one kind is never passed for another', () => {
+    expect(InstanceId.make('a1-b_2')).toBe(InstanceId.make('a1-b_2'));
+    for (const id of ['', 'a/b', 'x'.repeat(65), '../x'])
+      expect(Option.isNone(Schema.decodeUnknownOption(InstanceId)(id))).toBe(true);
+    expect(Option.isNone(Schema.decodeUnknownOption(RemoteUserId)(''))).toBe(true);
+    expect(Option.isSome(Schema.decodeUnknownOption(TeamId)('team-1'))).toBe(true);
+    expect(Option.isSome(Schema.decodeUnknownOption(ClaimCode)('ABCD1234'))).toBe(true);
+    expect(TEAM_ACTIONS).toContain('requests/decline');
   });
 });

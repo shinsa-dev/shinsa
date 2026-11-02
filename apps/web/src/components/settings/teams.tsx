@@ -33,9 +33,9 @@ import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
+import { describeMemberSince } from '@/lib/remote-access.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
-import { describeMemberSince } from '@/lib/remote-access.ts';
 import {
   canUseTeams,
   describePeopleCount,
@@ -209,7 +209,7 @@ function TeamLinkRow({
         void add();
       }}
     >
-      <span className='text-fg-2 text-xs'>
+      <span className='text-xs text-fg-2'>
         This machine has no key for the team yet. Paste the team’s link and pick the projects to share.
       </span>
       <div className='flex items-center gap-1.5'>
@@ -342,7 +342,7 @@ function TeamPeople({
       startsOpen={!searchable}
     >
       {searchable && (
-        <label className='flex h-8 items-center gap-2 border-bg-3 border-b px-2.5'>
+        <label className='flex h-8 items-center gap-2 border-b border-bg-3 px-2.5'>
           <Icon name='IconMagnifyingGlass' size='sm' className='text-fg-2' />
           <input
             type='search'
@@ -350,7 +350,7 @@ function TeamPeople({
             onChange={(event) => setQuery(event.target.value)}
             placeholder={PEOPLE_SEARCH_LABEL}
             aria-label={PEOPLE_SEARCH_LABEL}
-            className='min-w-0 flex-1 bg-transparent font-medium text-fg-4 text-xs outline-none placeholder:font-normal placeholder:text-fg-2'
+            className='min-w-0 flex-1 bg-transparent text-xs font-medium text-fg-4 outline-none placeholder:font-normal placeholder:text-fg-2'
           />
         </label>
       )}
@@ -380,7 +380,7 @@ function TeamHeader({
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
-        <Truncate className='font-medium text-fg-4 text-xs'>{entry.name}</Truncate>
+        <Truncate className='text-xs font-medium text-fg-4'>{entry.name}</Truncate>
         <Truncate className='text-2xs text-fg-2'>
           <MentionText mention={describeTeamEntry(entry, now)} />
         </Truncate>

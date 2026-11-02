@@ -25,13 +25,13 @@ import { EndedBar } from '@/components/terminal/ended-bar.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
 import { TerminalTabs } from '@/components/terminal/tab-bar.tsx';
 import { resolveProjectMark } from '@/lib/projects.ts';
-import type { ServiceGroup, TaskServiceRun } from '@/lib/terminal/services.ts';
 import {
   createServicesPanel,
   reduceServicesPanel,
   type ServicesPanelAction,
   type ServicesPanelState,
 } from '@/lib/terminal/services-panel.ts';
+import type { ServiceGroup, TaskServiceRun } from '@/lib/terminal/services.ts';
 import type { PlaceGroup } from '@/lib/terminal/tabs.ts';
 import { readDocumentVariable, resolveTerminalTheme } from '@/lib/terminal/theme.ts';
 import { PreviewShareSpecimen } from '@/routes/ui/preview-share.tsx';
@@ -219,10 +219,8 @@ function PanelSample({
   start: ServicesPanelAction[];
   actions?: ServicesPanelActions;
 }) {
-  const [panel, dispatch] = React.useReducer(
-    reduceServicesPanel,
-    start,
-    (initial): ServicesPanelState => initial.reduce(reduceServicesPanel, createServicesPanel('list', 'shop'))
+  const [panel, dispatch] = React.useReducer(reduceServicesPanel, start, (initial): ServicesPanelState =>
+    initial.reduce(reduceServicesPanel, createServicesPanel('list', 'shop'))
   );
   return (
     <div className={cn(INSET, SERVICES_PANEL, 'overflow-hidden bg-popover [--available-height:28rem]')}>
@@ -444,7 +442,7 @@ export function TerminalSpecimens() {
             onReorder={acknowledgeSample}
           />
           <NewTerminalButton groups={GROUPS} fallback={null} onOpen={acknowledgeSample} />
-          <span className='flex shrink-0 items-center gap-px border-border border-s ps-1.5'>
+          <span className='flex shrink-0 items-center gap-px border-s border-border ps-1.5'>
             <ServiceRunButtons
               view={VIEWS[0] as ServiceView}
               onStart={acknowledgeSample}

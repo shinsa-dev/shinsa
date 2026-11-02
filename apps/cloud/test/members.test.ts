@@ -15,7 +15,7 @@ import {
   SLACK_RELAY_PATHS,
   verifyConnectToken,
 } from '@shinsa/core';
-import { MAX_INSTANCES_PER_USER } from '../src/pairing.ts';
+import { MAX_INSTANCES_PER_USER } from '../src/routes/pairs/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
 const MONA: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };

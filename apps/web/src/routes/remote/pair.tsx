@@ -72,7 +72,7 @@ export function PairPage({
       </RemoteHero>
       <SettingsCard className='w-full'>
         <div className='flex flex-col items-center gap-1 px-3 py-4'>
-          <span className='font-medium font-mono text-2xl text-fg-4 tracking-[0.2em]'>{view.claimCode}</span>
+          <span className='font-mono text-2xl font-medium tracking-[0.2em] text-fg-4'>{view.claimCode}</span>
           <span className='text-center text-2xs text-fg-2'>
             Your machine shows this code in Settings, Remote access.
           </span>

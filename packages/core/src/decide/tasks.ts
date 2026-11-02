@@ -43,14 +43,14 @@ import { assertNoWatchdogsLeft, stopAllWatchdogs } from './watchdogs.ts';
 
 function assertRepo(decider: Decider, repoId: string | null) {
   if (repoId !== null && !decider.state.repos[repoId]) {
-    throw new DomainError('repo_not_found', `No repository ${repoId}`);
+    throw new DomainError({ code: 'repo_not_found', message: `No repository ${repoId}` });
   }
 }
 
 function resolveCreatedProject(decider: Decider, command: CommandOf<'task.create'>) {
   if (command.projectId !== undefined) {
     if (command.projectId !== null && !decider.state.projects[command.projectId]) {
-      throw new DomainError('project_not_found', `No project ${command.projectId}`);
+      throw new DomainError({ code: 'project_not_found', message: `No project ${command.projectId}` });
     }
     return command.projectId;
   }
@@ -70,7 +70,8 @@ interface TaskLineage {
 
 export function createTask(decider: Decider, command: CommandOf<'task.create'>, lineage: TaskLineage = {}) {
   const request = command.request.trim();
-  if (request.length === 0) throw new DomainError('intent_required', 'Describe what you want done.');
+  if (request.length === 0)
+    throw new DomainError({ code: 'intent_required', message: 'Describe what you want done.' });
   assertRepo(decider, command.repoId);
   const stacksOn = command.stacksOn
     ? resolveStackParent(decider, null, command.stacksOn, command.repoId)
@@ -185,7 +186,7 @@ export function prioritizeTask(decider: Decider, command: CommandOf<'task.priori
 
 export function waitOnTasks(decider: Decider, command: CommandOf<'task.wait_on'>) {
   const task = decider.task(command.taskId);
-  if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
+  if (isTaskSettled(task)) throw new DomainError({ code: 'task_settled', message: 'This task is finished.' });
   changeDependencies(decider, task.id, resolveDependencies(decider, task, command.waitsOn), 'you');
 }
 
@@ -196,10 +197,13 @@ export function cancelTask(decider: Decider, command: CommandOf<'task.cancel'>) 
 
 function assertNothingOpen(task: Task) {
   if (listQueuedRounds(task).length > 0) {
-    throw new DomainError('task_open', 'Rounds are still waiting to start.');
+    throw new DomainError({ code: 'task_open', message: 'Rounds are still waiting to start.' });
   }
   if (task.pullRequest?.state === 'open') {
-    throw new DomainError('task_open', `Pull request #${task.pullRequest.number} is still open.`);
+    throw new DomainError({
+      code: 'task_open',
+      message: `Pull request #${task.pullRequest.number} is still open.`,
+    });
   }
 }
 
@@ -208,7 +212,10 @@ function assertNoShippedRoundOpen(task: Task) {
     (round) => round.status === 'shipped' && round.pullRequest?.state === 'open'
   );
   if (!shipped?.pullRequest) return;
-  throw new DomainError('task_open', `Pull request #${shipped.pullRequest.number} is still open.`);
+  throw new DomainError({
+    code: 'task_open',
+    message: `Pull request #${shipped.pullRequest.number} is still open.`,
+  });
 }
 
 export function completeTask(decider: Decider, command: CommandOf<'task.complete'>) {
@@ -232,7 +239,7 @@ export function retryTaskCommand(decider: Decider, command: CommandOf<'task.retr
   if (command.account) {
     const task = decider.task(command.taskId);
     if (!RUN_STAGES.has(task.stage)) {
-      throw new DomainError('no_agent_step', 'No agent works on this step.');
+      throw new DomainError({ code: 'no_agent_step', message: 'No agent works on this step.' });
     }
     decider.bindNextRun(task.id, command.account);
   }

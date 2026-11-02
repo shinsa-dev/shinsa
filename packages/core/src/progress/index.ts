@@ -307,9 +307,8 @@ function isFinishedPhase(phase: DisplayPhase) {
 function listCancelledPhases(task: Task, stage: TaskStage) {
   const phases = listTaskPhases({ ...task, stage });
   const stopped = phases.findIndex((phase) => !isFinishedPhase(phase));
-  return phases.map(
-    (phase, index): DisplayPhase =>
-      index === stopped ? { ...phase, status: 'cancelled', detail: resolveCancelledDetail(phase) } : phase
+  return phases.map((phase, index): DisplayPhase =>
+    index === stopped ? { ...phase, status: 'cancelled', detail: resolveCancelledDetail(phase) } : phase
   );
 }
 

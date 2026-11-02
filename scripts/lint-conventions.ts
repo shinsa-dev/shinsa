@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parse } from '@babel/parser';
 import { listDisclosureViolations } from './lint-disclosure.ts';
+import { isEffectSource, listEffectViolations } from './lint-effect.ts';
 import {
   APP,
   APP_AND_KIT,
@@ -40,6 +41,8 @@ type BabelNode = {
 };
 
 const ROOTS = [
+  'apps/cloud/src',
+  'apps/cloud/test',
   'apps/engine/src',
   'apps/engine/test',
   'apps/web/src',
@@ -69,7 +72,7 @@ const VERB_CHECK_ROOTS = [
 
 const COMMENT_CHECK_EXCLUDED_ROOTS = ['packages/ui'];
 
-const ALLOWED_COMMENT_PATTERN = /^\s*(biome-ignore|@ts-)/;
+const ALLOWED_COMMENT_PATTERN = /^\s*(oxlint-disable|@ts-)/;
 
 const SVG_DRAWERS = ['icon/index.tsx', 'spinner.tsx', 'logo.tsx', 'area-chart.tsx'].map(
   (name) => `packages/ui/src/components/${name}`
@@ -568,6 +571,9 @@ function checkFile(file: string, violations: Violation[], appSources: Record<str
   collectSyntaxViolations(file, parsed.program, violations);
   if (file.endsWith('.tsx') && isUnder(file, APP)) {
     for (const violation of listDisclosureViolations(source)) violations.push({ file, ...violation });
+  }
+  if (isEffectSource(file, source)) {
+    for (const violation of listEffectViolations(file, source)) violations.push({ file, ...violation });
   }
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
   if (isUnder(file, APP)) appSources[file] = source;

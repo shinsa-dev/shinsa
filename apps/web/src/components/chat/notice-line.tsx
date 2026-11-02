@@ -9,7 +9,7 @@ function NoticeGroups({ groups }: { groups: NoticeGroup[] }) {
       {groups.map((group) => (
         <div key={group.title} className='flex min-w-0 flex-col gap-px'>
           <span className='text-2xs text-fg-2'>{group.title}</span>
-          <ul className='flex w-full min-w-0 max-w-80 flex-col'>
+          <ul className='flex w-full max-w-80 min-w-0 flex-col'>
             {group.lines.map((line) => (
               <li key={line.name} className='flex min-w-0 items-baseline justify-between gap-4'>
                 <span className='min-w-0 truncate text-fg-4'>{line.name}</span>
@@ -29,7 +29,7 @@ export function NoticeLine({ item }: { item: TimelineItemOf<QuietNoticeKind> }) 
   const persistId = useDisclosureScope('notice', item.key);
   return (
     <ExpandRow persistId={persistId} icon={icon} label={label} meta={meta}>
-      <p className='text-fg-3 text-xs'>{detail}</p>
+      <p className='text-xs text-fg-3'>{detail}</p>
       {groups && <NoticeGroups groups={groups} />}
     </ExpandRow>
   );

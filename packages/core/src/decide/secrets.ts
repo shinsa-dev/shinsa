@@ -7,10 +7,12 @@ export function requestSecret(decider: Decider, command: CommandOf<'agent.reques
   const { run, task } = findCurrentRun(decider, command.runId, 'request_secret');
   const existing = decider.state.gates[command.gateId];
   if (existing?.runId === run.id) return;
-  if (existing) throw new DomainError('gate_exists', `Gate ${command.gateId} already exists.`);
+  if (existing)
+    throw new DomainError({ code: 'gate_exists', message: `Gate ${command.gateId} already exists.` });
   const label = command.label.trim().slice(0, SCHEDULE_LIMITS.secretLabel);
   const reason = command.reason.trim().slice(0, SCHEDULE_LIMITS.secretReason);
-  if (!label || !reason) throw new DomainError('secret_invalid', 'Name the secret and say what it is for.');
+  if (!label || !reason)
+    throw new DomainError({ code: 'secret_invalid', message: 'Name the secret and say what it is for.' });
   decider.openGate(task.id, 'secret', reason, '', {
     id: command.gateId,
     runId: run.id,
@@ -21,8 +23,9 @@ export function requestSecret(decider: Decider, command: CommandOf<'agent.reques
 export function assertSecretAnswer(decision: GateDecision, response: string | null) {
   if (decision === 'reject') return;
   if (decision === 'reply' && response !== null && SECRET_REF_PATTERN.test(response)) return;
-  throw new DomainError(
-    'secret_answer_invalid',
-    'Paste the secret into the secret field. It goes straight to Shinsa’s secret store and never into the chat.'
-  );
+  throw new DomainError({
+    code: 'secret_answer_invalid',
+    message:
+      'Paste the secret into the secret field. It goes straight to Shinsa’s secret store and never into the chat.',
+  });
 }

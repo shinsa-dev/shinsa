@@ -123,6 +123,18 @@ describe('listing files', () => {
     const { path } = await createSampleRepo();
     await expect(listCommitPaths(path, 'b'.repeat(40))).rejects.toMatchObject({ code: 'read_failed' });
   });
+
+  test('a read that outlasts its time limit becomes a timeout refusal', async () => {
+    const { path, sha } = await createSampleRepo();
+    const limits = CODE_LIMITS as { readMs: number };
+    const readMs = limits.readMs;
+    limits.readMs = 0;
+    try {
+      await expect(listCommitPaths(path, sha)).rejects.toMatchObject({ code: 'read_timeout' });
+    } finally {
+      limits.readMs = readMs;
+    }
+  });
 });
 
 describe('reading a file', () => {

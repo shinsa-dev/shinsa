@@ -113,7 +113,7 @@ function SidebarTaskPage({ state, task, view }: { state: ShinsaState; task: Task
   const coding = view.tab === 'code';
   return (
     <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
-      <div className={cn('shrink-0', coding && 'border-border border-b')}>
+      <div className={cn('shrink-0', coding && 'border-b border-border')}>
         <TaskHeader
           state={state}
           task={task}

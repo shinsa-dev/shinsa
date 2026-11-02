@@ -22,12 +22,21 @@ import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { OnboardingDefaults } from '@/components/onboarding/defaults.tsx';
 import { OnboardingHelp } from '@/components/onboarding/help.tsx';
 import { OptionList } from '@/components/onboarding/options.tsx';
-import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
 import { OnboardingFiledProjects, OnboardingProjectsChat } from '@/components/onboarding/projects-chat.tsx';
+import { OnboardingProjects } from '@/components/onboarding/projects.tsx';
 import { OnboardingSection } from '@/components/onboarding/section.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { SETTING_ROW } from '@/components/settings/group.tsx';
 import { useWindowReturn } from '@/hooks/use-window-return.ts';
+import {
+  createProjectDrafts,
+  describeProjectsSubmit,
+  isProjectsReady,
+  type ProjectDraft,
+  resolveProjectChoices,
+  resolveProjectsSignature,
+  updateProjectDraft,
+} from '@/lib/onboarding-projects.ts';
 import {
   ACCESS_KEY,
   HELP_KEY,
@@ -41,15 +50,6 @@ import {
   resolveToggledRoots,
   SUBMIT_KEY,
 } from '@/lib/onboarding.ts';
-import {
-  createProjectDrafts,
-  describeProjectsSubmit,
-  isProjectsReady,
-  type ProjectDraft,
-  resolveProjectChoices,
-  resolveProjectsSignature,
-  updateProjectDraft,
-} from '@/lib/onboarding-projects.ts';
 
 export const ONBOARDING_COLUMN = 'mx-auto flex w-full max-w-xl flex-col gap-6 px-6';
 

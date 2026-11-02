@@ -1,5 +1,4 @@
-import type { RemoteAccess, RemoteUser } from './contract.ts';
-import type { RemoteTeam } from './teams.ts';
+import type { RemoteAccess, RemoteTeam, RemoteUser } from './contract.ts';
 
 export type TunnelStatus = 'off' | 'starting' | 'connected' | 'reconnecting' | 'revoked';
 
@@ -14,7 +13,7 @@ export interface RemoteDevice {
   name: string;
   enrolledAt: number;
   lastSeenAt: number | null;
-  userId: string | null;
+  userId: string;
   taskId?: string | null;
 }
 

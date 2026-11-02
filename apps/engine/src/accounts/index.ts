@@ -80,7 +80,7 @@ const SHARED_LOGIN_DETAIL: Record<Exclude<AccountOrigin, 'login'>, string> = {
 
 async function resolveClaudePath() {
   const executable = await resolveClaudeExecutable();
-  if (!executable.ok) throw new DomainError('claude_missing', executable.message);
+  if (!executable.ok) throw new DomainError({ code: 'claude_missing', message: executable.message });
   return executable.path;
 }
 
@@ -637,16 +637,17 @@ export class Accounts {
 
   submitLoginCode(loginId: unknown, code: unknown) {
     if (typeof loginId !== 'string' || typeof code !== 'string' || !code.trim()) {
-      throw new DomainError('code_invalid', 'Paste the code the sign-in page showed.');
+      throw new DomainError({ code: 'code_invalid', message: 'Paste the code the sign-in page showed.' });
     }
     if (!this.logins.submitCode(loginId, code)) {
-      throw new DomainError('login_stale', 'That sign-in ended. Start it again.');
+      throw new DomainError({ code: 'login_stale', message: 'That sign-in ended. Start it again.' });
     }
     return this.snapshot();
   }
 
   cancelLogin(loginId: unknown) {
-    if (typeof loginId !== 'string') throw new DomainError('login_invalid', 'Name the sign-in to cancel.');
+    if (typeof loginId !== 'string')
+      throw new DomainError({ code: 'login_invalid', message: 'Name the sign-in to cancel.' });
     const phase = this.logins.current()?.phase;
     if (phase === 'done' || phase === 'failed') this.logins.clear(loginId);
     else this.logins.cancel(loginId);
@@ -662,7 +663,7 @@ export class Accounts {
   update(accountId: unknown, patchBody: unknown) {
     this.#assertChangeable();
     if (typeof accountId !== 'string')
-      throw new DomainError('account_invalid', 'Name the account to change.');
+      throw new DomainError({ code: 'account_invalid', message: 'Name the account to change.' });
     const account = this.store.find(accountId);
     const patch = parseAccountPatch(patchBody);
     if (patch.isDefault) this.store.updateDefault(account.id);
@@ -680,7 +681,7 @@ export class Accounts {
   async remove(accountId: unknown) {
     this.#assertChangeable();
     if (typeof accountId !== 'string')
-      throw new DomainError('account_invalid', 'Name the account to remove.');
+      throw new DomainError({ code: 'account_invalid', message: 'Name the account to remove.' });
     this.store.find(accountId);
     await this.#forget(accountId);
     await this.#engine.dispatch(

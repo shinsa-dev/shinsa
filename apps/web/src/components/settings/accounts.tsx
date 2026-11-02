@@ -50,8 +50,8 @@ import {
 } from '@/lib/connection/accounts.ts';
 import { SettingsEmpty, SettingsGroup } from './group.tsx';
 import { ProviderLoginBlock } from './providers.tsx';
-import { UsageWindows } from './usage.tsx';
 import { UsageAccountBlock } from './usage-account.tsx';
+import { UsageWindows } from './usage.tsx';
 
 export interface AccountActions {
   signIn: (accountId: string | null) => void;

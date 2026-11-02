@@ -64,7 +64,7 @@ export function CodeBlock({
     <div
       className={cn(
         INSET,
-        'group/code selectable relative min-w-0 overflow-hidden bg-bg-2',
+        'group/code relative min-w-0 selectable overflow-hidden bg-bg-2',
         centred && 'flex items-center',
         className
       )}
@@ -75,7 +75,7 @@ export function CodeBlock({
           data-slot='code-corner'
           data-corner={corner}
           className={cn(
-            'pointer-events-none flex opacity-0 pointer-coarse:opacity-100 group-hover/code:opacity-100 has-[:focus-visible]:opacity-100',
+            'pointer-events-none flex opacity-0 group-hover/code:opacity-100 has-[:focus-visible]:opacity-100 pointer-coarse:opacity-100',
             CORNER_POSITION[corner]
           )}
         >

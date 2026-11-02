@@ -9,7 +9,7 @@ import { STAT_PANEL } from './stat-tile.tsx';
 
 const LIST_ROW = 'flex min-h-8 items-center gap-3 px-3 py-1';
 
-const EMPTY_ROW = cn(LIST_ROW, 'text-fg-2 text-xs');
+const EMPTY_ROW = cn(LIST_ROW, 'text-xs text-fg-2');
 
 function ListPanel({
   title,
@@ -23,19 +23,19 @@ function ListPanel({
   return (
     <div className={cn(STAT_PANEL, 'flex min-w-0 flex-col')}>
       <div className='flex h-9 shrink-0 items-center gap-3 px-3'>
-        <Truncate className='flex-1 font-medium text-fg-4 text-xs'>{title}</Truncate>
+        <Truncate className='flex-1 text-xs font-medium text-fg-4'>{title}</Truncate>
         {aside}
       </div>
-      <div className='flex flex-col divide-y divide-border border-border border-t'>{children}</div>
+      <div className='flex flex-col divide-y divide-border border-t border-border'>{children}</div>
     </div>
   );
 }
 
 function TaskTitle({ state, taskId, title }: { state: ShinsaState; taskId: string; title: string }) {
   const task = state.tasks[taskId];
-  if (!task) return <Truncate className='flex-1 text-fg-4 text-xs'>{title}</Truncate>;
+  if (!task) return <Truncate className='flex-1 text-xs text-fg-4'>{title}</Truncate>;
   return (
-    <span className='min-w-0 flex-1 truncate text-fg-4 text-xs'>
+    <span className='min-w-0 flex-1 truncate text-xs text-fg-4'>
       <TaskLink state={state} task={task} />
     </span>
   );
@@ -48,7 +48,7 @@ export function Breakdown({ title, rows }: { title: string; rows: BreakdownRow[]
       {rows.map((row) => (
         <div key={row.key} className='flex flex-col gap-1.5 px-3 py-2'>
           <div className='flex items-baseline gap-2'>
-            <Truncate className='flex-1 text-fg-4 text-xs'>{row.label}</Truncate>
+            <Truncate className='flex-1 text-xs text-fg-4'>{row.label}</Truncate>
             <span className={TOKEN_TEXT}>{row.tokens}</span>
           </div>
           <div className='h-1 overflow-hidden rounded-full bg-bg-a2'>

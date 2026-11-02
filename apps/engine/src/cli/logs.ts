@@ -68,7 +68,10 @@ function readLineCount(raw: string | undefined) {
   if (raw === undefined) return DEFAULT_LINES;
   const count = Number(raw);
   if (!Number.isInteger(count) || count < 1) {
-    throw new DomainError('arguments_invalid', '--lines takes a whole number, such as --lines 200.');
+    throw new DomainError({
+      code: 'arguments_invalid',
+      message: '--lines takes a whole number, such as --lines 200.',
+    });
   }
   return count;
 }
@@ -81,10 +84,10 @@ export function printLogs(args: string[], io: LogsIo) {
   try {
     text = readFileSync(path, 'utf8');
   } catch {
-    throw new DomainError(
-      'log_missing',
-      `There is no engine log at ${path} yet. The engine writes it when the Shinsa app runs it; \`bun dev\` prints to its terminal instead.`
-    );
+    throw new DomainError({
+      code: 'log_missing',
+      message: `There is no engine log at ${path} yet. The engine writes it when the Shinsa app runs it; \`bun dev\` prints to its terminal instead.`,
+    });
   }
   const lines = text
     .split('\n')

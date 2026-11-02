@@ -7,7 +7,7 @@ import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/discl
 
 export const COMPACT_POPOVER = 'max-h-(--available-height) w-80 gap-0 p-0';
 
-export const QUEUE_POPOVER = cn(COMPACT_POPOVER, 'w-max min-w-80 max-w-(--available-width)');
+export const QUEUE_POPOVER = cn(COMPACT_POPOVER, 'w-max max-w-(--available-width) min-w-80');
 
 export const COMPACT_POPOVER_INSET = 'pt-1.5';
 
@@ -43,7 +43,7 @@ export function CompactSection({
   return (
     <section
       data-folded={disclosure.open ? undefined : ''}
-      className='flex flex-col border-border border-t px-2 py-1.5 first-of-type:border-t-0'
+      className='flex flex-col border-t border-border px-2 py-1.5 first-of-type:border-t-0'
     >
       <DisclosureHeader
         disclosure={disclosure}

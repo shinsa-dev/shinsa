@@ -39,11 +39,12 @@ const SYMLINK_MODE = '120000';
 
 function assertRead(read: GitRead, what: string) {
   if (read.ok) return read;
-  if (read.timedOut) throw new DomainError('read_timeout', `Reading ${what} took too long.`);
-  throw new DomainError(
-    'read_failed',
-    `Shinsa could not read ${what}: ${read.stderr || `exit ${read.code}`}`
-  );
+  if (read.timedOut)
+    throw new DomainError({ code: 'read_timeout', message: `Reading ${what} took too long.` });
+  throw new DomainError({
+    code: 'read_failed',
+    message: `Shinsa could not read ${what}: ${read.stderr || `exit ${read.code}`}`,
+  });
 }
 
 const VERIFIED_LIMIT = 10_000;
@@ -52,15 +53,15 @@ const verified = new Set<string>();
 
 export async function assertCommit(repoPath: string, sha: string, signal?: AbortSignal) {
   if (!isCommitSha(sha))
-    throw new DomainError(
-      'ref_invalid',
-      `Name a commit by its full id, or “${WORKING_REF}” for the working copy.`
-    );
+    throw new DomainError({
+      code: 'ref_invalid',
+      message: `Name a commit by its full id, or “${WORKING_REF}” for the working copy.`,
+    });
   const key = `${repoPath}\0${sha}`;
   if (verified.has(key)) return sha;
   const read = await readGit(['cat-file', '-t', sha], repoPath, { signal });
   if (!read.ok || decodeText(read.bytes).trim() !== 'commit')
-    throw new DomainError('ref_unknown', 'The repository has no such commit.');
+    throw new DomainError({ code: 'ref_unknown', message: 'The repository has no such commit.' });
   if (verified.size >= VERIFIED_LIMIT) verified.clear();
   verified.add(key);
   return sha;

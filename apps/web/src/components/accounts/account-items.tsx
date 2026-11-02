@@ -97,7 +97,7 @@ export function RunAccountLabel({
       >
         · {label ?? ACCOUNT_LABEL.pickRerunOn}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='start' className='min-w-48 max-w-80'>
+      <DropdownMenuContent align='start' className='max-w-80 min-w-48'>
         <DropdownMenuRadioGroup
           value={value}
           onValueChange={(picked) => onPick(resolveBoundAccount(choices, String(picked)))}

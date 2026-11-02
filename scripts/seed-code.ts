@@ -619,7 +619,7 @@ function renameModule(worktree: string) {
   );
   const keyed = replaceRequired(
     renamed,
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: the template literal the rename replaces in the sample file
+    // oxlint-disable-next-line eslint/no-template-curly-in-string -- the template literal the rename replaces in the sample file
     '`${sectionIndex}:${spotIndex}`',
     'formatSpotKey(sectionIndex, spotIndex)',
     SAMPLE_PATHS.targets

@@ -1,20 +1,22 @@
 import type { ScheduleTargetInput } from '../commands/schedules.ts';
+import { MINUTE_MS, type ScheduleTrigger } from '../domain/index.ts';
+import { HandOverReader, type Validation } from '../report/reading.ts';
 import {
-  MINUTE_MS,
-  SCHEDULE_LIMITS,
-  type ScheduleTrigger,
-  SECRET_REF_PATTERN,
-  TASK_PRIORITIES,
-  type WebhookSignature,
-} from '../domain/index.ts';
-import { Reader, type Validation } from '../report/validate.ts';
+  DailyAt,
+  EveryMinutes,
+  InMinutes,
+  NewTaskTarget,
+  ReadReportInput,
+  ReportFilingInput,
+  RunAt,
+  ScheduleNaming,
+  ScheduleOptions,
+  SecretRequestInput,
+  TargetChoice,
+  Webhook,
+  WHEN_KEYS,
+} from './schema.ts';
 import { parseTimeOfDay, serializeTimeOfDay } from './time.ts';
-
-const WHEN_KEYS = ['in_minutes', 'run_at', 'every_minutes', 'daily_at', 'webhook'] as const;
-
-const WEBHOOK_KEYS = ['signature', 'replay_key'];
-
-const SIGNATURE_KEYS = ['header', 'encoding', 'prefix', 'secret_ref'];
 
 export interface ScheduleRequest {
   scheduleId: string | null;
@@ -30,83 +32,30 @@ export interface ScheduleRequest {
   repository: string | null;
 }
 
-function readWeekdays(reader: Reader, value: unknown) {
-  return reader.list(value, 'weekdays', SCHEDULE_LIMITS.weekdays).flatMap((day, index) => {
-    if (typeof day === 'number' && Number.isInteger(day) && day >= 0 && day <= 6) return [day];
-    reader.errors.push(`weekdays[${index}] must be a whole number from 0 (Sunday) to 6 (Saturday).`);
-    return [];
-  });
-}
-
-function assertKnownKeys(reader: Reader, record: Record<string, unknown>, known: string[], path: string) {
-  const unknown = Object.keys(record).filter((key) => !known.includes(key));
-  if (unknown.length === 0) return;
-  reader.errors.push(`${path} has no ${unknown.join(', ')}. Its fields are ${known.join(', ')}.`);
-}
-
-function assertWebhookKeys(reader: Reader, record: Record<string, unknown>) {
-  const misplaced = Object.keys(record).filter((key) => SIGNATURE_KEYS.includes(key));
-  if (misplaced.length > 0) {
-    reader.errors.push(
-      `${misplaced.join(', ')} go under webhook.signature, not on webhook itself: webhook: { signature: { header, encoding, prefix, secret_ref } }.`
-    );
-  }
-  const unknown = Object.keys(record).filter(
-    (key) => !WEBHOOK_KEYS.includes(key) && !SIGNATURE_KEYS.includes(key)
-  );
-  if (unknown.length > 0) {
-    reader.errors.push(`webhook has no ${unknown.join(', ')}. Its fields are ${WEBHOOK_KEYS.join(', ')}.`);
-  }
-}
-
-function readSignature(reader: Reader, value: unknown) {
-  if (value === undefined || value === null) return { signature: null, secretRef: null };
-  const record = reader.record(value, 'webhook.signature');
-  assertKnownKeys(reader, record, SIGNATURE_KEYS, 'webhook.signature');
-  const signature: WebhookSignature = {
-    header: reader.text(record.header, 'webhook.signature.header', SCHEDULE_LIMITS.header).toLowerCase(),
-    encoding:
-      record.encoding === undefined
-        ? 'hex'
-        : reader.pick(record.encoding, 'webhook.signature.encoding', ['hex', 'base64']),
-    prefix: reader.optionalText(record.prefix, 'webhook.signature.prefix', SCHEDULE_LIMITS.prefix) ?? '',
-  };
-  const secretRef = reader.optionalText(
-    record.secret_ref,
-    'webhook.signature.secret_ref',
-    SCHEDULE_LIMITS.secretRef
-  );
-  if (secretRef !== null && !SECRET_REF_PATTERN.test(secretRef)) {
-    reader.errors.push('webhook.signature.secret_ref must be the secret-ref:… that request_secret returned.');
-  }
-  return { signature, secretRef };
-}
-
-function readWebhook(reader: Reader, value: unknown): TriggerRead {
-  const record = value === true ? {} : reader.record(value, 'webhook');
-  assertWebhookKeys(reader, record);
-  const { signature, secretRef } = readSignature(reader, record.signature);
-  const replayKey = reader.optionalText(record.replay_key, 'webhook.replay_key', SCHEDULE_LIMITS.replayKey);
-  return { trigger: { kind: 'webhook', signature, replayKey }, secretRef };
-}
-
-function readRunAt(reader: Reader, value: unknown) {
-  const text = reader.text(value, 'run_at', SCHEDULE_LIMITS.runAt);
-  const at = Date.parse(text);
-  if (Number.isNaN(at))
-    reader.errors.push(`run_at “${text}” is not a time. Use ISO 8601, such as 2026-01-31T09:00:00-08:00.`);
-  return at;
-}
-
-function readDaily(reader: Reader, input: Record<string, unknown>): ScheduleTrigger {
-  const raw = reader.text(input.daily_at, 'daily_at', SCHEDULE_LIMITS.dailyAt);
-  const time = parseTimeOfDay(raw);
-  if (!time) reader.errors.push(`daily_at “${raw}” is not a time of day. Use 24-hour HH:MM, such as 09:00.`);
+function readWebhook(reader: HandOverReader, value: unknown): TriggerRead {
+  const webhook = reader.read(Webhook, value === true ? {} : value, ['webhook']);
+  const { signature } = webhook;
   return {
-    kind: 'daily',
-    time: time ? serializeTimeOfDay(time) : raw,
-    weekdays: readWeekdays(reader, input.weekdays),
+    trigger: {
+      kind: 'webhook',
+      signature:
+        signature === null
+          ? null
+          : {
+              header: signature.header.toLowerCase(),
+              encoding: signature.encoding ?? 'hex',
+              prefix: signature.prefix ?? '',
+            },
+      replayKey: webhook.replay_key,
+    },
+    secretRef: signature?.secret_ref ?? null,
   };
+}
+
+function readDaily(reader: HandOverReader, input: Record<string, unknown>): ScheduleTrigger {
+  const { daily_at: raw, weekdays } = reader.read(DailyAt, input, []);
+  const time = parseTimeOfDay(raw);
+  return { kind: 'daily', time: time ? serializeTimeOfDay(time) : raw, weekdays };
 }
 
 interface TriggerRead {
@@ -114,31 +63,28 @@ interface TriggerRead {
   secretRef: string | null;
 }
 
-function readTrigger(reader: Reader, input: Record<string, unknown>, now: number): TriggerRead {
+function readTrigger(reader: HandOverReader, input: Record<string, unknown>, now: number): TriggerRead {
   const given = WHEN_KEYS.filter(
     (key) => input[key] !== undefined && input[key] !== null && input[key] !== false
   );
   const [when] = given;
   if (when === undefined) return { trigger: null, secretRef: null };
   if (given.length > 1) {
-    reader.errors.push(`Give one of ${WHEN_KEYS.join(', ')}, not several.`);
+    reader.refuse(`Give one of ${WHEN_KEYS.join(', ')}, not several.`);
     return { trigger: null, secretRef: null };
   }
-  if (input.weekdays !== undefined && when !== 'daily_at')
-    reader.errors.push('weekdays only go with daily_at.');
+  if (input.weekdays !== undefined && when !== 'daily_at') reader.refuse('weekdays only go with daily_at.');
   switch (when) {
     case 'in_minutes': {
-      const minutes = reader.count(input.in_minutes, 'in_minutes', SCHEDULE_LIMITS.maxInMinutes);
+      const minutes = reader.read(InMinutes, input.in_minutes, ['in_minutes']);
       return { trigger: { kind: 'once', at: now + minutes * MINUTE_MS }, secretRef: null };
     }
-    case 'run_at':
-      return { trigger: { kind: 'once', at: readRunAt(reader, input.run_at) }, secretRef: null };
+    case 'run_at': {
+      const { run_at: text } = reader.read(RunAt, input, []);
+      return { trigger: { kind: 'once', at: Date.parse(text) }, secretRef: null };
+    }
     case 'every_minutes': {
-      const everyMinutes = reader.count(
-        input.every_minutes,
-        'every_minutes',
-        SCHEDULE_LIMITS.maxEveryMinutes
-      );
+      const everyMinutes = reader.read(EveryMinutes, input.every_minutes, ['every_minutes']);
       return { trigger: { kind: 'interval', everyMinutes }, secretRef: null };
     }
     case 'daily_at':
@@ -148,66 +94,51 @@ function readTrigger(reader: Reader, input: Record<string, unknown>, now: number
   }
 }
 
-function readTarget(reader: Reader, input: Record<string, unknown>): ScheduleTargetInput | null {
-  const newTask = reader.flag(input.new_task, 'new_task');
-  const taskId = reader.optionalText(input.task_id, 'task_id', SCHEDULE_LIMITS.reference);
-  if (newTask && taskId !== null) reader.errors.push('Give new_task or task_id, not both.');
-  if (!newTask && input.repository !== undefined && input.repository !== null) {
-    reader.errors.push('repository only goes with new_task: it is where each new task starts.');
-  }
+function readTarget(reader: HandOverReader, input: Record<string, unknown>): ScheduleTargetInput | null {
+  const { new_task: newTask, task_id: taskId } = reader.read(TargetChoice, input, []);
   if (newTask) {
+    const target = reader.read(NewTaskTarget, input, []);
     return {
       kind: 'new_task',
       repoId: null,
-      priority:
-        input.priority === undefined ? 'normal' : reader.pick(input.priority, 'priority', TASK_PRIORITIES),
-      mode: reader.flag(input.just_answer, 'just_answer') ? 'ask' : 'build',
+      priority: target.priority ?? 'normal',
+      mode: target.just_answer ? 'ask' : 'build',
     };
   }
   if (taskId !== null) return { kind: 'task', taskId };
   return null;
 }
 
-function readEnabled(reader: Reader, value: unknown) {
-  if (value === undefined || value === null) return null;
-  return reader.flag(value, 'enabled');
-}
-
 export function validateScheduleRequest(
   input: Record<string, unknown>,
   now: number
 ): Validation<ScheduleRequest> {
-  const reader = new Reader();
+  const reader = new HandOverReader();
   const { trigger, secretRef } = readTrigger(reader, input, now);
+  const naming = reader.read(ScheduleNaming, input, []);
+  const target = readTarget(reader, input);
+  const options = reader.read(ScheduleOptions, input, []);
   return reader.result({
-    scheduleId: reader.optionalText(input.schedule_id, 'schedule_id', SCHEDULE_LIMITS.reference),
-    name: reader.optionalText(input.name, 'name', SCHEDULE_LIMITS.name),
-    text: reader.optionalText(input.message, 'message', SCHEDULE_LIMITS.text),
+    scheduleId: naming.schedule_id,
+    name: naming.name,
+    text: naming.message,
     trigger,
-    target: readTarget(reader, input),
-    source: reader.optionalText(input.source, 'source', SCHEDULE_LIMITS.reference),
-    enabled: readEnabled(reader, input.enabled),
-    maxRuns: reader.optionalCount(input.max_runs, 'max_runs', SCHEDULE_LIMITS.maxRuns),
-    timeZone: reader.optionalText(input.time_zone, 'time_zone', SCHEDULE_LIMITS.timeZone),
+    target,
+    source: options.source,
+    enabled: options.enabled,
+    maxRuns: options.max_runs,
+    timeZone: options.time_zone,
     secretRef,
-    repository: reader.optionalText(input.repository, 'repository', SCHEDULE_LIMITS.reference),
+    repository: options.repository,
   });
-}
-
-function readOptionalFlag(reader: Reader, value: unknown, name: string) {
-  if (value === undefined || value === null) return null;
-  return reader.flag(value, name);
 }
 
 export function validateReadReport(
   input: Record<string, unknown>
 ): Validation<{ summary: string; reached: boolean; live: boolean | null }> {
-  const reader = new Reader();
-  return reader.result({
-    summary: reader.text(input.summary, 'summary', SCHEDULE_LIMITS.readSummary),
-    reached: readOptionalFlag(reader, input.reached, 'reached') ?? true,
-    live: readOptionalFlag(reader, input.live, 'live'),
-  });
+  const reader = new HandOverReader();
+  const report = reader.read(ReadReportInput, input, []);
+  return reader.result({ summary: report.summary, reached: report.reached ?? true, live: report.live });
 }
 
 export interface ReportFilingRequest {
@@ -223,32 +154,24 @@ export interface ReportFilingRequest {
 }
 
 export function validateReportFiling(input: Record<string, unknown>): Validation<ReportFilingRequest> {
-  const reader = new Reader();
-  const L = SCHEDULE_LIMITS;
-  const reportId = reader.optionalText(input.report_id, 'report_id', L.reportId);
-  const link = reader.optionalText(input.link, 'link', L.reportLink);
-  if (reportId === null && link === null) {
-    reader.errors.push('Give the report’s report_id or link in the source, so Shinsa never files it twice.');
-  }
+  const reader = new HandOverReader();
+  const filing = reader.read(ReportFilingInput, input, []);
   return reader.result({
-    title: reader.text(input.title, 'title', L.reportTitle),
-    request: reader.text(input.request, 'request', L.reportRequest),
-    reportId,
-    link,
-    author: reader.optionalText(input.author, 'author', L.reportAuthor),
-    postedAt: reader.optionalText(input.posted_at, 'posted_at', L.reportPostedAt),
-    text: reader.text(input.text, 'text', L.reportText),
-    forkFrom: reader.optionalText(input.fork_from, 'fork_from', L.reference),
-    repository: reader.optionalText(input.repository, 'repository', L.reference),
+    title: filing.title,
+    request: filing.request,
+    reportId: filing.report_id,
+    link: filing.link,
+    author: filing.author,
+    postedAt: filing.posted_at,
+    text: filing.text,
+    forkFrom: filing.fork_from,
+    repository: filing.repository,
   });
 }
 
 export function validateSecretRequest(
   input: Record<string, unknown>
 ): Validation<{ label: string; reason: string }> {
-  const reader = new Reader();
-  return reader.result({
-    label: reader.text(input.label, 'label', SCHEDULE_LIMITS.secretLabel),
-    reason: reader.text(input.reason, 'reason', SCHEDULE_LIMITS.secretReason),
-  });
+  const reader = new HandOverReader();
+  return reader.result(reader.read(SecretRequestInput, input, []));
 }

@@ -43,26 +43,26 @@ export function findTaskCheck(decider: Decider, task: Task, id: string) {
   const check = checks.find((candidate) => candidate.id === id);
   if (check) return check;
   const known = checks.length > 0 ? `The checks are ${describeIds(checks)}.` : 'The task has no checks yet.';
-  throw new DomainError('check_unknown', `There is no check ${id}. ${known}`);
+  throw new DomainError({ code: 'check_unknown', message: `There is no check ${id}. ${known}` });
 }
 
 function findAgentCheck(decider: Decider, task: Task, id: string) {
   const check = findTaskCheck(decider, task, id);
   if (check.source !== 'repo') return check;
-  throw new DomainError(
-    'check_human_only',
-    `${id} is the repository’s own command, \`${check.command}\`. Only the human changes it, in Settings → Projects.`
-  );
+  throw new DomainError({
+    code: 'check_human_only',
+    message: `${id} is the repository’s own command, \`${check.command}\`. Only the human changes it, in Settings → Projects.`,
+  });
 }
 
 function assertPhases(task: Task, phases: number[] | null) {
   const total = countPlanPhases(task);
   const outside = (phases ?? []).filter((phase) => phase > total);
   if (outside.length === 0) return;
-  throw new DomainError(
-    'check_phases_invalid',
-    `The plan has ${total} phases, so a check cannot cover phase ${outside.join(', ')}.`
-  );
+  throw new DomainError({
+    code: 'check_phases_invalid',
+    message: `The plan has ${total} phases, so a check cannot cover phase ${outside.join(', ')}.`,
+  });
 }
 
 function listDefaultPhases(task: Task, from: number) {
@@ -75,10 +75,10 @@ function addCheck(task: Task, change: CheckChangeHandOver, from: number): CheckC
   const command = change.command ?? '';
   const duplicate = (task.checks ?? []).find((existing) => existing.command === command);
   if (duplicate) {
-    throw new DomainError(
-      'check_exists',
-      `\`${command}\` is already ${duplicate.id}, “${duplicate.label}”. Change that check instead.`
-    );
+    throw new DomainError({
+      code: 'check_exists',
+      message: `\`${command}\` is already ${duplicate.id}, “${duplicate.label}”. Change that check instead.`,
+    });
   }
   const check: TaskCheck = {
     id: resolveNextCheckId(task),

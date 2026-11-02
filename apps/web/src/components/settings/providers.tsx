@@ -12,8 +12,8 @@ import {
 } from '@/lib/accounts/providers.ts';
 import { copyText } from '@/lib/connection/commands.ts';
 import { SETTING_ROW } from './group.tsx';
-import { UsageWindows } from './usage.tsx';
 import { UsageAccountBlock } from './usage-account.tsx';
+import { UsageWindows } from './usage.tsx';
 
 function ProviderMenu({ login, onRefresh }: { login: ProviderLogin; onRefresh: () => Promise<unknown> }) {
   const command = selectSignInCommand(login);
@@ -50,7 +50,7 @@ export function ProviderLoginBlock({
       {login.usage && login.status === 'signed_in' && <UsageWindows account={{ usage: login.usage }} />}
       {view.fix && (
         <div className={SETTING_ROW}>
-          <span className='min-w-0 flex-1 text-fg-2 text-xs'>
+          <span className='min-w-0 flex-1 text-xs text-fg-2'>
             <InlineMarkdown text={view.fix} />
           </span>
           {view.command && <CopyButton text={view.command} />}

@@ -77,8 +77,8 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
           <li key={section.title} className='flex gap-2.5'>
             <StepNumber index={index} />
             <div className='flex min-w-0 flex-1 flex-col gap-px'>
-              <InlineMarkdown text={section.title} className='font-medium text-fg-4 text-xs leading-5' />
-              <Markdown text={section.summary} className='text-fg-3 text-xs' />
+              <InlineMarkdown text={section.title} className='text-xs leading-5 font-medium text-fg-4' />
+              <Markdown text={section.summary} className='text-xs text-fg-3' />
             </div>
           </li>
         ))}
@@ -100,7 +100,7 @@ function PostMergePanel({ state, task, gate }: { state: ShinsaState; task: Task;
       title={MERGE_STEP_TITLE.post_merge}
       icon='IconChecklist'
     >
-      <p className='text-fg-3 text-xs'>
+      <p className='text-xs text-fg-3'>
         An earlier round merged and left these steps for you. The task is done once each is ticked.
       </p>
       <MergeStepsBlock task={task} when='post_merge' />
@@ -127,7 +127,7 @@ function ActivityPanel({
       <ol className='flex flex-col'>
         {entries.slice(0, shown).map((entry, index) => (
           <ActivityRow
-            // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a time and kind; the place counted from the oldest tells them apart
+            // oxlint-disable-next-line shinsa/no-array-index-key -- entries can share a time and kind; the place counted from the oldest tells them apart
             key={`${entry.at}-${entry.kind}-${entries.length - index}`}
             entry={entry}
             state={state}
@@ -181,7 +181,7 @@ export function OverviewTab({
               {summary ? (
                 <Markdown text={summary} className='text-fg-4' />
               ) : (
-                <p className='text-fg-2 text-xs'>
+                <p className='text-xs text-fg-2'>
                   No summary yet. It appears once an agent hands over its work.
                 </p>
               )}

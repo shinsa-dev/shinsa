@@ -245,7 +245,7 @@ export class Extensions {
 
   #findGroup(catalog: Catalog, id: unknown) {
     const group = selectGroup(catalog.groups, id);
-    if (!group) throw new DomainError('server_not_found', 'There is no MCP with that id.');
+    if (!group) throw new DomainError({ code: 'server_not_found', message: 'There is no MCP with that id.' });
     return group;
   }
 
@@ -383,7 +383,8 @@ export class Extensions {
   }
 
   createServer(fields: unknown) {
-    if (!isFields(fields)) throw new DomainError('server_invalid', 'Describe the MCP to add.');
+    if (!isFields(fields))
+      throw new DomainError({ code: 'server_invalid', message: 'Describe the MCP to add.' });
     const name = this.#parseName(fields.name, null);
     return this.#writeServer({
       id: `shinsa:${name}`,
@@ -398,7 +399,7 @@ export class Extensions {
   }
 
   updateServer(id: unknown, fields: unknown) {
-    if (!isFields(fields)) throw new DomainError('server_invalid', 'Describe the MCP.');
+    if (!isFields(fields)) throw new DomainError({ code: 'server_invalid', message: 'Describe the MCP.' });
     const group = this.#findGroup(this.#catalog(), id);
     const { lead } = group;
     const stored = lead.editable ? lead : null;
@@ -418,7 +419,10 @@ export class Extensions {
   removeServer(id: unknown) {
     const server = this.#findGroup(this.#catalog(), id).lead;
     if (!server.editable) {
-      throw new DomainError('server_not_removable', `It comes from ${server.origin}. Turn it off.`);
+      throw new DomainError({
+        code: 'server_not_removable',
+        message: `It comes from ${server.origin}. Turn it off.`,
+      });
     }
     this.#store.removeServer(server.id);
     this.#oauth.signOut(server.id);
@@ -447,7 +451,7 @@ export class Extensions {
   }
 
   updateServerChoice(id: unknown, fields: unknown) {
-    if (!isFields(fields)) throw new DomainError('server_invalid', 'Say what to change.');
+    if (!isFields(fields)) throw new DomainError({ code: 'server_invalid', message: 'Say what to change.' });
     const group = this.#findGroup(this.#catalog(), id);
     const enabled = typeof fields.enabled === 'boolean' ? fields.enabled : undefined;
     const scope =
@@ -457,35 +461,40 @@ export class Extensions {
   }
 
   updateSkillChoice(id: unknown, enabled: unknown) {
-    if (typeof enabled !== 'boolean') throw new DomainError('skill_invalid', 'Turn the skill on or off.');
+    if (typeof enabled !== 'boolean')
+      throw new DomainError({ code: 'skill_invalid', message: 'Turn the skill on or off.' });
     const skill = this.#catalog().skills.find((entry) => entry.id === id);
-    if (!skill) throw new DomainError('skill_not_found', 'There is no skill with that id.');
+    if (!skill)
+      throw new DomainError({ code: 'skill_not_found', message: 'There is no skill with that id.' });
     if (skill.source === 'shinsa') {
-      throw new DomainError('skill_built_in', 'Shinsa’s own skills are always on.');
+      throw new DomainError({ code: 'skill_built_in', message: 'Shinsa’s own skills are always on.' });
     }
     this.#store.updateSkill(skill.id, enabled);
     return this.snapshot();
   }
 
   updatePluginChoice(id: unknown, enabled: unknown) {
-    if (typeof enabled !== 'boolean') throw new DomainError('plugin_invalid', 'Turn the plugin on or off.');
+    if (typeof enabled !== 'boolean')
+      throw new DomainError({ code: 'plugin_invalid', message: 'Turn the plugin on or off.' });
     const plugin = this.#catalog().plugins.find((entry) => entry.id === id);
-    if (!plugin) throw new DomainError('plugin_not_found', 'There is no plugin with that id.');
+    if (!plugin)
+      throw new DomainError({ code: 'plugin_not_found', message: 'There is no plugin with that id.' });
     this.#store.updatePlugin(plugin.id, enabled);
     return this.snapshot();
   }
 
   updateOptimizer(fields: unknown) {
-    if (!isFields(fields)) throw new DomainError('optimizer_invalid', 'Say what to change.');
+    if (!isFields(fields))
+      throw new DomainError({ code: 'optimizer_invalid', message: 'Say what to change.' });
     const { enabled, days, skills } = fields;
     if (enabled !== undefined && typeof enabled !== 'boolean') {
-      throw new DomainError('optimizer_invalid', 'Turn the optimizer on or off.');
+      throw new DomainError({ code: 'optimizer_invalid', message: 'Turn the optimizer on or off.' });
     }
     if (skills !== undefined && typeof skills !== 'boolean') {
-      throw new DomainError('optimizer_invalid', 'Say whether it also leaves out skills.');
+      throw new DomainError({ code: 'optimizer_invalid', message: 'Say whether it also leaves out skills.' });
     }
     if (days !== undefined && !isOptimizerDays(days)) {
-      throw new DomainError('optimizer_invalid', 'Pick 1 to 365 days.');
+      throw new DomainError({ code: 'optimizer_invalid', message: 'Pick 1 to 365 days.' });
     }
     this.#store.updateOptimizer({
       ...(enabled === undefined ? {} : { enabled }),
@@ -527,7 +536,7 @@ export class Extensions {
     const { lead } = group;
     const url = expandDefinition(lead.definition, this.#env).url;
     if (lead.definition.transport === 'stdio' || !url) {
-      throw new DomainError('sign_in_unavailable', 'It runs here and has no sign-in.');
+      throw new DomainError({ code: 'sign_in_unavailable', message: 'It runs here and has no sign-in.' });
     }
     const member = this.#selectSignedIn(group) ?? lead;
     const authorizationUrl = await this.#oauth.start(member.id, url);

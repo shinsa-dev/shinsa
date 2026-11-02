@@ -29,7 +29,7 @@ describe('remote.json', () => {
     warn.mockRestore();
   });
 
-  test('reads a paired file and drops what it cannot use', () => {
+  test('reads a paired file and drops what it cannot use, a device with no account included', () => {
     const path = createPath();
     writeFileSync(
       path,
@@ -46,7 +46,7 @@ describe('remote.json', () => {
             lastSeenAt: 2,
             userId: '7',
           },
-          { publicKey: 'd2', name: 'Laptop', enrolledAt: 3 },
+          { publicKey: 'd2', name: 'Laptop', enrolledAt: 3, userId: null },
           { publicKey: 'd4', name: 'Guest', enrolledAt: 4, userId: '9', taskId: 't1' },
           { publicKey: 'd3', name: 'Broken' },
           'nope',
@@ -101,13 +101,6 @@ describe('remote.json', () => {
       enabled: true,
       devices: [
         { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2, userId: '7' },
-        {
-          publicKey: 'd2',
-          name: 'Laptop',
-          enrolledAt: 3,
-          lastSeenAt: null,
-          userId: null,
-        },
         { publicKey: 'd4', name: 'Guest', enrolledAt: 4, lastSeenAt: null, userId: '9', taskId: 't1' },
       ],
       access: {
@@ -175,20 +168,20 @@ describe('the remote store', () => {
       name: 'Phone',
       enrolledAt: 1,
       lastSeenAt: null,
-      userId: null,
+      userId: '1',
     });
     store.upsertDevice({
       publicKey: 'd1',
       name: 'Phone again',
       enrolledAt: 2,
       lastSeenAt: null,
-      userId: null,
+      userId: '1',
     });
     store.recordDeviceSeen('d1', 5);
     store.recordDeviceSeen('unknown', 5);
     expect(statSync(store.path).mode & 0o777).toBe(0o600);
     expect(store.file.devices).toEqual([
-      { publicKey: 'd1', name: 'Phone again', enrolledAt: 2, lastSeenAt: 5, userId: null },
+      { publicKey: 'd1', name: 'Phone again', enrolledAt: 2, lastSeenAt: 5, userId: '1' },
     ]);
     expect(store.selectDevice('d1')?.name).toBe('Phone again');
     expect(store.removeDevice('d1')).toBe(true);
@@ -196,16 +189,15 @@ describe('the remote store', () => {
     expect(new RemoteStore(store.path).file.devices).toEqual([]);
   });
 
-  test('forgets only the devices of accounts that lost access, keeping devices from before accounts were recorded', () => {
+  test('forgets only the devices of accounts that lost access', () => {
     const store = new RemoteStore(createPath());
     const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null };
     store.upsertDevice({ ...device, publicKey: 'mine', userId: '1' });
     store.upsertDevice({ ...device, publicKey: 'kai', userId: '7' });
-    store.upsertDevice({ ...device, publicKey: 'old', userId: null });
     store.upsertDevice({ ...device, publicKey: 'guest', userId: '9', taskId: 't1' });
     expect(store.removeDevicesOutside(new Set(['1', '7']), new Set(['9']))).toEqual([]);
     expect(store.removeDevicesOutside(new Set(['1', '9']), new Set(['1']))).toEqual(['kai', 'guest']);
-    expect(store.file.devices.map((entry) => entry.publicKey)).toEqual(['mine', 'old']);
+    expect(store.file.devices.map((entry) => entry.publicKey)).toEqual(['mine']);
   });
 
   test('keeps one grant per teammate and drops the grants of people no longer in a team', () => {

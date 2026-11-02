@@ -104,24 +104,37 @@ export function selectStackRefusal(
   parent: Task,
   repoId = task?.repoId ?? null
 ) {
-  if (parent.id === task?.id) return new DomainError('stack_self', 'A task cannot stack on itself.');
+  if (parent.id === task?.id)
+    return new DomainError({ code: 'stack_self', message: 'A task cannot stack on itself.' });
   if (parent.stage === 'cancelled')
-    return new DomainError('dependency_cancelled', 'That task was cancelled.');
+    return new DomainError({ code: 'dependency_cancelled', message: 'That task was cancelled.' });
   if (isTaskSettled(parent)) {
-    return new DomainError('stack_parent_settled', 'That task is finished, so there is nothing to stack on.');
+    return new DomainError({
+      code: 'stack_parent_settled',
+      message: 'That task is finished, so there is nothing to stack on.',
+    });
   }
   if (!hasStep(parent, 'pull_request')) {
-    return new DomainError('stack_no_pull_request', 'That task opens no pull request to stack on.');
+    return new DomainError({
+      code: 'stack_no_pull_request',
+      message: 'That task opens no pull request to stack on.',
+    });
   }
   if (repoId && parent.repoId && repoId !== parent.repoId) {
-    return new DomainError('stack_repository', 'The tasks of a bundle work in one repository.');
+    return new DomainError({
+      code: 'stack_repository',
+      message: 'The tasks of a bundle work in one repository.',
+    });
   }
   const taken = selectStackedOnThis(state, parent.id);
   if (taken && taken.id !== task?.id) {
-    return new DomainError('stack_taken', `“${taken.title}” is already stacked on that task.`);
+    return new DomainError({
+      code: 'stack_taken',
+      message: `“${taken.title}” is already stacked on that task.`,
+    });
   }
   if (task && isDependencyOf(state, task.id, parent.id)) {
-    return new DomainError('dependency_cycle', 'That task already waits on this one.');
+    return new DomainError({ code: 'dependency_cycle', message: 'That task already waits on this one.' });
   }
   return null;
 }
@@ -259,12 +272,12 @@ export function isTriaged(task: Task) {
 
 export function findRun(state: ShinsaState, runId: string) {
   const run = state.runs[runId];
-  if (!run) throw new DomainError('run_not_found', `No run ${runId}`);
+  if (!run) throw new DomainError({ code: 'run_not_found', message: `No run ${runId}` });
   return run;
 }
 
 export function findTask(state: ShinsaState, taskId: string) {
   const task = state.tasks[taskId];
-  if (!task) throw new DomainError('task_not_found', `No task ${taskId}`);
+  if (!task) throw new DomainError({ code: 'task_not_found', message: `No task ${taskId}` });
   return task;
 }

@@ -51,7 +51,7 @@ function Files({ files, align }: { files: ChatAttachment[]; align: AttachmentAli
         const at = videos.indexOf(attachment);
         return (
           <FileChip
-            // biome-ignore lint/suspicious/noArrayIndexKey: attachments are positional
+            // oxlint-disable-next-line shinsa/no-array-index-key -- attachments are positional
             key={`${attachment.url}-${index}`}
             attachment={attachment}
             viewer={at < 0 ? null : { open: () => viewer.show(at), originRef: viewer.recordOrigin(at) }}
@@ -139,9 +139,9 @@ export function UserMessage({
     <div data-message data-delivery={delivery ?? undefined} className='flex min-w-0 flex-col items-end gap-2'>
       <MessageAttachments attachments={shown} />
       {body && (
-        <div className='relative min-w-0 max-w-4/5'>
+        <div className='relative max-w-4/5 min-w-0'>
           <div className={cn(BUBBLE, 'selectable')}>
-            <p className={cn('whitespace-pre-wrap break-words', long && !expanded && 'line-clamp-12')}>
+            <p className={cn('break-words whitespace-pre-wrap', long && !expanded && 'line-clamp-12')}>
               {body}
             </p>
           </div>

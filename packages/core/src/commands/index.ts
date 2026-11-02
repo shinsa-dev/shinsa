@@ -8,22 +8,15 @@ import type {
   EvidenceStage,
   EvidenceTheme,
   EvidenceUpload,
-  FindingVerdict,
-  GateDecision,
   MessageKind,
   PipelineStep,
-  Project,
   PullRequest,
   Repo,
-  ReviewComment,
-  RoundShipping,
   RunAccount,
   RunFailure,
   RunHandoff,
   RunOutcome,
   RunUsage,
-  Settings,
-  TaskMode,
   TaskPriority,
   TaskShape,
   TaskSize,
@@ -52,28 +45,21 @@ import type {
   SuggestedTask,
 } from '../report/types.ts';
 import type { Coverage } from '../test-coverage/types.ts';
-import type {
-  DelegationAgentCommand,
-  DelegationSystemCommand,
-  DelegationUserCommand,
-} from './delegations.ts';
-import type { FeedbackAgentCommand, FeedbackSystemCommand, FeedbackUserCommand } from './feedback.ts';
-import type { HandoffSystemCommand, HandoffUserCommand } from './handoffs.ts';
-import type { MemoryAgentCommand, MemoryUserCommand } from './memory.ts';
+import type { DelegationAgentCommand, DelegationSystemCommand } from './delegations.ts';
+import type { FeedbackAgentCommand, FeedbackSystemCommand } from './feedback.ts';
+import type { HandoffSystemCommand } from './handoffs.ts';
+import type { MemoryAgentCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
-import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
-import type { ShareSystemCommand, ShareUserCommand } from './shares.ts';
+import type { ScheduleAgentCommand, ScheduleSystemCommand } from './schedules.ts';
+import type { UserCommand } from './schema.ts';
+import type { ShareSystemCommand } from './shares.ts';
 import type { SlackSystemCommand } from './slack.ts';
-import type { TeamUserCommand } from './teams.ts';
-import type { WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
+import type { WatchdogSystemCommand } from './watchdogs.ts';
 
 export interface ChangeProposalInput {
   request: string;
   why: string;
 }
-
-export type ProjectInput = Pick<Project, 'name' | 'color'> &
-  Partial<Pick<Project, 'id' | 'key' | 'description' | 'folders'>>;
 
 export interface MessageRoute {
   kind?: MessageKind;
@@ -90,80 +76,6 @@ export interface TriageReasons {
   start?: string;
   duplicate?: string;
 }
-
-export type UserCommand =
-  | { type: 'repo.update'; repoId: string; patch: Partial<Omit<Repo, 'id' | 'path'>> }
-  | { type: 'repo.remove'; repoId: string }
-  | { type: 'project.write'; project: ProjectInput }
-  | { type: 'project.remove'; projectId: string }
-  | { type: 'focus.change'; projectId: string | null; teamId?: string | null; until: number | null }
-  | { type: 'settings.change'; patch: Partial<Settings> }
-  | {
-      type: 'task.create';
-      request: string;
-      repoId: string | null;
-      projectId?: string | null;
-      priority?: TaskPriority;
-      planFirst?: boolean;
-      origin?: string | null;
-      waitsOn?: string[];
-      stacksOn?: string;
-      mode?: TaskMode;
-      account?: RunAccount | null;
-      forkOf?: string;
-      backlog?: boolean;
-    }
-  | { type: 'task.prioritize'; taskId: string; priority: TaskPriority }
-  | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }
-  | { type: 'task.stack_on'; taskId: string; stacksOn: string | null }
-  | { type: 'task.move_to_backlog'; taskId: string }
-  | { type: 'task.remove_from_backlog'; taskId: string }
-  | { type: 'task.snooze'; taskId: string }
-  | { type: 'task.unsnooze'; taskId: string }
-  | { type: 'task.cancel'; taskId: string }
-  | { type: 'task.mark_duplicate'; taskId: string; duplicateOf: string }
-  | { type: 'task.clear_duplicate'; taskId: string }
-  | { type: 'task.complete'; taskId: string }
-  | { type: 'task.retry'; taskId: string; account?: RunAccount }
-  | ({ type: 'task.message'; taskId: string; text: string } & MessageRoute)
-  | { type: 'round.ship'; taskId: string; number: number; shipping: RoundShipping }
-  | { type: 'round.update'; taskId: string; number: number; request: string }
-  | { type: 'round.remove'; taskId: string; number: number }
-  | { type: 'round.send'; taskId: string; number: number }
-  | {
-      type: 'gate.answer';
-      gateId: string;
-      decision: GateDecision;
-      response: string | null;
-      planVersion?: number;
-      verdicts?: FindingVerdict[];
-      comments?: ReviewComment[];
-      thenApprove?: boolean;
-    }
-  | { type: 'merge_step.tick'; taskId: string; key: string; done: boolean }
-  | {
-      type: 'suggestion.accept';
-      taskId: string;
-      suggestionId: string;
-      waitsOnThis: boolean;
-      backlog?: boolean;
-    }
-  | { type: 'suggestion.dismiss'; taskId: string; suggestionId: string }
-  | { type: 'suggestion.keep'; taskId: string; suggestionId: string; shape?: TaskShape }
-  | { type: 'monitor.check_in_now'; taskId: string }
-  | { type: 'run.snooze_silence'; runId: string; until: number }
-  | { type: 'run.dismiss_silence'; runId: string }
-  | { type: 'task.bind_account'; taskId: string; account: RunAccount | null }
-  | { type: 'usage_wait.change'; taskId: string; autoResume: boolean }
-  | { type: 'usage_wait.resume_now'; taskId: string }
-  | DelegationUserCommand
-  | ScheduleUserCommand
-  | WatchdogUserCommand
-  | MemoryUserCommand
-  | FeedbackUserCommand
-  | ShareUserCommand
-  | HandoffUserCommand
-  | TeamUserCommand;
 
 type AgentCommand =
   | {
@@ -410,5 +322,6 @@ export function isUserCommand(command: ShinsaCommand): command is UserCommand {
 
 export type CommandOf<T extends ShinsaCommand['type']> = Extract<ShinsaCommand, { type: T }>;
 
-export { parseUserCommand, USER_COMMAND_TYPES } from './parse.ts';
+export { parseUserCommand } from './parse.ts';
+export { ProjectInput, USER_COMMAND_TYPES, UserCommand } from './schema.ts';
 export type { ReportFiling, ScheduleTargetInput } from './schedules.ts';

@@ -99,9 +99,12 @@ function listSection(label: string, tasks: TrayTask[]): TrayItem[] {
   return [
     { kind: 'separator' },
     { kind: 'header', label: `${label} (${tasks.length})` },
-    ...shown.map(
-      (task): TrayItem => ({ kind: 'task', path: task.path, label: task.title, sublabel: task.detail })
-    ),
+    ...shown.map((task): TrayItem => ({
+      kind: 'task',
+      path: task.path,
+      label: task.title,
+      sublabel: task.detail,
+    })),
     ...(more > 0 ? [{ kind: 'task' as const, path: '/', label: `${more} more`, sublabel: 'Open Home' }] : []),
   ];
 }

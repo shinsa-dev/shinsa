@@ -116,7 +116,7 @@ export function ClaimPage({
       <RemoteBenefits points={CLAIM_POINTS} />
       <div className='flex w-full flex-col items-center gap-2'>
         {state.kind === 'failed' && (
-          <p role='alert' className='w-full text-destructive text-xs'>
+          <p role='alert' className='w-full text-xs text-destructive'>
             {state.message}
           </p>
         )}

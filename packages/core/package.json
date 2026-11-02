@@ -6,14 +6,19 @@
   "type": "module",
   "sideEffects": false,
   "scripts": {
-    "check-types": "tsc --noEmit",
+    "check-types": "effect-tsgo tsc --noEmit",
     "test": "bun test --randomize"
+  },
+  "dependencies": {
+    "effect": "4.1.1"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
     "typescript": "^7.0.2"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./remote/api": "./src/remote/api.ts",
+    "./remote/errors": "./src/remote/errors.ts"
   }
 }

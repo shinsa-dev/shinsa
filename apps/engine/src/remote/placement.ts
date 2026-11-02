@@ -26,10 +26,12 @@ function isNoMachineAnswer(value: unknown) {
 export function createPlacementAsker(ask: QuickJson): PlacementAsker {
   return async (question) => {
     const said = await ask<unknown>(PLACEMENT_SYSTEM, serializePlacementPrompt(question), PLACEMENT_SCHEMA);
-    if (said === null) throw new DomainError('placement_unavailable', 'Claude did not answer. Try again.');
+    if (said === null)
+      throw new DomainError({ code: 'placement_unavailable', message: 'Claude did not answer. Try again.' });
     if (isNoMachineAnswer(said)) return null;
     const answer = parsePlacementAnswer(question, said);
-    if (!answer) throw new DomainError('placement_unreadable', 'Claude named none of your machines.');
+    if (!answer)
+      throw new DomainError({ code: 'placement_unreadable', message: 'Claude named none of your machines.' });
     return answer;
   };
 }
@@ -42,10 +44,10 @@ export function createPlacementRoutes(place: PlacementAsker): ApiRoute[] {
       respond: async (_match, request) => {
         const question = parsePlacementQuestion(await readJsonObject(request));
         if (!question)
-          throw new DomainError(
-            'placement_invalid',
-            'Send the request and two or more machines with their policies, projects and load.'
-          );
+          throw new DomainError({
+            code: 'placement_invalid',
+            message: 'Send the request and two or more machines with their policies, projects and load.',
+          });
         return Response.json({ answer: await place(question) });
       },
     },

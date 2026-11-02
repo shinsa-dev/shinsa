@@ -22,15 +22,16 @@ export function selectProjectSource(decider: Decider, source: ScheduleSource) {
 
 export function findProjectSource(decider: Decider, source: ScheduleSource) {
   const project = decider.state.projects[source.projectId];
-  if (!project) throw new DomainError('project_not_found', `No project ${source.projectId}.`);
+  if (!project)
+    throw new DomainError({ code: 'project_not_found', message: `No project ${source.projectId}.` });
   const found = selectProjectSource(decider, source);
   if (found) return found;
   const known = (project.watchSources ?? []).map((candidate) => `\`${candidate.server}\``);
   const listed = known.length > 0 ? ` It uses ${known.join(', ')}.` : ' It uses none yet.';
-  throw new DomainError(
-    'source_not_found',
-    `The project “${project.name}” does not use the integration \`${source.server}\`. Add it in Settings → Projects first.${listed}`
-  );
+  throw new DomainError({
+    code: 'source_not_found',
+    message: `The project “${project.name}” does not use the integration \`${source.server}\`. Add it in Settings → Projects first.${listed}`,
+  });
 }
 
 export function createWatchHome(decider: Decider, source: ScheduleSource, name: string): ScheduleTarget {
@@ -79,10 +80,10 @@ function selectIntakeSchedule(decider: Decider, task: Task) {
 export function findIntakeSchedule(decider: Decider, task: Task) {
   const schedule = selectIntakeSchedule(decider, task);
   if (schedule?.source) return { schedule, source: schedule.source };
-  throw new DomainError(
-    'schedule_not_found',
-    'No automation reads a data source in this task any more. Call `report_read` and stop.'
-  );
+  throw new DomainError({
+    code: 'schedule_not_found',
+    message: 'No automation reads a data source in this task any more. Call `report_read` and stop.',
+  });
 }
 
 export function missIntakeRead(decider: Decider, runId: string) {

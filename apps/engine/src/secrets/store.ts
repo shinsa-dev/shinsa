@@ -145,25 +145,26 @@ export class SecretStore {
 
   removeRef(ref: string, taskId: string) {
     if (!SECRET_REF_PATTERN.test(ref)) {
-      throw new DomainError(
-        'secret_ref_invalid',
-        'That is not a secret ref. Use the secret-ref:… request_secret returned.'
-      );
+      throw new DomainError({
+        code: 'secret_ref_invalid',
+        message: 'That is not a secret ref. Use the secret-ref:… request_secret returned.',
+      });
     }
     const stored = this.#file.refs[ref];
     if (!stored || stored.taskId !== taskId) {
-      throw new DomainError(
-        'secret_ref_unavailable',
-        'That secret ref has been used or belongs to another task. Ask for the secret again with request_secret.'
-      );
+      throw new DomainError({
+        code: 'secret_ref_unavailable',
+        message:
+          'That secret ref has been used or belongs to another task. Ask for the secret again with request_secret.',
+      });
     }
     const { [ref]: _removed, ...refs } = this.#file.refs;
     this.#write({ ...this.#file, refs });
     if (this.#now() - stored.savedAt > SECRET_REF_TTL_MS) {
-      throw new DomainError(
-        'secret_ref_expired',
-        'That secret ref expired. Ask for the secret again with request_secret.'
-      );
+      throw new DomainError({
+        code: 'secret_ref_expired',
+        message: 'That secret ref expired. Ask for the secret again with request_secret.',
+      });
     }
     return stored.value;
   }

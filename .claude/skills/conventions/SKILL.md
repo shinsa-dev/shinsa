@@ -5,7 +5,7 @@ description: Shinsa code conventions — load before writing or reviewing code a
 
 # Shinsa conventions
 
-`CLAUDE.md` carries the law; this skill carries the worked examples. When they disagree, `CLAUDE.md` wins, and fix the drift in the same change. For UI work also load `design`; for any string a person or an agent reads, load `copy`. Adapted from Buzzkit's `conventions`; when this is silent, do what Buzzkit does.
+`CLAUDE.md` carries the law; this skill carries the worked examples. When they disagree, `CLAUDE.md` wins, and fix the drift in the same change. For any code that imports `effect`, also load `effect`, which wins for Effect code; for UI work also load `design`; for any string a person or an agent reads, load `copy`. Adapted from Buzzkit's `conventions`; when this is silent, do what Buzzkit does.
 
 ## Where things live
 
@@ -14,11 +14,13 @@ description: Shinsa code conventions — load before writing or reviewing code a
 | `packages/core` | Pure domain: one folder per concern under `src/` (`domain`, `agent-models`, `events`, `commands`, `effects`, `state`, `decide`, `accounts`, `costs`, `schedules`, `queue`, `briefing`, `report`, `chat`, `prompts`, `progress`, `protocol`). No `node:*`, no Bun, no I/O. See `packages/core/CLAUDE.md` |
 | `apps/engine` | All I/O: event log, effect runner, agent runs, git, GitHub, HTTP. Folder per concern; see `apps/engine/CLAUDE.md` |
 | `apps/web` | Renders server state, owns nothing. Every action is a `UserCommand` through `sendCommand`. `routes/`, `components/<domain>/`, `hooks/`, `lib/` (all non-JSX logic, 100% covered); see `apps/web/CLAUDE.md` |
+| `apps/cloud` | The Worker, all Effect: `routes/<group>/` (`schema.ts` + `handler.ts`), `store/<table>/` and `integrations/<name>/` (`schema.ts` + `service.ts`), `auth/`, `http/`, `domain/`; see `apps/cloud/CLAUDE.md` |
 | `packages/ui` | The design system. Reusable beyond Shinsa, imports nothing from the workspace |
 
 - **A folder is a concern with an `index.ts` barrel.** Importers outside the folder use the barrel (`../state/index.ts`) or, inside one package where a barrel would cycle, the concrete file (`../state/queries.ts`). Files inside a folder import each other directly, never their own barrel. Packages import each other only by package name (`@shinsa/core`), never by path.
 - **The package barrel is the contract.** Everything `packages/core/src/index.ts` exports stays importable by the same name. Moving a file is free; renaming or removing an export changes every consumer and needs their updates in the same change.
 - **Tests follow `src/`**: one test folder per source folder and a test file per module with behaviour of its own (`packages/core/test/decide/gates.test.ts` ↔ `src/decide/gates.ts`); a module that only serves another is covered through it. Shared helpers live beside them (`test/harness.ts`, `test/briefing/fixtures.ts`), never in `src/`.
+- **Shapes apart from logic, one thing per logic file.** A module's schemas, types and constants go in its `schema.ts`; its logic file (`handler.ts`, `service.ts`, `middleware.ts`) holds one export with its steps inside it, and a step another module needs is a module of its own. No helper functions stacked above the main code, in Effect code or not: every app's move to Effect and every cleanup pass leaves its folders this way (the `effect` skill → File layout; lint-enforced for those file names).
 - **No single-use constants.** A value gets a name when it is reused or is a tunable (`MAX_STALLED_FIXES`, `ACTIVITY_LIMIT`). A lookup table (`Record<GateType, string>`) beats a `switch` that only returns strings.
 
 ## Function verbs — one catalog, no synonyms
@@ -40,7 +42,7 @@ description: Shinsa code conventions — load before writing or reviewing code a
 
 Banned in `apps/engine/src`, `apps/web/src` and `packages/core` (lint-enforced): `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*`.
 
-**The `find*`/`select*` split is a contract callers rely on.** If you null-check the result it must be `select*`; if absence is an error it must be `find*`.
+**The `find*`/`select*` split is a contract callers rely on.** If you null-check the result it must be `select*`; if absence is an error it must be `find*`. In Effect code `find*` fails with a `*NotFound` tagged error and `select*` succeeds with an `Option` (the `effect` skill → Errors).
 
 **The decider has its own vocabulary**, one verb per kind of step, so a reader can tell what a function does to a task without opening it: `start*` begins a step (`startPlanning`, `startFix`), `reactTo*` decides what a fact means (`reactToPullRequest`), `answer*` handles a gate, `settle*` ends a task, `retry*` restarts the current step, `open*` / `withdraw*` gates, `request*` asks for an effect (`requestPush`).
 
@@ -66,7 +68,7 @@ export function waitOnTasks(state: ShinsaState, command: CommandOf<'task.wait_on
 ```
 
 - **State is the event log.** `decide` is pure given `now` and `newId`; it never mutates its input (the `Decider` works on a clone) and every change is an event folded by `applyEvent`. Replaying the log must rebuild the same state, so `applyEvent` reads only the event and the state before it, and never stores a shared constant by reference (`createSettings()`, not `DEFAULT_SETTINGS`).
-- **Events are facts, past tense** (`task.staged`, `pull_request.push_requested`). Shinsa has never shipped, so it keeps no backwards compatibility in code: a renamed or removed event, field or value changes everywhere at once, with no reader for the old shape and no default that only an old log needs. Old shapes already in the user's log are rewritten once on start by `apps/engine/src/store/legacy.ts` (bump `LOG_VERSION`, SQLite's `user_version`), never read.
+- **Events are facts, past tense** (`task.staged`, `pull_request.push_requested`). Shinsa has never shipped, so it keeps no backwards compatibility in code: a renamed or removed event, field or value changes everywhere at once, with no reader for the old shape and no default that only an old log needs. A change that would leave an old shape in the user's log adds one entry to `LOG_MIGRATIONS` in `apps/engine/src/store/migrations.ts`, which rewrites it once on start (the log version is SQLite's `user_version`, the baseline plus the list's length); code never reads the old shape.
 - **Commands are idempotent where the world can repeat them.** A system or agent command that arrives twice (a retried effect, a duplicate tool call) is a no-op the second time: `checks.record` outside `checking` is ignored, an `agent.ask` with a known gate id opens nothing, a write that changes nothing emits nothing.
 - **Validation throws `DomainError(code, message)` before anything is emitted.** The code is `snake_case`; the message is a sentence the human or the agent can act on (`copy` skill).
 - **Exhaustive switches over unions.** `decide`'s `apply` lists every command type; `applyEvent` every event type. Don't add a `default` that swallows a new member; let the type checker and `useExhaustiveSwitchCases` fail instead.
@@ -75,14 +77,16 @@ export function waitOnTasks(state: ShinsaState, command: CommandOf<'task.wait_on
 
 ## Readability
 
-1. **No comments.** Names and structure carry the meaning; the reasons live in `CLAUDE.md` and `docs/`. Only functional directives (`biome-ignore`, `@ts-expect-error`) are allowed (lint-enforced everywhere but `packages/ui`, a reusable kit that keeps Buzzkit's comments).
+1. **No comments.** Names and structure carry the meaning; the reasons live in `CLAUDE.md` and `docs/`. Only functional directives with their reason (`oxlint-disable-next-line`, `stylelint-disable-next-line`, `@ts-expect-error`) are allowed (lint-enforced everywhere but `packages/ui`, a reusable kit that keeps Buzzkit's comments).
 2. **Never wrap a call chain in a ternary.** Guards and early returns; ternaries are for small value picks.
 3. **Multi-line arrow bodies get a block and an explicit `return`.** One-liners stay expressions.
 4. **Blank lines separate phases in long functions only.** A guard and a return read as one unit.
 5. **No dead parameters.** When an argument stops meaning anything (a `required = true` nobody passes), remove it.
-6. **Narrow types, no `any`.** Untrusted input is `unknown` and narrowed once (`readField` in `briefing/parse.ts`, `Reader` in `report/validate.ts`); a cast is allowed only right after the runtime check that justifies it.
+6. **Narrow types, no `any`.** Untrusted input is `unknown` and decoded once by its Effect Schema defined in its folder's `schema.ts` (`UserCommand` in `commands/schema.ts`, the hand-over schemas in `report/schema.ts` read by `HandOverReader`); a cast is allowed only right after the runtime check that justifies it.
 
 ## Errors and logs (apps/engine)
+
+Effect code fails with `Schema.TaggedError`s and logs with `Effect.log*` instead (the `effect` skill → Errors, Running and observability); what follows is for code not yet moved.
 
 - One JSON line per log entry: `log.info/warn/error('[Area] Sentence', fields)` with every id in scope and `error: describeError(error)`. Never `console` outside `scripts/`.
 - A `catch` rethrows, converts to a typed result, or logs with context. `.catch(() => undefined)` is a silent swallow and is not allowed.
@@ -103,9 +107,9 @@ A behaviour change updates `docs/engine.md` (core and server rules), `docs/spec.
 ## Before you finish
 
 ```sh
-bunx biome check --write .     # lint, format, Grit plugins
-bun lint                       # + comments ban, verb catalog, class checks
-bun check-types
+bun format:fix                 # oxfmt: formatting, class order, import order
+bun lint                       # Oxlint, stylelint, comments ban, verb catalog, class checks, spelling
+bun check-types                # TypeScript and the Effect language service
 bun run test                   # every workspace and scripts/, with the coverage floor
 bunx knip                      # dead exports: run it after exporting anything
 bun deps                       # dependency drift (sherif)

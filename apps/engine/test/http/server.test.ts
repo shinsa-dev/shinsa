@@ -104,7 +104,7 @@ describe('a taken port', () => {
       await expect(attempt).rejects.toThrow(`Is port ${port} in use?`);
       await expect(attempt).rejects.toThrow(/set another `port` in .*config\.json\./);
     } finally {
-      other.stop(true);
+      void other.stop(true);
     }
   });
 

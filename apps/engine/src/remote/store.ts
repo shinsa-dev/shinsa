@@ -102,9 +102,8 @@ function readDevices(value: unknown): RemoteDevice[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     if (!isFields(entry) || typeof entry.publicKey !== 'string' || typeof entry.name !== 'string') return [];
-    if (typeof entry.enrolledAt !== 'number') return [];
+    if (typeof entry.enrolledAt !== 'number' || typeof entry.userId !== 'string') return [];
     const lastSeenAt = typeof entry.lastSeenAt === 'number' ? entry.lastSeenAt : null;
-    const userId = typeof entry.userId === 'string' ? entry.userId : null;
     const taskId = typeof entry.taskId === 'string' ? { taskId: entry.taskId } : {};
     return [
       {
@@ -112,7 +111,7 @@ function readDevices(value: unknown): RemoteDevice[] {
         name: entry.name,
         enrolledAt: entry.enrolledAt,
         lastSeenAt,
-        userId,
+        userId: entry.userId,
         ...taskId,
       },
     ];
@@ -384,10 +383,9 @@ export class RemoteStore {
   }
 
   removeDevicesOutside(userIds: ReadonlySet<string>, guestIds: ReadonlySet<string>) {
-    const removed = this.#file.devices.filter((device) => {
-      if (device.userId === null) return false;
-      return !(device.taskId ? guestIds : userIds).has(device.userId);
-    });
+    const removed = this.#file.devices.filter(
+      (device) => !(device.taskId ? guestIds : userIds).has(device.userId)
+    );
     if (removed.length === 0) return [];
     this.update((file) => ({
       ...file,

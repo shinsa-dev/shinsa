@@ -116,7 +116,7 @@ export function ScheduleRow({
       <div className='flex min-w-0 flex-1 items-center gap-2.5'>
         <StatusTile {...look} label={type} detail={look.hint} />
         <div className='flex min-w-0 flex-1 flex-col'>
-          <Truncate className='text-fg-4 text-xs'>{schedule.name}</Truncate>
+          <Truncate className='text-xs text-fg-4'>{schedule.name}</Truncate>
           <Truncate className='text-2xs text-fg-2'>{describeScheduleSummary(state, schedule)}</Truncate>
         </div>
       </div>
@@ -156,7 +156,7 @@ export function ScheduleSettings({ state }: { state: ShinsaState }) {
           header={
             <>
               <Icon size='sm' name='IconLightbulbGlow' className='text-fg-2' />
-              <span className='font-medium text-fg-4 text-xs'>Suggested watches</span>
+              <span className='text-xs font-medium text-fg-4'>Suggested watches</span>
             </>
           }
         >

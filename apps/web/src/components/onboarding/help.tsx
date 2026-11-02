@@ -26,7 +26,7 @@ function HelpAsk({
 }) {
   return (
     <div className='flex items-center justify-between gap-3'>
-      <p className='text-fg-2 text-xs'>{text}</p>
+      <p className='text-xs text-fg-2'>{text}</p>
       <Button
         variant='secondary'
         icon='IconBubbleQuestion'

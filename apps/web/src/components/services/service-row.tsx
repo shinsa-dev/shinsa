@@ -233,7 +233,7 @@ export function TaskRunRow({
         className={cn(LIST_ROW, 'h-8 min-w-0 flex-1 items-center ps-1.5')}
       >
         <StatusTile icon={glyph.icon} tone={glyph.tone} size='sm' label={state} />
-        <Truncate className='min-w-0 flex-1 text-fg-3 text-xs'>{label}</Truncate>
+        <Truncate className='min-w-0 flex-1 text-xs text-fg-3'>{label}</Truncate>
         <span
           className={cn('shrink-0 text-2xs', glyph.tone === 'neutral' ? 'text-fg-2' : TONE_TEXT[glyph.tone])}
         >
@@ -276,8 +276,7 @@ export function ManagedServiceRow({
 }) {
   const name = view.service.name;
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the checkbox inside takes the keys
-    // biome-ignore lint/a11y/noStaticElementInteractions: the whole row ticks its checkbox
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the checkbox inside takes the keys; the whole row ticks its checkbox
     <div
       data-highlight-item=''
       onClick={onPick}

@@ -77,12 +77,12 @@ function PlannedOperation({ task }: { task: Task }) {
   if (!operation) return null;
   return (
     <div className='flex flex-col gap-1.5'>
-      <span className='font-medium text-fg-4 text-xs leading-5'>{operation.heading}</span>
+      <span className='text-xs leading-5 font-medium text-fg-4'>{operation.heading}</span>
       <ol className='flex flex-col gap-1.5'>
         {operation.steps.map((step, index) => (
           <li key={step} className='flex gap-2.5'>
             <StepNumber index={index} />
-            <Markdown text={step} className='text-fg-3 text-xs' />
+            <Markdown text={step} className='text-xs text-fg-3' />
           </li>
         ))}
       </ol>
@@ -96,14 +96,14 @@ function PlanList({ task }: { task: Task }) {
   const changes = resolvePlanChanges(task);
   return (
     <div className='flex flex-col gap-3'>
-      <Markdown text={document.goal} className='text-fg-3 text-xs' />
+      <Markdown text={document.goal} className='text-xs text-fg-3' />
       <ol className='flex flex-col gap-2.5'>
         {document.phases.map((phase, index) => (
           <li key={phase.title} className='flex gap-2.5'>
             <StepNumber index={index} />
             <div className='flex min-w-0 flex-col gap-px'>
               <PlanPhaseTitle title={phase.title} change={resolvePhaseChange(changes, phase.title)} />
-              <Markdown text={phase.detail} className='text-fg-3 text-xs' />
+              <Markdown text={phase.detail} className='text-xs text-fg-3' />
             </div>
           </li>
         ))}
@@ -134,7 +134,7 @@ export function QuestionCard({
       eyebrow={<Eyebrow state={state} task={task} extra={asked ? 'The agent asked' : undefined} />}
       title={gate.title}
     >
-      {gate.body && <Markdown text={gate.body} className='text-fg-3 text-xs' />}
+      {gate.body && <Markdown text={gate.body} className='text-xs text-fg-3' />}
       {!readOnly && (
         <>
           <QuestionChoices gate={gate} busy={busy !== null} onPick={(choice) => void answer(choice)} />
@@ -194,7 +194,7 @@ export function PausedCard({
       {run ? (
         <MessageLink run={run} fallback={gate.body} onOpen={(runId) => onOpen('agent', runId)} />
       ) : (
-        gate.body && <Markdown text={gate.body} className='text-fg-3 text-xs' />
+        gate.body && <Markdown text={gate.body} className='text-xs text-fg-3' />
       )}
     </NowFrame>
   );
@@ -202,7 +202,7 @@ export function PausedCard({
 
 function ShownReply({ task, iteration }: { task: Task; iteration: AnsweredIteration }) {
   return (
-    <div className='border-border border-b pb-3'>
+    <div className='border-b border-border pb-3'>
       <ReplyReport task={task} iteration={iteration} />
     </div>
   );
@@ -289,8 +289,8 @@ export function ChangeCard({
       }
     >
       {reply && <ShownReply task={task} iteration={reply} />}
-      {task.result && <Markdown text={task.result.body} className='text-fg-4 text-xs' />}
-      {change.why && <Markdown text={change.why} className='text-fg-3 text-xs' />}
+      {task.result && <Markdown text={task.result.body} className='text-xs text-fg-4' />}
+      {change.why && <Markdown text={change.why} className='text-xs text-fg-3' />}
       {change.request && <InsetNote label={change.requestLabel} text={change.request} />}
     </NowFrame>
   );
@@ -312,7 +312,7 @@ function ReviewFacts({ state, task, merge }: { state: ShinsaState; task: Task; m
   ].filter((fact) => fact.node);
   if (facts.length === 0) return null;
   return (
-    <p className='flex flex-wrap items-center gap-x-1.5 gap-y-1 text-fg-3 text-xs'>
+    <p className='flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-3'>
       {facts.map((fact, index) => (
         <React.Fragment key={fact.key}>
           {index > 0 && <FactDot />}
@@ -358,7 +358,7 @@ function ReviewCard({
     >
       {reply && <ShownReply task={task} iteration={reply} />}
       {gate.escalation ? (
-        <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>
+        <p className='text-xs text-fg-3'>{describeEscalationBody(gate.escalation)}</p>
       ) : (
         <ReviewFacts state={state} task={task} merge={merge} />
       )}
@@ -422,13 +422,13 @@ function WorkCard({
       footer={<TaskTrack task={task} />}
     >
       {leaf && (
-        <p className='flex flex-wrap items-center gap-1 text-fg-3 text-xs'>
+        <p className='flex flex-wrap items-center gap-1 text-xs text-fg-3'>
           Held up because <TaskLink state={state} task={leaf.task} /> {STALLED_REASON[leaf.reason]}.
         </p>
       )}
       {request && <WorkingRequest iteration={request} />}
       {current?.planned && current.detail && !checks && !request && (
-        <Markdown text={current.detail} className='text-fg-3 text-xs' />
+        <Markdown text={current.detail} className='text-xs text-fg-3' />
       )}
       {checks && <ChecksBlock taskId={task.id} view={checks} />}
       {run && <SilenceNote state={state} run={run} />}
@@ -518,7 +518,7 @@ export function ResultCard({
       }
     >
       {reply && <ShownReply task={task} iteration={reply} />}
-      <Markdown text={result.body} className='text-fg-4 text-xs' />
+      <Markdown text={result.body} className='text-xs text-fg-4' />
     </NowFrame>
   );
 }

@@ -52,7 +52,10 @@ export async function findTeamId(client: SurfaceClient, ref: string) {
   if (found && matches.length === 1) return found.id;
   const problem =
     matches.length > 1 ? `More than one team is called ${ref}; name it by its id` : `No team matches ${ref}`;
-  throw new DomainError('team_not_found', `${problem}. See them with \`shinsa teams list\`.`);
+  throw new DomainError({
+    code: 'team_not_found',
+    message: `${problem}. See them with \`shinsa teams list\`.`,
+  });
 }
 
 type Among = 'members' | 'requests' | 'teammates';
@@ -65,7 +68,10 @@ async function findUserId(client: SurfaceClient, teamId: string, login: string, 
   const found = listed?.find((entry) => entry.user.login.toLowerCase() === wanted);
   if (!found) {
     const where = among === 'requests' ? 'has not asked to join this team' : 'is not in this team';
-    throw new DomainError('member_not_found', `${wanted} ${where}. See the team with \`shinsa teams list\`.`);
+    throw new DomainError({
+      code: 'member_not_found',
+      message: `${wanted} ${where}. See the team with \`shinsa teams list\`.`,
+    });
   }
   return found.user.id;
 }

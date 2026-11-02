@@ -20,7 +20,7 @@ function assertUsage(usage: RunUsage) {
   const counts = [usage.inputTokens, usage.outputTokens, usage.cacheReadTokens, usage.cacheWriteTokens];
   const cost = usage.costUsd;
   if (!counts.every(isTokenCount) || (cost !== null && !(Number.isFinite(cost) && cost >= 0))) {
-    throw new DomainError('usage_invalid', 'Token counts and cost must be zero or more.');
+    throw new DomainError({ code: 'usage_invalid', message: 'Token counts and cost must be zero or more.' });
   }
 }
 
@@ -48,10 +48,10 @@ function assertReadings(readings: WeeklyReading[]) {
       isTime(reading.resetsAt)
   );
   if (!valid) {
-    throw new DomainError(
-      'usage_invalid',
-      'A weekly reading must be a percentage from 0 to 100 with a time and a reset time or none.'
-    );
+    throw new DomainError({
+      code: 'usage_invalid',
+      message: 'A weekly reading must be a percentage from 0 to 100 with a time and a reset time or none.',
+    });
   }
 }
 

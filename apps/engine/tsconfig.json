@@ -1,5 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.effect.json",
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],

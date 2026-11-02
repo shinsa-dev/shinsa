@@ -84,7 +84,7 @@ function AlertDialogTitle({ className, ...props }: React.ComponentProps<typeof A
   return (
     <AlertDialogPrimitive.Title
       data-slot='alert-dialog-title'
-      className={cn('text-balance text-center font-medium text-fg-4 text-sm leading-tighter', className)}
+      className={cn('text-center text-sm leading-tighter font-medium text-balance text-fg-4', className)}
       {...props}
     />
   );
@@ -98,7 +98,7 @@ function AlertDialogDescription({
     <AlertDialogPrimitive.Description
       data-slot='alert-dialog-description'
       className={cn(
-        'text-pretty text-center text-fg-2 text-xs *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-fg-4 *:[a]:active:text-fg-4',
+        'text-center text-xs text-pretty text-fg-2 *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-fg-4 *:[a]:active:text-fg-4',
         className
       )}
       {...props}

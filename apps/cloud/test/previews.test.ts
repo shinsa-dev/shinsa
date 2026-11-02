@@ -18,8 +18,8 @@ import {
   serializePreviewUrl,
   verifyPreviewAccessToken,
 } from '@shinsa/core';
-import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE, resolveForwardCookie } from '../src/previews.ts';
-import { respond } from '../src/router.ts';
+import { resolveForwardCookie } from '../src/routes/previews/address.ts';
+import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE } from '../src/routes/previews/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
 const PREVIEW_ID = serializeBase64Url(new Uint8Array(PREVIEW_ID_BYTES).fill(7));
@@ -38,7 +38,7 @@ async function shareMachine(harness: Harness) {
 }
 
 function visit(harness: Harness, url: string, init: RequestInit = {}) {
-  return respond(new Request(url, { redirect: 'manual', ...init }), harness.world);
+  return harness.request(new Request(url, { redirect: 'manual', ...init }));
 }
 
 function withKey(init: RequestInit = {}, extra = '') {
@@ -182,7 +182,7 @@ describe('a preview link', () => {
   test('answers a failure inside the Worker as an error, not the app', async () => {
     const harness = createHarness();
     const { origin } = await shareMachine(harness);
-    harness.world.store.selectInstance = () => Promise.reject(new Error('d1 down'));
+    harness.db.sqlite.exec('DROP TABLE instances');
     const answer = await visit(harness, `${origin}/`, withKey());
     expect(answer.status).toBe(500);
     expect(answer.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');

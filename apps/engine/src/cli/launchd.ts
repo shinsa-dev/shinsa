@@ -100,39 +100,43 @@ export function createLaunchdService(options: LaunchdOptions): EngineService {
   const assertInstalled = async () => {
     const printed = await launchctl(['print', target]);
     if (!printed.ok) {
-      throw new DomainError(
-        'engine_not_installed',
-        inApp
+      throw new DomainError({
+        code: 'engine_not_installed',
+        message: inApp
           ? 'The engine is not set up yet. Open the Shinsa app once and it sets it up.'
-          : 'The engine is not set up yet. `shinsa start` sets it up.'
-      );
+          : 'The engine is not set up yet. `shinsa start` sets it up.',
+      });
     }
     if (ownsJob(printed.output)) return;
     if (inApp) {
-      throw new DomainError(
-        'engine_not_this_app',
-        'This shinsa is not the one inside the Shinsa app that runs your engine, so it leaves that engine alone. Use `shinsa` from your PATH, which the app keeps pointing at itself.'
-      );
+      throw new DomainError({
+        code: 'engine_not_this_app',
+        message:
+          'This shinsa is not the one inside the Shinsa app that runs your engine, so it leaves that engine alone. Use `shinsa` from your PATH, which the app keeps pointing at itself.',
+      });
     }
     if (isAppJob(printed.output)) {
-      throw new DomainError(
-        'engine_not_this_app',
-        'The Shinsa app runs the engine on this Mac, so this shinsa leaves it alone. Use the app, or `shinsa` from your PATH, which the app keeps pointing at itself.'
-      );
+      throw new DomainError({
+        code: 'engine_not_this_app',
+        message:
+          'The Shinsa app runs the engine on this Mac, so this shinsa leaves it alone. Use the app, or `shinsa` from your PATH, which the app keeps pointing at itself.',
+      });
     }
-    throw new DomainError(
-      'engine_not_this_install',
-      'Another shinsa set up the engine on this Mac, so this one leaves it alone. `shinsa start` from this one takes it over.'
-    );
+    throw new DomainError({
+      code: 'engine_not_this_install',
+      message:
+        'Another shinsa set up the engine on this Mac, so this one leaves it alone. `shinsa start` from this one takes it over.',
+    });
   };
 
   const writeAgent = async (printed: { ok: boolean; output: string }) => {
     if (printed.ok && isAppJob(printed.output)) {
       if (ownsJob(printed.output)) return;
-      throw new DomainError(
-        'engine_beside_app',
-        'The Shinsa app runs the engine on this Mac, so this shinsa does not start a second one on the same port. Use the app, or quit and remove it to run this engine on its own.'
-      );
+      throw new DomainError({
+        code: 'engine_beside_app',
+        message:
+          'The Shinsa app runs the engine on this Mac, so this shinsa does not start a second one on the same port. Use the app, or quit and remove it to run this engine on its own.',
+      });
     }
     const agent = resolveLaunchAgent(label, program, env);
     if (printed.ok && readAgent(path) === agent) return;

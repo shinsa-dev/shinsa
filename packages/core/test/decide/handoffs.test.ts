@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { parseUserCommand, serializeTaskDetail, type TaskGuest } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
+import { serializeTaskDetail, type TaskGuest } from '../../src/index.ts';
+import { parseCommand, createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
 
 const URL = 'https://app.shinsa.dev/claim#inst.key.secret.invite';
 
@@ -183,11 +183,11 @@ describe('handing a task off', () => {
   });
 
   test('parses both commands from the page', () => {
-    expect(parseUserCommand({ type: 'task.hand_off', taskId: 't1' })).toEqual({
+    expect(parseCommand({ type: 'task.hand_off', taskId: 't1' })).toEqual({
       type: 'task.hand_off',
       taskId: 't1',
     });
-    expect(parseUserCommand({ type: 'handoff.remove', taskId: 't1', extra: true })).toEqual({
+    expect(parseCommand({ type: 'handoff.remove', taskId: 't1', extra: true })).toEqual({
       type: 'handoff.remove',
       taskId: 't1',
     });

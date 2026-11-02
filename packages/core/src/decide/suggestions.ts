@@ -69,10 +69,10 @@ export function suggestTasks(decider: Decider, command: CommandOf<'agent.suggest
   });
   const open = countOpen(task);
   if (open + fresh.length > MAX_OPEN_SUGGESTIONS) {
-    throw new DomainError(
-      'suggestions_full',
-      `This task already has ${open} open suggestions. Leave the rest for the human to look at.`
-    );
+    throw new DomainError({
+      code: 'suggestions_full',
+      message: `This task already has ${open} open suggestions. Leave the rest for the human to look at.`,
+    });
   }
   for (const suggestion of fresh) {
     decider.emit({
@@ -96,9 +96,10 @@ export function suggestTasks(decider: Decider, command: CommandOf<'agent.suggest
 
 export function findOpenSuggestion(decider: Decider, taskId: string, suggestionId: string): TaskSuggestion {
   const suggestion = decider.task(taskId).suggestions?.find((candidate) => candidate.id === suggestionId);
-  if (!suggestion) throw new DomainError('suggestion_not_found', `No suggestion ${suggestionId}`);
+  if (!suggestion)
+    throw new DomainError({ code: 'suggestion_not_found', message: `No suggestion ${suggestionId}` });
   if (suggestion.status !== 'open') {
-    throw new DomainError('suggestion_closed', 'It was already added or dismissed.');
+    throw new DomainError({ code: 'suggestion_closed', message: 'It was already added or dismissed.' });
   }
   return suggestion;
 }

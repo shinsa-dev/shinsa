@@ -75,13 +75,13 @@ function CheckGlyph({ state, className }: { state: CheckState; className?: strin
 }
 
 function RowLabel({ row }: { row: CheckRow }) {
-  if (!row.url) return <span className='wrap-anywhere text-fg-4 text-xs'>{row.label}</span>;
+  if (!row.url) return <span className='text-xs wrap-anywhere text-fg-4'>{row.label}</span>;
   return (
     <a
       href={row.url}
       target='_blank'
       rel='noreferrer'
-      className='wrap-anywhere text-fg-4 text-xs underline-offset-2 hover:underline active:underline'
+      className='text-xs wrap-anywhere text-fg-4 underline-offset-2 hover:underline active:underline'
     >
       {row.label}
     </a>
@@ -98,7 +98,7 @@ function RowFacts({ row }: { row: CheckRow }) {
   return (
     <>
       {row.command && (
-        <Truncate data-facts='' className='selectable min-w-0 font-mono text-2xs text-fg-3'>
+        <Truncate data-facts='' className='min-w-0 selectable font-mono text-2xs text-fg-3'>
           {row.command}
         </Truncate>
       )}
@@ -111,7 +111,7 @@ function RowFacts({ row }: { row: CheckRow }) {
         <span
           data-facts=''
           className={cn(
-            'selectable wrap-anywhere text-2xs',
+            'selectable text-2xs wrap-anywhere',
             row.state === 'failed' ? 'text-red-text' : 'text-fg-3'
           )}
         >
@@ -215,7 +215,7 @@ function PopoverRow({ row }: { row: CheckRow }) {
     <li className='flex min-w-0 items-start gap-2'>
       <CheckGlyph state={row.state} />
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
-        <Truncate className='text-fg-4 text-xs leading-4'>{row.label}</Truncate>
+        <Truncate className='text-xs leading-4 text-fg-4'>{row.label}</Truncate>
         <RowFacts row={row} />
       </span>
     </li>

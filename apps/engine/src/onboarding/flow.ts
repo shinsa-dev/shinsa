@@ -92,7 +92,7 @@ function readDraft(path: string): Draft | null {
 
 function parseStepId(value: unknown, steps: readonly StepDefinition[]) {
   const step = steps.find((entry) => entry.id === value);
-  if (!step) throw new DomainError('step_invalid', 'Name a setup step.');
+  if (!step) throw new DomainError({ code: 'step_invalid', message: 'Name a setup step.' });
   return step.id;
 }
 
@@ -111,7 +111,10 @@ function isProjectChoice(value: unknown): value is OnboardingProjectChoice {
 function parseProjectChoices(value: unknown) {
   if (value === undefined) return null;
   if (!Array.isArray(value) || value.length > MAX_VALUES || !value.every(isProjectChoice)) {
-    throw new DomainError('projects_invalid', 'Send each project as its id, name and repositories.');
+    throw new DomainError({
+      code: 'projects_invalid',
+      message: 'Send each project as its id, name and repositories.',
+    });
   }
   return value;
 }
@@ -129,18 +132,22 @@ function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition
       values.length > MAX_VALUES ||
       !values.every((value) => typeof value === 'string')
     ) {
-      throw new DomainError('values_invalid', 'Pick at least one option.');
+      throw new DomainError({ code: 'values_invalid', message: 'Pick at least one option.' });
     }
     const projects = parseProjectChoices(fields.projects);
     return { type: 'answer', stepId, values: values as string[], ...(projects ? { projects } : {}) };
   }
   if (fields.type === 'revise') {
     const stepId = parseStepId(fields.stepId, steps);
-    if (typeof fields.text !== 'string') throw new DomainError('request_invalid', 'Say what to change.');
+    if (typeof fields.text !== 'string')
+      throw new DomainError({ code: 'request_invalid', message: 'Say what to change.' });
     const projects = parseProjectChoices(fields.projects);
     return { type: 'revise', stepId, text: fields.text, ...(projects ? { projects } : {}) };
   }
-  throw new DomainError('reply_invalid', 'Answer a step, open one, ask for help or start again.');
+  throw new DomainError({
+    code: 'reply_invalid',
+    message: 'Answer a step, open one, ask for help or start again.',
+  });
 }
 
 export class OnboardingSetup {
@@ -172,7 +179,7 @@ export class OnboardingSetup {
         return this.#present(draft);
       }
       if (index !== draft.index) {
-        throw new DomainError('step_stale', 'That step has closed.');
+        throw new DomainError({ code: 'step_stale', message: 'That step has closed.' });
       }
       if (reply.type === 'help') {
         await this.#help(draft, this.#options.steps[index] as StepDefinition);
@@ -226,10 +233,10 @@ export class OnboardingSetup {
 
   #assertReached(draft: Draft, index: number) {
     if (draft.index >= this.#options.steps.length) {
-      throw new DomainError('setup_finished', 'Setup is done. Restart it in Settings.');
+      throw new DomainError({ code: 'setup_finished', message: 'Setup is done. Restart it in Settings.' });
     }
     if (!draft.revisit && index > draft.furthest) {
-      throw new DomainError('step_unreached', 'Answer the steps before this one first.');
+      throw new DomainError({ code: 'step_unreached', message: 'Answer the steps before this one first.' });
     }
   }
 
@@ -249,7 +256,7 @@ export class OnboardingSetup {
     projects: OnboardingProjectChoice[] | undefined
   ) {
     if (stepId !== 'projects') {
-      throw new DomainError('revise_invalid', 'Only suggested projects can change.');
+      throw new DomainError({ code: 'revise_invalid', message: 'Only suggested projects can change.' });
     }
     try {
       draft.revision = await this.#options.reviseProjects(draft.revision, text, projects);
@@ -266,10 +273,10 @@ export class OnboardingSetup {
     const view = await definition.view(context, false, draft.picked);
     const failing = listFailingChecks(view.checks);
     if (failing.length === 0) {
-      throw new DomainError(
-        'help_unneeded',
-        'Every check on this step passes, so there is nothing to ask about.'
-      );
+      throw new DomainError({
+        code: 'help_unneeded',
+        message: 'Every check on this step passes, so there is nothing to ask about.',
+      });
     }
     draft.help = await this.#options.requestHelp(failing);
     this.#write(draft);

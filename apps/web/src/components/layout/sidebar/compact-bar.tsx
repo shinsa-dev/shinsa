@@ -10,7 +10,7 @@ export function CompactBar({ state, onMenu }: { state: ShinsaState; onMenu: () =
   return (
     <header
       data-window-drag
-      className='flex h-11 shrink-0 select-none items-center gap-2 border-border border-b px-2 desktop:ps-20 md:hidden'
+      className='flex h-11 shrink-0 items-center gap-2 border-b border-border px-2 select-none md:hidden desktop:ps-20'
     >
       <Hint label='Open the queue'>
         <Button

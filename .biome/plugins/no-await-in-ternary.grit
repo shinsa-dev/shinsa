@@ -1,6 +1,0 @@
-language js
-
-`$condition ? $consequence : $alternative` where {
-  or { $consequence <: contains `await $_`, $alternative <: contains `await $_` },
-  register_diagnostic(span=$condition, message="Ternaries never wrap awaited calls. Branch with an if or an early return instead (the conventions skill).")
-}

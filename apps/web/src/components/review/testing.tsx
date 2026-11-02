@@ -57,7 +57,7 @@ function TestTarget({ task, step }: { task: Task; step: ManualTestStep }) {
       );
     case 'text':
       return (
-        <span className='flex min-w-0 items-center gap-1.5 text-fg-3 text-xs'>
+        <span className='flex min-w-0 items-center gap-1.5 text-xs text-fg-3'>
           <Icon size='sm' name={view.icon} className='shrink-0' />
           {view.text}
         </span>
@@ -120,7 +120,7 @@ function CoverageLines({
   if (!measured) return null;
   return (
     <div className='flex flex-col gap-1.5'>
-      <p className='text-fg-2 text-xs'>{describeCoverageSummary(measured)}.</p>
+      <p className='text-xs text-fg-2'>{describeCoverageSummary(measured)}.</p>
       {measured.files.length > 0 && (
         <DisclosureHeader
           disclosure={disclosure}
@@ -180,7 +180,7 @@ export function TestingPanel({
           <ol className='flex flex-col gap-3'>
             {manual.map((step, index) => (
               <ManualStep
-                // biome-ignore lint/suspicious/noArrayIndexKey: steps are positional
+                // oxlint-disable-next-line shinsa/no-array-index-key -- steps are positional
                 key={index}
                 task={task}
                 step={step}

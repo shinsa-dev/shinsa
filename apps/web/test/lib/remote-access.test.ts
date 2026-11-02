@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import { describeMentionText } from '@/lib/remote/users.ts';
 import {
   canEnrollDevices,
   describeAcceptOutcome,
@@ -11,6 +10,7 @@ import {
   LINK_COPY,
   resolveQrImage,
 } from '@/lib/remote-access.ts';
+import { describeMentionText } from '@/lib/remote/users.ts';
 import { createRemoteSnapshot } from '../support/remote-access.ts';
 
 const NOW = 1_800_000_000_000;
@@ -77,7 +77,7 @@ describe('remote access words', () => {
       name: 'iPhone',
       enrolledAt: NOW - 3_600_000,
       lastSeenAt: null,
-      userId: null,
+      userId: '1',
     };
     expect(describeDeviceSeen(device, NOW)).toStartWith('Added ');
     expect(describeDeviceSeen({ ...device, lastSeenAt: NOW - 60_000 }, NOW)).toStartWith('Last used ');
@@ -123,7 +123,7 @@ describe('remote access words', () => {
     const detail = describeDeviceDetail(device, access, NOW);
     expect(detail.at(-1)).toEqual({ user: kai });
     expect(describeMentionText(detail)).toMatch(/^Added .* · Added by kai$/);
-    expect(describeMentionText(describeDeviceDetail({ ...device, userId: null }, access, NOW))).not.toContain(
+    expect(describeMentionText(describeDeviceDetail({ ...device, userId: '1' }, access, NOW))).not.toContain(
       'Added by'
     );
     expect(describeMemberSince(access.members[0] ?? { user: kai, addedAt: 0 }, NOW)).toStartWith('Joined ');

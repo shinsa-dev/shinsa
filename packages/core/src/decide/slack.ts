@@ -4,9 +4,10 @@ import { isTaskClosed } from '../domain/rounds.ts';
 import { isSameSlackThread, type SlackThreadRef } from '../domain/slack.ts';
 import type { Task } from '../domain/types.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
-import { resolveSlackMentionThread, type SlackMention } from '../slack/contract.ts';
+import { resolveSlackMentionThread } from '../slack/contract.ts';
 import { SLACK_REACTIONS } from '../slack/messages.ts';
 import { SLACK_POSTED_GATES, type SlackPost } from '../slack/posts.ts';
+import type { SlackMention } from '../slack/schema.ts';
 import { serializeSlackMessage, serializeSlackRequest } from '../slack/thread.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
@@ -87,19 +88,19 @@ export function answerSlackQuestion(decider: Decider, command: CommandOf<'slack.
   const { answer } = command;
   const gate = decider.state.gates[answer.gateId];
   if (gate?.status !== 'open' || gate.type !== 'question')
-    throw new DomainError('slack_answer_closed', 'This question is no longer open.');
+    throw new DomainError({ code: 'slack_answer_closed', message: 'This question is no longer open.' });
   const link = decider.state.tasks[gate.taskId]?.slack;
   if (!link || !isSameSlackThread(link, answer) || link.userId !== answer.userId)
-    throw new DomainError(
-      'slack_answer_refused',
-      'Only the person who started this task from Slack can answer it here. Answer it in Shinsa.'
-    );
+    throw new DomainError({
+      code: 'slack_answer_refused',
+      message: 'Only the person who started this task from Slack can answer it here. Answer it in Shinsa.',
+    });
   const choice = gate.choices?.[answer.choice];
   if (choice === undefined)
-    throw new DomainError(
-      'slack_answer_choice',
-      'That choice is no longer on the question. Answer it in Shinsa.'
-    );
+    throw new DomainError({
+      code: 'slack_answer_choice',
+      message: 'That choice is no longer on the question. Answer it in Shinsa.',
+    });
   answerGate(decider, gate.id, 'reply', choice);
 }
 

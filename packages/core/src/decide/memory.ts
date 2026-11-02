@@ -13,25 +13,26 @@ import { findCurrentRun } from './runs.ts';
 
 function assertHumanWrites(decider: Decider) {
   if (!decider.context.onBehalf) return;
-  throw new DomainError(
-    'human_only',
-    'Only the human decides what agents remember. Propose a rule with `remember` instead.'
-  );
+  throw new DomainError({
+    code: 'human_only',
+    message: 'Only the human decides what agents remember. Propose a rule with `remember` instead.',
+  });
 }
 
 function findMemory(decider: Decider, memoryId: string) {
   const entry = decider.state.memories[memoryId];
-  if (!entry) throw new DomainError('memory_not_found', `No memory ${memoryId}`);
+  if (!entry) throw new DomainError({ code: 'memory_not_found', message: `No memory ${memoryId}` });
   return entry;
 }
 
 function assertText(text: string) {
-  if (text.length === 0) throw new DomainError('memory_invalid', 'Write the rule for agents to remember.');
+  if (text.length === 0)
+    throw new DomainError({ code: 'memory_invalid', message: 'Write the rule for agents to remember.' });
   if (text.length > MEMORY_LIMITS.text) {
-    throw new DomainError(
-      'memory_invalid',
-      `A rule can be at most ${MEMORY_LIMITS.text} characters. Keep it to one short sentence.`
-    );
+    throw new DomainError({
+      code: 'memory_invalid',
+      message: `A rule can be at most ${MEMORY_LIMITS.text} characters. Keep it to one short sentence.`,
+    });
   }
 }
 
@@ -43,12 +44,15 @@ function countKept(decider: Decider, projectId: string | null, except: string | 
 
 function assertRoomToKeep(decider: Decider, projectId: string | null, except: string | null) {
   if (countKept(decider, projectId, except) < MEMORY_LIMITS.keptPerScope) return;
-  throw new DomainError('memory_full', `${MEMORY_LIMITS.keptPerScope} rules kept. Remove one first.`);
+  throw new DomainError({
+    code: 'memory_full',
+    message: `${MEMORY_LIMITS.keptPerScope} rules kept. Remove one first.`,
+  });
 }
 
 function assertProject(decider: Decider, projectId: string | null) {
   if (projectId === null || decider.state.projects[projectId]) return;
-  throw new DomainError('project_not_found', `No project ${projectId}`);
+  throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}` });
 }
 
 function keep(decider: Decider, entry: MemoryEntry, patch: Pick<MemoryEntry, 'projectId' | 'text'>) {
@@ -105,10 +109,11 @@ export function removeProjectMemory(decider: Decider, projectId: string) {
 function resolveScopeProject(scope: MemoryScope, projectId: string | null) {
   if (scope === 'global') return null;
   if (projectId) return projectId;
-  throw new DomainError(
-    'memory_no_project',
-    'This task belongs to no project. Propose the rule for every project with `scope: "global"`, or leave it.'
-  );
+  throw new DomainError({
+    code: 'memory_no_project',
+    message:
+      'This task belongs to no project. Propose the rule for every project with `scope: "global"`, or leave it.',
+  });
 }
 
 function isKnown(decider: Decider, projectId: string | null, text: string) {
@@ -129,10 +134,10 @@ export function rememberRule(decider: Decider, command: CommandOf<'agent.remembe
   assertText(text);
   if (isKnown(decider, projectId, text)) return;
   if (countProposals(decider) >= MEMORY_LIMITS.proposals) {
-    throw new DomainError(
-      'memory_proposals_full',
-      `The human already has ${MEMORY_LIMITS.proposals} rules to look at. Leave this one and carry on with your step.`
-    );
+    throw new DomainError({
+      code: 'memory_proposals_full',
+      message: `The human already has ${MEMORY_LIMITS.proposals} rules to look at. Leave this one and carry on with your step.`,
+    });
   }
   decider.emit({
     type: 'memory.proposed',

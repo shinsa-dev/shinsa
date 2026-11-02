@@ -76,7 +76,7 @@ import { prefetchTask } from '@/routes/task/prefetch.tsx';
 
 function Crumb({ children }: { children: string }) {
   return (
-    <span className='-ms-1 inline-flex h-5.5 min-w-0 max-w-48 shrink-0 items-center rounded-control-sm bg-bg-2 px-1 font-medium text-fg-3 text-xs'>
+    <span className='-ms-1 inline-flex h-5.5 max-w-48 min-w-0 shrink-0 items-center rounded-control-sm bg-bg-2 px-1 text-xs font-medium text-fg-3'>
       <Truncate className='min-w-0'>{children}</Truncate>
     </span>
   );

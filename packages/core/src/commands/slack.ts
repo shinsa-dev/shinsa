@@ -1,5 +1,5 @@
 import type { SlackAnswer } from '../slack/answers.ts';
-import type { SlackMention } from '../slack/contract.ts';
+import type { SlackMention } from '../slack/schema.ts';
 
 export type SlackSystemCommand =
   | { type: 'slack.mention'; mention: SlackMention }

@@ -9,7 +9,7 @@ import { describeAttachment, resolveFileGlyph } from '@/lib/chat/attachments.ts'
 const FILE_CARD = cn(
   CARD,
   ATTACHMENT_CORNER,
-  'group relative flex h-14 w-60 min-w-0 max-w-full items-center gap-3 p-1 pe-3'
+  'group relative flex h-14 w-60 max-w-full min-w-0 items-center gap-3 p-1 pe-3'
 );
 
 function FileTile({ name, mimeType, busy }: { name: string; mimeType: string | null; busy: boolean }) {
@@ -19,7 +19,7 @@ function FileTile({ name, mimeType, busy }: { name: string; mimeType: string | n
       className={cn(
         INSET,
         ATTACHMENT_TILE_CORNER,
-        'file-icons-muted grid size-11.5 shrink-0 place-items-center bg-bg-a1 text-fg-3'
+        'grid size-11.5 shrink-0 place-items-center bg-bg-a1 text-fg-3 file-icons-muted'
       )}
     >
       {busy ? <Spinner size='md' /> : <Icon size='lg' name={resolveFileGlyph({ name, mimeType })} />}
@@ -30,7 +30,7 @@ function FileTile({ name, mimeType, busy }: { name: string; mimeType: string | n
 function FileLines({ name, meta }: { name: string; meta: string }) {
   return (
     <span className='flex min-w-0 flex-1 flex-col gap-px'>
-      <Truncate className='text-fg-4 text-xs'>{name}</Truncate>
+      <Truncate className='text-xs text-fg-4'>{name}</Truncate>
       {meta && <span className='truncate text-2xs text-fg-2 tabular-nums'>{meta}</span>}
     </span>
   );

@@ -63,7 +63,7 @@ export function ProjectSettings({
           header={
             <>
               <Icon size='sm' name='IconCircleDotted' className='text-fg-2' />
-              <span className='font-medium text-fg-2 text-xs'>No project</span>
+              <span className='text-xs font-medium text-fg-2'>No project</span>
             </>
           }
         >

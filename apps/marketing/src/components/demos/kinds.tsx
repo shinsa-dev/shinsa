@@ -44,14 +44,14 @@ export function KindsDemo() {
       <Stage className='flex h-full flex-col items-center gap-8 max-sm:gap-6'>
         <Tabs
           ref={tabs}
-          className='min-w-0 max-w-full'
+          className='max-w-full min-w-0'
           value={kind}
           onValueChange={(value) => {
             setPicked(true);
             setKind(value as TaskShape);
           }}
         >
-          <TabsList className='justify-center-safe max-w-full overflow-x-auto [scrollbar-width:none]'>
+          <TabsList className='max-w-full [scrollbar-width:none] justify-center-safe overflow-x-auto'>
             {KIND_ORDER.map((shape) => (
               <TabsTrigger key={shape} value={shape}>
                 {SHAPE_LABEL[shape]}
@@ -67,7 +67,7 @@ export function KindsDemo() {
         >
           <div className='flex shrink-0 flex-col gap-1 text-center'>
             <p className='text-base text-fg-4'>“{scene.task.title}”</p>
-            <p className='text-fg-2 text-sm'>{KIND_ENDS[kind]}</p>
+            <p className='text-sm text-fg-2'>{KIND_ENDS[kind]}</p>
           </div>
           <div className='demo-static demo-pre min-h-0 flex-1 overflow-hidden text-left'>
             <NowCard

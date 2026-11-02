@@ -29,17 +29,17 @@ export function answerIteration(
 ) {
   const open = selectOpenIteration(task);
   if (!open && reply) {
-    throw new DomainError(
-      'reply_unasked',
-      `Leave \`reply\` out: it answers a message the human sent, and this \`${tool}\` answers none.`
-    );
+    throw new DomainError({
+      code: 'reply_unasked',
+      message: `Leave \`reply\` out: it answers a message the human sent, and this \`${tool}\` answers none.`,
+    });
   }
   if (!open) return;
   if (!reply) {
-    throw new DomainError(
-      'reply_required',
-      `This \`${tool}\` answers a message the human sent, so \`reply\` is required: a headline, each point they raised with its outcome and a note, and what they do now. Call \`${tool}\` again with it.`
-    );
+    throw new DomainError({
+      code: 'reply_required',
+      message: `This \`${tool}\` answers a message the human sent, so \`reply\` is required: a headline, each point they raised with its outcome and a note, and what they do now. Call \`${tool}\` again with it.`,
+    });
   }
   decider.emit({ type: 'iteration.answered', taskId: task.id, iterationId: open.id, reply, runId });
 }

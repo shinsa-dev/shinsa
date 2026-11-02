@@ -123,7 +123,7 @@ export function PointIndex({
         aria-label='Every point'
         className={cn(
           CARD,
-          'block w-full cursor-pointer select-none overflow-hidden text-start outline-none'
+          'block w-full cursor-pointer overflow-hidden text-start outline-none select-none'
         )}
       >
         <span className={cn(CARD_HEADER, resolveDisclosureStrip('band', 'box'))}>

@@ -178,7 +178,7 @@ function ScopeHeader({ group }: { group: MemoryScopeGroup }) {
       ) : (
         <Icon size='sm' name='IconGlobe' className='text-fg-2' />
       )}
-      <Truncate className='min-w-0 flex-1 font-medium text-fg-4 text-xs'>
+      <Truncate className='min-w-0 flex-1 text-xs font-medium text-fg-4'>
         {group.project?.name ?? EVERY_PROJECT_LABEL}
       </Truncate>
       <span className={TOKEN_TEXT}>{describeRuleCount(group.entries.length)}</span>
@@ -269,7 +269,7 @@ export function MemorySettings({
           header={
             <>
               <Icon size='sm' name='IconLightbulbGlow' className='text-fg-2' />
-              <span className='font-medium text-fg-4 text-xs'>Proposed by agents</span>
+              <span className='text-xs font-medium text-fg-4'>Proposed by agents</span>
             </>
           }
         >

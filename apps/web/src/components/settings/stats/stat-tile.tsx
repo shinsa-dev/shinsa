@@ -13,7 +13,7 @@ function StatTile({ tile }: { tile: ShippingTile }) {
     <div className={cn('flex min-w-0 flex-col gap-1 px-3 py-2', TILE_EDGE)}>
       <Truncate className='text-2xs text-fg-2'>{tile.label}</Truncate>
       <span className='flex min-w-0 items-baseline gap-1.5'>
-        <span className='shrink-0 font-medium text-base text-fg-4 leading-6'>{tile.value}</span>
+        <span className='shrink-0 text-base leading-6 font-medium text-fg-4'>{tile.value}</span>
         {tile.detail && <Truncate className='text-2xs text-fg-2'>{tile.detail}</Truncate>}
         {tile.changes && <DiffStats added={tile.changes.added} removed={tile.changes.removed} />}
       </span>

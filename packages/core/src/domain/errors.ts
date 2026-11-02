@@ -1,9 +1,9 @@
-export class DomainError extends Error {
-  readonly code: string;
+import { Schema } from 'effect';
 
-  constructor(code: string, message: string) {
-    super(message);
-    this.name = 'DomainError';
-    this.code = code;
+export class DomainError extends Schema.TaggedError<DomainError, { readonly brand: unique symbol }>()(
+  'DomainError',
+  {
+    code: Schema.String,
+    message: Schema.String,
   }
-}
+) {}

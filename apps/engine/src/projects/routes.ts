@@ -31,7 +31,7 @@ interface LocalRepoView {
 
 function findProject(engine: Engine, projectId: string) {
   const project = engine.state.projects[projectId];
-  if (!project) throw new DomainError('project_not_found', `No project ${projectId}.`);
+  if (!project) throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}.` });
   return project;
 }
 
@@ -62,7 +62,7 @@ export function createProjectChanges({
       findProject(engine, projectId);
       const path = resolveProjectFolder(raw, userHome);
       if (!(await resolveRepoRoot(path))) {
-        throw new DomainError('repo_invalid', `${path} is not a git repository.`);
+        throw new DomainError({ code: 'repo_invalid', message: `${path} is not a git repository.` });
       }
       const repo = await upsertRepo(engine, path, resolveLogin, projectId, from);
       if (repo.projectId !== projectId) {

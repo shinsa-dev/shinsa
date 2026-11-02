@@ -82,30 +82,30 @@ html[data-desktop]
   ),
 html[data-desktop] :where(a[href], button, [role="button"], .cursor-pointer)::before,
 html[data-desktop] :where(a[href], button, [role="button"], .cursor-pointer)::after {
-  /* biome-ignore lint/complexity/noImportantStyles: the Mac app shows the arrow where a browser shows the pointer hand, over every utility, kit rule, inline style and third-party stylesheet; every other cursor is left alone */
+  /* stylelint-disable-next-line declaration-no-important -- the Mac app shows the arrow where a browser shows the pointer hand, over every utility, kit rule, inline style and third-party stylesheet; every other cursor is left alone */
   cursor: default !important;
 }
 
 html[data-desktop] :where(:disabled, [aria-disabled="true"], [data-disabled]) :where(*) {
-  /* biome-ignore lint/complexity/noImportantStyles: inside a disabled control everything shows the control's own not-allowed cursor */
+  /* stylelint-disable-next-line declaration-no-important -- inside a disabled control everything shows the control's own not-allowed cursor */
   cursor: inherit !important;
+}
+
+html[data-desktop],
+html[data-desktop] body {
+  overscroll-behavior: none;
 }
 
 html[data-desktop] body[style*="col-resize"],
 html[data-desktop] body[style*="col-resize"] *,
 html[data-desktop] body[style*="col-resize"] *::before,
 html[data-desktop] body[style*="col-resize"] *::after {
-  /* biome-ignore lint/complexity/noImportantStyles: while a pane is dragged the whole page keeps the resize cursor */
+  /* stylelint-disable-next-line declaration-no-important -- while a pane is dragged the whole page keeps the resize cursor */
   cursor: col-resize !important;
 }
 
 html[data-desktop] body:has([data-slot="slider-thumb"][data-dragging]),
 html[data-desktop] body:has([data-slot="slider-thumb"][data-dragging]) * {
-  /* biome-ignore lint/complexity/noImportantStyles: while a slider is dragged the whole page keeps the grabbing cursor */
+  /* stylelint-disable-next-line declaration-no-important -- while a slider is dragged the whole page keeps the grabbing cursor */
   cursor: grabbing !important;
-}
-
-html[data-desktop],
-html[data-desktop] body {
-  overscroll-behavior: none;
 }

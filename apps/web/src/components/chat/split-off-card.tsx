@@ -54,7 +54,7 @@ export function SplitOffCard({ reference }: { reference: SplitOffReference }) {
         title='Suggested as a separate task'
         meta={describeSplitOffState(suggestion)}
       />
-      <div className='flex min-w-0 flex-col gap-3 border-border border-t p-3'>
+      <div className='flex min-w-0 flex-col gap-3 border-t border-border p-3'>
         {suggestion.status === 'open' ? (
           <OpenSplitOff task={task} suggestion={suggestion} />
         ) : (

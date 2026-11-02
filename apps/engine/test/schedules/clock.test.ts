@@ -63,7 +63,10 @@ describe('the schedule clock', () => {
     state.schedules.s1 = schedule;
     state.schedules.s2 = { ...schedule, id: 's2' };
     const sent: { command: ShinsaCommand; id: string | undefined }[] = [];
-    let refusals = [new DomainError('task_settled', 'This task is finished.'), new Error('disk full')];
+    let refusals = [
+      new DomainError({ code: 'task_settled', message: 'This task is finished.' }),
+      new Error('disk full'),
+    ];
     const engine = {
       state,
       subscribe: () => () => undefined,

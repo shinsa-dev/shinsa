@@ -44,7 +44,7 @@ function recordTree(decider: Decider, taskId: string, treeHash: string | null | 
 
 function assertPlanRules(task: Task, document: PlanDocument) {
   const errors = validatePlanRules(resolveTaskPipeline(task), document);
-  if (errors.length > 0) throw new DomainError('plan_invalid', errors.join(' '));
+  if (errors.length > 0) throw new DomainError({ code: 'plan_invalid', message: errors.join(' ') });
 }
 
 const EVIDENCE_NOUN: Record<PlanEvidenceKind, string> = {
@@ -63,10 +63,10 @@ export function assertEvidence(decider: Decider, task: Task, handOver: string) {
   const missing = listMissingEvidence(task.plan?.document ?? null, attached);
   if (missing.length === 0) return;
   const kinds = missing.map((kind) => `${EVIDENCE_NOUN[kind]} (\`${kind}\`)`).join(' and ');
-  throw new DomainError(
-    'evidence_missing',
-    `The plan asks for ${kinds} as evidence. Attach it with \`attach_evidence\` before you ${handOver}.`
-  );
+  throw new DomainError({
+    code: 'evidence_missing',
+    message: `The plan asks for ${kinds} as evidence. Attach it with \`attach_evidence\` before you ${handOver}.`,
+  });
 }
 
 export function proposePlan(decider: Decider, command: CommandOf<'agent.propose_plan'>) {
@@ -148,10 +148,10 @@ function findOwnItems(decider: Decider, task: Task, run: Run, references: readon
   return references.map((reference) => {
     const item = selectEvidenceItem(items, reference);
     if (item) return item;
-    throw new DomainError(
-      'evidence_unknown',
-      `${field} names ${reference}, which is not current evidence you attached this round. Name an item by its key or its id.`
-    );
+    throw new DomainError({
+      code: 'evidence_unknown',
+      message: `${field} names ${reference}, which is not current evidence you attached this round. Name an item by its key or its id.`,
+    });
   });
 }
 
@@ -225,14 +225,14 @@ function assertEvidenceAccounted(
     return covered === null || [...covered].some((file) => changed.has(file));
   });
   if (stale.length === 0) return;
-  throw new DomainError(
-    'evidence_stale',
-    [
+  throw new DomainError({
+    code: 'evidence_stale',
+    message: [
       'Your fix changed files this evidence shows, so it may still show the work as it was before the fix:',
       ...stale.map(describeStaleItem),
       'For each one, attach a new one with the same `key` (it replaces the old one), remove it with `remove_evidence` when it no longer applies, or name its key in `evidence_kept` when it still shows the work as it is. Then call `complete_fix` again.',
-    ].join('\n')
-  );
+    ].join('\n'),
+  });
 }
 
 function isPushedFix(task: Task) {
@@ -274,10 +274,10 @@ function resolveDisagreements(task: Task, disagreements: { call: number; reason:
   return disagreements.map(({ call: number, reason }) => {
     const call = calls[number - 1];
     if (!call) {
-      throw new DomainError(
-        'unknown_judgement_call',
-        `disagreements names judgement call ${number}, but the agent made ${calls.length}. Use the numbers from your brief.`
-      );
+      throw new DomainError({
+        code: 'unknown_judgement_call',
+        message: `disagreements names judgement call ${number}, but the agent made ${calls.length}. Use the numbers from your brief.`,
+      });
     }
     return { call: call.call, reason };
   });
@@ -303,7 +303,8 @@ export function askQuestion(decider: Decider, command: CommandOf<'agent.ask'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'ask');
   const existing = decider.state.gates[command.gateId];
   if (existing?.runId === run.id) return;
-  if (existing) throw new DomainError('gate_exists', `Gate ${command.gateId} already exists.`);
+  if (existing)
+    throw new DomainError({ code: 'gate_exists', message: `Gate ${command.gateId} already exists.` });
   const choices = command.choices ?? [];
   decider.openGate(task.id, 'question', command.question, command.context ?? '', {
     id: command.gateId,
@@ -360,26 +361,24 @@ export function attachCheck(decider: Decider, command: CommandOf<'agent.attach_c
 export function attachComparison(decider: Decider, command: CommandOf<'agent.attach_comparison'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'attach_evidence');
   const itemId = decider.context.newId();
-  const parts = command.parts.map(
-    (part): Evidence => ({
-      id: decider.context.newId(),
-      taskId: task.id,
-      runId: run.id,
-      kind: part.kind,
-      title: command.title,
-      uri: part.uri,
-      attachedAt: decider.context.now,
-      itemId,
-      ...resolveRoundStamp(task),
-      ...(command.detail ? { detail: command.detail } : {}),
-      ...(command.width ? { width: command.width } : {}),
-      ...(command.theme ? { theme: command.theme } : {}),
-      ...(part.stage ? { stage: part.stage } : {}),
-      ...(part.label ? { label: part.label } : {}),
-      ...(command.key ? { key: command.key } : {}),
-      ...resolveFixStamp(task, run),
-    })
-  );
+  const parts = command.parts.map((part): Evidence => ({
+    id: decider.context.newId(),
+    taskId: task.id,
+    runId: run.id,
+    kind: part.kind,
+    title: command.title,
+    uri: part.uri,
+    attachedAt: decider.context.now,
+    itemId,
+    ...resolveRoundStamp(task),
+    ...(command.detail ? { detail: command.detail } : {}),
+    ...(command.width ? { width: command.width } : {}),
+    ...(command.theme ? { theme: command.theme } : {}),
+    ...(part.stage ? { stage: part.stage } : {}),
+    ...(part.label ? { label: part.label } : {}),
+    ...(command.key ? { key: command.key } : {}),
+    ...resolveFixStamp(task, run),
+  }));
   const [first] = parts;
   const replaces = first ? listReplacedIds(decider, task, run, first, true, command.replaces ?? []) : [];
   parts.forEach((evidence, index) => {

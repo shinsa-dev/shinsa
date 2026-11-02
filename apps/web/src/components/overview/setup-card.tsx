@@ -36,7 +36,7 @@ export function SetupCard({
         </FooterNote>
       }
     >
-      {gate.body && <Markdown text={gate.body} className='text-fg-3 text-xs' />}
+      {gate.body && <Markdown text={gate.body} className='text-xs text-fg-3' />}
     </NowFrame>
   );
 }

@@ -73,14 +73,14 @@ import { navigate } from '@/router.ts';
 function ShareBody({ view }: { view: ShareView }) {
   switch (view.kind) {
     case 'unpaired':
-      return <p className='text-fg-3 text-xs'>{SHARE_NEEDS_REMOTE}</p>;
+      return <p className='text-xs text-fg-3'>{SHARE_NEEDS_REMOTE}</p>;
     case 'off':
     case 'linking':
     case 'shared':
       return null;
     case 'failed':
       return (
-        <p role='alert' className='selectable text-destructive text-xs'>
+        <p role='alert' className='selectable text-xs text-destructive'>
           {view.message}
         </p>
       );
@@ -216,7 +216,7 @@ function HandoffGuest({ view }: { view: Extract<HandoffView, { kind: 'claimed' }
 function HandoffBody({ view }: { view: HandoffView }) {
   if (view.kind === 'failed')
     return (
-      <p role='alert' className='selectable text-destructive text-xs'>
+      <p role='alert' className='selectable text-xs text-destructive'>
         {view.message}
       </p>
     );

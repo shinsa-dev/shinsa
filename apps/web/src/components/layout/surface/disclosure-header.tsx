@@ -97,8 +97,7 @@ export function DisclosureChevron({ kind = 'glyph', className }: { kind?: Chevro
 
 export function DisclosureAction({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: keeps a header action's click from folding the header
-    // biome-ignore lint/a11y/useKeyWithClickEvents: only stops a click from reaching the header
+    // oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- keeps a header action's click from folding the header; only stops a click from reaching the header
     <span
       data-disclosure-action
       className={cn('flex min-w-0 items-center', className)}
@@ -136,7 +135,7 @@ export function DisclosureHeader({
   const separate = interactive || Boolean(action);
   const trigger = React.useMemo(() => ({ open, label, separate }), [open, label, separate]);
   const header = cn(
-    'group/disclosure flex min-w-0 cursor-pointer select-none items-center text-left',
+    'group/disclosure flex min-w-0 cursor-pointer items-center text-left select-none',
     className,
     strip && chevron && resolveDisclosureStrip(strip, chevron)
   );

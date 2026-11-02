@@ -132,9 +132,10 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 
 ## Naming decisions
 
-All twenty are decided and in the code. Shinsa has never shipped, so nothing reads the old names: every event,
-command, stored shape and route uses the current one. Old shapes already in the user's log are rewritten once on start
-(`apps/engine/src/store/legacy.ts`, `docs/engine.md` → State in memory), so code never reads them.
+All twenty-one are decided and in the code. Shinsa has never shipped, so nothing reads the old names: every event,
+command, stored shape and route uses the current one. A change that would leave an old shape in the user's log ships
+a migration that rewrites it once on start (`apps/engine/src/store/migrations.ts`, `docs/engine.md` → State in
+memory), so code never reads one.
 
 1. **Plan, not spec**: `Plan`, `PlanDocument`, `PlanRevision`, `PlanFile`, `PlanQuestion`, `Task.plan`, `planFirst`,
    `planHistory`, `planAnswers`, stage `awaiting_plan`, events `plan.*`, activity kind `plan`, `shinsa do --plan-first`.
@@ -182,6 +183,17 @@ command, stored shape and route uses the current one. Old shapes already in the 
     remove-from-backlog`, `--backlog`); the list of every task is All tasks, its groups `TaskGroup` (`resolveTaskGroup`,
     `TASK_GROUPS`, `components/tasks/`, the disclosure scope `tasks:group:`). "Roadmap" names nothing, in code, tools,
     the command line or on screen.
+21. **Effect names** (since 2026-11-02): Shinsa's I/O is Effect 4 (the `effect` skill). A service is a
+    `Context.Service` named for what it owns (`Machines`, `Tunnel`), its key `shinsa/<package>/<folder>/<Name>` and its
+    methods' spans `<Name>.<method>`. An error is a `Schema.TaggedError` whose `_tag` is its class name and says what
+    happened (`MachineNotFound`, `PairingExpired`), never a generic error with a code string. A schema and the type
+    it derives share one name (`MachineId`, `typeof MachineId.Type`). In Effect code `find*` fails with a `*NotFound`
+    error and `select*` returns an `Option`. A failure the Worker answers is one class per wire code in core's
+    `remote/errors.ts` (`NotFound` is `not_found`, `MembersFull` is `members_full`), its status part of its
+    definition and its body `{ error: { code, message } }` (`resolveRemoteFailureWire`). `DomainError` keeps its
+    `code` string: it is a `Schema.TaggedError` with a `code` and a `message`, and `decide` returns a `Result` of the
+    `Decision` or that error. An id that enters through a schema is branded with its own name (`TaskId`, `RunId`,
+    `GateId`, `ProjectId`, in `domain/schema.ts`), and the type a value is built in by hand is `Unbranded<T>` of it.
 
 ## The task
 
@@ -767,8 +779,15 @@ iteration is open (`reply_required`) and refused otherwise (`reply_unasked`), ea
 
 ## Commands
 
-Every command has an id; a repeat is answered from its receipt. `parseUserCommand` checks a user command field by field
-before `decide` sees it; `decide` throws `DomainError` (nothing emitted) for anything not allowed.
+Every command has an id; a repeat is answered from its receipt. `parseUserCommand` decodes a user command with the
+`UserCommand` schema (`commands/schema.ts`, one tagged struct per command, the type derived from it) before `decide`
+sees it, and returns a `Result`: the command with its ids branded, or a `DomainError` (`command_invalid` for a field,
+`command_forbidden` for an unknown type) whose message names the field as before. `decide` returns `Result.fail` of a
+`DomainError` (nothing emitted) for anything not allowed and `Result.succeed` of the `Decision` otherwise; a bug that
+is not a `DomainError` still throws. Every hand-over a tool takes is likewise one schema per shape
+(`report/schema.ts`, `schedules/schema.ts`), read by `HandOverReader` in the `validate*` beside them, which lists every
+error at once in field order. Each folder of core keeps its shapes in its `schema.ts` and the code that reads them
+apart from it (`packages/core/CLAUDE.md` → Rules).
 
 ### User commands
 
@@ -1194,7 +1213,7 @@ something out of (`apps/engine/src/extensions/loader.ts`), any role, delegated r
 
 ### Hand-overs
 
-The fields each hand-over tool takes, checked by `validate*` in `packages/core/src/report/validate.ts` (types in
+The fields each hand-over tool takes, checked by `validate*` in `packages/core/src/report/validate.ts` over the schemas in `report/schema.ts` (types in
 `report/types.ts`). Every limit is a number in `PROTOCOL_LIMITS` or `SHAPE_LIMITS` and is published in the tool's schema.
 
 | Tool | Fields (required in bold) | Limits |
@@ -1239,7 +1258,8 @@ component (`docs/design.md` → Checklists).
 ## The socket
 
 The web and the server talk over `/ws` in JSON messages (`packages/core/src/protocol/messages.ts`; how they flow is
-`docs/engine.md` → The socket). A **surface** (`Surface`, `SURFACES`) is what a page runs in: `desktop` (the Mac app)
+`docs/engine.md` → The socket). The server reads each page message with the `ClientMessage` schema
+(`parseClientMessage`: the message with its `taskId` and `runId` branded, or null for one it cannot read). A **surface** (`Surface`, `SURFACES`) is what a page runs in: `desktop` (the Mac app)
 or `browser` (a tab, Floaty).
 
 | Page → server (`ClientMessage`) | What it does |
@@ -1365,7 +1385,7 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
 | `GET /__remote/sign-in?client=native&redirect=…&code_challenge=…`, `POST /__remote/sign-in/token` | The iPhone app | GitHub sign-in that ends at `shinsa://` (or `shinsa-dev://`, `REMOTE_NATIVE_REDIRECT_SCHEMES`) with `?code=`, a one-time code bound to the app's S256 challenge, traded once within 60 s for `{ token, user }` (`NativeSignInTokenRequest`, `NativeSignInTokenResponse`); a failed sign-in ends at `?error=` |
 | `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove`, `POST …/<id>/leave` | The page | The instances you own or are a member of (`RemoteInstance`, with its `owner` and your `role`, `owner`, `member` or `guest`), a connect token and the channel's URL (`ConnectResponse`), removal (the owner only), leaving (a member or a guest) |
-| `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`parseRemoteHookPath`) |
+| `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`apps/cloud/src/routes/hooks/`) |
 | `POST /__remote/shares/<instance>/connect` | Anyone with a share link | `ShareConnectResponse` (`url`: `wss://t-<instance>.shinsa.dev`, `online`), no session, `X-Robots-Tag: noindex`; 404 when the instance does not exist (`resolveShareConnectPath`) |
 | `POST /__remote/machine/teams` | The engine, with its machine token | `{ name }` (`TeamCreateRequest`) makes a team its owner owns (409 `teams_full` past `MAX_OWNED_TEAMS`) and answers `TeamCreateResponse` (`team`, a `RemoteTeam`, and `invite`) |
 | `POST /__remote/machine/teams/join`, `POST /__remote/teams/join` | The engine, with its machine token; the join page | `{ invite }` (`TeamJoinRequest`) records that the account asked, unless it is in the team already, and answers `TeamJoinResponse` (`teamId`, `name`, `owner`, `status`: `requested` or `member`); 404 `invite_invalid` for a link turned off |

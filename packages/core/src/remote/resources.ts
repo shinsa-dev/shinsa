@@ -1,3 +1,6 @@
+import { Option, Schema } from 'effect';
+import { ResourceSummary } from './schema.ts';
+
 export interface ResourceUse {
   cpuPercent: number;
   memoryBytes: number;
@@ -12,21 +15,11 @@ export interface TaskResources {
   worktreeBytes: number | null;
 }
 
-export interface MachineResources {
+export interface MachineResources extends ResourceSummary {
   sampledAt: number;
-  cores: number;
-  cpuPercent: number;
-  memoryUsedBytes: number;
-  memoryTotalBytes: number;
-  diskFreeBytes: number | null;
   diskTotalBytes: number | null;
   tasks: TaskResources[];
 }
-
-export type ResourceSummary = Pick<
-  MachineResources,
-  'cores' | 'cpuPercent' | 'memoryUsedBytes' | 'memoryTotalBytes' | 'diskFreeBytes'
->;
 
 export const HEADROOM_STEP = 5;
 
@@ -72,23 +65,8 @@ export function describeResourceSummary(resources: ResourceSummary) {
   return [cpu, memory, disk].filter((part) => part !== null).join(', ');
 }
 
-function isCount(value: unknown, minimum: number): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= minimum;
-}
-
-function isAmount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
-}
+const decodeResourceSummary = Schema.decodeUnknownOption(ResourceSummary);
 
 export function parseResourceSummary(value: unknown): ResourceSummary | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const { cores, cpuPercent, memoryUsedBytes, memoryTotalBytes, diskFreeBytes } = value as Record<
-    string,
-    unknown
-  >;
-  if (!isCount(cores, 1) || !isAmount(cpuPercent) || cpuPercent > 100) return null;
-  if (!isAmount(memoryUsedBytes) || !isAmount(memoryTotalBytes) || memoryUsedBytes > memoryTotalBytes)
-    return null;
-  if (diskFreeBytes !== null && !isAmount(diskFreeBytes)) return null;
-  return { cores, cpuPercent, memoryUsedBytes, memoryTotalBytes, diskFreeBytes };
+  return Option.getOrNull(decodeResourceSummary(value));
 }

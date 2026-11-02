@@ -7,6 +7,13 @@ import type { UpdateChannel } from '../lib/bridge.ts';
 import { APP_NAME } from '../lib/dev-bundle.ts';
 import { APP_ID } from '../lib/engine.ts';
 import {
+  resolveDowngradeOffer,
+  resolveUpdateChannel,
+  resolveUpdaterOptions,
+  UPDATE_FEED,
+} from '../lib/update-channel.ts';
+import { describeStateChange } from '../lib/update-log.ts';
+import {
   DOWNGRADE_ACCEPT,
   describeDowngradeDialog,
   describeInstallError,
@@ -26,13 +33,6 @@ import {
   UPDATE_CHECK_MS,
   type UpdateState,
 } from '../lib/update.ts';
-import {
-  resolveDowngradeOffer,
-  resolveUpdateChannel,
-  resolveUpdaterOptions,
-  UPDATE_FEED,
-} from '../lib/update-channel.ts';
-import { describeStateChange } from '../lib/update-log.ts';
 import { showNotice } from './notifications.ts';
 import { readPrefs, writePrefs } from './prefs.ts';
 import { createUpdateLog } from './update-log.ts';

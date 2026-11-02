@@ -63,12 +63,12 @@ export function ListRow({
         {meta && <Truncate className={LIST_ROW_META}>{meta}</Truncate>}
         {summary && <span className={cn(LIST_ROW_META, 'flex h-4 min-w-0 items-center')}>{summary}</span>}
       </span>
-      {trailing && <span className='shrink-0 text-2xs text-fg-2 tabular-nums leading-5'>{trailing}</span>}
+      {trailing && <span className='shrink-0 text-2xs leading-5 text-fg-2 tabular-nums'>{trailing}</span>}
     </>
   );
   if (holdsLinks)
     return (
-      // biome-ignore lint/a11y/useSemanticElements: the row holds a link, and a link cannot sit inside a button
+      // oxlint-disable-next-line shinsa/use-semantic-elements -- the row holds a link, and a link cannot sit inside a button
       <div
         {...row}
         role='button'

@@ -51,7 +51,7 @@ function SwapText({ id, text }: { id: string; text: string }) {
         <p
           key={shown.key}
           aria-live='polite'
-          className={cn('selectable line-clamp-4 text-xs', shown.entering && 'chat-swap-in')}
+          className={cn('line-clamp-4 selectable text-xs', shown.entering && 'chat-swap-in')}
         >
           <InlineMarkdown text={flattenWhitespace(shown.text)} className='prose-chat' />
         </p>
@@ -79,7 +79,7 @@ export function LiveCard({ run, turn, waiting }: { run: Run; turn: RunTurn; wait
         <IconSlot>
           <Pulse tone={tone} />
         </IconSlot>
-        <span className='min-w-0 flex-1 truncate text-fg-3 leading-normal'>
+        <span className='min-w-0 flex-1 truncate leading-normal text-fg-3'>
           {paused ? step : <ShimmeringText key={step} text={step} className={SHIMMER_LINE} />}
         </span>
         <span className='shrink-0 text-fg-2 tabular-nums group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4'>
@@ -88,7 +88,7 @@ export function LiveCard({ run, turn, waiting }: { run: Run; turn: RunTurn; wait
         </span>
       </DisclosureHeader>
       {disclosure.open && (
-        <div className='border-border border-t p-3'>
+        <div className='border-t border-border p-3'>
           <TurnDetail items={turn.work.filter((item) => item !== latest)} run={run} />
         </div>
       )}

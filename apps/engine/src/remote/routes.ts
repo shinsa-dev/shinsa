@@ -7,7 +7,7 @@ import type { Teams } from './teams.ts';
 
 function readText(fields: JsonObject, name: string, message: string) {
   const value = fields[name];
-  if (typeof value !== 'string' || !value.trim()) throw new DomainError(`${name}_invalid`, message);
+  if (typeof value !== 'string' || !value.trim()) throw new DomainError({ code: `${name}_invalid`, message });
   return value;
 }
 
@@ -116,7 +116,7 @@ export function createRemoteRoutes(remote: Remote): ApiRoute[] {
     post('/devices/remove', (fields) => {
       const publicKey = readText(fields, 'publicKey', 'Name the device to remove by its key.');
       if (!remote.removeDevice(publicKey))
-        throw new DomainError('device_not_found', 'No device with that key is enrolled.');
+        throw new DomainError({ code: 'device_not_found', message: 'No device with that key is enrolled.' });
     }),
   ];
 }

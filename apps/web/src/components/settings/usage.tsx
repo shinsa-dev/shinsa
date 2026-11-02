@@ -38,7 +38,7 @@ function WindowRow({ row }: { row: UsageRow }) {
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col gap-px'>
-        <Truncate className='text-fg-4 text-xs'>{row.label}</Truncate>
+        <Truncate className='text-xs text-fg-4'>{row.label}</Truncate>
         {row.resetsAt !== null && (
           <span className='text-2xs text-fg-2'>
             <ResetTime at={row.resetsAt} />
@@ -54,7 +54,7 @@ function WindowRow({ row }: { row: UsageRow }) {
 function DetailRow({ text }: { text: string }) {
   return (
     <div className={SETTING_ROW}>
-      <span className='min-w-0 flex-1 text-fg-2 text-xs'>{text}</span>
+      <span className='min-w-0 flex-1 text-xs text-fg-2'>{text}</span>
     </div>
   );
 }

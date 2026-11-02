@@ -136,7 +136,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
     <LazyMenu kind='context' content={<TaskMenuItems state={state} task={task} />}>
       <LazyMenuTrigger
         render={
-          // biome-ignore lint/a11y/useSemanticElements: the row holds a pull request link, so it cannot be a button
+          // oxlint-disable-next-line shinsa/use-semantic-elements -- the row holds a pull request link, so it cannot be a button
           <div
             role='button'
             tabIndex={0}

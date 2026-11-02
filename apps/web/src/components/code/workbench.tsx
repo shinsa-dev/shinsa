@@ -5,8 +5,8 @@ import { Sheet, SheetContent, SheetTitle } from '@shinsa/ui/components/sheet';
 import { useMediaQuery } from '@shinsa/ui/hooks/use-media-query';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import type { EditorHandle, EditorSessionHolder } from '@/components/code/editor/code-editor.tsx';
 import { EditorPane } from '@/components/code/editor-pane.tsx';
+import type { EditorHandle, EditorSessionHolder } from '@/components/code/editor/code-editor.tsx';
 import { Explorer, type ExplorerProps } from '@/components/code/explorer.tsx';
 import { QuickOpen } from '@/components/code/quick-open.tsx';
 import { ResizeHandle } from '@/components/layout/sidebar/resize-handle.tsx';
@@ -270,7 +270,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
         ) : (
           <div className='flex min-h-0 flex-1 flex-col'>
             {explorerButton && (
-              <div className='flex h-9 items-center border-border border-b px-2'>{explorerButton}</div>
+              <div className='flex h-9 items-center border-b border-border px-2'>{explorerButton}</div>
             )}
             <EmptyState
               size='sm'

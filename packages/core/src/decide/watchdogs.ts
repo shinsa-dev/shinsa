@@ -19,8 +19,8 @@ import {
 } from '../domain/index.ts';
 import { resolveAgentPrompt, resolveWatchPrompt } from '../prompts/index.ts';
 import { assembleReport } from '../report/assemble.ts';
+import { PROTOCOL_LIMITS } from '../report/schema.ts';
 import type { WatchdogSource, WatchdogSpec } from '../report/types.ts';
-import { PROTOCOL_LIMITS } from '../report/validate.ts';
 import { listChangedIds } from '../state/draft.ts';
 import type { Decider } from './decider.ts';
 import { settleTask } from './lifecycle.ts';
@@ -35,7 +35,7 @@ function selectWatchdog(task: Task, watchdogId: string) {
 function findWatchdog(task: Task, watchdogId: string) {
   const watchdog = selectWatchdog(task, watchdogId);
   if (watchdog) return watchdog;
-  throw new DomainError('watchdog_not_found', 'That watchdog is no longer there.');
+  throw new DomainError({ code: 'watchdog_not_found', message: 'That watchdog is no longer there.' });
 }
 
 function isArmedForRound(task: Task, round: number) {
@@ -102,14 +102,14 @@ function createWatchdog(decider: Decider, spec: WatchdogSpec, round: number): Wa
 
 function writeSource(decider: Decider, projectId: string, source: WatchSource) {
   const project = decider.state.projects[projectId];
-  if (!project) throw new DomainError('project_not_found', `No project ${projectId}`);
+  if (!project) throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}` });
   const sources = project.watchSources ?? [];
   const known = sources.find((candidate) => candidate.server === source.server);
   if (!known && sources.length >= WATCHDOG_LIMITS.projectSources) {
-    throw new DomainError(
-      'too_many_sources',
-      `A project keeps ${WATCHDOG_LIMITS.projectSources} data sources at most.`
-    );
+    throw new DomainError({
+      code: 'too_many_sources',
+      message: `A project keeps ${WATCHDOG_LIMITS.projectSources} data sources at most.`,
+    });
   }
   const repoIds = known ? [...new Set([...known.repoIds, ...source.repoIds])] : source.repoIds;
   const written = { ...source, repoIds: known && known.repoIds.length === 0 ? [] : repoIds };
@@ -283,17 +283,18 @@ function hasFoundReports(filed: readonly string[], watchdog: Watchdog) {
 
 function resolveLive(read: ReadReport, found: boolean) {
   if (found && read.live === false) {
-    throw new DomainError(
-      'live_filed',
-      'You filed a report on the change, so it is live in production. Set `live` true.'
-    );
+    throw new DomainError({
+      code: 'live_filed',
+      message: 'You filed a report on the change, so it is live in production. Set `live` true.',
+    });
   }
   const live = read.live ?? (found ? true : null);
   if (live === null && read.reached) {
-    throw new DomainError(
-      'live_required',
-      'This watchdog waits for the change to reach production. Report `live`: true once it is live there, false while it is not.'
-    );
+    throw new DomainError({
+      code: 'live_required',
+      message:
+        'This watchdog waits for the change to reach production. Report `live`: true once it is live there, false while it is not.',
+    });
   }
   return live;
 }
@@ -362,7 +363,11 @@ function resolveCheckedWatchdog(decider: Decider, task: Task, found: Watchdog, r
 
 export function endWatchCheck(decider: Decider, task: Task, run: Run, read: ReadReport) {
   const found = selectWatchingRun(task, run.id);
-  if (!found) throw new DomainError('watchdog_not_found', 'No watchdog waits on this check. End your turn.');
+  if (!found)
+    throw new DomainError({
+      code: 'watchdog_not_found',
+      message: 'No watchdog waits on this check. End your turn.',
+    });
   const watchdog = resolveCheckedWatchdog(decider, task, found, read);
   if (!watchdog) {
     awaitProduction(decider, task, run.id);
@@ -413,17 +418,17 @@ export function stopAllWatchdogs(decider: Decider, taskId: string) {
 export function assertNoWatchdogsLeft(task: Task) {
   const active = listActiveWatchdogs(task);
   if (active.length === 0) return;
-  throw new DomainError(
-    'task_open',
-    `${describeCount(active.length, 'watchdog still watches', 'watchdogs still watch')} it.`
-  );
+  throw new DomainError({
+    code: 'task_open',
+    message: `${describeCount(active.length, 'watchdog still watches', 'watchdogs still watch')} it.`,
+  });
 }
 
 export function connectWatchdog(decider: Decider, command: CommandOf<'watchdog.connect'>) {
   const task = decider.task(command.taskId);
   const watchdog = findWatchdog(task, command.watchdogId);
   if (watchdog.status !== 'needs_source') {
-    throw new DomainError('watchdog_has_source', 'It already has a data source.');
+    throw new DomainError({ code: 'watchdog_has_source', message: 'It already has a data source.' });
   }
   const source = { server: command.server.trim(), data: command.data.trim() };
   const project = decider.projectOf(task);
@@ -446,7 +451,8 @@ export function connectWatchdog(decider: Decider, command: CommandOf<'watchdog.c
 
 export function writeWatchSource(decider: Decider, command: CommandOf<'watch_source.write'>) {
   for (const repoId of command.repoIds) {
-    if (!decider.state.repos[repoId]) throw new DomainError('repo_not_found', `No repository ${repoId}`);
+    if (!decider.state.repos[repoId])
+      throw new DomainError({ code: 'repo_not_found', message: `No repository ${repoId}` });
   }
   const known = decider.state.projects[command.projectId]?.watchSources?.find(
     (source) => source.server === command.server
@@ -462,7 +468,8 @@ export function writeWatchSource(decider: Decider, command: CommandOf<'watch_sou
 
 export function removeWatchSource(decider: Decider, command: CommandOf<'watch_source.remove'>) {
   const project = decider.state.projects[command.projectId];
-  if (!project) throw new DomainError('project_not_found', `No project ${command.projectId}`);
+  if (!project)
+    throw new DomainError({ code: 'project_not_found', message: `No project ${command.projectId}` });
   if (!(project.watchSources ?? []).some((source) => source.server === command.server)) return;
   removeSourceSuggestions(decider, project.id, command.server);
   decider.emit({ type: 'watch_source.removed', projectId: project.id, server: command.server });

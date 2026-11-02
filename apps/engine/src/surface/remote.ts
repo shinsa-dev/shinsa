@@ -84,7 +84,10 @@ async function findRequestId(client: SurfaceClient, ref: string) {
     matches.length > 1
       ? `${wanted} asked more than once; name the request by its id`
       : `No access request matches ${ref}`;
-  throw new DomainError('request_not_found', `${problem}. See them with \`shinsa remote status\`.`);
+  throw new DomainError({
+    code: 'request_not_found',
+    message: `${problem}. See them with \`shinsa remote status\`.`,
+  });
 }
 
 const REQUEST_FIELD = {
@@ -100,10 +103,10 @@ async function findMemberId(client: SurfaceClient, login: string) {
   const wanted = login.replace(/^@/, '').toLowerCase();
   const member = snapshot.access?.members.find((entry) => entry.user.login.toLowerCase() === wanted);
   if (!member)
-    throw new DomainError(
-      'member_not_found',
-      `${wanted} has no access to this machine. See its members with \`shinsa remote status\`.`
-    );
+    throw new DomainError({
+      code: 'member_not_found',
+      message: `${wanted} has no access to this machine. See its members with \`shinsa remote status\`.`,
+    });
   return member.user.id;
 }
 

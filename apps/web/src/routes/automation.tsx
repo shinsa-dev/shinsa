@@ -84,12 +84,12 @@ function TasksPanel({ state, schedule }: { state: ShinsaState; schedule: Schedul
       flush
     >
       {tasks.length === 0 ? (
-        <p className='px-3 py-2.5 text-fg-2 text-xs'>{copy.empty}</p>
+        <p className='px-3 py-2.5 text-xs text-fg-2'>{copy.empty}</p>
       ) : (
         <div className='-mb-px'>
           <div
             className={cn(
-              'grid h-7 items-center gap-4 border-border border-b px-3 font-medium text-2xs text-fg-2',
+              'grid h-7 items-center gap-4 border-b border-border px-3 text-2xs font-medium text-fg-2',
               FILED_COLUMNS
             )}
           >
@@ -136,7 +136,7 @@ function ActivityPanel({ state, schedule }: { state: ShinsaState; schedule: Sche
       icon='IconClock'
     >
       {reads.length === 0 ? (
-        <p className='text-fg-2 text-xs'>{describeReadsEmpty(schedule)}</p>
+        <p className='text-xs text-fg-2'>{describeReadsEmpty(schedule)}</p>
       ) : (
         <ol className='flex flex-col'>
           {reads.map((read) => (

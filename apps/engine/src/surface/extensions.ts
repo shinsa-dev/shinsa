@@ -68,7 +68,8 @@ function formatPlugins(snapshot: ExtensionsSnapshot) {
 function findEntry<T extends { id: string; name: string }>(entries: T[], reference: string, kind: string) {
   const found =
     entries.find((entry) => entry.id === reference) ?? entries.find((entry) => entry.name === reference);
-  if (!found) throw new DomainError(`${kind}_not_found`, `There is no ${kind} named ${reference}.`);
+  if (!found)
+    throw new DomainError({ code: `${kind}_not_found`, message: `There is no ${kind} named ${reference}.` });
   return found;
 }
 

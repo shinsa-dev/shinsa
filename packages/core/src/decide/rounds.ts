@@ -91,7 +91,10 @@ export function isHeldByYourDecision(state: ShinsaState, task: Task, pipeline: r
 export function queueRound(decider: Decider, taskId: string, input: RoundRequest) {
   const task = decider.task(taskId);
   if (listQueuedRounds(task).length >= ROUND_LIMITS.queued) {
-    throw new DomainError('rounds_full', `${ROUND_LIMITS.queued} rounds already wait to start.`);
+    throw new DomainError({
+      code: 'rounds_full',
+      message: `${ROUND_LIMITS.queued} rounds already wait to start.`,
+    });
   }
   const number = resolveNextRoundNumber(task);
   decider.emit({
@@ -193,14 +196,15 @@ export function startQueuedRounds(decider: Decider) {
 
 function findChangingRound(task: Task, number: number) {
   const round = resolveTaskRounds(task).find((candidate) => candidate.number === number);
-  if (!round) throw new DomainError('round_not_found', `This task has no round ${number}.`);
+  if (!round)
+    throw new DomainError({ code: 'round_not_found', message: `This task has no round ${number}.` });
   if (canChangeRoundShipping(task, round)) return round;
-  throw new DomainError('round_shipped', `Round ${number} has already shipped.`);
+  throw new DomainError({ code: 'round_shipped', message: `Round ${number} has already shipped.` });
 }
 
 export function changeRoundShipping(decider: Decider, command: CommandOf<'round.ship'>) {
   const task = decider.task(command.taskId);
-  if (isTaskClosed(task)) throw new DomainError('task_settled', 'This task is finished.');
+  if (isTaskClosed(task)) throw new DomainError({ code: 'task_settled', message: 'This task is finished.' });
   const round = findChangingRound(task, command.number);
   if (round.shipping === command.shipping) return;
   const base = { type: 'round.shipping_changed' as const, taskId: task.id, number: round.number };
@@ -224,18 +228,20 @@ export function changeRoundShipping(decider: Decider, command: CommandOf<'round.
 }
 
 export function findWaitingRound(task: Task, number: number) {
-  if (isTaskClosed(task)) throw new DomainError('task_settled', 'This task is finished.');
+  if (isTaskClosed(task)) throw new DomainError({ code: 'task_settled', message: 'This task is finished.' });
   const round = resolveTaskRounds(task).find((candidate) => candidate.number === number);
-  if (!round) throw new DomainError('round_not_found', `This task has no round ${number}.`);
+  if (!round)
+    throw new DomainError({ code: 'round_not_found', message: `This task has no round ${number}.` });
   if (round.status === 'waiting') return round;
-  throw new DomainError('round_started', `Round ${number} has already started.`);
+  throw new DomainError({ code: 'round_started', message: `Round ${number} has already started.` });
 }
 
 export function updateRound(decider: Decider, command: CommandOf<'round.update'>) {
   const task = decider.task(command.taskId);
   const round = findWaitingRound(task, command.number);
   const request = command.request.trim();
-  if (request.length === 0) throw new DomainError('message_required', 'Write a message first.');
+  if (request.length === 0)
+    throw new DomainError({ code: 'message_required', message: 'Write a message first.' });
   if (request === round.request) return;
   decider.emit({
     type: 'round.updated',
@@ -253,5 +259,6 @@ export function removeRound(decider: Decider, command: CommandOf<'round.remove'>
 }
 
 export function assertTakesMessages(task: Task) {
-  if (isTaskClosed(task)) throw new DomainError('task_settled', 'This task is finished. Start a new one.');
+  if (isTaskClosed(task))
+    throw new DomainError({ code: 'task_settled', message: 'This task is finished. Start a new one.' });
 }

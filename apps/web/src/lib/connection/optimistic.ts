@@ -34,7 +34,8 @@ function createOptimisticId() {
 
 function decideOrKeep(state: WireState, command: UserCommand, now: number): WireState {
   try {
-    return serializeState(decide(state, command, { now, newId: createOptimisticId }).state);
+    const result = decide(state, command, { now, newId: createOptimisticId });
+    return result._tag === 'Success' ? serializeState(result.success.state) : state;
   } catch {
     return state;
   }

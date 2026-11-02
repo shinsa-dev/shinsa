@@ -65,10 +65,10 @@ export function runSurface(words: string[], io: SurfaceIo, specs: SurfaceSpec[] 
     const actions = listGroup(group, specs).map((spec) => spec.path.slice(1).join(' '));
     const closest = selectClosest(words[1] ?? '', actions);
     const hint = closest ? `Did you mean \`shinsa ${group} ${closest}\`? ` : '';
-    throw new DomainError(
-      'command_unknown',
-      `No command shinsa ${words.slice(0, 2).join(' ')}. ${hint}Run \`shinsa ${group} --help\` for its commands.`
-    );
+    throw new DomainError({
+      code: 'command_unknown',
+      message: `No command shinsa ${words.slice(0, 2).join(' ')}. ${hint}Run \`shinsa ${group} --help\` for its commands.`,
+    });
   }
   return runSpec(found.spec, found.rest, io);
 }

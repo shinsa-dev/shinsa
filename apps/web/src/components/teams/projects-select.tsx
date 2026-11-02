@@ -53,7 +53,7 @@ export function ProjectsSelect({
         aria-label={label}
         size='sm'
         variant={variant}
-        className={cn('min-w-0 max-w-64', className)}
+        className={cn('max-w-64 min-w-0', className)}
       >
         <SelectValue>{() => <PickedProjects projects={projects} chosen={chosen} />}</SelectValue>
       </SelectTrigger>

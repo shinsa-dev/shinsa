@@ -27,7 +27,7 @@ export function WaitsOnLinks({ waitsOn }: { waitsOn: Task[] }) {
   const shown = cancelled ? [cancelled] : waitsOn;
   return (
     <Hint label={<WaitsOnHint waitsOn={waitsOn} />}>
-      <span className='flex w-fit min-w-0 items-center whitespace-pre text-fg-2 text-xs max-md:hidden'>
+      <span className='flex w-fit min-w-0 items-center text-xs whitespace-pre text-fg-2 max-md:hidden'>
         {!cancelled && <span className='shrink-0'>Waits on </span>}
         {shown.map((parent, index) => (
           <React.Fragment key={parent.id}>
@@ -57,7 +57,7 @@ export function ChainArrow({ state, task }: { state: ShinsaState; task: Task }) 
     <LazyMenu
       kind='dropdown'
       content={
-        <DropdownMenuContent align='start' className='min-w-56 max-w-80'>
+        <DropdownMenuContent align='start' className='max-w-80 min-w-56'>
           <WaitsOnItems state={state} task={task} waitsOn={waitsOn} />
         </DropdownMenuContent>
       }

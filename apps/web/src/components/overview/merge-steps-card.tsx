@@ -21,7 +21,7 @@ export function PostMergeCard({
       title={describePostMergeTitle(task)}
       footer={<TaskTrack task={task} />}
     >
-      <p className='text-fg-3 text-xs'>
+      <p className='text-xs text-fg-3'>
         The change is in. These steps need you or production access, so no agent runs them. Tick each one once
         it is done.
       </p>

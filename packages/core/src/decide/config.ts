@@ -61,7 +61,7 @@ function resolveProblems(task: Task, problems: ConfigProblem[]) {
 function bindRepo(decider: Decider, task: Task, repoId: string) {
   if (task.repoId !== null) return;
   const repo = decider.repoOf({ repoId });
-  if (!repo) throw new DomainError('repo_not_found', `No repository ${repoId}`);
+  if (!repo) throw new DomainError({ code: 'repo_not_found', message: `No repository ${repoId}` });
   decider.emit({
     type: 'task.repo_bound',
     taskId: task.id,

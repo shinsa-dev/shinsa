@@ -9,7 +9,7 @@ export function BranchDetails({ state, task }: { state: ShinsaState; task: Task 
   const from = resolveBranchBase(state, task);
   return (
     <InfoHeader
-      title={<span className='break-all font-mono'>{task.branch}</span>}
+      title={<span className='font-mono break-all'>{task.branch}</span>}
       description={from ? `Branched from ${from}` : undefined}
     />
   );
@@ -25,7 +25,7 @@ export function BranchChip({ state, task, name }: { state: ShinsaState; task: Ta
       trigger={content}
     >
       <BranchDetails state={state} task={task} />
-      <p className='border-border border-t px-3 py-2 text-2xs text-fg-2'>The branch of {task.title}.</p>
+      <p className='border-t border-border px-3 py-2 text-2xs text-fg-2'>The branch of {task.title}.</p>
     </InfoPopover>
   );
 }

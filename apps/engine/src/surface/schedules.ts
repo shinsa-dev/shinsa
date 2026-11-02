@@ -80,14 +80,14 @@ function resolveTrigger(values: Values, now: number) {
     webhook: resolveWebhookInput(values),
   };
   const result = validateScheduleRequest(input, now);
-  if (!result.ok) throw new DomainError('schedule_invalid', result.errors.join(' '));
+  if (!result.ok) throw new DomainError({ code: 'schedule_invalid', message: result.errors.join(' ') });
   return result.value.trigger;
 }
 
 async function resolveTarget(client: SurfaceClient, values: Values): Promise<ScheduleTarget | null> {
   const task = readValue(values, 'task');
   if (task && values.newTask)
-    throw new DomainError('schedule_invalid', 'Give --new-task or --task, not both.');
+    throw new DomainError({ code: 'schedule_invalid', message: 'Give --new-task or --task, not both.' });
   if (task) return { kind: 'task', taskId: await findTaskId(client, task) };
   if (!values.newTask) return null;
   return {
@@ -102,16 +102,17 @@ function assertHookSecret(client: SurfaceClient, values: Values) {
   const ref = readValue(values, 'signatureSecretRef');
   const signed = Boolean(values.webhook && readValue(values, 'signatureHeader'));
   if (ref && !client.hookSecrets) {
-    throw new DomainError(
-      'schedule_invalid',
-      '--signature-secret-ref is for agents. Set the signing secret with `shinsa schedules webhook-secret`.'
-    );
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message:
+        '--signature-secret-ref is for agents. Set the signing secret with `shinsa schedules webhook-secret`.',
+    });
   }
   if (ref && !signed) {
-    throw new DomainError(
-      'schedule_invalid',
-      'Give --signature-secret-ref with --webhook and --signature-header.'
-    );
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message: 'Give --signature-secret-ref with --webhook and --signature-header.',
+    });
   }
   if (signed) client.hookSecrets?.assertSecret(readValue(values, 'id') || null, ref || null);
 }
@@ -127,11 +128,15 @@ async function resolveSource(client: SurfaceClient, values: Values) {
   const server = readValue(values, 'source');
   const project = readValue(values, 'project');
   if (!server) {
-    if (project) throw new DomainError('schedule_invalid', 'Give --project only with --source.');
+    if (project)
+      throw new DomainError({ code: 'schedule_invalid', message: 'Give --project only with --source.' });
     return null;
   }
   if (!project) {
-    throw new DomainError('schedule_invalid', 'Name the project whose data source it reads with --project.');
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message: 'Name the project whose data source it reads with --project.',
+    });
   }
   return { projectId: await findProjectId(client, project), server };
 }

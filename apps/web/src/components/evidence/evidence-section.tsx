@@ -118,7 +118,7 @@ function LinkRow({ view, previews }: { view: EvidenceView; previews: ServiceView
 
 function Folder({ path }: { path: string }) {
   return (
-    <div className='flex min-w-0 items-center gap-2 border-border border-t pt-2.5 text-2xs text-fg-2'>
+    <div className='flex min-w-0 items-center gap-2 border-t border-border pt-2.5 text-2xs text-fg-2'>
       <Icon size='sm' name='IconFolder1' className='shrink-0' />
       <span className='shrink-0'>Stored in</span>
       <Truncate className='min-w-0 font-mono text-fg-3'>{shortenHomePath(path)}</Truncate>
@@ -265,7 +265,7 @@ function EarlierVersions({
         label='Earlier versions'
         strip='line'
         chevron='glyph'
-        className='w-fit gap-1 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
+        className='w-fit gap-1 text-2xs font-medium text-fg-2 hover:text-fg-4 active:text-fg-4'
       >
         Earlier versions
         <span className='font-normal tabular-nums'>{entries.length}</span>
@@ -298,7 +298,7 @@ function EvidenceBody({
   const attached = layout.groups.some((group) => group.kind === 'preview');
   return (
     <div className='flex flex-col gap-5'>
-      {layout.count === 0 && <p className='text-fg-2 text-xs'>{EVIDENCE_ALL_REMOVED}</p>}
+      {layout.count === 0 && <p className='text-xs text-fg-2'>{EVIDENCE_ALL_REMOVED}</p>}
       {layout.groups.map((group) => (
         <Group
           key={group.kind}
@@ -366,7 +366,7 @@ export function EvidenceSection({
     return (
       <Panel persistId={persistId} title='Evidence' icon='IconImages1'>
         <div className='flex flex-col gap-5'>
-          <p className='text-fg-2 text-xs'>{EVIDENCE_EMPTY}</p>
+          <p className='text-xs text-fg-2'>{EVIDENCE_EMPTY}</p>
           <LocalPreviews views={previews} />
         </div>
       </Panel>

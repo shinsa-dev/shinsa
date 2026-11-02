@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { USER_COMMAND_TYPES } from '../../src/commands/index.ts';
 import {
-  DEVELOPMENT_VERSION,
   ENGINE_BASELINE_COMMANDS,
   ENGINE_FEATURES,
   ENGINE_PROTOCOL,
@@ -16,6 +15,7 @@ import {
   resolveReleaseChannel,
   resolveVersionOrder,
 } from '../../src/protocol/engine.ts';
+import { DEVELOPMENT_VERSION } from '../../src/protocol/schema.ts';
 
 const app = (version: string, protocol = ENGINE_PROTOCOL) => ({ version, protocol });
 

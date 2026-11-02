@@ -135,13 +135,10 @@ export class Engine {
     this.#stateVersion = options.stateVersion ?? null;
     this.#snapshotEvery = options.snapshotEvery ?? SNAPSHOT_EVERY;
     this.#snapshotQuietMs = options.snapshotQuietMs ?? SNAPSHOT_QUIET_MS;
-    if (this.readOnly) {
-      const rewritten = eventLog.applyLegacyView();
-      if (rewritten > 0)
-        log.info('[Engine] Reading events an older Shinsa wrote in their new shape', { rewritten });
-    } else {
-      const rewritten = eventLog.replaceLegacyEvents();
-      if (rewritten > 0) log.info('[Engine] Rewrote events an older Shinsa wrote', { rewritten });
+    if (this.readOnly) eventLog.assertCurrent();
+    else {
+      const migrations = eventLog.migrate();
+      if (migrations.length > 0) log.info('[Engine] Migrated the event log', { migrations });
     }
     const snapshot = this.#readSnapshot();
     const read = eventLog.readEvents(snapshot?.seq ?? 0);
@@ -306,32 +303,46 @@ export class Engine {
       receipt.target !== identity.target ||
       receipt.fingerprint !== identity.fingerprint
     ) {
-      throw new DomainError(
-        'command_id_conflict',
-        `Command id ${identity.id} was already used for ${receipt.type} on ${receipt.target}. Send a different command with a new id.`
-      );
+      throw new DomainError({
+        code: 'command_id_conflict',
+        message: `Command id ${identity.id} was already used for ${receipt.type} on ${receipt.target}. Send a different command with a new id.`,
+      });
     }
     if (receipt.status === 'rejected') {
-      throw new DomainError(receipt.code ?? 'command_failed', receipt.error ?? 'The command was refused.');
+      throw new DomainError({
+        code: receipt.code ?? 'command_failed',
+        message: receipt.error ?? 'The command was refused.',
+      });
     }
     return this.#log.listEventsBetween(receipt.firstSeq, receipt.lastSeq);
   }
 
   #decide(command: ShinsaCommand, identity: ReceiptIdentity, now: number, context: BehalfContext) {
+    const result = this.#attemptDecision(command, identity, now, context);
+    if (result._tag === 'Success') return result.success;
+    this.#recordRejection(identity, now, result.failure);
+    throw result.failure;
+  }
+
+  #attemptDecision(command: ShinsaCommand, identity: ReceiptIdentity, now: number, context: BehalfContext) {
     try {
       return decide(this.#state, command, { now, newId: () => Bun.randomUUIDv7(), ...context });
     } catch (error) {
-      this.#log.recordReceipt({
-        ...identity,
-        status: 'rejected',
-        code: error instanceof DomainError ? error.code : 'command_failed',
-        error: describeError(error),
-        firstSeq: this.#state.seq + 1,
-        lastSeq: this.#state.seq,
-        at: now,
-      });
+      this.#recordRejection(identity, now, error);
       throw error;
     }
+  }
+
+  #recordRejection(identity: ReceiptIdentity, now: number, error: unknown) {
+    this.#log.recordReceipt({
+      ...identity,
+      status: 'rejected',
+      code: error instanceof DomainError ? error.code : 'command_failed',
+      error: describeError(error),
+      firstSeq: this.#state.seq + 1,
+      lastSeq: this.#state.seq,
+      at: now,
+    });
   }
 
   #apply(command: ShinsaCommand, identity: ReceiptIdentity, supplied: boolean, context: BehalfContext) {

@@ -53,7 +53,7 @@ function MergedLine({
   commit: MergedCommit | null;
 }) {
   return (
-    <p className='flex flex-wrap items-center gap-1 text-fg-3 text-xs'>
+    <p className='flex flex-wrap items-center gap-1 text-xs text-fg-3'>
       Merged
       {task.pullRequest && (
         <>
@@ -135,8 +135,8 @@ export function OperationCard({
       footer={<SkipOperation busy={busy !== null} onSkip={() => reply('skipOperation')} />}
     >
       {merged && <MergedLine state={state} task={task} commit={commit} />}
-      {body.caution && <Markdown text={body.caution} className='text-fg-3 text-xs' />}
-      {body.rest && <Markdown text={body.rest} className='text-fg-3 text-xs' />}
+      {body.caution && <Markdown text={body.caution} className='text-xs text-fg-3' />}
+      {body.rest && <Markdown text={body.rest} className='text-xs text-fg-3' />}
       <textarea
         value={notes.text}
         onChange={(event) => notes.change(event.target.value)}

@@ -345,7 +345,7 @@ export class Shares implements ShareEffects, ShareLinks {
 
   #findTask(taskId: string) {
     const task = this.#engine.state.tasks[taskId];
-    if (!task) throw new DomainError('task_not_found', 'No such task.');
+    if (!task) throw new DomainError({ code: 'task_not_found', message: 'No such task.' });
     return task;
   }
 

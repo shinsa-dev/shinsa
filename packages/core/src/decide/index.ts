@@ -1,3 +1,4 @@
+import { identity, Result } from 'effect';
 import { isAgentCommand, isUserCommand, type ShinsaCommand } from '../commands/index.ts';
 import { DomainError } from '../domain/index.ts';
 import { resolveScopedRefusal, SCOPE_MESSAGES, SCOPE_REFUSAL_CODE } from '../remote/scope.ts';
@@ -490,15 +491,26 @@ function apply(decider: Decider, command: ShinsaCommand) {
   }
 }
 
-function assertGuestScope(state: ShinsaState, command: ShinsaCommand, taskId: string) {
-  const refusal = isUserCommand(command)
-    ? resolveScopedRefusal(state, taskId, command)
-    : SCOPE_MESSAGES.command;
-  if (refusal) throw new DomainError(SCOPE_REFUSAL_CODE, refusal);
+function resolveGuestRefusal(state: ShinsaState, command: ShinsaCommand, taskId: string) {
+  return isUserCommand(command) ? resolveScopedRefusal(state, taskId, command) : SCOPE_MESSAGES.command;
 }
 
-export function decide(state: ShinsaState, command: ShinsaCommand, context: DecideContext): Decision {
-  if (context.guest) assertGuestScope(state, command, context.guest.taskId);
+function resolveDomainFailure(error: unknown) {
+  if (error instanceof DomainError) return error;
+  return Result.getOrThrowWith(Result.fail(error), identity);
+}
+
+export function decide(
+  state: ShinsaState,
+  command: ShinsaCommand,
+  context: DecideContext
+): Result.Result<Decision, DomainError> {
+  const refusal = context.guest ? resolveGuestRefusal(state, command, context.guest.taskId) : null;
+  if (refusal) return Result.fail(new DomainError({ code: SCOPE_REFUSAL_CODE, message: refusal }));
+  return Result.try({ try: () => resolveDecision(state, command, context), catch: resolveDomainFailure });
+}
+
+function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: DecideContext): Decision {
   const decider = new Decider(state, context);
   if (isAgentCommand(command)) {
     assertCurrentAttempt(decider, command.runId, command.attemptId);

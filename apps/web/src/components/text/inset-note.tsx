@@ -21,7 +21,7 @@ export function InsetNote({
         {icon && <Icon size='sm' name={icon} />}
         {label}
       </span>
-      <Markdown text={text} className='text-fg-4 text-xs' />
+      <Markdown text={text} className='text-xs text-fg-4' />
     </div>
   );
 }

@@ -54,7 +54,7 @@ function CodeEditor(props: React.ComponentProps<EditorModule['default']>) {
     requestCodeEditor().then(setModule, () => setModule('failed'));
   }, [module]);
   if (module === 'failed')
-    return <p className='p-3 text-fg-2 text-xs'>The editor did not load. Reload the page to try again.</p>;
+    return <p className='p-3 text-xs text-fg-2'>The editor did not load. Reload the page to try again.</p>;
   if (!module) return <Waiting path={props.path} />;
   return <module.default {...props} />;
 }
@@ -108,7 +108,7 @@ function ImageView({
         style={{ visibility: loaded ? 'visible' : 'hidden' }}
         className={cn(
           INSET,
-          'max-h-[60vh] max-w-full bg-[length:16px_16px] bg-[repeating-conic-gradient(var(--bg-2)_0_25%,transparent_0_50%)] object-contain'
+          'max-h-[60vh] max-w-full bg-[repeating-conic-gradient(var(--bg-2)_0_25%,transparent_0_50%)] bg-[length:16px_16px] object-contain'
         )}
       />
     </figure>
@@ -215,7 +215,7 @@ function PaneToolbar({
 
 function PaneNotice({ text, readOnly }: { text: string; readOnly: boolean }) {
   return (
-    <p className='flex shrink-0 items-center gap-1.5 border-border border-b px-3 py-1.5 text-2xs text-fg-2'>
+    <p className='flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-1.5 text-2xs text-fg-2'>
       <Icon name={readOnly ? 'IconLock' : 'IconCircleInfo'} size='sm' />
       <Truncate>{text}</Truncate>
     </p>
@@ -348,7 +348,7 @@ export function EditorPane({
         </EmptyState>
       )}
       {content.kind === 'waiting' && <Waiting path={path} />}
-      {content.kind === 'failed' && <p className='p-3 text-fg-2 text-xs'>{content.message}</p>}
+      {content.kind === 'failed' && <p className='p-3 text-xs text-fg-2'>{content.message}</p>}
       {content.kind === 'absent' && (
         <NoText task={task} refs={refs} gitRef={gitRef} source={source} head={content.head} />
       )}

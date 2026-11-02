@@ -150,7 +150,7 @@ function EditDetail({
     <>
       {hunks.map((hunk, position) => (
         <EditDiff
-          // biome-ignore lint/suspicious/noArrayIndexKey: hunks are positional
+          // oxlint-disable-next-line shinsa/no-array-index-key -- hunks are positional
           key={position}
           before={hunk.before}
           after={hunk.after}
@@ -196,7 +196,7 @@ function TodoDetail({ todos }: { todos: { text: string; status: ChatTodoStatus }
       {todos.map((todo, index) => {
         const mark = TODO_MARK[todo.status];
         return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: to-dos are positional
+          // oxlint-disable-next-line shinsa/no-array-index-key -- to-dos are positional
           <li key={index} className='flex min-w-0 items-start gap-2 text-xs'>
             <Hint label={<span className={mark.className}>{mark.label}</span>}>
               <span className='mt-px grid w-fit shrink-0 place-items-center'>
@@ -249,7 +249,7 @@ function ArgumentsDetail({ args }: { args: ChatToolArgs }) {
           {inline.map(([name, value]) => (
             <React.Fragment key={name}>
               <dt className='text-fg-2'>{humanize(name)}</dt>
-              <dd className='min-w-0 break-words font-mono text-fg-4'>{String(value)}</dd>
+              <dd className='min-w-0 font-mono break-words text-fg-4'>{String(value)}</dd>
             </React.Fragment>
           ))}
         </dl>

@@ -33,8 +33,6 @@ import {
 } from '@/lib/connection/remote-access.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { THIS_MACHINE } from '@/lib/remote/mode.ts';
-import { resolveFirstName } from '@/lib/remote/users.ts';
 import {
   canEnrollDevices,
   describeAcceptOutcome,
@@ -46,10 +44,12 @@ import {
   REMOTE_ACCESS_SECTION,
   resolveQrImage,
 } from '@/lib/remote-access.ts';
+import { THIS_MACHINE } from '@/lib/remote/mode.ts';
+import { resolveFirstName } from '@/lib/remote/users.ts';
 import { ROW_INSET, SETTING_ROW, SETTINGS_SUBHEADING, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { UserRow } from './user-row.tsx';
 
-const NO_MEMBERS: RemoteMember[] = [];
+const NO_MEMBERS: readonly RemoteMember[] = [];
 
 const DESCRIPTION =
   'Reach this machine from any device through Shinsa Cloud, behind GitHub sign-in and end to end encrypted. Your devices and other people ask for access with the invite link, and nothing opens until you accept.';
@@ -170,7 +170,7 @@ export function AccessRequestRows({
           return (
             <div key={request.id} className={SETTING_ROW}>
               <div className='flex min-w-0 flex-1 flex-col'>
-                <span className='truncate text-fg-4 text-xs'>{request.deviceName}</span>
+                <span className='truncate text-xs text-fg-4'>{request.deviceName}</span>
                 <span className='truncate text-2xs text-fg-2'>
                   {formatSince('Asked', request.requestedAt, now)}
                 </span>
@@ -281,7 +281,7 @@ function DeviceRow({
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
-        <span className='truncate text-fg-4 text-xs'>{device.name}</span>
+        <span className='truncate text-xs text-fg-4'>{device.name}</span>
         <span className='truncate text-2xs text-fg-2'>
           <MentionText mention={describeDeviceDetail(device, snapshot.access)} />
         </span>
@@ -299,7 +299,7 @@ function PeopleSection({
   onRemove,
 }: {
   owner: RemoteUser | null;
-  members: RemoteMember[];
+  members: readonly RemoteMember[];
   onRemove: (user: RemoteUser) => void;
 }) {
   return (

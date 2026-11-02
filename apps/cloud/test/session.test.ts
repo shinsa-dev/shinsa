@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
   decodeText,
   encodeText,
@@ -8,8 +8,14 @@ import {
   type RemoteSession,
   serializeBase64Url,
 } from '@shinsa/core';
-import { createCodeChallenge } from '../src/crypto.ts';
-import { createHarness, type Harness, NATIVE_VERIFIER, readJson, registerGitHubCode } from './harness.ts';
+import {
+  createCodeChallenge,
+  createHarness,
+  type Harness,
+  NATIVE_VERIFIER,
+  readJson,
+  registerGitHubCode,
+} from './harness.ts';
 
 function readOAuthCookie(response: Response) {
   const cookie = (response.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
@@ -131,6 +137,22 @@ describe('signing in with GitHub', () => {
       headers: { cookie },
     });
     expect(unknown.headers.get('location')).toBe('/?sign_in_error=sign_in_failed');
+  });
+
+  test('a callback that breaks inside the Worker sends you back with a plain error and logs it', async () => {
+    const harness = createHarness();
+    const logged = spyOn(console, 'error').mockImplementation(() => undefined);
+    registerGitHubCode('broken', { id: 5, login: 'rio' }, '');
+    const start = await harness.call('/__remote/sign-in');
+    const state = new URL(start.headers.get('location') ?? '').searchParams.get('state');
+    const cookie = (start.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+    harness.db.sqlite.exec('DROP TABLE users');
+    const failed = await harness.call(`/__remote/sign-in/callback?code=broken&state=${state}`, {
+      headers: { cookie },
+    });
+    expect(failed.headers.get('location')).toBe('/?sign_in_error=server_error');
+    expect(logged.mock.calls.map(([message]) => message)).toContain('[Cloud] Request failed');
+    logged.mockRestore();
   });
 
   test('lets any GitHub account in, and each one sees only its own machines', async () => {

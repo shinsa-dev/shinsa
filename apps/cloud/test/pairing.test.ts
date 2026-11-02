@@ -10,8 +10,12 @@ import {
   resolvePairPath,
   serializePublicKey,
 } from '@shinsa/core';
-import { MAX_INSTANCES_PER_USER, MAX_PENDING_PAIRS_PER_ADDRESS, PAIR_TTL_MS } from '../src/pairing.ts';
+import { Duration } from 'effect';
+import { MAX_PENDING_PAIRS_PER_ADDRESS, PAIR_TTL } from '../src/routes/pairing/schema.ts';
+import { MAX_INSTANCES_PER_USER } from '../src/routes/pairs/schema.ts';
 import { createHarness, type Harness, readJson } from './harness.ts';
+
+const PAIR_TTL_MS = Duration.toMillis(PAIR_TTL);
 
 async function createMachineKey() {
   const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;

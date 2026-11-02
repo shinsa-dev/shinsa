@@ -5,8 +5,8 @@ import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { Choice } from '@/components/controls/choice.tsx';
 import { ChoiceButton, ChoiceButtons } from '@/components/controls/choice-buttons.tsx';
+import { Choice } from '@/components/controls/choice.tsx';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
@@ -121,7 +121,7 @@ function RepoMarkSpecimen() {
     ),
   }));
   return (
-    <span className='flex flex-col gap-1.5 text-fg-2 text-xs'>
+    <span className='flex flex-col gap-1.5 text-xs text-fg-2'>
       {Object.values(state.repos).map((repo) => (
         <span key={repo.id} className='flex items-center gap-3'>
           <span className='flex items-center gap-1.5'>
@@ -262,7 +262,7 @@ export function CompositeSpecimens() {
       </Specimen>
       <Specimen label='Priority · project dots'>
         {TASK_PRIORITIES.map((priority) => (
-          <span key={priority} className='flex items-center gap-1.5 text-fg-3 text-xs'>
+          <span key={priority} className='flex items-center gap-1.5 text-xs text-fg-3'>
             <PriorityIcon priority={priority} />
             {PRIORITY_LABEL[priority]}
           </span>
@@ -275,13 +275,13 @@ export function CompositeSpecimens() {
         <RepoMarkSpecimen />
       </Specimen>
       <Specimen label='TimeAgo · Duration · DiffStats · FilePath'>
-        <span className='text-fg-3 text-xs'>
+        <span className='text-xs text-fg-3'>
           <TimeAgo at={now - 2 * HOUR} />
         </span>
-        <span className='text-fg-3 text-xs'>
+        <span className='text-xs text-fg-3'>
           <TimeAgo at={now - 2 * HOUR} compact detail='Waiting on you' />
         </span>
-        <span className='text-fg-3 text-xs'>
+        <span className='text-xs text-fg-3'>
           Worked for <Duration from={now - 3 * 60_000} to={now} />
         </span>
         <DiffStats added={12} removed={3} />
@@ -309,7 +309,7 @@ export function CompositeSpecimens() {
       <Specimen label='InfoPopover (hover)'>
         <InfoPopover
           className='w-64'
-          render={<button type='button' className='cursor-pointer text-fg-3 text-xs underline' />}
+          render={<button type='button' className='cursor-pointer text-xs text-fg-3 underline' />}
           trigger='Pull request #4531'
         >
           <InfoHeader title='Pull request #4531' description='Open into main' />
@@ -345,7 +345,7 @@ export function CompositeSpecimens() {
               Open
             </Button>
           </Toolbar>
-          <p className='p-3 text-fg-2 text-xs'>The code view sits under the toolbar.</p>
+          <p className='p-3 text-xs text-fg-2'>The code view sits under the toolbar.</p>
         </div>
       </Specimen>
       <Specimen label='Panel · StepNumber · CodeFence'>
@@ -363,7 +363,7 @@ export function CompositeSpecimens() {
             <div className='flex gap-2.5'>
               <StepNumber index={0} />
               <div className='flex min-w-0 flex-1 flex-col gap-2'>
-                <span className='font-medium text-fg-4 text-xs'>Open an MCP session per chat</span>
+                <span className='text-xs font-medium text-fg-4'>Open an MCP session per chat</span>
                 <CodeFence code={SAMPLE_CODE} language='ts' />
               </div>
             </div>

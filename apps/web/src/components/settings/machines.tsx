@@ -243,7 +243,7 @@ export function MachinesSettings() {
       <MachineAccessRequests machines={access} instances={(rows ?? []).map((row) => row.instance)} />
       <SettingsGroup title={MACHINES_SECTION} description={MACHINES_DESCRIPTION}>
         {failure && (
-          <p role='alert' className='px-2 py-1.5 text-destructive text-xs'>
+          <p role='alert' className='px-2 py-1.5 text-xs text-destructive'>
             {failure}
           </p>
         )}

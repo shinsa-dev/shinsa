@@ -53,7 +53,7 @@ export function openInstallTerminal(
   const script = scripts.resolve(id);
   const label = resolvePrerequisiteLabel(id);
   if (!(script && label))
-    throw new DomainError('check_unknown', 'Shinsa has no command that fixes that check.');
+    throw new DomainError({ code: 'check_unknown', message: 'Shinsa has no command that fixes that check.' });
   return openSetupTerminal(terminals, `Set up ${label}`, `${script}; exit`, home);
 }
 
@@ -67,7 +67,8 @@ export function openInstallAllTerminal(
     const script = scripts.resolve(id);
     return script ? [`{ ${script}; }`] : [];
   });
-  if (steps.length === 0) throw new DomainError('nothing_missing', 'Every tool Shinsa needs is installed.');
+  if (steps.length === 0)
+    throw new DomainError({ code: 'nothing_missing', message: 'Every tool Shinsa needs is installed.' });
   return openSetupTerminal(terminals, ALL_TERMINAL_NAME, `${steps.join(' && ')}; exit`, home);
 }
 
@@ -93,9 +94,9 @@ export function openReplyTerminal(
   scripts: InstallScripts = INSTALL_SCRIPTS
 ): TerminalInfo {
   if (!(body && isReplyCommand(body, command)))
-    throw new DomainError(
-      'command_unknown',
-      'Shinsa runs only the commands the help task’s agent replied with.'
-    );
+    throw new DomainError({
+      code: 'command_unknown',
+      message: 'Shinsa runs only the commands the help task’s agent replied with.',
+    });
   return openSetupTerminal(terminals, REPLY_TERMINAL_NAME, `${scripts.resolveReply(command)}\nexit`, home);
 }

@@ -8,8 +8,11 @@ import {
   resolveInstanceRemovePath,
   verifyConnectToken,
 } from '@shinsa/core';
-import { ONLINE_WINDOW_MS } from '../src/instances.ts';
+import { Duration } from 'effect';
+import { ONLINE_WINDOW } from '../src/domain/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
+
+const ONLINE_WINDOW_MS = Duration.toMillis(ONLINE_WINDOW);
 
 async function listInstances(harness: Harness, session: string) {
   return readJson<RemoteInstance[]>(await harness.call(REMOTE_PATHS.instances, { session }));

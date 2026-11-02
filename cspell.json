@@ -4,9 +4,13 @@
   "ignorePaths": ["**/node_modules/**", "**/dist/**", "packages/ui/src/components/icon/paths.ts"],
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_", "\\\\bxox\\[[a-z]+\\]-", "AKIA\\["],
   "words": [
+    "tsgolint",
+    "textnodes",
+    "proptypes",
     "Sigstore",
     "TLOG",
     "shellcheck",
+    "finalizer",
     "dgst",
     "cfargotunnel",
     "addexclusion",

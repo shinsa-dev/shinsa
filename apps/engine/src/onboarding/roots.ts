@@ -23,17 +23,16 @@ export const PRIVACY_SETTINGS_URL =
   'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
 
 export class PrivateFoldersError extends DomainError {
-  readonly folders: string[];
-  readonly picked: string[];
+  declare readonly folders: string[];
+  declare readonly picked: string[];
 
-  constructor(folders: string[], picked: string[], userHome: string) {
+  static create(folders: string[], picked: string[], userHome: string) {
     const names = folders.map((folder) => resolveDisplayPath(folder, userHome));
-    super(
-      'roots_private',
-      `macOS keeps ${describeList(names, 'and')} private. Turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then check again.`
-    );
-    this.folders = folders;
-    this.picked = picked;
+    const error = new PrivateFoldersError({
+      code: 'roots_private',
+      message: `macOS keeps ${describeList(names, 'and')} private. Turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then check again.`,
+    });
+    return Object.assign(error, { folders, picked });
   }
 }
 
@@ -53,27 +52,29 @@ export function resolveChosenRoots(
   read: (path: string) => unknown = readdirSync
 ): string[] {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new DomainError('roots_invalid', 'Choose a folder with your repositories.');
+    throw new DomainError({ code: 'roots_invalid', message: 'Choose a folder with your repositories.' });
   }
   if (value.length > MAX_ROOTS) {
-    throw new DomainError('roots_invalid', `Choose at most ${MAX_ROOTS} folders.`);
+    throw new DomainError({ code: 'roots_invalid', message: `Choose at most ${MAX_ROOTS} folders.` });
   }
   const roots: string[] = [];
   const refused: string[] = [];
   const picked: string[] = [];
   for (const entry of value) {
     if (typeof entry !== 'string' || entry.trim().length === 0) {
-      throw new DomainError('roots_invalid', 'Each folder must be a path.');
+      throw new DomainError({ code: 'roots_invalid', message: 'Each folder must be a path.' });
     }
     const path = expandHome(entry.trim(), userHome);
-    if (!isAbsolute(path)) throw new DomainError('roots_invalid', `${entry} is not a full path.`);
+    if (!isAbsolute(path))
+      throw new DomainError({ code: 'roots_invalid', message: `${entry} is not a full path.` });
     const root = resolve(path);
-    if (!isDirectory(root)) throw new DomainError('roots_invalid', 'That is not a folder on this machine.');
+    if (!isDirectory(root))
+      throw new DomainError({ code: 'roots_invalid', message: 'That is not a folder on this machine.' });
     if (picked.includes(root)) continue;
     picked.push(root);
     if (isReadable(root, read)) roots.push(root);
     else refused.push(root);
   }
-  if (refused.length > 0) throw new PrivateFoldersError(refused, picked, userHome);
+  if (refused.length > 0) throw PrivateFoldersError.create(refused, picked, userHome);
   return roots;
 }
