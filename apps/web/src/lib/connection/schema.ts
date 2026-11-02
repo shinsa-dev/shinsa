@@ -127,6 +127,4 @@ export const SignInAnswer = Schema.Unknown.pipe(
   )
 );
 
-export const CODE_READS = ['refs', 'paths', 'tree', 'blob', 'diff'] as const;
-
-export const CodeRead = Schema.Literals(CODE_READS);
+export const CodeRead = Schema.Literals(['refs', 'paths', 'tree', 'blob', 'diff']);

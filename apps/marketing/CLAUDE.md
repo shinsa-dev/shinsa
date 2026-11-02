@@ -5,8 +5,10 @@ time so the static HTML already holds them (the hero hydrates on load, the rest 
 **5182**; the scripts run Astro under Bun (`bun --bun astro`) because Astro 7 needs a newer Node than the repo pins.
 
 The demos are not drawings of Shinsa: they render `apps/web`'s own components (the `@/` alias points at
-`apps/web/src`) from sample state built with `apps/web/src/routes/ui/samples.ts`. `lib/demo-server.ts` stands in for
-`shinsa engine` in the browser: it answers the web's one WebSocket (acks every command and hands it to the demo that
+`apps/web/src`) from sample state built with `apps/web/src/routes/ui/samples.ts`. `lib/demo-server/` stands in for
+`shinsa engine` in the browser, as one `DemoTransport` layer (`transport.ts`: a Fetch and a WebSocket constructor) the
+web's one runtime takes through `replaceAppTransport`, so the web's own `EngineClient` and sockets talk to it and no
+global is patched: it answers the web's one WebSocket (`sockets.ts`) (acks every command and hands it to the demo that
 listens, streams transcripts) and `/api/tasks/<id>/<read>` from the in-memory repositories in `lib/demo-repo.ts` (one per task: Shinsa's for the Review demo, Northwind's for the rest), so
 the real cards, toasts, live feeds and the Code workbench work unchanged. It also keeps the page's path fixed while the
 web's router writes its query (`?tab=chat`, the Code tab's position), and supplies `crypto.randomUUID` where the
@@ -17,7 +19,7 @@ gives the build process the browser globals the web's modules read when they loa
 `localStorage`, `matchMedia`, and a 1440×1000 window so row windows such as All tasks' render their rows); it has to run before any page chunk, so it lives in the config, not in a component. A
 plugin in the config points every `react` import at `lib/react-snapshots.ts`, whose `useSyncExternalStore` uses the
 client snapshot as the server one, since React refuses to render or hydrate that hook without it and the web app never
-passes one. And the server half of the stand-in (`installDemoApi`) runs at build too, so `code.tsx` and `review.tsx` can load the
+passes one. And the stand-in's transport and socket (`installDemoConnection`, `install.ts`) run at build too, so `code.tsx` and `review.tsx` can load the
 workbench's reads with a top-level await before it renders, in the build and in the browser alike: `review-prime.ts`
 reads every folder and file at both commits and the diff, and the stand-in answers at once, so the Code tab never
 shows a loading state. The stand-in calls `connection.flush()` after it opens, since the connection otherwise applies state on the next frame and the build would render the composer without its project. Keep a demo's first

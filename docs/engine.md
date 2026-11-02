@@ -3265,7 +3265,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   or merged pull request, in its Changes view, from the streamed `diff` and `code` files. A link that stopped working says so at once.
 - **Nothing writes through a link.** The channel above only listens, and hiding controls is a second layer. On the
   page itself, `SharedTaskPage` holds `enterReadOnly` (`lib/connection/read-only.ts`) while it is open: `sendCommand`
-  rejects every command and `requestJson`/`requestLines` every `POST` with "This shared task is read-only. Nothing on it
+  rejects every command and `EngineHttp` (`lib/runtime/engine-http`) every `POST` through `EngineClient` with "This shared task is read-only. Nothing on it
   can be changed from here." before anything is sent, so a control added later without a `useReadOnly` check still
   changes nothing.
 - **Agents read it, never change it.** `tasks show` and `read_task` say whether a task is shared, its link, or why

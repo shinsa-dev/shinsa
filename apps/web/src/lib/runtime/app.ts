@@ -6,16 +6,6 @@ import { EngineClient } from './engine/service.ts';
 import { RemoteClient } from './remote/service.ts';
 import type { AppServices, AppTransportServices } from './schema.ts';
 
-export const AppTransport: Layer.Layer<AppTransportServices> = Layer.mergeAll(
-  Layer.succeed(
-    FetchHttpClient.Fetch,
-    Object.assign((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init), {
-      preconnect: globalThis.fetch.preconnect,
-    })
-  ),
-  Socket.layerWebSocketConstructorGlobal
-);
-
 function createAppRuntime(transport: Layer.Layer<AppTransportServices>) {
   return ManagedRuntime.make(
     Layer.mergeAll(EngineClient.layer, RemoteClient.layer).pipe(
@@ -27,7 +17,17 @@ function createAppRuntime(transport: Layer.Layer<AppTransportServices>) {
   );
 }
 
-let appRuntime = createAppRuntime(AppTransport);
+let appRuntime = createAppRuntime(
+  Layer.mergeAll(
+    Layer.succeed(
+      FetchHttpClient.Fetch,
+      Object.assign((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init), {
+        preconnect: globalThis.fetch.preconnect,
+      })
+    ),
+    Socket.layerWebSocketConstructorGlobal
+  )
+);
 
 export function replaceAppTransport(transport: Layer.Layer<AppTransportServices>) {
   const previous = appRuntime;

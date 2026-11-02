@@ -4,7 +4,8 @@ The web app: React 19, Vite and Tailwind 4, laid out like Buzzkit's dashboard. I
 pushes over one WebSocket and owns nothing: every action is a `UserCommand` through `sendCommand`, and the next state
 push is the answer. `docs/design.md` is the source of truth for everything visual (its "Where Shinsa differs"
 wins over the rest); `/ui` renders every token, kit component, shared building block and feature piece in both
-themes, from sample data.
+themes, from sample data. Everything that reaches the engine or app.shinsa.dev is Effect code behind one
+`ManagedRuntime` (`lib/runtime/`, Rules → The data layer is Effect); components and routes stay plain React.
 
 ## Layout
 
@@ -140,7 +141,9 @@ src/
     ├── share/           Sharing a task: dialog.ts (Share task's state, its five views, how long a task is shared, share,
     │                    Stop sharing and its confirmation, the banner's words),
     │                    live.ts (openShareStream: the link's live channel to the machine, the hello and welcome
-    │                    checked with the key, the views and files it pushes as blob addresses, reconnecting),
+    │                    checked with the key, the views and files it pushes as blob addresses; share-socket/ is its
+    │                    ShareSocket service, connecting through RemoteClient and reconnecting on SHARE_RECONNECT:
+    │                    1, 2, 5, then every 10 s), viewer.ts (who is signed in to app.shinsa.dev, through RemoteClient),
     │                    sources.ts (a shared file's text, who is looking), view.ts (the read-only state and task the tab components render),
     │                    page.ts (the shared page's tabs, notes and Shared by line, "you" for its owner; resolveOwnerName: the owner's
     │                    first name and profile, Kai with no `@`, in place of "You" for anyone else), code.ts (the streamed diff and
@@ -157,39 +160,59 @@ src/
     │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
     │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the
     │                    browser's team keys in IndexedDB), join-machines.ts (the join page's projects from your own
-    │                    machines, and joining and sharing them there), channel.ts (a team channel from the browser with its own
-    │                    key, and the engine relay of one task), feeds.ts (teammates' tasks for the focused team,
+    │                    machines, and joining and sharing them there through EngineClient over each machine's own Fetch), channel.ts (a team channel from the browser with its own
+    │                    key, and the engine relay of one task; team-socket/ is its TeamSocket service, reconnecting on
+    │                    TEAM_RECONNECT: 1, 2, 5, 10, then every 30 s), schema.ts (the join's shapes and errors), feeds.ts (teammates' tasks for the focused team,
     │                    merged from the machines and the browser, without machines the dashboard reaches);
     │                    components/teams/ (the new team dialog, the shared projects dropdown, a teammate's row on All tasks, among your own),
     │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
     │                    scope, the enrollment link kept through sign-in, MACHINE_ICON, This machine and resolveMachineLabel), dashboard.ts (app.shinsa.dev's
-    │                    /__remote/ routes), fleet.ts (Fleet: every machine's connection as one, the merged state, held back until every machine answers or FLEET_WAIT_MS passes, which
+    │                    /__remote/ routes as promise methods, each a `RemoteClient` call, refusals as `CloudRefused`), schema.ts
+    │                    (EnrolledDevice, ENROLL_RETRY, the device store's and enroll's tagged errors), fleet.ts (Fleet: every machine's connection as one, the merged state, held back until every machine answers or FLEET_WAIT_MS passes, which
     │                    machine owns each id, each machine's own state for placement (listMachines), each machine's own remote access for its access requests (listMachineAccess), the account's machines it cannot reach (listUnreachableMachines), commands sent to the
     │                    machine named or the one that owns them, transcripts and requests sent to their machine), services.ts (the
     │                    remote services and their context, for Settings → Machines), resources.ts (how busy a machine and its
     │                    open tasks are in words, and the meters of a machine in Settings → Machines),
-    │                    devices.ts and indexed-store.ts (this device's key per machine, in IndexedDB, and whether it sits on that machine),
-    │                    channel.ts (openRemoteChannel: the handshake, sealed frames, the app socket and HTTP
-    │                    inside), link.ts (RemoteLink: the channel per machine, reconnecting, and ChannelSocket, the
-    │                    app socket on it), relay.ts (the service worker's relay and the page's side of it),
-    │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, first name, login, initial and profile address, the member who added a device; components/people/user-tag.tsx: UserTag, a person's name with a small avatar in front, as a task chip has its tile, that opens the one user card on hover, UserAvatar, and UserIdentity, the avatar beside "Name login" on one line (no `@`) over a description, View on GitHub in the card and the row's detail in every settings UserRow), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
+    │                    devices.ts and indexed-store.ts (this device's key per machine, in IndexedDB, read by its schema, and whether it sits on that machine),
+    │                    channel.ts (openRemoteChannel: the promise face of remote-channel/, the RemoteChannels service:
+    │                    the handshake, sealed frames sent through one queue in order, each request's settle-once slot,
+    │                    the app socket and HTTP inside), link.ts (RemoteLink: the channel per machine, reconnecting,
+    │                    its `fetch` the machine's own Fetch for EngineClient, and ChannelSocket, the app socket on it), relay.ts (the service worker's relay and the page's side of it),
+    │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again on ENROLL_RETRY (every 2 s) with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, first name, login, initial and profile address, the member who added a device; components/people/user-tag.tsx: UserTag, a person's name with a small avatar in front, as a task chip has its tile, that opens the one user card on hover, UserAvatar, and UserIdentity, the avatar beside "Name login" on one line (no `@`) over a description, View on GitHub in the card and the row's detail in every settings UserRow), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
     │                    ones this device cannot reach yet, the form's checks and the
     │                    settings each add, edit, move or removal writes), machines.ts (a machine's row, the rows of the account, task capacity's choices, a machine as a
     │                    fleet member)
-    ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, the state and its
-    │                    patches applied once per frame, acks, transcripts from the position held (every followed
-    │                    run plus the 24 read last, TRANSCRIPT_CACHE_LIMIT), whether the desktop app is connected,
-    │                    reconnect), optimistic.ts (the commands shown before the
+    ├── runtime/         The data layer's edge (Rules → The data layer is Effect): app.ts (the browser's
+    │                    Fetch and WebSocket constructor; the one ManagedRuntime over EngineClient, RemoteClient and
+    │                    EngineHttp; runApp and forkApp, the only places an effect runs; replaceAppTransport, which the
+    │                    site's stand-in calls once), schema.ts (AppServices, StepFailed), engine/ (EngineClient: core's
+    │                    EngineApi through HttpApiClient, onMachine for the fleet's `?machine=`; its tagged errors and
+    │                    messages; answers.ts, decodeAnswer; lines.ts, streamLines: an NDJSON answer as a Stream of
+    │                    decoded lines), engine-http/ (EngineHttp: the one place a refusal becomes the engine's own
+    │                    message or "Shinsa answered with status N.", "Couldn’t reach Shinsa." and the read-only block),
+    │                    remote/ (RemoteClient: core's RemoteApi, every failure a CloudUnreachable, CloudRefused or
+    │                    CloudAnswerInvalid), socket/ (dialSocket: Effect's Socket opened within SOCKET_OPEN_TIMEOUT
+    │                    as a Stream of frames; keepDialing: redial on a ReconnectPlan, its first and its backoff
+    │                    Schedule, starting over only once a socket connected; provideTransport: a test's own
+    │                    WebSocket constructor), fetch.ts (sendThrough: an effect's requests through another Fetch,
+    │                    a machine's sealed link), promise.ts (enterPromise: a promise API entered once),
+    │                    shared-run.ts (createSharedRun: one read in flight at a time)
+    ├── connection/      socket.ts (the connection React reads: the hello with this page's surface, the state and its
+    │                    patches applied once per frame, acks settling a Deferred, transcripts from the position held (every followed
+    │                    run plus the 24 read last, TRANSCRIPT_CACHE_LIMIT), whether the desktop app is connected;
+    │                    engine-socket/ is its EngineSocket service: every frame decoded once with core's ServerMessage
+    │                    schema, every send encoded with ClientMessage, reconnecting on ENGINE_RECONNECT: 250 ms, 1 s,
+    │                    2 s, then every 5 s), optimistic.ts (the commands shown before the
     │                    server answers, decided on the page and converted to the socket's shape, so a run they
     │                    start has no prompt and a fix its focus), selectors.ts (useShinsaSelector, useTask, useRun,
     │                    useGate: render again only when the part read changes), commands.ts
-    │                    (sendCommandWithToast, requestWithToast, copyText), http.ts (requestJson: a JSON
-    │                    request whose refusal becomes the server's message), attachments.ts (requestAttachmentUpload: a
+    │                    (sendCommandWithToast, requestWithToast, copyText), schema.ts (the shapes the engine answers
+    │                    that core types only as interfaces), attachments.ts (requestAttachmentUpload: a
     │                    file you attach, as base64 to POST /api/attachments, and the files of a paste or drop), code.ts (the Code tab's reads: refs, paths, tree, blob,
     │                    search and diff, cached by commit in a bounded least-recently-used cache, the last answer shown
     │                    while a newer version loads, never read again for an unrelated task event, and requestFileWrite, the one
-    │                    write: saving a file you edit), models.ts, worktree.ts (open in editor / Finder), onboarding.ts
+    │                    write: saving a file you edit; code-reads.ts runs each read on EngineClient), models.ts, worktree.ts (open in editor / Finder), onboarding.ts
     │                    (the onboarding status, folders, suggestions and the setup steps over HTTP),
     │                    projects.ts (/api/repos/local, adding a repository or a folder to a project),
     │                    terminals.ts (useTerminals over the snapshot the socket holds, /api/terminals changes,
@@ -198,9 +221,11 @@ src/
     │                    the sign-in dialog state, refreshUsage and watchUsage over one shared usage recheck), health.ts (/api/health on start and after each reconnect,
     │                    the banner's text and its dismissal), engine.ts (the app against the engine: the engine
     │                    banner's view, the automatic restart and requestEngineRestart), extensions.ts (useExtensions over
-    │                    /api/extensions, the server check, every /api/extensions/* change and the MCP
+    │                    /api/extensions, the server check, every /api/extensions/* change; sign-in-watch.ts, the MCP
     │                    sign-in watch), versions.ts (useVersions over /api/versions, Check for updates, and
-    │                    requestUpdate: the update's lines streamed into its toast; http.ts's requestLines reads them)
+    │                    requestUpdate: the update's lines streamed into its toast through streamLines), evidence.ts,
+    │                    placement.ts, schedules.ts and secrets.ts (the engine calls of evidence texts, routing,
+    │                    schedules and secrets, for the plain modules in lib/ that use them)
     ├── command/         ⌘K: registry.ts (useRegisterCommands, menu open state), score.ts, menu.ts (frames,
     │                    rows, the root's blocks and their scores, Recent, the New task action), global.ts, gates.ts (the commands of every open gate), task.ts and
     │                    task-actions.ts (a task's page), process.ts (check-ins, the quiet agent, suggested
@@ -246,7 +271,8 @@ src/
     │                    tokens), line-changes.ts (an edit's added and removed counts), and highlight.ts (Shiki for
     │                    the chat on a theme of the `--code-*` tokens the editor reads)
     ├── terminal/        Terminals and services (docs/design.md, 37): view.ts (TerminalView: one xterm.js per terminal,
-    │                    kept outside React, its socket and reconnect, its WebGL renderer kept for the six shown last,
+    │                    kept outside React, its socket (terminal-socket/: the TerminalSocket service, reconnecting on
+    │                    TERMINAL_RECONNECT: 250 ms, 1 s, 2 s, then every 5 s, and stopping on close code 4404), its WebGL renderer kept for the six shown last,
     │                    fit only when the pane's size changed, find, clear, the font size; resolveTerminalView),
     │                    theme.ts (the xterm.js options and theme on the `--terminal-*` tokens, the Code tab's `--code-*` colours, its find
     │                    colours, and `--font-mono`), scrollbar.ts (xterm.js's scrollbar shown only on its strip and while
@@ -404,10 +430,23 @@ print the whole document.
 - **One owner per shared piece.** The visual ones (tones, times, cards, check marks, task actions, dependencies)
   are listed in `docs/design.md`, 15. In code, besides those: gate replies go through `lib/tasks/gates.ts`, what a message does (every composer's
   placeholder and toast for `task.message`, and ⌘K's Message the agent) through `lib/tasks/messages.ts`, HTTP
-  through `lib/connection/http.ts` and `requestWithToast`, the `•••` trigger through `controls/options-trigger.tsx`,
+  through `EngineClient` / `RemoteClient` (`lib/runtime/`) and `requestWithToast`, the `•••` trigger through `controls/options-trigger.tsx`,
   a remove confirmation through `overlays/confirm-dialog.tsx`, usage percentages through
   `accounts/usage-percent.tsx`, and the account picker is core's (`selectNextAccount`), never a web copy.
   `bun lint:conventions` rejects some hand-built copies; the rest is on review.
+- **The data layer is Effect** (the `effect` skill). Every request to the engine and to app.shinsa.dev goes through
+  a client derived from core's `EngineApi` or `RemoteApi` with `HttpApiClient` (`lib/runtime/engine`,
+  `lib/runtime/remote`), so no `fetch` is written by hand and every answer is decoded by its schema; one that breaks
+  it fails as a tagged error and never reaches a component. Every socket (the engine, the sealed remote channel, a
+  share, a team channel, a terminal) is a scoped service on Effect's `Socket` through `dialSocket`, its reconnect
+  delays a named `ReconnectPlan` of Schedules in its `schema.ts`, and it is closed by interrupting its fiber. Each
+  module is a folder with its shapes, constants and tagged errors in `schema.ts` and its logic in `service.ts` (or one
+  pure module named for its concern). Effects run only in `lib/runtime/app.ts` (`runApp`, `forkApp`) on the one
+  `ManagedRuntime`; React reaches it through the promise methods `lib/` exports and `useAppEffect`
+  (`hooks/use-app-effect.ts`, interrupted on unmount). A fleet machine's calls and a team join give the same clients
+  that machine's own Fetch (`sendThrough`, `EngineClient.onMachine`). Tests swap the transport, never the clients: a
+  fake `fetch` sees the client's `Request`, a fake socket comes as a WebSocket constructor (`openSocket`,
+  `provideTransport`), and the marketing site's stand-in is one `DemoTransport` layer (`replaceAppTransport`).
 - **A person is a first name in a user tag** (`docs/design.md`, 43). Name someone by their capitalized first name
   (`resolveFirstName`), their login only when no name is known, and never put `@` in front of a login, in copy, docs
   or tests. Every mention is a `UserTag` (`components/people/user-tag.tsx`) and every row that lists a person is

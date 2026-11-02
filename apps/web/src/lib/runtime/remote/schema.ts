@@ -32,7 +32,7 @@ export class CloudAnswerInvalid extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()('CloudAnswerInvalid', { message: Schema.String }) {}
 
-export type CloudFailure = CloudUnreachable | CloudRefused | CloudAnswerInvalid;
+type CloudFailure = CloudUnreachable | CloudRefused | CloudAnswerInvalid;
 
 type RemoteGroups = typeof RemoteApi extends { readonly groups: infer Groups } ? Groups : never;
 
