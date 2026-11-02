@@ -15,7 +15,7 @@ Shinsa is written in Effect 4 (`effect` pinned at **4.1.1**, the same exact vers
 
 All code that does I/O, holds a resource, reads time, config or randomness, or crosses a boundary (HTTP, SQL, a process, a socket, a file) is Effect code. Every shape that crosses a boundary is a `Schema`.
 
-**Pure logic stays plain functions.** Core's `decide`, the folds and the derivations take values and return values: they use Schema types and return a `Result` instead of throwing once they move, but they are not wrapped in `Effect.succeed`, take no services and never `yield*`. Wrapping pure code in an Effect adds a runtime and hides nothing. Effect code calls pure code directly.
+**Pure logic stays plain functions.** Core's `decide`, the folds and the derivations take values and return values: they use Schema types and return a `Result` instead of throwing (`decide` returns `Result<Decision, DomainError>`), but they are not wrapped in `Effect.succeed`, take no services and never `yield*`. Wrapping pure code in an Effect adds a runtime and hides nothing. Effect code calls pure code directly.
 
 ## Imports
 
