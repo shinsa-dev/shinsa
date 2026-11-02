@@ -1,5 +1,6 @@
 import { describe, expect, setSystemTime, test } from 'bun:test';
 import { MINUTE_MS } from '@shinsa/core';
+import type { SurfaceHookSecrets } from '../../src/surface/index.ts';
 import { createFakeClient, createTaskDetail, findSpec, runSpec } from './fixtures.ts';
 
 const NOW = Date.UTC(2026, 9, 23, 9, 0);
@@ -30,8 +31,9 @@ const RESPONSES = {
   },
 };
 
-async function write(words: string[]) {
+async function write(words: string[], hookSecrets?: SurfaceHookSecrets) {
   const fake = createFakeClient(RESPONSES);
+  if (hookSecrets) fake.client.hookSecrets = hookSecrets;
   setSystemTime(new Date(NOW));
   try {
     const result = await runSpec(fake, ['schedules', 'write', ...words]);
@@ -151,6 +153,51 @@ describe('writing a schedule', () => {
     });
     const plain = await write(['--webhook', '--new-task']);
     expect(plain.command.trigger).toMatchObject({ kind: 'webhook', signature: null });
+  });
+
+  test('an agent’s signing secret ref is checked before the write and redeemed after it', async () => {
+    const calls: unknown[][] = [];
+    const hookSecrets: SurfaceHookSecrets = {
+      assertSecret: (...args) => {
+        calls.push(['assert', ...args]);
+      },
+      writeSecret: (...args) => {
+        calls.push(['write', ...args]);
+        return 'The schedule was saved, but its signing secret was not.';
+      },
+    };
+    const ref = `secret-ref:${'a'.repeat(32)}`;
+    const signed = ['--webhook', '--signature-header', 'x-sig', '--new-task'];
+    const { result, command } = await write(
+      ['--id', 'sch-1', ...signed, '--signature-secret-ref', ref],
+      hookSecrets
+    );
+    expect(command.trigger).toMatchObject({ signature: { header: 'x-sig' } });
+    expect(calls).toEqual([
+      ['assert', 'sch-1', ref],
+      ['write', 'sch-1', ref],
+    ]);
+    expect(result.text).toBe('Saved the schedule.\nThe schedule was saved, but its signing secret was not.');
+    calls.length = 0;
+    await write(signed, hookSecrets);
+    expect(calls).toEqual([['assert', null, null]]);
+  });
+
+  test('a secret ref is refused from you, and without a signed webhook', async () => {
+    const ref = `secret-ref:${'a'.repeat(32)}`;
+    await expect(
+      write(['--webhook', '--signature-header', 'x-sig', '--new-task', '--signature-secret-ref', ref])
+    ).rejects.toThrow('--signature-secret-ref is for agents.');
+    const hookSecrets: SurfaceHookSecrets = { assertSecret: () => undefined, writeSecret: () => null };
+    await expect(
+      write(['--webhook', '--new-task', '--signature-secret-ref', ref], hookSecrets)
+    ).rejects.toThrow('Give --signature-secret-ref with --webhook and --signature-header.');
+    await expect(
+      write(
+        ['--webhook', '--signature-header', 'x-sig', '--new-task', '--signature-secret-ref', 'shh'],
+        hookSecrets
+      )
+    ).rejects.toThrow('secret_ref must be the secret-ref');
   });
 
   test('a trigger core refuses, or both targets at once, is refused before anything is sent', async () => {

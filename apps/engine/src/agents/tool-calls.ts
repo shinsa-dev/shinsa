@@ -271,6 +271,7 @@ export class ToolCalls {
       byTask: task.id,
       projects: manage.projects,
       route: manage.route,
+      ...(manage.hookSecrets ? { hookSecrets: manage.hookSecrets(task.id) } : {}),
     });
     const { text } = await call.spec.run(client, call.values);
     return isTaskSettled(engine.state.tasks[task.id] ?? task)

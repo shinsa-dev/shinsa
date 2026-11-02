@@ -35,6 +35,7 @@ describe('reading set_schedule', () => {
         maxRuns: null,
         timeZone: null,
         secretRef: null,
+        repository: null,
       },
     });
   });
@@ -102,6 +103,22 @@ describe('reading set_schedule', () => {
     expect(read({ enabled: false })).toMatchObject({ value: { enabled: false } });
   });
 
+  test('a new task can name its repository', () => {
+    expect(read({ new_task: true, repository: 'paywall-next' })).toMatchObject({
+      value: { target: { kind: 'new_task', repoId: null }, repository: 'paywall-next' },
+    });
+    expect(read({ new_task: true })).toMatchObject({ value: { repository: null } });
+  });
+
+  test('signature fields on webhook itself point at webhook.signature', () => {
+    const errors = errorsOf({
+      webhook: { header: 'X-Hub-Signature-256', prefix: 'sha256=', encoding: 'hex', secret_ref: REF },
+    });
+    expect(errors).toEqual([
+      'header, prefix, encoding, secret_ref go under webhook.signature, not on webhook itself: webhook: { signature: { header, encoding, prefix, secret_ref } }.',
+    ]);
+  });
+
   test.each<[string, Record<string, unknown>, string]>([
     ['several times', { in_minutes: 5, every_minutes: 5 }, 'not several'],
     ['weekdays without a daily time', { every_minutes: 5, weekdays: [1] }, 'weekdays only go with daily_at'],
@@ -111,6 +128,17 @@ describe('reading set_schedule', () => {
     ['a bad ref', { webhook: { signature: { header: 'x', secret_ref: 'abc' } } }, 'secret-ref'],
     ['both targets', { new_task: true, task_id: 't' }, 'not both'],
     ['zero minutes', { in_minutes: 0 }, 'in_minutes must be'],
+    ['an unknown webhook field', { webhook: { replay: '{{body.id}}' } }, 'webhook has no replay.'],
+    [
+      'an unknown signature field',
+      { webhook: { signature: { header: 'x', algorithm: 'sha1' } } },
+      'webhook.signature has no algorithm. Its fields are header, encoding, prefix, secret_ref.',
+    ],
+    [
+      'a repository without new_task',
+      { task_id: 't', repository: 'shinsa' },
+      'repository only goes with new_task',
+    ],
   ])('refuses %s', (_name, input, message) => {
     expect(errorsOf(input).join(' ')).toContain(message);
   });

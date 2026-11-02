@@ -1,21 +1,18 @@
-import {
-  describeList,
-  type ShinsaState,
-  type TeamJoinStatus,
-  type UserCommand,
-  type WireState,
-} from '@shinsa/core';
-import type { ShinsaConnection } from '@/lib/connection/socket.ts';
+import { describeList, type Project, type TeamJoinStatus, type UserCommand } from '@shinsa/core';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
 import type { FleetMember } from '@/lib/remote/fleet.ts';
-import type { RemoteLinkOptions } from '@/lib/remote/link.ts';
-import { createFleetMember, listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
+import { RemoteLink, type RemoteLinkOptions } from '@/lib/remote/link.ts';
+import { listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
 import { listProjectChoices, type ProjectChoice } from './settings.ts';
 
 export const JOIN_PATH = '/api/remote/teams/join';
 
-const STATE_TIMEOUT_MS = 10_000;
+export const PROJECTS_PATH = '/api/projects';
+
+export const COMMANDS_PATH = '/api/commands';
+
+const PROJECTS_TIMEOUT_MS = 4000;
 
 export interface JoinMachine {
   id: string;
@@ -31,36 +28,13 @@ export interface JoinMachines {
 
 export type OpenJoinMachines = () => Promise<JoinMachines>;
 
-type MachineConnection = Pick<ShinsaConnection, 'start' | 'subscribe' | 'snapshot' | 'command'>;
+type JoinFetch = Pick<FleetMember, 'id' | 'name' | 'fetch'>;
 
 export function listJoinRows(rows: readonly MachineRow[]) {
   return rows.filter(
-    (row): row is JoinRow => row.instance.role === 'owner' && row.device !== null && !row.device.waiting
+    (row): row is JoinRow =>
+      row.instance.role === 'owner' && row.instance.online && row.device !== null && !row.device.waiting
   );
-}
-
-export function waitForState(
-  connection: Pick<ShinsaConnection, 'subscribe' | 'snapshot'>,
-  timeoutMs: number
-) {
-  return new Promise<WireState | null>((resolve) => {
-    let done = false;
-    let stop: (() => void) | null = null;
-    const finish = (state: WireState | null) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      stop?.();
-      resolve(state);
-    };
-    const timer = setTimeout(() => finish(null), timeoutMs);
-    const check = () => {
-      const current = connection.snapshot().state;
-      if (current) finish(current);
-    };
-    stop = connection.subscribe(check);
-    check();
-  });
 }
 
 export function listJoinCommands(teamId: string, projectIds: readonly string[]): UserCommand[] {
@@ -75,43 +49,67 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-async function readJoinAnswer(response: Response) {
-  const answer = (await readJson(response)) as {
-    teamId?: string;
-    status?: TeamJoinStatus;
-    error?: { message?: string };
-  } | null;
-  if (response.ok && typeof answer?.teamId === 'string') return answer.teamId;
+async function readAnswer<T>(response: Response) {
+  const answer = (await readJson(response)) as (T & { error?: { message?: string } }) | null;
+  if (response.ok && answer) return answer;
   throw new Error(answer?.error?.message ?? `Shinsa answered with status ${response.status}.`);
 }
 
-export function createJoinMachine(
-  member: Pick<FleetMember, 'id' | 'name' | 'fetch'>,
-  connection: Pick<ShinsaConnection, 'command'>,
-  state: Pick<ShinsaState, 'projects'>,
-  origin: string
-): JoinMachine {
+async function readJoinAnswer(response: Response) {
+  const answer = await readAnswer<{ teamId?: string; status?: TeamJoinStatus }>(response);
+  if (typeof answer.teamId === 'string') return answer.teamId;
+  throw new Error(`Shinsa answered with status ${response.status}.`);
+}
+
+function postJson(origin: string, path: string, body: unknown) {
+  return new Request(new URL(path, origin), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+async function readJoinProjects(member: Pick<FleetMember, 'fetch'>, origin: string) {
+  const answer = await readAnswer<{ projects?: Project[] }>(
+    await member.fetch(new Request(new URL(PROJECTS_PATH, origin)))
+  );
+  const projects = Object.fromEntries((answer.projects ?? []).map((project) => [project.id, project]));
+  return listProjectChoices({ projects });
+}
+
+export function createJoinMachine(member: JoinFetch, projects: ProjectChoice[], origin: string): JoinMachine {
   return {
     id: member.id,
     name: member.name,
-    projects: listProjectChoices(state),
+    projects,
     share: async (url, projectIds) => {
       if (projectIds.length === 0) return;
-      const response = await member.fetch(
-        new Request(new URL(JOIN_PATH, origin), {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ url }),
-        })
-      );
-      const teamId = await readJoinAnswer(response);
-      for (const command of listJoinCommands(teamId, projectIds)) await connection.command(command);
+      const teamId = await readJoinAnswer(await member.fetch(postJson(origin, JOIN_PATH, { url })));
+      for (const command of listJoinCommands(teamId, projectIds)) {
+        await readAnswer(await member.fetch(postJson(origin, COMMANDS_PATH, command)));
+      }
     },
   };
 }
 
+function resolveWithin<T>(promise: Promise<T>, timeoutMs: number) {
+  return new Promise<T | null>((resolve) => {
+    const timer = setTimeout(() => resolve(null), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      }
+    );
+  });
+}
+
 interface JoinMember {
-  member: Pick<FleetMember, 'id' | 'name' | 'fetch'> & { connection: MachineConnection };
+  member: JoinFetch;
   close: () => void;
 }
 
@@ -124,12 +122,17 @@ export function createJoinMember(
   dashboard: JoinDashboard,
   openChannel?: RemoteLinkOptions['openChannel']
 ): JoinMember {
-  const member = createFleetMember(row.instance, row.device, {
+  const link: RemoteLink = new RemoteLink({
+    instanceId: row.instance.id,
+    device: row.device,
     dashboard,
-    onRefused: () => member.close(),
+    onRefused: () => link.close(),
     ...(openChannel ? { openChannel } : {}),
   });
-  return { member, close: member.close };
+  return {
+    member: { id: row.instance.id, name: row.instance.name, fetch: (request) => link.fetch(request) },
+    close: () => link.close(),
+  };
 }
 
 export function createJoinMachinesSource(
@@ -145,17 +148,19 @@ export function createJoinMachinesSource(
 ): OpenJoinMachines {
   const createMember = options.createMember ?? createJoinMember;
   return async () => {
+    const origin = options.origin ?? location.origin;
     const rows = listJoinRows(await listMachineRows(services.dashboard, services.devices));
     const closers: (() => void)[] = [];
     const machines = await Promise.all(
       rows.map(async (row) => {
         const entry = createMember(row, services.dashboard);
         closers.push(entry.close);
-        const { connection } = entry.member;
-        connection.start();
-        const state = await waitForState(connection, options.timeoutMs ?? STATE_TIMEOUT_MS);
-        if (!state) return null;
-        return createJoinMachine(entry.member, connection, state, options.origin ?? location.origin);
+        const projects = await resolveWithin(
+          readJoinProjects(entry.member, origin),
+          options.timeoutMs ?? PROJECTS_TIMEOUT_MS
+        );
+        if (!projects) return null;
+        return createJoinMachine(entry.member, projects, origin);
       })
     );
     return {

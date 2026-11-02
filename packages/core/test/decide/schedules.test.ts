@@ -45,7 +45,7 @@ function only(harness: Harness): Schedule {
 }
 
 function newTaskTarget(overrides: Partial<Extract<ScheduleTargetInput, { kind: 'new_task' }>> = {}) {
-  return { kind: 'new_task', priority: 'normal', mode: 'build', ...overrides } as const;
+  return { kind: 'new_task', repoId: null, priority: 'normal', mode: 'build', ...overrides } as const;
 }
 
 function createScheduling() {
@@ -92,6 +92,20 @@ describe('setting a schedule', () => {
       priority: 'high',
       mode: 'ask',
     });
+  });
+
+  test('a new task target can name another repository', () => {
+    const { harness, taskId } = createScheduling();
+    const repoId = registerRepo(harness, 'billing');
+    schedule(harness, taskId, { target: newTaskTarget({ repoId }) });
+    expect(only(harness).target).toMatchObject({ kind: 'new_task', repoId });
+  });
+
+  test('a new task target in a repository that does not exist is refused', () => {
+    const { harness, taskId } = createScheduling();
+    expect(() => schedule(harness, taskId, { target: newTaskTarget({ repoId: 'gone' }) })).toThrow(
+      'No repository gone.'
+    );
   });
 
   test('a message target can be another open task', () => {
@@ -851,6 +865,54 @@ describe('writing a schedule from Settings', () => {
       createdBy: before.createdBy,
       nextRunAt: before.nextRunAt,
     });
+  });
+
+  test('an agent writing for its task makes the schedule that task’s, so set_schedule can change it', () => {
+    const { harness, taskId } = createScheduling();
+    harness.send(
+      {
+        type: 'schedule.write',
+        scheduleId: null,
+        name: null,
+        text: 'Audit the dependencies.',
+        trigger: { kind: 'webhook', signature: null, replayKey: null },
+        target: { kind: 'task', taskId },
+        source: null,
+        enabled: null,
+        maxRuns: null,
+        timeZone: ZONE,
+      },
+      { onBehalf: true, byTask: taskId }
+    );
+    expect(only(harness).createdBy).toEqual({ kind: 'agent', taskId, runId: null });
+    schedule(harness, taskId, { scheduleId: only(harness).id, name: 'Renamed', text: null, trigger: null });
+    expect(only(harness).name).toBe('Renamed');
+    harness.send({
+      type: 'agent.delete_schedule',
+      runId: harness.activeRun(taskId).id,
+      scheduleId: only(harness).id,
+    });
+    expect(Object.keys(harness.state.schedules)).toHaveLength(0);
+  });
+
+  test('a write on your behalf from no task stays yours', () => {
+    const { harness } = createScheduling();
+    harness.send(
+      {
+        type: 'schedule.write',
+        scheduleId: null,
+        name: null,
+        text: 'Audit the dependencies.',
+        trigger: { kind: 'interval', everyMinutes: 60 },
+        target: { kind: 'new_task', repoId: null, priority: 'normal', mode: 'build' },
+        source: null,
+        enabled: null,
+        maxRuns: null,
+        timeZone: ZONE,
+      },
+      { onBehalf: true, byTask: null }
+    );
+    expect(only(harness).createdBy).toEqual({ kind: 'you' });
   });
 
   test('moves a schedule to a new target', () => {

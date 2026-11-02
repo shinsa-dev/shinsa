@@ -1,0 +1,33 @@
+name: Watch issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  report:
+    if: github.event.repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send the new issue to Shinsa
+        env:
+          SHINSA_ISSUES_URL: ${{ secrets.SHINSA_ISSUES_URL }}
+          SHINSA_WATCH_SECRET: ${{ secrets.SHINSA_WATCH_SECRET }}
+          DELIVERY: issue-${{ github.event.issue.number }}
+        run: |
+          if [ -z "$SHINSA_ISSUES_URL" ] || [ -z "$SHINSA_WATCH_SECRET" ]; then
+            echo "::warning title=Watch issues::Set SHINSA_ISSUES_URL and SHINSA_WATCH_SECRET to send new issues to Shinsa."
+            exit 0
+          fi
+          signature=$(openssl dgst -sha256 -hmac "$SHINSA_WATCH_SECRET" -r "$GITHUB_EVENT_PATH" | cut -d' ' -f1)
+          curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors \
+            -X POST \
+            -H 'content-type: application/json' \
+            -H 'x-github-event: issues' \
+            -H "x-github-delivery: $DELIVERY" \
+            -H "x-hub-signature-256: sha256=$signature" \
+            --data-binary "@$GITHUB_EVENT_PATH" \
+            "$SHINSA_ISSUES_URL"
