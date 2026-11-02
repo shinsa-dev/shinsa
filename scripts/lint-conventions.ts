@@ -41,6 +41,8 @@ type BabelNode = {
 };
 
 const ROOTS = [
+  'apps/cloud/src',
+  'apps/cloud/test',
   'apps/engine/src',
   'apps/engine/test',
   'apps/web/src',

@@ -7,7 +7,7 @@ import {
   resolvePairApprovePath,
   serializePublicKey,
 } from '@shinsa/core';
-import { HOOK_BODY_LIMIT_BYTES } from '../src/routes/hooks.ts';
+import { HOOK_BODY_LIMIT_BYTES } from '../src/routes/hooks/schema.ts';
 import { createHarness, type Harness, readJson } from './harness.ts';
 
 async function pairInstance(harness: Harness) {

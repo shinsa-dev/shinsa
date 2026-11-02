@@ -18,7 +18,8 @@ import {
   serializePreviewUrl,
   verifyPreviewAccessToken,
 } from '@shinsa/core';
-import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE, resolveForwardCookie } from '../src/routes/previews.ts';
+import { resolveForwardCookie } from '../src/routes/previews/address.ts';
+import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE } from '../src/routes/previews/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
 const PREVIEW_ID = serializeBase64Url(new Uint8Array(PREVIEW_ID_BYTES).fill(7));

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect, Exit, Redacted } from 'effect';
-import { GitHub } from '../../src/integrations/github.ts';
+import { Effect, Exit, Redacted, Schema } from 'effect';
+import { GitHubUser } from '../../src/integrations/github/schema.ts';
+import { GitHub } from '../../src/integrations/github/service.ts';
 import { createUpstream, flipTest, runTest, type UpstreamHandler } from '../layers.ts';
 
 const signIn = GitHub.use((github) => github.signIn('code-1', Redacted.make('verifier-1')));
@@ -84,5 +85,17 @@ describe('GitHub sign-in', () => {
     const unreachable = (() => Promise.reject(new TypeError('fetch failed'))) as unknown as typeof fetch;
     const exit = await runTest(Effect.exit(signIn), { upstream: { ...upstream, fetch: unreachable } });
     expect(Exit.isFailure(exit) && Exit.hasDies(exit)).toBe(true);
+  });
+});
+
+describe('GitHub user schema', () => {
+  test('encodes an account back into the shape GitHub answers with', () => {
+    const user = { id: '42', login: 'mona', name: 'Mona', avatarUrl: null };
+    expect(Schema.encodeSync(GitHubUser)(user)).toEqual({
+      id: 42,
+      login: 'mona',
+      name: 'Mona',
+      avatar_url: null,
+    });
   });
 });

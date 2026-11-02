@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect, Redacted } from 'effect';
-import { Cloudflare } from '../../src/integrations/cloudflare.ts';
+import { Cloudflare } from '../../src/integrations/cloudflare/service.ts';
 import { createLogRecorder, createUpstream, flipTest, runTest, type Upstream } from '../layers.ts';
 
 const HOST = 'studio000001.shinsa.dev';

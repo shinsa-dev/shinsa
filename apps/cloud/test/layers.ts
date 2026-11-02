@@ -6,7 +6,7 @@ import { FetchHttpClient } from 'effect/http';
 import { SqlClient } from 'effect/sql';
 import { TestClock } from 'effect/testing';
 import { CloudServices } from '../src/layers.ts';
-import { SQL_NAMES } from '../src/store/tables.ts';
+import { SQL_NAMES } from '../src/store/shared/schema.ts';
 
 export const TEST_NOW = 1_800_000_000_000;
 

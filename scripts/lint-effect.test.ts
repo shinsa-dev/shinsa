@@ -5,7 +5,9 @@ import {
   EFFECT_FN_PIPE_MESSAGE,
   EFFECT_GEN_WRAPPER_MESSAGE,
   EFFECT_JSON_MESSAGE,
+  EFFECT_LOGIC_FILE_MESSAGE,
   EFFECT_PROMISE_MESSAGE,
+  EFFECT_SCHEMA_FILE_MESSAGE,
   EFFECT_THROW_MESSAGE,
   EFFECT_TRY_MESSAGE,
   isEffectSource,
@@ -105,5 +107,33 @@ describe('Effect code is held to the house style', () => {
     expect(
       messages('const text = JSON.stringify(value); const url = new URL(path); Data.struct({});')
     ).toEqual([]);
+  });
+
+  test('a handler, service or middleware file holds its one export and nothing beside it', () => {
+    const one = "import { Layer } from 'effect';\nexport const Routes = Layer.empty;";
+    expect(listEffectViolations('apps/cloud/src/routes/teams/handler.ts', one)).toEqual([]);
+    const helper = `${one}\nconst ok = { ok: true };\nexport type Answer = string;`;
+    expect(listEffectViolations('apps/cloud/src/routes/teams/handler.ts', helper)).toEqual([
+      { line: 3, message: EFFECT_LOGIC_FILE_MESSAGE },
+      { line: 4, message: EFFECT_LOGIC_FILE_MESSAGE },
+    ]);
+    expect(listEffectViolations('a/service.ts', 'const helper = 1;')).toEqual([
+      { line: 1, message: EFFECT_LOGIC_FILE_MESSAGE },
+    ]);
+    expect(listEffectViolations('a/middleware.tsx', 'export const Gate = 1;')).toEqual([]);
+    expect(listEffectViolations('a/helpers.ts', 'const a = 1;\nconst b = 2;')).toEqual([]);
+  });
+
+  test('a schema file holds schemas, types and constants, never a function or an effect', () => {
+    const shapes =
+      'export const LIMIT = 1;\nexport const Row = Schema.Struct({});\nexport type Row = string;';
+    expect(listEffectViolations('a/schema.ts', shapes)).toEqual([]);
+    expect(
+      listEffectViolations(
+        'a/schema.ts',
+        'export function read() {}\nconst a = () => 1;\nexport const b = Effect.gen(function* () {});\nconst c = Effect.fn("c")(function* () {});'
+      )
+    ).toEqual([1, 2, 3, 4].map((line) => ({ line, message: EFFECT_SCHEMA_FILE_MESSAGE })));
+    expect(listEffectViolations('a/schema.ts', 'let a;')).toEqual([]);
   });
 });

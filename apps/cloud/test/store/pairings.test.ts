@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { ClaimCode, type MachineCredentials } from '@shinsa/core';
 import { Effect, Option } from 'effect';
 import { TestClock } from 'effect/testing';
-import { Pairings } from '../../src/store/pairings.ts';
+import { Pairings } from '../../src/store/pairings/service.ts';
 import { runTest, TEST_NOW } from '../layers.ts';
 import { hashOf, KAI, MONA, seedUsers } from './fixtures.ts';
 

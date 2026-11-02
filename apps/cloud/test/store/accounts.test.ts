@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { RemoteUserId } from '@shinsa/core';
 import { Effect, Option } from 'effect';
 import { TestClock } from 'effect/testing';
-import { Accounts } from '../../src/store/accounts.ts';
+import { Accounts } from '../../src/store/accounts/service.ts';
 import { runTest, TEST_NOW } from '../layers.ts';
 import { hashOf, KAI, MONA, seedUsers } from './fixtures.ts';
 

@@ -7,7 +7,7 @@ import { constVoid } from 'effect/Function';
 import { FetchHttpClient } from 'effect/http';
 import { makeCloudHandler } from '../apps/cloud/src/app.ts';
 import { Assets, WorkerContext } from '../apps/cloud/src/http/worker.ts';
-import { SQL_NAMES } from '../apps/cloud/src/store/tables.ts';
+import { SQL_NAMES } from '../apps/cloud/src/store/shared/schema.ts';
 
 export interface SandboxTunnel {
   readonly id: string;

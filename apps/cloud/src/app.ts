@@ -3,21 +3,27 @@ import { Layer } from 'effect';
 import { HttpRouter, HttpServer } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
 import type { SqlClient } from 'effect/sql';
-import { MachineSessionLive, PageSessionLive } from './auth/sessions.ts';
-import { RequestGateLive } from './http/gate.ts';
-import { Ingress } from './http/ingress.ts';
+import { MachineSessionLive } from './auth/machine-session/middleware.ts';
+import { PageSessionLive } from './auth/page-session/middleware.ts';
+import { RequestGateLive } from './http/gate/middleware.ts';
+import { Ingress } from './http/ingress/middleware.ts';
 import { type Assets, WorkerLogger } from './http/worker.ts';
 import { CloudServices } from './layers.ts';
-import { HookRoutes } from './routes/hooks.ts';
-import { InstancesHandlers, MachineHandlers, SharesHandlers } from './routes/machines.ts';
-import { PairingHandlers, PairsHandlers } from './routes/pairing.ts';
-import { PreviewOpenRoutes } from './routes/previews.ts';
-import { SessionHandlers } from './routes/session.ts';
-import { SignInRoutes } from './routes/sign-in.ts';
-import { SlackEventRoutes } from './routes/slack-events.ts';
-import { SlackLinkRoutes } from './routes/slack-link.ts';
-import { SlackRelayHandlers } from './routes/slack-relay.ts';
-import { MachineTeamsHandlers, TeamsHandlers } from './routes/teams.ts';
+import { HookRoutes } from './routes/hooks/handler.ts';
+import { InstancesHandlers } from './routes/instances/handler.ts';
+import { MachineHandlers } from './routes/machine/handler.ts';
+import { MachineTeamsHandlers } from './routes/machine-teams/handler.ts';
+import { PairingHandlers } from './routes/pairing/handler.ts';
+import { PairsHandlers } from './routes/pairs/handler.ts';
+import { PreviewOpenRoutes } from './routes/preview-open/handler.ts';
+import { PreviewHost } from './routes/previews/service.ts';
+import { SessionHandlers } from './routes/session/handler.ts';
+import { SharesHandlers } from './routes/shares/handler.ts';
+import { SignInRoutes } from './routes/sign-in/handler.ts';
+import { SlackEventRoutes } from './routes/slack-events/handler.ts';
+import { SlackLinkRoutes } from './routes/slack-link/handler.ts';
+import { SlackRelayHandlers } from './routes/slack-relay/handler.ts';
+import { TeamsHandlers } from './routes/teams/handler.ts';
 
 const ApiRoutes = HttpApiBuilder.layer(RemoteApi).pipe(
   Layer.provide([
@@ -41,7 +47,7 @@ const CloudRoutes = Layer.mergeAll(
   SlackEventRoutes,
   HookRoutes,
   PreviewOpenRoutes,
-  Ingress
+  Ingress.pipe(Layer.provide(PreviewHost.layer))
 );
 
 export type CloudPlatform = SqlClient.SqlClient | Assets;

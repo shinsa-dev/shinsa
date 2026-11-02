@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect, Exit, Option, Redacted } from 'effect';
-import { CloudCrypto } from '../../src/crypto/crypto.ts';
+import { CloudCrypto } from '../../src/crypto/service.ts';
 import { runTest } from '../layers.ts';
 
 const SLACK_TIMESTAMP = '1800000000';

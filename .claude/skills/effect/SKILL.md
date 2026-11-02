@@ -32,6 +32,41 @@ import { camelToSnake } from 'effect/String';
 - Drivers and platforms are `@effect/*` at the same version: `@effect/sql-d1` in the Worker, `@effect/sql-sqlite-bun` in the engine and in tests, `@effect/platform-bun` for the engine's runtime.
 - No aliases, no namespace imports (`import * as E`). The lint rules below match `Effect.`, `Schema.` and the rest by name.
 
+## File layout
+
+A module is a folder. Its shapes and its logic live in separate files, and a logic file holds exactly one thing.
+
+```
+routes/teams/                       store/machines/
+├── schema.ts    the shapes          ├── schema.ts    Machine, NewMachine, the row schemas, MACHINE_COLUMNS
+└── handler.ts   TeamsHandlers       └── service.ts   Machines (the service and its layer)
+```
+
+- **`schema.ts`** holds every `Schema`, the types derived from them, the module's tagged errors, its interfaces and its constants (limits, TTLs, URLs, cookie names). No function and no effect: a conversion between two shapes is a schema transform (`Schema.decodeTo(Target, SchemaTransformation.transform({ decode, encode }))`), so it is decoded and encoded in one place, never a `resolveX` helper beside the schema.
+- **`handler.ts`** (an HttpApi group or a set of plain routes), **`service.ts`** (a service and its layer) and **`middleware.ts`** hold one export and nothing beside it: no helper above it, no constant, no type. Its steps live **inside** its body, after the services it yields once, so each step sees them without yielding them again. Plain routes are `Layer.unwrap(Effect.gen(function* () { …; return Layer.mergeAll(HttpRouter.add(…)) }))`; an HttpApi group's steps go in `HttpApiBuilder.group`'s builder.
+- **Read untrusted input with a schema, never by hand.** A webhook body, a cookie, a third party's answer is a `Schema.Struct` of the fields the code reads (`Schema.NonEmptyString` for an id, `Schema.optionalKey(Schema.Never)` for a field that must be absent, `Schema.Literal` for a type tag), decoded once with `Schema.decodeUnknownOption` or `Effect`. No `readString(fields, 'key')` helpers.
+- **A step two modules need is a module of its own**, named for what it does and exporting peers only (`domain/machines.ts`: `removeMachine`, `createConnectAnswer`; `auth/tokens.ts`: `createSession`, `selectRequestUser`; `http/cookies.ts`: `serializeCookie`). A module like that has no private helper above its exports.
+- A pure module of functions (`http/cookies.ts`, `routes/previews/address.ts`) is plain TypeScript and that is right: pure code is never wrapped in an effect. What makes it clean is that it is one concern, named for it.
+
+```ts
+// wrong: a helper, a constant and a hand-written reader above the export
+const ok = { ok: true as const };
+function readString(fields: Record<string, unknown>, key: string) { … }
+export const SlackEventRoutes = Layer.mergeAll(HttpRouter.add('POST', path, respondEvents));
+
+// right: schema.ts has MentionEnvelope; handler.ts holds one export, its steps inside
+export const SlackEventRoutes = Layer.unwrap(
+  Effect.gen(function* () {
+    const store = yield* SlackStore;
+    const decodeMention = Schema.decodeUnknownOption(MentionEnvelope);
+    const respondEvents = Effect.gen(function* () { … });
+    return HttpRouter.add('POST', SLACK_RELAY_PATHS.events, respondEvents);
+  })
+);
+```
+
+`apps/cloud` is the reference: every folder under `src/` follows this.
+
 ## Writing effects
 
 ```ts
@@ -213,7 +248,7 @@ test('find fails with MachineNotFound', async () => {
 
 ## Lint
 
-`bun lint:conventions` checks every source file that imports `effect` or `@effect/*` (never tests) with `scripts/lint-effect.ts`:
+`bun lint:conventions` checks every source file that imports `effect` or `@effect/*` (never tests), `apps/cloud` included, with `scripts/lint-effect.ts`:
 
 | Caught | Write instead |
 |---|---|
@@ -225,5 +260,7 @@ test('find fails with MachineNotFound', async () => {
 | `Data.TaggedError`, `Data.Error` | `Schema.TaggedError` |
 | `Date.now()`, `new Date()` | `Clock`, `DateTime` |
 | `JSON.parse` | `Schema.fromJsonString(Shape)` |
+| anything beside the one export of a `handler.ts`, `service.ts` or `middleware.ts` | its steps inside the export's body, its shapes and constants in `schema.ts` |
+| a function or an effect in a `schema.ts` | a schema transform, or the step next to the code that runs it |
 
 Biome adds `noConsole`, `useYield`, `noShadowRestrictedNames` and the rest of the house set.

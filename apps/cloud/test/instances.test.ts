@@ -9,7 +9,7 @@ import {
   verifyConnectToken,
 } from '@shinsa/core';
 import { Duration } from 'effect';
-import { ONLINE_WINDOW } from '../src/views/machines.ts';
+import { ONLINE_WINDOW } from '../src/domain/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
 const ONLINE_WINDOW_MS = Duration.toMillis(ONLINE_WINDOW);

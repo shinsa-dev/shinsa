@@ -18,9 +18,9 @@ import {
   serializeSlackAnswerValue,
   verifySlackForwardSignature,
 } from '@shinsa/core';
-import { SLACK_BOT_SCOPES } from '../src/integrations/slack.ts';
-import { SLACK_USER_SCOPES } from '../src/routes/slack-link.ts';
-import { SLACK_EVENT_BODY_LIMIT_BYTES } from '../src/slack/requests.ts';
+import { SLACK_BOT_SCOPES } from '../src/integrations/slack/schema.ts';
+import { SLACK_USER_SCOPES } from '../src/routes/slack-link/schema.ts';
+import { SLACK_EVENT_BODY_LIMIT_BYTES } from '../src/slack/schema.ts';
 import { createHarness, createSlackSignature, type Harness, readJson, TEST_CONFIG } from './harness.ts';
 
 type Fields = Record<string, unknown>;

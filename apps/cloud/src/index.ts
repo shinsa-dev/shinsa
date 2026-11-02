@@ -2,7 +2,7 @@ import { D1Client } from '@effect/sql-d1';
 import { ConfigProvider, Context, Layer } from 'effect';
 import { makeCloudHandler } from './app.ts';
 import { Assets, WorkerContext } from './http/worker.ts';
-import { SQL_NAMES } from './store/tables.ts';
+import { SQL_NAMES } from './store/shared/schema.ts';
 
 interface WorkerEnv {
   readonly DB: D1Client.D1ClientConfig['db'];

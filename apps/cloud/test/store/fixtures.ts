@@ -1,8 +1,8 @@
 import { InstanceId, type RemoteUser, RemoteUserId } from '@shinsa/core';
 import { Effect, Redacted } from 'effect';
-import { TokenHash } from '../../src/crypto/crypto.ts';
-import { Accounts } from '../../src/store/accounts.ts';
-import { Machines } from '../../src/store/machines.ts';
+import { TokenHash } from '../../src/crypto/schema.ts';
+import { Accounts } from '../../src/store/accounts/service.ts';
+import { Machines } from '../../src/store/machines/service.ts';
 
 export const MONA = {
   id: RemoteUserId.make('42'),

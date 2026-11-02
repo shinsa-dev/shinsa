@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Option, Redacted, Schema } from 'effect';
-import { SLACK_BOT_SCOPES, SlackApi } from '../../src/integrations/slack.ts';
+import { SLACK_BOT_SCOPES } from '../../src/integrations/slack/schema.ts';
+import { SlackApi } from '../../src/integrations/slack/service.ts';
 import { createUpstream, flipTest, runTest, type Upstream } from '../layers.ts';
 
 const TOKEN = Redacted.make('xoxb-token');

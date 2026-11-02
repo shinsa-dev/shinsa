@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ServerWebSocket } from 'bun';
-import { isPreviewHost, PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE } from '../apps/cloud/src/routes/previews.ts';
+import { isPreviewHost } from '../apps/cloud/src/routes/previews/address.ts';
+import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE } from '../apps/cloud/src/routes/previews/schema.ts';
 import { Transcripts } from '../apps/engine/src/agents/index.ts';
 import { ProviderRegistry } from '../apps/engine/src/agents/providers/index.ts';
 import { createQuickCalls } from '../apps/engine/src/agents/quick/index.ts';

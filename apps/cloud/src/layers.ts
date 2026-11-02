@@ -1,11 +1,11 @@
 import { Layer } from 'effect';
-import { CloudConfig } from './config/config.ts';
-import { CloudCrypto } from './crypto/crypto.ts';
-import { Cloudflare } from './integrations/cloudflare.ts';
-import { GitHub } from './integrations/github.ts';
+import { CloudConfig } from './config/service.ts';
+import { CloudCrypto } from './crypto/service.ts';
+import { Cloudflare } from './integrations/cloudflare/service.ts';
+import { GitHub } from './integrations/github/service.ts';
 import { OutboundHttp } from './integrations/http.ts';
-import { SlackApi } from './integrations/slack.ts';
-import { Tunnels } from './integrations/tunnels.ts';
+import { SlackApi } from './integrations/slack/service.ts';
+import { Tunnels } from './integrations/tunnels/service.ts';
 import { StoreLayer } from './store/index.ts';
 
 export const CloudServices = Layer.mergeAll(

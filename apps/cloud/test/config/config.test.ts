@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { PREVIEW_ORIGIN, REMOTE_APP_ORIGIN } from '@shinsa/core';
 import { ConfigProvider, Effect, Exit, Redacted } from 'effect';
-import { CloudConfig } from '../../src/config/config.ts';
+import { CloudConfig } from '../../src/config/service.ts';
 import { TEST_ENV } from '../layers.ts';
 
 const readConfig = (env: Record<string, string>) =>

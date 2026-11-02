@@ -20,7 +20,7 @@ import { FetchHttpClient } from 'effect/http';
 import { SqlClient } from 'effect/sql';
 import { makeCloudHandler } from '../src/app.ts';
 import { Assets, WorkerContext } from '../src/http/worker.ts';
-import { SQL_NAMES } from '../src/store/tables.ts';
+import { SQL_NAMES } from '../src/store/shared/schema.ts';
 
 export interface CloudConfig {
   origin: string;

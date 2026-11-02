@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { InstanceId, TeamId } from '@shinsa/core';
 import { Effect, Option } from 'effect';
 import { TestClock } from 'effect/testing';
-import { Teams } from '../../src/store/teams.ts';
+import { Teams } from '../../src/store/teams/service.ts';
 import { runTest, TEST_NOW } from '../layers.ts';
 import { hashOf, KAI, LAPTOP, MONA, RIO, STUDIO, seedMachine, seedUsers } from './fixtures.ts';
 

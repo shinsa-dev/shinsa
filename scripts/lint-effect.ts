@@ -34,6 +34,16 @@ export const EFFECT_CLOCK_MESSAGE =
 export const EFFECT_JSON_MESSAGE =
   'JSON.parse in Effect code. Decode text with a schema, Schema.fromJsonString(Shape), so the result is checked and a failure is typed (the effect skill → Schemas)';
 
+export const EFFECT_LOGIC_FILE_MESSAGE =
+  'A logic file holds one export and nothing beside it. Move its schemas, types and constants to schema.ts, its steps inside the service or handler body, and a step another module needs to a module of its own (the effect skill → File layout)';
+
+export const EFFECT_SCHEMA_FILE_MESSAGE =
+  'A schema file holds schemas, types and constants only. Move this function or effect next to the code that runs it (the effect skill → File layout)';
+
+const LOGIC_FILES = /(?:^|\/)(?:handler|service|middleware)\.tsx?$/;
+
+const SCHEMA_FILE = /(?:^|\/)schema\.tsx?$/;
+
 function listChildren(node: Node): Node[] {
   return Object.values(node).flatMap((value) =>
     (Array.isArray(value) ? value : [value]).filter(
@@ -172,10 +182,35 @@ export function isEffectSource(file: string, source: string) {
   return !isTest && EFFECT_IMPORT.test(source);
 }
 
+function isFunctionValue(node: Node) {
+  const declaration = (node.declaration as Node | undefined) ?? node;
+  if (declaration.type === 'FunctionDeclaration') return true;
+  if (declaration.type !== 'VariableDeclaration') return false;
+  return (declaration.declarations as Node[]).some((declarator) => {
+    const init = declarator.init as Node | undefined;
+    return Boolean(init && (isFunction(init) || isEffectGen(init) || isEffectFnCall(init)));
+  });
+}
+
+function listLayoutViolations(file: string, program: Node) {
+  const statements = (program.body as Node[]).filter((node) => node.type !== 'ImportDeclaration');
+  const lineOf = (node: Node) => node.loc?.start.line ?? 0;
+  if (LOGIC_FILES.test(file)) {
+    const [first, ...rest] = statements;
+    const stray = first && first.type !== 'ExportNamedDeclaration' ? [first, ...rest] : rest;
+    return stray.map((node) => ({ line: lineOf(node), message: EFFECT_LOGIC_FILE_MESSAGE }));
+  }
+  if (SCHEMA_FILE.test(file))
+    return statements
+      .filter(isFunctionValue)
+      .map((node) => ({ line: lineOf(node), message: EFFECT_SCHEMA_FILE_MESSAGE }));
+  return [];
+}
+
 export function listEffectViolations(file: string, source: string) {
   const plugins: ('typescript' | 'jsx')[] = file.endsWith('.tsx') ? ['typescript', 'jsx'] : ['typescript'];
   const program = parse(source, { sourceType: 'module', plugins }).program as unknown as Node;
-  const violations: { line: number; message: string }[] = [];
+  const violations: { line: number; message: string }[] = listLayoutViolations(file, program);
   walk(program, (node, ancestors) => {
     const line = node.loc?.start.line ?? 0;
     for (const message of listMessages(node, ancestors)) violations.push({ line, message });

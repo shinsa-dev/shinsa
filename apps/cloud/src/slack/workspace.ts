@@ -1,10 +1,10 @@
 import { createSlackForwardSignature, SLACK_FORWARD_HEADERS } from '@shinsa/core';
 import { Clock, Effect, Option, Redacted } from 'effect';
-import { CloudCrypto } from '../crypto/crypto.ts';
-import { TUNNEL_OFFLINE_STATUSES } from '../http/forward.ts';
-import { Tunnels } from '../integrations/tunnels.ts';
-import type { Machine } from '../store/machines.ts';
-import { SlackStore, type SlackWorkspace } from '../store/slack.ts';
+import { CloudCrypto } from '../crypto/service.ts';
+import { Tunnels } from '../integrations/tunnels/service.ts';
+import type { Machine } from '../store/machines/schema.ts';
+import type { SlackWorkspace } from '../store/slack/schema.ts';
+import { SlackStore } from '../store/slack/service.ts';
 
 export const selectWorkspaceToken = Effect.fn('selectWorkspaceToken')(function* (teamId: string) {
   const store = yield* SlackStore;
@@ -39,5 +39,3 @@ export const requestSignedMachine = Effect.fn('requestSignedMachine')(function* 
     body,
   });
 });
-
-export const isTunnelDown = (response: Response) => TUNNEL_OFFLINE_STATUSES.has(response.status);

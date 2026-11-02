@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect, Option } from 'effect';
 import { TestClock } from 'effect/testing';
-import { SlackStore } from '../../src/store/slack.ts';
+import { SlackStore } from '../../src/store/slack/service.ts';
 import { runTest, TEST_NOW } from '../layers.ts';
 import { KAI, LAPTOP, MONA, STUDIO, seedMachine, seedUsers } from './fixtures.ts';
 

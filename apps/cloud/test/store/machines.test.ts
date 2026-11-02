@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect, Option, Redacted } from 'effect';
 import { TestClock } from 'effect/testing';
-import { MachineAccess } from '../../src/store/access.ts';
-import { Machines } from '../../src/store/machines.ts';
+import { MachineAccess } from '../../src/store/access/service.ts';
+import { Machines } from '../../src/store/machines/service.ts';
 import { runTest, TEST_NOW } from '../layers.ts';
 import { hashOf, KAI, LAPTOP, MONA, RIO, STUDIO, seedMachine, seedUsers } from './fixtures.ts';
 
