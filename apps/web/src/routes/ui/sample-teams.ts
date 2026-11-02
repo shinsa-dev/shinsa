@@ -144,6 +144,10 @@ export const SAMPLE_TEAM_JOIN_DASHBOARD = {
   previewTeam: () => Promise.resolve({ name: 'Platform', owner: MONA }),
 };
 
+export function openPendingSampleJoinMachines(): Promise<JoinMachines> {
+  return new Promise(() => undefined);
+}
+
 export function openSampleJoinMachines(): Promise<JoinMachines> {
   return Promise.resolve({
     machines: [

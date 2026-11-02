@@ -3,7 +3,12 @@ import type { Engine } from '../runtime/engine.ts';
 import type { SecretStore } from '../secrets/index.ts';
 import { ScheduleClock } from './clock.ts';
 import { createScheduleRoutes } from './routes.ts';
-import { handleScheduleTool, type ScheduleToolCall, type ScheduleToolContext } from './tools.ts';
+import {
+  createHookSecrets,
+  handleScheduleTool,
+  type ScheduleToolCall,
+  type ScheduleToolContext,
+} from './tools.ts';
 import { isWebhookPath, WebhookReceiver } from './webhook.ts';
 
 export type { ScheduleToolCall } from './tools.ts';
@@ -72,6 +77,10 @@ export class Schedules {
 
   handleWebhook(request: Request, url: URL) {
     return this.#receiver.handle(request, url);
+  }
+
+  hookSecrets(taskId: string) {
+    return createHookSecrets(this.context, () => this.#engine.state, taskId);
   }
 
   handleTool(name: string, input: Record<string, unknown>, call: ScheduleToolCall) {

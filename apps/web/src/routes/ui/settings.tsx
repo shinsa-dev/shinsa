@@ -54,6 +54,7 @@ import { createSampleSlack } from './sample-slack.ts';
 import {
   createSampleTeamActions,
   createSampleTeams,
+  openPendingSampleJoinMachines,
   openSampleJoinMachines,
   requestSampleTeamJoin,
   SAMPLE_TEAM_JOIN_DASHBOARD,
@@ -518,6 +519,17 @@ export function SettingsSpecimens() {
             dashboard={SAMPLE_TEAM_JOIN_DASHBOARD}
             teamKeys={{ selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() }}
             openMachines={openSampleJoinMachines}
+            request={requestSampleTeamJoin}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='TeamJoinPage · while it reads the projects on your machines'>
+        <div className='w-full max-w-sm'>
+          <TeamJoinPage
+            link={SAMPLE_TEAM_LINK}
+            dashboard={SAMPLE_TEAM_JOIN_DASHBOARD}
+            teamKeys={{ selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() }}
+            openMachines={openPendingSampleJoinMachines}
             request={requestSampleTeamJoin}
           />
         </div>

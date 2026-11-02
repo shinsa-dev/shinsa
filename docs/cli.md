@@ -1141,7 +1141,7 @@ Every task agent's tool: `schedules_list` (reads).
 Create a schedule, or change one with --id: it starts a new task, messages a task or reads a data source, once, on an interval, daily or when its webhook is called.
 
 ```
-shinsa schedules write [--id <text>] [--name <text>] [--message <text>] [--in-minutes <integer>] [--run-at <text>] [--every-minutes <integer>] [--daily-at <text>] [--weekdays <list>] [--webhook] [--signature-header <text>] [--signature-encoding <hex|base64>] [--signature-prefix <text>] [--replay-key <text>] [--new-task] [--repo <text>] [--priority <urgent|high|normal|low>] [--just-answer] [--task <text>] [--source <text>] [--project <text>] [--enabled] [--max-runs <integer>] [--time-zone <text>] [--json]
+shinsa schedules write [--id <text>] [--name <text>] [--message <text>] [--in-minutes <integer>] [--run-at <text>] [--every-minutes <integer>] [--daily-at <text>] [--weekdays <list>] [--webhook] [--signature-header <text>] [--signature-encoding <hex|base64>] [--signature-prefix <text>] [--signature-secret-ref <text>] [--replay-key <text>] [--new-task] [--repo <text>] [--priority <urgent|high|normal|low>] [--just-answer] [--task <text>] [--source <text>] [--project <text>] [--enabled] [--max-runs <integer>] [--time-zone <text>] [--json]
 ```
 
 Every task agent's tool: `schedules_write`. Sends `schedule.write`.
@@ -1160,6 +1160,7 @@ Every task agent's tool: `schedules_write`. Sends `schedule.write`.
 | `--signature-header` | text, optional | With --webhook: the header carrying an HMAC-SHA256 signature. |
 | `--signature-encoding` | choice, optional | hex (the default) or base64. |
 | `--signature-prefix` | text, optional | Text before the signature, such as sha256=. |
+| `--signature-secret-ref` | text, optional | For an agent: the secret-ref:… that request_secret returned for the signing secret. It works once. |
 | `--replay-key` | text, optional | With --webhook: a template that names a delivery, so a repeat starts nothing. |
 | `--new-task` | boolean, optional | Start a new task on each run. |
 | `--repo` | text, optional | With --new-task: the repository (name or id). |

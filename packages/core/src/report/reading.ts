@@ -222,6 +222,12 @@ export class HandOverReader {
     }
     const record: { [key: string]: unknown } = {};
     const filters = listFilters(ast.checks);
+    this.runFilters(
+      filters.filter((filter) => filter.annotations?.raw === true),
+      fields,
+      ast,
+      path
+    );
     for (const field of ast.propertySignatures) {
       const name = String(field.name);
       record[name] = this.readField(field.type, fields[name], [...path, name], record);
@@ -233,7 +239,7 @@ export class HandOverReader {
       );
     }
     this.runFilters(
-      filters.filter((filter) => filter.annotations?.after === undefined),
+      filters.filter((filter) => filter.annotations?.after === undefined && filter.annotations?.raw !== true),
       record,
       ast,
       path

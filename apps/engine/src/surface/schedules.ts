@@ -9,7 +9,7 @@ import {
   validateScheduleRequest,
   type WatchSuggestion,
 } from '@shinsa/core';
-import type { SurfaceClient } from './client.ts';
+import type { CommandReceipt, SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findProjectId, findTaskId, resolveOptionalRepoId } from './resolve.ts';
 import { defineAction, defineCommand, defineRead, encode, readValue, type SurfaceSpec } from './spec.ts';
@@ -54,6 +54,7 @@ function readWeekdays(values: Values) {
 function resolveWebhookInput(values: Values) {
   if (!values.webhook) return undefined;
   const header = readValue(values, 'signatureHeader');
+  const secretRef = readValue(values, 'signatureSecretRef');
   return {
     ...(header
       ? {
@@ -61,6 +62,7 @@ function resolveWebhookInput(values: Values) {
             header,
             ...(values.signatureEncoding ? { encoding: values.signatureEncoding } : {}),
             ...(values.signaturePrefix ? { prefix: values.signaturePrefix } : {}),
+            ...(secretRef ? { secret_ref: secretRef } : {}),
           },
         }
       : {}),
@@ -94,6 +96,32 @@ async function resolveTarget(client: SurfaceClient, values: Values): Promise<Sch
     priority: (values.priority as TaskPriority | undefined) ?? 'normal',
     mode: values.justAnswer ? 'ask' : 'build',
   };
+}
+
+function assertHookSecret(client: SurfaceClient, values: Values) {
+  const ref = readValue(values, 'signatureSecretRef');
+  const signed = Boolean(values.webhook && readValue(values, 'signatureHeader'));
+  if (ref && !client.hookSecrets) {
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message:
+        '--signature-secret-ref is for agents. Set the signing secret with `shinsa schedules webhook-secret`.',
+    });
+  }
+  if (ref && !signed) {
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message: 'Give --signature-secret-ref with --webhook and --signature-header.',
+    });
+  }
+  if (signed) client.hookSecrets?.assertSecret(readValue(values, 'id') || null, ref || null);
+}
+
+function writeHookSecret(values: Values, receipt: CommandReceipt, client: SurfaceClient) {
+  const ref = readValue(values, 'signatureSecretRef');
+  const scheduleId = receipt.scheduleId ?? readValue(values, 'id');
+  if (!ref || !scheduleId || !client.hookSecrets) return null;
+  return client.hookSecrets.writeSecret(scheduleId, ref);
 }
 
 async function resolveSource(client: SurfaceClient, values: Values) {
@@ -169,6 +197,12 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
       },
       { name: 'signaturePrefix', kind: 'text', description: 'Text before the signature, such as sha256=.' },
       {
+        name: 'signatureSecretRef',
+        kind: 'text',
+        description:
+          'For an agent: the secret-ref:… that request_secret returned for the signing secret. It works once.',
+      },
+      {
         name: 'replayKey',
         kind: 'text',
         description: 'With --webhook: a template that names a delivery, so a repeat starts nothing.',
@@ -202,20 +236,24 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
         description: 'IANA time zone for --daily-at. The machine’s by default.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'schedule.write',
-      scheduleId: readValue(values, 'id') || null,
-      name: readValue(values, 'name') || null,
-      text: readValue(values, 'message') || null,
-      trigger: resolveTrigger(values, Date.now()),
-      target: await resolveTarget(client, values),
-      source: await resolveSource(client, values),
-      enabled: typeof values.enabled === 'boolean' ? values.enabled : null,
-      maxRuns: typeof values.maxRuns === 'number' ? values.maxRuns : null,
-      timeZone: await resolveTimeZone(client, values),
-    }),
+    build: async (values, client) => {
+      assertHookSecret(client, values);
+      return {
+        type: 'schedule.write',
+        scheduleId: readValue(values, 'id') || null,
+        name: readValue(values, 'name') || null,
+        text: readValue(values, 'message') || null,
+        trigger: resolveTrigger(values, Date.now()),
+        target: await resolveTarget(client, values),
+        source: await resolveSource(client, values),
+        enabled: typeof values.enabled === 'boolean' ? values.enabled : null,
+        maxRuns: typeof values.maxRuns === 'number' ? values.maxRuns : null,
+        timeZone: await resolveTimeZone(client, values),
+      };
+    },
     done: (values) =>
       values.id ? 'Saved the schedule.' : 'Created the schedule. `shinsa schedules list` shows it.',
+    after: writeHookSecret,
   }),
   defineCommand({
     path: ['schedules', 'enable'],

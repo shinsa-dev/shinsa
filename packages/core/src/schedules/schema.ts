@@ -35,12 +35,26 @@ const SIGNATURE_ENCODINGS: readonly [WebhookSignature['encoding'], ...WebhookSig
   'base64',
 ];
 
+const SIGNATURE_KEYS = ['header', 'encoding', 'prefix', 'secret_ref'];
+
+const WEBHOOK_KEYS = ['signature', 'replay_key'];
+
 const Signature = HandOverRecord({
   header: Required(SCHEDULE_LIMITS.header),
   encoding: OrOmitted(OneOf(SIGNATURE_ENCODINGS)),
   prefix: OptionalText(SCHEDULE_LIMITS.prefix),
   secret_ref: OptionalText(SCHEDULE_LIMITS.secretRef),
 }).check(
+  Schema.makeFilter(
+    (fields: { readonly [key: string]: unknown }) => {
+      const unknown = Object.keys(fields).filter((key) => !SIGNATURE_KEYS.includes(key));
+      return (
+        unknown.length === 0 ||
+        `{path} has no ${unknown.join(', ')}. Its fields are ${SIGNATURE_KEYS.join(', ')}.`
+      );
+    },
+    { raw: true }
+  ),
   Schema.makeFilter(
     ({ secret_ref: secretRef }: { secret_ref: string | null }) =>
       secretRef === null ||
@@ -52,7 +66,30 @@ const Signature = HandOverRecord({
 export const Webhook = HandOverRecord({
   signature: OrAbsent(Signature),
   replay_key: OptionalText(SCHEDULE_LIMITS.replayKey),
-});
+}).check(
+  Schema.makeFilter(
+    (fields: { readonly [key: string]: unknown }) => {
+      const misplaced = Object.keys(fields).filter((key) => SIGNATURE_KEYS.includes(key));
+      return (
+        misplaced.length === 0 ||
+        `${misplaced.join(', ')} go under webhook.signature, not on webhook itself: webhook: { signature: { header, encoding, prefix, secret_ref } }.`
+      );
+    },
+    { raw: true }
+  ),
+  Schema.makeFilter(
+    (fields: { readonly [key: string]: unknown }) => {
+      const unknown = Object.keys(fields).filter(
+        (key) => !WEBHOOK_KEYS.includes(key) && !SIGNATURE_KEYS.includes(key)
+      );
+      return (
+        unknown.length === 0 ||
+        `{path} has no ${unknown.join(', ')}. Its fields are ${WEBHOOK_KEYS.join(', ')}.`
+      );
+    },
+    { raw: true }
+  )
+);
 
 export const RunAt = HandOverRecord({ run_at: Required(SCHEDULE_LIMITS.runAt) }).check(
   Schema.makeFilter(
@@ -82,10 +119,17 @@ export const EveryMinutes = CountUpTo(SCHEDULE_LIMITS.maxEveryMinutes);
 export const TargetChoice = HandOverRecord({
   new_task: Flag,
   task_id: OptionalText(SCHEDULE_LIMITS.reference),
+  repository: OrAbsent(Schema.Unknown),
 }).check(
   Schema.makeFilter(
     ({ new_task: newTask, task_id: taskId }: { new_task: boolean; task_id: string | null }) =>
       !newTask || taskId === null || 'Give new_task or task_id, not both.'
+  ),
+  Schema.makeFilter(
+    ({ new_task: newTask, repository }: { new_task: boolean; repository: unknown }) =>
+      newTask ||
+      repository === null ||
+      'repository only goes with new_task: it is where each new task starts.'
   )
 );
 
@@ -105,6 +149,7 @@ export const ScheduleOptions = HandOverRecord({
   enabled: OrAbsent(Flag),
   max_runs: OrAbsent(CountUpTo(SCHEDULE_LIMITS.maxRuns)),
   time_zone: OptionalText(SCHEDULE_LIMITS.timeZone),
+  repository: OptionalText(SCHEDULE_LIMITS.reference),
 });
 
 export const ReadReportInput = HandOverRecord({

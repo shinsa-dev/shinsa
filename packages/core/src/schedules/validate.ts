@@ -29,6 +29,7 @@ export interface ScheduleRequest {
   maxRuns: number | null;
   timeZone: string | null;
   secretRef: string | null;
+  repository: string | null;
 }
 
 function readWebhook(reader: HandOverReader, value: unknown): TriggerRead {
@@ -99,6 +100,7 @@ function readTarget(reader: HandOverReader, input: Record<string, unknown>): Sch
     const target = reader.read(NewTaskTarget, input, []);
     return {
       kind: 'new_task',
+      repoId: null,
       priority: target.priority ?? 'normal',
       mode: target.just_answer ? 'ask' : 'build',
     };
@@ -127,6 +129,7 @@ export function validateScheduleRequest(
     maxRuns: options.max_runs,
     timeZone: options.time_zone,
     secretRef,
+    repository: options.repository,
   });
 }
 

@@ -209,6 +209,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       baseUrl: () => address.url,
       projects: createProjectChanges({ engine, resolveLogin, userHome: config.userHome }),
       route: createCommandRouter(engine, classify),
+      hookSecrets: (taskId) => schedules.hookSecrets(taskId),
     },
   });
   const briefings = new Briefings(engine, { ask: quick.write });

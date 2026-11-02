@@ -2117,15 +2117,23 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
 (`apps/engine/src/schedules/`, `secrets/`).
 
 - **A schedule is a trigger that sends a message**: it starts a new task (`new_task`, or an Ask task with
-  `just_answer`) in the repository it was set from, or messages a task (`task_id`, the task it was set from by
+  `just_answer`) in the repository it was set from or the one `repository` names (by name or id, among the task
+  project's repositories, or every repository when it has none; the server resolves it to `repoId` and core
+  checks it exists, `repo_not_found`), or messages a task (`task_id`, the task it was set from by
   default), or watches one of its project's integrations and files a task for each new report (`source`, below). Agents set
   them up: `set_schedule`, `list_schedules` and `delete_schedule` (every working role;
   `agent.set_schedule` / `agent.delete_schedule`), each changing only its own task's. You, the command line
   (`shinsa schedules write`) and any task agent (its `schedules_write` tool) write any schedule with `schedule.write` (`createdBy: you` for a
-  new one; a change keeps who made it): the same trigger, message, `max_runs` and time zone, and a target that is a
+  new one of yours; one an agent sends on your behalf is its task's, `{kind: 'agent', taskId, runId: null}`, so its
+  `set_schedule` and `delete_schedule` can change it; a change keeps who made it): the same trigger, message, `max_runs` and time zone, and a target that is a
   new task in a named repository (or the one triage picks) or a task to message. A webhook schedule's signing secret
   goes to the secret store through `POST /api/schedules/<id>/webhook` (`shinsa schedules webhook-secret`), never
-  through a command. You see, pause, resume and delete them in Settings → Automations and ⌘K (`schedule.enable`,
+  through a command; an agent passes the ref `request_secret` gave it instead (`webhook.signature.secret_ref` on
+  `set_schedule`, `signature_secret_ref` on `schedules_write`), which the server redeems after the write through the
+  same `writeSigningSecret` (`apps/engine/src/schedules/tools.ts`, the manage client's `hookSecrets`, bound to its
+  task). Either refuses a signature check with no ref when the schedule has no secret yet, and `schedules_write`
+  refuses a ref from you. Core refuses a key `webhook` or `webhook.signature` does not have, and points signature
+  keys put on `webhook` itself at `webhook.signature`, so nothing is dropped and saved as no signature check. You see, pause, resume and delete them in Settings → Automations and ⌘K (`schedule.enable`,
   `schedule.remove`). A task keeps at most 20, Shinsa 100 live.
 - **Kinds** (`packages/core/src/schedules/time.ts`): once (`in_minutes` or `run_at`, at most a year out; a `run_at`
   more than a minute in the past is refused), every N minutes (1 minute to a week), daily at `HH:MM` on chosen
@@ -2264,7 +2272,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   `/api/secrets/<gate>` (never a command), and the server keeps it in `secrets.json` (mode 600) and answers the gate
   with `secret-ref:<32 hex>`. Core refuses any other answer to a secret gate, so a value typed into the chat or ⌘K
   never lands in the log. The ref is fixed per request, so pasting again before the gate is answered (after a
-  crash, say) replaces the value it holds. The agent gets the ref, which `set_schedule` spends once (it expires in a day); the value
+  crash, say) replaces the value it holds. The agent gets the ref, which `set_schedule` or `schedules_write` spends once (it expires in a day); the value
   never reaches the transcript or the model.
 
 ## Delegation
@@ -3225,11 +3233,15 @@ online, and the last list of it their own machine kept while it is not (Offline 
 - **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page names the team
   and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing), keeps the key in the browser
   and, on Ask to join, sends `POST /__remote/teams/join { invite }`, which records that the account asked
-  (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads their
-  projects over the sealed channel (`lib/teams/join-machines.ts`) and asks which to share, one or more being required;
+  (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads the
+  projects of those online with one `GET /api/projects` over the sealed channel, never the whole state
+  (`lib/teams/join-machines.ts`, giving up on one after 4 s) and asks
+  which to share, one or more being required once any arrive (Ask to join stays open while they load, and joins
+  without sharing if pressed before they do);
   Ask to join then sends each machine with a pick `POST /api/remote/teams/join { url }` (the one team route the
   dashboard may call, and only from a device of the machine's owner: a member's device is refused with `not_owner`,
-  since joining your account to a team and sharing your projects is yours alone, `Remote.openChannel`) and `project.add_to_team` for each pick, so the key
+  since joining your account to a team and sharing your projects is yours alone, `Remote.openChannel`) and
+  `project.add_to_team` for each pick (`POST /api/commands`), so the key
   and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
   on each of your machines; one without the key asks for the link right in the team's card, with the projects to
   share beside it (or `shinsa teams join <url>`), which stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,

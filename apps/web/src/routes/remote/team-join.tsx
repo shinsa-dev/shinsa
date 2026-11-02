@@ -146,6 +146,16 @@ function ProjectPicks({
   );
 }
 
+function ReadingProjects() {
+  return (
+    <SettingsCard className='w-full'>
+      <div className='flex items-center px-2.5 py-1.5'>
+        <LoadingLine label='Reading your projects' className='h-6 text-xs' />
+      </div>
+    </SettingsCard>
+  );
+}
+
 function LinkRow({ url }: { url: string }) {
   return (
     <div className='flex w-full min-w-0 items-center gap-1.5'>
@@ -258,8 +268,13 @@ export function TeamJoinPage({
           'Ask to join with your GitHub account. Once the team’s owner accepts, you see your teammates’ tasks next to your own.'
         )}
       </RemoteHero>
-      <RemoteBenefits points={[...TEAM_POINTS, machines.length > 0 ? PICK_POINT : PRIVATE_POINT]} />
-      {load.status === 'loading' && <LoadingLine label='Reading your projects' />}
+      <RemoteBenefits
+        points={[
+          ...TEAM_POINTS,
+          load.status === 'loading' || machines.length > 0 ? PICK_POINT : PRIVATE_POINT,
+        ]}
+      />
+      {load.status === 'loading' && <ReadingProjects />}
       {machines.length > 0 && (
         <ProjectPicks
           machines={machines}
@@ -280,12 +295,7 @@ export function TeamJoinPage({
           {failure}
         </p>
       )}
-      <Button
-        className='w-full'
-        loading={state.kind === 'requesting'}
-        disabled={load.status === 'loading'}
-        onClick={() => void join(link, url)}
-      >
+      <Button className='w-full' loading={state.kind === 'requesting'} onClick={() => void join(link, url)}>
         Ask to join
       </Button>
     </section>
