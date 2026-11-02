@@ -13,6 +13,10 @@ export interface FakeControlPlane {
   stop: () => Promise<void>;
 }
 
+export function refuse(failure: { readonly code: string; readonly status: number }, message = 'Refused.') {
+  return Response.json({ error: { code: failure.code, message } }, { status: failure.status });
+}
+
 export function startFakeControlPlane(): FakeControlPlane {
   const calls: ControlCall[] = [];
   const answers = new Map<string, () => Response | Promise<Response>>();
@@ -22,7 +26,12 @@ export function startFakeControlPlane(): FakeControlPlane {
     async fetch(request) {
       const path = new URL(request.url).pathname;
       const authorization = request.headers.get('authorization');
-      calls.push({ path, token: authorization?.replace(/^Bearer /, '') ?? null, body: await request.json() });
+      const text = await request.text();
+      calls.push({
+        path,
+        token: authorization?.replace(/^Bearer /, '') ?? null,
+        body: text ? JSON.parse(text) : null,
+      });
       const answer = answers.get(path);
       if (answer) return answer();
       if (path === REMOTE_PATHS.pairStart)

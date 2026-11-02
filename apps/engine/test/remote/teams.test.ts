@@ -21,14 +21,16 @@ import {
   type TeamView,
   verifyTeamSnapshot,
 } from '@shinsa/core';
+import { InviteInvalid, MembersFull, NotFound, NotOwner, TeamsFull } from '@shinsa/core/remote/errors';
 import { log } from '../../src/log/index.ts';
-import { ControlClient } from '../../src/remote/control.ts';
+import { RemoteControl } from '../../src/remote/client/index.ts';
+import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
 import { TEAM_GONE_REASON, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
 import { createKeyPair, startHandshake } from './client.ts';
-import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
+import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
 
 const CREDENTIALS = {
   instanceId: 'inst1',
@@ -102,8 +104,8 @@ function setUp(options: SetUp = {}) {
   );
   const remote = new Remote({
     path,
-    control: new ControlClient({ origin: plane.origin }),
-    connect: () => Promise.reject(new Error('no tunnel in this test')),
+    control: new RemoteControl({ origin: plane.origin }),
+    connector: createRefusedConnector('no tunnel in this test'),
     localUrl: () => 'http://127.0.0.1:1',
     version: '1',
     maxBodyBytes: 1024,
@@ -422,7 +424,7 @@ describe('making and joining teams', () => {
   test('refuses a team without a name, one too many and a machine that is not paired', async () => {
     const { teams, plane } = setUp();
     await expect(teams.create(' ')).rejects.toMatchObject({ code: 'name_invalid' });
-    plane.answers.set(REMOTE_PATHS.machineTeams, () => new Response('full', { status: 409 }));
+    plane.answers.set(REMOTE_PATHS.machineTeams, () => refuse(TeamsFull));
     await expect(teams.create('More')).rejects.toMatchObject({ code: 'teams_full' });
     plane.answers.set(REMOTE_PATHS.machineTeams, () => new Response('down', { status: 500 }));
     await expect(teams.create('More')).rejects.toThrow('status 500');
@@ -444,7 +446,7 @@ describe('making and joining teams', () => {
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'team1', name: 'Platform', owner: MONA, status: 'member' })
     );
-    const heartbeat = spyOn(remote.supervisor, 'requestHeartbeat').mockResolvedValue();
+    const heartbeat = spyOn(remote, 'requestHeartbeat').mockResolvedValue();
     expect(await teams.join(url)).toEqual({ status: 'member', teamId: 'team1' });
     expect(heartbeat).toHaveBeenCalled();
     expect(remote.store.selectTeamKey('team1')).toMatchObject({ invite: 'invite-1', key: TEAM_KEY });
@@ -456,7 +458,9 @@ describe('making and joining teams', () => {
       code: 'team_link_invalid',
     });
     const url = resolveTeamJoinUrl({ teamId: 'team1', invite: 'invite-1', key: TEAM_KEY }, plane.origin);
-    plane.answers.set(REMOTE_PATHS.machineTeamJoin, () => new Response('gone', { status: 404 }));
+    plane.answers.set(REMOTE_PATHS.machineTeamJoin, () => refuse(NotFound));
+    await expect(teams.join(url)).rejects.toMatchObject({ code: 'team_link_off' });
+    plane.answers.set(REMOTE_PATHS.machineTeamJoin, () => refuse(InviteInvalid));
     await expect(teams.join(url)).rejects.toMatchObject({ code: 'team_link_off' });
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'other', name: 'Other', owner: KAI, status: 'member' })
@@ -501,18 +505,18 @@ describe('the members of a team', () => {
   test('says why accepting failed, and refuses to remove someone not in the team', async () => {
     const { teams, plane } = setUp();
     const path = resolveMachineTeamPath('team1', 'members/add');
-    plane.answers.set(path, () => new Response('full', { status: 409 }));
+    plane.answers.set(path, () => refuse(MembersFull));
     await expect(teams.acceptRequest('team1', BOB.id)).rejects.toMatchObject({ code: 'members_full' });
-    plane.answers.set(path, () => new Response('none', { status: 404 }));
+    plane.answers.set(path, () => refuse(NotFound));
     await expect(teams.acceptRequest('team1', BOB.id)).rejects.toMatchObject({ code: 'request_not_found' });
-    plane.answers.set(path, () => new Response('owner', { status: 403 }));
+    plane.answers.set(path, () => refuse(NotOwner));
     await expect(teams.acceptRequest('team1', BOB.id)).rejects.toMatchObject({ code: 'not_owner' });
     await expect(teams.removeMember('team1', BOB.id)).rejects.toMatchObject({ code: 'member_not_found' });
   });
 
   test('leaving forgets the key and takes the team off every project, even when the cloud forgot it first', async () => {
     const { teams, plane, remote, stub } = setUp({ file: { teams: [createTeam({ role: 'member' })] } });
-    plane.answers.set(resolveMachineTeamPath('team1', 'leave'), () => new Response('gone', { status: 404 }));
+    plane.answers.set(resolveMachineTeamPath('team1', 'leave'), () => refuse(NotFound));
     await teams.leave('team1');
     expect(remote.snapshot().teams).toEqual([]);
     expect(remote.store.selectTeamKey('team1')).toBeNull();

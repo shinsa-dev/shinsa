@@ -2,14 +2,19 @@ import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
+import { Effect, Layer } from 'effect';
+import { FetchHttpClient } from 'effect/http';
+import { resolveCloudflaredAsset, resolveCloudflaredPath } from '../../src/remote/cloudflared/asset.ts';
 import {
   CLOUDFLARED_VERSION,
   type CloudflaredAsset,
-  installCloudflared,
-  resolveCloudflaredAsset,
-  resolveCloudflaredPath,
-} from '../../src/remote/cloudflared.ts';
+  CloudflaredTarget,
+} from '../../src/remote/cloudflared/schema.ts';
+import { Cloudflared } from '../../src/remote/cloudflared/service.ts';
 import { runCommand } from '../../src/shell/index.ts';
+import { CommandNotFound } from '../../src/shell/schema.ts';
+import { Shell } from '../../src/shell/service.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 function sha256(bytes: Uint8Array) {
@@ -18,11 +23,38 @@ function sha256(bytes: Uint8Array) {
 
 function serve(bytes: Uint8Array, status = 200) {
   const urls: string[] = [];
-  const fetch = (input: string) => {
-    urls.push(input);
+  const fetch = (input: string | URL | Request) => {
+    urls.push(input instanceof Request ? input.url : String(input));
     return Promise.resolve(new Response(bytes, { status }));
   };
-  return { fetch, urls };
+  return { fetch: fetch as typeof globalThis.fetch, urls };
+}
+
+function install(
+  dataDir: string,
+  asset: CloudflaredAsset | null,
+  fetch?: typeof globalThis.fetch,
+  shell: Layer.Layer<Shell> = Shell.layer.pipe(Layer.provide(BunServices.layer))
+) {
+  return Effect.runPromise(
+    Cloudflared.use((cloudflared) => cloudflared.install).pipe(
+      Effect.provide(
+        Cloudflared.layer.pipe(
+          Layer.provide(Layer.succeed(CloudflaredTarget, { dataDir, asset })),
+          Layer.provide(Layer.mergeAll(FetchHttpClient.layer, shell)),
+          Layer.provide(fetch ? Layer.succeed(FetchHttpClient.Fetch, fetch) : Layer.empty),
+          Layer.provide(BunServices.layer)
+        )
+      )
+    )
+  );
+}
+
+function refuse(...input: Parameters<typeof install>) {
+  return install(...input).then(
+    () => null,
+    (error: unknown) => error
+  );
 }
 
 async function createArchive(contents: Record<string, string>) {
@@ -62,10 +94,10 @@ describe('the pinned cloudflared', () => {
       archive: false,
     };
     const server = serve(bytes);
-    const path = await installCloudflared({ dataDir, asset, fetch: server.fetch });
+    const path = await install(dataDir, asset, server.fetch);
     expect(path).toBe(resolveCloudflaredPath(dataDir, asset));
     expect(statSync(path).mode & 0o111).not.toBe(0);
-    expect(await installCloudflared({ dataDir, asset, fetch: server.fetch })).toBe(path);
+    expect(await install(dataDir, asset, server.fetch)).toBe(path);
     expect(server.urls).toEqual(['https://x/bin']);
   });
 
@@ -78,7 +110,7 @@ describe('the pinned cloudflared', () => {
       sha256: sha256(bytes),
       archive: true,
     };
-    const path = await installCloudflared({ dataDir, asset, fetch: serve(bytes).fetch });
+    const path = await install(dataDir, asset, serve(bytes).fetch);
     expect(readFileSync(path, 'utf8')).toBe('binary');
   });
 
@@ -90,29 +122,42 @@ describe('the pinned cloudflared', () => {
       sha256: '0'.repeat(64),
       archive: false,
     };
-    await expect(
-      installCloudflared({ dataDir, asset, fetch: serve(new Uint8Array([1])).fetch })
-    ).rejects.toThrow('checksum');
+    expect(await refuse(dataDir, asset, serve(new Uint8Array([1])).fetch)).toMatchObject({
+      _tag: 'CloudflaredInstallFailed',
+      message: expect.stringContaining('checksum'),
+    });
     expect(existsSync(resolveCloudflaredPath(dataDir, asset))).toBe(false);
-    await expect(
-      installCloudflared({ dataDir, asset, fetch: serve(new Uint8Array(), 404).fetch })
-    ).rejects.toThrow('status 404');
+    expect(await refuse(dataDir, asset, serve(new Uint8Array(), 404).fetch)).toMatchObject({
+      message: expect.stringContaining('status 404'),
+    });
+    const unreachable = (() => Promise.reject(new Error('offline'))) as unknown as typeof globalThis.fetch;
+    expect(await refuse(dataDir, asset, unreachable)).toMatchObject({
+      message: 'Could not download cloudflared.',
+    });
     const empty = await createArchive({ other: 'x' });
-    await expect(
-      installCloudflared({
-        dataDir,
-        asset: { ...asset, sha256: sha256(empty), archive: true },
-        fetch: serve(empty).fetch,
-      })
-    ).rejects.toThrow('did not contain');
+    expect(
+      await refuse(dataDir, { ...asset, sha256: sha256(empty), archive: true }, serve(empty).fetch)
+    ).toMatchObject({ message: expect.stringContaining('did not contain') });
     const broken = new Uint8Array([1, 2, 3]);
-    await expect(
-      installCloudflared({
-        dataDir,
-        asset: { ...asset, sha256: sha256(broken), archive: true },
-        fetch: serve(broken).fetch,
-      })
-    ).rejects.toThrow('Could not unpack');
-    await expect(installCloudflared({ dataDir, asset: null })).rejects.toThrow('no build for this computer');
+    expect(
+      await refuse(dataDir, { ...asset, sha256: sha256(broken), archive: true }, serve(broken).fetch)
+    ).toMatchObject({ message: expect.stringContaining('Could not unpack') });
+    const noTar = Layer.succeed(Shell, {
+      run: () => Effect.fail(new CommandNotFound({ command: 'tar', message: 'tar is not installed.' })),
+      stopTree: () => Effect.void,
+    });
+    expect(
+      await refuse(dataDir, { ...asset, sha256: sha256(broken), archive: true }, serve(broken).fetch, noTar)
+    ).toMatchObject({ message: 'Could not unpack cloudflared: tar is not installed.' });
+    const notADir = join(createTempDir(), 'file');
+    writeFileSync(notADir, '');
+    const bytes = new Uint8Array([4]);
+    expect(await refuse(notADir, { ...asset, sha256: sha256(bytes) }, serve(bytes).fetch)).toMatchObject({
+      message: expect.stringContaining('Could not prepare data/bin'),
+    });
+    expect(await refuse(dataDir, null)).toMatchObject({
+      _tag: 'CloudflaredUnsupported',
+      message: expect.stringContaining('no build for this computer'),
+    });
   });
 });

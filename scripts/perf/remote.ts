@@ -7,7 +7,7 @@ import { Transcripts } from '../../apps/engine/src/agents/index.ts';
 import { ConfigStore, resolveConfig } from '../../apps/engine/src/config/index.ts';
 import { startServer } from '../../apps/engine/src/http/index.ts';
 import { Onboarding } from '../../apps/engine/src/onboarding/index.ts';
-import { REMOTE_FILE, Remote } from '../../apps/engine/src/remote/index.ts';
+import { createRefusedConnector, REMOTE_FILE, Remote } from '../../apps/engine/src/remote/index.ts';
 import { Roots } from '../../apps/engine/src/repos/index.ts';
 import { Engine } from '../../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore, resolveStateVersion } from '../../apps/engine/src/store/index.ts';
@@ -117,7 +117,7 @@ function startEngine(dataDir: string) {
   );
   const remote = new Remote({
     path: join(dataDir, REMOTE_FILE),
-    connect: () => Promise.reject(new Error('The bench runs its own tunnel.')),
+    connector: createRefusedConnector('The bench runs its own tunnel.'),
     localUrl: () => 'http://127.0.0.1',
     version: 'bench',
     maxBodyBytes: 32 * 1024 * 1024,
