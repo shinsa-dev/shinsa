@@ -38,7 +38,7 @@ import type { Workspaces } from '../workspaces/index.ts';
 
 const REQUEST_VIAS = ['local', 'tunnel', 'channel'] as const;
 
-export type RequestVia = (typeof REQUEST_VIAS)[number];
+type RequestVia = (typeof REQUEST_VIAS)[number];
 
 export interface RequestSourceShape {
   readonly via: RequestVia;
@@ -62,7 +62,7 @@ export type JsonObject = Record<string, unknown>;
 
 export type Launcher = (command: string[], cwd: string) => Promise<CommandResult>;
 
-export interface ProviderCatalog {
+interface ProviderCatalog {
   listProviders: () => Promise<AgentProviderInfo[]>;
 }
 

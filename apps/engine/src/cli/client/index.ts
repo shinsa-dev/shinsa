@@ -3,15 +3,7 @@ import { FetchHttpClient, HttpClient } from 'effect/http';
 import { EngineAnswerInvalid, type EngineCalls, type EngineClientOptions } from './schema.ts';
 import { EngineClient } from './service.ts';
 
-export {
-  EngineAnswerInvalid,
-  type EngineCalls,
-  type EngineClientOptions,
-  EngineNotRunning,
-  type EngineWake,
-  NOT_RUNNING,
-} from './schema.ts';
-export { EngineClient } from './service.ts';
+export { type EngineCalls, type EngineClientOptions, type EngineWake, NOT_RUNNING } from './schema.ts';
 
 const PASSED_FAILURES = ['DomainError', 'EngineNotRunning', 'EngineAnswerInvalid'];
 

@@ -32,7 +32,7 @@ import { resolveAllowedHosts, resolveRefusal, resolveUpgradeRefusal } from './gu
 import { type HttpContext, PORT_TAKEN, PortInUse, RequestSource } from './schema.ts';
 import { createSocketHub, type SocketData } from './socket.ts';
 
-export type { HttpContext, Launcher } from './schema.ts';
+export type { HttpContext } from './schema.ts';
 
 const SOCKET_BACKPRESSURE_LIMIT_BYTES = 128 * 1024 * 1024;
 

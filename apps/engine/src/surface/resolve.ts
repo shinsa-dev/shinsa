@@ -19,7 +19,7 @@ export interface ProjectsRead {
   readonly focus: Focus;
 }
 
-export interface TaskDetail {
+interface TaskDetail {
   task: TaskView;
   gates: Gate[];
   mergeSteps: MergeStepView[];
