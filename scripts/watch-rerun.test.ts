@@ -2,12 +2,11 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { CommandResult } from './run-command.ts';
 import {
-  type CommandResult,
   MAX_RERUN_ATTEMPT,
   type RunJob,
   resolveRerun,
-  runCommand,
   runWatchRerun,
 } from './watch-rerun.ts';
 
@@ -154,13 +153,5 @@ describe('runWatchRerun', () => {
       "Set WORKFLOW_ID to the failed run's workflow id."
     );
     expect(gh.calls).toEqual([]);
-  });
-
-  it('runs a command and keeps its exit code and both streams', () => {
-    expect(runCommand(['sh', '-c', 'echo out; echo err >&2; exit 3'])).toEqual({
-      exitCode: 3,
-      stdout: 'out\n',
-      stderr: 'err\n',
-    });
   });
 });

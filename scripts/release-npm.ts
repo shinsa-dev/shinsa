@@ -8,6 +8,7 @@ import {
 } from './release-engine.ts';
 import { type RetryOptions, retryStep, serializeRetryWarning } from './release-retry.ts';
 import type { ReleaseChannel } from './release-version.ts';
+import { type RunCommand, runCommand } from './run-command.ts';
 
 export const LAUNCHER_PACKAGE = 'shinsa';
 
@@ -26,14 +27,6 @@ export interface NpmPackage {
   name: string;
   dir: string;
 }
-
-export interface CommandResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-
-export type RunCommand = (argv: string[]) => CommandResult;
 
 interface EnginePlatform {
   os: string;
@@ -205,11 +198,6 @@ export function createPublishRetry(
   output: { write: (text: string) => unknown }
 ): PublishRetry {
   return { sleep: Bun.sleep, onRetry: (failure) => output.write(serializeRetryWarning(failure, env)) };
-}
-
-export function runCommand(argv: string[]): CommandResult {
-  const result = Bun.spawnSync(argv, { stdout: 'pipe', stderr: 'pipe' });
-  return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
 }
 
 export async function runReleaseNpm(

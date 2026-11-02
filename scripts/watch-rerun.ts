@@ -1,14 +1,7 @@
 import { appendFileSync } from 'node:fs';
+import { type RunCommand, runCommand } from './run-command.ts';
 
 export const MAX_RERUN_ATTEMPT = 2;
-
-export interface CommandResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-
-export type RunCommand = (argv: string[]) => CommandResult;
 
 const FAILED_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure']);
 
@@ -58,11 +51,6 @@ export function resolveRerun(input: RerunInput): RerunDecision {
     rerun: true,
     reason: `No runner picked up ${names} on attempt ${input.attempt}, so its failed jobs run again.`,
   };
-}
-
-export function runCommand(argv: string[]): CommandResult {
-  const result = Bun.spawnSync(argv, { stdout: 'pipe', stderr: 'pipe' });
-  return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
 }
 
 function runGh(run: RunCommand, argv: string[]) {

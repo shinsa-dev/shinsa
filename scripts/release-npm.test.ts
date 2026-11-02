@@ -14,7 +14,6 @@ import { join } from 'node:path';
 import { PUBLISHED_ENGINE_TARGETS, packEngine } from './release-engine.ts';
 import {
   assertArchiveChecksum,
-  type CommandResult,
   createEngineManifest,
   createLauncherManifest,
   createPublishRetry,
@@ -23,12 +22,12 @@ import {
   publishNpmPackages,
   resolveDistTag,
   resolveEnginePackageName,
-  runCommand,
   runReleaseNpm,
   summarizeNpmError,
   writeNpmPackages,
 } from './release-npm.ts';
 import type { RetryFailure } from './release-retry.ts';
+import type { CommandResult } from './run-command.ts';
 
 const launcher = require('../apps/engine/npm/shinsa.js') as {
   ENGINE_PACKAGES: Record<string, string>;
@@ -398,14 +397,6 @@ describe('publishing', () => {
     } finally {
       process.chdir(start);
     }
-  });
-
-  it('runs a real command and reads its output', () => {
-    expect(runCommand(['sh', '-c', 'echo out; echo err >&2; exit 3'])).toEqual({
-      exitCode: 3,
-      stdout: 'out\n',
-      stderr: 'err\n',
-    });
   });
 });
 
