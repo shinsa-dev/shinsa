@@ -1,12 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { type CommandOf, listActiveRuns, listOpenGates, type TeammateOriginal } from '../../src/index.ts';
 import {
-  type CommandOf,
-  listActiveRuns,
-  listOpenGates,
-  parseUserCommand,
-  type TeammateOriginal,
-} from '../../src/index.ts';
-import {
+  parseCommand,
   createHarness,
   createTask,
   type Harness,
@@ -203,16 +198,16 @@ describe('duplicates', () => {
   });
 
   test('the commands parse from untrusted input', () => {
-    expect(parseUserCommand({ type: 'task.mark_duplicate', taskId: 'a', duplicateOf: 'b' })).toEqual({
+    expect(parseCommand({ type: 'task.mark_duplicate', taskId: 'a', duplicateOf: 'b' })).toEqual({
       type: 'task.mark_duplicate',
       taskId: 'a',
       duplicateOf: 'b',
     });
-    expect(parseUserCommand({ type: 'task.clear_duplicate', taskId: 'a' })).toEqual({
+    expect(parseCommand({ type: 'task.clear_duplicate', taskId: 'a' })).toEqual({
       type: 'task.clear_duplicate',
       taskId: 'a',
     });
-    expect(() => parseUserCommand({ type: 'task.mark_duplicate', taskId: 'a' })).toThrow();
+    expect(() => parseCommand({ type: 'task.mark_duplicate', taskId: 'a' })).toThrow();
   });
 });
 

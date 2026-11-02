@@ -38,7 +38,9 @@ export function createManageClient(options: ManageClientOptions): SurfaceClient 
       : {}),
     send: async (command) => {
       sent += 1;
-      const events = await route(parseUserCommand(command), {
+      const parsed = parseUserCommand(command);
+      if (parsed._tag === 'Failure') throw parsed.failure;
+      const events = await route(parsed.success, {
         ...(key === null ? {} : { id: `${key}:${sent}` }),
         ...from,
       });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { DAY_MS, HOUR_MS, MINUTE_MS, parseUserCommand } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '../../src/index.ts';
+import { parseCommand, createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
 
 const URL = 'https://app.shinsa.dev/share/inst/AAAAAAAAAAAAAAAAAAAAAA#key';
 
@@ -89,17 +89,17 @@ describe('sharing a task', () => {
   });
 
   test('both commands are parsed from the page', () => {
-    expect(parseUserCommand({ type: 'task.share', taskId: 't1' })).toEqual({
+    expect(parseCommand({ type: 'task.share', taskId: 't1' })).toEqual({
       type: 'task.share',
       taskId: 't1',
     });
-    expect(parseUserCommand({ type: 'task.share', taskId: 't1', limit: 'day' })).toEqual({
+    expect(parseCommand({ type: 'task.share', taskId: 't1', limit: 'day' })).toEqual({
       type: 'task.share',
       taskId: 't1',
       limit: 'day',
     });
-    expect(() => parseUserCommand({ type: 'task.share', taskId: 't1', limit: 'forever' })).toThrow();
-    expect(parseUserCommand({ type: 'task.unshare', taskId: 't1' })).toEqual({
+    expect(() => parseCommand({ type: 'task.share', taskId: 't1', limit: 'forever' })).toThrow();
+    expect(parseCommand({ type: 'task.unshare', taskId: 't1' })).toEqual({
       type: 'task.unshare',
       taskId: 't1',
     });
@@ -270,12 +270,12 @@ describe('how long a task is shared', () => {
   });
 
   test('a preset is read from a command, and only the human picks one, in the settings too', () => {
-    expect(parseUserCommand({ type: 'task.share', taskId: 't1', preset: 'status' })).toEqual({
+    expect(parseCommand({ type: 'task.share', taskId: 't1', preset: 'status' })).toEqual({
       type: 'task.share',
       taskId: 't1',
       preset: 'status',
     });
-    expect(() => parseUserCommand({ type: 'task.share', taskId: 't1', preset: 'all' })).toThrow();
+    expect(() => parseCommand({ type: 'task.share', taskId: 't1', preset: 'all' })).toThrow();
     const harness = createHarness();
     const taskId = createTask(harness);
     expect(() =>

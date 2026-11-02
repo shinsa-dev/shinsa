@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { HOUR_MS, parseUserCommand } from '../../src/index.ts';
-import { createHarness, createTask, type Harness } from '../harness.ts';
+import { HOUR_MS } from '../../src/index.ts';
+import { parseCommand, createHarness, createTask, type Harness } from '../harness.ts';
 
 const URL = 'https://abc.shinsa.page/?key=secret';
 
@@ -89,21 +89,19 @@ describe('sharing a preview', () => {
   });
 
   test('both commands are parsed from the page', () => {
-    expect(parseUserCommand({ type: 'preview.share', taskId: 't1', serviceId: 'web' })).toEqual({
+    expect(parseCommand({ type: 'preview.share', taskId: 't1', serviceId: 'web' })).toEqual({
       type: 'preview.share',
       taskId: 't1',
       serviceId: 'web',
     });
-    expect(
-      parseUserCommand({ type: 'preview.share', taskId: 't1', serviceId: 'web', limit: 'week' })
-    ).toEqual({
+    expect(parseCommand({ type: 'preview.share', taskId: 't1', serviceId: 'web', limit: 'week' })).toEqual({
       type: 'preview.share',
       taskId: 't1',
       serviceId: 'web',
       limit: 'week',
     });
-    expect(() => parseUserCommand({ type: 'preview.share', taskId: 't1', serviceId: '' })).toThrow();
-    expect(parseUserCommand({ type: 'preview.unshare', taskId: 't1', serviceId: 'web' })).toEqual({
+    expect(() => parseCommand({ type: 'preview.share', taskId: 't1', serviceId: '' })).toThrow();
+    expect(parseCommand({ type: 'preview.unshare', taskId: 't1', serviceId: 'web' })).toEqual({
       type: 'preview.unshare',
       taskId: 't1',
       serviceId: 'web',

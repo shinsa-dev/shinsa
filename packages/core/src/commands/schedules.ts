@@ -1,10 +1,4 @@
-import type {
-  ScheduleSource,
-  ScheduleTarget,
-  ScheduleTrigger,
-  TaskMode,
-  TaskPriority,
-} from '../domain/index.ts';
+import type { ScheduleTrigger, TaskMode, TaskPriority } from '../domain/index.ts';
 
 export interface ReportFiling {
   title: string;
@@ -21,24 +15,6 @@ export interface ReportFiling {
 export type ScheduleTargetInput =
   | { kind: 'new_task'; priority: TaskPriority; mode: TaskMode }
   | { kind: 'task'; taskId: string | null };
-
-export type ScheduleUserCommand =
-  | { type: 'schedule.enable'; scheduleId: string; enabled: boolean }
-  | { type: 'schedule.remove'; scheduleId: string }
-  | { type: 'watch_suggestion.accept'; suggestionId: string }
-  | { type: 'watch_suggestion.dismiss'; suggestionId: string }
-  | {
-      type: 'schedule.write';
-      scheduleId: string | null;
-      name: string | null;
-      text: string | null;
-      trigger: ScheduleTrigger | null;
-      target: ScheduleTarget | null;
-      source: ScheduleSource | null;
-      enabled: boolean | null;
-      maxRuns: number | null;
-      timeZone: string;
-    };
 
 export type ScheduleAgentCommand =
   | {

@@ -9,6 +9,7 @@ export { parseChangedLines } from './diff.ts';
 export { type CoverageInput, measureCoverage, resolveCoverageRanges, resolveReportPath } from './measure.ts';
 export { parseCobertura, parseCoverageReport, parseGoProfile, parseLcov } from './reports.ts';
 export {
+  CoverageSetting,
   DEFAULT_COVERAGE,
   resolveCoverageFormat,
   resolveCustomFormat,
@@ -26,6 +27,5 @@ export {
   type CoverageHits,
   type CoverageMode,
   type CoverageRange,
-  type CoverageSetting,
   type MeasuredCoverage,
 } from './types.ts';

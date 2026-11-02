@@ -1,30 +1,103 @@
+import { identity, Schema, SchemaTransformation } from 'effect';
+import {
+  ByDefault,
+  Choice,
+  Count,
+  FIELD_MESSAGES,
+  ID_LIMIT,
+  Id,
+  NullByDefault,
+  NumberOf,
+  resolveChoiceMessage,
+  Strict,
+  Tagged,
+  Text,
+  Time,
+} from './fields.ts';
+import { TASK_PRIORITIES } from './stages.ts';
 import { DAY_MS, MINUTE_MS } from './time.ts';
-import type { Task, TaskMode, TaskPriority } from './types.ts';
+import { TASK_MODES, type Task } from './types.ts';
 
-export type WebhookEncoding = 'hex' | 'base64';
+export const WEBHOOK_ENCODINGS = ['hex', 'base64'] as const;
 
-export interface WebhookSignature {
-  header: string;
-  encoding: WebhookEncoding;
-  prefix: string;
-}
+export type WebhookEncoding = (typeof WEBHOOK_ENCODINGS)[number];
 
-export type ScheduleTrigger =
-  | { kind: 'once'; at: number }
-  | { kind: 'interval'; everyMinutes: number }
-  | { kind: 'daily'; time: string; weekdays: number[] }
-  | { kind: 'webhook'; signature: WebhookSignature | null; replayKey: string | null };
+const WEEKDAYS_MESSAGE = 'weekdays must be a list of up to 7 days.';
+
+export const WebhookSignature = Strict(
+  {
+    header: Id(),
+    encoding: ByDefault(
+      Choice(WEBHOOK_ENCODINGS),
+      resolveChoiceMessage(WEBHOOK_ENCODINGS),
+      () => 'hex' as const
+    ),
+    prefix: NullByDefault(Text(ID_LIMIT), FIELD_MESSAGES.text).pipe(
+      Schema.decodeTo(
+        Schema.String,
+        SchemaTransformation.transform({ decode: (prefix) => prefix ?? '', encode: identity })
+      )
+    ),
+  },
+  'A signature',
+  '{key}'
+);
+
+export type WebhookSignature = typeof WebhookSignature.Type;
+
+export const SCHEDULE_TRIGGER_KINDS = ['once', 'interval', 'daily', 'webhook'] as const;
+
+export const ScheduleTrigger = Tagged('kind', SCHEDULE_TRIGGER_KINDS, [
+  Schema.Struct({ kind: Schema.Literal('once'), at: Time }),
+  Schema.Struct({ kind: Schema.Literal('interval'), everyMinutes: Count }),
+  Schema.Struct({
+    kind: Schema.Literal('daily'),
+    time: Id(),
+    weekdays: Schema.Array(Schema.Unknown)
+      .annotate({ message: WEEKDAYS_MESSAGE })
+      .check(Schema.isMaxLength(7, { message: WEEKDAYS_MESSAGE }))
+      .pipe(
+        Schema.decodeTo(
+          Schema.mutable(Schema.Array(NumberOf('day must be a whole number.', Number.isInteger))),
+          SchemaTransformation.passthrough({ strict: false })
+        )
+      )
+      .annotateKey({ messageMissingKey: WEEKDAYS_MESSAGE }),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('webhook'),
+    signature: NullByDefault(WebhookSignature, FIELD_MESSAGES.object),
+    replayKey: NullByDefault(Text(ID_LIMIT), FIELD_MESSAGES.text),
+  }),
+]);
+
+export type ScheduleTrigger = typeof ScheduleTrigger.Type;
 
 export type ScheduleTriggerKind = ScheduleTrigger['kind'];
 
-export type ScheduleTarget =
-  | { kind: 'new_task'; repoId: string | null; priority: TaskPriority; mode: TaskMode }
-  | { kind: 'task'; taskId: string };
+export const ScheduleTarget = Tagged(
+  'kind',
+  ['new_task', 'task'],
+  [
+    Schema.Struct({
+      kind: Schema.Literal('new_task'),
+      repoId: NullByDefault(Id(), FIELD_MESSAGES.text),
+      priority: ByDefault(
+        Choice(TASK_PRIORITIES),
+        resolveChoiceMessage(TASK_PRIORITIES),
+        () => 'normal' as const
+      ),
+      mode: ByDefault(Choice(TASK_MODES), resolveChoiceMessage(TASK_MODES), () => 'build' as const),
+    }),
+    Schema.Struct({ kind: Schema.Literal('task'), taskId: Id() }),
+  ]
+);
 
-export interface ScheduleSource {
-  projectId: string;
-  server: string;
-}
+export type ScheduleTarget = typeof ScheduleTarget.Type;
+
+export const ScheduleSource = Strict({ projectId: Id(), server: Text(ID_LIMIT) }, 'A source', '{key}');
+
+export type ScheduleSource = typeof ScheduleSource.Type;
 
 export interface SourceReport {
   scheduleId: string | null;

@@ -1,4 +1,18 @@
-import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
+import { Schema, SchemaTransformation } from 'effect';
+import { AGENT_ROLES, CLAUDE_PROVIDER } from '../agent-models/index.ts';
+import {
+  Bool,
+  Choice,
+  FIELD_MESSAGES,
+  FiniteNumber,
+  Id,
+  KnownKeys,
+  List,
+  OrNull,
+  Strict,
+  Text,
+  WholeNumber,
+} from './fields.ts';
 import { DAY_MS, HOUR_MS } from './time.ts';
 import type { AgentRole } from './types.ts';
 
@@ -109,6 +123,50 @@ export const SETTINGS_KEYS = [
   'shareLimit',
   'sharePreset',
 ] as const satisfies readonly (keyof Settings)[];
+
+function RoleMap<S extends Schema.Top>(name: string, value: S) {
+  return KnownKeys(name, AGENT_ROLES, (role) => `${name} has no role ${role}.`).pipe(
+    Schema.decodeTo(
+      Schema.Record(Schema.Literals(AGENT_ROLES), Schema.optionalKey(value)),
+      SchemaTransformation.passthrough({ strict: false })
+    )
+  );
+}
+
+export const SettingsPatch = Strict(
+  {
+    defaultProvider: Schema.optionalKey(Id()),
+    defaultModel: Schema.optionalKey(OrNull(Id(), FIELD_MESSAGES.text)),
+    maxFixRounds: Schema.optionalKey(OrNull(WholeNumber, FIELD_MESSAGES.wholeNumber)),
+    delegationLimit: Schema.optionalKey(OrNull(WholeNumber, FIELD_MESSAGES.wholeNumber)),
+    mergeMethod: Schema.optionalKey(Choice(MERGE_METHODS)),
+    attentionLimit: Schema.optionalKey(WholeNumber),
+    taskCapacity: Schema.optionalKey(OrNull(WholeNumber, FIELD_MESSAGES.wholeNumber)),
+    placementPolicies: Schema.optionalKey(List(Text())),
+    shareLimit: Schema.optionalKey(Choice(SHARE_LIMITS)),
+    sharePreset: Schema.optionalKey(Choice(SHARE_PRESETS)),
+    approvePlans: Schema.optionalKey(Choice(PLAN_APPROVALS)),
+    agentModels: Schema.optionalKey(RoleMap('agentModels', Id())),
+    agentProviders: Schema.optionalKey(RoleMap('agentProviders', Id())),
+    agentFastModes: Schema.optionalKey(RoleMap('agentFastModes', Bool)),
+    taskBudgetUsd: Schema.optionalKey(OrNull(FiniteNumber, FIELD_MESSAGES.number)),
+    taskUsageLimit: Schema.optionalKey(OrNull(WholeNumber, FIELD_MESSAGES.wholeNumber)),
+    autoResume: Schema.optionalKey(Bool),
+    snoozeLimited: Schema.optionalKey(Bool),
+    accountSwitchAt: Schema.optionalKey(WholeNumber),
+    idleCompaction: Schema.optionalKey(Bool),
+    compactionLeadMinutes: Schema.optionalKey(WholeNumber),
+    compaction: Schema.optionalKey(Choice(COMPACTION_MODES)),
+    fastMode: Schema.optionalKey(Bool),
+    watchdogHours: Schema.optionalKey(WholeNumber),
+    watchdogFirstCheckMinutes: Schema.optionalKey(WholeNumber),
+    watchdogMaxGapHours: Schema.optionalKey(WholeNumber),
+  } satisfies Record<(typeof SETTINGS_KEYS)[number], Schema.Top>,
+  'Settings',
+  'patch'
+);
+
+export type SettingsPatch = typeof SettingsPatch.Type;
 
 export const HUMAN_ONLY_SETTINGS = [
   'approvePlans',

@@ -50,7 +50,6 @@ export { DomainError } from './errors.ts';
 export {
   FeedbackId,
   GateId,
-  ID_LIMIT,
   IdText,
   MemoryId,
   ProjectId,
@@ -63,6 +62,7 @@ export {
   type Unbranded,
   WatchdogId,
 } from './ids.ts';
+export { ID_LIMIT } from './fields.ts';
 export { listIssueMessages, resolveIssuePath } from './issues.ts';
 export {
   type CurrentEvidenceItem,

@@ -137,7 +137,9 @@ export async function dispatchUserCommand(
   guest: GuestActor | null = null
 ) {
   if (engine.readOnly) throw createReadOnlyError();
-  const command = parseUserCommand(body);
+  const parsed = parseUserCommand(body);
+  if (parsed._tag === 'Failure') throw parsed.failure;
+  const command = parsed.success;
   const refusal = resolveLocalOnlyRefusal(origin, command);
   if (refusal) throw new DomainError({ code: LOCAL_ONLY_CODE, message: refusal });
   const outside = guest ? resolveScopedRefusal(engine.state, guest.taskId, command) : null;

@@ -1,3 +1,4 @@
+import { Result } from 'effect';
 import {
   type AgentReply,
   applyEvent,
@@ -7,6 +8,7 @@ import {
   type GuestActor,
   listActiveRuns,
   listOpenGates,
+  parseUserCommand,
   type PlanDocument,
   type PullRequest,
   type ReportCheck,
@@ -17,11 +19,16 @@ import {
   type ShinsaEvent,
   type ShinsaEventInput,
   type ShinsaState,
+  type UserCommand,
   selectOpenIteration,
   splitHouseRules,
 } from '../src/index.ts';
 
 export type Harness = ReturnType<typeof createHarness>;
+
+export function parseCommand(body: unknown): UserCommand {
+  return Result.getOrThrow(parseUserCommand(body));
+}
 
 export function readInstruction(run: Run) {
   const prompt = run.rolePrompt ?? run.prompt ?? '';

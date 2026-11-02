@@ -3,13 +3,19 @@ import {
   isSharedWorkspace,
   isWaitingForCheckout,
   listWaitsOn,
-  parseUserCommand,
   resolveRepoWorkspace,
   resolveTaskWorkspace,
   selectCheckoutHolder,
   type WorkspaceMode,
 } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, registerRepo, verifySetup } from '../harness.ts';
+import {
+  parseCommand,
+  createHarness,
+  createTask,
+  type Harness,
+  registerRepo,
+  verifySetup,
+} from '../harness.ts';
 
 function chooseWorkspace(harness: Harness, repoId: string, workspace: WorkspaceMode) {
   harness.send({ type: 'repo.update', repoId, patch: { workspace } });
@@ -152,13 +158,13 @@ describe('where agents work', () => {
     expect(() =>
       harness.send({ type: 'repo.update', repoId, patch: { workspace: 'main_checkout' } }, { onBehalf: true })
     ).toThrow('Only the human changes the repository’s workspace.');
-    expect(parseUserCommand({ type: 'repo.update', repoId, patch: { workspace: 'main_checkout' } })).toEqual({
+    expect(parseCommand({ type: 'repo.update', repoId, patch: { workspace: 'main_checkout' } })).toEqual({
       type: 'repo.update',
       repoId,
       patch: { workspace: 'main_checkout' },
     });
     for (const workspace of ['branches', 'gitbutler']) {
-      expect(() => parseUserCommand({ type: 'repo.update', repoId, patch: { workspace } })).toThrow(
+      expect(() => parseCommand({ type: 'repo.update', repoId, patch: { workspace } })).toThrow(
         'workspace must be one of worktrees, main_checkout.'
       );
     }

@@ -1,11 +1,7 @@
 import { type Brand, Schema } from 'effect';
+import { Id } from './fields.ts';
 
-export const ID_LIMIT = 200;
-
-export const IdText = Schema.String.annotate({ message: '{key} must be text.' }).check(
-  Schema.isMaxLength(ID_LIMIT, { message: `{key} is longer than ${ID_LIMIT} characters.` }),
-  Schema.isNonEmpty({ message: '{key} must not be empty.' })
-);
+export const IdText = Id();
 
 export const TaskId = IdText.pipe(Schema.brand('TaskId'));
 
