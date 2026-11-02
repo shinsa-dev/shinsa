@@ -12,5 +12,6 @@ export class DesktopHost extends Context.Service<
     readonly userDataPath: string;
     readonly logsPath: string;
     readonly env: Readonly<Record<string, string | undefined>>;
+    readonly argv: readonly string[];
   }
 >()('shinsa/desktop/host/DesktopHost') {}

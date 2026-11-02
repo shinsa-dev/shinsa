@@ -2,6 +2,7 @@ import { APP_IDENTITY } from '@shinsa/core';
 import { Option, Predicate, Schema } from 'effect';
 import {
   BUSY_PORT,
+  ENGINE_ACTION_LABEL,
   ENGINE_ACTION_LINK,
   EngineAction,
   EngineLogEntry,
@@ -100,4 +101,14 @@ export function describeEngineScreen(screen: EngineScreen): EngineScreenView {
         busy: false,
       };
   }
+}
+
+export function resolveWaitingQuery(view: EngineScreenView): Record<string, string> {
+  return {
+    title: view.title,
+    text: view.text,
+    detail: view.detail,
+    busy: view.busy ? '1' : '',
+    actions: view.actions.map((action) => `${action}:${ENGINE_ACTION_LABEL[action]}`).join('|'),
+  };
 }

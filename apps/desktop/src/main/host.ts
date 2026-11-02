@@ -14,5 +14,6 @@ export const DesktopHostLive = Layer.sync(DesktopHost, () =>
     userDataPath: app.getPath('userData'),
     logsPath: app.getPath('logs'),
     env: process.env,
+    argv: process.argv,
   })
 );

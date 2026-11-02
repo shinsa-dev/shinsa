@@ -21,8 +21,8 @@ export function isAppUrl(url: URL, origin: string) {
   return url.protocol === app.protocol && url.port === app.port && sameHost;
 }
 
-function isAppAddress(address: string | undefined, origin: string) {
-  const url = address === undefined ? null : URL.parse(address);
+export function isAppAddress(address: string | null | undefined, origin: string) {
+  const url = address === undefined || address === null ? null : URL.parse(address);
   return url !== null && isAppUrl(url, origin);
 }
 

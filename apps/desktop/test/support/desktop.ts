@@ -1,23 +1,45 @@
-import { Effect, Layer, Logger, Option, PubSub, Stream } from 'effect';
+import { Effect, Layer, Logger, Option, PubSub, Queue, Stream } from 'effect';
 import { HttpClient, HttpClientError, HttpClientResponse } from 'effect/http';
 import { TestClock } from 'effect/testing';
+import { AppLifecycle } from '../../src/app/service.ts';
+import type { DesktopStart } from '../../src/bridge/schema.ts';
+import { PageBridge } from '../../src/bridge/service.ts';
 import type { MessageDialog } from '../../src/dialogs/schema.ts';
 import { Dialogs } from '../../src/dialogs/service.ts';
-import type { Registration } from '../../src/engine/schema.ts';
+import { EngineActions } from '../../src/engine-actions/service.ts';
+import type { EngineAction, Registration } from '../../src/engine/schema.ts';
 import { EngineSupervisor } from '../../src/engine/service.ts';
 import { FileWriteFailed } from '../../src/files/schema.ts';
 import { Files } from '../../src/files/service.ts';
 import { DesktopHost } from '../../src/host/service.ts';
 import { Launchctl } from '../../src/launchctl/service.ts';
 import { LoginItems } from '../../src/login-items/service.ts';
-import type { DesktopNotice } from '../../src/notifications/schema.ts';
+import type { MenuCommand, MenuSection } from '../../src/menu/schema.ts';
+import { AppMenu } from '../../src/menu/service.ts';
+import { NativeNotices } from '../../src/native-notices/service.ts';
+import { NativeTray } from '../../src/native-tray/service.ts';
+import { NativeWindow } from '../../src/native-window/service.ts';
+import type { DesktopNotice, NoticeEvent } from '../../src/notifications/schema.ts';
 import { Notifications } from '../../src/notifications/service.ts';
+import type { PageMessage } from '../../src/page-channel/schema.ts';
+import { PageChannel } from '../../src/page-channel/service.ts';
 import { Prefs } from '../../src/prefs/service.ts';
 import { EngineServer } from '../../src/server/service.ts';
+import type { AboutPanel, ShellEvent, ShellGuards } from '../../src/shell/schema.ts';
+import { DesktopShell } from '../../src/shell/service.ts';
+import type { TrayClick, TrayView } from '../../src/tray/schema.ts';
+import { StatusTray } from '../../src/tray/service.ts';
 import { UpdateClient } from '../../src/update-client/service.ts';
 import { UpdateLog } from '../../src/update-log/service.ts';
 import { UpdateCheckFailed, type UpdateEvent, type UpdaterOptions } from '../../src/updates/schema.ts';
 import { Updater } from '../../src/updates/service.ts';
+import type {
+  NativeWindowEvent,
+  NavigationHistory,
+  Rect,
+  SenderFrame,
+  WindowGuards,
+} from '../../src/window/schema.ts';
 import { AppWindow } from '../../src/window/service.ts';
 
 export type HttpAnswer = { status: number; body: string } | 'refuse' | 'hang';
@@ -47,8 +69,31 @@ export interface DesktopWorld {
   dialogs: MessageDialog[];
   dialogAnswer: (dialog: MessageDialog) => number;
   notices: DesktopNotice[];
+  noticesSupported: boolean;
+  noticeEvents: Queue.Queue<NoticeEvent>[];
   window: string[];
+  sent: [string, unknown][];
+  fullScreen: boolean;
+  bounds: Rect;
+  history: NavigationHistory;
+  loads: boolean;
+  windowGuards: WindowGuards | null;
+  windowEvents: Queue.Queue<NativeWindowEvent> | null;
+  tray: TrayView[];
+  trayClicks: Queue.Queue<TrayClick> | null;
+  argv: string[];
+  shell: string[];
+  about: AboutPanel[];
+  menus: (readonly MenuSection[])[];
+  shellGuards: ShellGuards | null;
+  shellEvents: Queue.Queue<ShellEvent> | null;
+  menuCommands: Queue.Queue<MenuCommand> | null;
+  pageMessages: Queue.Queue<PageMessage> | null;
+  start: ((frame: SenderFrame) => Effect.Effect<DesktopStart | null>) | null;
+  actions: EngineAction[];
 }
+
+export const CONTENTS_ID = 7;
 
 const HOME = '/Users/me';
 
@@ -82,7 +127,28 @@ export function createWorld(overrides: Partial<DesktopWorld> = {}): DesktopWorld
     dialogs: [],
     dialogAnswer: () => 1,
     notices: [],
+    noticesSupported: true,
+    noticeEvents: [],
     window: [],
+    sent: [],
+    fullScreen: false,
+    bounds: { x: 10, y: 20, width: 900, height: 700 },
+    history: { urls: [], active: 0 },
+    loads: true,
+    windowGuards: null,
+    windowEvents: null,
+    tray: [],
+    trayClicks: null,
+    argv: [],
+    shell: [],
+    about: [],
+    menus: [],
+    shellGuards: null,
+    shellEvents: null,
+    menuCommands: null,
+    pageMessages: null,
+    start: null,
+    actions: [],
     ...overrides,
   };
 }
@@ -132,6 +198,7 @@ function makeWorldLayer(world: DesktopWorld) {
         userDataPath: USER_DATA,
         logsPath: LOGS,
         env: world.env,
+        argv: world.argv,
       })
     ),
     Layer.succeed(
@@ -240,24 +307,125 @@ function makeUpdateLayer(world: DesktopWorld) {
           }),
       })
     ),
+    makeNativeLayer(world)
+  );
+}
+
+function record(world: DesktopWorld, call: string) {
+  return Effect.sync(() => {
+    world.window.push(call);
+  });
+}
+
+function makeNativeLayer(world: DesktopWorld) {
+  return Layer.mergeAll(
     Layer.succeed(
-      Notifications,
-      Notifications.of({
+      NativeNotices,
+      NativeNotices.of({
+        supported: world.noticesSupported,
         show: (notice) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
+            const events = yield* Queue.unbounded<NoticeEvent>();
             world.notices.push(notice);
+            world.noticeEvents.push(events);
+            return {
+              close: Effect.sync(() => {
+                world.shell.push(`close ${notice.tag}`);
+                Queue.offerUnsafe(events, 'close');
+              }),
+              events: Stream.fromQueue(events),
+            };
           }),
       })
     ),
-    Layer.succeed(
-      AppWindow,
-      AppWindow.of({
-        show: Effect.sync(() => {
-          world.window.push('show');
-        }),
-        markQuitting: Effect.sync(() => {
-          world.window.push('markQuitting');
-        }),
+    Layer.effect(
+      NativeWindow,
+      Effect.gen(function* () {
+        const events = yield* Queue.unbounded<NativeWindowEvent>();
+        world.windowEvents = events;
+        return NativeWindow.of({
+          contentsId: CONTENTS_ID,
+          events: Stream.fromQueue(events),
+          guard: (guards) =>
+            Effect.sync(() => {
+              world.windowGuards = guards;
+            }),
+          loadUrl: (url) => Effect.as(record(world, `load ${url}`), world.loads),
+          loadWaiting: (query) => Effect.as(record(world, `waiting ${query.title}`), world.loads),
+          send: (channel, value) =>
+            Effect.sync(() => {
+              world.sent.push([channel, value]);
+            }),
+          show: record(world, 'show'),
+          hide: record(world, 'hide'),
+          reload: record(world, 'reload'),
+          fullScreen: Effect.sync(() => world.fullScreen),
+          leaveFullScreen: record(world, 'leave-full-screen'),
+          normalBounds: Effect.sync(() => world.bounds),
+          history: Effect.sync(() => world.history),
+          goTo: (index) => record(world, `go ${index}`),
+        });
+      })
+    ),
+    Layer.effect(
+      NativeTray,
+      Effect.gen(function* () {
+        const clicks = yield* Queue.unbounded<TrayClick>();
+        world.trayClicks = clicks;
+        return NativeTray.of({
+          show: (view) =>
+            Effect.sync(() => {
+              world.tray.push(view);
+            }),
+          clicks: Stream.fromQueue(clicks),
+        });
+      })
+    ),
+    Layer.effect(
+      DesktopShell,
+      Effect.gen(function* () {
+        const events = yield* Queue.unbounded<ShellEvent>();
+        const commands = yield* Queue.unbounded<MenuCommand>();
+        world.shellEvents = events;
+        world.menuCommands = commands;
+        const push = (entry: string) =>
+          Effect.sync(() => {
+            world.shell.push(entry);
+          });
+        return DesktopShell.of({
+          events: Stream.fromQueue(events),
+          guard: (guards) =>
+            Effect.sync(() => {
+              world.shellGuards = guards;
+            }),
+          quit: push('quit'),
+          setBadge: (text) => push(`badge ${text}`),
+          openExternal: (url) => push(`open ${url}`),
+          writeClipboard: (text) => push(`copy ${text}`),
+          setAboutPanel: (panel) =>
+            Effect.sync(() => {
+              world.about.push(panel);
+            }),
+          applyMenu: (sections) =>
+            Effect.sync(() => {
+              world.menus.push(sections);
+            }),
+          menuCommands: Stream.fromQueue(commands),
+        });
+      })
+    ),
+    Layer.effect(
+      PageChannel,
+      Effect.gen(function* () {
+        const messages = yield* Queue.unbounded<PageMessage>();
+        world.pageMessages = messages;
+        return PageChannel.of({
+          messages: Stream.fromQueue(messages),
+          serveStart: (answer) =>
+            Effect.sync(() => {
+              world.start = answer;
+            }),
+        });
       })
     )
   );
@@ -269,14 +437,50 @@ export function emitUpdate(world: DesktopWorld, event: UpdateEvent) {
 
 export const flush = Effect.repeat(Effect.yieldNow, { times: 50 });
 
-export function runDesktop<A, E>(
-  world: DesktopWorld,
-  effect: Effect.Effect<A, E, EngineServer | EngineSupervisor | Updater | Prefs | UpdateLog>
-) {
-  const layer = Layer.mergeAll(EngineSupervisor.layer, Updater.layer).pipe(
-    Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer)),
-    Layer.provide(makeWorldLayer(world)),
+export function closeWindow(world: DesktopWorld) {
+  return Effect.runPromise(Effect.suspend(() => world.windowGuards?.close ?? Effect.succeed(false)));
+}
+
+export function offer<A>(queue: Queue.Queue<A> | null, value: A) {
+  return Effect.andThen(
+    Effect.suspend(() => (queue ? Queue.offer(queue, value) : Effect.void)),
+    flush
+  );
+}
+
+function makeDesktopLayer(world: DesktopWorld) {
+  return Layer.mergeAll(
+    AppLifecycle,
+    PageBridge,
+    AppMenu.layer,
+    StatusTray.layer,
+    EngineSupervisor.layer
+  ).pipe(
+    Layer.provideMerge(Updater.layer),
+    Layer.provideMerge(Notifications.layer),
+    Layer.provideMerge(AppWindow.layer),
+    Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer, EngineActions.layer)),
+    Layer.provideMerge(makeWorldLayer(world)),
     Layer.provideMerge(TestClock.layer())
   );
-  return Effect.runPromise(effect.pipe(Effect.provide(Layer.merge(layer, Logger.layer([])))));
+}
+
+export type DesktopServices = Layer.Success<ReturnType<typeof makeDesktopLayer>>;
+
+export function runDesktop<A, E>(world: DesktopWorld, effect: Effect.Effect<A, E, DesktopServices>) {
+  const watched = Effect.gen(function* () {
+    const actions = yield* EngineActions;
+    yield* Effect.forkScoped(
+      Stream.runForEach(actions.requests, (action) =>
+        Effect.sync(() => {
+          world.actions.push(action);
+        })
+      ),
+      { startImmediately: true }
+    );
+    return yield* effect;
+  });
+  return Effect.runPromise(
+    Effect.scoped(watched).pipe(Effect.provide(Layer.merge(makeDesktopLayer(world), Logger.layer([]))))
+  );
 }

@@ -1,103 +1,129 @@
 import { Effect, Layer, ManagedRuntime, Option, Stream } from 'effect';
 import { FetchHttpClient } from 'effect/http';
+import { AppLifecycle } from '../app/service.ts';
+import { PageBridge } from '../bridge/service.ts';
+import { EngineActions } from '../engine-actions/service.ts';
+import type { EngineAction, EngineScreenView } from '../engine/schema.ts';
 import { EngineSupervisor } from '../engine/service.ts';
+import { AppMenu } from '../menu/service.ts';
+import { Notifications } from '../notifications/service.ts';
 import { Prefs } from '../prefs/service.ts';
+import type { ServerHealth } from '../server/schema.ts';
 import { EngineServer } from '../server/service.ts';
+import { DesktopShell } from '../shell/service.ts';
+import type { TrayQueue } from '../tray/schema.ts';
+import { StatusTray } from '../tray/service.ts';
 import { UpdateLog } from '../update-log/service.ts';
-import type { UpdateChannel, UpdateSnapshot } from '../updates/schema.ts';
 import { Updater } from '../updates/service.ts';
-import type { Rect } from '../window/schema.ts';
-import { AppWindowLive, NotificationsLive } from './app-window.ts';
+import { AppWindow } from '../window/service.ts';
 import { DialogsLive } from './dialogs.ts';
 import { FilesLive } from './files.ts';
 import { DesktopHostLive } from './host.ts';
 import { LaunchctlLive } from './launchctl.ts';
 import { LoginItemsLive } from './login-items.ts';
+import { NativeNoticesLive } from './native-notices.ts';
+import { NativeTrayLive } from './native-tray.ts';
+import { NativeWindowLive } from './native-window.ts';
+import { PageChannelLive } from './page-channel.ts';
+import { DesktopShellLive } from './shell.ts';
 import { UpdateClientLive } from './update-client.ts';
 
-const WorldLayer = Layer.mergeAll(
-  FetchHttpClient.layer,
-  DesktopHostLive,
-  FilesLive,
-  LaunchctlLive,
-  LoginItemsLive,
-  UpdateClientLive,
-  DialogsLive,
-  AppWindowLive,
-  NotificationsLive
+const BaseLayer = EngineSupervisor.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer, EngineActions.layer)),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      FetchHttpClient.layer,
+      DesktopHostLive,
+      FilesLive,
+      LaunchctlLive,
+      LoginItemsLive,
+      UpdateClientLive,
+      DialogsLive,
+      DesktopShellLive
+    )
+  )
 );
 
-const DesktopLayer = Layer.mergeAll(EngineSupervisor.layer, Updater.layer).pipe(
-  Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer)),
-  Layer.provideMerge(WorldLayer)
+const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AppMenu.layer, StatusTray.layer).pipe(
+  Layer.provideMerge(Updater.layer),
+  Layer.provideMerge(Notifications.layer),
+  Layer.provideMerge(AppWindow.layer),
+  Layer.provideMerge(Layer.mergeAll(NativeWindowLive, NativeTrayLive, NativeNoticesLive, PageChannelLive)),
+  Layer.provideMerge(BaseLayer)
 );
 
-const desktopRuntime = ManagedRuntime.make(DesktopLayer);
+const baseRuntime = ManagedRuntime.make(BaseLayer);
+
+const windowRuntime = ManagedRuntime.make(WindowLayer, { memoMap: baseRuntime.memoMap });
 
 export function readOrigin() {
-  return desktopRuntime.runPromise(EngineServer.use((server) => Effect.succeed(server.origin)));
+  return baseRuntime.runPromise(EngineServer.use((server) => Effect.succeed(server.origin)));
 }
 
 export function requestHealth() {
-  return desktopRuntime.runPromise(
+  return baseRuntime.runPromise(
     EngineServer.use((server) => Effect.map(Effect.option(server.requestHealth), Option.getOrNull))
   );
 }
 
-export function requestTrayQueue() {
-  return desktopRuntime.runPromise(
-    EngineServer.use((server) => Effect.map(Effect.option(server.requestQueue), Option.getOrNull))
-  );
-}
-
 export function ensureEngine(onStarting: () => void) {
-  return desktopRuntime.runPromise(EngineSupervisor.use((engine) => engine.ensure(Effect.sync(onStarting))));
+  return baseRuntime.runPromise(EngineSupervisor.use((engine) => engine.ensure(Effect.sync(onStarting))));
 }
 
 export function restartEngine() {
-  return desktopRuntime.runPromise(EngineSupervisor.use((engine) => engine.restart));
+  return baseRuntime.runPromise(EngineSupervisor.use((engine) => engine.restart));
 }
 
 export function readEngineDetails() {
-  return desktopRuntime.runPromise(EngineSupervisor.use((engine) => engine.readDetails));
+  return baseRuntime.runPromise(EngineSupervisor.use((engine) => engine.readDetails));
 }
 
-export function readPrefs() {
-  return desktopRuntime.runPromise(Prefs.use((prefs) => prefs.read));
+export function openExternal(url: string) {
+  return baseRuntime.runPromise(DesktopShell.use((shell) => shell.openExternal(url)));
 }
 
-export function writeWindowBounds(windowBounds: Rect) {
-  desktopRuntime.runSync(Prefs.use((prefs) => prefs.write({ windowBounds })));
+export function writeClipboard(text: string) {
+  return baseRuntime.runPromise(DesktopShell.use((shell) => shell.writeClipboard(text)));
 }
 
-export function readUpdates() {
-  return desktopRuntime.runPromise(Updater.use((updater) => updater.snapshot));
+export function clearBadge() {
+  return baseRuntime.runPromise(DesktopShell.use((shell) => shell.setBadge('')));
 }
 
-export function watchUpdates(listener: (snapshot: UpdateSnapshot) => void) {
-  desktopRuntime.runFork(
-    Updater.use((updater) =>
-      Stream.runForEach(updater.changes, (snapshot) => Effect.sync(() => listener(snapshot)))
+export function watchEngineActions(listener: (action: EngineAction) => void) {
+  baseRuntime.runFork(
+    EngineActions.use((actions) =>
+      Stream.runForEach(actions.requests, (action) => Effect.sync(() => listener(action)))
     )
   );
 }
 
-export function startUpdater() {
-  desktopRuntime.runFork(Updater.use((updater) => updater.start));
+export function startWindow() {
+  return windowRuntime.runPromise(Updater.use((updater) => updater.start));
 }
 
-export function checkForUpdates(manual: boolean) {
-  desktopRuntime.runFork(Updater.use((updater) => updater.check(manual)));
+export function readPage() {
+  return windowRuntime.runPromise(AppWindow.use((window) => window.page));
 }
 
-export function applyUpdateChannel(channel: UpdateChannel) {
-  desktopRuntime.runFork(Updater.use((updater) => updater.applyChannel(channel)));
+export function showServerPage() {
+  return windowRuntime.runPromise(AppWindow.use((window) => window.showServerPage));
 }
 
-export function answerDowngrade(accept: boolean) {
-  desktopRuntime.runFork(Updater.use((updater) => updater.answerDowngrade(accept)));
+export function showWaiting(view: EngineScreenView) {
+  return windowRuntime.runPromise(AppWindow.use((window) => window.showWaiting(view)));
 }
 
-export function installUpdate() {
-  desktopRuntime.runFork(Updater.use((updater) => updater.install));
+export function showServer(health: ServerHealth) {
+  return windowRuntime.runPromise(AppMenu.use((menu) => menu.showServer(health)));
+}
+
+export function requestTrayQueue() {
+  return baseRuntime.runPromise(
+    EngineServer.use((server) => Effect.map(Effect.option(server.requestQueue), Option.getOrNull))
+  );
+}
+
+export function updateTray(health: ServerHealth | null, queue: TrayQueue | null) {
+  return windowRuntime.runPromise(StatusTray.use((tray) => tray.update(health, queue)));
 }

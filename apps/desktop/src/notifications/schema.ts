@@ -1,4 +1,4 @@
-import { Schema, SchemaGetter, SchemaTransformation } from 'effect';
+import { type Effect, Schema, SchemaGetter, SchemaTransformation, type Stream } from 'effect';
 import { AppPath } from '../navigation/schema.ts';
 
 const NOTICE_LIMITS = { title: 120, body: 240, tag: 120 } as const;
@@ -39,3 +39,12 @@ export const NoticePayload = Schema.Struct({
 export type DesktopNotice = typeof NoticePayload.Type;
 
 export const BadgeCount = Schema.Int.check(Schema.isGreaterThan(0));
+
+export const NoticeEvent = Schema.Literals(['click', 'close', 'failed']);
+
+export type NoticeEvent = typeof NoticeEvent.Type;
+
+export interface NativeNotice {
+  readonly close: Effect.Effect<void>;
+  readonly events: Stream.Stream<NoticeEvent>;
+}

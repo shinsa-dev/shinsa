@@ -58,7 +58,7 @@ export const TrayQueue = Schema.Struct({ decisions: TrayTasks, working: TrayTask
 
 export type TrayQueue = typeof TrayQueue.Type;
 
-export type TrayAction = 'open' | 'quit';
+type TrayAction = 'open' | 'quit';
 
 export type TrayItem =
   | { kind: 'status'; label: string }
@@ -66,3 +66,11 @@ export type TrayItem =
   | { kind: 'separator' }
   | { kind: 'task'; path: string; label: string; sublabel: string }
   | { kind: 'action'; action: TrayAction; label: string; sublabel?: string };
+
+export interface TrayView {
+  title: string;
+  tooltip: string;
+  items: TrayItem[];
+}
+
+export type TrayClick = { kind: 'action'; action: TrayAction } | { kind: 'task'; path: string };

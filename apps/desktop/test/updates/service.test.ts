@@ -5,6 +5,7 @@ import type { UpdateEvent } from '../../src/updates/schema.ts';
 import { Updater } from '../../src/updates/service.ts';
 import {
   type CheckScript,
+  closeWindow,
   createWorld,
   type DesktopWorld,
   emitUpdate,
@@ -169,7 +170,7 @@ describe('the updater', () => {
       })
     );
     expect(world.installs).toBe(1);
-    expect(world.window).toEqual(['markQuitting']);
+    expect(await closeWindow(world)).toBe(true);
     expect(states).toEqual([
       { status: 'installing', version: '1.3.0' },
       { status: 'ready', version: '1.3.0' },

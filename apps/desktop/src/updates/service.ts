@@ -214,6 +214,7 @@ export class Updater extends Context.Service<
         if (state.status !== 'ready') return;
         yield* set({ status: 'installing', version: state.version });
         yield* inBackground(Effect.delay(timeOutInstall, INSTALL_TIMEOUT));
+        yield* window.markQuitting;
         yield* client.quitAndInstall;
       });
       const start = Effect.gen(function* () {

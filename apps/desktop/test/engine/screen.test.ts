@@ -4,6 +4,7 @@ import {
   describeEngineScreen,
   parseEngineAction,
   resolveLogTail,
+  resolveWaitingQuery,
   selectBusyPort,
 } from '../../src/engine/screen.ts';
 
@@ -69,5 +70,16 @@ describe('the status screen', () => {
       expect(parseEngineAction(`shinsa://engine/${action}`)).toBe(action as never);
     expect(parseEngineAction('shinsa://engine/format-disk')).toBeNull();
     expect(parseEngineAction('shinsa://task/SW-1')).toBeNull();
+  });
+});
+
+describe('the waiting page query', () => {
+  it('carries the view and its actions with their labels', () => {
+    expect(resolveWaitingQuery(describeEngineScreen({ kind: 'stopped', detail: 'exit 1' }))).toMatchObject({
+      detail: 'exit 1',
+      busy: '',
+      actions: 'restart:Start engine|open-privacy:Open Privacy & Security|copy-details:Copy details',
+    });
+    expect(resolveWaitingQuery(describeEngineScreen({ kind: 'starting' })).busy).toBe('1');
   });
 });

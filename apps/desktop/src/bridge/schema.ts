@@ -1,8 +1,6 @@
 import type { DesktopNotice } from '../notifications/schema.ts';
 import type { UpdateChannel } from '../updates/schema.ts';
 
-export type { DesktopNotice };
-
 export type DesktopWindowState = 'window' | 'fullscreen';
 
 export type DesktopUpdate =
