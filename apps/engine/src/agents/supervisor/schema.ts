@@ -1,6 +1,6 @@
 import type { Effect, Scope } from 'effect';
 
-export interface TaskScope {
+interface TaskScope {
   readonly scope: Scope.Closeable;
   readonly open: number;
 }
