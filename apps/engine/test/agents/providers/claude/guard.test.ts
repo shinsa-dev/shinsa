@@ -168,6 +168,55 @@ describe('the command guard', () => {
     });
   });
 
+  test('refuses calling the terminal and service routes, but not source or a search that names them', () => {
+    const viewEdit = [
+      "python3 - <<'EOF'",
+      'from pathlib import Path',
+      "path = Path('apps/web/src/lib/terminal/view.ts')",
+      'text = path.read_text()',
+      `text = text.replace('class TerminalSocket {', 'class TerminalSocket {\\n  readonly url = \`/ws/terminals/\${id}\`;')`,
+      "text = text.replace('new TerminalView(', 'new TerminalView(socket, ')",
+      'path.write_text(text)',
+      'EOF',
+    ].join('\n');
+    const socketFile = [
+      "mkdir -p src/lib/terminal/terminal-socket && cat > src/lib/terminal/terminal-socket/service.ts <<'EOF'",
+      'export class TerminalSocket {',
+      '  open(id: string) {',
+      `    return new WebSocket(\`/ws/terminals/\${encodeURIComponent(id)}\`);`,
+      '  }',
+      '}',
+      'EOF',
+    ].join('\n');
+    for (const command of [
+      viewEdit,
+      socketFile,
+      'grep -rn "/api/terminals" apps/web/src',
+      "rg '/api/services/' apps/engine/src",
+      'cat apps/web/test/lib/terminal/view.test.ts',
+    ]) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: false });
+    }
+    for (const command of [
+      'curl -X POST http://localhost:7446/api/terminals/x/input -d ls',
+      'websocat ws://localhost:7446/ws/terminals/x',
+      'curl -s localhost:7446/api/services/x/start',
+      'cd app && wget -qO- http://127.0.0.1:7446/api/terminals',
+      'echo ls | wscat -c ws://localhost:7446/ws/terminals/x',
+      'out=$(curl -s localhost:7446/api/terminals)',
+      'xh POST :7446/api/services/x/stop',
+      'bash <<EOF\ncurl -X POST localhost:7446/api/terminals/x/input\nEOF',
+    ]) {
+      expect(resolveCommandVerdict(command, 'main')).toMatchObject({
+        hookSpecificOutput: {
+          permissionDecisionReason:
+            'Only the human types into their terminals and runs their services. Put the command in a ```bash run block in your question to them, and they can run it in a terminal with one press.',
+        },
+      });
+    }
+    expect(denied('shinsa terminals list')).toBe(true);
+  });
+
   test('only looks at Bash commands before they run', async () => {
     const hook = guardCommand('main');
     const signal = new AbortController().signal;

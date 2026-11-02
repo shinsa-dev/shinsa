@@ -43,7 +43,8 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
         'Only the human changes a repository’s check commands, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
     },
     {
-      pattern: /\/(?:api|ws)\/(?:terminals|services)(?![\w-])/,
+      pattern:
+        /(?:^|[\s;&|(`])(?:curl|wget|xh|https?|websocat|wscat)\s[^;&|\n]*?\/(?:api|ws)\/(?:terminals|services)(?![\w-])/,
       reason:
         'Only the human types into their terminals and runs their services. Put the command in a ```bash run block in your question to them, and they can run it in a terminal with one press.',
     },
