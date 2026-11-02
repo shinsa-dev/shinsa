@@ -1,5 +1,10 @@
-import { hasShareGroup, lowerFirst, type SharedTask, type Task } from '@shinsa/core';
-import { resolveFirstName, resolveSharedProfile, type UserProfile } from '@/lib/remote/users.ts';
+import { capitalise, hasShareGroup, lowerFirst, type SharedTask, type Task } from '@shinsa/core';
+import {
+  type MentionPart,
+  resolveFirstName,
+  resolveSharedProfile,
+  type UserProfile,
+} from '@/lib/remote/users.ts';
 import { listTaskTabs, type TaskTab } from '@/lib/tasks/tabs.ts';
 
 export const SHARED_READ_ONLY_NOTE = 'Read-only';
@@ -29,6 +34,17 @@ export function describeOwnerInSentence(owner: string) {
 
 export function describeOwnerPossessive(owner: string | null) {
   return owner === null ? 'your' : `${describeOwnerInSentence(owner)}’s`;
+}
+
+export function resolveOwnerMention(owner: SharedOwner): MentionPart {
+  const label = describeOwnerInSentence(owner.name);
+  return owner.user ? { user: owner.user, label } : label;
+}
+
+export function resolveOwnerPossessive(owner: SharedOwner | null, start = false): MentionPart {
+  if (owner?.user) return { user: owner.user, label: `${owner.name}’s` };
+  const label = describeOwnerPossessive(owner?.name ?? null);
+  return start ? capitalise(label) : label;
 }
 
 export function describeSharedFrom(shared: SharedTask) {

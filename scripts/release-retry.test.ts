@@ -8,6 +8,7 @@ import {
   resolveNotaryCredentials,
   retryStep,
   STAPLE_DELAYS,
+  serializeRetryWarning,
 } from './release-retry.ts';
 
 function createRecorder() {
@@ -113,6 +114,22 @@ describe('describeRetryFailure', () => {
     const error = Object.assign(new Error('Failed'), { stderr: '  ' });
     expect(describeRetryFailure({ ...failure, error })).toContain('(Failed)');
     expect(describeRetryFailure({ ...failure, error: 'timed out' })).toContain('(timed out)');
+  });
+});
+
+describe('serializeRetryWarning', () => {
+  const failure = { label: 'Validate the staple', attempt: 1, attempts: 5, delay: 15_000, error: 'Error 68' };
+
+  it('writes a warning annotation on GitHub Actions', () => {
+    expect(serializeRetryWarning(failure, { GITHUB_ACTIONS: 'true' })).toBe(
+      '::warning title=Validate the staple::Validate the staple failed on attempt 1 of 5 (Error 68). Trying again in 15s.\n'
+    );
+  });
+
+  it('writes the plain line anywhere else', () => {
+    expect(serializeRetryWarning(failure, {})).toBe(
+      'Validate the staple failed on attempt 1 of 5 (Error 68). Trying again in 15s.\n'
+    );
   });
 });
 

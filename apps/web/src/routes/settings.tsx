@@ -11,6 +11,7 @@ import { AppearanceSettings } from '@/components/settings/appearance.tsx';
 import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
+import { HostedTeamsSettings } from '@/components/settings/hosted-teams.tsx';
 import { IntegrationSettings } from '@/components/settings/integrations.tsx';
 import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
@@ -75,7 +76,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <NotificationSettings />
           <ContextSettings settings={state.settings} />
           {isRemoteBuild() ? <MachinesSettings /> : <RemoteAccessSettings />}
-          {!isRemoteBuild() && <TeamsSettings state={state} />}
+          {isRemoteBuild() ? <HostedTeamsSettings /> : <TeamsSettings state={state} />}
           {!isRemoteBuild() && <SharingSettings settings={state.settings} />}
           <SlackSettings />
           <UpdateSettings />

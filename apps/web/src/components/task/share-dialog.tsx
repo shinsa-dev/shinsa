@@ -13,14 +13,14 @@ import * as React from 'react';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
-import { UserIdentity } from '@/components/people/user-tag.tsx';
+import { MentionText, UserIdentity } from '@/components/people/user-tag.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
 import { useEngineCommand } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
-import { describeUserName } from '@/lib/remote/users.ts';
+import { type Mention, resolveFirstName } from '@/lib/remote/users.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
   changeShareLimit,
@@ -272,9 +272,9 @@ function HandoffActions({ task, view }: { task: Task; view: HandoffView }) {
   }
 }
 
-function describeHandoffView(view: HandoffView) {
-  if (view.kind === 'claimed') return `${describeHandoffClaim(view.guest)}. ${HANDOFF_HELD_DESCRIPTION}`;
-  return HANDOFF_DESCRIPTION;
+function describeHandoffView(view: HandoffView): Mention {
+  if (view.kind === 'claimed') return [...describeHandoffClaim(view.guest), `. ${HANDOFF_HELD_DESCRIPTION}`];
+  return [HANDOFF_DESCRIPTION];
 }
 
 function ShareContent({ task }: { task: Task }) {
@@ -310,7 +310,9 @@ function ShareContent({ task }: { task: Task }) {
     <>
       <DialogHeader>
         <DialogTitle>{SHARE_TITLE}</DialogTitle>
-        <DialogDescription>{handing ? describeHandoffView(handoff) : SHARE_DESCRIPTION}</DialogDescription>
+        <DialogDescription>
+          {handing ? <MentionText mention={describeHandoffView(handoff)} /> : SHARE_DESCRIPTION}
+        </DialogDescription>
       </DialogHeader>
       {!handing && <ShareBody view={view} />}
       {view.kind !== 'unpaired' && (
@@ -390,7 +392,7 @@ export function HandoffRemoveConfirm() {
         },
         onOpenChangeComplete: () => undefined,
       }}
-      title={guest ? `Remove ${describeUserName(guest)}?` : `${HANDOFF_REMOVE}?`}
+      title={guest ? `Remove ${resolveFirstName(guest)}?` : `${HANDOFF_REMOVE}?`}
       body={HANDOFF_REMOVE_DESCRIPTION}
       action={HANDOFF_REMOVE}
       onConfirm={() => {

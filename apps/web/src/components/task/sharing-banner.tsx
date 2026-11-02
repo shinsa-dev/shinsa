@@ -4,6 +4,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { MentionText } from '@/components/people/user-tag.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useEngineCommand } from '@/lib/connection/socket.ts';
@@ -74,7 +75,9 @@ export function HandoffBanner({ task }: { task: Task }) {
   return (
     <div role='status' className={BANNER}>
       <Icon size='sm' name={HANDOFF_ICON} className='text-primary-text' />
-      <span className='min-w-48 flex-1 text-fg-4'>{note}</span>
+      <span className='min-w-48 flex-1 text-fg-4'>
+        <MentionText mention={note} />
+      </span>
       <div className='ms-auto flex shrink-0 items-center gap-2'>
         {view.kind === 'ready' && <CopyLinkButton url={view.url} label={HANDOFF_COPY} />}
         {view.kind === 'claimed' ? (

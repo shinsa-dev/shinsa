@@ -1,3 +1,4 @@
+import { resolveFirstName } from './people.ts';
 import type { UnreachedTeammate } from './shapes.ts';
 import type { TeammateOriginal, TeammateOwner } from './types.ts';
 
@@ -5,10 +6,6 @@ interface DuplicateOriginal {
   handle?: string | null;
   title: string;
   owner?: TeammateOwner | null;
-}
-
-export function resolveFirstName(person: Pick<TeammateOwner, 'login' | 'name'>) {
-  return person.name?.trim().split(/\s+/)[0] || person.login;
 }
 
 export function quoteDuplicateOriginal(original: DuplicateOriginal) {

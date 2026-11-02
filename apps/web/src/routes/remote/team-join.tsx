@@ -3,13 +3,14 @@ import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
+import { UserTag } from '@/components/people/user-tag.tsx';
 import { SettingsCard } from '@/components/settings/group.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { RemotePoint } from '@/lib/remote/mode.ts';
-import { resolveFirstName } from '@/lib/remote/users.ts';
+import type { UserProfile } from '@/lib/remote/users.ts';
 import {
   clearTeamJoinFragment,
   requestTeamJoin,
@@ -58,7 +59,7 @@ const SHARE_STEPS = [
   'Pick the projects your teammates should see.',
 ];
 
-type TeamPreview = { name: string; owner: string } | { failure: string } | null;
+type TeamPreview = { name: string; owner: UserProfile } | { failure: string } | null;
 
 function useTeamPreview(link: TeamJoinFragment | null, dashboard: Pick<DashboardClient, 'previewTeam'>) {
   const [preview, setPreview] = React.useState<TeamPreview>(null);
@@ -68,7 +69,7 @@ function useTeamPreview(link: TeamJoinFragment | null, dashboard: Pick<Dashboard
     let live = true;
     dashboard.previewTeam(invite).then(
       (answer) => {
-        if (live) setPreview({ name: answer.name, owner: resolveFirstName(answer.owner) });
+        if (live) setPreview({ name: answer.name, owner: answer.owner });
       },
       (error: unknown) => {
         if (live) setPreview({ failure: describeFailure(error) });
@@ -163,9 +164,14 @@ function JoinedPage({ result, url, shared }: { result: TeamJoinResult; url: stri
         tone='green'
         title={member ? `You are in ${result.name}` : 'Request sent'}
       >
-        {member
-          ? 'This browser shows the team’s tasks next to your own.'
-          : `${result.owner} accepts or declines your request to join ${result.name}. You can close this page.`}
+        {member ? (
+          'This browser shows the team’s tasks next to your own.'
+        ) : (
+          <>
+            <UserTag user={result.owner} /> accepts or declines your request to join {result.name}. You can
+            close this page.
+          </>
+        )}
       </RemoteHero>
       {shared ? (
         <p className='w-full text-pretty text-center text-fg-2 text-xs'>{shared}</p>
@@ -243,9 +249,14 @@ export function TeamJoinPage({
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
       <RemoteHero icon='IconUserAdd' title={named ? `Join ${named.name}` : 'Join a team'}>
-        {named
-          ? `${named.owner} owns this team. Ask to join with your GitHub account. Once they accept, you see your teammates’ tasks next to your own.`
-          : 'Ask to join with your GitHub account. Once the team’s owner accepts, you see your teammates’ tasks next to your own.'}
+        {named ? (
+          <>
+            <UserTag user={named.owner} /> owns this team. Ask to join with your GitHub account. Once they
+            accept, you see your teammates’ tasks next to your own.
+          </>
+        ) : (
+          'Ask to join with your GitHub account. Once the team’s owner accepts, you see your teammates’ tasks next to your own.'
+        )}
       </RemoteHero>
       <RemoteBenefits points={[...TEAM_POINTS, machines.length > 0 ? PICK_POINT : PRIVATE_POINT]} />
       {load.status === 'loading' && <LoadingLine label='Reading your projects' />}

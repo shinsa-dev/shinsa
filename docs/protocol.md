@@ -92,7 +92,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | receipt | The stored answer to a command id, so a repeat is answered and never applied twice | `CommandReceipt` (engine) | not shown |
 | on your behalf | A user command an agent's management tool sent for you from its task, recorded with the acting task | `onBehalf`, `byTask`, `OnBehalfAction` | "‹handle› agent (on your behalf)" |
 | hand-off | A task given to someone by a link: the first GitHub account to open it steers that one task on your machine | `TaskHandoff`, `task.hand_off` | Hand off, "took this task over" |
-| guest | The account a task was handed to, and its device, scoped to that task | `TaskGuest`, `GuestActor`, `byGuest`, `role: 'guest'` | "@login", "A task handed to you by …" |
+| guest | The account a task was handed to, and its device, scoped to that task | `TaskGuest`, `GuestActor`, `byGuest`, `role: 'guest'` | "Kai" as a user tag, "A task handed to you by …" |
 | message kind | What the classifier read a message to be: feedback on the current round (a follow-up on a finished one), a message that needs nothing (thanks, "ok"), new work for the task (a new round), or work for another task (a split-off) | `MessageKind` (`feedback`, `acknowledge`, `new_round`, `separate_task`) | not shown |
 | split-off | A suggested task saying something you asked for in this chat belongs in a task of its own; you make it a task or keep it here, which sends it to this task now | `TaskSuggestion.splitOff` | "Make it a task", "Keep it here" |
 
@@ -1009,8 +1009,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `preview.shared`, `preview.unshared` | you shared a service run by link or changed how long (`serviceId`, `limit`, `endsAt`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when the task settled, whatever its limit, `expired`; each adds an activity entry) |
 | `preview.recorded`, `preview.failed` | the engine made the preview's link (`url`, null when unchanged), or could not (`detail`) |
 | `task.handed_off`, `handoff.removed` | you handed a task off, or took it back (`guest`, null when no one had claimed it); each adds an activity entry |
-| `handoff.recorded`, `handoff.failed`, `handoff.claimed` | the engine made the hand-off link (`url`), or could not (`detail`), or an account took the task over (`guest`; adds an activity entry, "Handed this task to @login") |
-| `handoff.left` | the guest left the machine at app.shinsa.dev, so the task is no longer handed off (`guest`; adds an activity entry, "@login gave this task back") |
+| `handoff.recorded`, `handoff.failed`, `handoff.claimed` | the engine made the hand-off link (`url`), or could not (`detail`), or an account took the task over (`guest`; adds an activity entry, "Handed this task to Kai", with the guest as `Activity.person`) |
+| `handoff.left` | the guest left the machine at app.shinsa.dev, so the task is no longer handed off (`guest`; adds an activity entry, "Kai gave this task back", with the guest as `Activity.person`) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
 | `task.retitled` | an accepted plan named the work anew (`round`, `title`): the round takes the title, and the task too when it is round 1; activity “Renamed to …” |
@@ -1463,9 +1463,9 @@ another instance, an expired token and one that lives longer than `CONNECT_TOKEN
 
 | Message | From | Fields |
 | --- | --- | --- |
-| `hello` | The browser | `version`, `device` (its P-256 public key, raw, base64url), `ephemeral` (a fresh one), `enroll` (null, or the proof), `name` (the device name it asks under, null, at most `DEVICE_NAME_LIMIT`, 60) |
+| `hello` | The browser | `version`, `device` (its P-256 public key, raw, base64url), `ephemeral` (a fresh one), `enroll` (null, or the proof), `name` (the device name it asks under, null, at most `DEVICE_NAME_LIMIT`, 60), `compression` (the codecs it reads; `['deflate-raw']` today, `CHANNEL_COMPRESSION`; missing on an older page) |
 | `pending` | The engine | Nothing: the request waits for an answer, and `welcome` or `refused` follows on the same socket |
-| `welcome` | The engine | `ephemeral` (its fresh key) |
+| `welcome` | The engine | `ephemeral` (its fresh key), `compression` (`deflate-raw` when the hello offered it, else null; missing on an older engine) |
 | `refused` | The engine | `reason`; the socket then closes |
 
 Both sides compute three ECDH secrets, `ee` (the two ephemerals), `es` (the browser's ephemeral and the machine's
@@ -1477,7 +1477,27 @@ HMAC-SHA256 with the link's secret over the machine key, the device key and the 
 
 **Frames** (`frames.ts`): every message after the handshake is one binary frame, an 8-byte counter and the AES-GCM
 ciphertext, the counter as the nonce, so no nonce repeats. Sealing and opening run in call order; a frame that is
-short, out of order or fails to open throws `FrameError` and the channel closes.
+short, out of order or fails to open throws `FrameError` and the channel closes. When the welcome named `deflate-raw`, every plaintext of the
+main channel starts with one header byte: 0 for plain, 1 for deflated (`CompressionStream('deflate-raw')`). A deflated
+plaintext is the header, the deflated length (4 bytes, big-endian), the deflate data and zeros up to its Padmé length
+(`resolvePaddedLength`: the length rounded up so only its top few bits vary, at most 12% more). The sealer deflates a
+plaintext of 16 KB or more and keeps it plain when the padded result is not smaller; compression runs inside the
+in-order chain, so a small frame never overtakes a large one still compressing. The opener refuses an unknown header,
+a length that runs past the frame, deflate data it cannot read and a frame that inflates past its limit (64 MB in the
+engine, 256 MB in the page). Without the field on either side there is no header byte, as before. The share and team
+channels never compress.
+
+Compressing before sealing is a trade: AES-GCM hides content but not length, and a deflated length depends on what
+the plaintext repeats (CRIME and BREACH), so whoever carries the frames (Cloudflare, or Shinsa Cloud if it were
+hostile) and can also put text of its choosing into the same frame (a GitHub comment an agent reads, a task title)
+could watch whether its guess at a nearby secret made the frame shorter. Three things narrow it: each frame deflates
+on its own, with no window shared across frames, so a guess and a secret must sit in the same message; only frames
+of 16 KB or more compress, which are the state and large responses, not the small replies and commands; and Padmé
+padding means a guess that saves a few bytes changes the length on the wire only at a bucket edge (128 KB wide for
+a 4 MB state), so each guess first costs a search for that edge, over frames the attacker must also cause, while
+every other change to the state moves the length too. It narrows the leak and does not close it: what is at stake is
+task content, since the channel's keys and connect tokens are never in a message. The gain is the first state through
+the tunnel in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/engine.md` → Remote access).
 
 **Inside the channel** (`channel.ts`, `ChannelMessage`, JSON in each sealed frame):
 

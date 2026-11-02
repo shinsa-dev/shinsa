@@ -94,7 +94,13 @@ export {
   TeamMachine,
   TeamPreviewResponse,
 } from './contract.ts';
-export { createFrameOpener, createFrameSealer, FrameError } from './frames.ts';
+export {
+  CHANNEL_COMPRESSION,
+  type ChannelCompression,
+  createFrameOpener,
+  createFrameSealer,
+  FrameError,
+} from './frames.ts';
 export {
   type ClientHello,
   createClientHello,
@@ -106,6 +112,7 @@ export {
   parseClientHello,
   parseServerHello,
   REMOTE_PROTOCOL_VERSION,
+  resolveCompression,
   type ServerHello,
   type SessionKeys,
   verifyEnrollProof,

@@ -408,6 +408,14 @@ print the whole document.
   a remove confirmation through `overlays/confirm-dialog.tsx`, usage percentages through
   `accounts/usage-percent.tsx`, and the account picker is core's (`selectNextAccount`), never a web copy.
   `bun lint:conventions` rejects some hand-built copies; the rest is on review.
+- **A person is a first name in a user tag** (`docs/design.md`, 43). Name someone by their capitalized first name
+  (`resolveFirstName`), their login only when no name is known, and never put `@` in front of a login, in copy, docs
+  or tests. Every mention is a `UserTag` (`components/people/user-tag.tsx`) and every row that lists a person is
+  `UserIdentity` (`UserRow` in Settings); there is no other avatar or name layout. A `lib/` function whose sentence
+  names someone returns a `Mention` (`lib/remote/users.ts`: strings and `{ user, label? }` parts) that the component
+  draws with `MentionText`; a tooltip, toast, confirm title or clickable header takes `describeMentionText`, the plain
+  first name. A guest's actions and hand-off lines carry the person (`byGuest`, `Activity.person`), so build their
+  profile with `resolveGuestProfile` or `resolveSharedProfile`, never from the login alone.
 - **One surface notifies.** The socket's first message names this page's surface (`resolveSurface`), and while the
   server says the desktop app is connected (`useDesktopConnected`) a browser page or Floaty is quiet
   (`isPageQuiet`): `useAttention` plays no sound and shows no notification, but keeps the count and status in the

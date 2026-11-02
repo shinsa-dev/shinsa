@@ -44,7 +44,6 @@ export {
   copyTeammateOriginal,
   copyUnreachedTeammate,
   quoteDuplicateOriginal,
-  resolveFirstName,
   resolveTeammateMachineLabel,
 } from './duplicates.ts';
 export { DomainError } from './errors.ts';
@@ -94,6 +93,7 @@ export {
   listNewOverlapPaths,
   type OverlapNote,
 } from './overlaps.ts';
+export { resolveFirstName, resolveGuestFirstName, selectTaskPerson } from './people.ts';
 export {
   type ProjectSuggestion,
   resolveProjectSuggestions,

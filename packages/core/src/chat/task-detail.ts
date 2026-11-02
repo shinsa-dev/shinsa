@@ -2,6 +2,7 @@ import {
   type Activity,
   type Gate,
   resolveCurrentRound,
+  resolveGuestFirstName,
   type Task,
   type WatchdogStatus,
 } from '../domain/index.ts';
@@ -145,15 +146,15 @@ function describeRequest(task: Task) {
   return `${label}: ${cut(resolveRequest(task), REQUEST_LIMIT)}`;
 }
 
-function describeActor(state: ShinsaState, entry: Activity) {
-  if (entry.byGuest) return `@${entry.byGuest}`;
+function describeActor(state: ShinsaState, task: Task, entry: Activity) {
+  if (entry.byGuest) return resolveGuestFirstName(task, entry.byGuest);
   if (!entry.onBehalf) return ACTOR_WORDS[entry.actor];
   const from = entry.byTask ? state.tasks[entry.byTask] : undefined;
   return from ? `the agent of ${from.handle ?? `"${from.title}"`} for the human` : 'Shinsa for the human';
 }
 
-function describeActivity(state: ShinsaState, entry: Activity) {
-  const who = describeActor(state, entry);
+function describeActivity(state: ShinsaState, task: Task, entry: Activity) {
+  const who = describeActor(state, task, entry);
   return `- ${new Date(entry.at).toISOString()} ${who}: ${entry.text}`;
 }
 
@@ -176,6 +177,6 @@ export function serializeTaskDetail(state: ShinsaState, taskId: string) {
     ...(waits.length > 0 ? [`Waits on: ${waits.map(describeLink).join(', ')}`] : []),
     ...(gates.length > 0 ? ['Open decisions:', ...gates.map(describeGate)] : ['No open decisions.']),
     'Recent activity:',
-    ...task.activity.slice(-ACTIVITY_SHOWN).map((entry) => describeActivity(state, entry)),
+    ...task.activity.slice(-ACTIVITY_SHOWN).map((entry) => describeActivity(state, task, entry)),
   ].join('\n');
 }

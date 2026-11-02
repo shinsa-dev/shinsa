@@ -2,7 +2,7 @@ import { isTaskSettled, type RemoteUser, type Task, type TaskGuest } from '@shin
 import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { describeUserName } from '@/lib/remote/users.ts';
+import { type Mention, resolveFirstName } from '@/lib/remote/users.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const HANDOFF_TITLE = 'Hand off';
@@ -61,8 +61,8 @@ export function resolveHandoffView(task: Task): HandoffView {
   return { kind: 'linking' };
 }
 
-export function describeHandoffClaim(guest: TaskGuest) {
-  return `${describeUserName(guest)} is working on this task`;
+export function describeHandoffClaim(guest: TaskGuest): Mention {
+  return [{ user: guest }, ' is working on this task'];
 }
 
 export function isTaskHandedOff(task: Task) {
@@ -71,9 +71,9 @@ export function isTaskHandedOff(task: Task) {
 }
 
 export function describeHandoffMark(task: Task, handedBy: RemoteUser | null) {
-  if (handedBy) return `Handed to you by ${describeUserName(handedBy)}`;
+  if (handedBy) return `Handed to you by ${resolveFirstName(handedBy)}`;
   const guest = task.handoff?.guest;
-  return guest ? `Handed to ${describeUserName(guest)}` : 'Hand-off link not opened yet';
+  return guest ? `Handed to ${resolveFirstName(guest)}` : 'Hand-off link not opened yet';
 }
 
 export function resolveHandoffFact(task: Task, handedBy: RemoteUser | null) {
@@ -91,18 +91,18 @@ export const HANDOFF_JOINED = 'Joined';
 
 export const HANDOFF_TURN_OFF = 'Turn off link';
 
-export function describeHandoffBanner(view: HandoffView) {
+export function describeHandoffBanner(view: HandoffView): Mention | null {
   switch (view.kind) {
     case 'off':
       return null;
     case 'linking':
-      return 'Making the hand-off link.';
+      return ['Making the hand-off link.'];
     case 'failed':
-      return `The hand-off link couldn’t be made. ${view.message}`;
+      return [`The hand-off link couldn’t be made. ${view.message}`];
     case 'ready':
-      return 'The first GitHub account to open the hand-off link can work on this task.';
+      return ['The first GitHub account to open the hand-off link can work on this task.'];
     case 'claimed':
-      return `${describeHandoffClaim(view.guest)}. It stays yours.`;
+      return [...describeHandoffClaim(view.guest), '. It stays yours.'];
   }
 }
 
@@ -112,6 +112,6 @@ export function handOffTask(task: Task) {
 
 export function removeHandoff(task: Task) {
   const guest = task.handoff?.guest;
-  const done = guest ? `${describeUserName(guest)} no longer has this task.` : 'The hand-off link is off.';
+  const done = guest ? `${resolveFirstName(guest)} no longer has this task.` : 'The hand-off link is off.';
   return sendCommandWithToast({ type: 'handoff.remove', taskId: task.id }, done);
 }

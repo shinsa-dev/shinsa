@@ -4,6 +4,7 @@ import {
   NO_TEAM_FEED,
   type RemoteInstance,
   type RemoteSnapshot,
+  type RemoteTeam,
   resolveEngineInfo,
   type ShinsaState,
   type WireState,
@@ -189,24 +190,73 @@ export const SAMPLE_MACS: RemoteInstance[] = [
     owner: SAMPLE_PARTNER,
     role: 'member',
   },
+  {
+    id: 'h2k5',
+    name: 'Kai’s MacBook',
+    fingerprint: '07ad 3c91 e58b 64f2 1d0e',
+    online: true,
+    lastSeenAt: null,
+    createdAt: 0,
+    owner: SAMPLE_MEMBER,
+    role: 'guest',
+  },
 ];
+
+function createSampleHostedTeams(now: number): RemoteTeam[] {
+  return [
+    {
+      id: 'team-platform',
+      name: 'Platform',
+      owner: SAMPLE_OWNER,
+      role: 'owner',
+      members: [
+        { user: SAMPLE_MEMBER, addedAt: now - 30 * HOUR_MS },
+        { user: SAMPLE_PARTNER, addedAt: now - 6 * HOUR_MS },
+      ],
+      requests: [],
+      machines: [
+        { id: 'k3x9', name: 'Studio', userId: SAMPLE_OWNER.id, online: true, lastSeenAt: now },
+        {
+          id: 'h2k5',
+          name: 'Kai’s MacBook',
+          userId: SAMPLE_MEMBER.id,
+          online: false,
+          lastSeenAt: now - 3 * HOUR_MS,
+        },
+      ],
+      createdAt: now - 9 * 24 * HOUR_MS,
+    },
+    {
+      id: 'team-design',
+      name: 'Design review',
+      owner: SAMPLE_PARTNER,
+      role: 'member',
+      members: [{ user: SAMPLE_OWNER, addedAt: now - 2 * 24 * HOUR_MS }],
+      requests: [],
+      machines: [
+        { id: 'v9q1', name: 'Team server', userId: SAMPLE_PARTNER.id, online: true, lastSeenAt: now },
+      ],
+      createdAt: now - 20 * 24 * HOUR_MS,
+    },
+  ];
+}
 
 export function createSampleMachineServices(now: number): RemoteServices {
   const refuse = () => Promise.reject(new Error('This is a sample. Nothing changes here.'));
   const macs = SAMPLE_MACS.map((mac) =>
     mac.online ? { ...mac, lastSeenAt: now } : { ...mac, lastSeenAt: now - 26 * HOUR_MS }
   );
-  const added = new Set(['k3x9', 'p7m2', 'v9q1']);
+  const added = new Set(['k3x9', 'p7m2', 'v9q1', 'h2k5']);
   return {
     dashboard: {
-      readSession: refuse,
+      readSession: () => Promise.resolve({ user: SAMPLE_OWNER }),
       listInstances: () => Promise.resolve(macs),
       requestConnect: refuse,
       removeInstance: refuse,
       leaveInstance: refuse,
       acceptInvite: refuse,
       acceptHandoff: refuse,
-      listTeams: () => Promise.resolve([]),
+      listTeams: () => Promise.resolve(createSampleHostedTeams(now)),
       joinTeam: refuse,
       previewTeam: refuse,
       readPair: refuse,
@@ -224,7 +274,13 @@ export function createSampleMachineServices(now: number): RemoteServices {
       writeDevice: refuse,
       removeDevice: refuse,
     },
-    teamKeys: { selectTeamKey: () => Promise.resolve(null), writeTeamKey: refuse },
+    teamKeys: {
+      selectTeamKey: (teamId) =>
+        Promise.resolve(
+          teamId === 'team-platform' ? { teamId, name: 'Platform', key: 'key', joinedAt: 0 } : null
+        ),
+      writeTeamKey: refuse,
+    },
     worker: {} as ServiceWorkerContainer,
   };
 }

@@ -5,7 +5,8 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { AgentReplyBlock } from '@/components/overview/agent-reply.tsx';
-import { useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
+import { MentionText } from '@/components/people/user-tag.tsx';
+import { useReadOnlyOwner, useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
@@ -21,6 +22,7 @@ import {
   resolveTaskDisclosureId,
   useDisclosure,
 } from '@/lib/preferences/disclosure.ts';
+import { describeMentionText } from '@/lib/remote/users.ts';
 
 function SentQuote({ text, className }: { text: string; className?: string }) {
   return (
@@ -72,11 +74,13 @@ export function ReplyReport({
 
 export function WorkingRequest({ iteration }: { iteration: Iteration }) {
   const text = describeRequestText(iteration);
-  const label = describeRequestLabel(useReadOnlyOwnerName());
+  const label = describeRequestLabel(useReadOnlyOwner());
   if (!text) return null;
   return (
     <div className='flex flex-col gap-1'>
-      <span className='text-fg-2 text-xs'>{label}</span>
+      <span className='text-fg-2 text-xs'>
+        <MentionText mention={label} />
+      </span>
       <SentQuote text={text} className='line-clamp-4' />
     </div>
   );
@@ -116,12 +120,12 @@ function ExchangeRow({ task, iteration }: { task: Task; iteration: AnsweredItera
 
 export function RequestsPanel({ task, shownId }: { task: Task; shownId: string | null }) {
   const replies = listEarlierReplies(task, shownId);
-  const owner = useReadOnlyOwnerName();
+  const owner = useReadOnlyOwner();
   if (replies.length === 0) return null;
   return (
     <Panel
       persistId={resolveOverviewPanelId(task, 'requests')}
-      title={shownId ? 'Earlier requests' : `${describeRequestLabel(owner)}s`}
+      title={shownId ? 'Earlier requests' : `${describeMentionText(describeRequestLabel(owner))}s`}
       icon='IconChecklist'
       count={replies.length}
     >

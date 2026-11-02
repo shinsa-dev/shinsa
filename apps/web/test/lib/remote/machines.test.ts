@@ -13,6 +13,7 @@ import {
   resolveMachineDetail,
   resolveTaskCapacityValue,
 } from '@/lib/remote/machines.ts';
+import { describeMentionText } from '@/lib/remote/users.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
 
 const NOW = Date.UTC(2026, 9, 30, 12);
@@ -39,7 +40,9 @@ describe('a machine in the dashboard', () => {
       owner: { id: '3', login: 'lee', name: null, avatarUrl: null },
       role: 'member',
     };
-    expect(describeMachine(shared, null, NOW).access).toBe('Shared by lee · Not added on this device');
+    const { access } = describeMachine(shared, null, NOW);
+    expect(access).toEqual(['Shared by ', { user: shared.owner }, ' · Not added on this device']);
+    expect(describeMentionText(access)).toBe('Shared by lee · Not added on this device');
   });
 
   it('names who handed you a task on a machine, and the task once it is in this dashboard', async () => {
@@ -49,7 +52,7 @@ describe('a machine in the dashboard', () => {
       role: 'guest',
     };
     const row = describeMachine(handed, await createDevice('key'), NOW);
-    expect(row.access).toBe('A task handed to you by Lee · In this dashboard');
+    expect(describeMentionText(row.access)).toBe('A task handed to you by Lee · In this dashboard');
     const machine = {
       id: STUDIO.id,
       name: 'Studio',
@@ -62,12 +65,12 @@ describe('a machine in the dashboard', () => {
         settings: { taskCapacity: null, placementPolicies: [] },
       },
     };
-    expect(resolveMachineDetail(row, undefined, machine, { t1: { title: 'Fix the tab bar' } })).toBe(
-      'A task handed to you by Lee · In this dashboard · Fix the tab bar'
-    );
+    expect(
+      describeMentionText(resolveMachineDetail(row, undefined, machine, { t1: { title: 'Fix the tab bar' } }))
+    ).toBe('A task handed to you by Lee · In this dashboard · Fix the tab bar');
     expect(resolveMachineDetail(row, undefined, machine)).toBe(row.access);
     expect(resolveMachineDetail(row, undefined, undefined)).toBe(row.access);
-    expect(resolveMachineDetail(row, { ...machine, guest: undefined }, undefined)).toBe(
+    expect(describeMentionText(resolveMachineDetail(row, { ...machine, guest: undefined }, undefined))).toBe(
       'A task handed to you by Lee · In this dashboard · 1 open task'
     );
   });
@@ -77,13 +80,13 @@ describe('a machine in the dashboard', () => {
     expect(describeMachine(STUDIO, device, NOW)).toMatchObject({
       label: 'Studio',
       status: 'Online',
-      access: 'In this dashboard',
+      access: ['In this dashboard'],
       device,
     });
-    expect(describeMachine(STUDIO, null, NOW).access).toBe('Not added on this device');
+    expect(describeMachine(STUDIO, null, NOW).access).toEqual(['Not added on this device']);
     expect(describeMachine(STUDIO, { ...device, onMachine: true }, NOW)).toMatchObject({
       label: 'This machine',
-      access: 'Studio · In this dashboard',
+      access: ['Studio · ', 'In this dashboard'],
     });
   });
 

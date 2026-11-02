@@ -1045,8 +1045,9 @@ its request and plan goal (`TEAMMATE_TEXT_LIMIT`, 280 characters): what a teamma
 A pick of one is sent with `task.triage` as `duplicateOfTeammate` (its team, machine, task id, handle, title and
 owner: `TeammateOwner`, their login, name and avatar from the listing's `ownerProfile` or the team's member) and
 recorded as `TaskDuplicate.teammate`, with `of` holding the teammate's task id. A person is named by first name,
-never `@login` (`resolveFirstName`): the stage reason and activity read "duplicate of Kai’s KAI-12 …", and the
-"Duplicate of" fact shows Kai as a user tag (`UserTag`, the user card on hover) beside the task, which opens its
+never `@login` (`resolveFirstName`): the stage reason and activity read "duplicate of Kai’s KAI-12 …", the activity
+line carrying Kai as `Activity.person` and the cancelled now card reading `TaskDuplicate.teammate.owner`, so both
+tag Kai, and the "Duplicate of" fact shows Kai as a user tag (`UserTag`, the user card on hover) beside the task, which opens its
 read-only team view (`/teams/<team>/<machine>/<task>`), in the local app and on app.shinsa.dev alike. A teammate's
 listing carries no share link, so none is stored or built. Nothing is written to the teammate's machine: the
 duplicate travels in this machine's own team listing (`TaskDuplicate` is in the shared status fields), so on the
@@ -2760,7 +2761,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   left and came back, `resumeAccess`): the engine answers `pending` and holds the channel until the request is
   accepted (it then finishes the handshake with `welcome`) or declined (`refused`). Both sides derive one AES-GCM key per
   direction from three ECDH secrets; every later message is a sealed binary frame, and one that is out of order or
-  fails to open closes the channel (1008). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
+  fails to open closes the channel (1008). The hello offers `deflate-raw` and the welcome accepts it, so a frame of
+  16 KB or more (the first state above all, which compresses about five times) crosses the tunnel deflated and padded
+  to a Padmé length, since a deflated length says something about its content; a page or engine that does not know the
+  field keeps plain frames (`docs/protocol.md` → Remote access, Frames, which weighs what compression leaks). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
   and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
   routes, marked remote (`markRemoteRequest`, `resolveRequestOrigin`), without the Host and Origin guard, whose job the
   handshake did. Removing a device closes its channels; turning remote access off or a revocation closes all of them.
@@ -2818,11 +2822,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   which asks first), the access requests waiting for an answer (yours as the device's name and when you asked, anyone
   else's with their GitHub avatar, name and login, the device's name and when, and Decline and Accept), and Invite
   link (only while it is on: `canEnrollDevices`). It opens the link's dialog: Make link when there is none, else the
-  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you, left out through remote
-  access, which this browser reaches only with its key (on the machine's own page the key, kept for app.shinsa.dev,
-  cannot be read, and a device's name does not tell two browsers apart). Every toast here is
-  a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). That link
-  carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
+  link as a QR code with Copy and Turn off link; the browser in front of you adds itself by opening the link like any
+  other device. Every toast here is
+  a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). An enroll
+  link opened with `?on=machine` (the sandbox's on-machine links) keeps it through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
   wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. Every change to remote access reaches every open page at once:
   `Remote` notifies on each one (a device added or revoked, a link made or turned off, a request, pausing, resuming,
@@ -2877,7 +2880,13 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
   sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
-  its connection's retry opens a fresh channel with a new token. The retry waits 250 ms, 1 s, 2 s, then 5 s, and starts
+  its connection's retry opens a fresh channel, with the connect token it already holds while that token has more than
+  20 seconds left (`CONNECT_TOKEN_MARGIN_MS`; a token is good for 60), else a new one, and a channel that fails to
+  open drops the token it used. The page builds the hello's keys while Shinsa Cloud's connect call runs
+  (`openRemoteChannel` takes the URL as a promise). `bun scripts/perf/remote.ts` times each leg (Shinsa Cloud's
+  connect call, cloudflared, the handshake, the first state, `/api` requests through the channel) on a copy of your
+  log in a scratch home with a test device of its own, over loopback and Cloudflare quick tunnels on QUIC and HTTP/2
+  (`--offline` skips Shinsa Cloud and the tunnels, `--json` writes the samples). The retry waits 250 ms, 1 s, 2 s, then 5 s, and starts
   over only once a socket has delivered the state, so a channel that opens and breaks before its state arrives backs
   off instead of retrying every 250 ms. The Reconnecting dot (`ConnectionStatus`) shows only once the connection has
   been down for a second (`RECONNECT_GRACE_MS`), so a reconnect that recovers within it never flashes. A machine that refuses this device's key is forgotten
@@ -3367,8 +3376,8 @@ online, and the last list of it their own machine kept while it is not (Offline 
     refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause, but still drops
     those past 30 days, with their full tasks, each time remote access changes and when the engine starts. Removing
     the machine from remote access, or app.shinsa.dev forgetting it, drops every copy and full task at once.
-- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
-  change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and
+- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, on the machine; every
+  change to it but joining is refused from off the machine like the rest of remote access, so app.shinsa.dev shows it read-only, below): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
   New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
   that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
@@ -3378,9 +3387,32 @@ online, and the last list of it their own machine kept while it is not (Offline 
   and `POST /api/remote/members/grant`,
   and the remote snapshot carries the teams (`RemoteSnapshot.teams`, `listTeamEntries`), so every change reaches every
   page at once.
+- **Settings → Teams on app.shinsa.dev** (`components/settings/hosted-teams.tsx`, `HostedTeamsSettings`) is read-only:
+  every change to a team is refused from off the machine, so it has no buttons and says that teams are made, linked and
+  changed in Settings on the machine itself (`TEAMS_ON_MACHINE_NOTE`). It never asks a machine: it reads your teams from
+  app.shinsa.dev (`dashboard.listTeams()`) and this browser's team keys (`teamKeys.selectTeamKey`, `listHostedTeams`),
+  so it shows even when no machine of yours is reachable. One card per team has its name, your role, its people and
+  machines counts and when it was made (`describeHostedTeam`), its machines with Online, Last seen or Never connected
+  (`listTeamMachineRows`, a fold that starts open) and its People (a fold that starts closed). A team this browser holds
+  no key for says to open its join link here once to read its tasks (`TEAM_KEY_MISSING`, the same line the team task
+  page shows). With no team the section says how to make or join one; a failed read shows its error. Sharing stays
+  only on the machine.
 - **Agents read it, never change it.** `shinsa teams list` (`teams_list`) is every agent's tool; every other `teams`
   command and both project team commands are human-only.
 
+
+## Naming people
+
+Wherever the engine, core or the command line names a GitHub account, the same three rules hold
+as on screen (`docs/design.md`, 43). A person is their first name ("Kai", core's `resolveFirstName`), the login only
+when no name is known; a login never has an `@` in front; and on a page each mention is a user tag with the user card.
+So activity reads "Handed this task to Kai" and "Kai gave this task back", carrying the guest as `Activity.person`
+so the page tags them (the web finds the name as a whole word, at the start or end first, never inside another
+word), a shared or team page keeps `person` and `byGuest` on each entry so it tags them too, a guest's actions show Kai as their actor, a guest's message reaches the agent as "From Kai,
+who the human handed this task to:", the task detail an agent reads names them the same way, and `shinsa remote
+status` and `shinsa teams list` print "Kai Lane (kai)" (the login alone when no name is known), with errors naming
+the login bare ("kai has no access to this machine."). `--login` still accepts `@kai`. Slack's own mentions keep
+their `@`: they are Slack names, not logins.
 
 ## Handing off a task
 
@@ -3440,8 +3472,9 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
     a path that only appears in some text never counts. Anything else is 403 `handoff_scope`. So a guest uploads
     no attachment and edits no file in Code: both write to your disk.
 - **Logged as theirs.** Everything a guest sends runs with `DecideContext.guest`, and each event it causes carries
-  `byGuest` (the login), which activity shows as `@login` ("Handed this task to @kai" for the claim). A guest's message
-  goes to the agent at once, without the message classifier, prefixed "From @kai, who the human handed this task to:",
+  `byGuest` (the login), which activity shows as the guest's first name in a user tag, Kai (the claim reads "Handed
+  this task to Kai", its entry carrying the guest as `Activity.person` so the page tags them). A guest's message
+  goes to the agent at once, without the message classifier, prefixed "From Kai, who the human handed this task to:",
   so the agent knows who wrote it; the task's request and chat show it without the prefix.
 - **Their dashboard** (`lib/remote/fleet.ts`, `lib/remote/machines.ts`). app.shinsa.dev lists the machine for the
   account with `role: 'guest'`, and the fleet joins it after your own machines, so settings, accounts and the machine a
@@ -3457,14 +3490,14 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   never changes a live share, and picking a preset again shows the share as before. With it, Share for goes, the
   description says the task stays yours, and the footer has Hand off; while the link is made, a busy button; then
   Turn off link, Copy hand-off link and Done; a failure with its reason, Remove and Try again; once claimed, their
-  avatar, name, `@login` and when they opened the link, "<name> is working on this task. It stays yours…", with
+  `UserIdentity` (avatar, "Kai Lane kai", no `@`) and when they opened the link, "<name> is working on this task. It stays yours…", with
   Remove, which asks first and names who lost the task in its toast.
 - **Where it shows.** A hand-off has the handshake icon (`HANDOFF_ICON`, `IconHandshake`) everywhere. Its banner on
   your task page (`HandoffBanner` in `components/task/sharing-banner.tsx`), apart from the sharing banner and below it
   when the task is shared too, says who is working on it with Remove only, or that the first GitHub account to open the
   link can, with Copy hand-off link and Turn off link; Manage stays on the sharing banner. The task's title in the task
   list, Home and the Needs you queue carries the hand-off mark beside the share mark (`SharedMark`, `hasShareMark`:
-  "Handed to Kai Lane", "Hand-off link not opened yet"), and its facts row says "Handed to <name>"
+  "Handed to Kai", "Hand-off link not opened yet"), and its facts row says "Handed to <name>"
   (`resolveHandoffFact`). On the guest's side the same mark and fact say "Handed to you by <owner>", from the
   machine's owner app.shinsa.dev lists (`MachineView.handedBy`).
 - **Taking it back.** `handoff.remove` emits `handoff.removed` and queues `handoff.revoke`, which turns the link off at
@@ -3472,7 +3505,7 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   (`/__remote/machine/guests/remove`) unless they still hold another task here, so app.shinsa.dev stops listing the
   machine for them. Each heartbeat answers the machine's guests too, and a guest who left (Leave in their Settings →
   Machines) loses their devices on the next one, and each task they held is given back: the engine sends
-  `handoff.leave`, which emits `handoff.left` ("@kai gave this task back") and queues `handoff.revoke`, so Share task
+  `handoff.leave`, which emits `handoff.left` ("Kai gave this task back") and queues `handoff.revoke`, so Share task
   can hand it off again. A heartbeat whose answer was read before a claim here added its guest keeps the guests the
   machine has, so a claim that lands while a heartbeat is out is never taken for a leave. Pausing remote access ends every channel, a guest's included; removing it or pairing again forgets every
   guest and hand-off link.
@@ -3604,7 +3637,7 @@ Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
 - **To try it without a deploy**, `bun run sandbox` gives Studio's running web service its private
   address: its start page, `/sandbox`, links the task through remote access, where Open goes there, the open route itself, and the
   address without a cookie, which shows the not-shared page. The stand-in accepts every access request at once, so
-  Add this device lets the browser in without a trip to the machine's own app.
+  its Add this device links let the browser in without a trip to the machine's own app.
 
 ## Slack
 

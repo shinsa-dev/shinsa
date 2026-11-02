@@ -316,6 +316,7 @@ function applyDuplicated(state: ShinsaState, event: EventOf<'task.duplicated'>) 
     actor: event.duplicate.by,
     kind: 'stage',
     text: `Closed as a duplicate of ${resolveDuplicateOriginalText(state, event.duplicate)}`,
+    ...(teammate?.owner ? { person: { ...teammate.owner } } : {}),
   });
 }
 

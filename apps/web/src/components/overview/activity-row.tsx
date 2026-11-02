@@ -1,8 +1,8 @@
-import type { Activity, ReviewComment, ShinsaState } from '@shinsa/core';
+import type { Activity, ReviewComment, ShinsaState, Task } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import type * as React from 'react';
 import { InAppLink } from '@/components/links/link.tsx';
-import { UserTag } from '@/components/people/user-tag.tsx';
+import { MentionText } from '@/components/people/user-tag.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -12,22 +12,30 @@ import {
   listActivityDetail,
   resolveActivityActor,
   resolveActivityGlyph,
+  resolveActivityText,
 } from '@/lib/overview/activity.ts';
+import type { Mention } from '@/lib/remote/users.ts';
 import { describeCommentPlace } from '@/lib/review/draft.ts';
 import type { Glyph } from '@/lib/tasks/status.ts';
 import { resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
 function ActorLabel({ state, actor }: { state: ShinsaState; actor: ActivityActor }) {
-  if (!actor.taskId) return actor.label;
   return (
-    <InAppLink
-      path={resolveTaskPath(resolveTaskTarget(state, actor.taskId))}
-      className='text-fg-2 hover:text-fg-4 active:text-fg-4'
-    >
-      {actor.label}
-    </InAppLink>
+    <>
+      {actor.link && (
+        <InAppLink
+          path={resolveTaskPath(resolveTaskTarget(state, actor.link.taskId))}
+          className='text-fg-2 hover:text-fg-4 active:text-fg-4'
+        >
+          {actor.link.label}
+        </InAppLink>
+      )}
+      <MentionText mention={actor.mention} />
+    </>
   );
 }
+
+const ENTRY_TEXT = 'font-medium text-fg-3';
 
 function SentComments({ comments }: { comments: ReviewComment[] }) {
   return (
@@ -51,7 +59,7 @@ export function ActivityEntry({
   children,
 }: {
   glyph: Glyph;
-  text: string;
+  text: string | Mention;
   actor: React.ReactNode;
   at: number;
   detail: readonly string[];
@@ -63,7 +71,13 @@ export function ActivityEntry({
       <StatusTile {...glyph} className='relative' />
       <div className='flex min-w-0 flex-1 flex-col gap-px'>
         <div className='flex items-baseline gap-2 text-xs leading-5'>
-          <InlineMarkdown text={text} className='font-medium text-fg-3' />
+          {typeof text === 'string' ? (
+            <InlineMarkdown text={text} className={ENTRY_TEXT} />
+          ) : (
+            <span className={ENTRY_TEXT}>
+              <MentionText mention={text} />
+            </span>
+          )}
           <span className='ms-auto shrink-0 text-2xs text-fg-2'>
             {actor} · <TimeAgo at={at} compact />
           </span>
@@ -82,10 +96,12 @@ export function ActivityEntry({
 export function ActivityRow({
   entry,
   state,
+  task = null,
   onOpenRun,
 }: {
   entry: Activity;
   state: ShinsaState;
+  task?: Task | null;
   onOpenRun: (runId: string) => void;
 }) {
   const run = entry.runId ? state.runs[entry.runId] : undefined;
@@ -93,14 +109,8 @@ export function ActivityRow({
   return (
     <ActivityEntry
       glyph={resolveActivityGlyph(entry)}
-      text={entry.text}
-      actor={
-        entry.actor === 'you' && !entry.onBehalf && owner?.user ? (
-          <UserTag user={owner.user} label={owner.name} />
-        ) : (
-          <ActorLabel state={state} actor={resolveActivityActor(state, entry, owner?.name ?? null)} />
-        )
-      }
+      text={resolveActivityText(entry)}
+      actor={<ActorLabel state={state} actor={resolveActivityActor(state, entry, owner, task)} />}
       at={entry.at}
       detail={listActivityDetail(entry)}
     >

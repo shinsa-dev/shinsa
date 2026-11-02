@@ -93,9 +93,9 @@ describe('duplicates', () => {
     expect(task.duplicate).toEqual({ of: original, by: 'shinsa', why: 'Both ask for a dark theme.' });
     expect(harness.effectsOf('config.verify').map((effect) => effect.taskId)).not.toContain(copy);
     expect(listActiveRuns(harness.state, copy)).toHaveLength(0);
-    expect(task.activity.find((entry) => entry.text.startsWith('Closed as a duplicate'))?.actor).toBe(
-      'shinsa'
-    );
+    const closed = task.activity.find((entry) => entry.text.startsWith('Closed as a duplicate'));
+    expect(closed?.actor).toBe('shinsa');
+    expect(closed?.person).toBeUndefined();
   });
 
   test('triage ignores a duplicate that names itself, a finished task, a duplicate or no task', () => {
@@ -257,9 +257,9 @@ describe('teammate duplicates', () => {
       why: 'Kai is already adding dark mode.',
       teammate: KAI_TASK,
     });
-    expect(task.activity.map((entry) => entry.text)).toContain(
-      'Closed as a duplicate of Kai’s KAI-12 “Add dark mode”'
-    );
+    const closed = task.activity.find((entry) => entry.text.startsWith('Closed as a duplicate'));
+    expect(closed?.text).toBe('Closed as a duplicate of Kai’s KAI-12 “Add dark mode”');
+    expect(closed?.person).toEqual(KAI_TASK.owner ?? undefined);
     expect(harness.effectsOf('config.verify').map((effect) => effect.taskId)).not.toContain(copy);
     expect(listActiveRuns(harness.state, copy)).toHaveLength(0);
   });

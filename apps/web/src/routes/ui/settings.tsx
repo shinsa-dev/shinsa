@@ -14,6 +14,7 @@ import { type AccountActions, AccountsGroup } from '@/components/settings/accoun
 import { ModelsGroup } from '@/components/settings/agents.tsx';
 import { ContextOptimizerGroup } from '@/components/settings/context-optimizer.tsx';
 import { SettingsGroup } from '@/components/settings/group.tsx';
+import { HostedTeamsGroup, HostedTeamsSettings } from '@/components/settings/hosted-teams.tsx';
 import { MachineAccessRequests, MachinesSettings } from '@/components/settings/machines.tsx';
 import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
@@ -526,6 +527,18 @@ export function SettingsSpecimens() {
           <RemoteServicesContext.Provider value={machines}>
             <MachinesSettings />
           </RemoteServicesContext.Provider>
+        </div>
+      </Specimen>
+      <Specimen label='HostedTeamsSettings · in Shinsa Cloud: a team you own with this browser’s key, and one you are in without it'>
+        <div className='w-full max-w-xl'>
+          <RemoteServicesContext.Provider value={machines}>
+            <HostedTeamsSettings />
+          </RemoteServicesContext.Provider>
+        </div>
+      </Specimen>
+      <Specimen label='HostedTeamsGroup · in Shinsa Cloud, in no team yet'>
+        <div className='w-full max-w-xl'>
+          <HostedTeamsGroup teams={{ viewerId: null, teams: [] }} failure={null} />
         </div>
       </Specimen>
       <Specimen label='MachineAccessRequests · in Shinsa Cloud: requests waiting on a machine, accepted from any device'>

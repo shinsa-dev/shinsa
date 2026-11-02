@@ -33,7 +33,7 @@ describe('the /ui remote access samples', () => {
     await expect(actions.declineRequest('request-1')).rejects.toThrow(REFUSED);
   });
 
-  it('list four machines, one shared, two of them added in this browser, and refuse every change', async () => {
+  it('list five machines, one shared, one handed over, and refuse every change', async () => {
     const { dashboard, devices, teamKeys } = createSampleMachineServices(NOW);
     const macs = await dashboard.listInstances();
     expect(macs.map((mac) => [mac.name, mac.online, mac.lastSeenAt])).toEqual([
@@ -41,14 +41,21 @@ describe('the /ui remote access samples', () => {
       ['MacBook Air', false, NOW - 26 * 3_600_000],
       ['Office mini', true, NOW],
       ['Team server', true, NOW],
+      ['Kai’s MacBook', true, NOW],
     ]);
     expect(await devices.selectDevice('k3x9')).toMatchObject({ instanceId: 'k3x9' });
     expect(await devices.selectDevice('w4t8')).toBeNull();
     expect(await devices.listWaitingDevices()).toEqual([]);
-    await expect(dashboard.readSession()).rejects.toThrow(REFUSED);
-    expect(await dashboard.listTeams()).toEqual([]);
+    expect(await dashboard.readSession()).toMatchObject({ user: { login: expect.any(String) } });
+    const teams = await dashboard.listTeams();
+    expect(teams.map((team) => [team.name, team.role, team.machines.length])).toEqual([
+      ['Platform', 'owner', 2],
+      ['Design review', 'member', 1],
+    ]);
+    expect(teams[0]?.members[0]?.addedAt).toBe(NOW - 30 * 3_600_000);
     await expect(dashboard.joinTeam('invite')).rejects.toThrow(REFUSED);
     await expect(dashboard.previewTeam('invite')).rejects.toThrow(REFUSED);
+    expect(await teamKeys.selectTeamKey('team-platform')).toMatchObject({ teamId: 'team-platform' });
     expect(await teamKeys.selectTeamKey('tm')).toBeNull();
     await expect(teamKeys.writeTeamKey({ teamId: 'tm', key: 'k' } as never)).rejects.toThrow(REFUSED);
   });

@@ -94,7 +94,7 @@ export function Composer({
             placeholder={placeholder}
             className={cn(COMPOSER_FIELD, 'max-h-40 min-h-10')}
           />
-          <ScrollFade targetRef={field} />
+          <ScrollFade field targetRef={field} />
           <div className={COMPOSER_FOOTER}>
             <AttachButton attachments={attachments} />
             {aside}

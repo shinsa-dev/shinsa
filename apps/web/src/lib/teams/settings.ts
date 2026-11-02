@@ -8,10 +8,13 @@ import {
   type RemoteUser,
   type ShinsaState,
   TEAM_NAME_LIMIT,
+  type TeamMachine,
   type UserCommand,
 } from '@shinsa/core';
 import { formatSince } from '@/lib/format/time.ts';
-import { resolveFirstName } from '@/lib/remote/users.ts';
+import type { DashboardClient } from '@/lib/remote/dashboard.ts';
+import type { Mention } from '@/lib/remote/users.ts';
+import type { TeamKeyStore } from './join.ts';
 
 export const TEAMS_SECTION = 'Teams';
 
@@ -37,11 +40,14 @@ export function describeTeamsUnavailable(snapshot: RemoteSnapshot | null) {
   return 'Teams reach your teammates through remote access. Turn it on above first.';
 }
 
-export function describeTeamEntry(entry: RemoteTeamEntry, now = Date.now()) {
+export function describeTeamEntry(entry: RemoteTeamEntry, now = Date.now()): Mention {
   const { team } = entry;
-  if (!team) return 'You asked to join. The team’s owner has not answered yet.';
-  const role = team.role === 'owner' ? 'You own it' : `Owned by ${resolveFirstName(team.owner)}`;
-  return `${role} · ${describeTeamFacts(team, now)}`;
+  if (!team) return ['You asked to join. The team’s owner has not answered yet.'];
+  return describeTeamRole(team, ` · ${describeTeamFacts(team, now)}`);
+}
+
+function describeTeamRole(team: RemoteTeam, facts: string): Mention {
+  return team.role === 'owner' ? [`You own it${facts}`] : ['Owned by ', { user: team.owner }, facts];
 }
 
 export function describeTeamFacts(team: NonNullable<RemoteTeamEntry['team']>, now = Date.now()) {
@@ -141,4 +147,73 @@ export function listTeamPeople(team: RemoteTeam, query: string): TeamPerson[] {
 
 export function describePeopleCount(team: RemoteTeam) {
   return String(team.members.length + 1);
+}
+
+export const TEAMS_ON_MACHINE_NOTE = 'Teams are made, linked and changed in Settings on the machine itself.';
+
+export const TEAM_KEY_MISSING =
+  'This browser has no key for the team. Open the team’s join link here once to read its tasks.';
+
+export const NO_HOSTED_TEAM =
+  'You are in no team yet. Make one in Settings on a machine, or open a teammate’s join link here and sign in to ask to join.';
+
+export function describeHostedTeamsNotice(teams: HostedTeams | null, failure: string | null) {
+  if (failure) return failure;
+  if (!teams) return 'Reading your teams…';
+  return NO_HOSTED_TEAM;
+}
+
+export interface HostedTeam {
+  team: RemoteTeam;
+  hasKey: boolean;
+}
+
+export interface HostedTeams {
+  viewerId: string | null;
+  teams: HostedTeam[];
+}
+
+export async function listHostedTeams(options: {
+  dashboard: Pick<DashboardClient, 'listTeams' | 'readSession'>;
+  teamKeys: Pick<TeamKeyStore, 'selectTeamKey'>;
+}): Promise<HostedTeams> {
+  const [teams, session] = await Promise.all([
+    options.dashboard.listTeams(),
+    options.dashboard.readSession(),
+  ]);
+  const keys = await Promise.all(teams.map((team) => options.teamKeys.selectTeamKey(team.id)));
+  return {
+    viewerId: session.user?.id ?? null,
+    teams: teams.map((team, index) => ({ team, hasKey: keys[index] !== null })),
+  };
+}
+
+function countOf(count: number, one: string, many: string) {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+export function describeHostedTeam(team: RemoteTeam, now = Date.now()): Mention {
+  const people = countOf(team.members.length + 1, 'person', 'people');
+  const machines = countOf(team.machines.length, 'machine', 'machines');
+  return describeTeamRole(team, ` · ${people} · ${machines} · ${formatSince('Made', team.createdAt, now)}`);
+}
+
+export interface TeamMachineRow {
+  machine: TeamMachine;
+  status: string;
+  owner: RemoteUser | null;
+}
+
+export function listTeamMachineRows(team: RemoteTeam, now = Date.now()): TeamMachineRow[] {
+  const people = [team.owner, ...team.members.map((member) => member.user)];
+  return team.machines.map((machine) => ({
+    machine,
+    status: describeTeamMachineStatus(machine, now),
+    owner: people.find((user) => user.id === machine.userId) ?? null,
+  }));
+}
+
+function describeTeamMachineStatus(machine: TeamMachine, now: number) {
+  if (machine.online) return 'Online';
+  return machine.lastSeenAt === null ? 'Never connected' : formatSince('Last seen', machine.lastSeenAt, now);
 }

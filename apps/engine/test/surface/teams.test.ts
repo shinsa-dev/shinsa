@@ -5,7 +5,7 @@ import { createFakeClient, findSpec, runSpec } from './fixtures.ts';
 
 const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
 
-const KAI = { id: '7', login: 'kai', name: null, avatarUrl: null };
+const KAI = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
 
 const BOB = { id: '9', login: 'bob', name: null, avatarUrl: null };
 
@@ -57,9 +57,9 @@ describe('the teams commands', () => {
     expect((await runSpec(fake, ['teams', 'list'])).text).toBe(
       [
         'Platform (team1), you own it.',
-        '  Member: @kai',
-        '  Asks to join: @bob',
-        'Growth (team2), owned by @kai. Open its link on this machine to show its tasks here.',
+        '  Member: Kai Lane (kai)',
+        '  Asks to join: bob',
+        'Growth (team2), owned by Kai Lane (kai). Open its link on this machine to show its tasks here.',
         'Design (team3): you asked to join; its owner has not answered yet.',
       ].join('\n')
     );
@@ -149,10 +149,10 @@ describe('the teams commands', () => {
     );
     await expect(runSpec(twins, ['teams', 'leave', 'Garden'])).rejects.toThrow('No team matches Garden.');
     await expect(runSpec(twins, ['teams', 'accept', 'team1', '--login', 'kai'])).rejects.toThrow(
-      '@kai has not asked to join this team.'
+      'kai has not asked to join this team.'
     );
     await expect(runSpec(twins, ['teams', 'remove-member', 'team3', '--login', 'kai'])).rejects.toThrow(
-      '@kai is not in this team.'
+      'kai is not in this team.'
     );
   });
 });

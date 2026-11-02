@@ -417,9 +417,9 @@ describe('the machines in Settings', () => {
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
-    expect(
-      await screen.findByText('A task handed to you by Lee · In this dashboard · Fix the tab bar')
-    ).toBeTruthy();
+    const handedLine = await screen.findByText(/^A task handed to you by/);
+    expect(handedLine.textContent).toBe('A task handed to you by LLee · In this dashboard · Fix the tab bar');
+    expect(handedLine.querySelector('a')?.getAttribute('href')).toBe('https://github.com/lee');
     expect(screen.queryByText('Task capacity')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     await waitFor(() => expect(left).toEqual(['k3x9']));
@@ -453,7 +453,9 @@ describe('the machines in Settings', () => {
         <MachinesSettings />
       </RemoteServicesContext.Provider>
     );
-    expect(await screen.findByText('Shared by Lee · In this dashboard')).toBeTruthy();
+    const sharedLine = await screen.findByText(/^Shared by/);
+    expect(sharedLine.textContent).toBe('Shared by Lee · In this dashboard');
+    expect(sharedLine.querySelector('a')?.getAttribute('href')).toBe('https://github.com/lee');
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     await waitFor(() => expect(devices.removed).toEqual(['k3x9']));
@@ -826,9 +828,10 @@ describe('the claim page', () => {
     );
     expect(await screen.findByText('Work on a task handed to you')).toBeTruthy();
     expect(screen.getByText('This one task')).toBeTruthy();
-    expect(
-      screen.getByText('As @kai. Only the first account to open this link gets this task.')
-    ).toBeTruthy();
+    const as = screen.getByText(/Only the first account to open this link gets this task/);
+    expect(as.textContent).toContain('As ');
+    expect(as.textContent).not.toContain('@');
+    expect(as.querySelector('a')?.getAttribute('href')).toBe('https://github.com/kai');
     fireEvent.click(screen.getByRole('button', { name: 'Work on this task' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
     expect(named).toEqual(['kai’s Chrome']);

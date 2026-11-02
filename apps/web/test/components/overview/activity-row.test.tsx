@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { render } from '@testing-library/react';
 import { ActivityRow } from '@/components/overview/activity-row.tsx';
-import { createShinsaState } from '../../support/state.ts';
+import { createShinsaState, createTask } from '../../support/state.ts';
 
 describe('an activity row', () => {
   it('lists the line comments sent with a decision, each with its place', () => {
@@ -41,5 +41,34 @@ describe('an activity row', () => {
     expect(view.getByText('Keep the guard.')).toBeTruthy();
     expect(view.getByText('src/b.ts:2')).toBeTruthy();
     expect(view.getByText('Make it a constant.')).toBeTruthy();
+  });
+
+  it('tags the guest in a hand-off line and as the actor of what they did, with no @', () => {
+    const guest = { id: 'u7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    const task = createTask({ id: 't', handoff: { at: 1, url: null, guest, claimedAt: 1 } });
+    const base = { at: Date.now(), detail: null, evidenceId: null };
+    const view = render(
+      <ul>
+        <ActivityRow
+          state={createShinsaState({})}
+          task={task}
+          onOpenRun={() => undefined}
+          entry={{ ...base, actor: 'shinsa', kind: 'stage', text: 'Handed this task to Kai', person: guest }}
+        />
+        <ActivityRow
+          state={createShinsaState({})}
+          task={task}
+          onOpenRun={() => undefined}
+          entry={{ ...base, actor: 'you', kind: 'decision', text: 'Approved the plan', byGuest: 'kai' }}
+        />
+      </ul>
+    );
+    const links = view.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]);
+    expect(links).toEqual([
+      ['KKai', 'https://github.com/kai'],
+      ['KKai', 'https://github.com/kai'],
+    ]);
+    expect(view.container.textContent).toContain('Handed this task to KKai');
+    expect(view.container.textContent).not.toContain('@');
   });
 });

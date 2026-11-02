@@ -6,6 +6,7 @@
   "words": [
     "shellcheck",
     "finalizer",
+    "dgst",
     "cfargotunnel",
     "addexclusion",
     "APFS",
@@ -224,6 +225,7 @@
     "worktree",
     "worktrees",
     "xcrun",
-    "ZDOTDIR"
+    "ZDOTDIR",
+    "QUIC"
   ]
 }

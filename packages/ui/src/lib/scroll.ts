@@ -9,10 +9,12 @@ export const THUMB_MIN_SIZE = 24;
  * Which ends of a scroller still hide content: the start once anything has
  * scrolled past, the end while the far edge is out of view. `Math.ceil`
  * absorbs the fractional scroll positions zoomed pages report, so a scroller
- * resting at its end never keeps a fade there.
+ * resting at its end never keeps a fade there. `tolerance` is how many px an
+ * end may hide before it counts, for a text field whose caret scroll leaves
+ * its padding out of view.
  */
-export function resolveOverflowEdges(position: number, viewport: number, content: number) {
-  return { start: position > 0, end: Math.ceil(position + viewport) < content };
+export function resolveOverflowEdges(position: number, viewport: number, content: number, tolerance = 0) {
+  return { start: position > tolerance, end: Math.ceil(position + viewport) + tolerance < content };
 }
 
 /**

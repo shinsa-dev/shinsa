@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { decodeText, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
-import { createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts';
+import { CHANNEL_COMPRESSION, createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts';
 import {
   createClientHello,
   createEnrollProof,
@@ -11,6 +11,7 @@ import {
   parseClientHello,
   parseServerHello,
   REMOTE_PROTOCOL_VERSION,
+  resolveCompression,
   type SessionKeys,
   verifyEnrollProof,
 } from '../../src/remote/handshake.ts';
@@ -129,6 +130,7 @@ describe('the hello messages', () => {
       ephemeral: parties.keys.clientEphemeral,
       enroll: null,
       name: null,
+      compression: [],
     });
     expect(parseClientHello(JSON.stringify(hello))).toEqual(hello);
     expect(parseClientHello(JSON.stringify({ ...hello, enroll: 'proof', extra: 1 }))).toEqual({
@@ -152,6 +154,25 @@ describe('the hello messages', () => {
     expect(parseClientHello(JSON.stringify({ ...hello, name: 3 }))?.name).toBeNull();
   });
 
+  test('offers compression and reads only the one it knows', async () => {
+    const parties = await createParties();
+    const hello = await createClientHello(
+      parties.device.publicKey,
+      parties.clientEphemeral.publicKey,
+      null,
+      null,
+      [CHANNEL_COMPRESSION]
+    );
+    const parsed = parseClientHello(JSON.stringify(hello));
+    expect(parsed?.compression).toEqual([CHANNEL_COMPRESSION]);
+    expect(parsed && resolveCompression(parsed)).toBe(CHANNEL_COMPRESSION);
+    const unknown = parseClientHello(JSON.stringify({ ...hello, compression: ['zstd'] }));
+    expect(unknown?.compression).toEqual([]);
+    expect(unknown && resolveCompression(unknown)).toBeNull();
+    const older = parseClientHello(JSON.stringify({ ...hello, compression: undefined }));
+    expect(older && resolveCompression(older)).toBeNull();
+  });
+
   test('refuses a client hello of another shape or version', () => {
     const hello = {
       type: 'hello',
@@ -172,6 +193,15 @@ describe('the hello messages', () => {
     expect(parseServerHello('{"type":"welcome","ephemeral":"e"}')).toEqual({
       type: 'welcome',
       ephemeral: 'e',
+      compression: null,
+    });
+    expect(parseServerHello('{"type":"welcome","ephemeral":"e","compression":"deflate-raw"}')).toEqual({
+      type: 'welcome',
+      ephemeral: 'e',
+      compression: CHANNEL_COMPRESSION,
+    });
+    expect(parseServerHello('{"type":"welcome","ephemeral":"e","compression":"zstd"}')).toMatchObject({
+      compression: null,
     });
     expect(parseServerHello('{"type":"refused","reason":"r"}')).toEqual({ type: 'refused', reason: 'r' });
     expect(parseServerHello('{"type":"pending"}')).toEqual({ type: 'pending' });

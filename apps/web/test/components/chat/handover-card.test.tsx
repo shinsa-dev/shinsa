@@ -212,6 +212,29 @@ describe('HandoverCard for the process tools', () => {
     expect(view.queryByText('Your answer')).toBeNull();
   });
 
+  it('tags the owner with their user card when the share names their account', () => {
+    const view = render(
+      <TooltipProvider>
+        <ReadOnlyProvider owner={{ name: 'Kai', user: { login: 'kai', name: 'Kai Lane', avatarUrl: null } }}>
+          <HandoverCard
+            call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
+            run={createRun({ id: 'r', taskId: 't' })}
+            live={false}
+            task={null}
+            at={null}
+          />
+        </ReadOnlyProvider>
+      </TooltipProvider>
+    );
+    const links = view.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]);
+    expect(links).toEqual([
+      ['KKai', 'https://github.com/kai'],
+      ['KKai’s', 'https://github.com/kai'],
+    ]);
+    expect(view.container.textContent).toContain('Asked KKai');
+    expect(view.container.textContent).toContain('KKai’s answer');
+  });
+
   it('shows a delegated agent’s question as asked of the agent that delegated it, with its answer', () => {
     const run = createRun({
       id: 'r',

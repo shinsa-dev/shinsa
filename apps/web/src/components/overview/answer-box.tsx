@@ -54,7 +54,7 @@ export function AnswerBox({
         placeholder={placeholder}
         className={cn(COMPOSER_FIELD, 'max-h-48 min-h-14')}
       />
-      <ScrollFade targetRef={field} />
+      <ScrollFade field targetRef={field} />
       <div className={COMPOSER_FOOTER}>
         <AttachButton attachments={attachments} />
         <span className='flex-1' />

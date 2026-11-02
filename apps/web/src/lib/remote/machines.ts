@@ -8,14 +8,14 @@ import type { DeviceStore, EnrolledDevice } from './devices.ts';
 import type { FleetMember } from './fleet.ts';
 import { RemoteLink, type RemoteLinkOptions } from './link.ts';
 import { resolveMachineLabel } from './mode.ts';
-import { resolveFirstName } from './users.ts';
+import type { Mention } from './users.ts';
 
 export interface MachineRow {
   instance: RemoteInstance;
   device: EnrolledDevice | null;
   label: string;
   status: string;
-  access: string;
+  access: Mention;
 }
 
 function resolveDeviceAccess(device: EnrolledDevice | null) {
@@ -36,16 +36,16 @@ export function describeMachine(
     instance.lastSeenAt === null ? 'Never connected' : formatSince('Last seen', instance.lastSeenAt, now);
   const current = device?.onMachine === true;
   const added = resolveDeviceAccess(device);
-  const access =
+  const access: Mention =
     instance.role === 'owner'
-      ? added
-      : `${describeSharer(instance)} ${resolveFirstName(instance.owner)} · ${added}`;
+      ? [added]
+      : [`${describeSharer(instance)} `, { user: instance.owner }, ` · ${added}`];
   return {
     instance,
     device,
     label: resolveMachineLabel({ name: instance.name, current }),
     status: instance.online ? 'Online' : seen,
-    access: current ? `${instance.name} · ${access}` : access,
+    access: current ? [`${instance.name} · `, ...access] : access,
   };
 }
 
@@ -54,14 +54,14 @@ export function resolveMachineDetail(
   machine: MachineChoice | undefined,
   handed: MachineChoice | undefined,
   tasks: Readonly<Record<string, Pick<Task, 'title'>>> = {}
-) {
-  if (machine) return `${row.access} · ${describeMachineLoad(resolveMachineLoad(machine))}`;
+): Mention {
+  if (machine) return [...row.access, ` · ${describeMachineLoad(resolveMachineLoad(machine))}`];
   if (row.instance.role !== 'guest') return row.access;
   const titles = Object.keys(handed?.state.tasks ?? {}).flatMap((id) => {
     const title = tasks[id]?.title;
     return title ? [title] : [];
   });
-  return titles.length > 0 ? `${row.access} · ${titles.join(', ')}` : row.access;
+  return titles.length > 0 ? [...row.access, ` · ${titles.join(', ')}`] : row.access;
 }
 
 export async function listMachineRows(

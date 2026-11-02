@@ -859,6 +859,20 @@
       scroll-timeline: none;
       timeline-scope: var(--fade-timeline-y), var(--fade-timeline-x);
     }
+
+    /* A text field (ScrollFade's `field` target) fades from the attributes
+       alone: a timeline on the field goes inactive once its text stops
+       overflowing but keeps its last value, which would leave a fade over
+       text that no longer scrolls. */
+    &[data-fade-static] {
+      animation: none;
+      scroll-timeline: none;
+      transition:
+        --fade-t 150ms ease,
+        --fade-b 150ms ease,
+        --fade-l 150ms ease,
+        --fade-r 150ms ease;
+    }
   }
 }
 

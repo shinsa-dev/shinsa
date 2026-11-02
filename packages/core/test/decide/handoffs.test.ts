@@ -78,7 +78,8 @@ describe('handing a task off', () => {
     });
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({
       actor: 'shinsa',
-      text: 'Handed this task to @kai',
+      text: 'Handed this task to Kai',
+      person: { login: 'kai', name: 'Kai Lane', avatarUrl: null },
     });
     expect(harness.send({ type: 'handoff.claim', taskId, guest: KAI }).events).toEqual([]);
     expect(() => harness.send({ type: 'handoff.claim', taskId, guest: ROBIN })).toThrow(
@@ -120,7 +121,10 @@ describe('handing a task off', () => {
       taskId: claimed,
       guestId: 'u-kai',
     });
-    expect(harness.task(claimed).activity.at(-1)?.text).toBe('Took this task back from @kai');
+    expect(harness.task(claimed).activity.at(-1)).toMatchObject({
+      text: 'Took this task back from Kai',
+      person: { login: 'kai', name: 'Kai Lane', avatarUrl: null },
+    });
   });
 
   test('a guest who leaves gives the task back, and someone else leaving changes nothing', () => {
@@ -133,7 +137,8 @@ describe('handing a task off', () => {
     expect(harness.task(taskId).handoff).toBeNull();
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({
       actor: 'shinsa',
-      text: '@kai gave this task back',
+      text: 'Kai gave this task back',
+      person: { login: 'kai', name: 'Kai Lane', avatarUrl: null },
     });
     expect(harness.lastEffect('handoff.revoke')).toEqual({
       kind: 'handoff.revoke',
@@ -206,9 +211,23 @@ describe('working as the guest', () => {
     expect(message?.onBehalf).toBeUndefined();
     expect(
       JSON.stringify(harness.effectsOf('run.steer').at(-1) ?? harness.effectsOf('run.execute').at(-1))
-    ).toContain('From @kai, who the human handed this task to:');
+    ).toContain('From Kai, who the human handed this task to:');
     expect(JSON.stringify(harness.task(taskId))).not.toContain('handed this task to');
-    expect(serializeTaskDetail(harness.state, taskId)).toContain('@kai:');
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(' Kai: ');
+    expect(serializeTaskDetail(harness.state, taskId)).not.toContain('@kai');
+    harness.send({ type: 'handoff.remove', taskId });
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(' Kai: ');
+  });
+
+  test('names a guest with no name on GitHub by their login', () => {
+    const harness = createHarness();
+    const taskId = handOff(harness);
+    harness.send({ type: 'handoff.claim', taskId, guest: ROBIN });
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe('Handed this task to robin');
+    harness.send({ type: 'task.message', taskId, text: 'On it.' }, { guest: { taskId, login: 'robin' } });
+    expect(
+      JSON.stringify(harness.effectsOf('run.steer').at(-1) ?? harness.effectsOf('run.execute').at(-1))
+    ).toContain('From robin, who the human handed this task to:');
   });
 
   test('answers a plan gate of their task as the human would', () => {

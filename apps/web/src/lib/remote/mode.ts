@@ -60,12 +60,6 @@ export function resolveMachineLabel(machine: { name: string; current?: boolean }
   return machine.current ? THIS_MACHINE : machine.name;
 }
 
-export function resolveOnMachineUrl(url: string) {
-  const [address = url, fragment] = url.split('#');
-  const marked = `${address}${address.includes('?') ? '&' : '?'}${ON_MACHINE_PARAM}=${ON_MACHINE_VALUE}`;
-  return fragment === undefined ? marked : `${marked}#${fragment}`;
-}
-
 export type RemoteView =
   | { kind: 'app' }
   | { kind: 'pair'; claimCode: string | null }

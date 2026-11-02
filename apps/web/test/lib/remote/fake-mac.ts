@@ -12,6 +12,7 @@ import {
   parseChannelMessage,
   parseClientHello,
   REMOTE_KEY_ALGORITHM,
+  resolveCompression,
   serializeChannelMessage,
   serializePublicKey,
   verifyEnrollProof,
@@ -29,6 +30,7 @@ export interface FakeMacOptions {
   refuseOpen?: boolean;
   tolerant?: boolean;
   pendingDrops?: number;
+  plainFrames?: boolean;
 }
 
 interface Collecting {
@@ -81,6 +83,7 @@ export class FakeMacSocket extends EventTarget {
   binaryType: BinaryType = 'blob';
   closedWith: { code: number | undefined; reason: string | undefined } | null = null;
   readonly sentText: string[] = [];
+  readonly frameSizes: number[] = [];
   readonly #mac: FakeMac;
   #seal: ((plain: Bytes) => Promise<Bytes>) | null = null;
   #open: ((frame: Bytes) => Promise<Bytes>) | null = null;
@@ -127,6 +130,7 @@ export class FakeMacSocket extends EventTarget {
     const frame = await (this.#seal as (plain: Bytes) => Promise<Bytes>)(
       encodeText(serializeChannelMessage(message))
     );
+    this.frameSizes.push(frame.length);
     this.deliver(frame.buffer);
   }
 
@@ -178,9 +182,14 @@ export class FakeMacSocket extends EventTarget {
       machinePrivateKey: mac.machine.privateKey,
       serverEphemeralPrivateKey: ephemeral.privateKey,
     });
-    this.#seal = createFrameSealer(session.send);
-    this.#open = createFrameOpener(session.receive);
-    const welcome = JSON.stringify({ type: 'welcome', ephemeral: serverEphemeral });
+    const compression = mac.options.plainFrames ? null : resolveCompression(hello);
+    this.#seal = createFrameSealer(session.send, compression);
+    this.#open = createFrameOpener(session.receive, compression);
+    const welcome = JSON.stringify(
+      mac.options.plainFrames
+        ? { type: 'welcome', ephemeral: serverEphemeral }
+        : { type: 'welcome', ephemeral: serverEphemeral, compression }
+    );
     this.deliver(mac.options.welcome?.(welcome) ?? welcome);
     await this.sealed({ t: 'ready' });
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { UserTag } from '@/components/people/user-tag.tsx';
+import { MentionText, UserTag } from '@/components/people/user-tag.tsx';
 
 async function openCard(name: HTMLElement) {
   const trigger = name.closest('a') ?? name;
@@ -52,5 +52,25 @@ describe('the user tag', () => {
     expect(card.textContent).not.toContain('@');
     expect(card.textContent).toContain('M');
     expect(card.querySelector('img')).toBeNull();
+  });
+
+  it('renders a mention with every person in it as a tag and the rest as text', async () => {
+    const kai = { login: 'kai', name: 'Kai Tanaka', avatarUrl: null };
+    const { container } = render(
+      <p>
+        <MentionText
+          mention={['Shared by ', { user: kai }, ' with ', { user: kai, label: 'Kai’s' }, ' team']}
+        />
+      </p>
+    );
+    expect(container.textContent).toBe('Shared by KKai with KKai’s team');
+    const tags = container.querySelectorAll('a');
+    expect([...tags].map((tag) => tag.getAttribute('href'))).toEqual([
+      'https://github.com/kai',
+      'https://github.com/kai',
+    ]);
+    expect(container.textContent).not.toContain('@');
+    const card = await openCard(screen.getByText('Kai’s'));
+    expect(card.textContent).toContain('Kai Tanakakai');
   });
 });

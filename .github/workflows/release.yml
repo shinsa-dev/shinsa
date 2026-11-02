@@ -201,8 +201,7 @@ jobs:
           fi
           codesign --verify --deep --strict "$app"
           if [ "$MODE" = signed ]; then
-            spctl --assess --type execute --verbose=2 "$app"
-            xcrun stapler validate "$app"
+            bun "$GITHUB_WORKSPACE/scripts/release-verify.ts" "$app"
           fi
       - name: Pack the engine
         env:

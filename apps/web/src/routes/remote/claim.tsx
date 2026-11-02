@@ -1,6 +1,7 @@
 import { REMOTE_PATHS, type RemoteInstance, type RemoteUser } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
+import { UserTag } from '@/components/people/user-tag.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import type { DeviceStore } from '@/lib/remote/devices.ts';
@@ -122,7 +123,9 @@ export function ClaimPage({
         <Button className='w-full' loading={state.kind === 'claiming'} onClick={take}>
           Work on this task
         </Button>
-        <p className='text-2xs text-fg-2'>{`As @${user.login}. Only the first account to open this link gets this task.`}</p>
+        <p className='text-2xs text-fg-2'>
+          As <UserTag user={user} />. Only the first account to open this link gets this task.
+        </p>
       </div>
     </section>
   );

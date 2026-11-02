@@ -222,6 +222,8 @@ function redactActivity(activity: readonly Activity[], grants: Grants): Activity
       runId: null,
       ...(entry.gateType ? { gateType: entry.gateType } : {}),
       ...(entry.onBehalf ? { onBehalf: entry.onBehalf } : {}),
+      ...(entry.byGuest ? { byGuest: entry.byGuest } : {}),
+      ...(entry.person ? { person: { ...entry.person } } : {}),
       ...(entry.round ? { round: entry.round } : {}),
     }));
 }

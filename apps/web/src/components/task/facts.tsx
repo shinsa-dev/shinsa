@@ -49,12 +49,7 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isAgentWorking } from '@/lib/overview/now.ts';
 import { MACHINE_ICON, resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { describeMachineResources, listTaskUseLines } from '@/lib/remote/resources.ts';
-import {
-  describeUserName,
-  resolveFirstName,
-  resolveSharedProfile,
-  type UserProfile,
-} from '@/lib/remote/users.ts';
+import { resolveFirstName, resolveSharedProfile, type UserProfile } from '@/lib/remote/users.ts';
 import { HANDOFF_ICON, resolveHandoffFact } from '@/lib/share/handoff.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
@@ -147,15 +142,17 @@ function HandoffFact({ task }: { task: Task }) {
   const fact = resolveHandoffFact(task, machine?.handedBy ?? null);
   if (!fact) return null;
   return (
-    <Hint label={fact.hint}>
-      <span className={cn(FACT, 'max-w-80')}>
-        <Icon size='sm' name={HANDOFF_ICON} />
-        <span className='flex min-w-0'>
-          <span className='shrink-0 whitespace-pre'>{`${fact.verb} `}</span>
-          <Truncate>{describeUserName(fact.user)}</Truncate>
+    <span className={cn(FACT, 'max-w-80')}>
+      <Hint label={fact.hint}>
+        <span className='inline-flex shrink-0 cursor-default items-center gap-1.5 whitespace-pre'>
+          <Icon size='sm' name={HANDOFF_ICON} />
+          {fact.verb}
         </span>
-      </span>
-    </Hint>
+      </Hint>
+      <Truncate>
+        <UserTag user={fact.user} />
+      </Truncate>
+    </span>
   );
 }
 

@@ -16,6 +16,7 @@ import {
   parseChannelMessage,
   parseClientHello,
   REMOTE_KEY_ALGORITHM,
+  resolveCompression,
   type ServerHello,
   serializeBase64Url,
   serializeChannelMessage,
@@ -27,6 +28,8 @@ import { describeError, log } from '../log/index.ts';
 const CHANNEL_REQUEST_ORIGIN = 'http://remote.shinsa.internal';
 
 const MAX_OPEN_REQUESTS = 32;
+
+const MAX_INFLATED_FRAME_BYTES = 64 * 1024 * 1024;
 
 const POLICY_VIOLATION = 1008;
 
@@ -207,15 +210,18 @@ export class RemoteChannel {
       serverEphemeralPrivateKey: ephemeral.privateKey,
     });
     if (this.#state.kind === 'closed') return;
+    const compression = resolveCompression(hello);
     this.#state = {
       kind: 'open',
       device: hello.device,
       guest: this.#host.resolveGuest(hello.device),
-      seal: createFrameSealer(session.send),
-      open: createFrameOpener(session.receive),
+      seal: createFrameSealer(session.send, compression),
+      open: createFrameOpener(session.receive, compression, MAX_INFLATED_FRAME_BYTES),
       socket: null,
     };
-    this.#peer.send(JSON.stringify({ type: 'welcome', ephemeral: serverEphemeral } satisfies ServerHello));
+    this.#peer.send(
+      JSON.stringify({ type: 'welcome', ephemeral: serverEphemeral, compression } satisfies ServerHello)
+    );
     this.#host.recordSeen(hello.device);
     void this.#send({ t: 'ready' });
   }

@@ -4,7 +4,6 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RemoteAccessGroup } from '@/components/settings/remote-access.tsx';
 import type { RemoteAccessActions } from '@/lib/connection/remote-access.ts';
-import { resolveOnMachineUrl } from '@/lib/remote/mode.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 
@@ -145,20 +144,7 @@ describe('Settings → Remote access', () => {
     expect(screen.getByText(ENROLL_URL)).toBeTruthy();
     expect(screen.queryByText(/^Made /)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Make new link' })).toBeNull();
-    const here = screen.getByText('Add this device').closest('a');
-    expect(here?.getAttribute('href')).toBe(resolveOnMachineUrl(ENROLL_URL));
-  });
-
-  it('offers no Add this device through remote access, where the device has its key already', async () => {
-    import.meta.env.VITE_SHINSA_REMOTE = '1';
-    try {
-      renderGroup(createRemoteSnapshot({ link: { url: ENROLL_URL, createdAt: Date.now() } }));
-      fireEvent.click(screen.getByRole('button', { name: 'Invite link' }));
-      expect(await screen.findByText(ENROLL_URL)).toBeTruthy();
-      expect(screen.queryByText('Add this device')).toBeNull();
-    } finally {
-      import.meta.env.VITE_SHINSA_REMOTE = undefined;
-    }
+    expect(screen.queryByText('Add this device')).toBeNull();
   });
 
   it('turns the link off with a short toast', async () => {
@@ -185,7 +171,9 @@ describe('Settings → Remote access', () => {
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     expect(screen.getByText(/^Kai iPhone · Asked/)).toBeTruthy();
     expect(screen.getByText('Chrome on Mac')).toBeTruthy();
-    expect(screen.queryByText('mona')).toBeNull();
+    expect(screen.getAllByText('mona').map((name) => name.closest('a')?.getAttribute('href'))).toEqual([
+      'https://github.com/mona',
+    ]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[0] as HTMLElement);
     await waitFor(() => expect(actions.acceptRequest).toHaveBeenCalledWith('r1'));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Kai joined.'));
@@ -206,11 +194,20 @@ describe('Settings → Remote access', () => {
     );
     expect(screen.getByText('People who can reach this machine')).toBeTruthy();
     expect(screen.getByText('You')).toBeTruthy();
-    expect(screen.queryByText('mona')).toBeNull();
+    expect(
+      screen
+        .getByText(/^Signed in as/)
+        .querySelector('a')
+        ?.getAttribute('href')
+    ).toBe('https://github.com/mona');
+    expect(screen.getAllByText('mona')).toHaveLength(1);
     expect(screen.getByText('Owner')).toBeTruthy();
     expect(screen.getByText('Kai Lane')).toBeTruthy();
     expect(screen.getByText('kai')).toBeTruthy();
-    expect(screen.getByText(/Added by Kai$/)).toBeTruthy();
+    const added = screen.getByText(/· Added by$/).parentElement;
+    expect(added?.textContent).toEndWith('Added by Kai');
+    expect(added?.querySelector('a')?.getAttribute('href')).toBe('https://github.com/kai');
+    expect(added?.querySelector('img')?.getAttribute('src')).toBe('https://avatars.example/kai');
     fireEvent.click(screen.getAllByRole('button', { name: 'Remove' }).at(-1) as HTMLElement);
     fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
     await waitFor(() => expect(actions.removeMember).toHaveBeenCalledWith('7'));

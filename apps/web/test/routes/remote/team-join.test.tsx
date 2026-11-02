@@ -11,6 +11,8 @@ const TEAM_KEYS = { selectTeamKey: () => Promise.resolve(null), writeTeamKey: ()
 
 const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
 
+const KAI = { id: '2', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+
 const DASHBOARD = {
   joinTeam: () => Promise.reject(new Error('unused')),
   previewTeam: () => Promise.resolve({ name: 'Platform', owner: MONA }),
@@ -27,15 +29,19 @@ describe('the team join page on app.shinsa.dev', () => {
   it('says what a teammate sees, asks to join, and says who answers', async () => {
     stashTeamJoinFragment(sessionStorage, `#team1.invite-1.${KEY}`);
     const request = mock(() =>
-      Promise.resolve({ name: 'Platform', owner: 'Kai Lane', status: 'requested' as const })
+      Promise.resolve({ name: 'Platform', owner: KAI, status: 'requested' as const })
     );
     render(<TeamJoinPage link={LINK} dashboard={DASHBOARD} teamKeys={TEAM_KEYS} request={request} />);
     expect(screen.getByText('Read-only, and never the chat')).toBeTruthy();
     expect(await screen.findByText('Join Platform')).toBeTruthy();
-    expect(screen.getByText(/Mona owns this team/)).toBeTruthy();
+    const owns = screen.getByText(/owns this team/);
+    expect(owns.textContent).toStartWith('MMona owns this team.');
+    expect(owns.querySelector('a')?.getAttribute('href')).toBe('https://github.com/mona');
     fireEvent.click(screen.getByRole('button', { name: 'Ask to join' }));
     expect(await screen.findByText('Request sent')).toBeTruthy();
-    expect(screen.getByText(/Kai Lane accepts or declines your request to join Platform/)).toBeTruthy();
+    const answers = screen.getByText(/accepts or declines your request to join Platform/);
+    expect(answers.textContent).toStartWith('KKai accepts');
+    expect(answers.querySelector('a')?.getAttribute('href')).toBe('https://github.com/kai');
     expect(screen.getByText('Paste this link into the team’s card.')).toBeTruthy();
     expect(screen.getByText(`${location.origin}/share/team#team1.invite-1.${KEY}`)).toBeTruthy();
     expect(sessionStorage.length).toBe(0);
@@ -73,7 +79,7 @@ describe('the team join page on app.shinsa.dev', () => {
         close,
       });
     const request = mock(() =>
-      Promise.resolve({ name: 'Platform', owner: 'Kai Lane', status: 'requested' as const })
+      Promise.resolve({ name: 'Platform', owner: KAI, status: 'requested' as const })
     );
     const { unmount } = render(
       <TeamJoinPage
@@ -138,9 +144,7 @@ describe('the team join page on app.shinsa.dev', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask to join' }));
     expect(await screen.findByText('This team link was turned off.')).toBeTruthy();
     unmount();
-    const member = mock(() =>
-      Promise.resolve({ name: 'Platform', owner: 'Kai Lane', status: 'member' as const })
-    );
+    const member = mock(() => Promise.resolve({ name: 'Platform', owner: KAI, status: 'member' as const }));
     render(<TeamJoinPage link={LINK} dashboard={DASHBOARD} teamKeys={TEAM_KEYS} request={member} />);
     fireEvent.click(screen.getByRole('button', { name: 'Ask to join' }));
     expect(await screen.findByText('You are in Platform')).toBeTruthy();
