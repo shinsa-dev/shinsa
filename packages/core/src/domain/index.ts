@@ -43,6 +43,7 @@ export {
 export {
   copyTeammateOriginal,
   copyUnreachedTeammate,
+  isDuplicateRepositoryAllowed,
   quoteDuplicateOriginal,
   resolveTeammateMachineLabel,
 } from './duplicates.ts';

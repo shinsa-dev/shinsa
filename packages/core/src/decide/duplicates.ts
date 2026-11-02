@@ -3,6 +3,7 @@ import {
   copyTeammateOriginal,
   DomainError,
   type DuplicateActor,
+  isDuplicateRepositoryAllowed,
   isTaskSettled,
   quoteDuplicateOriginal,
   type Task,
@@ -38,6 +39,12 @@ function assertCanDuplicate(task: Task, original: Task) {
   if (original.duplicate) {
     throw new DomainError({ code: 'duplicate_of_duplicate', message: 'That task is itself a duplicate.' });
   }
+  if (!isDuplicateRepositoryAllowed(task, original)) {
+    throw new DomainError({
+      code: 'duplicate_other_repository',
+      message: 'That task works in another repository, so it cannot be the original.',
+    });
+  }
 }
 
 export function markDuplicate(decider: Decider, command: CommandOf<'task.mark_duplicate'>) {
@@ -48,9 +55,15 @@ export function markDuplicate(decider: Decider, command: CommandOf<'task.mark_du
   stopAllWatchdogs(decider, task.id);
 }
 
-export function selectTriageDuplicate(decider: Decider, task: Task, duplicateOf: string | undefined) {
+export function selectTriageDuplicate(
+  decider: Decider,
+  task: Task,
+  repoId: string | null,
+  duplicateOf: string | undefined
+) {
   const original = duplicateOf ? decider.state.tasks[duplicateOf] : undefined;
   if (!original || original.id === task.id || isTaskSettled(original) || original.duplicate) return null;
+  if (original.repoId === null || original.repoId !== repoId) return null;
   return original;
 }
 

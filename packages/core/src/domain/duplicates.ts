@@ -14,6 +14,14 @@ export function quoteDuplicateOriginal(original: DuplicateOriginal) {
   return `${owner}${handle}“${original.title}”`;
 }
 
+interface RepositoryOwner {
+  repoId: string | null;
+}
+
+export function isDuplicateRepositoryAllowed(task: RepositoryOwner, original: RepositoryOwner) {
+  return task.repoId === null || original.repoId === null || task.repoId === original.repoId;
+}
+
 export function resolveTeammateMachineLabel(machine: Pick<UnreachedTeammate, 'name' | 'owner'>) {
   return machine.owner ? `${resolveFirstName(machine.owner)}’s ${machine.name}` : machine.name;
 }
