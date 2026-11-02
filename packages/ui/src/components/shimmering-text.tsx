@@ -46,7 +46,7 @@ export function ShimmeringText({
       data-slot='shimmering-text'
       data-paused={paused || undefined}
       className={cn(
-        'relative inline-block select-none whitespace-nowrap',
+        'relative inline-block whitespace-nowrap select-none',
         '[--color:var(--muted-foreground)] [--shimmering-color:var(--foreground)]',
         '[color:var(--color)]',
         className
@@ -57,8 +57,8 @@ export function ShimmeringText({
       {text}
       {!paused && (
         <span aria-hidden className='pointer-events-none absolute inset-0 overflow-clip motion-reduce:hidden'>
-          <span className='shimmer-window block size-full overflow-hidden'>
-            <span className='shimmer-copy block truncate [color:var(--shimmering-color)]'>{text}</span>
+          <span className='block size-full shimmer-window overflow-hidden'>
+            <span className='block shimmer-copy truncate [color:var(--shimmering-color)]'>{text}</span>
           </span>
         </span>
       )}

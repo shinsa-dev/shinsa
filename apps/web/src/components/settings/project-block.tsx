@@ -192,7 +192,7 @@ function ProjectHeader({
   return (
     <>
       <ProjectDotIcon color={project.color} />
-      <Truncate className='min-w-0 font-medium text-fg-4 text-xs'>{project.name}</Truncate>
+      <Truncate className='min-w-0 text-xs font-medium text-fg-4'>{project.name}</Truncate>
       <Hint label={describeProjectKey(project.key)}>
         <Badge size='sm' className='font-mono'>
           {project.key}

@@ -21,7 +21,7 @@ function Input({
         'corner-superellipse/1.125 w-full min-w-0 bg-input font-medium text-fg-4 backdrop-blur-md',
         size === 'sm' ? 'h-6 rounded-control-sm px-2 text-xs' : 'h-6.5 rounded-control px-2.5 text-xs',
         'outline-none placeholder:text-fg-2',
-        'file:inline-flex file:h-5.5 file:border-0 file:bg-transparent file:font-medium file:text-fg-4 file:text-xs',
+        'file:inline-flex file:h-5.5 file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-fg-4',
         'disabled:cursor-not-allowed disabled:text-fg-1 disabled:opacity-50',
         // A read-only field shows a hairline instead of the fill, so it reads
         // as a value to copy rather than a field to type into.

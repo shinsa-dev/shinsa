@@ -139,9 +139,9 @@ export function UserMessage({
     <div data-message data-delivery={delivery ?? undefined} className='flex min-w-0 flex-col items-end gap-2'>
       <MessageAttachments attachments={shown} />
       {body && (
-        <div className='relative min-w-0 max-w-4/5'>
+        <div className='relative max-w-4/5 min-w-0'>
           <div className={cn(BUBBLE, 'selectable')}>
-            <p className={cn('whitespace-pre-wrap break-words', long && !expanded && 'line-clamp-12')}>
+            <p className={cn('break-words whitespace-pre-wrap', long && !expanded && 'line-clamp-12')}>
               {body}
             </p>
           </div>

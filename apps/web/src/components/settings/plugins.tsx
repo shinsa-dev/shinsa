@@ -21,7 +21,7 @@ function PluginRow({
   return (
     <div className={SETTING_ROW}>
       <Hint label={`${describePluginContents(plugin)} · ${plugin.origin}`}>
-        <span className='min-w-0 flex-1 cursor-default truncate font-medium text-fg-4 text-xs'>
+        <span className='min-w-0 flex-1 cursor-default truncate text-xs font-medium text-fg-4'>
           {plugin.name}
         </span>
       </Hint>

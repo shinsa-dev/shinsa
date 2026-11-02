@@ -17,7 +17,7 @@ export function RepoDetails({ state, repo }: { state: ShinsaState; repo: Repo })
   const project = selectProject(state, repo.projectId);
   return (
     <>
-      <InfoHeader title={repo.name} description={<span className='break-all font-mono'>{repo.path}</span>} />
+      <InfoHeader title={repo.name} description={<span className='font-mono break-all'>{repo.path}</span>} />
       <InfoSection>
         {project && (
           <InfoRow

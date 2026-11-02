@@ -48,7 +48,7 @@ export function UsageWaitCard({
         </FooterNote>
       }
     >
-      <p className='text-fg-3 text-xs'>{describeUsageWaitBody(wait)}</p>
+      <p className='text-xs text-fg-3'>{describeUsageWaitBody(wait)}</p>
     </NowFrame>
   );
 }

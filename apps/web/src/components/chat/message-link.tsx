@@ -42,7 +42,7 @@ export function MessageLink({
         </span>
       </span>
       {text && (
-        <span className='line-clamp-3 text-fg-4 text-xs'>
+        <span className='line-clamp-3 text-xs text-fg-4'>
           <InlineMarkdown text={flattenWhitespace(text)} />
         </span>
       )}

@@ -82,7 +82,7 @@ function ProjectField({
         if (next !== null) onValueChange(next);
       }}
     >
-      <SelectTrigger aria-label='Project' size='sm' variant='ghost' className='w-fit min-w-0 max-w-56'>
+      <SelectTrigger aria-label='Project' size='sm' variant='ghost' className='w-fit max-w-56 min-w-0'>
         <SelectValue>{() => shown && <ProjectOption color={shown.color} name={shown.label} />}</SelectValue>
       </SelectTrigger>
       <SelectContent align='start' alignItemWithTrigger={false}>
@@ -174,7 +174,7 @@ function StartField({
           if (start === 'after' || start === 'stack') setPicking(start);
           else onChoose({ start, after: [] });
         }}
-        className='min-w-0 max-w-64'
+        className='max-w-64 min-w-0'
       />
       {state && (
         <Popover open={picking !== null} onOpenChange={(next) => setPicking(next ? picking : null)}>
@@ -230,7 +230,7 @@ export function NewTaskFields({
           items={listNewTaskMachines(machines, placement, unreachable)}
           value={choices.machine}
           onValueChange={(next) => onChoose({ machine: next })}
-          className='min-w-0 max-w-56'
+          className='max-w-56 min-w-0'
         />
       )}
       {state && (

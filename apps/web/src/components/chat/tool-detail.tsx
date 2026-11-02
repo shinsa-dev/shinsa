@@ -249,7 +249,7 @@ function ArgumentsDetail({ args }: { args: ChatToolArgs }) {
           {inline.map(([name, value]) => (
             <React.Fragment key={name}>
               <dt className='text-fg-2'>{humanize(name)}</dt>
-              <dd className='min-w-0 break-words font-mono text-fg-4'>{String(value)}</dd>
+              <dd className='min-w-0 font-mono break-words text-fg-4'>{String(value)}</dd>
             </React.Fragment>
           ))}
         </dl>

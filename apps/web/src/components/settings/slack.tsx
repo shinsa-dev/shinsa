@@ -41,7 +41,7 @@ function StatusRow({ snapshot }: { snapshot: SlackSnapshot }) {
           <span className='shrink-0 text-fg-4'>Slack</span>
           <span className={cn('shrink-0', TONE_TEXT[status.tone])}>{status.label}</span>
         </div>
-        <p className='text-pretty text-2xs text-fg-2'>{status.detail}</p>
+        <p className='text-2xs text-pretty text-fg-2'>{status.detail}</p>
       </div>
       <StatusAction snapshot={snapshot} />
     </div>
@@ -52,7 +52,7 @@ function LinkRow({ link }: { link: SlackLink }) {
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
-        <span className='truncate text-fg-4 text-xs'>{link.teamName}</span>
+        <span className='truncate text-xs text-fg-4'>{link.teamName}</span>
         <span className='truncate text-2xs text-fg-2'>{describeSlackLink(link)}</span>
       </div>
     </div>
@@ -91,7 +91,7 @@ export function SlackGroup({
       ))}
       {snapshot && !onMachine && (
         <div className={SETTING_ROW}>
-          <p className='text-pretty text-2xs text-fg-2'>{SLACK_ON_MACHINE_NOTE}</p>
+          <p className='text-2xs text-pretty text-fg-2'>{SLACK_ON_MACHINE_NOTE}</p>
         </div>
       )}
       <ConfirmDialog

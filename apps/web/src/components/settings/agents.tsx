@@ -113,7 +113,7 @@ function DescribedRow({
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
-        <div className='flex min-w-0 items-center gap-1.5 text-fg-4 text-xs'>{title}</div>
+        <div className='flex min-w-0 items-center gap-1.5 text-xs text-fg-4'>{title}</div>
         <p className='text-2xs text-fg-2'>{description}</p>
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>{children}</div>
@@ -145,7 +145,7 @@ function RoleRow({ context, entry }: { context: ModelsContext; entry: AgentRoleE
 function FollowingRoleRow({ entry }: { entry: FollowingRoleEntry }) {
   return (
     <DescribedRow title={<span className='truncate'>{entry.title}</span>} description={entry.description}>
-      <span className='w-71.5 truncate ps-2.5 text-fg-2 text-xs'>{describeFollowedRole(entry)}</span>
+      <span className='w-71.5 truncate ps-2.5 text-xs text-fg-2'>{describeFollowedRole(entry)}</span>
     </DescribedRow>
   );
 }

@@ -39,7 +39,7 @@ export function PullRequestDetails({
         description={describePullRequestState(pullRequest)}
       />
       {showTask && (
-        <div className='border-border border-t p-1'>
+        <div className='border-t border-border p-1'>
           <TaskPopoverRows state={state} tasks={[task]} />
         </div>
       )}

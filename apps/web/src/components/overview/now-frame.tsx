@@ -52,7 +52,7 @@ export function Eyebrow({ state, task, extra }: { state: ShinsaState; task: Task
   const round = resolveRoundCount(task);
   return (
     <span className='flex flex-wrap items-center gap-x-1.5'>
-      <StatusText state={state} task={task} className='whitespace-nowrap text-2xs' />
+      <StatusText state={state} task={task} className='text-2xs whitespace-nowrap' />
       {round && (
         <span className='flex items-center gap-1.5 whitespace-nowrap'>
           <span>·</span>

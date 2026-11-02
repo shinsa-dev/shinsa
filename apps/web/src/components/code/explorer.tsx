@@ -126,7 +126,7 @@ export function Explorer(props: ExplorerProps) {
   const row = useHeaderFloor(props.onFloor);
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', TREE_HOVER_GROUP)}>
-      <div className='flex shrink-0 flex-col gap-1.5 border-border border-b p-1.5'>
+      <div className='flex shrink-0 flex-col gap-1.5 border-b border-border p-1.5'>
         <div ref={row} className='flex items-center gap-1.5'>
           {modes.length > 1 ? (
             <Choice
@@ -138,7 +138,7 @@ export function Explorer(props: ExplorerProps) {
             />
           ) : (
             <span className='flex min-w-max flex-1'>
-              <span data-natural className='px-1.5 font-medium text-fg-4 text-xs'>
+              <span data-natural className='px-1.5 text-xs font-medium text-fg-4'>
                 {CODE_MODE[modes[0] ?? 'files'].label}
               </span>
             </span>

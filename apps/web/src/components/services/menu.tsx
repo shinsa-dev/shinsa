@@ -34,6 +34,19 @@ import { useTerminals } from '@/lib/connection/terminals.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
+  createServicesPanel,
+  listPickedServices,
+  reduceServicesPanel,
+  resolveServicesPanelHeight,
+  resolveShownServicesView,
+  type ServicesPanelAction,
+  type ServicesPanelHeight,
+  type ServicesPanelState,
+  type ServicesPanelView,
+  selectEditedService,
+  useServicesPanelRequest,
+} from '@/lib/terminal/services-panel.ts';
+import {
   canStartAll,
   describeRemoveServices,
   describeServiceGroup,
@@ -50,19 +63,6 @@ import {
   type ServiceGroup,
   togglePick,
 } from '@/lib/terminal/services.ts';
-import {
-  createServicesPanel,
-  listPickedServices,
-  reduceServicesPanel,
-  resolveServicesPanelHeight,
-  resolveShownServicesView,
-  type ServicesPanelAction,
-  type ServicesPanelHeight,
-  type ServicesPanelState,
-  type ServicesPanelView,
-  selectEditedService,
-  useServicesPanelRequest,
-} from '@/lib/terminal/services-panel.ts';
 import { resolveTerminalEntry, resolveTerminalProject } from '@/lib/terminal/tabs.ts';
 import { navigate, useRoute, useSearchParam } from '@/router.ts';
 
@@ -268,7 +268,7 @@ function ManageFooter({
     return (
       <div className={PANEL_FOOTER}>
         <span className='flex min-w-0 flex-1 flex-col ps-1.5'>
-          <span className='truncate text-fg-4 text-xs'>{copy.question}</span>
+          <span className='truncate text-xs text-fg-4'>{copy.question}</span>
           <span className='truncate text-2xs text-fg-2'>{copy.note}</span>
         </span>
         <Button variant='secondary' size='sm' onClick={() => onConfirm(false)}>

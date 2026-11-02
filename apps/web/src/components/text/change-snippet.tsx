@@ -119,11 +119,11 @@ export function ChangeSnippet({
         <SnippetPlace task={task} path={path} start={start} end={end} spot={spot} />
       </DisclosureHeader>
       {disclosure.open && (
-        <div className='border-border border-t'>
+        <div className='border-t border-border'>
           <SnippetBody task={task} path={path} lines={lines} />
         </div>
       )}
-      {why && <Markdown text={why} className='border-border border-t px-2 py-1.5 text-fg-3 text-xs' />}
+      {why && <Markdown text={why} className='border-t border-border px-2 py-1.5 text-xs text-fg-3' />}
     </figure>
   );
 }

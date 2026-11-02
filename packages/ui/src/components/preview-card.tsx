@@ -197,7 +197,7 @@ function PreviewCardContent({
           data-slot='preview-card-content'
           data-instant={instant ? '' : undefined}
           className={cn(
-            'corner-superellipse/1.125 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 flex w-72 origin-(--transform-origin) flex-col rounded-popup bg-popover text-popover-foreground text-xs shadow-md outline-hidden data-closed:animate-out data-open:animate-in',
+            'corner-superellipse/1.125 flex w-72 origin-(--transform-origin) flex-col rounded-popup bg-popover text-xs text-popover-foreground shadow-md outline-hidden data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
             'data-instant:animate-none! data-instant:duration-0!',
             className
           )}

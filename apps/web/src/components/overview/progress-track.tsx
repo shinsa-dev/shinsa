@@ -69,7 +69,7 @@ function StepItem({ step, fold, note }: { step: Step; fold: LabelFold; note: str
         <StepMark status={step.status} />
         <span
           className={cn(
-            'whitespace-nowrap text-2xs',
+            'text-2xs whitespace-nowrap',
             step.status === 'pending' ? 'text-fg-2' : 'text-fg-4',
             emphasised ? 'font-medium' : 'max-sm:hidden',
             fold === 'narrow' && 'max-lg:hidden',

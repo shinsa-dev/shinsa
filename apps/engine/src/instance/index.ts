@@ -39,9 +39,4 @@ export {
   type ServiceResult,
   type ServiceRunner,
 } from './service.ts';
-export {
-  createSystemdService,
-  resolveUnit,
-  resolveUnitPath,
-  SYSTEMD_UNIT,
-} from './systemd.ts';
+export { createSystemdService, resolveUnit, resolveUnitPath, SYSTEMD_UNIT } from './systemd.ts';

@@ -34,9 +34,9 @@ function SkillRow({
   onChoose: (skill: SkillSummary, enabled: boolean) => void;
 }) {
   return (
-    <div className={cn(SETTING_ROW, 'h-10 gap-1.5', !first && 'border-border border-t')}>
+    <div className={cn(SETTING_ROW, 'h-10 gap-1.5', !first && 'border-t border-border')}>
       <Hint label={skill.origin}>
-        <span className='min-w-0 shrink-0 cursor-default truncate font-medium text-fg-4 text-xs'>
+        <span className='min-w-0 shrink-0 cursor-default truncate text-xs font-medium text-fg-4'>
           {skill.name}
         </span>
       </Hint>

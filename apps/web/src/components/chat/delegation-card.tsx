@@ -74,7 +74,7 @@ export function DelegationQuestion({ question, className }: { question: string; 
       <IconSlot>
         <Icon size='sm' name='IconBubbleQuestion' aria-hidden className='text-amber-text' />
       </IconSlot>
-      <InlineMarkdown text={question} className='selectable min-w-0 text-fg-3' />
+      <InlineMarkdown text={question} className='min-w-0 selectable text-fg-3' />
     </div>
   );
 }
@@ -139,10 +139,10 @@ export function DelegationSpawnCard({
         />
       </DisclosureHeader>
       {view.question && (
-        <DelegationQuestion question={view.question} className='border-border border-t px-3 py-2' />
+        <DelegationQuestion question={view.question} className='border-t border-border px-3 py-2' />
       )}
       {disclosure.open && (
-        <div className={cn('border-border border-t py-1', CHAT_NESTED)}>{conversation(view)}</div>
+        <div className={cn('border-t border-border py-1', CHAT_NESTED)}>{conversation(view)}</div>
       )}
     </div>
   );

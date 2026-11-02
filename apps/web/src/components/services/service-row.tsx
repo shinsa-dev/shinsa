@@ -233,7 +233,7 @@ export function TaskRunRow({
         className={cn(LIST_ROW, 'h-8 min-w-0 flex-1 items-center ps-1.5')}
       >
         <StatusTile icon={glyph.icon} tone={glyph.tone} size='sm' label={state} />
-        <Truncate className='min-w-0 flex-1 text-fg-3 text-xs'>{label}</Truncate>
+        <Truncate className='min-w-0 flex-1 text-xs text-fg-3'>{label}</Truncate>
         <span
           className={cn('shrink-0 text-2xs', glyph.tone === 'neutral' ? 'text-fg-2' : TONE_TEXT[glyph.tone])}
         >

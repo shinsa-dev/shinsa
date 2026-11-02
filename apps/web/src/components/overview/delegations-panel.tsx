@@ -41,12 +41,12 @@ function DelegationRow({
           view={view}
           title={
             readOnly ? (
-              <Truncate className='min-w-0 flex-1 font-medium text-fg-4 text-xs'>{view.title}</Truncate>
+              <Truncate className='min-w-0 flex-1 text-xs font-medium text-fg-4'>{view.title}</Truncate>
             ) : (
               <button
                 type='button'
                 onClick={() => onOpen(view.run.id)}
-                className='flex min-w-0 flex-1 cursor-pointer text-left font-medium text-fg-4 text-xs hover:text-primary-text active:text-primary-text'
+                className='flex min-w-0 flex-1 cursor-pointer text-left text-xs font-medium text-fg-4 hover:text-primary-text active:text-primary-text'
               >
                 <Truncate>{view.title}</Truncate>
               </button>
@@ -79,7 +79,7 @@ export function DelegationsPanel({
       persistId={resolveOverviewPanelId(task, 'delegations')}
       title='Delegations'
       icon='IconAgents'
-      meta={summary && <span className='font-normal text-2xs text-fg-2 tabular-nums'>{summary}</span>}
+      meta={summary && <span className='text-2xs font-normal text-fg-2 tabular-nums'>{summary}</span>}
     >
       <ul className='flex flex-col divide-y divide-border'>
         {tree.map(({ view, depth }) => (

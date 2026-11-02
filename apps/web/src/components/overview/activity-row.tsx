@@ -84,7 +84,7 @@ export function ActivityEntry({
         </div>
         {detail.map((line) => (
           <div key={line} className='line-clamp-2'>
-            <Markdown text={line} className='text-fg-4 text-xs' />
+            <Markdown text={line} className='text-xs text-fg-4' />
           </div>
         ))}
         {children}

@@ -82,7 +82,7 @@ export function QuickOpenDialog({
           {loaded.status === 'loading' && (
             <LoadingLine label='Reading the files' className='px-2 py-1.5 text-xs' />
           )}
-          {loaded.status === 'error' && <p className='px-2 py-1.5 text-red-text text-xs'>{loaded.message}</p>}
+          {loaded.status === 'error' && <p className='px-2 py-1.5 text-xs text-red-text'>{loaded.message}</p>}
           {loaded.status === 'ready' && <CommandEmpty>No file matches.</CommandEmpty>}
           {ranked.map((entry) => {
             const name = resolveFileName(entry.path);

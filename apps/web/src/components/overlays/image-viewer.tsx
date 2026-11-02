@@ -621,7 +621,7 @@ function ImageViewerDialog({
           ref={mountStage}
           aria-label={caption}
           onKeyDown={onKeyDown}
-          className='dark fixed inset-0 z-50 select-none overflow-hidden text-foreground outline-none'
+          className='dark fixed inset-0 z-50 overflow-hidden text-foreground outline-none select-none'
         >
           <button
             type='button'
@@ -661,7 +661,7 @@ function ImageViewerDialog({
             <div className='pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4'>
               <div
                 className={cn(
-                  'corner-superellipse/1.125 pointer-events-auto flex h-8 min-w-0 max-w-full items-center gap-2 rounded-popup bg-popover ps-3 text-popover-foreground text-xs shadow-3 sm:max-w-xl',
+                  'corner-superellipse/1.125 pointer-events-auto flex h-8 max-w-full min-w-0 items-center gap-2 rounded-popup bg-popover ps-3 text-xs text-popover-foreground shadow-3 sm:max-w-xl',
                   many && 'w-xl',
                   item.parts.length > 0 ? 'pe-0.75' : 'pe-3'
                 )}

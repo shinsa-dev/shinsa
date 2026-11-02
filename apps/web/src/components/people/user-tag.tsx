@@ -31,7 +31,7 @@ function UserAvatar({ user, size }: { user: UserProfile; size: keyof typeof USER
   return (
     <span
       aria-hidden
-      className={cn('grid place-items-center font-medium text-2xs text-fg-2 leading-none', className)}
+      className={cn('grid place-items-center text-2xs leading-none font-medium text-fg-2', className)}
     >
       <span className={USER_INITIAL[size]}>{resolveUserInitial(user)}</span>
     </span>

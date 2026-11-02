@@ -61,7 +61,7 @@ export function CodeLines({
             // oxlint-disable-next-line shinsa/no-array-index-key -- lines are positional
             <div key={index} className='flex'>
               {gutter === 'numbers' && (
-                <span className='w-11 shrink-0 select-none pr-3 text-right text-fg-1 tabular-nums'>
+                <span className='w-11 shrink-0 pr-3 text-right text-fg-1 tabular-nums select-none'>
                   {line.number ?? ''}
                 </span>
               )}
@@ -69,7 +69,7 @@ export function CodeLines({
                 className={cn(
                   'min-h-[1lh] min-w-0 flex-1 pr-3',
                   gutter === null && 'pl-3',
-                  wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
+                  wrap ? 'break-words whitespace-pre-wrap' : 'whitespace-pre'
                 )}
               >
                 <TokenText text={line.text} tokens={line.tokens ?? tokens?.[index]} />

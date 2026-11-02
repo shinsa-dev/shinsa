@@ -7,8 +7,8 @@ import {
   type TeamJoinFragment,
 } from '@shinsa/core';
 import type { TeamActions } from '@/lib/connection/teams.ts';
-import type { TeamJoinResult } from '@/lib/teams/join.ts';
 import type { JoinMachines } from '@/lib/teams/join-machines.ts';
+import type { TeamJoinResult } from '@/lib/teams/join.ts';
 
 const HOUR_MS = 3_600_000;
 

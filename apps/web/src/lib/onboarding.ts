@@ -50,14 +50,12 @@ export function listFolderRows(status: OnboardingStatus): FolderRow[] {
 
 export function listFolderSuggestions(status: OnboardingStatus, suggestions: RootSuggestion[]) {
   const chosen = new Set(status.roots.configured);
-  return suggestions.map(
-    (suggestion): FolderSuggestion => ({
-      path: suggestion.path,
-      label: resolveDisplayPath(suggestion.path, status.paths.userHome),
-      detail: formatCount(suggestion.repoCount, 'repository', 'repositories'),
-      chosen: chosen.has(suggestion.path),
-    })
-  );
+  return suggestions.map((suggestion): FolderSuggestion => ({
+    path: suggestion.path,
+    label: resolveDisplayPath(suggestion.path, status.paths.userHome),
+    detail: formatCount(suggestion.repoCount, 'repository', 'repositories'),
+    chosen: chosen.has(suggestion.path),
+  }));
 }
 
 export function resolveToggledRoots(configured: string[], path: string) {

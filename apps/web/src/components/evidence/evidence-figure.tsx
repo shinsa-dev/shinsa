@@ -110,11 +110,11 @@ export function EvidenceFigure({
       <EvidenceMedia view={view} viewer={viewer} />
       <figcaption className='flex min-w-0 flex-col gap-px'>
         {label === 'part' ? (
-          <span className='font-medium text-2xs text-fg-4'>{describeEvidencePart(evidence)}</span>
+          <span className='text-2xs font-medium text-fg-4'>{describeEvidencePart(evidence)}</span>
         ) : (
           <>
             <span className='flex min-w-0 items-center gap-1.5'>
-              <span className='min-w-0 font-medium text-fg-4 text-xs'>{evidence.title}</span>
+              <span className='min-w-0 text-xs font-medium text-fg-4'>{evidence.title}</span>
               {view.fromReview && <ReviewMark />}
               {view.updated && <UpdatedMark text={view.updated} />}
             </span>

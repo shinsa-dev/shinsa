@@ -36,7 +36,6 @@ import { readDesktopChannel, subscribeDesktopUpdate } from '@/lib/desktop.ts';
 import { useExplorerSide } from '@/lib/preferences/code.ts';
 import { useNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { isRemoteBuild } from '@/lib/remote/mode.ts';
-import { resolveHashSectionId } from '@/lib/settings.ts';
 import {
   findSettingsTab,
   listSettingsTabs,
@@ -44,6 +43,7 @@ import {
   resolveSettingsTabParam,
   type SettingsTabId,
 } from '@/lib/settings-tabs.ts';
+import { resolveHashSectionId } from '@/lib/settings.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
 function useSectionScroll(

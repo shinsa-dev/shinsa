@@ -48,7 +48,7 @@ export function NewTerminalButton({
   return (
     <DropdownMenu>
       {wide ? menuTrigger : <Hint label={label}>{menuTrigger}</Hint>}
-      <DropdownMenuContent align={wide ? 'center' : 'start'} className='min-w-60 max-w-96'>
+      <DropdownMenuContent align={wide ? 'center' : 'start'} className='max-w-96 min-w-60'>
         {groups.map((group, index) => (
           <React.Fragment key={group.kind}>
             {index > 0 && <DropdownMenuSeparator />}

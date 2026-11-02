@@ -75,7 +75,7 @@ function CommentComposer({
           onSave(text.trim());
         }}
         placeholder='What should change here? It goes to the agent with your review.'
-        className='corner-superellipse/1.125 field-sizing-content min-h-14 w-full resize-none rounded-control bg-bg-2 px-2.5 py-1.5 text-fg-4 text-xs outline-none placeholder:text-fg-2'
+        className='corner-superellipse/1.125 field-sizing-content min-h-14 w-full resize-none rounded-control bg-bg-2 px-2.5 py-1.5 text-xs text-fg-4 outline-none placeholder:text-fg-2'
       />
       <div className='flex items-center gap-1.5'>
         <Button size='xs' disabled={!text.trim()} onClick={() => onSave(text.trim())}>

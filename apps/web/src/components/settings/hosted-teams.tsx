@@ -7,8 +7,8 @@ import { MentionText } from '@/components/people/user-tag.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
-import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
+import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import {
   describeHostedTeam,
   describeHostedTeamsNotice,
@@ -45,7 +45,7 @@ function TeamMachines({ team }: { team: RemoteTeam }) {
               <span className={cn('shrink-0', machine.online ? TONE_TEXT.green : 'text-fg-2')}>{status}</span>
             </div>
             {owner && (
-              <Truncate className='text-2xs text-fg-2 leading-4'>
+              <Truncate className='text-2xs leading-4 text-fg-2'>
                 <MentionText mention={['Owned by ', { user: owner }]} />
               </Truncate>
             )}
@@ -83,7 +83,7 @@ function HostedTeamCard({ entry, viewerId }: { entry: HostedTeam; viewerId: stri
     <SettingsCard>
       <div className={SETTING_ROW}>
         <div className='flex min-w-0 flex-1 flex-col'>
-          <Truncate className='font-medium text-fg-4 text-xs'>{team.name}</Truncate>
+          <Truncate className='text-xs font-medium text-fg-4'>{team.name}</Truncate>
           <Truncate className='text-2xs text-fg-2'>
             <MentionText mention={describeHostedTeam(team, now)} />
           </Truncate>
@@ -92,7 +92,7 @@ function HostedTeamCard({ entry, viewerId }: { entry: HostedTeam; viewerId: stri
       {!entry.hasKey && (
         <div className={cn(SETTING_ROW, 'gap-2')}>
           <Icon name='IconKey1' size='sm' className='shrink-0 text-fg-2' />
-          <p className='min-w-0 flex-1 text-pretty text-2xs text-fg-2'>{TEAM_KEY_MISSING}</p>
+          <p className='min-w-0 flex-1 text-2xs text-pretty text-fg-2'>{TEAM_KEY_MISSING}</p>
         </div>
       )}
       <TeamMachines team={team} />

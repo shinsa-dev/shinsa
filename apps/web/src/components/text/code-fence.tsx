@@ -41,7 +41,7 @@ export function CodeFence({
       <pre
         data-diagram={isTextDiagram(code) || undefined}
         data-capped={capped || undefined}
-        className='overflow-x-auto px-3.5 py-2.5 font-mono text-2xs text-fg-4 leading-relaxed data-capped:max-h-80 data-capped:overflow-y-auto data-diagram:leading-3.5'
+        className='overflow-x-auto px-3.5 py-2.5 font-mono text-2xs leading-relaxed text-fg-4 data-capped:max-h-80 data-capped:overflow-y-auto data-diagram:leading-3.5'
       >
         <code className='block'>
           {code.split('\n').map((line, index) => (

@@ -37,7 +37,7 @@ export function RemoteShell({
       className={cn('flex flex-col bg-background text-fg-3', fill ? 'h-dvh overflow-hidden' : 'min-h-dvh')}
     >
       <header className='flex h-11 shrink-0 items-center gap-2 px-3.5 sm:px-5'>
-        <a href={REMOTE_PATHS.app} className='flex items-center gap-1.5 font-medium text-fg-4 text-sm'>
+        <a href={REMOTE_PATHS.app} className='flex items-center gap-1.5 text-sm font-medium text-fg-4'>
           <span className='grid size-5 shrink-0 place-items-center'>
             <Logo className='size-3.25' />
           </span>
@@ -101,8 +101,8 @@ export function RemoteBenefits({ points = SIGN_IN_POINTS }: { points?: RemotePoi
         <div key={point.title} className='flex gap-3 px-2.5 py-2'>
           <Icon name={point.icon} size='sm' className='mt-px shrink-0 text-fg-2' />
           <div className='flex min-w-0 flex-col gap-px'>
-            <span className='text-fg-4 text-xs'>{point.title}</span>
-            <span className='text-pretty text-2xs text-fg-2'>{point.detail}</span>
+            <span className='text-xs text-fg-4'>{point.title}</span>
+            <span className='text-2xs text-pretty text-fg-2'>{point.detail}</span>
           </div>
         </div>
       ))}
@@ -117,7 +117,7 @@ export function RemoteSteps({ title, steps }: { title: string; steps: string[] }
       {steps.map((step, index) => (
         <div key={step} className='flex items-start gap-3 px-2.5 py-1.5'>
           <StepNumber index={index} />
-          <span className='text-pretty pt-px text-fg-4 text-xs'>{step}</span>
+          <span className='pt-px text-xs text-pretty text-fg-4'>{step}</span>
         </div>
       ))}
     </SettingsCard>
@@ -155,7 +155,7 @@ export function SignInPrompt({
       )}
       <RemoteBenefits {...(handoff ? { points: CLAIM_POINTS } : {})} />
       {error && (
-        <p role='alert' className='w-full text-pretty text-destructive text-xs'>
+        <p role='alert' className='w-full text-xs text-pretty text-destructive'>
           {describeSignInError(error)}
         </p>
       )}
@@ -196,8 +196,8 @@ export function RemoteHero({
         <Icon name={icon} size='lg' />
       </span>
       <div className='flex flex-col gap-1'>
-        <h1 className='text-balance font-medium text-fg-4 text-lg'>{title}</h1>
-        <p className='text-pretty text-fg-2 text-xs'>{children}</p>
+        <h1 className='text-lg font-medium text-balance text-fg-4'>{title}</h1>
+        <p className='text-xs text-pretty text-fg-2'>{children}</p>
       </div>
     </div>
   );

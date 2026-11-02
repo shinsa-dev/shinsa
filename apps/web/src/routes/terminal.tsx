@@ -331,7 +331,7 @@ function ProjectTerminals({
 
 function StartAllButton({ project }: { project: Project }) {
   return (
-    <span className='flex shrink-0 items-center border-border border-s ps-1.5'>
+    <span className='flex shrink-0 items-center border-s border-border ps-1.5'>
       <ServiceActionButton
         label={describeStartAll(project)}
         icon='IconPlay'
@@ -343,7 +343,7 @@ function StartAllButton({ project }: { project: Project }) {
 
 function ActiveServiceButtons({ view }: { view: ServiceView }) {
   return (
-    <span className='flex shrink-0 items-center gap-px border-border border-s ps-1.5'>
+    <span className='flex shrink-0 items-center gap-px border-s border-border ps-1.5'>
       <ServiceRunButtons
         view={view}
         onStart={() => void startService(view.service.id, view.taskId)}

@@ -28,7 +28,7 @@ function RecommendationRow({
   const { server } = recommendation;
   return (
     <div className={SETTING_ROW}>
-      <Truncate className='min-w-0 shrink-0 font-medium text-fg-4 text-xs'>{recommendation.name}</Truncate>
+      <Truncate className='min-w-0 shrink-0 text-xs font-medium text-fg-4'>{recommendation.name}</Truncate>
       <Truncate className='min-w-0 flex-1 text-right text-2xs text-fg-2 tabular-nums'>
         {recommendation.detail}
       </Truncate>
@@ -94,7 +94,7 @@ export function ContextOptimizerGroup({
         />
       </SettingRow>
       <SettingsBlock
-        header={<span className='font-medium text-2xs text-fg-2'>{EXTENSION_LABEL.notUsedLately}</span>}
+        header={<span className='text-2xs font-medium text-fg-2'>{EXTENSION_LABEL.notUsedLately}</span>}
       >
         {snapshot.usage.readAt === null && (
           <div className={`${SETTING_ROW} text-2xs text-fg-2`}>{EXTENSION_LABEL.readingUsage}</div>

@@ -10,7 +10,7 @@ export function OnboardingHeader({
   onOpen: (stepId: OnboardingStepId) => void;
 }) {
   return (
-    <div className='flex flex-col gap-4 border-border border-b pb-5'>
+    <div className='flex flex-col gap-4 border-b border-border pb-5'>
       <PageHeading
         title='Set up Shinsa'
         description={

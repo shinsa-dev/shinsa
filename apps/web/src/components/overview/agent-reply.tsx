@@ -21,14 +21,14 @@ function PointList({ reply }: { reply: AgentReply }) {
           </span>
           <div className='flex min-w-0 flex-col gap-px'>
             <span className='flex flex-wrap items-baseline gap-x-2'>
-              <InlineMarkdown text={point.ask} className='font-medium text-fg-4 text-xs leading-5' />
+              <InlineMarkdown text={point.ask} className='text-xs leading-5 font-medium text-fg-4' />
               {point.outcome !== 'done' && (
                 <span className={cn('text-2xs', REPLY_OUTCOME[point.outcome].className)}>
                   {REPLY_OUTCOME[point.outcome].label}
                 </span>
               )}
             </span>
-            <InlineMarkdown text={point.note} className='selectable text-fg-3 text-xs' />
+            <InlineMarkdown text={point.note} className='selectable text-xs text-fg-3' />
           </div>
         </li>
       ))}
@@ -43,15 +43,15 @@ export function AgentReplyBlock({ reply, headline = true }: { reply: AgentReply;
         {headline && (
           <InlineMarkdown
             text={reply.headline}
-            className='selectable font-medium text-fg-4 text-xs leading-5'
+            className='selectable text-xs leading-5 font-medium text-fg-4'
           />
         )}
         <PointList reply={reply} />
       </div>
       {reply.next && (
         <div className='flex flex-col gap-1'>
-          <span className='font-medium text-fg-4 text-xs leading-5'>What to do now</span>
-          <Markdown text={reply.next} className='text-fg-3 text-xs' />
+          <span className='text-xs leading-5 font-medium text-fg-4'>What to do now</span>
+          <Markdown text={reply.next} className='text-xs text-fg-3' />
         </div>
       )}
     </div>

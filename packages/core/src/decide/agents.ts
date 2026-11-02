@@ -361,26 +361,24 @@ export function attachCheck(decider: Decider, command: CommandOf<'agent.attach_c
 export function attachComparison(decider: Decider, command: CommandOf<'agent.attach_comparison'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'attach_evidence');
   const itemId = decider.context.newId();
-  const parts = command.parts.map(
-    (part): Evidence => ({
-      id: decider.context.newId(),
-      taskId: task.id,
-      runId: run.id,
-      kind: part.kind,
-      title: command.title,
-      uri: part.uri,
-      attachedAt: decider.context.now,
-      itemId,
-      ...resolveRoundStamp(task),
-      ...(command.detail ? { detail: command.detail } : {}),
-      ...(command.width ? { width: command.width } : {}),
-      ...(command.theme ? { theme: command.theme } : {}),
-      ...(part.stage ? { stage: part.stage } : {}),
-      ...(part.label ? { label: part.label } : {}),
-      ...(command.key ? { key: command.key } : {}),
-      ...resolveFixStamp(task, run),
-    })
-  );
+  const parts = command.parts.map((part): Evidence => ({
+    id: decider.context.newId(),
+    taskId: task.id,
+    runId: run.id,
+    kind: part.kind,
+    title: command.title,
+    uri: part.uri,
+    attachedAt: decider.context.now,
+    itemId,
+    ...resolveRoundStamp(task),
+    ...(command.detail ? { detail: command.detail } : {}),
+    ...(command.width ? { width: command.width } : {}),
+    ...(command.theme ? { theme: command.theme } : {}),
+    ...(part.stage ? { stage: part.stage } : {}),
+    ...(part.label ? { label: part.label } : {}),
+    ...(command.key ? { key: command.key } : {}),
+    ...resolveFixStamp(task, run),
+  }));
   const [first] = parts;
   const replaces = first ? listReplacedIds(decider, task, run, first, true, command.replaces ?? []) : [];
   parts.forEach((evidence, index) => {

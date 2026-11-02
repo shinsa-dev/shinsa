@@ -243,11 +243,11 @@ function IconColumnSpecimen({ view }: { view: DelegationView | undefined }) {
           title='Activity'
           icon='IconClock'
         >
-          <div className='flex items-center gap-3 text-fg-3 text-xs'>
+          <div className='flex items-center gap-3 text-xs text-fg-3'>
             <StatusTile icon='IconBubbleText' tone='blue' />
             Answered the question
           </div>
-          <div className='flex items-center gap-3 text-fg-3 text-xs'>
+          <div className='flex items-center gap-3 text-xs text-fg-3'>
             <StatusTile icon='IconArrowRight' tone='neutral' />
             Answering the question
           </div>

@@ -31,7 +31,7 @@ function TaskPreview({ state, task, action }: { state: ShinsaState; task: Task; 
       <div className='flex flex-col gap-2.5 p-3'>
         <div className='flex items-start gap-2'>
           <StatusTile {...resolveTaskGlyph(state, task)} size='sm' className='mt-px' />
-          <p className='line-clamp-2 font-medium text-fg-4 text-sm'>{task.title}</p>
+          <p className='line-clamp-2 text-sm font-medium text-fg-4'>{task.title}</p>
         </div>
         <div className='flex flex-col gap-px ps-6 text-xs'>
           <p className={cn('font-medium', TONE_TEXT[status.tone])}>{status.label}</p>
@@ -62,7 +62,7 @@ function TaskPreview({ state, task, action }: { state: ShinsaState; task: Task; 
           </div>
         )}
       </div>
-      <div className='flex items-center justify-between gap-3 border-border border-t px-3 py-2'>
+      <div className='flex items-center justify-between gap-3 border-t border-border px-3 py-2'>
         <span className='text-2xs text-fg-2'>
           <TimeAgo at={resolveTaskSince(state, task)} text={(at) => describeWaited(state, task, at)} />
         </span>

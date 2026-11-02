@@ -56,7 +56,7 @@ export function InfoHeader({
 }) {
   return (
     <div className='flex flex-col gap-px px-3 py-2.5'>
-      <div className='min-w-0 font-medium text-fg-4 text-xs'>{title}</div>
+      <div className='min-w-0 text-xs font-medium text-fg-4'>{title}</div>
       {description && <div className='min-w-0 text-2xs text-fg-2'>{description}</div>}
     </div>
   );
@@ -64,9 +64,9 @@ export function InfoHeader({
 
 export function InfoSection({ title, children }: { title?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className='flex flex-col border-border border-t py-1 first:border-t-0'>
+    <section className='flex flex-col border-t border-border py-1 first:border-t-0'>
       {title && (
-        <h3 className='flex h-7 items-center gap-1.5 px-3 font-medium text-2xs text-fg-2'>{title}</h3>
+        <h3 className='flex h-7 items-center gap-1.5 px-3 text-2xs font-medium text-fg-2'>{title}</h3>
       )}
       {children}
     </section>

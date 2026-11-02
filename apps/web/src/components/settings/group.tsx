@@ -73,7 +73,7 @@ export function SettingsCard({ className, children }: { className?: string; chil
 export function SettingRow({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className={SETTING_ROW}>
-      <div className='flex min-w-0 flex-1 items-center gap-1.5 truncate text-fg-4 text-xs'>{title}</div>
+      <div className='flex min-w-0 flex-1 items-center gap-1.5 truncate text-xs text-fg-4'>{title}</div>
       <div className='flex shrink-0 items-center gap-1.5'>{children}</div>
     </div>
   );
@@ -100,7 +100,7 @@ export function PathRow({
         </span>
       </Hint>
       <span className='flex min-w-0 flex-1 items-baseline gap-1.5'>
-        <Truncate className='min-w-0 shrink-0 text-fg-4 text-xs'>{title}</Truncate>
+        <Truncate className='min-w-0 shrink-0 text-xs text-fg-4'>{title}</Truncate>
         {path && <Truncate className='min-w-0 text-2xs text-fg-2'>{path}</Truncate>}
       </span>
       {action}
@@ -111,7 +111,7 @@ export function PathRow({
 export function SettingsEmpty({ children, action }: { children: string; action?: React.ReactNode }) {
   return (
     <div className={SETTING_ROW}>
-      <span className='min-w-0 flex-1 text-fg-2 text-xs'>{children}</span>
+      <span className='min-w-0 flex-1 text-xs text-fg-2'>{children}</span>
       {action}
     </div>
   );

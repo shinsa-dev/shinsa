@@ -42,7 +42,7 @@ function resolveBrowserDeviceName(invitee: RemoteUser | null) {
 
 function WaitingNote({ joining }: { joining: boolean }) {
   return (
-    <p role='status' className='w-full text-pretty text-fg-2 text-xs'>
+    <p role='status' className='w-full text-xs text-pretty text-fg-2'>
       {joining ? 'Request sent. You can close this page.' : 'Request sent. Accept it on the machine.'}
     </p>
   );
@@ -189,8 +189,8 @@ export function EnrollPage({
           <div key={point.title} className='flex gap-3 px-2.5 py-2'>
             <Icon name={point.icon} size='sm' className='mt-px shrink-0 text-fg-2' />
             <div className='flex min-w-0 flex-col gap-px'>
-              <span className='text-fg-4 text-xs'>{point.title}</span>
-              <span className='text-pretty text-2xs text-fg-2'>{point.detail}</span>
+              <span className='text-xs text-fg-4'>{point.title}</span>
+              <span className='text-2xs text-pretty text-fg-2'>{point.detail}</span>
             </div>
           </div>
         ))}
@@ -212,7 +212,7 @@ export function EnrollPage({
           />
         </Field>
         {state.kind === 'failed' && (
-          <p role='alert' className='w-full text-destructive text-xs'>
+          <p role='alert' className='w-full text-xs text-destructive'>
             {state.message}
           </p>
         )}

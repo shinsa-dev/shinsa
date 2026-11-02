@@ -99,7 +99,7 @@ export function TreeRow({
       }}
       style={{ paddingInlineStart: EDGE + depth * INDENT }}
       className={cn(
-        'corner-superellipse/1.125 relative flex h-5.5 w-full shrink-0 cursor-pointer select-none items-center gap-1 rounded-control-sm pe-1.5 text-2xs outline-none',
+        'corner-superellipse/1.125 relative flex h-5.5 w-full shrink-0 cursor-pointer items-center gap-1 rounded-control-sm pe-1.5 text-2xs outline-none select-none',
         selected ? 'bg-primary-a1 text-fg-4' : 'text-fg-3 hover:bg-bg-a2 active:bg-bg-a2',
         className
       )}

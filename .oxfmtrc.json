@@ -1,0 +1,59 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "printWidth": 110,
+  "endOfLine": "lf",
+  "singleQuote": true,
+  "jsxSingleQuote": true,
+  "quoteProps": "as-needed",
+  "trailingComma": "es5",
+  "semi": true,
+  "arrowParens": "always",
+  "bracketSameLine": false,
+  "bracketSpacing": true,
+  "singleAttributePerLine": false,
+  "sortImports": {
+    "groups": ["builtin", "external", "internal", ["parent", "sibling", "index"], "unknown"],
+    "newlinesBetween": false,
+    "partitionByNewline": true,
+    "ignoreCase": false
+  },
+  "overrides": [
+    {
+      "files": ["packages/ui/src/**", "apps/web/src/**", "apps/marketing/src/**"],
+      "options": {
+        "sortTailwindcss": {
+          "stylesheet": "./apps/web/src/app.css",
+          "functions": ["cn", "cva", "clsx"]
+        }
+      }
+    },
+    {
+      "files": ["**/*.css"],
+      "options": {
+        "singleQuote": false
+      }
+    },
+    {
+      "files": ["**/*.json", "**/*.jsonc"],
+      "options": {
+        "trailingComma": "none"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    ".claude",
+    "**/dist",
+    "**/.astro",
+    "packages/ui/src/styles/globals.css",
+    "**/*.md",
+    "**/*.yml",
+    "**/*.yaml",
+    "**/*.html",
+    "**/*.toml",
+    "**/*.astro",
+    "**/*.webmanifest"
+  ],
+  "sortPackageJson": false
+}

@@ -182,8 +182,10 @@ export function serializeRemoteFailure(error: { readonly _tag: string; readonly 
   return { status: wire.status, body: { error: { code: wire.code, message: error.message } } };
 }
 
-interface RemoteFailureClass<Tag extends string, Code extends string>
-  extends Schema.Codec<unknown, { readonly _tag: Tag; readonly message: string }> {
+interface RemoteFailureClass<Tag extends string, Code extends string> extends Schema.Codec<
+  unknown,
+  { readonly _tag: Tag; readonly message: string }
+> {
   readonly tag: Tag;
   readonly code: Code;
   readonly status: number;

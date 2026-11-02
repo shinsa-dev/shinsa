@@ -9,8 +9,8 @@ import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.
 import { TaskSharedFacts } from '@/components/task/facts.tsx';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { openTask } from '../../lib/content.ts';
-import type { InviteHeader } from '../../lib/open.ts';
 import { type OpenPage, type OpenScene, readOpenPage } from '../../lib/open-page.ts';
+import type { InviteHeader } from '../../lib/open.ts';
 import { site } from '../../lib/site.ts';
 import { DemoRoot } from './frame.tsx';
 
@@ -75,7 +75,7 @@ function InvitePage({ header }: { header: InviteHeader }) {
         title={header.title}
         description={header.description && <p className={PAGE_DESCRIPTION}>{header.description}</p>}
         link={header.link}
-        facts={header.handle && <p className='text-fg-2 text-xs'>{header.handle}</p>}
+        facts={header.handle && <p className='text-xs text-fg-2'>{header.handle}</p>}
       />
       {header.link && (
         <div className={cn(PAGE_COLUMN, 'pt-6')}>

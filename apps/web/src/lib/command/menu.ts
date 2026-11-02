@@ -173,14 +173,12 @@ export function listDecisionCommands(
     .flatMap((task) =>
       listOpenGateCommands(state, task, { comments: [], clearComments: () => {}, verdicts: {}, tab: null })
         .filter((command) => !registeredIds.has(command.id))
-        .map(
-          (command): Command => ({
-            ...command,
-            id: `queue:${command.id}`,
-            taskId: task.id,
-            hint: task.title,
-          })
-        )
+        .map((command): Command => ({
+          ...command,
+          id: `queue:${command.id}`,
+          taskId: task.id,
+          hint: task.title,
+        }))
     );
 }
 
@@ -239,22 +237,20 @@ function resolveTasksBlock(menu: RootMenu, listed: ReadonlySet<string>): MenuBlo
 }
 
 function listTypedBlocks(sections: CommandSection[], query: string): MenuBlock[] {
-  const choices = listChoiceCommands(sections).map(
-    (command): MenuBlock => ({
-      kind: 'choice',
-      key: command.id,
-      score: scoreBest(
-        query,
-        command.options
-          .filter((option) => !isDisabled(option))
-          .map((option) => ({
-            value: `${command.id}:${option.value}`,
-            keywords: listOptionKeywords(command, option),
-          }))
-      ),
-      command,
-    })
-  );
+  const choices = listChoiceCommands(sections).map((command): MenuBlock => ({
+    kind: 'choice',
+    key: command.id,
+    score: scoreBest(
+      query,
+      command.options
+        .filter((option) => !isDisabled(option))
+        .map((option) => ({
+          value: `${command.id}:${option.value}`,
+          keywords: listOptionKeywords(command, option),
+        }))
+    ),
+    command,
+  }));
   const searches = listSearchCommands(sections);
   const search: MenuBlock[] =
     searches.length > 0 ? [{ kind: 'search', key: 'search', score: 0, commands: searches }] : [];

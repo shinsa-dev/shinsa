@@ -71,7 +71,7 @@ function NoteForm({ actions }: { actions: FeedbackActions }) {
             aria-label='Your feedback'
             aria-invalid={error ? true : undefined}
             placeholder='What got in your way, or what you wish Shinsa did'
-            className='field-sizing-content max-h-40 min-h-12 w-full resize-none bg-transparent px-2.5 pt-1.5 text-fg-4 text-xs outline-none placeholder:text-fg-2'
+            className='field-sizing-content max-h-40 min-h-12 w-full resize-none bg-transparent px-2.5 pt-1.5 text-xs text-fg-4 outline-none placeholder:text-fg-2'
             onKeyDown={(event) => {
               if (isSubmitKey(event)) {
                 event.preventDefault();
@@ -195,9 +195,9 @@ export function FeedbackPanel({
   const groups = listFeedbackGroups(state);
   return (
     <>
-      <div className='flex shrink-0 flex-col gap-2 border-border border-b p-3'>
+      <div className='flex shrink-0 flex-col gap-2 border-b border-border p-3'>
         <div className='flex flex-col gap-px'>
-          <p className='font-medium text-fg-4 text-xs'>Feedback on Shinsa</p>
+          <p className='text-xs font-medium text-fg-4'>Feedback on Shinsa</p>
           <p className='text-2xs text-fg-2'>
             {FEEDBACK_INTRO.before} <span className='whitespace-nowrap'>{FEEDBACK_REPOSITORY}</span>
             {FEEDBACK_INTRO.after}

@@ -14,7 +14,7 @@ import { ResizeHandle } from './sidebar/resize-handle.tsx';
 function SidebarRail({ state }: { state: ShinsaState }) {
   const rail = useRailWidth();
   return (
-    <aside style={{ width: rail.width }} className='relative hidden shrink-0 border-border border-r md:flex'>
+    <aside style={{ width: rail.width }} className='relative hidden shrink-0 border-r border-border md:flex'>
       <Rail state={state} />
       <ResizeHandle onPointerDown={rail.startResize} onDoubleClick={rail.resetWidth} />
     </aside>

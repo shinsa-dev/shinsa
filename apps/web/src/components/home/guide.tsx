@@ -120,7 +120,7 @@ export function HomeGuide({
   return (
     <section
       aria-label='What to do now'
-      className='flex flex-col gap-1.5 text-pretty text-fg-3 text-sm leading-relaxed'
+      className='flex flex-col gap-1.5 text-sm leading-relaxed text-pretty text-fg-3'
     >
       {briefing.now ? <Lead state={state} item={briefing.now} /> : <Clear />}
       {briefing.now && <UpNext state={state} items={briefing.next} />}

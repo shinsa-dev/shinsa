@@ -141,7 +141,7 @@ const MarkdownBlock = React.memo(function RenderedMarkdown({
   className?: string;
 }) {
   return (
-    <div className={cn('prose-shinsa selectable min-w-0 break-words', className)}>{parseBlock(text)}</div>
+    <div className={cn('prose-shinsa min-w-0 selectable break-words', className)}>{parseBlock(text)}</div>
   );
 });
 

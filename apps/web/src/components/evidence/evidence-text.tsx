@@ -72,7 +72,7 @@ export function OutputToggle({ open, onToggle }: { open: boolean; onToggle: () =
 function NoteBody({ text }: { text: string }) {
   return (
     <div className={cn(INSET, 'min-w-0 px-3.5 py-2.5')}>
-      <Markdown text={text} className='text-fg-4 text-xs' />
+      <Markdown text={text} className='text-xs text-fg-4' />
     </div>
   );
 }
@@ -95,7 +95,7 @@ export function EvidenceText({ view }: { view: EvidenceView }) {
       <figcaption className='flex min-w-0 flex-col gap-px'>
         <span className='flex min-h-5.5 min-w-0 items-center gap-1.5'>
           <Icon size='sm' name={note ? 'IconNote1' : 'IconConsole'} className='shrink-0 text-fg-2' />
-          <span className='wrap-anywhere min-w-0 font-medium text-fg-4 text-xs'>{evidence.title}</span>
+          <span className='min-w-0 text-xs font-medium wrap-anywhere text-fg-4'>{evidence.title}</span>
           {view.fromReview && <ReviewMark />}
           {view.updated && <UpdatedMark text={view.updated} />}
           {ran && <OutputToggle open={open} onToggle={toggle} />}

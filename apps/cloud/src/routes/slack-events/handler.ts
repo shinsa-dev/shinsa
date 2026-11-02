@@ -175,15 +175,13 @@ export const SlackEventRoutes = Layer.unwrap(
       const names = { users, botUserId: workspace.botUserId };
       const readable = (text: string) => resolveSlackReadableText(text, names).slice(0, SLACK_LIMITS.text);
       const nameOf = (id: string) => (users.get(id) ?? id).slice(0, SLACK_LIMITS.userName);
-      const thread = entries.map(
-        (entry): SlackThreadMessage => ({
-          ts: entry.ts,
-          userId: entry.userId,
-          userName: (entry.botName ?? nameOf(entry.userId)).slice(0, SLACK_LIMITS.userName),
-          text: readable(entry.text),
-          bot: entry.botName !== null || entry.userId === workspace.botUserId,
-        })
-      );
+      const thread = entries.map((entry): SlackThreadMessage => ({
+        ts: entry.ts,
+        userId: entry.userId,
+        userName: (entry.botName ?? nameOf(entry.userId)).slice(0, SLACK_LIMITS.userName),
+        text: readable(entry.text),
+        bot: entry.botName !== null || entry.userId === workspace.botUserId,
+      }));
       const permalink = yield* slack
         .call(
           'chat.getPermalink',

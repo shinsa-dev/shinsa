@@ -193,9 +193,8 @@ describe('Settings → Projects', () => {
   });
 
   it('adds a folder by its path, shows a refusal under it, and removes one', async () => {
-    const addFolder = mock(
-      async (_project: Project, path: string): Promise<string | null> =>
-        path === '~/Nope' ? 'There is no folder at ~/Nope.' : null
+    const addFolder = mock(async (_project: Project, path: string): Promise<string | null> =>
+      path === '~/Nope' ? 'There is no folder at ~/Nope.' : null
     );
     const actions = renderProjects(superwallState(), createActions({ addFolder }));
     expect(screen.queryByLabelText('Add a folder to Superwall')).toBeNull();

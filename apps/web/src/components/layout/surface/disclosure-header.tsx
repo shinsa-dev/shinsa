@@ -135,7 +135,7 @@ export function DisclosureHeader({
   const separate = interactive || Boolean(action);
   const trigger = React.useMemo(() => ({ open, label, separate }), [open, label, separate]);
   const header = cn(
-    'group/disclosure flex min-w-0 cursor-pointer select-none items-center text-left',
+    'group/disclosure flex min-w-0 cursor-pointer items-center text-left select-none',
     className,
     strip && chevron && resolveDisclosureStrip(strip, chevron)
   );

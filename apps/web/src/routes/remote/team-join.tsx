@@ -12,12 +12,6 @@ import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { RemotePoint } from '@/lib/remote/mode.ts';
 import type { UserProfile } from '@/lib/remote/users.ts';
 import {
-  clearTeamJoinFragment,
-  requestTeamJoin,
-  type TeamJoinResult,
-  type TeamKeyStore,
-} from '@/lib/teams/join.ts';
-import {
   countJoinPicks,
   describeJoinPicks,
   type JoinMachine,
@@ -25,6 +19,12 @@ import {
   type OpenJoinMachines,
   shareJoinPicks,
 } from '@/lib/teams/join-machines.ts';
+import {
+  clearTeamJoinFragment,
+  requestTeamJoin,
+  type TeamJoinResult,
+  type TeamKeyStore,
+} from '@/lib/teams/join.ts';
 import { TEAM_PROJECTS_REQUIRED } from '@/lib/teams/settings.ts';
 import { RemoteBenefits, RemoteHero, RemoteSteps } from './shell.tsx';
 
@@ -130,7 +130,7 @@ function ProjectPicks({
     <SettingsCard className='w-full'>
       {machines.map((machine) => (
         <div key={machine.id} className='flex items-center justify-between gap-3 px-2.5 py-1.5'>
-          <span className='min-w-0 truncate text-fg-4 text-xs'>
+          <span className='min-w-0 truncate text-xs text-fg-4'>
             {single ? 'Projects to share' : `Projects to share from ${machine.name}`}
           </span>
           <ProjectsSelect
@@ -174,7 +174,7 @@ function JoinedPage({ result, url, shared }: { result: TeamJoinResult; url: stri
         )}
       </RemoteHero>
       {shared ? (
-        <p className='w-full text-pretty text-center text-fg-2 text-xs'>{shared}</p>
+        <p className='w-full text-center text-xs text-pretty text-fg-2'>{shared}</p>
       ) : (
         <>
           <RemoteSteps title='To share your own work with the team' steps={SHARE_STEPS} />
@@ -271,12 +271,12 @@ export function TeamJoinPage({
         />
       )}
       {pickError && (
-        <p role='alert' className='w-full text-destructive text-xs'>
+        <p role='alert' className='w-full text-xs text-destructive'>
           {pickError}
         </p>
       )}
       {failure && (
-        <p role='alert' className='w-full text-destructive text-xs'>
+        <p role='alert' className='w-full text-xs text-destructive'>
           {failure}
         </p>
       )}
