@@ -95,8 +95,6 @@ export function resolveStackParent(
   id: string,
   repoId = task?.repoId ?? null
 ) {
-  if (id === task?.id)
-    throw new DomainError({ code: 'stack_self', message: 'A task cannot stack on itself.' });
   const refusal = selectStackRefusal(decider.state, task, decider.task(id), repoId);
   if (refusal) throw refusal;
   return id;
