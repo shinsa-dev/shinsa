@@ -19,7 +19,6 @@ export type {
   EffectContext,
   EffectRetry,
   EngineOptions,
-  StateChange,
   StateListener,
 } from './engine/schema.ts';
 

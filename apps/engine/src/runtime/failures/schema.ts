@@ -33,9 +33,9 @@ export interface EffectRetryInput {
 
 export const MAX_EFFECT_ATTEMPTS = 5;
 
-export const FIRST_EFFECT_BACKOFF = Duration.millis(100);
+const FIRST_EFFECT_BACKOFF = Duration.millis(100);
 
-export const MAX_EFFECT_BACKOFF = Duration.seconds(30);
+const MAX_EFFECT_BACKOFF = Duration.seconds(30);
 
 export const NON_FAST_FORWARD =
   'The branch on the remote has commits this branch does not have, so Git refused the push. Someone pushed to it, or GitHub updated it from its base. Bring those commits into the task’s branch, then retry.';

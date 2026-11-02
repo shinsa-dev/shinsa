@@ -1,14 +1,14 @@
-import { CLAUDE_PROVIDER } from '@shinsa/core';
-import { log } from '../../log/index.ts';
+import { edgeRuntime } from '../../runtime/edge.ts';
 import { createClaudeProvider, type EunoeLink } from './claude/index.ts';
 import { CLAUDE_RUNTIME } from './claude/sdk.ts';
 import { createCodexProvider } from './codex/index.ts';
-import type { AgentProvider, ProviderUsageReading } from './types.ts';
+import type { ProvidersShape } from './registry/schema.ts';
+import { Providers } from './registry/service.ts';
+import type { AgentProvider } from './types.ts';
 
-export interface ProviderUsageSource {
-  id: string;
-  read: () => Promise<ProviderUsageReading>;
-}
+export type { ProviderUsageSource } from './registry/schema.ts';
+export { Providers } from './registry/service.ts';
+export { acquireAgentSession } from './session/service.ts';
 
 export {
   type AgentProvider,
@@ -32,47 +32,37 @@ export function listDefaultProviders(eunoe: EunoeLink | null = null): AgentProvi
 }
 
 export class ProviderRegistry {
-  readonly #providers = new Map<string, AgentProvider>();
+  readonly #providers: ProvidersShape;
 
   constructor(providers: AgentProvider[] = listDefaultProviders()) {
-    for (const provider of providers) this.#providers.set(provider.id, provider);
+    this.#providers = Providers.make(providers);
+  }
+
+  get service() {
+    return this.#providers;
   }
 
   list() {
-    return [...this.#providers.values()];
+    return [...this.#providers.list()];
   }
 
   listProviders() {
-    return Promise.all(
-      this.list().map(async (provider) => ({
-        id: provider.id,
-        label: provider.label,
-        models: await provider.listModels(),
-      }))
-    );
+    return edgeRuntime.runPromise(this.#providers.listProviders);
   }
 
   listLogins() {
-    return Promise.all(this.list().flatMap((provider) => (provider.readLogin ? [provider.readLogin()] : [])));
+    return edgeRuntime.runPromise(this.#providers.listLogins);
   }
 
-  listUsageSources(): ProviderUsageSource[] {
-    return this.list().flatMap((provider) => {
-      const read = provider.readUsage;
-      return read ? [{ id: provider.id, read: () => read() }] : [];
-    });
+  listUsageSources() {
+    return this.#providers.listUsageSources();
   }
 
   select(id: string): AgentProvider | null {
-    return this.#providers.get(id) ?? null;
+    return this.#providers.select(id);
   }
 
   resolve(id: string | null | undefined): AgentProvider {
-    const provider = this.#providers.get(id ?? CLAUDE_PROVIDER);
-    if (provider) return provider;
-    const fallback = this.#providers.get(CLAUDE_PROVIDER) ?? this.list()[0];
-    if (!fallback) throw new Error('Shinsa has no agent provider.');
-    log.warn('[Providers] Unknown provider; using the default', { provider: id, fallback: fallback.id });
-    return fallback;
+    return edgeRuntime.runSync(this.#providers.resolve(id));
   }
 }

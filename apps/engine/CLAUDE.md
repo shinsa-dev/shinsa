@@ -177,9 +177,11 @@ src/
 │   │                    the server's router on your behalf with byTask, so a message is classified; adding a
 │   │                    repository or folder to a project runs in process through the project changes);
 │   │                    ManageAccess ({ baseUrl, projects, route }) is what serve.ts hands the supervisor as `manage`
-│   ├── providers/       types.ts (AgentProvider, capabilities, AgentSession), index.ts (ProviderRegistry),
-│   │                    instructions.ts (what every session is told about Shinsa and its skills), versions.ts
-│   │                    (reading and comparing a program's version)
+│   ├── providers/       types.ts (AgentProvider, capabilities, AgentSession), registry/ (Providers: the registry as
+│   │                    a service, resolve failing with NoAgentProvider; index.ts's ProviderRegistry is its edge),
+│   │                    session/ (acquireAgentSession: a session as a scoped resource, closing its scope cancels
+│   │                    it and waits for it to end), instructions.ts (what every session is told about Shinsa
+│   │                    and its skills), versions.ts (reading and comparing a program's version)
 │   │   └── claude/      The Claude Agent SDK provider: the session (session.ts: prompt ids, steering), result
 │   │                    classification (classify.ts), the user's `claude` (executable.ts), the SDK runtime (sdk.ts),
 │   │                    session files (artifacts.ts), the PreToolUse guard (guard.ts), the recorder (recorder.ts: the
@@ -188,7 +190,10 @@ src/
 │   │                    catalog (models.ts), the prompt queue the SDK reads from (async-queue.ts), the MCP servers
 │   │                    and skills a run loads (extensions.ts), the route to the API per compaction setting: eunoe
 │   │                    or direct, and the fallback notice (route.ts)
-│   │   └── codex/       The `codex app-server` provider: the JSON-RPC client (client.ts), the session (session.ts:
+│   │   └── codex/       The `codex app-server` provider: the JSON-RPC client (client/: makeCodexClient, the
+│   │                    process a scoped resource, its stdout and stderr read as streams, each request a Deferred
+│   │                    failing with CodexRequestError, the process group killed when its scope closes; client.ts
+│   │                    is its edge), the session (session.ts:
 │   │                    turns, steering, the agents Codex starts, compaction), the chat mapping (map.ts), failure
 │   │                    classes (classify.ts), the HTTP MCP endpoint (mcp.ts), the price table and what a turn costs
 │   │                    (pricing.ts, meter.ts), usage windows read like CodexBar and fast mode credits (usage.ts),

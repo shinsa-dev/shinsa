@@ -9,7 +9,7 @@ import {
   type ShippingStepKind,
 } from './schema.ts';
 
-export function isEffectFailure(error: unknown): error is EffectFailure {
+function isEffectFailure(error: unknown): error is EffectFailure {
   return Predicate.isTagged(error, 'EffectFailed') || Predicate.isTagged(error, 'ShippingFailed');
 }
 
