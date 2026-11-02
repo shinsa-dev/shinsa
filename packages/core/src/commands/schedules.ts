@@ -19,7 +19,7 @@ export interface ReportFiling {
 }
 
 export type ScheduleTargetInput =
-  | { kind: 'new_task'; priority: TaskPriority; mode: TaskMode }
+  | { kind: 'new_task'; repoId: string | null; priority: TaskPriority; mode: TaskMode }
   | { kind: 'task'; taskId: string | null };
 
 export type ScheduleUserCommand =

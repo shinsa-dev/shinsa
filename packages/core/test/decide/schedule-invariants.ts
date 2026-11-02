@@ -51,7 +51,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
         name: null,
         text: 'Check on it again.',
         trigger: pick(random, TRIGGERS) ?? null,
-        target: chance(random, 0.5) ? { kind: 'new_task', priority: 'low', mode: 'build' } : null,
+        target: chance(random, 0.5) ? { kind: 'new_task', repoId: null, priority: 'low', mode: 'build' } : null,
         source: null,
         enabled: null,
         maxRuns: pick(random, [null, 2]) ?? null,
@@ -295,7 +295,8 @@ export function listScheduleWriteMarks(state: ShinsaState) {
       : null,
     schedules.some(
       (schedule) =>
-        schedule.createdBy.kind === 'agent' && state.runs[schedule.createdBy.runId]?.role === 'reviewer'
+        schedule.createdBy.kind === 'agent' &&
+        state.runs[schedule.createdBy.runId ?? '']?.role === 'reviewer'
     )
       ? 'reviewer schedule'
       : null,
