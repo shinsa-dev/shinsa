@@ -8,6 +8,7 @@ export function createActiveRun(
   return {
     taskId,
     done,
+    fiber: null,
     session: null,
     clock: null,
     attemptId: null,

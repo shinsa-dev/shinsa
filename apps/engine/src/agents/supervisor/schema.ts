@@ -1,7 +1,18 @@
-import type { Repo, Run } from '@shinsa/core';
-import { Duration, Effect, Schedule, Schema, type Scope } from 'effect';
+import type { ChatNotice, Repo, Run } from '@shinsa/core';
+import { Duration, Effect, type FiberSet, Schedule, Schema, type Scope } from 'effect';
+import type { SessionExtensionSource } from '../../extensions/index.ts';
+import type { ProcessTracker } from '../../resources/index.ts';
+import type { EvidenceStore } from '../../store/index.ts';
+import type { RejectionHandler } from '../accounts.ts';
 import type { ActiveRun } from '../active/schema.ts';
-import type { AgentProvider } from '../providers/index.ts';
+import type { ClockTimers } from '../clock.ts';
+import type { IdleCompaction } from '../compaction.ts';
+import type { Deliveries } from '../deliveries/service.ts';
+import type { SessionExtensionSets } from '../extension-sets.ts';
+import type { AgentProvider, AgentSessionResult, SessionStarter } from '../providers/index.ts';
+import type { Questions } from '../questions.ts';
+import type { ToolCalls } from '../tool-calls/service.ts';
+import type { TurnPlan } from '../turns/schema.ts';
 
 interface TaskScope {
   readonly scope: Scope.Closeable;
@@ -51,6 +62,13 @@ export interface Turn {
   readonly provider: AgentProvider;
   readonly active: ActiveRun;
 }
+
+export interface DriveAttempt {
+  readonly plan: TurnPlan;
+  readonly restored: boolean;
+}
+
+export type DriveStep = DriveAttempt | { readonly done: AgentSessionResult };
 
 export interface RecordedAttempt {
   readonly attemptId: string;
@@ -105,3 +123,71 @@ export const UNGUARDED =
 
 export const UNREADONLY =
   'This agent provider cannot keep a read-only agent from changing files, so Shinsa will not run a read-only task on it.';
+
+export type NoticeListener = (runId: string, notice: ChatNotice) => void;
+
+export interface RunControl {
+  shuttingDown: boolean;
+  holding: (() => void) | null;
+  readonly held: Set<string>;
+}
+
+interface RunLimits {
+  readonly maxRunMs: number;
+  readonly clockTimers: ClockTimers | undefined;
+  readonly quiesceMs: number;
+  readonly stopMs: number;
+}
+
+interface RunHooks {
+  readonly startSession: SessionStarter | null;
+  readonly onRejection: RejectionHandler | null;
+  readonly onNotice: NoticeListener | null;
+  readonly trackProcess: ProcessTracker | null;
+  readonly extensions: SessionExtensionSource | null;
+  readonly manages: boolean;
+}
+
+export interface RunParts {
+  readonly active: Map<string, ActiveRun>;
+  readonly control: RunControl;
+  readonly questions: Questions;
+  readonly deliveries: Deliveries;
+  readonly compaction: IdleCompaction;
+  readonly tools: ToolCalls;
+  readonly extensionSets: SessionExtensionSets;
+  readonly evidence: EvidenceStore;
+  readonly limits: RunLimits;
+  readonly hooks: RunHooks;
+}
+
+export interface RunHostShape extends RunParts {
+  readonly scopes: TaskScopesHandle;
+  readonly fibers: FiberSet.FiberSet<void, unknown>;
+}
+
+export const DRIVE_TIMED_OUT = 'It ran past its time limit without handing over.';
+
+export const NO_WORKTREE = 'The task has no worktree to run in.';
+
+export const COMPACT_ONLY = 'This turn only compacts. End it.';
+
+export class ExtensionsUnavailable extends Schema.TaggedError<
+  ExtensionsUnavailable,
+  { readonly brand: unique symbol }
+>()('ExtensionsUnavailable', { message: Schema.String }) {}
+
+export class SessionStopFailed extends Schema.TaggedError<
+  SessionStopFailed,
+  { readonly brand: unique symbol }
+>()('SessionStopFailed', { message: Schema.String }) {}
+
+export class EditsNotSetAside extends Schema.TaggedError<
+  EditsNotSetAside,
+  { readonly brand: unique symbol }
+>()('EditsNotSetAside', { message: Schema.String }) {}
+
+export class ImageNotKept extends Schema.TaggedError<ImageNotKept, { readonly brand: unique symbol }>()(
+  'ImageNotKept',
+  { message: Schema.String }
+) {}
