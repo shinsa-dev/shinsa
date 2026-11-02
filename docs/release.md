@@ -262,7 +262,12 @@ Two ways in, both reading those archives:
   version (`scripts/release-npm.ts`) and publishes the engine packages first, the launcher last, all under the
   channel's dist-tag: `latest` for stable, `beta` and `canary` otherwise. So `npm i -g shinsa@beta` or `@canary`
   picks a channel, and plain `shinsa` stays on the 0.0.1 placeholder until the first stable release. A version npm
-  already has is skipped, so Re-run failed jobs is safe.
+  already has is skipped, so Re-run failed jobs is safe. Each `npm publish` gets three attempts, 30 s and 60 s apart,
+  with a warning annotation for each retry, because the registry and Sigstore's transparency log drop an upload now
+  and then: a first upload whose answer never arrives leaves its provenance entry in the log, and npm's own resend is
+  refused with `TLOG_CREATE_ENTRY_ERROR (409)`, while a new attempt signs again and goes through. Before each attempt
+  the script asks npm whether the version is there, so an upload that went through before its error is never
+  published twice. A dry run is not retried.
 - **The install script.** `curl -fsSL https://shinsa.dev/install | sh` (`apps/marketing/public/install`, served as
   text) picks the archive for the machine, asks `shinsa.dev/download/version` (`/beta`, `/canary`) for the channel's
   version, downloads the archive and its `.sha256` from that GitHub release, checks the sum, runs the engine once,
@@ -326,7 +331,8 @@ used to fail the whole release. The script zips the app with `ditto`, submits it
 `xcrun notarytool submit --wait --output-format json` (three attempts, 30 s and 60 s apart) and staples the ticket
 with `xcrun stapler staple` (five attempts, 15 s, 30 s, 60 s and 120 s apart), writing a warning annotation for each
 retry. The check after packaging (`scripts/release-verify.ts`) retries `spctl --assess` and `xcrun stapler validate`
-on the same delays, with the same warnings. Apple rejecting the app is not retried: the step fails at once with Apple's log. The retry and the parsing are
+on the same delays, with the same warnings. Apple rejecting the app is not retried: the step fails at once with Apple's log. The `npm` job's
+publishes retry the same way (The engine on its own, above). The retry and the parsing are
 `scripts/release-retry.ts`, tested at 100%. If a release still fails there, Re-run failed jobs on the run builds it
 again from the start.
 
