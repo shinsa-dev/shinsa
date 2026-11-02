@@ -50,6 +50,7 @@ import {
   overrideEnv,
   until,
 } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
 import { refuse, startFakeControlPlane } from './control-plane.ts';
 
@@ -1167,6 +1168,23 @@ describe('links, access requests and members', () => {
     expect(remote.snapshot().devices).toEqual([]);
     expect(await channel.closed).toBe(1008);
     release();
+  });
+
+  test('a signing key that cannot be read is logged and the heartbeat goes without it', async () => {
+    const { remote, plane } = await start();
+    spyOn(remote.store, 'resolveSigningKey').mockRejectedValue(new Error('disk full'));
+    const logs = captureLogs();
+    try {
+      remote.start();
+      await until('connected', () => remote.snapshot().status === 'connected');
+      await remote.requestHeartbeat();
+      const beats = plane.calls.filter((call) => call.path === REMOTE_PATHS.heartbeat);
+      expect(beats.length).toBeGreaterThan(0);
+      expect(beats.every((call) => !('signingKey' in (call.body as object)))).toBe(true);
+      expect(logs.fieldsOf('[Remote] Could not read the signing key').length).toBeGreaterThan(0);
+    } finally {
+      logs.restore();
+    }
   });
 
   test('a heartbeat with the account’s teams shows them at once, and a repeat changes nothing', async () => {

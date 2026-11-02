@@ -30,7 +30,11 @@ import {
 import type { QuickJson } from '../agents/quick/index.ts';
 import type { ApiRoute } from '../http/routes.ts';
 import { describeError, log } from '../log/index.ts';
-import { isRemoteRetryable, selectRemoteFailureTag } from '../remote/client/index.ts';
+import {
+  isRemoteRetryable,
+  selectRemoteFailureCode,
+  selectRemoteFailureTag,
+} from '../remote/client/index.ts';
 import type { Remote } from '../remote/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
 
@@ -184,7 +188,7 @@ export class Slack {
     } catch (error) {
       if (!isRelayRetryable(error)) {
         log.warn('[Slack] app.shinsa.dev refused the post', {
-          code: selectRemoteFailureTag(error),
+          code: selectRemoteFailureCode(error),
           threadTs: thread.threadTs,
           error: describeError(error),
         });

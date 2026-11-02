@@ -1,6 +1,7 @@
 import type { MachineCredentials, RemoteAccess, RemoteMember, RemoteTeam, TunnelStatus } from '@shinsa/core';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { FetchHttpClient } from 'effect/http';
+import { describeError } from '../../log/redact.ts';
 import { JsonLogger } from '../../log/service.ts';
 import type { RemoteControl } from '../client/index.ts';
 import { RemoteClient } from '../client/service.ts';
@@ -40,7 +41,14 @@ export class Tunnel {
           TunnelMachine.of({
             version: options.version,
             localUrl: Effect.sync(options.localUrl),
-            signingKey: Effect.promise(options.signingKey),
+            signingKey: Effect.tryPromise(options.signingKey).pipe(
+              Effect.catch((error) =>
+                Effect.logWarning('[Remote] Could not read the signing key').pipe(
+                  Effect.annotateLogs({ error: describeError(error) }),
+                  Effect.as(null)
+                )
+              )
+            ),
             heartbeat: (token, request) =>
               Effect.suspend(() => {
                 const revision = options.guestRevision();

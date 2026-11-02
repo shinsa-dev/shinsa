@@ -60,6 +60,11 @@ export interface TeamsOptions {
 
 type Refusals = Partial<Record<string, DomainError>>;
 
+const TEAM_LINK_OFF = new DomainError({
+  code: 'team_link_off',
+  message: 'This team link was turned off. Ask the team’s owner for a new one.',
+});
+
 const OWNER_ONLY = new DomainError({ code: 'not_owner', message: 'Only the team’s owner can do this.' });
 
 const TEAM_GONE = new DomainError({ code: 'team_not_found', message: 'This machine is not in that team.' });
@@ -194,10 +199,8 @@ export class Teams implements TeamLinks {
       });
     const token = this.#findMachineToken();
     const answer = await this.#call(this.#remote.control.requestTeamJoin(token, fragment.invite), {
-      NotFound: new DomainError({
-        code: 'team_link_off',
-        message: 'This team link was turned off. Ask the team’s owner for a new one.',
-      }),
+      NotFound: TEAM_LINK_OFF,
+      InviteInvalid: TEAM_LINK_OFF,
     });
     if (answer.teamId !== fragment.teamId)
       throw new DomainError({

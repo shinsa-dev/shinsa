@@ -399,6 +399,10 @@ describe('the status message of a task', () => {
       Response.json({ error: { code: 'post_not_yours', message: 'Refused.' } }, { status: 403 });
     await slack.status(effect, context());
     expect(stub.dispatched).toEqual([]);
+    expect(warnings).toHaveBeenCalledWith(
+      '[Slack] app.shinsa.dev refused the post',
+      expect.objectContaining({ code: 'post_not_yours' })
+    );
     const plain = setUp({ link: null });
     await plain.slack.status(effect, context());
     await plain.slack.status({ ...effect, taskId: 'gone' }, context());

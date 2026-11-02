@@ -8,13 +8,14 @@ import {
   type SlackRelaySession,
   type TeamId,
 } from '@shinsa/core';
+import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
 import { Effect, Exit, Fiber, Layer, ManagedRuntime, Predicate, Redacted } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { JsonLogger } from '../../log/service.ts';
 import type { PairingEnd } from '../pairing/schema.ts';
 import { PairPollInterval } from '../pairing/schema.ts';
 import { Pairings } from '../pairing/service.ts';
-import { RemoteOrigin } from './schema.ts';
+import { RELAY_FAILED_CODE, RemoteOrigin } from './schema.ts';
 import { RemoteClient } from './service.ts';
 
 export type { PairedMachine } from '../pairing/schema.ts';
@@ -32,6 +33,14 @@ export interface PairingRun {
 
 export function selectRemoteFailureTag(error: unknown) {
   return Predicate.hasProperty(error, '_tag') && Predicate.isString(error._tag) ? error._tag : null;
+}
+
+export function selectRemoteFailureCode(error: unknown) {
+  if (!Predicate.hasProperty(error, '_tag') || !Predicate.isString(error._tag)) return null;
+  if (error._tag === 'RemoteUnreachable') return RELAY_FAILED_CODE;
+  const message =
+    Predicate.hasProperty(error, 'message') && Predicate.isString(error.message) ? error.message : '';
+  return serializeRemoteFailure({ _tag: error._tag, message }).body.error.code;
 }
 
 export function isRemoteRetryable(error: unknown) {

@@ -21,7 +21,7 @@ import {
   type TeamView,
   verifyTeamSnapshot,
 } from '@shinsa/core';
-import { MembersFull, NotFound, NotOwner, TeamsFull } from '@shinsa/core/remote/errors';
+import { InviteInvalid, MembersFull, NotFound, NotOwner, TeamsFull } from '@shinsa/core/remote/errors';
 import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
 import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
@@ -459,6 +459,8 @@ describe('making and joining teams', () => {
     });
     const url = resolveTeamJoinUrl({ teamId: 'team1', invite: 'invite-1', key: TEAM_KEY }, plane.origin);
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () => refuse(NotFound));
+    await expect(teams.join(url)).rejects.toMatchObject({ code: 'team_link_off' });
+    plane.answers.set(REMOTE_PATHS.machineTeamJoin, () => refuse(InviteInvalid));
     await expect(teams.join(url)).rejects.toMatchObject({ code: 'team_link_off' });
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'other', name: 'Other', owner: KAI, status: 'member' })

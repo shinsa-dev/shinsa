@@ -47,6 +47,8 @@ import type {
 import { Context, type Effect, type Redacted, Schema } from 'effect';
 import type { HttpClientError } from 'effect/http';
 
+export const RELAY_FAILED_CODE = 'relay_failed';
+
 export class RemoteUnreachable extends Schema.TaggedError<
   RemoteUnreachable,
   { readonly brand: unique symbol }
