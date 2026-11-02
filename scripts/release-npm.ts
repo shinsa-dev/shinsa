@@ -6,9 +6,12 @@ import {
   type PublishedEngineTarget,
   resolveEngineArchive,
 } from './release-engine.ts';
+import { type RetryOptions, retryStep, serializeRetryWarning } from './release-retry.ts';
 import type { ReleaseChannel } from './release-version.ts';
 
 export const LAUNCHER_PACKAGE = 'shinsa';
+
+export const NPM_PUBLISH_DELAYS = [30_000, 60_000] as const;
 
 const LAUNCHER_SOURCE = resolve(import.meta.dirname, '../apps/engine/npm/shinsa.js');
 const REPOSITORY = { type: 'git', url: 'git+https://github.com/shinsa-dev/shinsa.git' };
@@ -144,30 +147,64 @@ export function isPublished(name: string, version: string, run: RunCommand) {
   return result.exitCode === 0 && result.stdout.trim() === version;
 }
 
-export function publishNpmPackages(
+export type PublishRetry = Pick<RetryOptions, 'sleep' | 'onRetry'>;
+
+export function summarizeNpmError(stderr: string) {
+  const errors = stderr
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('npm error'));
+  return errors.length > 0 ? errors.join(' ') : stderr.trim();
+}
+
+export async function publishNpmPackages(
   packages: NpmPackage[],
-  { version, tag, dryRun, run }: { version: string; tag: string; dryRun: boolean; run: RunCommand }
+  {
+    version,
+    tag,
+    dryRun,
+    run,
+    retry,
+  }: { version: string; tag: string; dryRun: boolean; run: RunCommand; retry: PublishRetry }
 ) {
-  return packages.map(({ name, dir }) => {
-    if (!dryRun && isPublished(name, version, run)) return `${name}@${version} is already on npm`;
-    const argv = [
-      'npm',
-      'publish',
-      dir,
-      '--access',
-      'public',
-      '--tag',
-      tag,
-      ...(dryRun ? ['--dry-run'] : []),
-    ];
-    const result = run(argv);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `npm publish of ${name}@${version} failed (${result.exitCode}): ${result.stderr.trim()}`
-      );
-    }
-    return `Published ${name}@${version} as ${tag}${dryRun ? ' (dry run)' : ''}`;
-  });
+  const lines: string[] = [];
+  for (const { name, dir } of packages) {
+    const publish = () => {
+      if (!dryRun && isPublished(name, version, run)) return `${name}@${version} is already on npm`;
+      const argv = [
+        'npm',
+        'publish',
+        dir,
+        '--access',
+        'public',
+        '--tag',
+        tag,
+        ...(dryRun ? ['--dry-run'] : []),
+      ];
+      const result = run(argv);
+      if (result.exitCode !== 0) {
+        throw new Error(
+          `npm publish of ${name}@${version} failed (${result.exitCode}): ${summarizeNpmError(result.stderr)}`
+        );
+      }
+      return `Published ${name}@${version} as ${tag}${dryRun ? ' (dry run)' : ''}`;
+    };
+    lines.push(
+      await retryStep(publish, {
+        label: `Publish ${name}@${version}`,
+        delays: dryRun ? [] : NPM_PUBLISH_DELAYS,
+        ...retry,
+      })
+    );
+  }
+  return lines;
+}
+
+export function createPublishRetry(
+  env: Readonly<Record<string, string | undefined>>,
+  output: { write: (text: string) => unknown }
+): PublishRetry {
+  return { sleep: Bun.sleep, onRetry: (failure) => output.write(serializeRetryWarning(failure, env)) };
 }
 
 export function runCommand(argv: string[]): CommandResult {
@@ -175,7 +212,12 @@ export function runCommand(argv: string[]): CommandResult {
   return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
 }
 
-export function runReleaseNpm(argv: string[], env: Record<string, string | undefined>, run: RunCommand) {
+export async function runReleaseNpm(
+  argv: string[],
+  env: Record<string, string | undefined>,
+  run: RunCommand,
+  retry = createPublishRetry(env, process.stderr)
+) {
   const dryRun = argv.includes('--dry-run');
   const [archivesDir, outDir] = argv.filter((arg) => arg !== '--dry-run');
   const version = env.SHINSA_VERSION?.replace(/^v/, '');
@@ -186,7 +228,7 @@ export function runReleaseNpm(argv: string[], env: Record<string, string | undef
   }
   const tag = resolveDistTag(env.RELEASE_CHANNEL);
   const packages = writeNpmPackages(archivesDir, resolve(outDir), version);
-  return `${publishNpmPackages(packages, { version, tag, dryRun, run }).join('\n')}\n`;
+  return `${(await publishNpmPackages(packages, { version, tag, dryRun, run, retry })).join('\n')}\n`;
 }
 
-if (import.meta.main) process.stdout.write(runReleaseNpm(Bun.argv.slice(2), Bun.env, runCommand));
+if (import.meta.main) process.stdout.write(await runReleaseNpm(Bun.argv.slice(2), Bun.env, runCommand));
