@@ -13,8 +13,13 @@ src/
 ├── main.ts              The `shinsa` binary from source: argv → cli/ (the only file outside coverage;
 │                        test/main.test.ts runs it). The compiled bundle starts from scripts/engine-main.ts, the same
 │                        plus `shinsa eunoe …`, which runs Eunoe from the one executable
-├── serve.ts             startShinsa: takes the data directory's lock (not in inspect mode, which is read-only and
-│                        starts nothing), wires the pieces, recovers in-flight work, returns { url, engine, stop }
+├── serve.ts             startShinsa: one ManagedRuntime over the Serve layer, returns { url, engine, stop }; stop
+│                        disposes the runtime, and a start that fails disposes it too
+├── serve/               service.ts (Serve: takes the data directory's lock as the scoped ServeLock layer, not in
+│                        inspect mode, which is read-only and starts nothing; opens the log, wires the pieces, listens,
+│                        recovers in-flight work; each step a finalizer, so closing the scope runs the shutdown order
+│                        below in reverse of the start), wiring.ts (the pieces not moved to Effect yet: createServices,
+│                        startHttp, startWork, stopWork), schema.ts (ShinsaOptions, Shinsa)
 ├── cli/                 The command line (docs/cli.md: why it is shaped like Tailscale's and Docker's).
 │                        index.ts routes the commands (`engine`, hidden from the help, runs the engine: it reads
 │                        the login shell's environment first unless started from a terminal, exits 0 when its

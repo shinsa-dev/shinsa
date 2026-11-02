@@ -4,7 +4,15 @@ import { Context, Effect, Exit, Layer, Option, Scope } from 'effect';
 import { edgeRuntime } from '../../runtime/edge.ts';
 import { describeVersion } from '../install.ts';
 import { readLockHolder } from './file.ts';
-import { LOCK_FILE, type LockAddress, type LockHolder, type LockOptions, type LockOwner } from './schema.ts';
+import {
+  LOCK_FILE,
+  type LockAddress,
+  type LockContended,
+  type LockHolder,
+  type LockOptions,
+  type LockOwner,
+  type ServerRunning,
+} from './schema.ts';
 import { ServeLock } from './service.ts';
 
 export { isProcessAlive, resolveBootedAt } from './liveness.ts';
@@ -30,6 +38,14 @@ export class ServerRunningError extends DomainError {
   }
 }
 
+export function resolveLockError(error: ServerRunning | LockContended) {
+  if (error._tag === 'ServerRunning') return ServerRunningError.create(error.dataDir, error.holder);
+  return new DomainError({
+    code: 'server_lock_contended',
+    message: `Another Shinsa kept taking the lock on ${error.dataDir} while this one started. Try again.`,
+  });
+}
+
 export function selectLockHolder(dataDir: string) {
   return Option.getOrNull(edgeRuntime.runSync(readLockHolder(join(dataDir, LOCK_FILE))));
 }
@@ -42,16 +58,7 @@ export function acquireDataDirLock(
   const scope = Scope.makeUnsafe();
   const context = edgeRuntime.runSync(
     Layer.buildWithScope(ServeLock.layer(dataDir, owner, options), scope).pipe(
-      Effect.catchTags({
-        ServerRunning: (error) => Effect.die(ServerRunningError.create(error.dataDir, error.holder)),
-        LockContended: (error) =>
-          Effect.die(
-            new DomainError({
-              code: 'server_lock_contended',
-              message: `Another Shinsa kept taking the lock on ${error.dataDir} while this one started. Try again.`,
-            })
-          ),
-      })
+      Effect.catch((error) => Effect.die(resolveLockError(error)))
     )
   );
   const lock = Context.get(context, ServeLock);
