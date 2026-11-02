@@ -48,9 +48,9 @@ export interface GitReadRequest {
 
 export const LOCKED = /Unable to create '[^']*\.lock': File exists/;
 
-export const LOCK_BACKOFF = Duration.millis(50);
+const LOCK_BACKOFF = Duration.millis(50);
 
-export const LOCK_RETRIES = 5;
+const LOCK_RETRIES = 5;
 
 export const LOCK_RETRY = Schedule.max([
   Schedule.exponential(LOCK_BACKOFF),

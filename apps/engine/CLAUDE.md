@@ -126,7 +126,7 @@ src/
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
-├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile and GitLayer that code not yet
+├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile, GitLayer, GitHubLayer, ReposLayer and WorkspacesLayer that code not yet
 │                        moved to Effect calls the foundation through), Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
@@ -302,20 +302,28 @@ src/
 │                        `git cat-file --batch-command` per repository) and objects.ts (ObjectCache, the 64 MB cache
 │                        of what a commit addresses) stay as they were: only http/code.ts holds them, and they move
 │                        with its routes
-├── workspaces/          Where agents work (docs/engine.md → Where agents work): one WorkspaceStrategy per mode
-│                        (types.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
-│                        before a push), worktrees.ts, main-checkout.ts, index.ts (Workspaces.resolve, the setup
-│                        check's describeWorkspaceProblem)
-├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
-│                        checks, comments, threads, the reader and the merge queue), create with its body, retarget,
-│                        merge (only the approved head, `--match-head-commit`), the repository's numeric id,
-│                        a pull request's diff (`gh pr diff`) and a file at a commit (readRepoFile), what a shared
-│                        task's Code tab shows, a user
-│                        attachment upload and rewriting the description's block (writePullRequestBlock);
-│                        description.ts: PullRequestDescriptions (uploads the evidence GitHub cannot reach, reads
-│                        the notes, builds the body with core's serializePullRequestMarkdown); ci.ts: whether a
-│                        repository has CI for a base (readRepoCi: workflows, the base commit's checks, required
-│                        checks; RepoCiCache)
+├── workspaces/          Where agents work (docs/engine.md → Where agents work): one Workspace of effects per mode
+│                        (schema.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
+│                        before a push; TaskCheckoutMissing, CheckoutDirty, CheckoutOffBranch),
+│                        worktrees-mode/ (WorktreeWorkspaces: make(worktreesDir) and the commit both modes share),
+│                        main-checkout-mode/ (MainCheckoutWorkspace: the workspace and the setup check's
+│                        describeProblem); the edges: edge.ts (EdgeWorkspace, the WorkspaceStrategy of promises),
+│                        worktrees.ts, main-checkout.ts, index.ts (Workspaces.resolve, describeWorkspaceProblem)
+├── github/              `gh`, the one way the engine reaches GitHub: process/ (GitHubProcess: gh with GITHUB_TIMEOUT,
+│                        and layerTest, which plays gh in a test), service.ts (GitHubCli: run fails with
+│                        GitHubFailed, json decodes the answer with a schema or fails with GitHubAnswerInvalid),
+│                        slug.ts (resolveRepoSlug); pulls/ (PullRequests: read, the view with the merge commit, then
+│                        one GraphQL read for checks, comments, threads, the reader and the merge queue; create with
+│                        its body, retarget, merge only the approved head with `--match-head-commit`, the
+│                        repository's numeric id, a pull request's diff and a file at a commit for a shared task's
+│                        Code tab, a user attachment upload, rewriting the description's block; every answer's
+│                        schema in schema.ts; serialize.ts maps them onto core's PullRequest); description/
+│                        (PullRequestDescriber.make: the writer that uploads the evidence GitHub cannot reach,
+│                        reads the notes and builds the body with core's serializePullRequestMarkdown; link.ts the
+│                        review link); ci/ (RepoCiReader: whether a repository has CI for a base, from workflows,
+│                        the base commit's checks and required checks, and makeCache); layers.ts (GitHubLayer);
+│                        index.ts, ci.ts and description.ts are the edges (readPullRequest…, RepoCiCache,
+│                        PullRequestDescriptions)
 ├── checks/              The checks a `checks.run` effect names (the agent's and the repository's baseline; nothing is
 │                        guessed from package.json), all at once with no machine-wide limit: each through `sh -c` in the
 │                        task's checkout at low priority (`nice -n 10` where it exists) with CHECK_ENV, stopped after
@@ -343,10 +351,12 @@ src/
 │                        and service processes)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
-│                        (syncRepoRemote, upsertRepo) (index.ts); remote.ts (a repository's origin from .git/config,
-│                        without running git); discover.ts (scans the home folder for the folders that hold repositories),
-│                        roots.ts (chosen folders, SHINSA_ROOTS, or discovery until onboarding is done), setup.ts
-│                        (setup verification before a task's first agent)
+│                        (syncRepoRemote, upsertRepo) (index.ts); folders/ (RepoFolders: scanning the home folder
+│                        for the folders that hold repositories, the repositories in the chosen folders, a
+│                        repository's origin from .git/config without running git), setup/ (RepoSetup: setup
+│                        verification before a task's first agent), login/ (GitHubLogins: the GitHub login through
+│                        GitHubCli, kept once gh answers it), roots.ts (chosen folders, SHINSA_ROOTS, or discovery
+│                        until onboarding is done); edge.ts the functions the rest of the engine calls
 ├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts: the folders macOS keeps
 │                        private as PrivateFoldersError, and opening Full Disk Access), the prerequisite checks
 │                        (prerequisites.ts: git, gh, claude, bun when a repository uses it, Homebrew when a fix
@@ -428,10 +438,13 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `JsonFile` (`files/service.ts`) | `JsonFile.layer` | the JSON files Shinsa keeps: `read(path, schema)` → `Option` or `JsonFileUnreadable`, `keepAside`, an atomic `write`; `JsonFileWriteFailed` |
   | `Git` (`git/service.ts`) | `Git.layer`, needs `Shell` and `BunServices.layer` | `attempt`, `run` (`GitFailed`, `LOCK_RETRY` on a held index.lock), `read` (raw bytes, caps, timeout, abort) |
   | `Checkout`, `Remote`, `History`, `CodeFiles`, `LeftoverProcesses` (`git/`) | `GitLayer` (`git/layers.ts`), needs `Shell` and `BunServices.layer` | worktrees and commits; pushes (`PushError`), the base and bundles; refs, changed files and diffs; the Code tab's reads (`CodeReadFailed`); processes left in a worktree |
+  | `GitHubProcess`, `GitHubCli`, `PullRequests`, `RepoCiReader`, `PullRequestDescriber` (`github/`) | `GitHubLayer` (`github/layers.ts`), needs `Shell`; a test gives `GitHubProcess.layerTest(answer)` instead | gh with its timeout, gh's answers decoded (`GitHubFailed`, `GitHubAnswerInvalid`), pull requests (`MergeMethodInvalid`, `NoGitHubRemote`), CI, the description |
+  | `RepoFolders`, `RepoSetup`, `GitHubLogins` (`repos/`) | `ReposLayer` (`repos/layers.ts`), needs `GitLayer` and `GitHubLayer` | finding repositories and their origin, the setup check, the GitHub login |
+  | `WorktreeWorkspaces`, `MainCheckoutWorkspace` (`workspaces/`) | `WorkspacesLayer` (`workspaces/layers.ts`), needs `GitLayer` | the two places agents work (`TaskCheckoutMissing`, `CheckoutDirty`, `CheckoutOffBranch`) |
   | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order; fails with the lock's `ServerRunning` or `LockContended`, which `startShinsa` turns into its `DomainError` |
 
   Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
-  helpers, `writeJsonFile` and the functions of `git/` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
+  helpers, `writeJsonFile`, the functions of `git/`, `github/` and `repos/`, and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
   `EventLog`, `EvidenceStore` and `AttachmentStore` each own a `ManagedRuntime` over their layer and `runSync` it;
   `acquireDataDirLock` builds `ServeLock` in a scope of its own. Each edge throws the errors and messages it threw
   before. A module that moves to Effect yields the service instead and stops calling its edge; once nothing calls an

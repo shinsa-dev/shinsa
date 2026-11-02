@@ -2,8 +2,6 @@ import { Effect } from 'effect';
 import { edgeRuntime } from '../runtime/edge.ts';
 import { Remote } from './remote/service.ts';
 
-export type { BaseUpdate } from './remote/schema.ts';
-
 export interface UpdateOptions {
   signal?: AbortSignal;
   onBehind: () => Promise<void>;

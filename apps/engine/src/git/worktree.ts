@@ -44,10 +44,6 @@ export function refreshWorktree(repo: Repo, path: string, baseBranch: string | n
   return edgeRuntime.runPromise(Checkout.use((checkout) => checkout.refresh(repo, path, baseBranch, signal)));
 }
 
-export function discardEdits(path: string, signal?: AbortSignal) {
-  return edgeRuntime.runPromise(Checkout.use((checkout) => checkout.discard(path, signal)));
-}
-
 export function removeWorktree(repo: Repo, path: string) {
   return edgeRuntime.runPromise(Checkout.use((checkout) => checkout.remove(repo, path)));
 }

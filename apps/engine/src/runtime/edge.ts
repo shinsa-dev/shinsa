@@ -3,8 +3,11 @@ import { Layer, ManagedRuntime } from 'effect';
 import { MachineConfigFile } from '../config/machine/service.ts';
 import { JsonFile } from '../files/service.ts';
 import { GitLayer } from '../git/layers.ts';
+import { GitHubLayer } from '../github/layers.ts';
 import { JsonLogger } from '../log/service.ts';
+import { ReposLayer } from '../repos/layers.ts';
 import { Shell } from '../shell/service.ts';
+import { WorkspacesLayer } from '../workspaces/layers.ts';
 
 const ShellLayer = Shell.layer.pipe(Layer.provideMerge(BunServices.layer));
 
@@ -13,6 +16,9 @@ export const edgeRuntime = ManagedRuntime.make(
     JsonLogger,
     MachineConfigFile.layer,
     JsonFile.layer,
-    GitLayer.pipe(Layer.provideMerge(ShellLayer))
+    Layer.merge(ReposLayer, WorkspacesLayer).pipe(
+      Layer.provideMerge(Layer.merge(GitLayer, GitHubLayer)),
+      Layer.provideMerge(ShellLayer)
+    )
   )
 );

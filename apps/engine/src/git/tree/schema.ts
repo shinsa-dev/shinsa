@@ -1,8 +1,7 @@
 import type { RepoEntry, RepoEntryKind } from '@shinsa/core';
 import { Schema } from 'effect';
 
-export const CodeReadCode = Schema.Literals(['read_timeout', 'read_failed', 'ref_invalid', 'ref_unknown']);
-export type CodeReadCode = typeof CodeReadCode.Type;
+const CodeReadCode = Schema.Literals(['read_timeout', 'read_failed', 'ref_invalid', 'ref_unknown']);
 
 export class CodeReadFailed extends Schema.TaggedError<CodeReadFailed, { readonly brand: unique symbol }>()(
   'CodeReadFailed',

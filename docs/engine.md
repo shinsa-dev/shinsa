@@ -500,8 +500,8 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
 A repository says where its agents work (`Repo.workspace`, Settings → Projects on each repository's row, ⌘K "Where
 agents work in ‹repository›", `shinsa repos update --workspace`). It is a human-only repository field
 (`HUMAN_ONLY_REPO_FIELDS`): no agent tool, no shell command and nothing on your behalf changes it. There are two
-modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behind one interface
-(`WorkspaceStrategy`: prepare, commit, syncBase, push, writeEdit, remove), picked per task by `Workspaces.resolve`:
+modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behind one interface
+(`Workspace`: prepare, commit, syncBase, push, writeEdit, remove), picked per task by `Workspaces.resolve`:
 
 | Mode | A task gets | Commits | Pushes | When the task settles |
 |---|---|---|---|---|
@@ -2097,7 +2097,7 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
 ### Setup verification
 
 - Before a task's first agent, the task stage reads "verifying the setup" (`VERIFYING_SETUP`) while
-  `config.verify` (`apps/engine/src/repos/setup.ts`) checks that the repository folder exists and is a git
+  `config.verify` (`RepoSetup`, `apps/engine/src/repos/setup/service.ts`) checks that the repository folder exists and is a git
   repository, that the default branch exists (fetching it from origin before calling it missing) and that agents can
   work in the repository's workspace mode (Where agents work, above). A task whose pipeline needs no worktree (an
   answer, research) checks the repository only. A task with no repository whose steps need none never comes here; one
@@ -5689,8 +5689,9 @@ startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
                   └─ the work: runs, clocks, effects, …
                 stop() = dispose: finalizers in reverse
 
-unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, Git and its services)
-  log.*, resolveConfig, runCommand, killProcessTree, writeJsonFile, the git/ functions
+unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, Git, GitHub, repos, workspaces)
+  log.*, resolveConfig, runCommand, killProcessTree, writeJsonFile, the git/, github/, repos/ functions,
+  Workspaces
 ```
 
 - **Configuration.** `EngineConfig` reads the whole `ServerConfig` once, through one `ConfigProvider` that looks in
@@ -5724,14 +5725,30 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   working diff on a scratch index that is a scoped resource), `CodeFiles` (the Code tab's reads, each failure the
   typed `CodeReadFailed` with its code) and `LeftoverProcesses` (the processes a worktree still runs, stopped after a
   grace period polled on a schedule).
+- **GitHub.** `GitHubProcess` runs `gh` with its one-minute timeout (`GITHUB_TIMEOUT`); it is the outside world, and a
+  test plays it with `GitHubProcess.layerTest(answer)`. `GitHubCli` stands on it: `run` fails with the typed
+  `GitHubFailed`, and `json(schema, …)` decodes gh's answer with a schema or fails with `GitHubAnswerInvalid` naming
+  the command. `PullRequests` reads, opens, retargets, closes and merges pull requests and writes the description's
+  block, every view and GraphQL answer decoded (`pulls/schema.ts`), a refused merge method `MergeMethodInvalid`, a
+  head that is not a commit `CommitInvalid` and a repository without a GitHub remote `NoGitHubRemote`.
+  `RepoCiReader` reads whether a base has CI and makes the per-runner cache; `PullRequestDescriber` makes the writer
+  that uploads evidence and builds the body, each with its own repository id cache. Every other `gh` call in the
+  engine (the GitHub login a project is named after, in `repos/`) runs through `GitHubCli`.
+- **Repositories and workspaces.** `RepoFolders` scans the home folder, lists the repositories in the chosen folders
+  and reads a repository's origin from its `.git/config`; `RepoSetup` is the setup check; `GitHubLogins` caches the
+  login once gh answers it and asks again after a failure. `WorktreeWorkspaces` and `MainCheckoutWorkspace` are the
+  two places agents work, each a `Workspace` of effects whose failures are typed (`TaskCheckoutMissing`,
+  `CheckoutDirty`, `CheckoutOffBranch`, and git's own), over `Git`, `Checkout` and `Remote`.
 - **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
   its release as a finalizer: the lock, the log, the HTTP server, Eunoe's forwarder, the work. `stop()` disposes the
   runtime, which runs them in reverse: the work (live runs first, then the clocks and the effects, The agent loop →
   Restart continuation), Eunoe, HTTP, the log, then the lock. A start that fails partway disposes it as well, so
   nothing it took stays held, and a second `stop()` waits for the first.
 - **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
-  helpers, `writeJsonFile` and the functions of `git/` run the services through `edgeRuntime`, a `ManagedRuntime` of
-  the logger, the shell, `JsonFile` and git's services for the process;
+  helpers, `writeJsonFile` and the functions of `git/`, `github/` and `repos/` run the services through
+  `edgeRuntime`, a `ManagedRuntime` of the logger, the shell, `JsonFile`, git's, GitHub's, the repositories' and the
+  workspaces' services for the process; `Workspaces` hands out one `WorkspaceStrategy` of promises per mode over the
+  services, and `RepoCiCache` and `PullRequestDescriptions` each hold the cache their service made;
   `EventLog`, `EvidenceStore` and `AttachmentStore` each run their layer in a runtime of their own; the CLI's
   `acquireDataDirLock` builds `ServeLock` in a scope it closes on `release()`. Each throws the errors and messages it
   threw before, so nothing behind it changed. A module that moves yields the service instead, and an edge nothing

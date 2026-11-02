@@ -8,7 +8,7 @@ export interface StopOptions {
 
 export const STOP_GRACE = Duration.seconds(3);
 
-export const STOP_POLL = Duration.millis(50);
+const STOP_POLL = Duration.millis(50);
 
 export const STOP_POLL_SCHEDULE = Schedule.spaced(STOP_POLL);
 

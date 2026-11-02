@@ -1,8 +1,7 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { Task } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
 import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
-import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
+import { captureLogs, createGitRepo, git, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
 const strategy = new MainCheckoutStrategy();
@@ -98,13 +97,12 @@ describe('the main checkout', () => {
   test('a finished task gives the checkout back on the default branch, unless you left work in it', async () => {
     const { repo, path, task } = await startTask();
     writeFiles(path, { 'a.txt': 'a, unfinished\n' });
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     await strategy.remove(repo, task);
-    expect(warn).toHaveBeenCalledWith(
-      '[Workspaces] Left the checkout on the task’s branch: it has uncommitted changes',
-      { taskId: 'task-1', path }
-    );
-    warn.mockRestore();
+    logs.restore();
+    expect(
+      logs.fieldsOf('[Workspaces] Left the checkout on the task’s branch: it has uncommitted changes')
+    ).toEqual([{ taskId: 'task-1', path }]);
     expect(await readBranch(path)).toBe('fix/scroll');
     await git(path, 'checkout', '--', 'a.txt');
     await strategy.remove(repo, task);
@@ -126,16 +124,17 @@ describe('the main checkout', () => {
   test('falls back to the default branch when the branch it was on is gone, and says so', async () => {
     const { repo, path, task } = await startTask('fix/scroll', 'feat/gone');
     await git(path, 'branch', '-q', '-D', 'feat/gone');
-    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       await strategy.remove(repo, task);
-      expect(info).toHaveBeenCalledWith(
-        '[Workspaces] The branch the checkout was on is gone, so it goes back to the default branch',
-        { taskId: 'task-1', branch: 'feat/gone', defaultBranch: 'main' }
-      );
     } finally {
-      info.mockRestore();
+      logs.restore();
     }
+    expect(
+      logs.fieldsOf(
+        '[Workspaces] The branch the checkout was on is gone, so it goes back to the default branch'
+      )
+    ).toEqual([{ taskId: 'task-1', branch: 'feat/gone', defaultBranch: 'main' }]);
     expect(await readBranch(path)).toBe('main');
   });
 
@@ -155,5 +154,15 @@ describe('the main checkout', () => {
     });
     await strategy.remove(made.repo, task);
     expect(await readBranch(made.path)).toBe('main');
+  });
+
+  test('the base is brought in only while the checkout is on the task’s branch', async () => {
+    const { repo, path, task } = await startTask();
+    const onBehind = () => Promise.resolve();
+    expect(await strategy.syncBase(repo, task, 'main', { onBehind })).toEqual({ status: 'current' });
+    await git(path, 'checkout', '-q', 'main');
+    await expect(strategy.syncBase(repo, task, 'main', { onBehind })).rejects.toThrow(
+      'The checkout is on main, not on the task’s branch fix/scroll.'
+    );
   });
 });
