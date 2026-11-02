@@ -1029,9 +1029,9 @@ the task it repeats, who closed it and why; its stage stays `cancelled`, so ever
 as finished still does, and the page shows the status Duplicate, a Duplicates group on All tasks and a "Duplicate of"
 fact linking the original, whose own page shows a "Kept over" fact linking every task closed in its favour. Triage asks `duplicate_of` whenever a task is open: one choice among the open tasks it
 offers `waits_on`, or `none`, with a strict bar (the same outcome; related, overlapping, follow-up, partial or
-uncertain work is `none`) and a `duplicate_why`; a task pinned to a repository is offered only that repository's
-open tasks. Each task ships one pull request in its own repository, so a task in another repository is never its
-duplicate: a pick outside the offered tasks, in another repository, or when either task has no repository, is
+uncertain work is `none`) and a `duplicate_why`. Each task ships one pull request in its own repository, so a task
+in another repository is never its duplicate: every open task is offered with its repository, the question says so
+and the model decides, and a pick outside the offered tasks, in another repository, or when either task has no repository, is
 dropped (`isDuplicateAllowed`), and core drops it again (`selectTriageDuplicate`), along with one naming a settled
 task, itself or a duplicate. You close one yourself with `task.mark_duplicate` (Close as a duplicate in the task's
 menu, `shinsa tasks duplicate <task> --of <task>`, an agent's `tasks_duplicate`), refused with
@@ -1045,11 +1045,10 @@ round, a new branch and an empty plan), since its cancel removed its worktree an
 open tasks of every such team, read from this machine's team feeds (`TeamFeeds`, the same data
 `GET /api/teams/tasks?open=true` serves, read in the engine, so it takes no extra request and no token;
 `triage/team.ts`, `resolveTeammateCheck`). Each is offered under a key of its own (`teammate-1`, …), never its id,
-so a teammate's id never reaches a local lookup, and each shows only its owner, handle, stage, title and the start of
+so a teammate's id never reaches a local lookup, and each shows only its owner, handle, repository, stage, title and the start of
 its request and plan goal (`TEAMMATE_TEXT_LIMIT`, 280 characters): what a teammate shares, never their chats.
-Only listings with a repository are offered, each carrying its name (`TeammateTask.repoName`); a pinned task is
-offered only those whose repository has its repository's name, and a pick whose repository name differs from the
-task's is dropped, as for a local task in another repository. A pick of one is sent with `task.triage` as `duplicateOfTeammate` (its team, machine, task id, handle, title and
+Only listings with a repository are offered, each shown with its name (`TeammateTask.repoName`), and a pick whose
+repository name differs from the task's is dropped, as for a local task in another repository. A pick of one is sent with `task.triage` as `duplicateOfTeammate` (its team, machine, task id, handle, title and
 owner: `TeammateOwner`, their login, name and avatar from the listing's `ownerProfile` or the team's member) and
 recorded as `TaskDuplicate.teammate`, with `of` holding the teammate's task id. A person is named by first name,
 never `@login` (`resolveFirstName`): the stage reason and activity read "duplicate of Kai’s KAI-12 …", the activity

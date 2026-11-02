@@ -849,7 +849,12 @@ describe('resolveTriage for duplicates in a project of several repositories', ()
       projectId: 'p1',
       title: 'Teach the skill the new config option',
     });
-    draft.tasks.unbound = createTask({ id: 'unbound', repoId: null, projectId: 'p1', title: 'Not triaged yet' });
+    draft.tasks.unbound = createTask({
+      id: 'unbound',
+      repoId: null,
+      projectId: 'p1',
+      title: 'Not triaged yet',
+    });
   });
   const repos: LocalRepo[] = [
     { path: '/code/docs', name: 'docs', touchedAt: 2 },
@@ -860,21 +865,28 @@ describe('resolveTriage for duplicates in a project of several repositories', ()
 
   function record(value: unknown) {
     const schemas: (JsonSchema | undefined)[] = [];
-    const ask: QuickJson = <T>(_system: string, _prompt: string, shape?: JsonSchema) => {
+    const prompts: string[] = [];
+    const ask: QuickJson = <T>(_system: string, prompt: string, shape?: JsonSchema) => {
+      prompts.push(prompt);
       schemas.push(shape);
       return Promise.resolve(value as T);
     };
-    return { schemas, ask };
+    return { prompts, schemas, ask };
   }
 
   test('a task pinned to skills stays apart from the near-identical docs task the model names', async () => {
     const pinned = newTask({ projectId: 'p1', repoId: 'skills', request });
-    const { schemas, ask } = record({ ...base, duplicate_of: 'd' });
+    const { prompts, schemas, ask } = record({ ...base, duplicate_of: 'd' });
     const triage = await resolveTriage(state, pinned, repos, ask);
     expect(triage.repoPath).toBe('/code/skills');
     expect(triage.duplicateOf).toBeUndefined();
     expect(triage.reasons?.duplicate).toBeUndefined();
-    expect(schemas[0]?.properties.duplicate_of).toEqual({ type: 'string', enum: ['none', 's'] });
+    expect(schemas[0]?.properties.duplicate_of).toEqual({
+      type: 'string',
+      enum: ['none', 'd', 's', 'unbound'],
+    });
+    expect(prompts[0]).toContain('- d: Document the new config option (docs, ');
+    expect(prompts[0]).toContain('a task in another repository is never the same work');
   });
 
   test('an unpinned task triaged into skills stays apart from the docs task', async () => {
@@ -991,7 +1003,7 @@ describe('resolveTriage for teammates’ duplicates', () => {
       enum: ['none', 'same', 'teammate-1'],
     });
     expect(prompts[0]).toContain(
-      'Teammates’ open tasks, on their own machines, each with its owner, stage, request and plan:\n- teammate-1: Kai’s KAI-12 “Add dark mode” (building). Request: Add a dark theme to the app'
+      'Teammates’ open tasks, on their own machines, each with its owner, repository, stage, request and plan:\n- teammate-1: Kai’s KAI-12 “Add dark mode” (api, building). Request: Add a dark theme to the app'
     );
     expect(prompts[0]).toContain('"teammate-1": Kai’s KAI-12 “Add dark mode”');
     expect(triage.duplicateOf).toBeUndefined();
@@ -1032,7 +1044,7 @@ describe('resolveTriage for teammates’ duplicates', () => {
     expect(triage.duplicateOfTeammate).toBeUndefined();
   });
 
-  test('a teammate’s task in a repository of another name is no duplicate, nor offered to a pinned task', async () => {
+  test('a teammate’s task in a repository of another name is offered with its repository, and no duplicate', async () => {
     const elsewhere = await resolveTriage(
       state,
       task,
@@ -1046,9 +1058,9 @@ describe('resolveTriage for teammates’ duplicates', () => {
       Object.assign(draft, state);
       draft.repos.r2 = createRepo({ id: 'r2', path: '/code/web', name: 'web', projectId: 'p1' });
     });
-    const { schemas, ask } = record({ ...base, duplicate_of: 'teammate-1' });
+    const { prompts, ask } = record({ ...base, duplicate_of: 'teammate-1' });
     const triage = await resolveTriage(pinned, newTask({ projectId: 'p1', repoId: 'r2' }), LOCAL, ask, team);
-    expect(schemas[0]?.properties.duplicate_of).toBeUndefined();
+    expect(prompts[0]).toContain('(api, ');
     expect(triage.duplicateOfTeammate).toBeUndefined();
   });
 
