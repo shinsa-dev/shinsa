@@ -3,12 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CommandResult } from './run-command.ts';
-import {
-  MAX_RERUN_ATTEMPT,
-  type RunJob,
-  resolveRerun,
-  runWatchRerun,
-} from './watch-rerun.ts';
+import { MAX_RERUN_ATTEMPT, type RunJob, resolveRerun, runWatchRerun } from './watch-rerun.ts';
 
 const withoutRunner: RunJob = { name: 'mac', conclusion: 'cancelled', runner_id: 0, steps: [] };
 const passed: RunJob = { name: 'trigger', conclusion: 'success', runner_id: 1000001549, steps: [{}] };
