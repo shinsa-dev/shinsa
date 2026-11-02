@@ -1307,7 +1307,7 @@ describe('handing off a task', () => {
     await engine.dispatch({ type: 'task.hand_off', taskId });
     await remote.disable();
     await expect(handoffs.link(taskId, { key: 'again' } as never)).rejects.toMatchObject({
-      policy: { retryable: false },
+      retryable: false,
     });
     await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
     await handoffs.link(taskId, { key: 'claimed' } as never);

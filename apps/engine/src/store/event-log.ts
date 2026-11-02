@@ -14,15 +14,18 @@ import { Receipts } from './receipts/service.ts';
 import type { StateSnapshot } from './snapshot/schema.ts';
 import { Snapshots } from './snapshot/service.ts';
 
+export type LogServices = Events | Outbox | Receipts | Briefings | Snapshots | LogMigrator | CommandLog;
+
 export class EventLog {
-  readonly #runtime: ManagedRuntime.ManagedRuntime<
-    Events | Outbox | Receipts | Briefings | Snapshots | LogMigrator | CommandLog,
-    never
-  >;
+  readonly #runtime: ManagedRuntime.ManagedRuntime<LogServices, never>;
 
   constructor(path: string) {
     this.#runtime = ManagedRuntime.make(StoreLayer(path));
     this.#runtime.runSync(Effect.void);
+  }
+
+  get context() {
+    return this.#runtime.runSync(Effect.context<LogServices>());
   }
 
   migrate(migrations: readonly LogMigration[] = LOG_MIGRATIONS) {

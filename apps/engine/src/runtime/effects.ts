@@ -88,7 +88,7 @@ import { resolveRepoProject, type TriageResolver } from '../triage/index.ts';
 import type { RepositoryFinder } from '../triage/message.ts';
 import { describeWorkspaceProblem, Workspaces } from '../workspaces/index.ts';
 import type { EffectContext, EffectRetry, Engine } from './engine.ts';
-import { resolveShippingError } from './failures.ts';
+import { resolveShippingFailure } from './failures/classify.ts';
 
 export interface EffectRunnerOptions {
   triage: TriageResolver;
@@ -366,7 +366,7 @@ export class EffectRunner {
 
   async reportRetry(effect: ShinsaEffect, retry: EffectRetry, key: string) {
     if (effect.kind !== 'pull_request.open' && effect.kind !== 'pull_request.push') return;
-    const failure = resolveShippingError('pushing', retry.error, this.#config.pushRetryMs);
+    const failure = resolveShippingFailure('pushing', retry.failure, this.#config.pushRetryMs);
     await this.#engine.dispatch(
       {
         type: 'pull_request.record_retry',
@@ -774,7 +774,7 @@ export class EffectRunner {
     try {
       return await work();
     } catch (error) {
-      throw resolveShippingError(step, error, this.#config.pushRetryMs);
+      throw resolveShippingFailure(step, error, this.#config.pushRetryMs);
     }
   }
 

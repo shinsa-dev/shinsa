@@ -127,13 +127,19 @@ src/
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
 ├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger and Shell that code not yet
-│                        moved to Effect calls the foundation through), Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
-│                        receipt → decide → commit → adopt the decided state → listeners with the state before and
-│                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
-│                        effect pump, cancellation, settle, the retry policy an error carries and onEffectRetry),
+│                        moved to Effect calls the foundation through), engine/ (EngineCore in service.ts: boot from
+│                        the snapshot and the events after it, dispatch serialised on a Semaphore → receipt → decide →
+│                        commit → adopt the decided state → listeners with the state before and what changed, and the
+│                        same update on the `updates` Stream; snapshots once quiet, the Home guide beside the log
+│                        (writeBriefing), the pump fiber, one fiber per running effect in a FiberMap, interrupted when
+│                        a decision cancels it or the engine stops; the shapes in schema.ts, receipt identities in
+│                        receipts.ts), engine.ts (the Engine class edge: the same methods as before over EngineCore's
+│                        own ManagedRuntime on the EventLog's services; a promise handler runs in Effect.tryPromise,
+│                        so an interrupt aborts its signal, and settle waits for it to return),
 │                        EffectRunner (effects.ts: one handler per ShinsaEffect, the pull request watcher, the push's
-│                        steps, conflicts, hook rejections and reportRetry), failures.ts (EffectError with its retry
-│                        policy, ShippingError naming the push's step), StateClock (clock.ts: the
+│                        steps, conflicts, hook rejections and reportRetry), failures/ (EffectFailed and ShippingFailed,
+│                        the push's step, in schema.ts with the EFFECT_RETRY schedule; resolveEffectFailure and
+│                        resolveShippingFailure in classify.ts; retry.ts steps the schedule), StateClock (clock.ts: the
 │                        base of every timer that fires from state), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
 │                        next check)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
@@ -420,7 +426,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   (`docs/engine.md` → Guarantees).
 - **A failure that is not the outside world's is not thrown.** A deterministic failure (a pre-push hook rejection, a
   conflict while updating onto the base) is reported as a command and the effect settles, so the outbox never
-  retries it; one that is never worth retrying throws an `EffectError` with `retryable: false`; and every retry of a
+  retries it; one that is never worth retrying fails with an `EffectFailed` with `retryable: false`; and every retry of a
   push is reported to its task (`reportRetry`). No push skips the repository's hooks (`docs/engine.md` → Pushing the
   branch).
 - **Every command the server sends gets a fixed id from its cause** (`Engine.dispatch(command, { id })`), unique for

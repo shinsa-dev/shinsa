@@ -4006,7 +4006,7 @@ changes costs one call.
   for the cheap pull request watch, one for the briefing, and separate lanes per run for its session, its cancel and
   its steers, so a cancel is never stuck behind the session it cancels. Effects in a lane run in order. A failed replay-safe effect retries
   after 100 ms × 2ⁿ (capped at 30 s), up to 5 attempts; a process-bound one fails on its first error. An error can
-  say otherwise (`EffectError`, `apps/engine/src/runtime/failures.ts`): never retried (a push the remote refuses as
+  say otherwise (`EffectFailed`, `apps/engine/src/runtime/failures/`): never retried (a push the remote refuses as
   non-fast-forward fails at once), or retried after a delay of its own (a remote that cannot be reached, 30 s).
   Every retry of opening or pushing the pull request shows on its task (Pushing the branch, below).
   An effect that gives up opens a failure gate on its task when its kind has one (triage, setup
@@ -4240,8 +4240,11 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
   and a step waits for the runs before it, not for an effect, so the engine has no per-effect waiter
   (T3's `awaitSettled`). Tests wait for an effect's row to settle (`awaitEffect` in
   `apps/engine/test/helpers`).
-- **What an error says about a retry.** The handler throws; `Engine` reads `resolveRetryPolicy(error)`: an
-  `EffectError` carries `retryable` and `delayMs`, any other error is retried on the backoff. Before it requeues a
+- **What an error says about a retry.** The handler fails; `EngineCore` reads the failure as an `EffectFailed` or a
+  `ShippingFailed` (any other error becomes a retryable `EffectFailed`, `resolveEffectFailure`), each carrying
+  `retryable` and `delayMs`, and steps the named `EFFECT_RETRY` schedule (`runtime/failures/schema.ts`) once per
+  attempt so far: it stops at 5 attempts, for a final failure or a process-bound effect, and otherwise gives the
+  delay, the error's own or the backoff. The delay is stored as the row's next time, so a retry survives a restart. Before it requeues a
   retry it calls the retry handler (`onEffectRetry`, `EffectRunner.reportRetry`) with the attempt that failed, the
   attempts there are (5), when the next one runs and the error, so a retry is never silent. A handler that knows a
   failure is not the outside world's (a pre-push hook, a conflict) does not throw at all: it reports the fact as a
@@ -4299,7 +4302,7 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
      failure gate (`cause: 'push_hook'`, "The pre-push hook failed again", "the pre-push hook failed again") showing
      the failures and the last 40 lines of output. Send to the agent again resets the fix budget and starts another
      round with the same output (Retry with guidance adds your words); Cancel cancels the task.
-   - **The network is retried, visibly.** A `network` error is an `EffectError` retried after 30 s
+   - **The network is retried, visibly.** A `network` error is a `ShippingFailed` retried after 30 s
      (`SHINSA_PUSH_RETRY_MS`), up to 5 attempts;
      each retry reaches the task as `pull_request.record_retry` with its step, so the stage reason reads "pushing again
      in 30s, attempt 2 of 5: Could not resolve host: github.com" (`updating the branch again…` when the fetch failed,

@@ -4,12 +4,15 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError, type Repo, type ShinsaCommand, type ShinsaEffect } from '@shinsa/core';
+import { Duration, Effect, Option, Schedule } from 'effect';
 import { log as logger } from '../../src/log/index.ts';
-import { type EffectRetry, Engine, MAX_EFFECT_ATTEMPTS, resolveBackoff } from '../../src/runtime/engine.ts';
-import { EffectError } from '../../src/runtime/failures.ts';
+import { type EffectRetry, Engine } from '../../src/runtime/engine.ts';
+import { resolveEffectRetryDelay } from '../../src/runtime/failures/retry.ts';
+import { EFFECT_BACKOFF, EffectFailed, MAX_EFFECT_ATTEMPTS } from '../../src/runtime/failures/schema.ts';
 import { type CommandResult, runCommand } from '../../src/shell/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { awaitEffect, until } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 
 const dirs: string[] = [];
 
@@ -22,6 +25,24 @@ function createDatabasePath() {
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
+
+function resolveBackoff(attempt: number) {
+  const failure = new EffectFailed({ message: 'busy', detail: 'busy', retryable: true, delayMs: null });
+  return Effect.runSync(
+    resolveEffectRetryDelay(attempt, { failure, processBound: false }).pipe(Effect.map(Option.getOrNull))
+  );
+}
+
+function resolveUncappedBackoff(attempt: number) {
+  return Effect.runSync(
+    Effect.gen(function* () {
+      const step = yield* Schedule.toStep(EFFECT_BACKOFF);
+      let delay = Duration.zero;
+      for (let index = 0; index < attempt; index += 1) delay = (yield* step(0, undefined))[1];
+      return Duration.toMillis(delay);
+    })
+  );
+}
 
 const REPO: Omit<Repo, 'id' | 'projectId'> = {
   name: 'app',
@@ -281,7 +302,8 @@ describe('effect outbox', () => {
 
   test('backoff doubles from 100ms and is capped at 30s', () => {
     expect([1, 2, 3, 4].map(resolveBackoff)).toEqual([100, 200, 400, 800]);
-    expect(resolveBackoff(20)).toBe(30_000);
+    expect(resolveBackoff(MAX_EFFECT_ATTEMPTS)).toBeNull();
+    expect(resolveUncappedBackoff(20)).toBe(30_000);
   });
 
   test('a process-bound effect that fails is not retried and opens a failure gate', async () => {
@@ -358,17 +380,15 @@ describe('effect outbox', () => {
       replayed.push(effect.kind);
       return Promise.resolve();
     });
-    const info = spyOn(logger, 'info');
+    const logs = captureLogs();
     try {
       second.start();
       await awaitEffect(log, selectKey(log, 'task.triage'));
-      expect(info).toHaveBeenCalledWith('[Engine] Recovered the effect outbox after a restart', {
-        requeued: 1,
-        cancelled: 1,
-        failed: 0,
-      });
+      expect(logs.fieldsOf('[Engine] Recovered the effect outbox after a restart')).toEqual([
+        { requeued: 1, cancelled: 1, failed: 0 },
+      ]);
     } finally {
-      info.mockRestore();
+      logs.restore();
     }
     expect(replayed).toContain('task.triage');
     expect(replayed).not.toContain('run.execute');
@@ -510,7 +530,7 @@ describe('engine lifecycle', () => {
   test('an effect that keeps failing ends after five attempts, and a broken report is only logged', async () => {
     const log = new EventLog(createDatabasePath());
     const engine = new Engine(log);
-    const error = spyOn(logger, 'error');
+    const logs = captureLogs();
     engine.onEffect((effect) =>
       effect.kind === 'task.triage' ? Promise.reject(new Error('always')) : Promise.resolve()
     );
@@ -520,11 +540,9 @@ describe('engine lifecycle', () => {
       await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
       await awaitEffect(log, selectKey(log, 'task.triage'));
       await engine.settle();
-      expect(error).toHaveBeenCalledWith('[Engine] Could not report a failed effect', {
-        error: 'report broke',
-      });
+      expect(logs.fieldsOf('[Engine] Could not report a failed effect')).toEqual([{ error: 'report broke' }]);
     } finally {
-      error.mockRestore();
+      logs.restore();
     }
     expect(log.listEffectStatuses().find((row) => row.kind === 'task.triage')).toMatchObject({
       status: 'failed',
@@ -546,7 +564,7 @@ describe('retries the effect reports', () => {
       return context.attempt < 3 ? Promise.reject(new Error(`down ${context.attempt}`)) : Promise.resolve();
     });
     engine.onEffectRetry((_effect, retry, effectKey) => {
-      retries.push({ ...retry, key: effectKey, error: (retry.error as Error).message });
+      retries.push({ ...retry, key: effectKey, error: retry.failure.message });
       return Promise.resolve();
     });
     engine.start();
@@ -561,7 +579,7 @@ describe('retries the effect reports', () => {
       [2, MAX_EFFECT_ATTEMPTS, 'down 2'],
     ]);
     expect(retries[0]?.key).toBe(key);
-    expect(retries[0]?.retryAt).toBeGreaterThanOrEqual(before + resolveBackoff(1));
+    expect(retries[0]?.retryAt).toBeGreaterThanOrEqual(before + (resolveBackoff(1) ?? 0));
     engine.stop();
   });
 
@@ -569,24 +587,22 @@ describe('retries the effect reports', () => {
     const slow = new Engine(new EventLog(createDatabasePath()));
     const retries: EffectRetry[] = [];
     slow.onEffect(() =>
-      Promise.reject(new EffectError('slow', 'slow', { retryable: true, delayMs: 60_000 }))
+      Promise.reject(new EffectFailed({ message: 'slow', detail: 'slow', retryable: true, delayMs: 60_000 }))
     );
     slow.onEffectRetry((_effect, retry) => {
       retries.push(retry);
       return Promise.reject(new Error('report broke'));
     });
-    const warn = spyOn(logger, 'warn');
+    const logs = captureLogs();
     try {
       slow.start();
       const before = Date.now();
       await slow.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
       await until('the retry to be reported', () => retries.length === 1);
       expect(retries[0]?.retryAt).toBeGreaterThanOrEqual(before + 60_000);
-      await until('the warning', () =>
-        warn.mock.calls.some(([message]) => message === '[Engine] Could not report an effect retry')
-      );
+      await until('the warning', () => logs.fieldsOf('[Engine] Could not report an effect retry').length > 0);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
     slow.stop();
     await slow.settle();
@@ -595,7 +611,9 @@ describe('retries the effect reports', () => {
     const final = new Engine(log);
     const exhausted: string[] = [];
     final.onEffect(() =>
-      Promise.reject(new EffectError('refused', 'refused', { retryable: false, delayMs: null }))
+      Promise.reject(
+        new EffectFailed({ message: 'refused', detail: 'refused', retryable: false, delayMs: null })
+      )
     );
     final.onEffectRetry(() => Promise.reject(new Error('never retried')));
     final.onEffectExhausted((effect, error) => {

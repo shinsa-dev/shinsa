@@ -40,7 +40,7 @@ import { resolveTaskCheckout, resolveTaskRefs } from '../git/task-refs.ts';
 import { readPullRequestDiff, readRepoFile, resolveRepoSlug } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
-import { EffectError } from '../runtime/failures.ts';
+import { EffectFailed } from '../runtime/failures/schema.ts';
 import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence/index.ts';
 import type { ChannelPeer } from './channel.ts';
 import type { Remote } from './index.ts';
@@ -313,7 +313,8 @@ export class Shares implements ShareEffects, ShareLinks {
     const task = this.#engine.state.tasks[taskId];
     if (!task?.share) return;
     const credentials = this.#remote.store.file.credentials;
-    if (!credentials) throw new EffectError(SHARE_NOT_PAIRED, SHARE_NOT_PAIRED, FINAL);
+    if (!credentials)
+      throw new EffectFailed({ message: SHARE_NOT_PAIRED, detail: SHARE_NOT_PAIRED, ...FINAL });
     const current = parseShareUrl(task.share.url);
     const url =
       current?.instanceId === credentials.instanceId

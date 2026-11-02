@@ -1,11 +1,11 @@
 import { Database } from 'bun:sqlite';
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { applyStatePatch, resolveStatePatch, type ShinsaState } from '@shinsa/core';
-import { log as logger } from '../../src/log/index.ts';
 import { Engine } from '../../src/runtime/engine.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { createTempDir, until } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 
 const VERSION = 'test-version';
 
@@ -159,12 +159,14 @@ describe('a snapshot that cannot be written', () => {
     const { log, engine } = openEngine(path);
     await focus(engine, 1);
     log.close();
-    const warned = spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       expect(engine.writeSnapshot()).toBe(false);
-      expect(warned.mock.calls[0]?.[0]).toBe('[Engine] Could not write the state snapshot');
+      expect(logs.entries.map((entry) => entry.message)).toEqual([
+        '[Engine] Could not write the state snapshot',
+      ]);
     } finally {
-      warned.mockRestore();
+      logs.restore();
     }
   });
 });
@@ -219,14 +221,13 @@ describe('the Home guide', () => {
   test('one that cannot be stored is refused, and the engine goes on with its next command', async () => {
     const path = join(createTempDir(), 'shinsa.sqlite');
     const { log, engine } = openEngine(path);
-    const write = spyOn(log, 'writeBriefing').mockImplementationOnce(() => {
-      throw new Error('disk full');
-    });
-    await expect(engine.writeBriefing(null, { text: 'Lost.', briefing: guide })).rejects.toThrow('disk full');
+    const db = new Database(path);
+    db.run('DROP TABLE briefings');
+    db.close();
+    await expect(engine.writeBriefing(null, { text: 'Lost.', briefing: guide })).rejects.toThrow();
     expect(engine.state.briefings['*']).toBeUndefined();
     await focus(engine, 2);
     expect(engine.state.focus.until).toBe(2);
-    write.mockRestore();
     log.close();
   });
 

@@ -36,7 +36,7 @@ import {
   resolveCloseCode,
   resolveForwardHeaders,
 } from '../../src/remote/previews.ts';
-import { EffectError } from '../../src/runtime/failures.ts';
+import { EffectFailed } from '../../src/runtime/failures/schema.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
@@ -283,7 +283,7 @@ describe('making a preview link', () => {
   test('an unpaired machine and a service without a preview URL cannot make one, and say why', async () => {
     const unpaired = setUp({ paired: false });
     const refused = unpaired.previews.link('task-1', 'web', CONTEXT);
-    await expect(refused).rejects.toThrow(EffectError);
+    await expect(refused).rejects.toThrow(EffectFailed);
     await expect(refused).rejects.toThrow(PREVIEW_NOT_PAIRED);
     const plain = setUp();
     plain.snapshot.services[0] = createService({ previewUrl: null });

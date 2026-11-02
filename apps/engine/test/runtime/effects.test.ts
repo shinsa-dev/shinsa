@@ -19,7 +19,8 @@ import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
 import { ProcessLedger } from '../../src/resources/index.ts';
-import { EffectError, ShippingError } from '../../src/runtime/failures.ts';
+import { resolveEffectFailure } from '../../src/runtime/failures/classify.ts';
+import { EffectFailed, ShippingFailed } from '../../src/runtime/failures/schema.ts';
 import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtime/index.ts';
 import type { Slack } from '../../src/slack/index.ts';
 import { EventLog } from '../../src/store/index.ts';
@@ -1280,11 +1281,11 @@ describe('getting the branch to GitHub', () => {
     const error = await captureFailure(
       runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext())
     );
-    expect(error).toBeInstanceOf(ShippingError);
-    expect(error).toMatchObject({ step: 'updating', policy: { retryable: true, delayMs: 30_000 } });
+    expect(error).toBeInstanceOf(ShippingFailed);
+    expect(error).toMatchObject({ step: 'updating', retryable: true, delayMs: 30_000 });
     await runner.reportRetry(
       { kind: 'pull_request.open', taskId: 'task-1' },
-      { attempt: 1, attempts: 5, retryAt: 40_000, error },
+      { attempt: 1, attempts: 5, retryAt: 40_000, failure: error as ShippingFailed },
       'open-key'
     );
     expect(dispatched.at(-1)).toMatchObject({
@@ -1311,7 +1312,7 @@ describe('getting the branch to GitHub', () => {
     const error = await captureFailure(
       runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext())
     );
-    expect(error).toMatchObject({ step: 'pushing', policy: { retryable: false } });
+    expect(error).toMatchObject({ step: 'pushing', retryable: false });
     expect((error as Error).message).toStartWith(
       'The branch on the remote has commits this branch does not have'
     );
@@ -1325,7 +1326,7 @@ describe('getting the branch to GitHub', () => {
     expect(dispatched).toHaveLength(count);
     await runner.reportRetry(
       { kind: 'pull_request.push', taskId: 'task-1' },
-      retryOf(new EffectError('boom', 'boom', { retryable: true, delayMs: null })),
+      retryOf(new EffectFailed({ message: 'boom', detail: 'boom', retryable: true, delayMs: null })),
       'k'
     );
     expect(dispatched.at(-1)).toMatchObject({ step: 'pushing', detail: 'boom' });
@@ -1334,7 +1335,7 @@ describe('getting the branch to GitHub', () => {
 });
 
 function retryOf(error: unknown) {
-  return { attempt: 2, attempts: 5, retryAt: 1, error };
+  return { attempt: 2, attempts: 5, retryAt: 1, failure: resolveEffectFailure(error) };
 }
 
 describe('pull requests', () => {
