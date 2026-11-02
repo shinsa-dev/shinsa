@@ -98,7 +98,7 @@ migrations/          D1's schema (wrangler d1 migrations), applied in order
 slack-manifest.json  The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts
                      keeps its scopes, redirects and events in step with the code
 test/                One file per route group, against harness.ts: makeCloudHandler on a SQLite file with every
-                     migration in a temporary folder test/preload.ts removes (harness.db.sqlite reads the same rows), a clock a test moves
+                     migration in a temporary folder test/preload.ts removes (it also gives every test 30 s, since CI runs every workspace at once; harness.db.sqlite reads the same rows), a clock a test moves
                      (harness.clock.now), the configuration a test may change (harness.world.config, which builds
                      the handler again), waitUntil collected for settle(), and GitHub, the Cloudflare API, Slack and
                      a machine's tunnel as fakes behind one fetch (harness.world.fetch, its calls in harness.calls,

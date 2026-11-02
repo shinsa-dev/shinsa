@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -36,8 +36,6 @@ interface FakeSlack {
   answers: Record<string, (body: Fields) => Fields>;
   callsTo: (method: string) => SlackCall[];
 }
-
-setDefaultTimeout(30_000);
 
 const NAMES: Record<string, string> = { U1: 'Christo', U2: 'Mia' };
 
