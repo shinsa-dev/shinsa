@@ -363,8 +363,8 @@ describe('shinsa do', () => {
       expect(await runCli(['do', 'x'], second.io)).toBe(1);
       expect(second.errors[0]).toBe('Error: Describe what you want done.');
     } finally {
-      plain.stop(true);
-      failing.stop(true);
+      void plain.stop(true);
+      void failing.stop(true);
     }
   });
 });
@@ -512,9 +512,9 @@ describe('shinsa status and open', () => {
       expect(await runCli(['status', '--json'], json.io)).toBe(0);
       expect(JSON.parse(json.out[0] ?? '')).toMatchObject({ engine: { pid: 42 }, queue: { working: [{}] } });
     } finally {
-      queue.stop(true);
-      empty.stop(true);
-      damaged.stop(true);
+      void queue.stop(true);
+      void empty.stop(true);
+      void damaged.stop(true);
     }
   });
 
@@ -554,7 +554,7 @@ describe('shinsa status and open', () => {
       expect(out[1]).toBe(`Uptime   ${'2 hours'}`);
       expect(out[7]).toBe('On IPv6.');
     } finally {
-      server.stop(true);
+      void server.stop(true);
     }
   });
 

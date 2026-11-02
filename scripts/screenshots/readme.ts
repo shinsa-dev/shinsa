@@ -37,7 +37,7 @@ function runStep(label: string, command: string[], cwd: string, extra: Record<st
 function reservePort() {
   const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response() });
   const port = server.port;
-  server.stop(true);
+  void server.stop(true);
   if (port === undefined) throw new Error('No free port.');
   return port;
 }

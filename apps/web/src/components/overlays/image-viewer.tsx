@@ -176,7 +176,7 @@ function LayerVideo({
     );
   }
   return (
-    // biome-ignore lint/a11y/useMediaCaption: agent recordings have no captions
+    // oxlint-disable-next-line jsx-a11y/media-has-caption -- agent recordings have no captions
     <video
       src={src}
       aria-label={name}

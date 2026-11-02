@@ -8,7 +8,7 @@ export function TokenText({ text, tokens }: { text: string; tokens: Token[] | un
     <>
       {tokens.map((token, index) => (
         <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: tokens have no identity beyond their position
+          // oxlint-disable-next-line shinsa/no-array-index-key -- tokens have no identity beyond their position
           key={index}
           style={token.style}
         >
@@ -45,7 +45,7 @@ export function CodeFence({
       >
         <code className='block'>
           {code.split('\n').map((line, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
+            // oxlint-disable-next-line shinsa/no-array-index-key -- lines are positional
             <span key={index} className='block min-h-[1lh] whitespace-pre'>
               <TokenText text={line} tokens={tokens?.[index]} />
             </span>

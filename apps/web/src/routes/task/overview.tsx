@@ -127,7 +127,7 @@ function ActivityPanel({
       <ol className='flex flex-col'>
         {entries.slice(0, shown).map((entry, index) => (
           <ActivityRow
-            // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a time and kind; the place counted from the oldest tells them apart
+            // oxlint-disable-next-line shinsa/no-array-index-key -- entries can share a time and kind; the place counted from the oldest tells them apart
             key={`${entry.at}-${entry.kind}-${entries.length - index}`}
             entry={entry}
             state={state}

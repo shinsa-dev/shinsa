@@ -180,7 +180,7 @@ export function TestingPanel({
           <ol className='flex flex-col gap-3'>
             {manual.map((step, index) => (
               <ManualStep
-                // biome-ignore lint/suspicious/noArrayIndexKey: steps are positional
+                // oxlint-disable-next-line shinsa/no-array-index-key -- steps are positional
                 key={index}
                 task={task}
                 step={step}

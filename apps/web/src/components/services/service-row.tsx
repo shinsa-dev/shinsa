@@ -276,8 +276,7 @@ export function ManagedServiceRow({
 }) {
   const name = view.service.name;
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the checkbox inside takes the keys
-    // biome-ignore lint/a11y/noStaticElementInteractions: the whole row ticks its checkbox
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the checkbox inside takes the keys; the whole row ticks its checkbox
     <div
       data-highlight-item=''
       onClick={onPick}

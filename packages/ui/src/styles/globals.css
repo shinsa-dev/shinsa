@@ -1124,14 +1124,14 @@
   *:not(.animate-spin, [data-reduced-motion="fade"]),
   *:not(.animate-spin)::before,
   *:not(.animate-spin)::after {
-    /* biome-ignore-start lint/complexity/noImportantStyles: a user's OS-level
+    /* stylelint-disable declaration-no-important -- a user's OS-level
        motion preference has to win over inline styles (sonner, the highlight
        indicator) and third-party stylesheets — !important is the only lever. */
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-    /* biome-ignore-end lint/complexity/noImportantStyles: see above */
+    /* stylelint-enable declaration-no-important -- see above */
   }
 }
 

@@ -103,7 +103,7 @@ export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }:
   const { task } = entry;
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
   return (
-    // biome-ignore lint/a11y/useSemanticElements: the row holds a pull request link, so it cannot be a button
+    // oxlint-disable-next-line shinsa/use-semantic-elements -- the row holds a pull request link, so it cannot be a button
     <div
       role='button'
       tabIndex={0}

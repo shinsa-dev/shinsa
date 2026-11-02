@@ -7,7 +7,9 @@ import { TEST_ENV } from '../layers.ts';
 const readConfig = (env: Record<string, string>) =>
   Effect.runPromiseExit(
     CloudConfig.use(Effect.succeed).pipe(
-      Effect.provide(CloudConfig.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env)))))
+      Effect.provide(
+        CloudConfig.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))))
+      )
     )
   );
 

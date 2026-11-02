@@ -49,10 +49,10 @@ const TIMERS: LoginTimers = { menuFallbackMs: 5_000, urlTimeoutMs: 30_000, watch
 
 const TRANSCRIPT_LIMIT = 16_384;
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: terminal links start with an escape character
+// oxlint-disable-next-line eslint/no-control-regex -- terminal links start with an escape character
 const OSC_LINK = /\u001b]8;[^;]*;([^\u0007\u001b]*)(?:\u0007|\u001b\\)/g;
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: terminal escape sequences start with an escape character
+// oxlint-disable-next-line eslint/no-control-regex -- terminal escape sequences start with an escape character
 const ESCAPES = /\u001b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/g;
 
 const URL_PATTERN = /https:\/\/[^\s"'<>]+/g;

@@ -119,7 +119,7 @@ export function MentionText({ mention }: { mention: Mention }) {
     typeof part === 'string' ? (
       part
     ) : (
-      // biome-ignore lint/suspicious/noArrayIndexKey: one sentence can name the same person twice
+      // oxlint-disable-next-line shinsa/no-array-index-key -- one sentence can name the same person twice
       <UserTag key={index} user={part.user} label={part.label} />
     )
   );

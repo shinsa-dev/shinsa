@@ -1,0 +1,368 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y"],
+  "jsPlugins": ["./scripts/oxlint/plugin.ts"],
+  "categories": {
+    "correctness": "off"
+  },
+  "options": {
+    "typeAware": true
+  },
+  "ignorePatterns": [".claude/**", "**/dist/**", "**/.astro/**"],
+  "rules": {
+    "eslint/array-callback-return": "error",
+    "eslint/constructor-super": "error",
+    "eslint/default-case-last": "error",
+    "eslint/eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
+    "eslint/for-direction": "error",
+    "eslint/getter-return": "error",
+    "eslint/no-array-constructor": "error",
+    "eslint/no-async-promise-executor": "error",
+    "eslint/no-case-declarations": "error",
+    "eslint/no-class-assign": "error",
+    "eslint/no-compare-neg-zero": "error",
+    "eslint/no-cond-assign": "error",
+    "eslint/no-console": "error",
+    "eslint/no-const-assign": "error",
+    "eslint/no-constant-condition": "error",
+    "eslint/no-constructor-return": "error",
+    "eslint/no-control-regex": "error",
+    "eslint/no-debugger": "error",
+    "eslint/no-dupe-class-members": "error",
+    "eslint/no-dupe-else-if": "error",
+    "eslint/no-dupe-keys": "error",
+    "eslint/no-duplicate-case": "error",
+    "eslint/no-empty-character-class": "error",
+    "eslint/no-empty-pattern": "error",
+    "eslint/no-eval": "error",
+    "eslint/no-ex-assign": "error",
+    "eslint/no-extra-boolean-cast": "error",
+    "eslint/no-extra-label": "error",
+    "eslint/no-fallthrough": "error",
+    "eslint/no-func-assign": "error",
+    "eslint/no-global-assign": "error",
+    "eslint/no-import-assign": "error",
+    "eslint/no-inner-declarations": "error",
+    "eslint/no-irregular-whitespace": "error",
+    "eslint/no-label-var": "error",
+    "eslint/no-labels": "error",
+    "eslint/no-lone-blocks": "error",
+    "eslint/no-lonely-if": "error",
+    "eslint/no-loss-of-precision": "error",
+    "eslint/no-misleading-character-class": "error",
+    "eslint/no-nonoctal-decimal-escape": "error",
+    "eslint/no-obj-calls": "error",
+    "eslint/no-param-reassign": "error",
+    "eslint/no-proto": "error",
+    "eslint/no-prototype-builtins": "error",
+    "eslint/no-regex-spaces": "error",
+    "eslint/no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "lucide-react",
+            "message": "Icons come exclusively from @shinsa/ui <Icon /> (Central Icons)."
+          }
+        ]
+      }
+    ],
+    "eslint/no-self-assign": "error",
+    "eslint/no-self-compare": "error",
+    "eslint/no-sequences": "error",
+    "eslint/no-setter-return": "error",
+    "eslint/no-shadow": "error",
+    "eslint/no-shadow-restricted-names": "error",
+    "eslint/no-sparse-arrays": "error",
+    "eslint/no-template-curly-in-string": "error",
+    "eslint/no-this-before-super": "error",
+    "eslint/no-unneeded-ternary": "error",
+    "eslint/no-unreachable": "error",
+    "eslint/no-unsafe-finally": "error",
+    "eslint/no-unsafe-negation": "error",
+    "eslint/no-unsafe-optional-chaining": "error",
+    "eslint/no-unused-labels": "error",
+    "eslint/no-unused-private-class-members": "error",
+    "eslint/no-unused-vars": [
+      "error",
+      {
+        "args": "all",
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrors": "none",
+        "ignoreRestSiblings": true
+      }
+    ],
+    "eslint/no-use-before-define": [
+      "error",
+      {
+        "functions": false,
+        "classes": false,
+        "variables": false,
+        "typedefs": false,
+        "ignoreTypeReferences": true
+      }
+    ],
+    "eslint/no-useless-backreference": "error",
+    "eslint/no-useless-catch": "error",
+    "eslint/no-useless-constructor": "error",
+    "eslint/no-useless-escape": "error",
+    "eslint/no-useless-rename": "error",
+    "eslint/no-with": "error",
+    "eslint/one-var": ["error", "never"],
+    "eslint/prefer-arrow-callback": [
+      "error",
+      {
+        "allowNamedFunctions": true
+      }
+    ],
+    "eslint/prefer-const": "error",
+    "eslint/prefer-exponentiation-operator": "error",
+    "eslint/prefer-numeric-literals": "error",
+    "eslint/prefer-regex-literals": "error",
+    "eslint/prefer-rest-params": "error",
+    "eslint/radix": "error",
+    "eslint/require-yield": "error",
+    "eslint/use-isnan": "error",
+    "eslint/valid-typeof": "error",
+    "eslint/yoda": "error",
+    "jsx-a11y/alt-text": "error",
+    "jsx-a11y/anchor-ambiguous-text": "error",
+    "jsx-a11y/anchor-has-content": "error",
+    "jsx-a11y/anchor-is-valid": "error",
+    "jsx-a11y/aria-activedescendant-has-tabindex": "error",
+    "jsx-a11y/aria-props": "error",
+    "jsx-a11y/aria-proptypes": "error",
+    "jsx-a11y/aria-role": "error",
+    "jsx-a11y/aria-unsupported-elements": "error",
+    "jsx-a11y/autocomplete-valid": "error",
+    "jsx-a11y/click-events-have-key-events": "error",
+    "jsx-a11y/heading-has-content": "error",
+    "jsx-a11y/html-has-lang": "error",
+    "jsx-a11y/iframe-has-title": "error",
+    "jsx-a11y/img-redundant-alt": "error",
+    "jsx-a11y/interactive-supports-focus": "error",
+    "jsx-a11y/label-has-associated-control": "error",
+    "jsx-a11y/lang": "error",
+    "jsx-a11y/media-has-caption": "error",
+    "jsx-a11y/mouse-events-have-key-events": "error",
+    "jsx-a11y/no-access-key": "error",
+    "jsx-a11y/no-aria-hidden-on-focusable": "error",
+    "jsx-a11y/no-autofocus": [
+      "error",
+      {
+        "ignoreNonDOM": true
+      }
+    ],
+    "jsx-a11y/no-distracting-elements": "error",
+    "jsx-a11y/no-interactive-element-to-noninteractive-role": "error",
+    "jsx-a11y/no-noninteractive-element-to-interactive-role": "error",
+    "jsx-a11y/no-noninteractive-tabindex": "error",
+    "jsx-a11y/no-redundant-roles": "error",
+    "jsx-a11y/no-static-element-interactions": "error",
+    "jsx-a11y/role-has-required-aria-props": "error",
+    "jsx-a11y/role-supports-aria-props": "error",
+    "jsx-a11y/scope": "error",
+    "jsx-a11y/tabindex-no-positive": "error",
+    "oxc/approx-constant": "error",
+    "oxc/bad-min-max-func": "error",
+    "oxc/const-comparisons": "error",
+    "oxc/misrefactored-assign-op": "error",
+    "oxc/no-const-enum": "error",
+    "react/button-has-type": "error",
+    "react/jsx-no-comment-textnodes": "error",
+    "react/jsx-no-duplicate-props": "error",
+    "react/jsx-no-script-url": "error",
+    "react/jsx-no-target-blank": "error",
+    "react/jsx-no-useless-fragment": [
+      "error",
+      {
+        "allowExpressions": true
+      }
+    ],
+    "react/void-dom-elements-no-children": "error",
+    "shinsa/cognitive-complexity": "warn",
+    "shinsa/no-accumulating-spread": "error",
+    "shinsa/no-await-in-ternary": "error",
+    "shinsa/no-dynamic-namespace-import-access": "error",
+    "shinsa/no-evolving-types": "error",
+    "shinsa/no-for-each": "warn",
+    "shinsa/no-invalid-builtin-instantiation": "error",
+    "shinsa/no-redundant-use-strict": "error",
+    "shinsa/no-suspicious-semicolon-in-jsx": "error",
+    "shinsa/no-this-in-static": "error",
+    "shinsa/no-useless-continue": "error",
+    "shinsa/no-useless-else": "error",
+    "shinsa/no-useless-string-raw": "error",
+    "shinsa/no-useless-undefined-initialization": "error",
+    "shinsa/use-await": "error",
+    "shinsa/use-optional-chain": "error",
+    "shinsa/use-semantic-elements": "error",
+    "shinsa/use-simple-number-keys": "error",
+    "shinsa/use-template": "error",
+    "typescript/adjacent-overload-signatures": "error",
+    "typescript/ban-ts-comment": "error",
+    "typescript/consistent-type-exports": "error",
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "fixStyle": "inline-type-imports",
+        "disallowTypeAnnotations": false
+      }
+    ],
+    "typescript/dot-notation": "error",
+    "typescript/no-duplicate-enum-values": "error",
+    "typescript/no-empty-interface": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-extra-non-null-assertion": "error",
+    "typescript/no-extraneous-class": "error",
+    "typescript/no-floating-promises": [
+      "error",
+      {
+        "allowForKnownSafeCalls": [
+          {
+            "from": "package",
+            "name": "act",
+            "package": "@testing-library/react"
+          },
+          {
+            "from": "package",
+            "name": "act",
+            "package": "react"
+          }
+        ]
+      }
+    ],
+    "typescript/no-implied-eval": "error",
+    "typescript/no-misused-new": "error",
+    "typescript/no-misused-promises": [
+      "error",
+      {
+        "checksVoidReturn": {
+          "attributes": false,
+          "properties": false
+        }
+      }
+    ],
+    "typescript/no-non-null-asserted-optional-chain": "error",
+    "typescript/no-this-alias": "error",
+    "typescript/no-unnecessary-type-constraint": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-useless-empty-export": "error",
+    "typescript/no-wrapper-object-types": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/prefer-function-type": "error",
+    "typescript/prefer-literal-enum-member": "error",
+    "typescript/prefer-namespace-keyword": "error",
+    "typescript/switch-exhaustiveness-check": [
+      "error",
+      {
+        "considerDefaultExhaustiveForUnions": true
+      }
+    ],
+    "unicorn/error-message": "error",
+    "unicorn/explicit-length-check": "error",
+    "unicorn/no-document-cookie": "error",
+    "unicorn/no-instanceof-array": "error",
+    "unicorn/no-useless-switch-case": "error",
+    "unicorn/prefer-array-flat": "error",
+    "unicorn/prefer-array-flat-map": "error",
+    "unicorn/prefer-array-index-of": "error",
+    "unicorn/prefer-at": "error",
+    "unicorn/prefer-date-now": "error",
+    "unicorn/prefer-dom-node-text-content": "error",
+    "unicorn/prefer-math-min-max": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-number-properties": "error"
+  },
+  "overrides": [
+    {
+      "files": ["apps/web/**", "apps/marketing/**", "packages/ui/**"],
+      "rules": {
+        "react/jsx-key": "error",
+        "react/no-children-prop": "error",
+        "react/no-danger-with-children": "error",
+        "react/no-render-return-value": "error",
+        "react/no-string-refs": "error",
+        "react/rules-of-hooks": "error",
+        "shinsa/no-array-index-key": "error"
+      }
+    },
+    {
+      "files": ["**/test/**", "**/*.test.*"],
+      "rules": {
+        "eslint/require-await": "off",
+        "shinsa/use-await": "off",
+        "typescript/no-explicit-any": "off"
+      }
+    },
+    {
+      "files": ["packages/core/src/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "node:fs",
+                "message": "The core is pure: the server does I/O and hands the core events."
+              },
+              {
+                "name": "node:child_process",
+                "message": "The core is pure: side effects run in the server's effect workers."
+              },
+              {
+                "name": "node:path",
+                "message": "The core is pure: paths are the server's concern."
+              },
+              {
+                "name": "bun",
+                "message": "The core runs in the browser too; Bun belongs to the server."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.astro"],
+      "rules": {
+        "eslint/no-unused-vars": "off"
+      }
+    },
+    {
+      "files": ["scripts/**"],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    },
+    {
+      "files": ["packages/ui/src/**"],
+      "rules": {
+        "eslint/array-callback-return": "off",
+        "eslint/no-shadow": "off",
+        "jsx-a11y/aria-proptypes": "off",
+        "jsx-a11y/label-has-associated-control": "off",
+        "jsx-a11y/no-static-element-interactions": "off",
+        "jsx-a11y/prefer-tag-over-role": "off",
+        "jsx-a11y/role-supports-aria-props": "off",
+        "shinsa/no-array-index-key": "off",
+        "shinsa/no-for-each": "off",
+        "shinsa/use-semantic-elements": "off",
+        "typescript/no-floating-promises": "off"
+      }
+    },
+    {
+      "files": ["packages/ui/**"],
+      "rules": {
+        "shinsa/cognitive-complexity": "off"
+      }
+    }
+  ]
+}

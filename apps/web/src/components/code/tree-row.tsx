@@ -106,7 +106,7 @@ export function TreeRow({
     >
       {Array.from({ length: depth }, (_, level) => (
         <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: one guide per level, never reordered
+          // oxlint-disable-next-line shinsa/no-array-index-key -- one guide per level, never reordered
           key={level}
           aria-hidden
           className={cn(

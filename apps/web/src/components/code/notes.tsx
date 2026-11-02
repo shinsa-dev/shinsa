@@ -63,7 +63,7 @@ function CommentComposer({
     <div className={cn(NOTE, 'bg-background')}>
       <span className='text-2xs text-fg-2'>{label}</span>
       <textarea
-        // biome-ignore lint/a11y/noAutofocus: opened by a click on the line
+        // oxlint-disable-next-line jsx-a11y/no-autofocus -- opened by a click on the line
         autoFocus
         value={text}
         aria-label='Comment'

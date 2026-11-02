@@ -97,8 +97,7 @@ export function DisclosureChevron({ kind = 'glyph', className }: { kind?: Chevro
 
 export function DisclosureAction({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: keeps a header action's click from folding the header
-    // biome-ignore lint/a11y/useKeyWithClickEvents: only stops a click from reaching the header
+    // oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- keeps a header action's click from folding the header; only stops a click from reaching the header
     <span
       data-disclosure-action
       className={cn('flex min-w-0 items-center', className)}

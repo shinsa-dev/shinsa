@@ -48,6 +48,7 @@ function openInApp(event: React.MouseEvent, path: string) {
 export function InAppLink({
   path,
   onClick,
+  children,
   ...props
 }: Omit<React.ComponentProps<'a'>, 'href'> & { path: string }) {
   return (
@@ -59,6 +60,8 @@ export function InAppLink({
         onClick?.(event);
         openInApp(event, path);
       }}
-    />
+    >
+      {children}
+    </a>
   );
 }

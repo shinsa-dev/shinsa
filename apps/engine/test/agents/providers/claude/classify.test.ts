@@ -374,7 +374,7 @@ describe('a login that needs signing in again (Paperclip detectClaudeLoginRequir
 const EXPIRED = 'Failed to authenticate: OAuth session expired and could not be refreshed';
 
 const HOOK_NOISE =
-  // biome-ignore lint/suspicious/noTemplateCurlyInString: Claude Code prints the hook command unexpanded
+  // oxlint-disable-next-line eslint/no-template-curly-in-string -- Claude Code prints the hook command unexpanded
   'Claude Code process exited with code 1. stderr: SessionEnd hook [node "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.mjs"] failed: Hook cancelled';
 
 function synthetic(text: string, error?: string) {

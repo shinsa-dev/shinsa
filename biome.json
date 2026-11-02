@@ -17,76 +17,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended",
-      "a11y": {
-        "noSvgWithoutTitle": "off"
-      },
-      "correctness": {
-        "noChildrenProp": "error",
-        "useHookAtTopLevel": "error",
-        "useJsxKeyInIterable": "error",
-        "useExhaustiveDependencies": "off",
-        "noUnusedImports": "error",
-        "noUnusedVariables": "error",
-        "noUnusedFunctionParameters": "error",
-        "noUnusedPrivateClassMembers": "error",
-        "noPrivateImports": "error"
-      },
-      "security": {
-        "noBlankTarget": "error",
-        "noDangerouslySetInnerHtml": "off"
-      },
-      "suspicious": {
-        "noConsole": "error",
-        "noCommentText": "error",
-        "noDuplicateJsxProps": "error",
-        "noThenProperty": "off",
-        "useAwait": "error",
-        "useErrorMessage": "error",
-        "noEvolvingTypes": "error",
-        "noShadow": "error"
-      },
-      "style": {
-        "noNonNullAssertion": "off",
-        "noUselessElse": "error",
-        "useCollapsedElseIf": "error",
-        "useSingleVarDeclarator": "error",
-        "useTemplate": "error",
-        "noYodaExpression": "error",
-        "useNodejsImportProtocol": "error",
-        "useAtIndex": "error",
-        "useExplicitLengthCheck": "error",
-        "useThrowOnlyError": "error",
-        "noParameterAssign": "error",
-        "useImportType": "error",
-        "noRestrictedImports": {
-          "level": "error",
-          "options": {
-            "paths": {
-              "lucide-react": "Icons come exclusively from @shinsa/ui <Icon /> (Central Icons)."
-            }
-          }
-        }
-      },
-      "complexity": {
-        "noForEach": "warn",
-        "noUselessTernary": "error",
-        "noStaticOnlyClass": "error",
-        "noExcessiveCognitiveComplexity": {
-          "level": "warn",
-          "options": {
-            "maxAllowedComplexity": 25
-          }
-        }
-      },
-      "performance": {
-        "noAccumulatingSpread": "error"
-      },
-      "nursery": {
-        "noFloatingPromises": "error",
-        "noMisusedPromises": "error",
-        "useExhaustiveSwitchCases": "error"
-      }
+      "preset": "none"
     }
   },
   "assist": {
@@ -96,43 +27,7 @@
       }
     }
   },
-  "css": {
-    "parser": {
-      "tailwindDirectives": true
-    }
-  },
   "overrides": [
-    {
-      "includes": ["**/test/**", "**/*.test.*"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noExplicitAny": "off",
-            "useAwait": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/core/src/**"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "paths": {
-                  "node:fs": "The core is pure: the server does I/O and hands the core events.",
-                  "node:child_process": "The core is pure: side effects run in the server's effect workers.",
-                  "node:path": "The core is pure: paths are the server's concern.",
-                  "bun": "The core runs in the browser too; Bun belongs to the server."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     {
       "includes": ["packages/ui/src/**", "apps/web/src/**", "apps/marketing/src/**"],
       "linter": {
@@ -145,79 +40,6 @@
                 "functions": ["cn", "cva", "clsx"]
               }
             }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/*.astro"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "noUnusedImports": "off",
-            "noUnusedVariables": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["scripts/**"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noConsole": "off",
-            "noUndeclaredEnvVars": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/ui/**"],
-      "linter": {
-        "rules": {
-          "complexity": {
-            "noExcessiveCognitiveComplexity": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/ui/src/**/*.css"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noDescendingSpecificity": "off"
-          },
-          "complexity": {
-            "noImportantStyles": "off"
-          },
-          "correctness": {
-            "noUnknownTypeSelector": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/ui/src/**"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noArrayIndexKey": "off",
-            "useIterableCallbackReturn": "off",
-            "noShadow": "off"
-          },
-          "complexity": {
-            "noForEach": "off"
-          },
-          "a11y": {
-            "useSemanticElements": "off",
-            "noStaticElementInteractions": "off",
-            "useAriaPropsSupportedByRole": "off",
-            "useValidAriaValues": "off",
-            "noLabelWithoutControl": "off"
-          },
-          "nursery": {
-            "noFloatingPromises": "off"
           }
         }
       }
@@ -239,5 +61,9 @@
       "attributePosition": "auto"
     }
   },
-  "plugins": ["./.biome/plugins/no-await-in-ternary.grit"]
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
 }

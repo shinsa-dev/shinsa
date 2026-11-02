@@ -111,8 +111,7 @@ function SuggestionRow({
   onToggle: () => void;
 }) {
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the checkbox inside takes the keys
-    // biome-ignore lint/a11y/noStaticElementInteractions: the whole row toggles its checkbox
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the checkbox inside takes the keys; the whole row toggles its checkbox
     <div data-highlight-item='' onClick={onToggle} className={cn(LIST_ROW, LIST_ROW_LINES, 'px-1.5')}>
       <span className={ICON_SLOT}>
         <Checkbox

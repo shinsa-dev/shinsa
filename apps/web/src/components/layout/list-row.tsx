@@ -68,7 +68,7 @@ export function ListRow({
   );
   if (holdsLinks)
     return (
-      // biome-ignore lint/a11y/useSemanticElements: the row holds a link, and a link cannot sit inside a button
+      // oxlint-disable-next-line shinsa/use-semantic-elements -- the row holds a link, and a link cannot sit inside a button
       <div
         {...row}
         role='button'

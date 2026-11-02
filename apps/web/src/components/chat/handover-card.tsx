@@ -100,7 +100,7 @@ function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; a
             {phases.map((phase, index) => {
               const title = readString(phase, 'title') ?? `Phase ${index + 1}`;
               return (
-                // biome-ignore lint/suspicious/noArrayIndexKey: plan phases are positional
+                // oxlint-disable-next-line shinsa/no-array-index-key -- plan phases are positional
                 <li key={index} className='flex gap-2.5'>
                   <StepNumber index={index} />
                   <div className='flex min-w-0 flex-col gap-px'>
@@ -167,7 +167,7 @@ function SummaryCard({
             <span className='text-2xs text-fg-2'>Judgement calls</span>
             <ul className='flex flex-col gap-1.5'>
               {calls.map((call, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: judgement calls are positional
+                // oxlint-disable-next-line shinsa/no-array-index-key -- judgement calls are positional
                 <li key={index} className='flex gap-1.25 text-xs leading-5'>
                   <IconSlot>
                     <Icon size='sm' name='IconLightbulbGlow' className='text-fg-4' />
@@ -215,7 +215,7 @@ function ReviewCard({ args, task }: { args: ChatToolArgs; task: Task | null }) {
     <Card icon='IconShieldCheck' title={title} meta={meta}>
       <ul className='flex flex-col gap-2.5'>
         {findings.map((finding, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: findings are positional
+          // oxlint-disable-next-line shinsa/no-array-index-key -- findings are positional
           <li key={index} className='flex'>
             <FindingText finding={finding} task={task} />
           </li>
@@ -286,7 +286,7 @@ function SuggestionsCard({ args }: { args: ChatToolArgs }) {
     >
       <ul className='flex flex-col gap-2'>
         {tasks.map((task, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: suggestions are positional
+          // oxlint-disable-next-line shinsa/no-array-index-key -- suggestions are positional
           <li key={index} className='flex flex-col gap-px text-xs'>
             <InlineMarkdown text={readString(task, 'title') ?? ''} className='font-medium text-fg-4' />
             <InlineMarkdown text={readString(task, 'why') ?? ''} className='text-fg-3' />
@@ -456,5 +456,17 @@ export function HandoverCard({
     case 'note':
     case 'wait_for':
       return <InsetToolRow call={call} live={live} />;
+    case 'create_task':
+    case 'delegate_task':
+    case 'delegation_answer':
+    case 'delegation_cancel':
+    case 'delegation_status':
+    case 'delete_schedule':
+    case 'file_report':
+    case 'list_schedules':
+    case 'report_feedback':
+    case 'request_secret':
+    case 'split_task':
+      return null;
   }
 }

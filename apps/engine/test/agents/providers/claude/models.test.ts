@@ -14,7 +14,7 @@ const ROWS = [
 function createCatalogQuery(supportedModels: () => Promise<unknown[]>) {
   return createFakeQuery(
     (params) => {
-      (params.prompt as AsyncIterable<unknown>)[Symbol.asyncIterator]().next();
+      void (params.prompt as AsyncIterable<unknown>)[Symbol.asyncIterator]().next();
       return { [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => undefined) }) };
     },
     { supportedModels }

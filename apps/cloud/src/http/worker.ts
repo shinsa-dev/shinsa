@@ -19,9 +19,9 @@ export const deferWork = Effect.fn('deferWork')(function* <R>(work: Effect.Effec
 function writeConsole(level: LogLevel.LogLevel, message: unknown, detail: Record<string, unknown>) {
   const [text, ...rest] = Array.isArray(message) ? message : [message];
   const fields = rest.length > 0 ? { ...detail, detail: rest } : detail;
-  // biome-ignore lint/suspicious/noConsole: Workers Logs keeps what a Worker writes to the console, its only log
+  // oxlint-disable-next-line eslint/no-console -- Workers Logs keeps what a Worker writes to the console, its only log
   if (LogLevel.isGreaterThanOrEqualTo(level, 'Error')) return console.error(text, fields);
-  // biome-ignore lint/suspicious/noConsole: Workers Logs keeps what a Worker writes to the console, its only log
+  // oxlint-disable-next-line eslint/no-console -- Workers Logs keeps what a Worker writes to the console, its only log
   return console.log(text, fields);
 }
 

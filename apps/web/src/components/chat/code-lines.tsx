@@ -58,7 +58,7 @@ export function CodeLines({
           )}
         >
           {shown.map((line, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
+            // oxlint-disable-next-line shinsa/no-array-index-key -- lines are positional
             <div key={index} className='flex'>
               {gutter === 'numbers' && (
                 <span className='w-11 shrink-0 select-none pr-3 text-right text-fg-1 tabular-nums'>

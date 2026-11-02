@@ -393,7 +393,7 @@ async function runRemoteBench(): Promise<RemoteReport & { bootMs: number }> {
       tunnel.stop();
     }
   }
-  machine.http.server.stop(true);
+  void machine.http.server.stop(true);
   machine.engine.stop();
   return { cloud, tunnels, routes: routes.map(summarizeRoute), bootMs: machine.bootMs };
 }

@@ -22,7 +22,7 @@ const servers: ReturnType<typeof Bun.serve>[] = [];
 const folders: string[] = [];
 
 afterEach(() => {
-  for (const server of servers.splice(0)) server.stop(true);
+  for (const server of servers.splice(0)) void server.stop(true);
   for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
 

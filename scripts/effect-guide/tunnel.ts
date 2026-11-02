@@ -1,9 +1,12 @@
 import { Config, Context, Effect, Layer, type Redacted, Schedule, Schema } from 'effect';
 
-export class TunnelError extends Schema.TaggedError<TunnelError, { readonly brand: unique symbol }>()('TunnelError', {
-  message: Schema.String,
-  retryable: Schema.Boolean,
-}) {}
+export class TunnelError extends Schema.TaggedError<TunnelError, { readonly brand: unique symbol }>()(
+  'TunnelError',
+  {
+    message: Schema.String,
+    retryable: Schema.Boolean,
+  }
+) {}
 
 export interface Connection {
   readonly url: string;

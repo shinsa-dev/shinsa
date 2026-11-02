@@ -43,7 +43,7 @@ function RunList({ runs }: { runs: EvidenceRun[] }) {
   return (
     <ul className={cn(INSET, 'flex flex-col divide-y divide-border')}>
       {runs.map((run, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: a command can run twice, so a run is its place
+        // oxlint-disable-next-line shinsa/no-array-index-key -- a command can run twice, so a run is its place
         <RunRow key={index} run={run} />
       ))}
     </ul>

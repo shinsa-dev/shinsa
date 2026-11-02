@@ -1,6 +1,6 @@
 import { describeInline, type Style } from './style.ts';
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matches the escape codes the styles write
+// oxlint-disable-next-line eslint/no-control-regex -- matches the escape codes the styles write
 const STYLE_CODE = /\u001b\[[0-9;]*m/g;
 
 const WORD = /(?:`[^`]*`|[^\s`])+|`/g;

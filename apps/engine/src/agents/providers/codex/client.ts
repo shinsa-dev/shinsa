@@ -156,8 +156,8 @@ export class CodexClient {
   #write(message: Params) {
     if (this.#closed) return;
     try {
-      this.#stdin.write(`${JSON.stringify(message)}\n`);
-      this.#stdin.flush();
+      void this.#stdin.write(`${JSON.stringify(message)}\n`);
+      void this.#stdin.flush();
     } catch {
       killProcessGroup(this.#process.pid);
     }

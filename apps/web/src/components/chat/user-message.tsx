@@ -51,7 +51,7 @@ function Files({ files, align }: { files: ChatAttachment[]; align: AttachmentAli
         const at = videos.indexOf(attachment);
         return (
           <FileChip
-            // biome-ignore lint/suspicious/noArrayIndexKey: attachments are positional
+            // oxlint-disable-next-line shinsa/no-array-index-key -- attachments are positional
             key={`${attachment.url}-${index}`}
             attachment={attachment}
             viewer={at < 0 ? null : { open: () => viewer.show(at), originRef: viewer.recordOrigin(at) }}
