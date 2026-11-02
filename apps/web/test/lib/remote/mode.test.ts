@@ -4,7 +4,6 @@ import {
   clearEnrollFragment,
   isRemoteBuild,
   resolveMachineLabel,
-  resolveOnMachineUrl,
   resolveRemoteView,
   SERVICE_WORKER_PATH,
   SERVICE_WORKER_SCOPE,
@@ -15,15 +14,9 @@ import {
 const FRAGMENT = '#k3x9.machine-key.secret_1.tok';
 
 describe('the remote page’s mode', () => {
-  it('calls the machine this device runs on This machine, and marks a link opened on it', () => {
+  it('calls the machine this device runs on This machine', () => {
     expect(resolveMachineLabel({ name: 'Studio', current: true })).toBe('This machine');
     expect(resolveMachineLabel({ name: 'Studio' })).toBe('Studio');
-    expect(resolveOnMachineUrl('https://app.shinsa.dev/enroll#a.b.c')).toBe(
-      'https://app.shinsa.dev/enroll?on=machine#a.b.c'
-    );
-    expect(resolveOnMachineUrl('https://app.shinsa.dev/enroll?x=1')).toBe(
-      'https://app.shinsa.dev/enroll?x=1&on=machine'
-    );
   });
 
   it('is on only in the remote build', () => {

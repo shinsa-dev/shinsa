@@ -2826,11 +2826,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   which asks first), the access requests waiting for an answer (yours as the device's name and when you asked, anyone
   else's with their GitHub avatar, name and login, the device's name and when, and Decline and Accept), and Invite
   link (only while it is on: `canEnrollDevices`). It opens the link's dialog: Make link when there is none, else the
-  link as a QR code with Copy, Turn off link and Add this device for the browser in front of you, left out through remote
-  access, which this browser reaches only with its key (on the machine's own page the key, kept for app.shinsa.dev,
-  cannot be read, and a device's name does not tell two browsers apart). Every toast here is
-  a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). That link
-  carries `?on=machine` (`resolveOnMachineUrl`), which the enroll page keeps through sign-in, so the device it adds
+  link as a QR code with Copy and Turn off link; the browser in front of you adds itself by opening the link like any
+  other device. Every toast here is
+  a few words on one line ("Kai Lane joined.", "Request declined.", "Device revoked.", "The link is off."). An enroll
+  link opened with `?on=machine` (the sandbox's on-machine links) keeps it through sign-in, so the device it adds
   is marked as on this machine (`EnrolledDevice.onMachine`) and the dashboard there calls this machine This machine
   wherever it names it (`resolveMachineLabel`): the task's facts, the roadmap, New task and Settings → Machines. Every change to remote access reaches every open page at once:
   `Remote` notifies on each one (a device added or revoked, a link made or turned off, a request, pausing, resuming,
@@ -3642,7 +3641,7 @@ Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
 - **To try it without a deploy**, `bun run sandbox` gives Studio's running web service its private
   address: its start page, `/sandbox`, links the task through remote access, where Open goes there, the open route itself, and the
   address without a cookie, which shows the not-shared page. The stand-in accepts every access request at once, so
-  Add this device lets the browser in without a trip to the machine's own app.
+  its Add this device links let the browser in without a trip to the machine's own app.
 
 ## Slack
 

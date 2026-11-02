@@ -33,7 +33,7 @@ import {
 } from '@/lib/connection/remote-access.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { isRemoteBuild, resolveOnMachineUrl, THIS_MACHINE } from '@/lib/remote/mode.ts';
+import { THIS_MACHINE } from '@/lib/remote/mode.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
 import {
   canEnrollDevices,
@@ -77,13 +77,11 @@ function LinkDialog({
   control,
   link,
   canEnroll,
-  added,
   actions,
 }: {
   control: DialogControl;
   link: RemoteLink | null;
   canEnroll: boolean;
-  added: boolean;
   actions: RemoteAccessActions;
 }) {
   const [busy, setBusy] = React.useState(false);
@@ -112,15 +110,6 @@ function LinkDialog({
               >
                 Turn off link
               </Button>
-              {!added && (
-                <Button
-                  variant='secondary'
-                  nativeButton={false}
-                  render={<a href={resolveOnMachineUrl(link.url)} target='_blank' rel='noreferrer' />}
-                >
-                  Add this device
-                </Button>
-              )}
               <DialogClose render={<Button />}>Done</DialogClose>
             </>
           ) : (
@@ -355,7 +344,6 @@ function RemoteDialogs({
         control={dialog.control}
         link={snapshot?.link ?? null}
         canEnroll={canEnroll}
-        added={isRemoteBuild()}
         actions={actions}
       />
     );
