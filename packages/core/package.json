@@ -18,6 +18,10 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./engine-api": "./src/engine-api/api.ts",
+    "./engine-api/errors": "./src/engine-api/errors.ts",
+    "./engine-api/routes": "./src/engine-api/routes.ts",
+    "./engine-api/schema": "./src/engine-api/schema.ts",
     "./remote/api": "./src/remote/api.ts",
     "./remote/errors": "./src/remote/errors.ts"
   }

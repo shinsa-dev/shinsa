@@ -1,6 +1,6 @@
 import { DomainError } from '@shinsa/core';
 
-export const INSPECT_READ_ONLY = 'inspect_read_only';
+const INSPECT_READ_ONLY = 'inspect_read_only';
 
 export const INSPECT_MESSAGE = 'Inspect mode is read-only.';
 

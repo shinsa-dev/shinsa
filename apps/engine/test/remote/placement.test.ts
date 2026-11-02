@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { PLACEMENT_SCHEMA, PLACEMENT_SYSTEM, type PlacementQuestion } from '@shinsa/core';
-import { createPlacementAsker, createPlacementRoutes } from '../../src/remote/placement.ts';
+import { createPlacementAsker } from '../../src/remote/placement.ts';
 
 const QUESTION: PlacementQuestion = {
   request: 'Run the Xcode simulator tests',
@@ -53,24 +53,5 @@ describe('choosing a machine by its policies, projects and room', () => {
     await expect(silent(QUESTION)).rejects.toThrow('Claude did not answer. Try again.');
     const stray = createPlacementAsker(<T>() => Promise.resolve({ machine: 'laptop', reason: 'x' } as T));
     await expect(stray(QUESTION)).rejects.toThrow('Claude named none of your machines.');
-  });
-
-  test('POST /api/placement answers with the machine, and refuses a question it cannot read', async () => {
-    const [route] = createPlacementRoutes(() => Promise.resolve({ machineId: 'box', reason: 'Room.' }));
-    if (!route) throw new Error('no route');
-    const post = (body: unknown) =>
-      route.respond(
-        /x/.exec('x') as RegExpExecArray,
-        new Request('http://127.0.0.1/api/placement', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-      );
-    expect(route.pattern.test('/api/placement')).toBe(true);
-    expect(await (await post(QUESTION)).json()).toEqual({ answer: { machineId: 'box', reason: 'Room.' } });
-    await expect(post({ request: 'x', machines: [] })).rejects.toThrow(
-      'Send the request and two or more machines'
-    );
   });
 });

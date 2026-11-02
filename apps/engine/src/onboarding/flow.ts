@@ -7,7 +7,7 @@ import {
   type OnboardingStep,
   type OnboardingStepId,
 } from '@shinsa/core';
-import type { JsonObject } from '../http/body.ts';
+import type { JsonObject } from '../http/schema.ts';
 import { readSetupDraft, writeSetupDraft } from './drafts.ts';
 import { PrivateFoldersError } from './roots.ts';
 import type { ProjectRevision, SetupDraft } from './schema.ts';

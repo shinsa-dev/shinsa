@@ -35,8 +35,13 @@ src/
 │                        HUMAN_ONLY_ENGINE_COMMANDS); launchd.ts the Mac's EngineService on the app's launchd job
 │                        (createLaunchdService); logs.ts `shinsa logs`; app.ts the app's bundle id, the
 │                        engine's label and `shinsa://` links; surface.ts every `shinsa <group> <action>` (help,
-│                        --json, the idempotency key); api.ts the HTTP client and the surface client, which wake the
-│                        engine once when it does not answer; session.ts reads a Claude Code session for
+│                        --json, the idempotency key); client/ (EngineClient in service.ts: HttpApiClient.makeWith(EngineApi),
+│                        every call typed from core's EngineApi; a request that does not connect wakes the engine
+│                        once and is sent again, else EngineNotRunning (NOT_RUNNING); an error answer becomes a
+│                        DomainError with the engine's code, or request_failed, and one without JSON
+│                        EngineAnswerInvalid; index.ts createEngineCalls, the same calls as promises, the
+│                        client the web and desktop apps move to); api.ts (createSurfaceClient and
+│                        createApiClient over those calls); session.ts reads a Claude Code session for
 │                        `shinsa import`
 ├── terminal/            How the command line draws (docs/cli.md → How it looks): style.ts (when there is colour and
 │                        which symbols: TTY, NO_COLOR, FORCE_COLOR, TERM; the 16-colour tones; code in backticks),
@@ -65,7 +70,8 @@ src/
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
 │                        (argv, MCP schemas and tool input), spec.ts (defineCommand / defineRead / defineAction),
 │                        resolve.ts (task, account, repository and project references), client.ts (SurfaceClient,
-│                        the seam the command line and the management tools both run through), one file per group
+│                        the seam the command line and the management tools both run through: `calls`, the
+│                        EngineApi calls a spec makes, never a path), one file per group
 │                        (tasks, gates, work, schedules, config: projects and focus, extensions: mcp, skills and
 │                        plugins, services, remote, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
@@ -122,7 +128,7 @@ src/
 │                        or effect for both tables). event-log.ts is the edge: EventLog, the same methods as before, each running
 │                        a service through its own ManagedRuntime. Beside the log, evidence/ (Evidence: attached
 │                        evidence under `<task id>/round-<n>/`, chat tool images at the top, all served under
-│                        /api/evidence by http/evidence.ts, immutable and in byte ranges; EvidenceStore is its edge)
+│                        /api/evidence by http/routes/files, immutable and in byte ranges; EvidenceStore is its edge)
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
@@ -154,7 +160,7 @@ src/
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
 │   ├── manage/          The surface as every task agent's tools (docs/engine.md → Agents manage Shinsa): tools.ts
 │   │                    (one tool per spec but the human-only ones and those with an `agentTool`, such as
-│   │                    `tasks create`, whose agent files a task with `create_task`), client.ts (reads over HTTP, commands through
+│   │                    `tasks create`, whose agent files a task with `create_task`), client.ts (reads through the EngineApi calls, commands through
 │   │                    the server's router on your behalf with byTask, so a message is classified; adding a
 │   │                    repository or folder to a project runs in process through the project changes);
 │   │                    ManageAccess ({ baseUrl, projects, route }) is what serve.ts hands the supervisor as `manage`
@@ -207,9 +213,8 @@ src/
 │                        limits.ts (UsageLimits), rotation.ts (leases, the spent marks and the one retry budget; the
 │                        picker itself is core's `pickAccount`), renewal.ts (a login Claude could not refresh: read
 │                        again, the Sign in gate's text, noticing it works again), imports.ts and cswap.ts (imports),
-│                        patch.ts (an account's settings from the API), resume.ts (the usage-wait clock), routes.ts
-│                        (/api/accounts), index.ts (the Accounts service: sign-ins, snapshot, notices, the weekly
-│                        reading a run is charged against)
+│                        patch.ts (an account's settings from the API), resume.ts (the usage-wait clock), index.ts (the Accounts service: sign-ins, snapshot, notices, the weekly
+│                        reading a run is charged against); its routes are http/routes/accounts
 ├── eunoe/               Eunoe's core (`@chroxify/eunoe`) served inside the engine for its Claude sessions: server.ts
 │                        (EunoeServer: the forwarder on a loopback port of its own, started on first use; the request
 │                        log in data/eunoe; compaction notices and the stuck signal per session), forwarder.ts (the
@@ -218,8 +223,8 @@ src/
 ├── schedules/           Schedules: the clock (clock.ts), the agent tools (tools.ts), the webhook receiver
 │                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts:
 │                        a JSON body decoded by WebhookBodyText), the writer's wording of a suggested watch (suggest.ts,
-│                        its answer decoded by WatchAnswer in answer.ts), the routes for the webhook URL and secrets
-│                        (routes.ts), the Schedules service (index.ts), schema.ts (the shapes, WebhookOutcome, the
+│                        its answer decoded by WatchAnswer in answer.ts), the Schedules service (index.ts; its routes
+│                        are http/routes/secrets and webhooks), schema.ts (the shapes, WebhookOutcome, the
 │                        limits and RATE_WINDOW)
 ├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
 │                        credentials, the enrolled devices, who has access; the only place the keys live),
@@ -245,7 +250,8 @@ src/
 │                        machine is revoked or removed, closing them all in parallel; RemoteAccessScope is its
 │                        edge), guard.ts (what the tunnel may reach), channel.ts (RemoteChannel: the handshake,
 │                        sealed frames, the app socket and HTTP inside, a lease on the access scope), local-only.ts
-│                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the
+│                        (isOwnerOnlyRoute; the routes a remote request is refused are EngineApi's `localOnly`
+│                        annotation), placement.ts (POST /api/placement: the
 │                        classifier reads every machine's policies with a new task's request and names its machine),
 │                        shares.ts (Shares: the share.link effect, which makes a link's id and key; the live
 │                        view of a shared task, its evidence files by hash and its pull request's diff and changed
@@ -268,8 +274,8 @@ src/
 │                        offline), handoffs.ts (Handoffs: the handoff.link and handoff.revoke effects and the claim
 │                        recorded as handoff.claim), guest-routes.ts (isGuestRoute: the reads of its one task a
 │                        guest's channel may make), index.ts (Remote: wires them, pairing, pausing, removing,
-│                        enrolling, a hand-off's link, claim and removal, the stable webhook URL, markRemoteRequest
-│                        and resolveRequestOrigin)
+│                        enrolling, a hand-off's link, claim and removal, the stable webhook URL); its routes
+│                        are http/routes/remote, teams, placement and tunnel
 ├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
 │                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
 │                        slack.mention, and a question's choice clicked in Slack as slack.answer
@@ -299,13 +305,12 @@ src/
 │                        however many places define it (catalog.ts), checking and redacting what you send
 │                        (input.ts), sign-in (oauth.ts, and sign-in.ts: the callback page), what a run loads and
 │                        leaves out and what it is told about it (session.ts), loading what the context optimizer
-│                        left out mid-run, by any name (loader.ts), /api/extensions (routes.ts), the Extensions
-│                        service (index.ts)
+│                        left out mid-run, by any name (loader.ts), the Extensions service (index.ts; its routes are
+│                        http/routes/extensions and sign-in)
 ├── versions/            The agent programs' versions and their updates (docs/engine.md → Versions and updates):
 │                        registry/ (NpmRegistry: the latest from the npm registry over HttpClient, decoded by
 │                        NpmLatest, NpmRegistryFailed), registry.ts its edge (requestLatestVersion), each program's own
-│                        updater, found from where its binary lives (updaters.ts), /api/versions with the streamed
-│                        update (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts),
+│                        updater, found from where its binary lives (updaters.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts),
 │                        schema.ts (the shapes, PROGRAMS, LATEST_TTL, UPDATE_TIMEOUT), program.ts (isProgramId),
 │                        layers.ts (VersionsLayer, in runtime/edge.ts)
 ├── files/               service.ts (JsonFile: read(path, schema), a missing file Option.none and broken text or a
@@ -344,8 +349,7 @@ src/
 │                        diff.ts, files.ts and processes.ts, each failure the error it threw before (a DomainError
 │                        for the Code tab's reads). blobs.ts (CatFile, CatFilePool: one long-lived
 │                        `git cat-file --batch-command` per repository) and objects.ts (ObjectCache, the 64 MB cache
-│                        of what a commit addresses) stay as they were: only http/code.ts holds them, and they move
-│                        with its routes
+│                        of what a commit addresses) stay as they were: only http/routes/code holds them
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one Workspace of effects per mode
 │                        (schema.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
 │                        before a push; TaskCheckoutMissing, CheckoutDirty, CheckoutOffBranch),
@@ -417,9 +421,9 @@ src/
 │                        SetupDraft in schema.ts, a file it cannot read or did not write starting setup again), the
 │                        accounts it lists (accounts.ts); schema.ts also holds the revision of the suggested projects,
 │                        the prerequisite shapes and PREREQUISITE_TIMEOUT
-├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's
-│                        folders, registered or not), POST /api/projects/<id>/repos and /folders, and
-│                        createProjectChanges, which those routes and the management client share; folders.ts
+├── projects/            routes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
+│                        folders, registered or not) and createProjectChanges, which http/routes/projects and
+│                        the management client share; folders.ts
 │                        (resolving a folder you add)
 ├── triage/              Title, repository (or none), size, branch and dependencies for a new task, and the parts the human left
 │                        to Shinsa (Auto): its shape, priority and dependencies, each with a reason. A task in a
@@ -458,22 +462,36 @@ src/
 │                        detect.ts (the services found in a project's folders: workspace scripts, Deno, bin/dev and
 │                        Procfile lines, each Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the
 │                        quick call that names them, adds a port flag and a preview URL, cached per project; its answer
-│                        decoded in answer.ts), routes.ts (/api/terminals, the foreground check, /api/services with
-│                        its batch add, and /ws/terminals/<id>), index.ts (Terminals: the list, create, rename,
+│                        decoded in answer.ts), routes.ts (what http/routes/terminals and services read from a body, and the
+│                        /ws/terminals/<id> socket, createTerminalSockets), index.ts (Terminals: the list, create, rename,
 │                        reorder, restart, run, close, stop, and the services: add, update, remove, start, stop,
 │                        restart, a run per task, closing a task's runs, resume after a restart), schema.ts,
 │                        layers.ts (TerminalsLayer)
-└── http/                server.ts (Bun.serve; a taken port names itself and config.json's `port`), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
-                         routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts (the
-                         page's `/ws`; server.ts sends `/ws/terminals/<id>` to terminals/),
-                         static.ts, paths.ts (resolveInside, resolveWritableInside, assertRepoPath), code.ts (the
-                         Code tab's routes: refs, paths, tree, blob, raw images, search and diff), edits.ts (POST
-                         /api/tasks/<id>/file: saving a file you edit, against the text the editor expects on disk)
+└── http/                Core's EngineApi served (docs/engine.md → The HTTP surface): server.ts (Bun.serve
+                         listens and hands every request, and every request inside a remote channel, to the one
+                         web handler; the sockets: the page's `/ws`, `/ws/terminals/<id>`, the remote, share,
+                         team and preview channels; a taken port is PortInUse naming config.json's `port`),
+                         app.ts (makeEngineHandler: HttpRouter.toWebHandler over ApiRoutes, the plain routes
+                         and Ingress, a scoped resource), ingress/ (Ingress: Host, Origin, the tunnel's routes,
+                         local-only and guest scope, inspect mode, on every request), gate/ (EngineGateLive,
+                         EngineApi's EngineGate: content type, the body caps and every failure as
+                         `{ error: { code, message } }`), guard.ts (the checks both use), routes/<group>/
+                         (handler.ts, one HttpApiBuilder.group per EngineApi group, and its schema.ts: tasks,
+                         code, commands, server, files, state, onboarding, accounts, secrets, extensions,
+                         versions, remote, teams, placement, slack, projects, terminals, services; the plain
+                         routes webhooks, sign-in and tunnel), services/ (HttpServices: what handlers call),
+                         schema.ts (RequestSource, HttpContext, PortInUse), failures.ts (a service's thrown
+                         DomainError as RequestFailed with its code), commands.ts (dispatchUserCommand through
+                         parseUserCommand), features.ts (ENGINE_FEATURE_ROUTES from EngineApi's annotations),
+                         task-lookup.ts, task-views.ts, files.ts (byte ranges and attachment headers),
+                         socket.ts (the page socket hub), static.ts, paths.ts (resolveInside,
+                         resolveWritableInside, assertRepoPath)
 ```
 
 `test/` has one folder per source folder and a test file per module with behaviour of its own; a few modules are
 covered through the module that drives them (for example `agents/policy.ts` through the guard, `runtime/clock.ts`
-through the clocks built on it, `http/routes.ts` and `socket.ts` through `test/http/server.test.ts`).
+through the clocks built on it, `http/socket.ts` through `test/http/server.test.ts`); every EngineApi group is
+tested through the real gates in `test/http/routes/`, whose harness builds the web handler over fakes.
 `test/e2e/` runs the whole server against scripted agents; `test/e2e/soak.test.ts` kills a real `shinsa` process at
 random points of a task's life; `test/http/fuzz.test.ts` throws malformed requests and socket messages at it.
 `test/live/smoke.ts` (`bun run test:live`) uses real Claude agents and costs tokens, so it is never part of
@@ -507,6 +525,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `NpmRegistry` (`versions/registry/service.ts`) | `VersionsLayer` (`versions/layers.ts`) | the latest version of a package, decoded (`NpmRegistryFailed`) |
   | `SecretFiles` (`secrets/files/service.ts`) | `SecretFiles.layer`, needs `JsonFile` | secrets.json decoded, a file without a salt kept aside |
   | `TerminalFiles`, `TerminalPty` (`terminals/`) | `TerminalsLayer` (`terminals/layers.ts`), needs `JsonFile` and `Shell` | data/terminals/ decoded by schemas; the PTY as a scoped resource, the foreground program, a free port (`PortUnavailable`) |
+  | `HttpServices` (`http/services/service.ts`) | `makeEngineHandler(services)` (`http/app.ts`), scoped | what every `EngineApi` handler calls; the handler is `HttpRouter.toWebHandler` over the groups, `Ingress` and `EngineGateLive` |
+  | `EngineClient` (`cli/client/service.ts`) | `EngineClient.layer({ base, wake, fetch })` | `HttpApiClient` over core's `EngineApi`, waking the engine once; `createEngineCalls` the same calls as promises |
   | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order; fails with the lock's `ServerRunning` or `LockContended`, which `startShinsa` turns into its `DomainError` |
 
   Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
@@ -552,11 +572,12 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   (`bundle.record_check`, `docs/engine.md` → Bundles).
 - **The pull request watch reads, core decides**: the server dispatches a read only when `evaluatePullRequestWatch`
   (core) says it matters, and syncs of one task queue behind each other (`docs/engine.md` → The pull request watch).
-- **The HTTP surface is for this machine only.** Every route goes through `http/guard.ts` (what it checks, and the
-  routes that skip part of it, are `docs/engine.md` → Who can change Shinsa). `parseUserCommand` (core) is the single
+- **The HTTP surface is for this machine only.** Every route is declared once in core's `EngineApi` and passes
+  `Ingress` and the `EngineGate` middleware (`http/ingress/`, `http/gate/`; what they check, and the routes that
+  skip part of it, are `docs/engine.md` → Who can change Shinsa); never answer a request outside them. `parseUserCommand` (core) is the single
   gate for commands from outside: it accepts only `UserCommand` types and checks each field by field; never add an
   allowlist of your own. A socket message needs a string `id` or `runId`; request bodies are capped at 8 MB (an
-  attachment upload at the base64 of 25 MB, `ATTACHMENT_REQUEST_LIMIT_BYTES`), by `Content-Length` and again by the bytes `http/body.ts` reads as JSON; files are read through `resolveInside` (real paths, so a symlink cannot leave the
+  attachment upload at the base64 of 25 MB, `ATTACHMENT_REQUEST_LIMIT_BYTES`), by `Content-Length` and again by the bytes the gate reads, a route's cap its `bodyLimit` annotation; files are read through `resolveInside` (real paths, so a symlink cannot leave the
   worktree) and evidence by plain name only.
 - **Human-only decisions have no agent path**: a `humanOnly` spec is left out of the agents' tools
   (`listAgentSpecs`) and its `shinsa` command is refused in an agent's shell (`agents/policy.ts`), and so are
@@ -624,7 +645,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   log. Evidence is checked by core's `validateEvidence` (`storeEvidence`): exactly one of a path (absolute or relative
   to the worktree, at most 200 MB), an http or https URL, or text; a test or check takes only a check id and is
   dispatched as `agent.attach_check`, with nothing stored.
-- **Code reads are pinned and confined** (`http/code.ts`, `docs/engine.md` → The Code tab's reads): only the task's
+- **Code reads are pinned and confined** (`http/routes/code`, `docs/engine.md` → The Code tab's reads): only the task's
   registered repository, a ref is a full commit id the repository has or `working`, paths are relative with no `.`
   or `..` segment and pass git as literal pathspecs after `--`, working-copy reads go through `resolveInside`, and
   every read has a timeout and a size cap. A read named by a commit is immutable (`ETag`, a year's cache, the
@@ -642,8 +663,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   user's own Claude Code session) to hand work in. A CLI that marks steps complete would bypass the run binding and
   the protocol checks, so there is none: the command line does what you can do, never what a task agent hands over.
 - **The surface is the one list.** A new user command gets a spec in `src/surface/` (the test that every command
-  has a command-line path fails until it does), and anything the web can do that is not a command gets a read
-  route in `http/reads.ts` or its own route and a spec. The agents' management tools and `docs/cli.md` (`bun run
+  has a command-line path fails until it does), and anything the web can do that is not a command gets an
+  endpoint in core's `EngineApi`, its handler in `http/routes/<group>` and a spec that calls it through `calls`. The agents' management tools and `docs/cli.md` (`bun run
   docs:cli`, checked by a test) follow from the specs; never hand-write one.
 - **Providers.** The supervisor never names a provider: it talks to one only through `AgentProvider`
   (`agents/providers/types.ts`) and branches on its `capabilities`, never on its id. A new provider is a folder under

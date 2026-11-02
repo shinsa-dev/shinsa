@@ -1,63 +1,42 @@
 import {
   type GuestActor,
-  LOCAL_ONLY_CODE,
-  LOCAL_ONLY_MESSAGE,
   parseTeamViewTarget,
   REMOTE_CONNECT_PARAM,
-  SCOPE_MESSAGES,
-  SCOPE_REFUSAL_CODE,
   SHARE_CHANNEL_PARAM,
   TEAM_VIEW_PATH,
 } from '@shinsa/core';
+import { serializeEngineFailure } from '@shinsa/core/engine-api/errors';
+import {
+  ConnectRefused,
+  ENGINE_BODY_LIMIT_BYTES,
+  RequestForbidden,
+  RouteNotFound,
+  ROUTE_NOT_FOUND_MESSAGE,
+} from '@shinsa/core/engine-api/schema';
 import type { ServerWebSocket } from 'bun';
-import type { Transcripts } from '../agents/transcripts/index.ts';
-import { respondSignInPage } from '../extensions/routes.ts';
-import { createServerInstance, INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
-import { describeError, log } from '../log/index.ts';
-import { isGuestRoute } from '../remote/guest-routes.ts';
+import { Context, Effect, Exit, Predicate, Scope } from 'effect';
+import { createServerInstance } from '../instance/index.ts';
 import {
   type ChannelPeer,
   isTunnelRequest,
-  markRemoteRequest,
   type RemoteChannel,
   resolveChannelOriginRefusal,
-  resolveLocalOnlyRoute,
   resolveTunnelRoute,
 } from '../remote/index.ts';
 import type { PreviewRelay, PreviewUpgrade } from '../remote/previews.ts';
-import type { ResourceMonitor } from '../resources/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
-import {
-  createTerminalRoutes,
-  createTerminalSockets,
-  readTerminalSocketId,
-  type ServiceRefiner,
-  type TerminalSocketData,
-  type Terminals,
-} from '../terminals/index.ts';
-import { MAX_BODY_BYTES } from './body.ts';
-import {
-  resolveAllowedHosts,
-  resolveBodyRefusal,
-  resolveBodySizeRefusal,
-  resolveHostRefusal,
-  resolveRefusal,
-  resolveUpgradeRefusal,
-} from './guard.ts';
-import { type ApiContext, createApiRoutes, respondError, respondFailure } from './routes.ts';
+import { createTerminalSockets, readTerminalSocketId, type TerminalSocketData } from '../terminals/index.ts';
+import { makeEngineHandler } from './app.ts';
+import { resolveAllowedHosts, resolveRefusal, resolveUpgradeRefusal } from './guard.ts';
+import { type HttpContext, PORT_TAKEN, PortInUse, RequestSource } from './schema.ts';
 import { createSocketHub, type SocketData } from './socket.ts';
-import { serveStatic } from './static.ts';
 
-const ATTACHMENT_UPLOAD_PATH = '/api/attachments';
+export type { HttpContext } from './schema.ts';
 
 const SOCKET_BACKPRESSURE_LIMIT_BYTES = 128 * 1024 * 1024;
 
-export interface HttpContext extends ApiContext {
-  transcripts: Transcripts;
-  terminals?: Terminals;
-  refiner?: ServiceRefiner;
-  resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>;
-}
+const CONNECT_REFUSED_MESSAGE = 'The connect token is missing, wrong or expired.';
 
 interface RemoteSocketData {
   kind: 'remote';
@@ -139,8 +118,12 @@ export function resolveServerUrl(hostname: string, port: number) {
   return `http://${host}:${port}`;
 }
 
-function respondReadOnly() {
-  return respondError(INSPECT_READ_ONLY, INSPECT_MESSAGE, 403);
+function respondRefusal(failure: { readonly code: string; readonly status: number }, message: string) {
+  return Response.json(serializeEngineFailure({ code: failure.code, message }), { status: failure.status });
+}
+
+function respondNotFound() {
+  return respondRefusal(RouteNotFound, ROUTE_NOT_FOUND_MESSAGE);
 }
 
 type Hub = ReturnType<typeof createSocketHub>;
@@ -181,77 +164,46 @@ export function createSocketHandlers(
   };
 }
 
-function isPortTaken(error: unknown) {
-  return error instanceof Error && (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
-}
-
-function listenOnPort<T>(config: Pick<HttpContext['config'], 'port' | 'configPath'>, listen: () => T) {
-  try {
-    return listen();
-  } catch (error) {
-    if (!isPortTaken(error)) throw error;
-    throw new Error(
-      `Failed to start server. Is port ${config.port} in use? Quit the program on it, or set another \`port\` in ${config.configPath}.`
-    );
-  }
-}
-
-export function startServer(context: HttpContext) {
-  const { config } = context;
+const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
+  const { config, terminals, remote, shares, teams, previews } = context;
   const allowedHosts = resolveAllowedHosts(config.allowedHosts);
-  const { terminals } = context;
-  const handleApi = createApiRoutes(
-    context,
-    terminals ? createTerminalRoutes(context.engine, terminals, context.refiner ?? null) : []
+  const hub = yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      createSocketHub(
+        context.engine,
+        context.transcripts,
+        context.accounts,
+        context.classify ?? null,
+        terminals,
+        remote,
+        context.teamFeeds,
+        (context.instance ?? createServerInstance()).version,
+        context.resources
+      )
+    ),
+    (opened) => Effect.sync(() => opened.stop())
   );
-  const hub = createSocketHub(
-    context.engine,
-    context.transcripts,
-    context.accounts,
-    context.classify ?? null,
-    terminals,
-    context.remote,
-    context.teamFeeds,
-    (context.instance ?? createServerInstance()).version,
-    context.resources
+  const web = yield* Effect.acquireRelease(
+    Effect.sync(() => makeEngineHandler(context)),
+    (handler) => Effect.promise(() => handler.dispose())
   );
+  const handle = web.handler as (request: Request, services: Context.Context<never>) => Promise<Response>;
   const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
-  const { remote } = context;
+
+  function respondInsideChannel(request: Request, guest: GuestActor | null) {
+    return handle(request, Context.make(RequestSource, { via: 'channel', guest }));
+  }
 
   function upgrade(request: Request, bunServer: Bun.Server<ServerSocketData>, data: ServerSocketData) {
     const upgradeRefusal = resolveUpgradeRefusal(request);
-    if (upgradeRefusal) return respondError('forbidden', upgradeRefusal, 403);
+    if (upgradeRefusal) return respondRefusal(RequestForbidden, upgradeRefusal);
     if (bunServer.upgrade(request, { data })) return undefined;
     return new Response('Upgrade failed', { status: 400 });
   }
 
-  async function respondApi(request: Request, url: URL) {
-    if (config.inspect && request.method !== 'GET') return respondReadOnly();
-    const refusal = resolveBodyRefusal(request);
-    if (refusal) return respondError('content_type_invalid', refusal, 415);
-    const limit = url.pathname === ATTACHMENT_UPLOAD_PATH ? ATTACHMENT_REQUEST_LIMIT_BYTES : MAX_BODY_BYTES;
-    const sizeRefusal = resolveBodySizeRefusal(request, limit);
-    if (sizeRefusal) return respondError('body_too_large', sizeRefusal, 413);
-    try {
-      return await handleApi(request, url);
-    } catch (error) {
-      log.warn('[Server] Request failed', { path: url.pathname, error: describeError(error) });
-      return respondFailure(error);
-    }
-  }
-
-  function respondInsideChannel(request: Request, guest: GuestActor | null) {
-    const url = new URL(request.url);
-    if (!url.pathname.startsWith('/api/'))
-      return Promise.resolve(respondError('not_found', 'No such endpoint.', 404));
-    if (
-      guest &&
-      !isGuestRoute(context.engine.state, guest.taskId, request.method, url.pathname, context.transcripts)
-    )
-      return Promise.resolve(respondError(SCOPE_REFUSAL_CODE, SCOPE_MESSAGES.task, 403));
-    if (resolveLocalOnlyRoute(request.method, url.pathname))
-      return Promise.resolve(respondError(LOCAL_ONLY_CODE, LOCAL_ONLY_MESSAGE, 403));
-    return respondApi(markRemoteRequest(request), url);
+  function upgradeLive(request: Request, bunServer: Bun.Server<ServerSocketData>, data: LiveSocketData) {
+    if (bunServer.upgrade(request, { data })) return undefined;
+    return new Response('Upgrade failed', { status: 400 });
   }
 
   const remoteSockets: RemoteSocketHandlers | null = remote
@@ -275,9 +227,6 @@ export function startServer(context: HttpContext) {
       }
     : null;
 
-  const { shares, teams } = context;
-
-  const { previews } = context;
   const previewSockets: PreviewSocketHandlers | null = previews
     ? {
         open: (socket) => {
@@ -298,23 +247,27 @@ export function startServer(context: HttpContext) {
       }
     : null;
 
-  async function respondPreview(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
-    if (!previews) return respondError('not_found', 'No such endpoint.', 404);
-    const answer = await previews.answer(request, url);
+  const respondPreview = Effect.fn('serveHttp.respondPreview')(function* (
+    request: Request,
+    url: URL,
+    bunServer: Bun.Server<ServerSocketData>
+  ) {
+    if (!previews) return respondNotFound();
+    const answer = yield* Effect.promise(() => previews.answer(request, url));
     if (answer.kind === 'response') return answer.response;
     const [protocol] = answer.upgrade.protocols;
     const headers = protocol ? { 'Sec-WebSocket-Protocol': protocol } : undefined;
     const data: PreviewSocketData = { kind: 'preview', upgrade: answer.upgrade, relay: null };
     if (bunServer.upgrade(request, { data, ...(headers ? { headers } : {}) })) return undefined;
     return new Response('Upgrade failed', { status: 400 });
-  }
+  });
 
   function respondShareChannel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
-    if (!(remote && shares)) return respondError('not_found', 'No such endpoint.', 404);
+    if (!(remote && shares)) return respondNotFound();
     const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
-    if (originRefusal) return respondError('forbidden', originRefusal, 403);
+    if (originRefusal) return respondRefusal(RequestForbidden, originRefusal);
     const shareId = url.searchParams.get(SHARE_CHANNEL_PARAM) ?? '';
-    if (!shares.acceptsShare(shareId)) return respondError('not_found', 'No such endpoint.', 404);
+    if (!shares.acceptsShare(shareId)) return respondNotFound();
     const open = (peer: ChannelPeer) => {
       const channel = shares.openChannel(peer, shareId);
       return {
@@ -322,17 +275,21 @@ export function startServer(context: HttpContext) {
         close: () => shares.closeChannel(channel),
       };
     };
-    const data: LiveSocketData = { kind: 'live', open, channel: null };
-    if (bunServer.upgrade(request, { data })) return undefined;
-    return new Response('Upgrade failed', { status: 400 });
+    return upgradeLive(request, bunServer, { kind: 'live', open, channel: null });
   }
 
-  async function respondTeamChannel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
-    if (!(remote && teams?.acceptsViewer())) return respondError('not_found', 'No such endpoint.', 404);
+  const respondTeamChannel = Effect.fn('serveHttp.respondTeamChannel')(function* (
+    request: Request,
+    url: URL,
+    bunServer: Bun.Server<ServerSocketData>
+  ) {
+    if (!(remote && teams?.acceptsViewer())) return respondNotFound();
     const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
-    if (originRefusal) return respondError('forbidden', originRefusal, 403);
-    const claim = await remote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM));
-    if (!claim) return respondError('unauthorized', 'The connect token is missing, wrong or expired.', 401);
+    if (originRefusal) return respondRefusal(RequestForbidden, originRefusal);
+    const claim = yield* Effect.promise(() =>
+      remote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM))
+    );
+    if (!claim) return respondRefusal(ConnectRefused, CONNECT_REFUSED_MESSAGE);
     const open = (peer: ChannelPeer) => {
       const channel = teams.openChannel(peer, claim.userId);
       return {
@@ -340,15 +297,30 @@ export function startServer(context: HttpContext) {
         close: () => teams.closeChannel(channel),
       };
     };
-    const data: LiveSocketData = { kind: 'live', open, channel: null };
-    if (bunServer.upgrade(request, { data })) return undefined;
+    return upgradeLive(request, bunServer, { kind: 'live', open, channel: null });
+  });
+
+  const respondRemoteChannel = Effect.fn('serveHttp.respondRemoteChannel')(function* (
+    request: Request,
+    url: URL,
+    bunServer: Bun.Server<ServerSocketData>,
+    channelRemote: NonNullable<typeof remote>
+  ) {
+    const originRefusal = resolveChannelOriginRefusal(request, channelRemote.appOrigin);
+    if (originRefusal) return respondRefusal(RequestForbidden, originRefusal);
+    const claim = yield* Effect.promise(() =>
+      channelRemote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM))
+    );
+    if (!claim) return respondRefusal(ConnectRefused, CONNECT_REFUSED_MESSAGE);
+    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null, userId: claim.userId } }))
+      return undefined;
     return new Response('Upgrade failed', { status: 400 });
-  }
+  });
 
   function respondTeamView(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
     const { teamFeeds } = context;
     const target = parseTeamViewTarget(url);
-    if (!(teamFeeds && target)) return respondError('not_found', 'No such endpoint.', 404);
+    if (!(teamFeeds && target)) return respondNotFound();
     const open = (peer: ChannelPeer) => {
       const relay = teamFeeds.openRelay(peer, target);
       return {
@@ -362,94 +334,83 @@ export function startServer(context: HttpContext) {
     return upgrade(request, bunServer, { kind: 'live', open, channel: null });
   }
 
-  function respondTunnel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
-    const route = remote?.isEnabled ? resolveTunnelRoute(request, url) : null;
-    if (route === 'health') return Response.json({ ok: true });
-    if (route === 'hook' && context.schedules?.isWebhook(url.pathname)) {
-      if (config.inspect) return respondReadOnly();
-      return context.schedules.handleWebhook(request, url);
-    }
-    if (route === 'share') return respondShareChannel(request, url, bunServer);
-    if (route === 'team') return respondTeamChannel(request, url, bunServer);
-    if (route === 'preview') return respondPreview(request, url, bunServer);
-    if (route === 'slack' && context.slack) {
-      if (config.inspect) return respondReadOnly();
-      return context.slack.handleTunnel(request, url);
-    }
-    if (route !== 'channel' || !remote) return respondError('not_found', 'No such endpoint.', 404);
-    return respondRemoteChannel(request, url, bunServer, remote);
-  }
-
-  async function respondRemoteChannel(
+  const respondTunnelSocket = Effect.fn('serveHttp.respondTunnelSocket')(function* (
     request: Request,
     url: URL,
-    bunServer: Bun.Server<ServerSocketData>,
-    channelRemote: NonNullable<typeof remote>
+    bunServer: Bun.Server<ServerSocketData>
   ) {
-    const originRefusal = resolveChannelOriginRefusal(request, channelRemote.appOrigin);
-    if (originRefusal) return respondError('forbidden', originRefusal, 403);
-    const claim = await channelRemote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM));
-    if (!claim) return respondError('unauthorized', 'The connect token is missing, wrong or expired.', 401);
-    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null, userId: claim.userId } }))
-      return undefined;
-    return new Response('Upgrade failed', { status: 400 });
+    const route = remote?.isEnabled ? resolveTunnelRoute(request, url) : null;
+    if (route === 'share') return respondShareChannel(request, url, bunServer);
+    if (route === 'team') return yield* respondTeamChannel(request, url, bunServer);
+    if (route === 'preview') return yield* respondPreview(request, url, bunServer);
+    if (route === 'channel' && remote) return yield* respondRemoteChannel(request, url, bunServer, remote);
+    return yield* Effect.promise(() => handle(request, Context.empty()));
+  });
+
+  const run = Effect.runPromiseWith(yield* Effect.context<never>());
+
+  function respondLocalSocket(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+    const isPage = url.pathname === '/ws';
+    const isTeamView = url.pathname === TEAM_VIEW_PATH;
+    const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
+    if (!(isPage || isTeamView || terminalId)) return null;
+    const refusal = resolveRefusal(request, allowedHosts);
+    if (refusal) return respondRefusal(RequestForbidden, refusal);
+    if (isTeamView) return respondTeamView(request, url, bunServer);
+    if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });
+    return upgrade(request, bunServer, {
+      kind: 'hub',
+      transcripts: new Map(),
+      surface: null,
+      origin: 'local',
+      guest: null,
+    });
   }
 
-  function respondOutside(request: Request, url: URL) {
-    const { schedules, extensions } = context;
-    if (schedules?.isWebhook(url.pathname)) {
-      if (config.inspect) return respondReadOnly();
-      return schedules.handleWebhook(request, url);
-    }
-    if (!extensions?.isCallback(url.pathname) || request.method !== 'GET') return null;
-    if (config.inspect) return respondReadOnly();
-    const hostRefusal = resolveHostRefusal(request, allowedHosts);
-    if (hostRefusal) return respondError('forbidden', hostRefusal, 403);
-    return respondSignInPage(extensions, request);
-  }
-
-  const server = listenOnPort(config, () =>
-    Bun.serve<ServerSocketData>({
-      port: config.port,
-      hostname: config.hostname,
-      maxRequestBodySize: ATTACHMENT_REQUEST_LIMIT_BYTES,
-      fetch(request, bunServer) {
-        const url = new URL(request.url);
-        if (remote && isTunnelRequest(request, remote.tunnelHost))
-          return respondTunnel(request, url, bunServer);
-        const outside = respondOutside(request, url);
-        if (outside) return outside;
-        const refusal = resolveRefusal(request, allowedHosts);
-        if (refusal) return respondError('forbidden', refusal, 403);
-        if (url.pathname === '/ws')
-          return upgrade(request, bunServer, {
-            kind: 'hub',
-            transcripts: new Map(),
-            surface: null,
-            origin: 'local',
-            guest: null,
-          });
-        if (url.pathname === TEAM_VIEW_PATH) return respondTeamView(request, url, bunServer);
-        const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
-        if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });
-        if (url.pathname.startsWith('/api/')) return respondApi(request, url);
-        return serveStatic(config.webDir, url.pathname);
-      },
-      websocket: {
-        ...createSocketHandlers(hub, terminalSockets, remoteSockets, previewSockets),
-        maxPayloadLength: MAX_BODY_BYTES,
-        backpressureLimit: SOCKET_BACKPRESSURE_LIMIT_BYTES,
-      },
-    })
+  const server = yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      Bun.serve<ServerSocketData>({
+        port: config.port,
+        hostname: config.hostname,
+        maxRequestBodySize: ATTACHMENT_REQUEST_LIMIT_BYTES,
+        fetch(request, bunServer) {
+          const url = new URL(request.url);
+          if (remote && isTunnelRequest(request, remote.tunnelHost))
+            return run(respondTunnelSocket(request, url, bunServer));
+          return respondLocalSocket(request, url, bunServer) ?? handle(request, Context.empty());
+        },
+        websocket: {
+          ...createSocketHandlers(hub, terminalSockets, remoteSockets, previewSockets),
+          maxPayloadLength: ENGINE_BODY_LIMIT_BYTES,
+          backpressureLimit: SOCKET_BACKPRESSURE_LIMIT_BYTES,
+        },
+      })
+    ).pipe(
+      Effect.catchDefect((defect) =>
+        Predicate.hasProperty(defect, 'code') && defect.code === PORT_TAKEN
+          ? Effect.fail(
+              new PortInUse({
+                message: `Failed to start server. Is port ${config.port} in use? Quit the program on it, or set another \`port\` in ${config.configPath}.`,
+              })
+            )
+          : Effect.die(defect)
+      )
+    ),
+    (listening) => Effect.promise(() => listening.stop(true))
   );
-  const address = resolveServerUrl(config.hostname, server.port ?? config.port);
-  log.info('[Server] Listening', { url: address });
-  return {
-    server,
-    url: address,
-    stop: async () => {
-      hub.stop();
-      await server.stop(true);
-    },
-  };
+  const url = resolveServerUrl(config.hostname, server.port ?? config.port);
+  yield* Effect.logInfo('[Server] Listening').pipe(Effect.annotateLogs({ url }));
+  return { server, url };
+});
+
+export function startServer(context: HttpContext) {
+  const scope = Scope.makeUnsafe();
+  const stop = () => edgeRuntime.runPromise(Scope.close(scope, Exit.void));
+  const served = edgeRuntime.runSync(
+    serveHttp(context).pipe(
+      Scope.provide(scope),
+      Effect.onError(() => Effect.forkDetach(Scope.close(scope, Exit.void)))
+    )
+  );
+  return { ...served, stop };
 }

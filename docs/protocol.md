@@ -940,7 +940,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
-| `task.record_edit` | the file route after a save from the Code tab (`http/edits.ts`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
+| `task.record_edit` | the file route after a save from the Code tab (`http/routes/tasks`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
 | `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
 | `task.record_overlaps` | an agent's `propose_plan`, `complete_phase` or `complete_fix`, before it dispatches (`agents/repository-work.ts`) | `overlaps`: the other open tasks of the repository and the files this task shares with each; `from`: the task whose hand-over compared them; records the ones not known yet (`task.overlapped`) and steers this task's Agent at work with them at once when `from` is another task, else they wait for its next turn |
 | `checks.record` | `checks.run` effect | records a round of checks (`results: ReportCheck[]`), with `outputs?` (`CheckEvidence[]`, one per check run: the output the server stored, attached as Shinsa's own `check` evidence with its `checkId`) and `coverage?` (`Coverage`) when the run before review measured it; ignored outside `checking` or with no results |
@@ -1604,7 +1604,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | Shell policy | `apps/engine/src/agents/policy.ts` |
 | Composer hint | `apps/web/src/lib/tasks/messages.ts` |
 | The Code tab's reads: `TaskRefs`, `RepoPaths`, `RepoTree`, `FileContent`, `SearchResult`, `TaskDiff`, `CODE_LIMITS` | `packages/core/src/protocol/code.ts`, `protocol/messages.ts`; served by `apps/engine/src/http/code.ts` (`docs/engine.md` → The Code tab's reads) |
-| Saving a file from the Code tab: `FileWrite`, `FileWritten`, `FileChanged` | `packages/core/src/protocol/code.ts`; served by `apps/engine/src/http/edits.ts` (`docs/engine.md` → Your edits) |
+| Saving a file from the Code tab: `FileWrite`, `FileWritten`, `FileChanged` | `packages/core/src/protocol/code.ts`; served by `apps/engine/src/http/routes/tasks/` (`docs/engine.md` → Your edits) |
 
 ## Open protocol questions
 

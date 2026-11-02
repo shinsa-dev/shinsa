@@ -559,7 +559,7 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
 The Code tab edits the task's code directly (`docs/design.md`, 32): there is no suggestion step, and Shinsa still makes
 every commit.
 
-- **Where they go.** `POST /api/tasks/<id>/file` (`apps/engine/src/http/edits.ts`) takes `{ path, content, base }`
+- **Where they go.** `POST /api/tasks/<id>/file` (`writeFile` in the `tasks` group, `apps/engine/src/http/routes/tasks/`) takes `{ path, content, base }`
   (`FileWrite`): the file's new text and the text the editor last knew on disk (`null` for none). It writes into the
   task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for the main
   checkout. The path passes `assertRepoPath` and must stay inside the checkout with its nearest existing
@@ -1325,7 +1325,7 @@ stops here.
   queue button, the guide, the Dock badge or a notification. Home shows it in a Snoozed section, folded by default
   (`QueueSection.opensOnHome`), the queue popover in a folded Snoozed section, and All tasks in a folded Snoozed
   group ahead of every gate (`resolveTaskGroup`). The task reads (`GET /api/tasks`, `shinsa tasks list`, an agent's
-  `tasks_list`) mark it `snoozed` and leave it out of `--status needs_you` (`isListed` in `http/reads.ts`). An agent
+  `tasks_list`) mark it `snoozed` and leave it out of `--status needs_you` (`isTaskListed` in `http/task-views.ts`). An agent
   at work keeps working; the gate it reaches waits quietly. A snoozed task that finishes drops out of the snoozed list.
 - **Unsnoozing.** The task shows again where it is now: a gate it reached while snoozed is in Needs you at once.
 - **On your behalf.** Both are management commands an agent may send for you; the activity reads "Snoozed ‹task›"
@@ -2379,6 +2379,54 @@ and the run supervisor.
 - **In the web.** Delegated runs show in their parent's turn (spawn, report, Stop, the child's own
   conversation nested inside) and in the Overview's Delegations panel (`docs/design.md`).
 
+## The HTTP surface
+
+Every `/api` route is declared once, in core, as `EngineApi` (`packages/core/src/engine-api/api.ts`): an `HttpApi` of
+18 groups (tasks, code, commands, server, files, state, onboarding, accounts, secrets, extensions, versions, remote,
+teams, placement, slack, projects, terminals, services), each endpoint with its params, query, payload, answer and
+failures as schemas, and the rules a route carries as annotations: the engine feature that adds it
+(`EngineFeatureRoute`), refused from off the machine (`LocalOnlyRoute`, writes only or reads too), the owner's alone
+(`OwnerOnlyRoute`), open to a guest's channel (`GuestRoute`), only Shinsa's own page (`BrowserOnlyRoute`) and its
+body cap (`RequestBodyLimit`). The engine serves it and every client calls it from the same declaration, so a route
+is never a path written by hand on either side.
+
+```
+Bun.serve ──► web handler (HttpRouter.toWebHandler)      http/app.ts
+                │
+                ├─ Ingress            Host, Origin, the tunnel's routes,
+                │                     local-only, guest scope, inspect
+                ├─ plain routes       webhooks, sign-in callback, tunnel,
+                │                     the built web app
+                └─ EngineApi groups   http/routes/<group>/handler.ts
+                     └─ EngineGate    content type, body cap, every
+                                      failure as { error: { code, message } }
+remote channel ──► the same handler, the request marked `channel`
+```
+
+- **One listener.** `Bun.serve` (`http/server.ts`) listens and hands every request to the one web handler, and so do
+  the requests a remote channel carries, marked as from the channel (`RequestSource`), so a remote request meets the
+  same routes and the same refusals. The sockets stay on Bun's own WebSocket, which keeps the buffered amount and the
+  drain the terminal's flow control needs: the page's `/ws`, `/ws/terminals/<id>`, the remote, share, team and preview
+  channels. The handler and the socket hub are scoped resources, closed with the HTTP step of shutdown.
+- **The gates.** `Ingress` (`http/ingress/middleware.ts`) runs on every request: the Host and Origin checks of Who can
+  change Shinsa, the tunnel's few routes, the local-only and guest refusals read from the annotations, and inspect
+  mode's `inspect_read_only`. `EngineGate` (`http/gate/middleware.ts`), the middleware every `EngineApi` group sits
+  behind, checks the content type and the body cap (8 MB, `ENGINE_BODY_LIMIT_BYTES`; an attachment upload the base64
+  of 25 MB) and answers every failure, a schema's included, as `{ error: { code, message } }` with its status, so the
+  answers are those the hand-written routes gave.
+- **The handlers.** One `HttpApiBuilder.group` per group in `http/routes/<group>/handler.ts`, its shapes in the
+  folder's `schema.ts`, calling the engine's services through `HttpServices`. A command goes through core's
+  `parseUserCommand` (`http/commands.ts`); a service that throws a `DomainError` answers its code at 400
+  (`http/failures.ts`).
+- **The client.** `EngineClient` (`apps/engine/src/cli/client/service.ts`) is `HttpApiClient.makeWith(EngineApi)`:
+  every call typed from the declaration. A request that does not connect wakes the engine once (below, When the
+  engine is down) and is sent again; an error answer becomes a `DomainError` with the engine's code (`request_failed`
+  when it gave none). `createEngineCalls` gives the same calls as promises; the command line, the surface specs and
+  the agents' management tools call it, and so will the web and desktop apps.
+- **Features.** `ENGINE_FEATURE_ROUTES` (`http/features.ts`) is read from the annotations (`resolveEngineFeatureRoutes`,
+  core's `engine-api/routes.ts`), and the frozen baseline is checked against `listEngineRoutes` (Remote access → What
+  each machine speaks).
+
 ## The command surface
 
 Everything you can do in Shinsa is one list of specs, `SURFACE` in `apps/engine/src/surface/`, and both the command
@@ -2391,7 +2439,7 @@ line and every task agent's management tools are generated from it, so neither c
   writes, the user command it sends (`command`), whether it is yours alone (`humanOnly`: no agent gets it as a tool,
   and an agent's shell may not run it; Agents manage Shinsa, below), the agent tool a task agent uses instead
   (`agentTool`: `tasks create` names `create_task`, so it is not a management tool), and `run(client, values)`, which reads and sends
-  through a `SurfaceClient` (`read`, `post`, `send`). The same fields give the command line's arguments and `--help`,
+  through a `SurfaceClient` (`calls`, the typed `EngineApi` calls, and `send`). The same fields give the command line's arguments and `--help`,
   and each agent tool's JSON schema (snake_case keys) with read-only, destructive and idempotent hints.
 - **Derived from core's parser.** `USER_COMMAND_TYPES` is the list `parseUserCommand` accepts. Every one of them has
   at least one spec (`listUncoveredCommands()` is empty, and a test fails the day core gains a command without a
@@ -2400,8 +2448,8 @@ line and every task agent's management tools are generated from it, so neither c
   the start of its id, its exact title or its handle, `SW-142`; an account by id or email; a repository by name or
   id; a project by id, key or name), and the server still runs every one through `parseUserCommand` and `decide`.
 - **What is not a command.** Reads (`GET /api/tasks`, `/api/tasks/<task>`, `/api/tasks/<task>/chat`, `/api/settings`,
-  `/api/repos`, `/api/projects`, `/api/schedules`, `/api/delegations`, `/api/activity`, in
-  `apps/engine/src/http/reads.ts`, and `/api/repos/local`, in `projects/routes.ts`), Claude accounts and usage
+  `/api/repos`, `/api/projects`, `/api/schedules`, `/api/delegations`, `/api/activity`, the `tasks` and `state`
+  groups of `EngineApi`, and `/api/repos/local`, in `projects`), Claude accounts and usage
   (`/api/accounts/*`), folders (`/api/onboarding/setup`), secrets and webhook signing secrets, the health check and
   the providers, and the Code tab's reads (below). `/api/tasks/<task>` takes an id, a handle, the start of an id or an exact title (more than one match
   is `task_ambiguous`) and answers the task's view, plan, findings, open gates, what it waits on, runs, suggested
@@ -2416,7 +2464,7 @@ line and every task agent's management tools are generated from it, so neither c
 - **When the engine is down**: from a compiled engine, a command the engine does not answer asks the platform's
   service to start it (`launchctl kickstart` on a Mac, `systemctl --user start shinsa` on Linux once `shinsa start`
   has set the unit up) and waits up to 20 s for it, then tries once more; otherwise it says how to start it
-  (`apps/engine/src/cli/api.ts`, `createWakeEngine`; Configuration and data → The engine in the background, Run on a
+  (`EngineClient`, `apps/engine/src/cli/client/`, and `createWakeEngine`; Configuration and data → The engine in the background, Run on a
   server).
   `shinsa status` and `shinsa version` only report, and never start it.
 - **Around the surface** (`apps/engine/src/cli`): the everyday commands (`shinsa [folder]`, `open`, `do`, `import`,
@@ -2431,7 +2479,7 @@ line and every task agent's management tools are generated from it, so neither c
 
 ## The Code tab's reads
 
-The web's Code tab reads a task's code over HTTP (`apps/engine/src/http/code.ts`, on `git/files.ts`,
+The web's Code tab reads a task's code over HTTP (`EngineApi`'s `code` group, `apps/engine/src/http/routes/code/`, on `git/files.ts`,
 `git/task-refs.ts`, `git/diff.ts` and `git/read.ts`). Every route takes the task's id or its handle (`SW-142`, through
 core's `selectTaskByReference`, as `POST /api/tasks/<id>/open` does) and reads only the repository the task is
 registered to (`task.repoId`); a task with none, or no such task, is `404 code_unavailable`. The one write, saving a
@@ -2775,7 +2823,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   lease on it. Turning access off, a revocation or removing the machine ends the scope, which closes every one of them
   at once with its own close reason; a channel that ends by itself gives its lease back. The keys stay in `remote.json`
   alone: the scope holds only what closes a socket.
-- **The tunnel entry point** (`guard.ts`, `http/server.ts`): a request with `cf-connecting-ip`, which Cloudflare
+- **The tunnel entry point** (`guard.ts`, `http/ingress/`): a request with `cf-connecting-ip`, which Cloudflare
   stamps on everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request and is decided
   before the local guard. It sees `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks) and
   `GET /remote`; everything else, and everything while remote access is off, is 404. `/remote` needs an Origin of
@@ -2792,8 +2840,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   16 KB or more (the first state above all, which compresses about five times) crosses the tunnel deflated and padded
   to a Padmé length, since a deflated length says something about its content; a page or engine that does not know the
   field keeps plain frames (`docs/protocol.md` → Remote access, Frames, which weighs what compression leaks). Inside, the app socket runs as a hub socket whose `origin` is `remote`,
-  and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
-  routes, marked remote (`markRemoteRequest`, `resolveRequestOrigin`), without the Host and Origin guard, whose job the
+  and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same web
+  handler, marked as from the channel (`RequestSource`), without the Host and Origin guard, whose job the
   handshake did. Removing a device closes its channels; turning remote access off or a revocation closes all of them.
 - **Pairing** (`Pairings`, `remote/pairing/`, `Remote.startPairing`): Settings → Remote access → Turn on, or `shinsa remote pair`,
   makes the machine's key if it has none, asks app.shinsa.dev for a claim code with the machine's name (its host name
@@ -2862,7 +2910,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   machine; its Settings → Machines shows Access requests instead (`MachineAccessRequests`): each machine of the
   dashboard with requests waiting, read from that machine's own `remote` push (`Fleet.listMachineAccess`), and the
   answer sent to that machine (`?machine=<instance>` on the request, which the fleet routes by, `resolveRequestOwner`).
-- **The routes** (`routes.ts`): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
+- **The routes** (`EngineApi`'s `remote` group): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
   owner, the machine's name and public key, a pairing under way, the devices, who has access, the link, the requests),
   `POST /api/remote/pair`, `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/link/create` and `/link/remove`,
   `/requests/accept` and `/requests/decline` (`{ requestId }`), `/members/remove` (`{ userId }`) and
@@ -2870,7 +2918,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 - **What stays at the keyboard.** A remote request is refused with `local_only` ("Do this on the machine Shinsa runs
   on.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
   repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
-  takes the origin), and for these routes (`local-only.ts`, 403): any change to remote access, accounts, MCP servers,
+  takes the origin), and for these routes (their `LocalOnlyRoute` annotation, 403): any change to remote access, accounts, MCP servers,
   plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
   programs, opening a task on the machine and restarting the engine; terminals and services are refused even to read.
   Everything else, closing gates included, is you, as on the machine.
@@ -2973,10 +3021,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
   (`Fleet.isEveryMachineOutdated`, `routes/remote/fleet.tsx`). Two tests keep it strict: core's `test/protocol/engine.test.ts` fails on a command in neither the
-  baseline nor `GATED_COMMANDS`, and the engine's `test/http/engine-features.test.ts` builds every `/api` route and
-  fails on one in neither its frozen `BASELINE_ROUTES` nor a feature's routes (`ENGINE_FEATURE_ROUTES`,
-  `src/http/features.ts`), and on a listed route the engine no longer serves. The schedule and Slack routes are built
-  from their route functions there, so a route added to either some other way is not caught.
+  baseline nor `GATED_COMMANDS`, and the engine's `test/http/engine-features.test.ts` reads every `/api` route from `EngineApi`
+  (`listEngineRoutes`) and fails on one in neither its frozen `BASELINE_ROUTES` nor a feature's routes
+  (`ENGINE_FEATURE_ROUTES`, `src/http/features.ts`, read from the routes' `EngineFeatureRoute` annotation), and on a
+  listed route the engine no longer serves. Every route is an endpoint of `EngineApi`, so none escapes it.
 - **Which machine a new task runs on** (core's `remote/placement.ts`, `lib/new-task.ts`): with two machines or more,
   New task shows a Machine picker, Automatic by default (the label says only Automatic, with the arrow-split icon); with one there is none. Every
   machine of the account is in it: one this device was not added to is listed disabled with "Add this device on <name>
@@ -3717,7 +3765,7 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; it is refused from off the machine (`local-only.ts`, writes only). The hosted dashboard on
+  link of this machine; it is refused from off the machine (`LocalOnlyRoute`, writes only). The hosted dashboard on
   app.shinsa.dev shows the section too, below Machines, read from the first machine of the dashboard: its status,
   Connect Slack and the connected workspaces, with a line that Disconnect is on the machine itself (`onMachine`),
   since it is refused remotely.
@@ -3853,7 +3901,7 @@ plainly what protects what.
   the sealed channel, and the channel's keys are what let it in (Remote access, above). Those keys live in
   `remote.json`, which an agent's shell could read like any of your files; what they unlock from off the machine is
   only what an agent on it can already reach.
-- **Other websites.** `http/guard.ts` refuses a Host that is not loopback, `SHINSA_HOST` or `SHINSA_ALLOWED_HOSTS`
+- **Other websites.** `Ingress` and `EngineGate` (`http/ingress/`, `http/gate/`, on `http/guard.ts`) refuse a Host that is not loopback, `SHINSA_HOST` or `SHINSA_ALLOWED_HOSTS`
   (DNS rebinding), an Origin from anywhere else and `Sec-Fetch-Site: cross-site`, an `/api` request other than a GET
   or HEAD that is not `application/json` (so no cross-site form or `text/plain` post is ever "simple"; 415) and a
   WebSocket without an Origin. A request with no Origin header (the command line, `curl`) or a loopback Origin (the web
@@ -5689,7 +5737,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   retries with your words as guidance, reject cancels; a message is a `reply`), only by you, and `account.signed_in` (a
   successful sign-in) answers every open Sign in gate of that account and retries those tasks. `account.removed` releases the tasks bound to a removed account and retries its
   Sign in gates on the pool.
-- **The API** (`accounts/routes.ts`): `GET /api/accounts` → `AccountsSnapshot` (`{ accounts, login, imports, duplicates,
+- **The API** (`EngineApi`'s `accounts` group): `GET /api/accounts` → `AccountsSnapshot` (`{ accounts, login, imports, duplicates,
   providers }`, `packages/core/src/protocol/accounts.ts`), also pushed on every socket as `{ type: 'accounts' }` on connect and
   on every change. `POST /api/accounts/refresh`, `/login` (`{ accountId? }`; none signs in a new account),
   `/login/code` (`{ loginId, code }`), `/login/cancel` (`{ loginId }`; on a finished sign-in it clears it), `/import`
@@ -5716,7 +5764,8 @@ startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
                   ├─ ServeLock     data/serve.lock         scoped
                   ├─ EventLog ───► StoreLayer: SqlClient   events, outbox,
                   │                (sqlite-bun)            receipts, snapshot
-                  ├─ HTTP server
+                  ├─ HTTP server   Bun.serve ──► EngineApi's
+                  │                web handler, scoped
                   ├─ Eunoe's forwarder
                   └─ the work: runs, clocks, effects, …
                 stop() = dispose: finalizers in reverse

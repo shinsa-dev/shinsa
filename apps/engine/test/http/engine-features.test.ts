@@ -1,11 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ENGINE_FEATURES } from '@shinsa/core';
+import { listEngineRoutes, resolveEngineRouteKey } from '@shinsa/core/engine-api/routes';
 import { ENGINE_FEATURE_ROUTES } from '../../src/http/features.ts';
-import { type ApiContext, type ApiRoute, listApiRoutes } from '../../src/http/routes.ts';
-import { createScheduleRoutes } from '../../src/schedules/routes.ts';
-import { Slack } from '../../src/slack/index.ts';
-import { createTerminalRoutes } from '../../src/terminals/index.ts';
-import { createTestConfig } from '../helpers/index.ts';
 
 const BASELINE_ROUTES = [
   'GET /api/accounts',
@@ -107,43 +103,10 @@ const BASELINE_ROUTES = [
 ];
 
 const ROUTE_RULE =
-  'is in neither BASELINE_ROUTES nor a feature: name it in ENGINE_FEATURES (packages/core) and ENGINE_FEATURE_ROUTES (src/http/features.ts), and gate what calls it with useEngineFeature';
-
-function resolveRouteKey(route: Pick<ApiRoute, 'method' | 'pattern'>) {
-  return `${route.method} ${route.pattern.source.slice(1, -1).replaceAll('\\/', '/')}`;
-}
+  "is in neither BASELINE_ROUTES nor a feature: name it in ENGINE_FEATURES (packages/core) and its endpoint's EngineFeatureRoute annotation in EngineApi (packages/core/src/engine-api/api.ts), and gate what calls it with useEngineFeature";
 
 function listRouteKeys() {
-  const engine = {} as never;
-  const stub = {} as never;
-  const context: Required<ApiContext> = {
-    engine,
-    remote: stub,
-    shares: stub,
-    slack: { routes: () => Slack.prototype.routes.call(stub) } as never,
-    config: createTestConfig(),
-    instance: stub,
-    evidence: stub,
-    models: stub,
-    providers: stub,
-    onboarding: stub,
-    launch: stub,
-    accounts: stub,
-    schedules: { routes: () => createScheduleRoutes(engine, stub, stub) } as never,
-    transcripts: stub,
-    extensions: stub,
-    versions: stub,
-    roots: stub,
-    resolveLogin: stub,
-    classify: stub,
-    place: stub,
-    workspaces: stub,
-    restarter: stub,
-    previews: stub,
-    teams: stub,
-    teamFeeds: stub,
-  };
-  return listApiRoutes(context, createTerminalRoutes(engine, { home: '/tmp' } as never)).map(resolveRouteKey);
+  return listEngineRoutes().map((route) => route.key);
 }
 
 const featureRoutes = Object.values(ENGINE_FEATURE_ROUTES).flat();
@@ -170,8 +133,6 @@ describe('engine routes', () => {
   });
 
   test('reads a route as its method and path', () => {
-    expect(resolveRouteKey({ method: 'GET', pattern: /^\/api\/tasks\/([^/]+)\/refs$/ })).toBe(
-      'GET /api/tasks/([^/]+)/refs'
-    );
+    expect(resolveEngineRouteKey('GET', '/api/tasks/:taskRef/refs')).toBe('GET /api/tasks/([^/]+)/refs');
   });
 });

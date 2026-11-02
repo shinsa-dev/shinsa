@@ -202,7 +202,7 @@ export async function restartEngine(io: EngineIo, whenIdle: boolean) {
   if (whenIdle) {
     if (!before) throw new DomainError({ code: 'engine_stopped', message: ENGINE_STOPPED });
     const client = createSurfaceClient(io.base, `cli:${Bun.randomUUIDv7()}`);
-    const answer = await client.post<{ restarting: boolean }>('/api/engine/restart', { when: 'idle' });
+    const answer = await client.api.server.restart({ payload: { when: 'idle' } });
     if (!answer.restarting) {
       writeOutcome(io, 'info', 'dot', 'The engine restarts once no agent is mid-turn.', '');
       return;

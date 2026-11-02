@@ -1,7 +1,7 @@
 import { MINUTE_MS } from '@shinsa/core';
 import type { FieldSpec } from './fields.ts';
-import { findTaskId, readTask, type TaskDetail } from './resolve.ts';
-import { defineCommand, defineRead, encode, readValue, type SurfaceSpec } from './spec.ts';
+import { findTaskId, readTask } from './resolve.ts';
+import { defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 import { TASK_FIELD } from './tasks.ts';
 
 const RUN_FIELD: FieldSpec = {
@@ -22,21 +22,12 @@ const SUGGESTION_FIELD: FieldSpec = {
 
 const SNOOZE_MINUTES = 30;
 
-interface DelegationView {
-  id: string;
-  taskId: string;
-  role: string;
-  outcome: string | null;
-  endedAt: number | null;
-  delegation: { title: string } | null;
-}
-
 export const WORK_SPECS: SurfaceSpec[] = [
-  defineRead<TaskDetail>({
+  defineRead({
     path: ['suggestions', 'list'],
     summary: 'List the tasks agents suggested on a task.',
     fields: [TASK_FIELD],
-    request: (values) => `/api/tasks/${encode(values.task)}`,
+    read: (values, client) => client.api.tasks.read({ params: { taskRef: String(values.task) } }),
     format: ({ suggestions }) =>
       suggestions.length === 0
         ? 'No suggested tasks.'
@@ -122,13 +113,14 @@ export const WORK_SPECS: SurfaceSpec[] = [
     build: (values) => ({ type: 'run.dismiss_silence', runId: readValue(values, 'run') }),
     done: () => 'Dismissed.',
   }),
-  defineRead<{ delegations: DelegationView[] }>({
+  defineRead({
     path: ['delegations', 'list'],
     summary: 'List the delegations: work agents handed to other agents.',
     fields: [
       { name: 'task', kind: 'text', description: 'Only this task (id, start of the id, or exact title).' },
     ],
-    request: (values) => (values.task ? `/api/delegations?task=${encode(values.task)}` : '/api/delegations'),
+    read: (values, client) =>
+      client.api.state.delegations({ query: values.task ? { task: String(values.task) } : {} }),
     format: ({ delegations }) =>
       delegations.length === 0
         ? 'No delegations.'
