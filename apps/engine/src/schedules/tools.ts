@@ -217,19 +217,7 @@ async function removeSchedule(input: Record<string, unknown>, call: ScheduleTool
   return `Deleted “${name ?? scheduleId}”.`;
 }
 
-function resolveFiledRepo(state: ShinsaState, runId: string, name: string | null) {
-  if (name === null) return null;
-  const projectId = findTaskOf(state, runId).projectId;
-  const repos = projectId ? listProjectRepos(state, projectId) : [];
-  const repo = repos.find((candidate) => candidate.name === name);
-  if (repo) return repo.id;
-  const known = repos.map((candidate) => candidate.name);
-  throw new Error(
-    `The project has no repository "${name}". Its repositories: ${known.join(', ') || 'none'}.`
-  );
-}
-
-function resolveScheduleRepo(state: ShinsaState, task: Task, reference: string) {
+function resolveNamedRepo(state: ShinsaState, task: Task, reference: string) {
   const projectRepos = task.projectId ? listProjectRepos(state, task.projectId) : [];
   const candidates = projectRepos.length > 0 ? projectRepos : Object.values(state.repos);
   const repo =
@@ -243,7 +231,7 @@ function resolveScheduleRepo(state: ShinsaState, task: Task, reference: string) 
 function resolveTarget(state: ShinsaState, task: Task, request: ScheduleRequest) {
   const { target, repository } = request;
   if (target?.kind !== 'new_task' || repository === null) return target;
-  return { ...target, repoId: resolveScheduleRepo(state, task, repository) };
+  return { ...target, repoId: resolveNamedRepo(state, task, repository) };
 }
 
 async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall) {
@@ -255,7 +243,7 @@ async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall
     attemptId: call.attemptId,
     ...filing,
     forkOf: forkFrom === null ? null : findForkSource(state, forkFrom),
-    repoId: resolveFiledRepo(state, call.runId, repository),
+    repoId: repository === null ? null : resolveNamedRepo(state, findTaskOf(state, call.runId), repository),
   });
   const linked = events.find((event) => event.type === 'watchdog.report_linked');
   if (linked?.type === 'watchdog.report_linked') {
