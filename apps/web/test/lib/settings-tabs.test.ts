@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   findSettingsTab,
+  listConnectionSections,
   listSettingsTabs,
   resolveSectionRank,
   resolveSectionTab,
@@ -20,6 +21,11 @@ describe('settings tabs', () => {
       'Integrations',
       'Automations',
     ]);
+  });
+
+  it('lists Machines and Teams in place of Remote access, Teams and Slack on the hosted page', () => {
+    expect(listConnectionSections(true)).toEqual(['Machines', 'Teams']);
+    expect(listConnectionSections(false)).toEqual(['Remote access', 'Teams', 'Slack']);
   });
 
   it('finds a tab by id', () => {
