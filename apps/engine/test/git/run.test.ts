@@ -58,4 +58,15 @@ describe('runGitOrThrow', () => {
     await expect(runGitOrThrow(['no-such-command'], path)).rejects.toThrow('git no-such-command failed');
     expect(performance.now() - started).toBeLessThan(1_000);
   });
+
+  test('a run cancelled before it starts, or in a folder that is gone, fails without a retry', async () => {
+    const cancelled = new AbortController();
+    cancelled.abort();
+    await expect(runGitOrThrow(['status'], '/', { signal: cancelled.signal })).rejects.toThrow(
+      'git status failed'
+    );
+    await expect(runGitOrThrow(['status'], '/nonexistent/shinsa/folder')).rejects.toThrow(
+      'git status failed'
+    );
+  });
 });

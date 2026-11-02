@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { sep } from 'node:path';
-import { Context, Duration, Effect, Layer, Schedule } from 'effect';
+import { Context, Duration, Effect, Layer, Option, Schedule } from 'effect';
 import { Shell } from '../../shell/service.ts';
 import {
   LIST_TIMEOUT,
@@ -27,7 +27,7 @@ export class LeftoverProcesses extends Context.Service<
       const runListing = (argv: readonly [string, ...string[]]) =>
         shell
           .run({ argv, cwd: sep, timeout: LIST_TIMEOUT })
-          .pipe(Effect.catchTag('CommandNotFound', () => Effect.succeed(null)));
+          .pipe(Effect.option, Effect.map(Option.getOrNull));
 
       const signal = (pid: number, name: NodeJS.Signals | 0) =>
         Effect.try(() => process.kill(pid, name)).pipe(

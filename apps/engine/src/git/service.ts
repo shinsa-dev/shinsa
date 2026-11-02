@@ -1,6 +1,6 @@
 import { CODE_LIMITS } from '@shinsa/core';
 import { Context, Duration, Effect, Exit, Layer, Ref, Scope, Stream } from 'effect';
-import { constFalse } from 'effect/Function';
+import { constant, constFalse } from 'effect/Function';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { awaitAbort, resolveCancel } from '../shell/abort.ts';
 import { describeFailure } from '../shell/failure.ts';
@@ -177,16 +177,16 @@ export class Git extends Context.Service<
             });
             const output = handle.stdout.pipe(
               Stream.runForEachWhile(take),
-              Effect.orElseSucceed(() => undefined),
+              Effect.ignore,
               Effect.tap(() => (counted.truncated ? stopProcessGroup(handle.pid) : Effect.void))
             );
             const stderr = handle.stderr.pipe(
               Stream.decodeText(),
               Stream.mkString,
-              Effect.orElseSucceed(() => '')
+              Effect.orElseSucceed(constant(''))
             );
             const [, text] = yield* Effect.all([output, stderr], { concurrency: 'unbounded' });
-            const code = yield* Effect.orElseSucceed(handle.exitCode, () => KILLED_EXIT_CODE);
+            const code = yield* Effect.orElseSucceed(handle.exitCode, constant(KILLED_EXIT_CODE));
             const timedOut = (yield* Ref.get(stopped)) === 'timeout';
             const length = Math.min(counted.length, limit);
             const bytes = new Uint8Array(length);

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { decodeText, readGit, splitRecords } from '../../src/git/read.ts';
+import { Git } from '../../src/git/service.ts';
+import { edgeRuntime } from '../../src/runtime/edge.ts';
 import { createGitRepo, writeFiles } from '../helpers/index.ts';
 
 describe('readGit', () => {
@@ -57,5 +59,29 @@ describe('readGit', () => {
     const read = await readGit(['status'], '/nonexistent/shinsa/folder');
     expect(read).toMatchObject({ ok: false, code: 127 });
     expect(read.stderr).not.toBe('');
+  });
+
+  test('hands each chunk to its listener as it comes', async () => {
+    const { path } = await createGitRepo({ remote: false, files: { 'lines.txt': 'one\ntwo\n' } });
+    const chunks: Uint8Array[] = [];
+    const read = await readGit(['cat-file', 'blob', 'HEAD:lines.txt'], path, {
+      onData: (chunk) => chunks.push(chunk),
+    });
+    expect(read.ok).toBe(true);
+    expect(decodeText(Buffer.concat(chunks))).toBe('one\ntwo\n');
+  });
+
+  test('a read whose caller goes away stops its process', async () => {
+    const { path } = await createGitRepo({ remote: false });
+    writeFiles(path, { 'slow.sh': 'sleep 5\n' });
+    const caller = new AbortController();
+    const started = Date.now();
+    const pending = edgeRuntime.runPromise(
+      Git.use((git) => git.read(['-c', `alias.slow=!sh ${join(path, 'slow.sh')}`, 'slow'], path)),
+      { signal: caller.signal }
+    );
+    setTimeout(() => caller.abort(), 50);
+    await expect(pending).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(4000);
   });
 });
