@@ -91,6 +91,8 @@ export const SHUTTING_DOWN = 'Shinsa is shutting down.';
 
 export const IDLE_POLL = Duration.seconds(30);
 
+export const PUMP_FLOOR = Duration.millis(1);
+
 export const TARGET_FIELDS = ['taskId', 'runId', 'gateId', 'repoId', 'projectId'] as const;
 
 export const SNAPSHOT_EVERY = 2_000;

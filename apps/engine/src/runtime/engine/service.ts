@@ -50,6 +50,7 @@ import {
   EngineStopped,
   type EngineOptions,
   IDLE_POLL,
+  PUMP_FLOOR,
   ListenerFailed,
   SHUTTING_DOWN,
   SNAPSHOT_EVERY,
@@ -427,7 +428,11 @@ export class EngineCore extends Context.Service<
           const now = yield* Clock.currentTimeMillis;
           return Option.match(next, {
             onNone: () => IDLE_POLL,
-            onSome: (at) => Duration.min(IDLE_POLL, Duration.millis(Math.max(0, at - now))),
+            onSome: (at) =>
+              Duration.clamp(Duration.millis(Math.max(0, at - now)), {
+                minimum: PUMP_FLOOR,
+                maximum: IDLE_POLL,
+              }),
           });
         });
 

@@ -300,6 +300,29 @@ describe('effect outbox', () => {
     engine.stop();
   });
 
+  test('an effect waiting behind a running one in its lane lets timers fire, and runs once the lane frees', async () => {
+    const log = new EventLog(createDatabasePath());
+    const engine = new Engine(log);
+    const started: number[] = [];
+    engine.onEffect((effect) => {
+      if (effect.kind !== 'briefing.request') return Promise.resolve();
+      started.push(started.length);
+      if (started.length > 1) return Promise.resolve();
+      return new Promise<void>((resolve) => setTimeout(resolve, 50));
+    });
+    engine.start();
+    await engine.dispatch({ type: 'focus.change', projectId: null, until: 1 });
+    await until('the first briefing to start', () => started.length === 1);
+    await engine.dispatch({ type: 'focus.change', projectId: null, until: 2 });
+    await until('the second briefing to run', () => started.length === 2);
+    await engine.settle();
+    expect(log.listEffectStatuses().filter((row) => row.kind === 'briefing.request')).toMatchObject([
+      { status: 'done' },
+      { status: 'done' },
+    ]);
+    engine.stop();
+  });
+
   test('backoff doubles from 100ms and is capped at 30s', () => {
     expect([1, 2, 3, 4].map(resolveBackoff)).toEqual([100, 200, 400, 800]);
     expect(resolveBackoff(MAX_EFFECT_ATTEMPTS)).toBeNull();
