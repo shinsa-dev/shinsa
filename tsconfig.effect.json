@@ -12,6 +12,7 @@
           "effect/http",
           "effect/http-api",
           "effect/sql",
+          "effect/socket",
           "effect/process",
           "effect/PlatformError",
           "@effect/sql-d1",

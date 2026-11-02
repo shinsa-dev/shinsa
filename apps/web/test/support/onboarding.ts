@@ -7,6 +7,7 @@ import type {
   OnboardingStepId,
   RootSuggestions,
 } from '@shinsa/core';
+import { readFetchRequest } from './fetch.ts';
 
 const USER_HOME = '/Users/me';
 
@@ -130,9 +131,7 @@ export function createFlow(
 export function startFakeOnboarding(routes: Record<string, FakeRoute>) {
   const requests: OnboardingRequest[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const path = String(input);
-    const method = init?.method ?? 'GET';
-    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
+    const { path, method, body } = await readFetchRequest(input, init);
     requests.push({ path, method, body });
     const route = routes[`${method} ${path}`];
     if (!route) return new Response('not found', { status: 404 });

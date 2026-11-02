@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { Option, Schema } from 'effect';
 import { isQuietSurface, isSurface, parseClientMessage } from '../../src/protocol/messages.ts';
-import { SURFACES } from '../../src/protocol/schema.ts';
+import { SURFACES, ServerMessage } from '../../src/protocol/schema.ts';
 
 describe('isSurface', () => {
   test('knows the desktop app and a browser page, nothing else', () => {
@@ -67,5 +68,57 @@ describe('parseClientMessage', () => {
       JSON.stringify({ type: 'shutdown' }),
     ])
       expect(parseClientMessage(text)).toBeNull();
+  });
+});
+
+describe('ServerMessage', () => {
+  const read = (message: unknown): unknown =>
+    Option.getOrNull(
+      Schema.decodeUnknownOption(Schema.fromJsonString(ServerMessage))(JSON.stringify(message))
+    );
+
+  test('reads each message the engine pushes', () => {
+    const state = { seq: 4, tasks: {}, runs: {} };
+    expect(read({ type: 'state', state })).toEqual({ type: 'state', state });
+    expect(read({ type: 'ack', id: 'c1', error: null })).toEqual({ type: 'ack', id: 'c1', error: null });
+    expect(read({ type: 'ack', id: 'c1', error: { code: 'refused', message: 'No.' } })).toEqual({
+      type: 'ack',
+      id: 'c1',
+      error: { code: 'refused', message: 'No.' },
+    });
+    expect(read({ type: 'transcript', runId: 'r1', entries: [{ kind: 'text' }], start: 0 })).toEqual({
+      type: 'transcript',
+      runId: 'r1',
+      entries: [{ kind: 'text' }],
+      start: 0,
+    });
+    expect(read({ type: 'surfaces', desktop: true })).toEqual({ type: 'surfaces', desktop: true });
+    const snapshots = {
+      'state.patch': 'patch',
+      'task.detail': 'detail',
+      accounts: 'accounts',
+      terminals: 'terminals',
+      resources: 'resources',
+      remote: 'remote',
+      teams: 'teams',
+    };
+    for (const [type, field] of Object.entries(snapshots)) {
+      expect(read({ type, [field]: { seq: 1 } })).toEqual({ type, [field]: { seq: 1 } });
+    }
+    expect(
+      read({ type: 'engine', engine: { version: '1.2.0', protocol: 3, commands: [], features: [] } })
+    ).toEqual({
+      type: 'engine',
+      engine: { version: '1.2.0', protocol: 3, commands: [], features: [] },
+    });
+  });
+
+  test('refuses a message it does not know or whose payload is not an object', () => {
+    expect(read({ type: 'hello' })).toBeNull();
+    expect(read({ type: 'state', state: 4 })).toBeNull();
+    expect(read({ type: 'state', state: { tasks: {} } })).toBeNull();
+    expect(read({ type: 'ack', id: 'c1' })).toBeNull();
+    expect(read({ type: 'transcript', runId: 'r1', entries: ['line'], start: 0 })).toBeNull();
+    expect(read({ type: 'accounts', accounts: null })).toBeNull();
   });
 });

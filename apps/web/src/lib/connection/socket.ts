@@ -570,7 +570,7 @@ export class Connection implements ShinsaConnection {
       }
       case 'transcript': {
         const chunks = this.#incomingTranscripts.get(message.runId) ?? [];
-        chunks.push({ start: message.start, entries: message.entries });
+        chunks.push({ start: message.start, entries: [...message.entries] });
         this.#incomingTranscripts.set(message.runId, chunks);
         this.#scheduleFlush();
         return;
