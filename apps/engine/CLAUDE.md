@@ -70,16 +70,31 @@ src/
 │                        plugins, services, remote, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
-├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
-│                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json, the port
-│                        defaulting to core's APP_IDENTITY: 7446; package.json's dev and start
-│                        scripts pin 5180 so a checkout never meets the Mac app's engine; every SHINSA_*
-│                        variable is read here, except SHINSA_QUICK and SHINSA_SERVICE (instance/service.ts) and the
-│                        SHINSA_BUILD_* a compiled engine carries (instance/bundle.ts); prepareDataDir)
-├── log/                 One JSON line per entry; describeError and redactSecrets (URL credentials, GitHub and
-│                        Anthropic tokens never reach a log, a failure gate or the event log)
-├── shell/               runCommand: argv only (never a shell string), its own process group, a timeout that kills
-│                        the whole group, and a failed result (not a throw) when the program is missing; login.ts
+├── config/              schema.ts (ServerConfig, MachineConfig and each config.json field's schema, ENGINE_SETTINGS:
+│                        every SHINSA_* setting as a Config with its default), service.ts (EngineConfig: ServerConfig
+│                        read once through the ConfigProvider of provider.ts, the environment first, then config.json,
+│                        then the default; settings.ts reads the port, lists and numbers, a bad value the typed
+│                        SettingInvalid), machine.ts (config.json decoded field by field: a bad field dropped and
+│                        named, unreadable JSON kept aside), paths.ts (where ~/.config/shinsa, config.json and data/
+│                        are), file.ts (ConfigStore: config.json written atomically), index.ts (the edge:
+│                        resolveConfig, resolveServerAddress, prepareDataDir). The port defaults to core's
+│                        APP_IDENTITY: 7446; package.json's dev and start scripts pin 5180 so a checkout never meets
+│                        the Mac app's engine; every SHINSA_* variable is read here, except SHINSA_QUICK and
+│                        SHINSA_SERVICE (instance/service.ts) and the SHINSA_BUILD_* a compiled engine carries
+│                        (instance/bundle.ts). A secret added later is Config.Redacted
+├── log/                 service.ts (JsonLogger: Effect's Logger writing one JSON line per entry, `at`, `level`,
+│                        `message` and the log's annotations, errors on stderr, the whole line through
+│                        redactSecrets), schema.ts (LOG_LEVEL_NAMES: Effect's levels as info, warn, error),
+│                        redact.ts (describeError and redactSecrets: URL credentials, GitHub and Anthropic tokens
+│                        never reach a log, a failure gate or the event log), index.ts (the edge: `log.info`, `warn`,
+│                        `error` run Effect.log* with the fields as annotations through runtime/edge.ts)
+├── shell/               service.ts (Shell on Effect's ChildProcessSpawner: run(request) takes argv only, never a shell
+│                        string, in its own process group; a timeout or an interrupt kills the whole group and still
+│                        answers its output; a missing program is the typed CommandNotFound; stopTree), schema.ts
+│                        (CommandRequest, CommandResult, CommandNotFound, COMMAND_TIMEOUT, QUIET_ENV, the exit
+│                        codes), processes.ts (stopping a group or a process, the ps table's descendants), index.ts
+│                        (the edge: runCommand, runCommandOrThrow, killProcessGroup, killProcessTree, the same
+│                        results as before, CommandNotFound answered as exit code 127); login.ts
 │                        reads the login shell's environment once (`-lic`, then `-lc` when that prints nothing, plus
 │                        `fish -lc` when the interactive shell handed off to fish) and
 │                        merges it into the server's, and
@@ -103,7 +118,8 @@ src/
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
-├── runtime/             Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
+├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger and Shell that code not yet
+│                        moved to Effect calls the foundation through), Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
 │                        effect pump, cancellation, settle, the retry policy an error carries and onEffectRetry),
@@ -369,6 +385,28 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 
 ## Rules
 
+- **The foundation is Effect; the rest calls it through an edge** (`docs/engine.md` → The Effect runtime). Config,
+  the log, the shell, the store, the data folder lock and `startShinsa` are services with layers, written as the
+  `effect` skill says: a folder per module, its shapes, tagged errors and limits in `schema.ts`, one service in
+  `service.ts`. The services the next moves build on:
+
+  | Service | Layer | What it gives |
+  |---|---|---|
+  | `EngineConfig` (`config/service.ts`) | `EngineConfig.layer(env, bundle)` | `ServerConfig`, read once; a bad setting dies with `SettingInvalid`'s message |
+  | `JsonLogger` (`log/service.ts`) | itself | the JSON line logger for `Effect.logInfo` / `logWarning` / `logError` with `Effect.annotateLogs` |
+  | `Shell` (`shell/service.ts`) | `Shell.layer`, needs `BunServices.layer` | `run(request)` → `CommandResult` or `CommandNotFound`; `stopTree(pid)` |
+  | `Events`, `Outbox`, `Receipts`, `Briefings`, `Snapshots`, `LogMigrator`, `CommandLog` (`store/`) | `StoreLayer(path)` | the event log's tables on one `SqlClient`, every row decoded |
+  | `Evidence`, `Attachments` (`store/`) | `Evidence.layer(dir)`, `Attachments.layer(dir)` | the files beside the log |
+  | `ServeLock` (`instance/lock/service.ts`) | `ServeLock.layer(dataDir, holder)`, scoped | `data/serve.lock`, given back when its scope closes; `ServerRunning`, `LockContended` |
+  | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order |
+
+  Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand` and the kill
+  helpers run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
+  `EventLog`, `EvidenceStore` and `AttachmentStore` each own a `ManagedRuntime` over their layer and `runSync` it;
+  `acquireDataDirLock` builds `ServeLock` in a scope of its own. Each edge throws the errors and messages it threw
+  before. A module that moves to Effect yields the service instead and stops calling its edge; once nothing calls an
+  edge it is removed. Never add a new caller of an edge from Effect code, and never a second implementation of a
+  service: a test replaces what the service stands on (SQLite in memory, a temp folder), not the service.
 - **Effects report back as commands.** An effect never writes state; it dispatches `run.end`, `pull_request.record`,
   `effect.fail` and so on. One that gives up becomes a failure gate when its kind has one, never a silent log line
   (`docs/engine.md` → Guarantees).
@@ -455,7 +493,11 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `Workspaces` the supervisor owns (`runs.workspaces`).
 - **The two-hour clock stops while a question is open**, counted per question, so parallel `ask` calls cannot
   double-count the pause or leave a stray timer.
-- **Shutdown order.** `stop()` interrupts every live run first (`RunSupervisor.interruptForShutdown`, which waits at
+- **Shutdown order.** `startShinsa` runs one `ManagedRuntime` over the `Serve` layer (`serve.ts`), and `stop()`
+  disposes it: each start step in `serve/service.ts` adds its release as a finalizer, so closing the scope runs them
+  in reverse of the start, which is this order (`docs/engine.md` → The Effect runtime). A start that fails disposes the
+  runtime too, so the lock, the port and the log are given back; a second `stop()` waits for the first. The work's
+  own stop (`stopWork` in `serve/wiring.ts`) interrupts every live run first (`RunSupervisor.interruptForShutdown`, which waits at
   most `stopMs` for the sessions and marks a run dispatched while stopping instead of starting it), then stops
   the pull request syncs, the clocks and every running effect, and waits for them and for every running effect
   handler (`Engine.settle`) before it closes
@@ -497,8 +539,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Machine config versus events**: a value replaying the log must reproduce is a `settings.change` event, one that
   only describes this machine is `config.json` (`docs/engine.md` → Configuration and data).
 - Never edit the data directory while the server runs.
-- **One server per data directory.** `startShinsa` takes `data/serve.lock` before anything opens the log and gives it
-  back in `stop()` after the log is closed, or at once when the server cannot start listening. Code that starts a
+- **One server per data directory.** `startShinsa` takes `data/serve.lock` as the scoped `ServeLock` layer before
+  anything opens the log, and the scope gives it back after the log is closed, in `stop()` or at once when the server
+  cannot start. Code that starts a
   second engine on a data directory in one process (a test that simulates a restart) stops the first through
   `stop()`, or builds the pieces itself as `test/e2e/harness.ts` does.
 - **Spawned programs inherit the server's environment**, which `shinsa engine` fills in from the login shell before
@@ -539,8 +582,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   once it merges one, so a test can follow a task past the merge (the operation gate shows that commit).
 - **Tests wait on conditions, never on time.** Use `awaitEffect(log, key)` from `test/helpers` (keys come from
   `log.listEffectStatuses()`, or are fixed: `run.execute:<runId>`, `run.cancel:<runId>`), a deferred the fake
-  resolves, `until(condition)` for another process or the file system, or `spyOn(log, …)` for a failure that is only
-  logged. A `Bun.sleep` that decides whether a line runs makes the coverage floor fail on a busy machine.
+  resolves, `until(condition)` for another process or the file system, or `captureLogs()` (`test/helpers/logs.ts`,
+  the JSON lines the logger wrote, `fieldsOf(message)`) for a failure that is only logged: `spyOn(log, …)` sees only
+  calls through the edge, never an `Effect.log*`. A `Bun.sleep` that decides whether a line runs makes the coverage floor fail on a busy machine.
 - **Wait for what the test reads next, never for a stage a task passes through.** A task can go through `building`
   and `checking` in a few milliseconds, and a polled `untilStage` on a loaded machine sees only the stage after them:
   wait for an agent session count (`world.agents.of('plan').length === 2`), a gate, or a stage the task rests in.
@@ -559,4 +603,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `config.pushRetryMs`); the test config sets it to 10 ms.
 - `SHINSA_OVERLOAD_RETRY_MS` sets the first wait before an overloaded turn is tried again (15 s, doubled for each of
   the three retries, `config.overloadRetryMs`); the test config sets it to 10 ms.
+- **Effect services are tested through `runTest`** (`test/harness.ts`): it provides `JsonLogger`, `Shell` on
+  `BunServices` and `StoreLayer(':memory:')`, so a service test runs the real service on SQLite in memory and real
+  processes in a `createTempDir` folder (`test/config/service.test.ts`, `test/shell/service.test.ts`,
+  `test/store/service.test.ts`, `test/instance/lock-service.test.ts`). A scoped layer a test builds is closed by the
+  test (`Effect.scoped`), so no lock, process or file outlives it.
 - `bun run test` fails below 100% line and function coverage (`bunfig.toml`).
