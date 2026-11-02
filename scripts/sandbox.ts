@@ -1404,7 +1404,7 @@ async function main() {
     original: teamTask?.handle ?? null,
   });
   let page = serializeSandboxPage(sections, findRemoteStylesheet());
-  const cloud = createSandboxCloud(new URL(PREVIEW_ZONE).host, USER.id, machines);
+  const cloud = createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, machines);
   Bun.serve<TunnelData>({
     port: PORT,
     hostname: HOST,

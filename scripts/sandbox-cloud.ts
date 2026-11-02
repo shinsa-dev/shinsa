@@ -46,8 +46,13 @@ function seedDatabase(filename: string, ownerId: string, tunnels: ReadonlyArray<
   return sqlite;
 }
 
-export function createSandboxCloud(zone: string, ownerId: string, tunnels: ReadonlyArray<SandboxTunnel>) {
-  const filename = `file:sandbox-cloud-${zone}?mode=memory&cache=shared`;
+export function createSandboxCloud(
+  folder: string,
+  zone: string,
+  ownerId: string,
+  tunnels: ReadonlyArray<SandboxTunnel>
+) {
+  const filename = join(folder, 'cloud.sqlite');
   const sqlite = seedDatabase(filename, ownerId, tunnels);
   const reachTunnel = (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : input);

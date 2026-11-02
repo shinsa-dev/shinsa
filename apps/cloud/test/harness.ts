@@ -1,5 +1,6 @@
 import { Database as Sqlite } from 'bun:sqlite';
-import { readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SqliteClient } from '@effect/sql-sqlite-bun';
 import {
@@ -69,10 +70,16 @@ function resolveEnv(config: CloudConfig) {
   };
 }
 
+const DATABASES = mkdtempSync(join(tmpdir(), 'shinsa-cloud-test-'));
+
+export function removeTestDatabases() {
+  rmSync(DATABASES, { recursive: true, force: true });
+}
+
 let databases = 0;
 
 function createTestDatabase() {
-  const filename = `file:cloud-test-${++databases}?mode=memory&cache=shared`;
+  const filename = join(DATABASES, `cloud-test-${++databases}.sqlite`);
   const sqlite = new Sqlite(filename);
   const migrations = join(import.meta.dirname, '../migrations');
   for (const file of readdirSync(migrations)

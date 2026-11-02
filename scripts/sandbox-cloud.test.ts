@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   PREVIEW_ID_BYTES,
   PREVIEW_KEY_BYTES,
@@ -16,9 +19,18 @@ const KEY = serializeBase64Url(new Uint8Array(PREVIEW_KEY_BYTES).fill(4));
 
 const servers: ReturnType<typeof Bun.serve>[] = [];
 
+const folders: string[] = [];
+
 afterEach(() => {
   for (const server of servers.splice(0)) server.stop(true);
+  for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
+
+function createFolder() {
+  const folder = mkdtempSync(join(tmpdir(), 'shinsa-sandbox-cloud-'));
+  folders.push(folder);
+  return folder;
+}
 
 function serveMachine() {
   const server = Bun.serve({
@@ -38,7 +50,7 @@ describe('the sandbox’s stand-in for app.shinsa.dev', () => {
   test('serves a preview through the Worker’s own preview code to the machine’s local port', async () => {
     const port = serveMachine();
     const connectKey = serializeBase64Url(new Uint8Array(32).fill(5));
-    const cloud = createSandboxCloud(new URL(ZONE).host, '1', [
+    const cloud = createSandboxCloud(createFolder(), new URL(ZONE).host, '1', [
       { id: 'studio', name: 'Studio', port, connectKey },
     ]);
     const origin = resolvePreviewOrigin({ instanceId: 'studio', previewId: PREVIEW_ID }, ZONE);
@@ -57,7 +69,7 @@ describe('the sandbox’s stand-in for app.shinsa.dev', () => {
   });
 
   test('says a machine it does not know is gone, and a tunnel it cannot reach is offline', async () => {
-    const cloud = createSandboxCloud('localhost:5998', '1', [
+    const cloud = createSandboxCloud(createFolder(), 'localhost:5998', '1', [
       { id: 'laptop', name: 'Laptop', port: 1, connectKey: serializeBase64Url(new Uint8Array(32)) },
     ]);
     const unknown = resolvePreviewOrigin(
