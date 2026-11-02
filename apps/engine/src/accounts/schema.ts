@@ -7,8 +7,6 @@ import type {
 } from '@shinsa/core';
 import { Duration, Effect, Schema } from 'effect';
 
-export type Env = Record<string, string | undefined>;
-
 const Text = Schema.Trim.pipe(Schema.decodeTo(Schema.NonEmptyString));
 
 const LenientText = Schema.optionalKey(Text.pipe(Schema.catchDecoding(() => Effect.succeedNone)));
@@ -25,7 +23,7 @@ const LenientRecord = Schema.optionalKey(
   Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.catchDecoding(() => Effect.succeedNone))
 );
 
-export const AccountOrigin = Schema.Literals(['claude', 'login', 'cswap']);
+const AccountOrigin = Schema.Literals(['claude', 'login', 'cswap']);
 
 export const StoredAccountFields = Schema.Struct({
   id: Text,
@@ -160,7 +158,7 @@ export const ExtraUsage = Schema.Struct({
 
 export const UsageBodyText = Schema.fromJsonString(Schema.Unknown);
 
-export const UsageReadReason = Schema.Literals(['expired', 'limited', 'failed']);
+const UsageReadReason = Schema.Literals(['expired', 'limited', 'failed']);
 
 export class UsageReadFailed extends Schema.TaggedError<UsageReadFailed, { readonly brand: unique symbol }>()(
   'UsageReadFailed',
@@ -219,11 +217,11 @@ export type SpentMark = typeof SpentMark.Type;
 
 export const SpentMarksFields = Schema.Struct({ marks: LenientRecord });
 
-export const USAGE_TTL = Duration.minutes(1);
+const USAGE_TTL = Duration.minutes(1);
 
 export const USAGE_TTL_MS = Duration.toMillis(USAGE_TTL);
 
-export const LIMITED_BACKOFF = Duration.minutes(5);
+const LIMITED_BACKOFF = Duration.minutes(5);
 
 export const LIMITED_BACKOFF_MS = Duration.toMillis(LIMITED_BACKOFF);
 
@@ -231,11 +229,11 @@ export const UNKNOWN_RESET = Duration.minutes(15);
 
 export const UNKNOWN_RESET_MS = Duration.toMillis(UNKNOWN_RESET);
 
-export const REFRESH_INTERVAL = Duration.minutes(5);
+const REFRESH_INTERVAL = Duration.minutes(5);
 
 export const REFRESH_INTERVAL_MS = Duration.toMillis(REFRESH_INTERVAL);
 
-export const KEYCHAIN_TIMEOUT = Duration.seconds(5);
+const KEYCHAIN_TIMEOUT = Duration.seconds(5);
 
 export const KEYCHAIN_TIMEOUT_MS = Duration.toMillis(KEYCHAIN_TIMEOUT);
 
@@ -243,29 +241,29 @@ export const KEYCHAIN_COMMAND = '/usr/bin/security';
 
 export const KEYCHAIN_NOT_FOUND = 44;
 
-export const STATUS_TIMEOUT = Duration.seconds(15);
+const STATUS_TIMEOUT = Duration.seconds(15);
 
 export const STATUS_TIMEOUT_MS = Duration.toMillis(STATUS_TIMEOUT);
 
 export const CSWAP_BINARIES = ['cswap', 'claude-swap'];
 
-export const CSWAP_TIMEOUT = Duration.seconds(30);
+const CSWAP_TIMEOUT = Duration.seconds(30);
 
 export const CSWAP_TIMEOUT_MS = Duration.toMillis(CSWAP_TIMEOUT);
 
-export const CSWAP_LIST_TTL = Duration.minutes(10);
+const CSWAP_LIST_TTL = Duration.minutes(10);
 
 export const CSWAP_LIST_TTL_MS = Duration.toMillis(CSWAP_LIST_TTL);
 
-export const LOGIN_EXPIRY_MARGIN = Duration.minutes(1);
+const LOGIN_EXPIRY_MARGIN = Duration.minutes(1);
 
 export const LOGIN_EXPIRY_MARGIN_MS = Duration.toMillis(LOGIN_EXPIRY_MARGIN);
 
-export const LOGIN_MENU_FALLBACK = Duration.seconds(5);
+const LOGIN_MENU_FALLBACK = Duration.seconds(5);
 
-export const LOGIN_URL_TIMEOUT = Duration.seconds(30);
+const LOGIN_URL_TIMEOUT = Duration.seconds(30);
 
-export const LOGIN_WATCHDOG = Duration.minutes(16);
+const LOGIN_WATCHDOG = Duration.minutes(16);
 
 export const LOGIN_TIMERS = {
   menuFallbackMs: Duration.toMillis(LOGIN_MENU_FALLBACK),
@@ -277,11 +275,11 @@ export const LOGIN_COLUMNS = 200;
 
 export const LOGIN_ROWS = 50;
 
-export const USAGE_RESUME_GRACE = Duration.seconds(5);
+const USAGE_RESUME_GRACE = Duration.seconds(5);
 
 export const USAGE_RESUME_GRACE_MS = Duration.toMillis(USAGE_RESUME_GRACE);
 
-export const USAGE_RESUME_RETRY = Duration.minutes(1);
+const USAGE_RESUME_RETRY = Duration.minutes(1);
 
 export const USAGE_RESUME_RETRY_MS = Duration.toMillis(USAGE_RESUME_RETRY);
 

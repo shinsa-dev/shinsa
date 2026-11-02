@@ -36,9 +36,9 @@ import {
   listProjectSuggestions,
   type ProjectSetup,
 } from './projects.ts';
-import type { ProjectRevision } from './revise.ts';
 import { requestRevision } from './revise.ts';
 import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from './roots.ts';
+import type { ProjectRevision } from './schema.ts';
 import { createSetupSimulation } from './simulate.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 import { resolveHelpRequest, resolveWelcomeBody } from './welcome.ts';

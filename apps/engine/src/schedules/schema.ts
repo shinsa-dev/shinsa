@@ -63,7 +63,7 @@ export const WEBHOOK_MAX_BODY_BYTES = 1024 * 1024;
 
 export const WEBHOOK_RATE_LIMIT_PER_MINUTE = 60;
 
-export const RATE_WINDOW = Duration.minutes(1);
+const RATE_WINDOW = Duration.minutes(1);
 
 export const RATE_WINDOW_MS = Duration.toMillis(RATE_WINDOW);
 

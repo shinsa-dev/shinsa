@@ -21,7 +21,6 @@ import { constantTimeEquals, verifyWebhookSignature } from './verify.ts';
 export {
   WEBHOOK_MAX_BODY_BYTES,
   WEBHOOK_RATE_LIMIT_PER_MINUTE,
-  WEBHOOK_ROUTE_PREFIX,
   type WebhookReceiverOptions,
 } from './schema.ts';
 

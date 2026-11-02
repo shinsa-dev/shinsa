@@ -1,6 +1,6 @@
 import type { ProcessRoot, ProcessTracker, ServiceProcess } from './schema.ts';
 
-export type { ProcessKind, ProcessRoot, ProcessTracker, ServiceProcess } from './schema.ts';
+export type { ProcessRoot, ProcessTracker, ServiceProcess } from './schema.ts';
 
 const NO_SERVICES = (): ServiceProcess[] => [];
 

@@ -2,7 +2,7 @@ import type { MachineResources, ResourceUse, ShinsaState } from '@shinsa/core';
 import { Duration } from 'effect';
 import type { CommandResult } from '../shell/schema.ts';
 
-export type ProcessKind = 'agent' | 'services' | 'checks';
+type ProcessKind = 'agent' | 'services' | 'checks';
 
 export interface ProcessRoot {
   taskId: string;
@@ -74,19 +74,19 @@ export interface ResourceMonitorOptions {
   diskIntervalMs?: number;
 }
 
-export const RESOURCE_INTERVAL = Duration.seconds(5);
+const RESOURCE_INTERVAL = Duration.seconds(5);
 
 export const RESOURCE_INTERVAL_MS = Duration.toMillis(RESOURCE_INTERVAL);
 
-export const PRIME_DELAY = Duration.seconds(1);
+const PRIME_DELAY = Duration.seconds(1);
 
 export const PRIME_DELAY_MS = Duration.toMillis(PRIME_DELAY);
 
-export const DISK_INTERVAL = Duration.minutes(10);
+const DISK_INTERVAL = Duration.minutes(10);
 
 export const DISK_INTERVAL_MS = Duration.toMillis(DISK_INTERVAL);
 
-export const RESOURCE_COMMAND_TIMEOUT = Duration.minutes(1);
+const RESOURCE_COMMAND_TIMEOUT = Duration.minutes(1);
 
 export const RESOURCE_COMMAND_TIMEOUT_MS = Duration.toMillis(RESOURCE_COMMAND_TIMEOUT);
 

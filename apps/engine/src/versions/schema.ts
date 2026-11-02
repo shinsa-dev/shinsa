@@ -52,11 +52,11 @@ export const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
 
 export const REGISTRY_TIMEOUT = Duration.seconds(10);
 
-export const LATEST_TTL = Duration.hours(3);
+const LATEST_TTL = Duration.hours(3);
 
 export const LATEST_TTL_MS = Duration.toMillis(LATEST_TTL);
 
-export const UPDATE_TIMEOUT = Duration.minutes(10);
+const UPDATE_TIMEOUT = Duration.minutes(10);
 
 export const UPDATE_TIMEOUT_MS = Duration.toMillis(UPDATE_TIMEOUT);
 

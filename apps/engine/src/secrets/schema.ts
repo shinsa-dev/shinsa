@@ -1,13 +1,13 @@
 import { Duration, Effect, Schema } from 'effect';
 
-export const StoredRef = Schema.Struct({
+const StoredRef = Schema.Struct({
   value: Schema.String,
   taskId: Schema.String,
   savedAt: Schema.Number,
 });
-export type StoredRef = typeof StoredRef.Type;
+type StoredRef = typeof StoredRef.Type;
 
-export const StoredHook = Schema.Struct({
+const StoredHook = Schema.Struct({
   token: Schema.String,
   secret: Schema.optionalKey(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeedNone))),
 });
@@ -57,6 +57,6 @@ export const REF_PREFIX = 'secret-ref:';
 
 export const REF_LENGTH = 32;
 
-export const SECRET_REF_TTL = Duration.days(1);
+const SECRET_REF_TTL = Duration.days(1);
 
 export const SECRET_REF_TTL_MS = Duration.toMillis(SECRET_REF_TTL);

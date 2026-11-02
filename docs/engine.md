@@ -761,7 +761,7 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   six shapes); it travels on `message.route` and is recorded with it, so replay never asks the model. `feedback` keeps
   the behaviour of What a message does (below): it steers, revises, sends back, fixes or follows up. `acknowledge` is
   only recorded. `new_round` queues the next round. `separate_task` becomes a split-off suggestion (below). When the
-  model is off, fails or does not answer within 30 s (`CLASSIFY_TIMEOUT_MS`), the messages are feedback. Messages the
+  model is off, fails or does not answer within 30 s (`CLASSIFY_TIMEOUT` in `triage/schema.ts`), the messages are feedback. Messages the
   task can no longer take by the time they are routed (it was closed meanwhile) are dropped with core's reason
   (`message.drop`), and a route that breaks for any other reason is dropped too ("Shinsa could not deliver it. Send
   it again."), so a message never waits in an inbox for ever. Messages still in an inbox at shutdown are routed on
@@ -3955,9 +3955,10 @@ their own UUIDv7.
 
 ## The briefing
 
-The guide at the top of Home. `Briefings` (`apps/engine/src/briefing`) rewrites it 4 s after
-the last command that asks for one (a gate opening or closing, a task finishing), so a burst of
-changes costs one call.
+The guide at the top of Home. `Briefings` (`apps/engine/src/briefing`) rewrites it 4 s
+(`BRIEFING_DEBOUNCE`) after the last command that asks for one (a gate opening or closing, a task
+finishing), so a burst of changes costs one call: each request interrupts the fiber still waiting
+(`briefing/debounce.ts`), and stopping cancels it.
 
 - **Shape.** `Briefing` in `packages/core/src/briefing/types.ts`: `now` (a task id and why to take it
   first), `next` (up to three more, each with a why), `running` (one line on what agents are
@@ -5836,6 +5837,7 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     │                  (never in the log; Teams → Offline teammates)
     ├── bin/           The pinned `cloudflared-<version>` remote access runs
     ├── onboarding.json  The run of setup so far, so a reload or a restart picks it up on the same step
+    │                  (`SetupDraft` in `onboarding/schema.ts`; a file it cannot read or did not write starts setup again)
     ├── serve.lock     Which server holds this data directory: pid, port, URL, version, commit, install path, start
     │                  and boot time (One server per data directory, below)
     └── engine.log     The bundled engine's output under launchd (The engine in the background, below)

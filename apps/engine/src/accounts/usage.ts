@@ -10,9 +10,8 @@ export {
   parseResetTime,
   parseUsageWindows,
   resolveClaudeFastMode,
-  resolveWindowId,
 } from './usage/answer.ts';
-export { KEYED_WINDOWS, type KeyedWindow, PROVIDER_WINDOWS, USAGE_URL, type UsageRead } from './schema.ts';
+export { type KeyedWindow, PROVIDER_WINDOWS, USAGE_URL, type UsageRead } from './schema.ts';
 
 export type UsageRequester = (url: string, init: RequestInit) => Promise<Response>;
 

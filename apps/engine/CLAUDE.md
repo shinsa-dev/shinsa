@@ -397,7 +397,10 @@ src/
 │                        needs it, and codex and its sign-in as optional, each with the command that fixes it;
 │                        install.ts: that command run in a terminal of your own), the setup steps: the fixed list, what each shows and saves
 │                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
-│                        back and its saved state (flow.ts), the accounts it lists (accounts.ts)
+│                        back (flow.ts), its saved state (drafts.ts: onboarding.json on JsonFile, decoded by
+│                        SetupDraft in schema.ts, a file it cannot read or did not write starting setup again), the
+│                        accounts it lists (accounts.ts); schema.ts also holds the revision of the suggested projects,
+│                        the prerequisite shapes and PREREQUISITE_TIMEOUT
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's
 │                        folders, registered or not), POST /api/projects/<id>/repos and /folders, and
 │                        createProjectChanges, which those routes and the management client share; folders.ts
@@ -417,13 +420,15 @@ src/
 │                        everything waiting in a task's inbox is classified together against the task as it is
 │                        then and routed as one (message.route with messageIds; not classified at a gate that
 │                        takes words, needsMessageKind), a classifier that does not
-│                        answer within 30 s routes it unclassified, and a route that breaks is dropped with a
+│                        answer within CLASSIFY_TIMEOUT (30 s, schema.ts; classify.ts runs the call with
+│                        Effect.timeoutOrElse, ClassifierFailed) routes it unclassified, and a route that breaks is dropped with a
 │                        reason, so no message waits for ever; the receipt is taken over the
 │                        command as sent; createCommandRouter, the same route for an agent's management commands,
 │                        which classifies before it dispatches; a new round or a kept suggestion that names no kind
 │                        of task is shaped first (resolveRoundShape); resolveRoundRepository finds the repository a
 │                        task with none needs once its work needs one (the setup check calls it)
-├── briefing/            The Home guide, debounced, written beside the log through Engine.writeBriefing
+├── briefing/            The Home guide, written beside the log through Engine.writeBriefing; debounce.ts waits
+│                        BRIEFING_DEBOUNCE (schema.ts) on a fiber that each new request interrupts and stop() cancels
 ├── terminals/           Your terminals (docs/engine.md → Terminals): pty/ (TerminalPty: your login shell in Bun's PTY as
 │                        a scoped resource, hung up and killed after HANG_UP_GRACE; the program in front of a shell
 │                        through Shell; a free port on PORT_RETRY, PortUnavailable), pty.ts its edge (the shell, its

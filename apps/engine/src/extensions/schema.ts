@@ -10,7 +10,7 @@ export class McpServerFailed extends Schema.TaggedError<McpServerFailed, { reado
   { message: Schema.String, unauthorized: Schema.Boolean }
 ) {}
 
-export const McpTransport = Schema.Literals(['stdio', 'http', 'sse']);
+const McpTransport = Schema.Literals(['stdio', 'http', 'sse']);
 
 const TextRecord = Schema.Record(
   Schema.String,
@@ -96,7 +96,7 @@ const NullOrNumber = Schema.NullOr(Schema.Number).pipe(
 
 export const McpToolInfo = Schema.Struct({ name: Schema.String, description: NullOrText });
 
-export const StoredStatus = Schema.Struct({
+const StoredStatus = Schema.Struct({
   state: Schema.Literals(['connected', 'needs_sign_in', 'failing', 'unchecked']),
   error: NullOrText,
   checkedAt: NullOrNumber,
@@ -168,7 +168,7 @@ export interface ExtensionsSettings {
 }
 
 const FileMark = Schema.Struct({ size: Schema.Number, mtimeMs: Schema.Number, offset: Schema.Number });
-export type FileMark = typeof FileMark.Type;
+type FileMark = typeof FileMark.Type;
 
 export const UsageFileFields = Schema.Struct({
   files: Schema.optionalKey(
@@ -277,7 +277,7 @@ const ClaudeProject = Schema.Struct({
   disabledMcpServers: LenientTexts,
   disabledMcpjsonServers: LenientTexts,
 });
-export type ClaudeProject = typeof ClaudeProject.Type;
+type ClaudeProject = typeof ClaudeProject.Type;
 
 export const ClaudeConfig = Schema.Struct({
   mcpServers: Schema.optionalKey(Schema.Unknown),
@@ -380,7 +380,7 @@ export interface PendingSignIn {
 
 export const MCP_CHECK_TIMEOUT = Duration.seconds(15);
 
-export const USAGE_MAX_AGE = Duration.minutes(10);
+const USAGE_MAX_AGE = Duration.minutes(10);
 
 export const USAGE_MAX_AGE_MS = Duration.toMillis(USAGE_MAX_AGE);
 
