@@ -126,7 +126,7 @@ describe('remote access on this machine', () => {
           name: 'iPhone',
           enrolledAt: 1,
           lastSeenAt: null,
-          userId: null,
+          userId: '1',
         },
       ],
     });

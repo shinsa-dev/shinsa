@@ -41,14 +41,14 @@ export function createSampleRemote(now: number) {
         name: 'iPhone',
         enrolledAt: now - 72 * HOUR_MS,
         lastSeenAt: now - 2 * HOUR_MS,
-        userId: null,
+        userId: SAMPLE_OWNER.id,
       },
       {
         publicKey: 'dev-2',
         name: 'Work laptop',
         enrolledAt: now - 5 * HOUR_MS,
         lastSeenAt: null,
-        userId: null,
+        userId: SAMPLE_OWNER.id,
       },
       {
         publicKey: 'dev-3',

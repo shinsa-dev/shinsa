@@ -1130,18 +1130,10 @@ describe('links, access requests and members', () => {
     expect(await (await opening).next()).toEqual({ t: 'ready' });
   });
 
-  test('a device opens only for the account that added it, and older devices only for the owner', async () => {
+  test('a device opens only for the account that added it', async () => {
     const { remote, port } = await start();
     const machine = await remote.store.resolveMachineKey();
     const kaiDevice = await addDevice(remote, KAI.id);
-    const legacyDevice = await createKeyPair();
-    remote.store.upsertDevice({
-      publicKey: await serializeDeviceKey(legacyDevice),
-      name: 'Phone',
-      enrolledAt: 1,
-      lastSeenAt: null,
-      userId: null,
-    });
     await expect(
       openChannel(remote.appOrigin, port, '', machine.publicKey, { device: kaiDevice })
     ).rejects.toThrow('not added');
@@ -1150,11 +1142,6 @@ describe('links, access requests and members', () => {
       userId: KAI.id,
     });
     expect(await kai.next()).toEqual({ t: 'ready' });
-    await expect(
-      openChannel(remote.appOrigin, port, '', machine.publicKey, { device: legacyDevice, userId: KAI.id })
-    ).rejects.toThrow('not added');
-    const legacy = await openChannel(remote.appOrigin, port, '', machine.publicKey, { device: legacyDevice });
-    expect(await legacy.next()).toEqual({ t: 'ready' });
   });
 
   test('a heartbeat that no longer lists a member forgets their devices and closes their sessions', async () => {

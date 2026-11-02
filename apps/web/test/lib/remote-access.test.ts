@@ -62,7 +62,7 @@ describe('remote access words', () => {
       name: 'iPhone',
       enrolledAt: NOW - 3_600_000,
       lastSeenAt: null,
-      userId: null,
+      userId: '1',
     };
     expect(describeDeviceSeen(device, NOW)).toStartWith('Added ');
     expect(describeDeviceSeen({ ...device, lastSeenAt: NOW - 60_000 }, NOW)).toStartWith('Last used ');
@@ -106,7 +106,7 @@ describe('remote access words', () => {
       userId: '7',
     };
     expect(describeDeviceDetail(device, access, NOW)).toMatch(/^Added .* · Added by kai$/);
-    expect(describeDeviceDetail({ ...device, userId: null }, access, NOW)).not.toContain('Added by');
+    expect(describeDeviceDetail({ ...device, userId: '1' }, access, NOW)).not.toContain('Added by');
     expect(describeMemberSince(access.members[0] ?? { user: kai, addedAt: 0 }, NOW)).toStartWith('Joined ');
   });
 

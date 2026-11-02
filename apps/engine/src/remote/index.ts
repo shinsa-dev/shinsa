@@ -448,7 +448,7 @@ export class Remote {
     this.#updateGuests((current) => current.filter((guest) => guest.user.id !== guestId));
   }
 
-  #selectLogin(userId: string | null) {
+  #selectLogin(userId: string) {
     const { access, guests } = this.store.file;
     const users = [access?.owner, ...(access?.members ?? []).map((member) => member.user)];
     const known = [...users, ...guests.map((guest) => guest.user)].find((user) => user?.id === userId);
@@ -662,10 +662,7 @@ export class Remote {
   }
 
   #admits(device: string, userId: string) {
-    const enrolled = this.store.selectDevice(device);
-    if (!enrolled) return false;
-    const owner = this.store.file.access?.owner.id ?? userId;
-    return (enrolled.userId ?? owner) === userId;
+    return this.store.selectDevice(device)?.userId === userId;
   }
 
   publish() {

@@ -39,7 +39,7 @@ function renderGroup(snapshot: RemoteSnapshot | null, failure: string | null = n
 }
 
 function createDevice(publicKey: string) {
-  return { publicKey, name: 'iPhone', enrolledAt: Date.now(), lastSeenAt: null, userId: null };
+  return { publicKey, name: 'iPhone', enrolledAt: Date.now(), lastSeenAt: null, userId: '1' };
 }
 
 const KAI = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
@@ -123,7 +123,7 @@ describe('Settings → Remote access', () => {
             name: 'iPhone',
             enrolledAt: Date.now() - 1e6,
             lastSeenAt: null,
-            userId: null,
+            userId: '1',
           },
         ],
       })

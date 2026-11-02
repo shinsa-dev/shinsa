@@ -1914,7 +1914,7 @@ checks it ran.
   - **One live rate.** Every run on a window is charged at the window's current rate, worked out from every
     observation in the log (the age weights count back from the newest one), so early tasks are not left at the low
     first estimate. A task's number can move a little as the rate improves, and the same log always gives the same
-    numbers. Tasks from before any readings (old logs, below) get a share too once enough new ones ran on the same
+    numbers. Runs from before an account's first reading get a share too once enough new ones ran on the same
     account.
   - Runs at once on one account never count the same movement twice: each is charged its own cost, so the shares
     of a stretch add up to the rate times what was spent in it. The movement includes anything else on the account,
@@ -2797,8 +2797,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   or the login that asked). Accepting is the one change to remote access a device away from the machine may make:
   the machine's own trust is unchanged, since it alone decides which device keys it takes. `forget-device <key>`
   revokes a device. A device is a browser or a phone, a way in that runs nothing; a machine runs the engine. Each
-  device opens only under the token of the account that added it; a device from before members has none and counts
-  as the owner's.
+  device opens only under the token of the account that added it, and a stored device with no account is dropped
+  when `remote.json` is read.
 - **Members** (`Remote.removeMember`): an account becomes a member when you accept its first request. Every
   heartbeat's answer (`HeartbeatResponse`: the owner and the members as `RemoteUser`s) is kept as `access`
   (`#recordAccess`): every device whose account is no longer listed is forgotten and its channels close, so a member
@@ -5207,12 +5207,11 @@ event because replay must reproduce it):
 Codex compacts its own threads under every setting but `off`; eunoe and its folds sit in front of the Anthropic API
 only.
 
-*Why the library in process.* Since 1.3, `@chroxify/eunoe` exports its core: `rewrite`, `foldThread`,
+*Why the library in process.* `@chroxify/eunoe` exports its core: `rewrite`, `foldThread`,
 `createForwarder` and a `ThreadStore` interface, with no disk, environment or global state of its own. Shinsa
 depends on the package (pinned, `apps/engine/package.json`) and serves its forwarder from the engine process itself,
 so there is no second process, port file, health probe or install for anyone to run, and taking a new eunoe is a
-version bump. Before 1.3 the package exported no API, so Shinsa ran its CLI as a proxy process it owned; that is
-gone. `shinsa eunoe …` still runs eunoe's CLI from the bundle, for the agents' own `eunoe load` and `eunoe peek`.
+version bump. `shinsa eunoe …` runs eunoe's CLI from the bundle, for the agents' own `eunoe load` and `eunoe peek`.
 
 *The forwarder* (`apps/engine/src/eunoe/server.ts`). `EunoeServer` starts one `Bun.serve` on `127.0.0.1` and a free
 port, lazily, the first time a Claude session needs it: never on the engine's own port, which can be reachable from
@@ -5269,9 +5268,9 @@ compacts this run"). Once Shinsa is stopping, nothing starts it again.
 
 *Stuck threads.* When even a cut cannot bring a thread under eunoe's target (a single turn too big for the window),
 eunoe reports it `stuck` and holds the cleared set still, so the cache keeps hitting. Only a request that still
-does not fit (`fit: "over"`, `isStuck`) counts. Since 1.3.1 eunoe notes `stuck` only while a request stays over
-`compactAt × window` and keeps the prefix still meanwhile; the `fit` check also guards against a `stuck` note under
-the limit, which 1.3.0 wrote. The forwarder tells the session, which ends the turn as `context_window_full` (code `eunoe_stuck`) with an error line in the chat; core's
+does not fit (`fit: "over"`, `isStuck`) counts: eunoe notes `stuck` only while a request stays over
+`compactAt × window` and keeps the prefix still meanwhile, and the `fit` check keeps a `stuck` note under the limit
+from ending a turn. The forwarder tells the session, which ends the turn as `context_window_full` (code `eunoe_stuck`) with an error line in the chat; core's
 recovery for that class starts a fresh session with the handoff instead of resuming the stuck one.
 
 *Notices.* eunoe compacts on the wire, so Claude Code reports nothing; the forwarder matches each request's log line
