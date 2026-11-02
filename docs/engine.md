@@ -2588,8 +2588,11 @@ running when the window closes or the app quits, and a page that comes back find
 - **Your terminals are yours.** No agent tool reaches a terminal, but for its own task's service runs (Services →
   Agents run their own task's services, below); every write route needs a browser's Origin
   (`browser_only` otherwise, so `curl` and the command line cannot type into one); `shinsa terminals` is human-only;
-  and `agents/policy.ts` refuses a shell command that names `/api/terminals` or `/ws/terminals`. As everywhere in Who
-  can change Shinsa, this keeps an agent from doing it by accident, not one set on it.
+  and `agents/policy.ts` refuses a shell command that calls `/api/terminals`, `/ws/terminals` or the services routes
+  with an HTTP or socket client (`curl`, `wget`, `xh`, `http`, `websocat`, `wscat`) in the same segment of the
+  command line. A route that only appears in a file's text, a heredoc body that writes source, a path or a search
+  pattern is not a call, so editing or searching the terminal code is allowed. As everywhere in Who can change Shinsa,
+  this keeps an agent from doing it by accident, not one set on it.
 - **An agent that needs you to run something** asks (`ask`) with the command in a ```` ```bash run ```` block in
   its context, as the tool's description says; the house rules' writing rules (`WRITING_RULES` in `prompts/rules.ts`)
   teach every role the `run` mark, and a plain ```` ```bash ```` block is an example with Copy alone. The
