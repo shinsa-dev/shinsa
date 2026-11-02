@@ -49,6 +49,25 @@ describe('listDuplicateChoices', () => {
     ]);
   });
 
+  it('leaves out tasks in another repository, and keeps tasks with none', () => {
+    const task = createTask({ id: 't', repoId: 'skills' });
+    const skills = createTask({ id: 'skills', repoId: 'skills' });
+    const docs = createTask({ id: 'docs', repoId: 'docs' });
+    const loose = createTask({ id: 'loose', repoId: null });
+    const state = createShinsaState({ tasks: [task, skills, docs, loose] });
+    expect(
+      listDuplicateChoices(state, task)
+        .map((choice) => choice.id)
+        .sort()
+    ).toEqual(['loose', 'skills']);
+    const unbound = createTask({ id: 'u', repoId: null });
+    expect(
+      listDuplicateChoices(createShinsaState({ tasks: [unbound, skills, docs] }), unbound)
+        .map((choice) => choice.id)
+        .sort()
+    ).toEqual(['docs', 'skills']);
+  });
+
   it('matches a choice by its handle, title or id', () => {
     expect(resolveDuplicateChoiceValue(createTask({ id: 'a', handle: 'SW-3', title: 'Add dark mode' }))).toBe(
       'SW-3 Add dark mode a'
