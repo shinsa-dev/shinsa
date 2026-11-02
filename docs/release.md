@@ -51,7 +51,8 @@ GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `m
    or Canary pill (`apps/desktop/CLAUDE.md` → The disk image).
 4. Checks that the app (`CFBundleShortVersionString`) and the engine inside it (`shinsa version --json`) both say the
    release's version, prerelease suffix included, that the bundle id is `studio.overclock.shinsa` on every channel, that the app has `Contents/Resources/app-update.yml`, and verifies the signature (`codesign --verify --deep --strict`;
-   `spctl` and `stapler validate` too when signed).
+   when signed, `bun scripts/release-verify.ts <app>` also runs `spctl --assess` and `xcrun stapler validate`, each up to
+   five attempts like the staple, since both ask Apple's ticket service and a lost connection used to fail the release).
 5. Packs the signed app's engine folder as `shinsa-darwin-arm64.tar.gz` with its `.sha256` (`scripts/release-engine.ts`),
    writes the update files for the channels (below) and publishes the release with GitHub's generated notes under a
    one-line channel note: `Shinsa-mac-arm64.dmg`, `.zip`, their `.blockmap`s, the update files and the Mac engine
@@ -324,9 +325,22 @@ Apple's services drop connections now and then and electron-builder's notarize n
 used to fail the whole release. The script zips the app with `ditto`, submits it with
 `xcrun notarytool submit --wait --output-format json` (three attempts, 30 s and 60 s apart) and staples the ticket
 with `xcrun stapler staple` (five attempts, 15 s, 30 s, 60 s and 120 s apart), writing a warning annotation for each
-retry. Apple rejecting the app is not retried: the step fails at once with Apple's log. The retry and the parsing are
+retry. The check after packaging (`scripts/release-verify.ts`) retries `spctl --assess` and `xcrun stapler validate`
+on the same delays, with the same warnings. Apple rejecting the app is not retried: the step fails at once with Apple's log. The retry and the parsing are
 `scripts/release-retry.ts`, tested at 100%. If a release still fails there, Re-run failed jobs on the run builds it
 again from the start.
+
+## Watching main
+
+`.github/workflows/watch.yml` (Watch main) runs when a Test or Release run on `main` finishes, and only for one that
+failed, timed out or could not start, came from a push, a dispatch or another workflow (never a pull request, since a
+fork's branch can be named `main` too) and ran in this repository. It sends that run's `workflow_run` event, as GitHub
+would send a webhook, to a Shinsa webhook schedule that opens a task to find the cause and fix it: signed with
+HMAC-SHA256 in `x-hub-signature-256`, with `x-github-delivery` set to the run's id and attempt, so a resend opens
+nothing and a re-run that fails again opens a new task. GitHub's own repository webhook sends every run of every
+workflow on every branch, three times each, so it is not used. Set two repository secrets: `SHINSA_WATCH_URL`, the
+schedule's URL (Settings → Schedules in Shinsa), and `SHINSA_WATCH_SECRET`, its signing secret. Without them the
+workflow passes with a warning.
 
 ## The first releases
 

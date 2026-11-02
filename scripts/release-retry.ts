@@ -56,6 +56,14 @@ export function describeRetryFailure(failure: RetryFailure) {
   return `${failure.label} failed on attempt ${failure.attempt} of ${failure.attempts} (${describeError(failure.error)}). Trying again in ${seconds}s.`;
 }
 
+export function serializeRetryWarning(
+  failure: RetryFailure,
+  env: Readonly<Record<string, string | undefined>>
+) {
+  const line = describeRetryFailure(failure);
+  return env.GITHUB_ACTIONS ? `::warning title=${failure.label}::${line}\n` : `${line}\n`;
+}
+
 export function resolveNotaryCredentials(
   env: Readonly<Record<string, string | undefined>>
 ): NotaryCredentials {
