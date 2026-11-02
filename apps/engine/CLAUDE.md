@@ -154,13 +154,19 @@ src/
 │                        next check)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
-│   │                    config/paths.ts, removed by the scratch.remove effect once the task settles), the live state of a run (active.ts), resume or
+│   │                    config/paths.ts, removed by the scratch.remove effect once the task settles; supervisor/:
+│   │                    makeTaskScopes, one scope per task with a child scope per attempt holding its session, closed
+│   │                    when the attempt ends and every task's at shutdown; TaskScopes in index.ts is its edge), the
+│   │                    live state of a run (active.ts), resume or
 │   │                    hand over per turn, the house rules only to a session without them and the round's
 │   │                    whole brief to an agent session that may not hold the round (turns.ts), the
-│   │                    tool calls (tool-calls.ts), questions and their waiters (questions.ts), idle release
-│   │                    (idle.ts), delegated reports in and out of a turn (deliveries.ts, delegations.ts), the
-│   │                    account seam: leases and rejections (accounts.ts), idle
-│   │                    compaction (compaction.ts), quiet runs (silence.ts, the edge over
+│   │                    tool calls (tool-calls.ts), questions and their waiters (questions.ts; questions/: each
+│   │                    reply a Deferred, ReplyWaiters its edge), idle release (idle.ts, the edge over idle/:
+│   │                    makeIdleRelease, one timer fiber per waiting run in a FiberMap), delegated reports in and
+│   │                    out of a turn (deliveries.ts, delegations.ts), the account seam: leases and rejections
+│   │                    (accounts.ts), idle compaction (compaction.ts, the edge over compaction/: makeIdleCompaction,
+│   │                    the wait and the running compaction as fibers per task, the window in window.ts; stopping
+│   │                    one aborts it and waits for it), quiet runs (silence.ts, the edge over
 │   │                    silence/: makeSilenceWatch, the check a fiber on its interval), hand-over checks and evidence
 │   │                    (handover.ts), RunClock (clock.ts, the edge over clock/:
 │   │                    makeRunClock, a countdown fiber paused by interruption; ClockTimers become an Effect

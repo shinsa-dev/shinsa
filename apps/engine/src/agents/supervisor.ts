@@ -72,6 +72,7 @@ import {
 } from './providers/index.ts';
 import { Questions } from './questions.ts';
 import type { TaskServiceRunner } from './services.ts';
+import { TaskScopes } from './supervisor/index.ts';
 import { type ScheduleToolHandler, ToolCalls } from './tool-calls.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
@@ -199,6 +200,7 @@ export class RunSupervisor {
   readonly #manages: boolean;
   readonly #trackProcess: ProcessTracker | null;
   readonly #held = new Set<string>();
+  readonly #scopes = new TaskScopes();
   readonly workspaces: Workspaces;
   #shuttingDown = false;
   #holding: (() => void) | null = null;
@@ -686,16 +688,18 @@ export class RunSupervisor {
       },
       storeImage: (data, mediaType) => this.#storeImage(data, mediaType),
     });
+    const scoped = this.#scopes.acquire(run.taskId, session);
     active.session = session;
     loader?.attach(session);
-    await this.#steerWaiting(run.id, active, session);
     try {
-      const result = await session.done;
+      await this.#steerWaiting(run.id, active, session);
+      const result = await scoped.done;
       await this.#meterAttempt(turn, attemptId, sessionId, result, weeklyBefore);
       if (!account || !result.failure) return { attemptId, result };
       return { attemptId, result: { ...result, failure: { ...result.failure, account } } };
     } finally {
       active.session = null;
+      await scoped.close();
       for (const release of releases) release();
       await loader?.close();
     }
@@ -934,6 +938,7 @@ export class RunSupervisor {
     for (const [runId, active] of live) await this.#markInterrupted(runId, active.attemptId);
     for (const [, active] of live) stopActiveRun(active);
     await this.#stopWithin(live, Promise.allSettled([compacting, ...live.map(([, active]) => active.done)]));
+    await settleWithin(this.#scopes.closeAll(), this.#stopMs);
   }
 
   async #interruptHeld() {
@@ -1017,7 +1022,9 @@ export class RunSupervisor {
           this.#transcripts.record(runId, entry);
       },
     });
-    signal.addEventListener('abort', () => this.#cancelCompaction(runId, session), { once: true });
+    const cancel = () => this.#cancelCompaction(runId, session);
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) cancel();
     const result = await session.done;
     if (result.usage) await this.#meter(runId, sessionId, result.usage, `${id}:run.meter`);
   }

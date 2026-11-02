@@ -17,12 +17,9 @@ import type { ActiveRun } from './active.ts';
 import { assertProtocol } from './handover.ts';
 import { IdleRelease, type IdleReleaseOptions } from './idle.ts';
 import type { AgentSession } from './providers/index.ts';
+import { ReplyWaiters } from './questions/index.ts';
+import { type QuestionReply, WITHDRAWN } from './questions/schema.ts';
 import type { Transcripts } from './transcripts/index.ts';
-
-type QuestionReply =
-  | { kind: 'answered'; text: string }
-  | { kind: 'superseded'; text: string }
-  | { kind: 'withdrawn' };
 
 interface QuestionsOptions {
   engine: Engine;
@@ -32,11 +29,7 @@ interface QuestionsOptions {
   idle?: IdleReleaseOptions;
 }
 
-type Waiter = (reply: QuestionReply) => void;
-
 type QuestionDispatch = (command: ShinsaCommand) => Promise<unknown>;
-
-const WITHDRAWN: QuestionReply = { kind: 'withdrawn' };
 
 function resolveGateReply(gate: Gate): QuestionReply {
   if (gate.status === 'answered') return { kind: 'answered', text: gate.response ?? '' };
@@ -69,7 +62,7 @@ function describeSecretReply(reply: QuestionReply, gate: Gate | undefined, label
 
 export class Questions {
   readonly #options: QuestionsOptions;
-  readonly #waiters = new Map<string, Waiter>();
+  readonly #waiters = new ReplyWaiters();
   readonly #idle: IdleRelease;
 
   constructor(options: QuestionsOptions) {
@@ -163,23 +156,11 @@ export class Questions {
   }
 
   #settle(id: string, reply: QuestionReply) {
-    const waiter = this.#waiters.get(id);
-    if (!waiter) return false;
-    waiter(reply);
-    return true;
+    return this.#waiters.settle(id, reply);
   }
 
   #await(id: string, signal: AbortSignal) {
-    return new Promise<QuestionReply>((resolve) => {
-      const settle = (reply: QuestionReply) => {
-        this.#waiters.delete(id);
-        signal.removeEventListener('abort', withdraw);
-        resolve(reply);
-      };
-      const withdraw = () => settle(WITHDRAWN);
-      this.#waiters.set(id, settle);
-      signal.addEventListener('abort', withdraw, { once: true });
-    });
+    return this.#waiters.open(id, signal);
   }
 
   async #open(
@@ -218,24 +199,14 @@ export class Questions {
     if (!active || active.session !== session || active.stopping) return;
     active.released = true;
     active.stopping = true;
-    const waiters = this.#takeWaiters(runId);
+    const gates = Object.values(this.#options.engine.state.gates).filter((gate) => gate.runId === runId);
+    const withdraw = this.#waiters.take(gates.map((gate) => gate.id));
     log.info('[Runs] Released an idle session; the answer resumes it', { runId });
     try {
       await session.cancel();
     } catch (error) {
       log.warn('[Runs] Could not stop an idle session', { runId, error: describeError(error) });
     }
-    for (const waiter of waiters) waiter(WITHDRAWN);
-  }
-
-  #takeWaiters(runId: string) {
-    const waiters: Waiter[] = [];
-    for (const gate of Object.values(this.#options.engine.state.gates)) {
-      const waiter = gate.runId === runId ? this.#waiters.get(gate.id) : undefined;
-      if (!waiter) continue;
-      this.#waiters.delete(gate.id);
-      waiters.push(waiter);
-    }
-    return waiters;
+    withdraw();
   }
 }
