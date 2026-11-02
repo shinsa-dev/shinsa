@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect } from 'effect';
 import { CodexClient, CodexRequestError } from '../../../../src/agents/providers/codex/client.ts';
+import { makeCodexClient } from '../../../../src/agents/providers/codex/client/service.ts';
 import { createTempDir, until } from '../../../helpers/index.ts';
 
 function createServer() {
@@ -68,7 +70,7 @@ describe('the app server client', () => {
     expect(await client.request('echo', { value: 1 })).toEqual({ value: 1 });
     expect(await client.request('env', {})).toEqual({ headless: 'true' });
     await expect(client.request('refuse', {})).rejects.toThrow(
-      new CodexRequestError('refuse', 'Codex refused the request.')
+      new CodexRequestError({ method: 'refuse', message: 'Codex refused the request.' })
     );
     await until('the unanswered request to be refused', () => server.received().includes('"id":"s1"'));
     expect(server.received()).toContain('No handler for this request.');
@@ -105,5 +107,53 @@ describe('the app server client', () => {
     await expect(client.request('echo', {})).rejects.toThrow('stopped reading');
     await client.exited;
     expect(exits).toEqual(['stopped reading']);
+  });
+});
+
+describe('the app server client as a scoped resource', () => {
+  test('without handlers it refuses the server’s requests, ignores its notes and ends with its last words', async () => {
+    const server = createServer();
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* makeCodexClient({ path: server.path, cwd: server.cwd });
+          expect(yield* client.request('echo', { value: 2 })).toEqual({ value: 2 });
+          yield* Effect.promise(() =>
+            until('the unanswered request to be refused', () => server.received().includes('"id":"s1"'))
+          );
+          const quit = yield* client
+            .request('quit', {})
+            .pipe(Effect.match({ onSuccess: () => 'answered', onFailure: (error) => error.message }));
+          expect(quit).toBe('bye from the server');
+          yield* client.exited;
+        })
+      )
+    );
+    expect(server.received()).toContain('No handler for this request.');
+  });
+
+  test('a request handler’s answer goes back to the server', async () => {
+    const server = createServer();
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* makeCodexClient(
+            { path: server.path, cwd: server.cwd },
+            { request: () => Promise.resolve({ answered: true }) }
+          );
+          yield* Effect.promise(() =>
+            until('the answer to reach the server', () => server.received().includes('"answered":true'))
+          );
+        })
+      )
+    );
+  });
+
+  test('a program that cannot start fails with a typed error', async () => {
+    const missing = await Effect.runPromise(
+      Effect.flip(Effect.scoped(makeCodexClient({ path: '/nonexistent/codex', cwd: createTempDir() })))
+    );
+    expect(missing).toBeInstanceOf(CodexRequestError);
+    expect(missing.method).toBe('app-server');
   });
 });

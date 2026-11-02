@@ -1,12 +1,12 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo, ShinsaState, Task } from '@shinsa/core';
 import type { RunSupervisor } from '../../src/agents/index.ts';
 import type { Briefings } from '../../src/briefing/index.ts';
-import { log } from '../../src/log/index.ts';
 import { EffectRunner } from '../../src/runtime/index.ts';
 import {
+  captureLogs,
   createGitRepo,
   createTempDir,
   createTestConfig,
@@ -86,17 +86,18 @@ describe('a pull request that conflicts with its base', () => {
 
   test('a base that cannot be fetched is logged, and the pull request is still recorded', async () => {
     const { repo } = await createGitRepo();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     for (const base of ['gone', '-x']) {
       writeConflictingPull(base);
       const { runner, dispatched } = setup([{ stage: 'shipping', pullRequest: null }], repo);
       await runner.syncPullRequest('task-1');
       expect(dispatched.map((command) => command.type)).toEqual(['pull_request.record']);
     }
-    expect(warn.mock.calls.map(([message, fields]) => [message, (fields as { base: string }).base])).toEqual([
-      ['[Watch] Could not fetch the base of a conflicting pull request; the agent fetches it', 'gone'],
-      ['[Watch] Could not fetch the base of a conflicting pull request; the agent fetches it', '-x'],
-    ]);
-    warn.mockRestore();
+    logs.restore();
+    expect(
+      logs
+        .fieldsOf('[Watch] Could not fetch the base of a conflicting pull request; the agent fetches it')
+        .map((fields) => fields.base)
+    ).toEqual(['gone', '-x']);
   });
 });

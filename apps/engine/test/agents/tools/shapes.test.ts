@@ -7,7 +7,8 @@ import {
   type ShinsaEvent,
   STEP_SCHEMA,
 } from '@shinsa/core';
-import { handleShapeTool, SHAPE_TOOL_SPECS } from '../../../src/agents/tools/shapes.ts';
+import { handleShapeTool } from '../../../src/agents/tools/shapes/handler.ts';
+import { SHAPE_TOOL_SPECS } from '../../../src/agents/tools/shapes/schema.ts';
 
 const RESHAPED = {
   type: 'task.reshaped',

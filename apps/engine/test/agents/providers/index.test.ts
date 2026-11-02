@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { type AgentProvider, ProviderRegistry } from '../../../src/agents/providers/index.ts';
+import { Effect, Exit } from 'effect';
+import {
+  type AgentProvider,
+  ProviderRegistry,
+  Providers,
+  type ProviderUsageReading,
+} from '../../../src/agents/providers/index.ts';
+import { NoAgentProvider } from '../../../src/agents/providers/registry/schema.ts';
 
 function createProvider(id: string, extra: Partial<AgentProvider> = {}): AgentProvider {
   return {
@@ -58,5 +65,27 @@ describe('ProviderRegistry', () => {
       { id: 'codex', label: 'codex', models: [] },
     ]);
     expect((await registry.listLogins()).map((login) => login.status)).toEqual(['signed_out']);
+  });
+});
+
+describe('Providers', () => {
+  test('is a service: an empty registry fails with NoAgentProvider, a known id resolves', async () => {
+    const codex = createProvider('codex');
+    const exit = await Effect.runPromiseExit(
+      Providers.use((providers) => providers.resolve('codex')).pipe(Effect.provide(Providers.layer([codex])))
+    );
+    expect(exit).toEqual(Exit.succeed(codex));
+    const empty = await Effect.runPromise(Effect.flip(Providers.make([]).resolve('claude')));
+    expect(empty).toBeInstanceOf(NoAgentProvider);
+    expect(new ProviderRegistry([codex]).service.select('codex')).toBe(codex);
+    expect(new ProviderRegistry([codex]).select('claude')).toBeNull();
+  });
+
+  test('lists the usage sources of the providers that read usage', async () => {
+    const reading = { read: { windows: [] }, email: null, plan: null } as unknown as ProviderUsageReading;
+    const codex = createProvider('codex', { readUsage: () => Promise.resolve(reading) });
+    const sources = new ProviderRegistry([createProvider('claude'), codex]).listUsageSources();
+    expect(sources.map((source) => source.id)).toEqual(['codex']);
+    expect(await sources[0]?.read()).toBe(reading);
   });
 });

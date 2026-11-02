@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { Repo, ShinsaCommand, Task } from '@shinsa/core';
-import { RepositoryWork } from '../../src/agents/repository-work.ts';
+import { RepositoryWork } from '../../src/agents/repository-work/service.ts';
 import { createWorktree } from '../../src/git/index.ts';
 import { log } from '../../src/log/index.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';

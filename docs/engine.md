@@ -311,7 +311,7 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
   `resume: false` and `sessionId: null`. The provider copies that session (Claude's `forkSession`, Codex
   `thread/fork`) and the run links the copy's own id, so every later run resumes the copy (`Decider.taskSession`) and
   the source session is never touched. A fork run that failed before it linked a session forks again on its retry.
-  In the engine the fork is a turn plan (`resolveForkPlan` in `agents/turns.ts`): a provider with `sessions.fork`
+  In the engine the fork is a turn plan (`resolveForkPlan` in `agents/turns/plan.ts`): a provider with `sessions.fork`
   that owns the source session and still has it (`inspectSession`) gets it as `resume` with `fork: true`, which
   Claude passes as the SDK's `forkSession` and Codex sends as `thread/fork` with the run's own sandbox and tools, and
   the session the provider reports is the fork's own. Otherwise (a provider without `sessions.fork`, the session on
@@ -367,7 +367,7 @@ have not worked in that repository yet"); Shinsa stays in the background as the 
 `VOICE_RULE` in `prompts/rules.ts`, in every working role's house rules and every delegate's prompt, forbids
 writing that Shinsa knows, has or did what the agent itself knows or did, and allows naming Shinsa only where the
 reader has to act in it (a setting, a command, a gate). The hand-over is the reply: the answer, diagnosis, report
-and outcome tool descriptions (`agents/tools/shapes.ts`) say to write it to the human in the first person, the
+and outcome tool descriptions (`agents/tools/shapes/handler.ts`) say to write it to the human in the first person, the
 tool's reply (`HANDED_OVER` in `agents/handover.ts`) says the human reads it as the agent's reply and to stop and
 write nothing more, and the house rules forbid announcing, pointing at, repeating or summarising it ("My answer is
 above"). Text the agent writes in that turn anyway folds into the chat's work, under the card
@@ -2292,7 +2292,7 @@ whose context can be thrown away. It is never a way to split a round by step or 
 no separate fixer. The house rules (`resolveOrchestrationRules`) and the `delegate_task` description say so. Ported from T3 Code's orchestration v2, Kanna's sub-chats and Paperclip's structure
 (harness plan WS6 names the sources). The rules live in `packages/core/src/decide/delegations.ts`
 and `couriers.ts`, the projection in `state/delegations.ts`, the tools in
-`apps/engine/src/agents/tools/orchestration.ts` and the delivery in `agents/delegations.ts`, `agents/deliveries.ts`
+`apps/engine/src/agents/tools/orchestration/handler.ts` and the delivery in `agents/delegations/delivery.ts`, `agents/deliveries/service.ts`
 and the run supervisor.
 
 - **A delegation is a sub-run, not a sub-task.** It is a `Run` of the same task with a
@@ -4082,7 +4082,7 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   for the cheap pull request watch, one for the briefing, and separate lanes per run for its session, its cancel and
   its steers, so a cancel is never stuck behind the session it cancels. Effects in a lane run in order. A failed replay-safe effect retries
   after 100 ms × 2ⁿ (capped at 30 s), up to 5 attempts; a process-bound one fails on its first error. An error can
-  say otherwise (`EffectError`, `apps/engine/src/runtime/failures.ts`): never retried (a push the remote refuses as
+  say otherwise (`EffectFailed`, `apps/engine/src/runtime/failures/`): never retried (a push the remote refuses as
   non-fast-forward fails at once), or retried after a delay of its own (a remote that cannot be reached, 30 s).
   Every retry of opening or pushing the pull request shows on its task (Pushing the branch, below).
   An effect that gives up opens a failure gate on its task when its kind has one (triage, setup
@@ -4316,22 +4316,25 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
   and a step waits for the runs before it, not for an effect, so the engine has no per-effect waiter
   (T3's `awaitSettled`). Tests wait for an effect's row to settle (`awaitEffect` in
   `apps/engine/test/helpers`).
-- **What an error says about a retry.** The handler throws; `Engine` reads `resolveRetryPolicy(error)`: an
-  `EffectError` carries `retryable` and `delayMs`, any other error is retried on the backoff. Before it requeues a
+- **What an error says about a retry.** The handler fails; `EngineCore` reads the failure as an `EffectFailed` or a
+  `ShippingFailed` (any other error becomes a retryable `EffectFailed`, `resolveEffectFailure`), each carrying
+  `retryable` and `delayMs`, and steps the named `EFFECT_RETRY` schedule (`runtime/failures/schema.ts`) once per
+  attempt so far: it stops at 5 attempts, for a final failure or a process-bound effect, and otherwise gives the
+  delay, the error's own or the backoff. The delay is stored as the row's next time, so a retry survives a restart. Before it requeues a
   retry it calls the retry handler (`onEffectRetry`, `EffectRunner.reportRetry`) with the attempt that failed, the
   attempts there are (5), when the next one runs and the error, so a retry is never silent. A handler that knows a
   failure is not the outside world's (a pre-push hook, a conflict) does not throw at all: it reports the fact as a
   command and settles.
 - **Damaged rows.** A stored effect that is not JSON, or whose payload does not match its kind,
   is failed when it is claimed and the next effect in its lane runs in the same claim.
-- **No gap between claim and cancel.** A claimed effect registers its abort controller in the
-  same synchronous step that claims it, and commits run on the same thread, so a cancellation can
+- **No gap between claim and cancel.** A claimed effect's fiber is registered in the engine's `FiberMap` in the
+  same step that claims it, before it starts, and commits run on the same thread, so a cancellation can
   never land between the two (T3 re-reads the row for this; one process with one connection does
   not need to).
 
 ## Pushing the branch
 
-`pull_request.open` and `pull_request.push` (`apps/engine/src/runtime/effects.ts`) take the branch from "approved" to
+`pull_request.open` and `pull_request.push` (`Shipping`, `apps/engine/src/runtime/effects/shipping/service.ts`) take the branch from "approved" to
 GitHub in four steps, and report each one to the task as `pull_request.record_step`, which core turns into the stage
 reason (`describeShippingStep`) while the task ships with a push pending and no failure gate open:
 
@@ -4375,7 +4378,7 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
      failure gate (`cause: 'push_hook'`, "The pre-push hook failed again", "the pre-push hook failed again") showing
      the failures and the last 40 lines of output. Send to the agent again resets the fix budget and starts another
      round with the same output (Retry with guidance adds your words); Cancel cancels the task.
-   - **The network is retried, visibly.** A `network` error is an `EffectError` retried after 30 s
+   - **The network is retried, visibly.** A `network` error is a `ShippingFailed` retried after 30 s
      (`SHINSA_PUSH_RETRY_MS`), up to 5 attempts;
      each retry reaches the task as `pull_request.record_retry` with its step, so the stage reason reads "pushing again
      in 30s, attempt 2 of 5: Could not resolve host: github.com" (`updating the branch again…` when the fetch failed,
@@ -5027,7 +5030,7 @@ what it costs at the start of every run, so you can turn off what you do not use
 
 ## The agent loop
 
-How one run executes, from the supervisor (`agents/supervisor.ts`, `agents/turns.ts`) down to the Claude adapter
+How one run executes, from the supervisor (`agents/supervisor.ts`, `agents/turns/plan.ts`) down to the Claude adapter
 (`agents/providers/claude/`). Harness plan WS1 names the T3 Code and Kanna sources.
 
 **Attempts and conditional writes.** Every execution of a run is an attempt with its own id, `<run>:<n>` numbered
@@ -5075,7 +5078,7 @@ attempt on the same account, after 15 s, then 30 s, then 60 s (`config.overloadR
 doubled each time), and only a fourth overloaded attempt ends the run, for core to resume it once. It never reaches
 the rejection seam, so the account is not marked or switched. Each wait is a `retrying` notice in the chat
 (`{ provider, detail, attempt, attempts, retryAt }`, the line "Claude was busy, trying again · 1 of 3"). A cancel, a
-restart or the run's time limit ends the wait at once (`waitToRetry` and `stopActiveRun` in `agents/active.ts`).
+restart or the run's time limit ends the wait at once (`waitToRetry` and `stopActiveRun` in `agents/active/run.ts`).
 
 **Steering by prompt id.** Every prompt the adapter sends carries a uuid, and a turn is matched to its prompts by the
 ids the CLI echoes on its result (`user_message_uuids`), never by counting. A result that answers none of our prompts
@@ -5105,7 +5108,7 @@ item, backticks, `run` blocks, references), when to delegate, and the command su
 says: how to brief a delegate, read another task or suggest one is in that tool's own description, and the
 `handover` skill keeps only what the hand-over schemas cannot say. `test/prompts/rules.test.ts` holds both. A session
 that already has them does not need them again, so a resumed turn sends only the instruction after them
-(`resolveTurnPrompt` in `agents/turns.ts`, `splitHouseRules` in core). It sends the full brief whenever the session
+(`resolveTurnPrompt` in `agents/turns/plan.ts`, `splitHouseRules` in core). It sends the full brief whenever the session
 might not have these exact rules: a fresh session, a handoff (a provider switch, a lost session restored on a new one,
 an account whose session cannot be resumed, which the CLI reports as lost), a session whose earlier briefs never
 carried the same text (a follow-up answerer resuming the Agent's session gets the answerer's rules), and a session
@@ -5231,7 +5234,7 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
 - **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the built-in list
   when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
 
-**Resume fallback** (`turns.ts`). Before resuming, the supervisor checks the session: a session owned by another
+**Resume fallback** (`agents/turns/plan.ts`). Before resuming, the supervisor checks the session: a session owned by another
 provider is handed over; one marked lost (`run.session_lost`, recorded for every run that used it, so no retry or
 recovery resumes it again) or a provider without resumable sessions is restored; otherwise the provider inspects it.
 Claude looks for `<id>.jsonl` under `$CLAUDE_CONFIG_DIR/projects` (relative to the worktree when relative,
@@ -5355,7 +5358,7 @@ Shutdown stops the forwarder after the effects, once no `claude` can still talk 
 *Boundary folds.* The Agent keeps one session for the task, but a step does not need the raw history of the steps
 before it. When the Agent's run resumes its session for a build phase, a fix or an operation (any purpose with a
 round brief, never planning, so a watchdog check in its watch session and a data source read fold the checks and reads
-before them too; `resolveTurnFold` in `agents/turns.ts`), on the run's first attempt and with its own step
+before them too; `resolveTurnFold` in `agents/turns/plan.ts`), on the run's first attempt and with its own step
 prompt (never a restart, an answer or a delivery), as a new step rather than one carrying on (core marks a run that
 continues another, after a recovery nudge, a `wait_for` wake-up or a usage-limit resume, with `Run.continues`, and
 that run never folds), with context management on its default (`fold`) on a provider whose capabilities include
@@ -5375,7 +5378,7 @@ nothing before its turn is left as it is, and so is a step whose history is unde
 `foldFloor`) while its cache is still warm: there a fold would rewrite more of the cache than it saves, so the fold is
 dropped and the step reads its warm cache. Whether it is warm is the expiry the session's last run recorded when it
 ended (`resolveCacheExpiry`, the same reading idle compaction uses, kept on the run by `run.cached` so it survives a
-restart; `isSessionCacheWarm` in `agents/turns.ts`), passed to the fold as `cacheWarm`. Once that time has passed, or
+restart; `isSessionCacheWarm` in `agents/turns/plan.ts`), passed to the fold as `cacheWarm`. Once that time has passed, or
 no run of the session recorded one, the next request rewrites the whole prefix anyway, so a step of any size folds
 first and writes only the folded prefix.
 
@@ -5770,6 +5773,8 @@ startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
                   ├─ ServeLock     data/serve.lock         scoped
                   ├─ EventLog ───► StoreLayer: SqlClient   events, outbox,
                   │                (sqlite-bun)            receipts, snapshot
+                  ├─ Engine, EffectRunner  runtimes of their own,
+                  │                        released after HTTP
                   ├─ HTTP server   Bun.serve ──► EngineApi's
                   │                web handler, scoped
                   ├─ Eunoe's forwarder
@@ -5872,10 +5877,46 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   `SetupDraft`; a draft that breaks it is logged and onboarding starts again. Triage asks the classifier under
   `CLASSIFY_TIMEOUT` (30 s), no answer the typed `ClassifierFailed`. The Home guide's write waits on a fiber
   (`BRIEFING_DEBOUNCE`, 4 s) that a newer change interrupts and starts again.
+- **The effects.** Each effect kind has one handler, an `Effect.fn` that fails only with `EffectFailed` or
+  `ShippingFailed`: `EffectHandlers` routes a kind to the service of its area (`TaskSetup`, `CheckRuns`,
+  `Shipping`, `Merging`, `Cleanup`, `PullRequestSync`, all under `runtime/effects/`), and `EffectReports` reports a
+  retry and a failure for good. Cancelling an effect interrupts its fiber. Code not moved yet (git, `gh`, the checks)
+  is called through `EffectWorld.bridge`, which hands it an `AbortSignal` that the interrupt aborts and waits for it
+  to return, so the processes it started have stopped when the interrupt ends; a cancelled effect settles without
+  an error. The pull request watch is a fiber on `Schedule.spaced` (45 s), a sync soon after a push is a fiber in the
+  same `FiberSet`, and `stop` interrupts both; syncs of one task take turns on a semaphore per task (`RcMap`), and a
+  full sync runs once however many ask for it. `EffectRunner` is the class edge over them.
+- **The dispatch.** `EngineCore` (`runtime/engine/`) takes one command at a time on a `Semaphore`: the receipt,
+  `decide`, the commit, the decided state, then the listeners, and the same update on its `updates` stream. The pump
+  is one fiber that claims what is due from the outbox and waits at least `PUMP_FLOOR` (1 ms) between rounds, since a
+  zero-length sleep never lets a timer or I/O run; each running effect is a fiber in a `FiberMap` keyed by its effect
+  key, so a decision that cancels it interrupts it, and `dispatch` returns once that interrupt has ended. `Engine` is
+  the class edge, with the same methods as before.
+- **The clocks.** A timer that fires from state (`StateClock`, `runtime/clock/`) keeps one timer fiber in a
+  `FiberHandle`, re-armed when a state change moves its earliest due time and left alone when it does not. The run's
+  two-hour clock (`agents/clock/`) is a countdown fiber that a question pauses, and the quiet-run check
+  (`agents/silence/`) a fiber on its interval.
+- **The agents.** The registry is the `Providers` service, which fails with `NoAgentProvider` for an id it does not
+  have. A session is a scoped resource (`acquireAgentSession`): closing its scope cancels it and waits for it to end.
+  Scopes follow the runs (`agents/supervisor/`): every task has a scope, a run's scope sits under its task's or, for a
+  delegation, under the scope of the run that delegated it, and each attempt of a run has a scope under the run's that
+  holds its session. An attempt that ends closes its own scope; the run's stays open while a delegation under it still
+  runs (a parent waiting on one), and closes with the last of them. `run.cancel` closes the run's scope, which cancels
+  its session and every delegation below it and waits for them, at most `stopMs`; cancelling a task reaches its runs
+  as `run.cancel` effects, and stopping the engine closes every task's scope. A session's `cancel()` stops its own
+  process tree (`claude` kills its process group, `codex` its app-server); the processes a run started are also on
+  the task's process ledger (`trackProcess`), which shows them while they run. The
+  `codex app-server` client is a scoped resource of its own (`makeCodexClient`), its process group killed when the
+  scope closes. A question's reply is a `Deferred`; idle release and idle compaction are fibers per run and per task.
+  Quick calls and every tool call run as effects with typed failures (`QuickAttemptFailed`, `ToolCallFailed`) that
+  answer the same text as before. A session's system prompt and tool list are decided when it starts and never
+  change (Caching).
 - **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
-  its release as a finalizer: the lock, the log, the HTTP server, Eunoe's forwarder, the work. `stop()` disposes the
-  runtime, which runs them in reverse: the work (live runs first, then the clocks and the effects, The agent loop →
-  Restart continuation), Eunoe, HTTP, the log, then the lock. A start that fails partway disposes it as well, so
+  its release as a finalizer: the lock, the log, the runtimes of `Engine` and `EffectRunner`, the HTTP server, Eunoe's
+  forwarder, the work. `stop()` disposes the runtime, which runs them in reverse: the work (live runs first, then the
+  clocks and the effects, The agent loop → Restart continuation), Eunoe, HTTP, the effects' and then the engine's
+  runtime, the log, then the lock. The two runtimes go only once HTTP has stopped, since a request still answers from
+  the engine until then. A start that fails partway disposes it as well, so
   nothing it took stays held, and a second `stop()` waits for the first.
 - **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the

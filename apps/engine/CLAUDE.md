@@ -133,28 +133,56 @@ src/
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
 ├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile, GitLayer, GitHubLayer, ReposLayer, WorkspacesLayer, ChecksLayer, TerminalsLayer, ExtensionsLayer, SecretFiles, AccountsLayer and VersionsLayer that code not yet
-│                        moved to Effect calls the foundation through), Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
-│                        receipt → decide → commit → adopt the decided state → listeners with the state before and
-│                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
-│                        effect pump, cancellation, settle, the retry policy an error carries and onEffectRetry),
-│                        EffectRunner (effects.ts: one handler per ShinsaEffect, the pull request watcher, the push's
-│                        steps, conflicts, hook rejections and reportRetry), failures.ts (EffectError with its retry
-│                        policy, ShippingError naming the push's step), StateClock (clock.ts: the
-│                        base of every timer that fires from state), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
+│                        moved to Effect calls the foundation through), engine/ (EngineCore in service.ts: boot from
+│                        the snapshot and the events after it, dispatch serialised on a Semaphore → receipt → decide →
+│                        commit → adopt the decided state → listeners with the state before and what changed, and the
+│                        same update on the `updates` Stream; snapshots once quiet, the Home guide beside the log
+│                        (writeBriefing), the pump fiber, one fiber per running effect in a FiberMap, interrupted when
+│                        a decision cancels it or the engine stops; the shapes in schema.ts, receipt identities in
+│                        receipts.ts), engine.ts (the Engine class edge: the same methods as before over EngineCore's
+│                        own ManagedRuntime on the EventLog's services; a promise handler runs in Effect.tryPromise,
+│                        so an interrupt aborts its signal, and settle waits for it to return),
+│                        effects/ (one service per area, each handler an Effect.fn failing with EffectFailed or
+│                        ShippingFailed: setup/ TaskSetup (triage, setup check, worktree), checks/ CheckRuns,
+│                        shipping/ Shipping (the push's steps, conflicts, hook rejections as HookRejected),
+│                        merging/ Merging (merge, stacks, bundles, close), cleanup/ Cleanup, pull-requests/
+│                        PullRequestSync (the watch fiber, a sync soon after a push, one sync per task at a time on
+│                        a semaphore per task, pure reads in news.ts), edits/ EditCommits, reports/ EffectReports
+│                        (retries and failures for good), runner/ EffectHandlers (routes each kind), world/
+│                        EffectWorld (the engine, config and unmoved pieces they stand on, and bridge: a promise
+│                        API given the fiber's AbortSignal, waited for on interrupt); the shapes in schema.ts),
+│                        effects.ts (the EffectRunner class edge over them: apply settles quietly once its signal
+│                        aborts, stop interrupts the watch and the background syncs), failures/ (EffectFailed and ShippingFailed,
+│                        the push's step, in schema.ts with the EFFECT_RETRY schedule; resolveEffectFailure and
+│                        resolveShippingFailure in classify.ts; retry.ts steps the schedule), StateClock (clock.ts, the
+│                        edge every timer that fires from state extends, over clock/: makeStateClock in service.ts
+│                        keeps one timer fiber in a FiberHandle, ClockTickFailed in schema.ts), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
 │                        next check)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
-│   │                    config/paths.ts, removed by the scratch.remove effect once the task settles), the live state of a run (active.ts), resume or
+│   │                    config/paths.ts, removed by the scratch.remove effect once the task settles; supervisor/:
+│   │                    makeTaskScopes: a scope per task, a run's scope under its task's or, for a delegation, under
+│   │                    the scope of the run that delegated it, and an attempt's scope holding its session under
+│   │                    its run's; a run's scope outlives its attempt while a delegation under it runs, `run.cancel`
+│   │                    closes it (its delegations with it) and shutdown closes every task's; TaskScopes in
+│   │                    index.ts is its edge), the
+│   │                    live state of a run (active/: run.ts, its shape in schema.ts), resume or
 │   │                    hand over per turn, the house rules only to a session without them and the round's
-│   │                    whole brief to an agent session that may not hold the round (turns.ts), the
-│   │                    tool calls (tool-calls.ts), questions and their waiters (questions.ts), idle release
-│   │                    (idle.ts), delegated reports in and out of a turn (deliveries.ts, delegations.ts), the
-│   │                    account seam: leases and rejections (accounts.ts), idle
-│   │                    compaction (compaction.ts), quiet runs (silence.ts), hand-over checks and evidence
-│   │                    (handover.ts), RunClock (clock.ts), the commands no agent may run (policy.ts: also the
-│   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
+│   │                    whole brief to an agent session that may not hold the round (turns/plan.ts), the
+│   │                    tool calls (tool-calls/: ToolCallFailed, each call an Effect in service.ts), questions and their waiters (questions.ts; questions/: each
+│   │                    reply a Deferred, ReplyWaiters its edge), idle release (idle.ts, the edge over idle/:
+│   │                    makeIdleRelease, one timer fiber per waiting run in a FiberMap), delegated reports in and
+│   │                    out of a turn (deliveries/service.ts, delegations/delivery.ts), the account seam: leases and rejections
+│   │                    (accounts.ts), idle compaction (compaction.ts, the edge over compaction/: makeIdleCompaction,
+│   │                    the wait and the running compaction as fibers per task, the window in window.ts; stopping
+│   │                    one aborts it and waits for it), quiet runs (silence.ts, the edge over
+│   │                    silence/: makeSilenceWatch, the check a fiber on its interval), hand-over checks and evidence
+│   │                    (handover.ts), RunClock (clock.ts, the edge over clock/:
+│   │                    makeRunClock, a countdown fiber paused by interruption; ClockTimers become an Effect
+│   │                    Clock), the commands no agent may run (policy.ts: also the
+│   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading/task.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
-│   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
+│   │                    (repository-work/service.ts: `list_repository_work` and task.record_overlaps before a hand-over),
 │   │                    the task's own service runs and the services it adds and removes (services.ts: `list_services`,
 │   │                    `run_service`, `add_service`, `remove_service`),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
@@ -164,9 +192,11 @@ src/
 │   │                    the server's router on your behalf with byTask, so a message is classified; adding a
 │   │                    repository or folder to a project runs in process through the project changes);
 │   │                    ManageAccess ({ baseUrl, projects, route }) is what serve.ts hands the supervisor as `manage`
-│   ├── providers/       types.ts (AgentProvider, capabilities, AgentSession), index.ts (ProviderRegistry),
-│   │                    instructions.ts (what every session is told about Shinsa and its skills), versions.ts
-│   │                    (reading and comparing a program's version)
+│   ├── providers/       types.ts (AgentProvider, capabilities, AgentSession), registry/ (Providers: the registry as
+│   │                    a service, resolve failing with NoAgentProvider; index.ts's ProviderRegistry is its edge),
+│   │                    session/ (acquireAgentSession: a session as a scoped resource, closing its scope cancels
+│   │                    it and waits for it to end), instructions.ts (what every session is told about Shinsa
+│   │                    and its skills), versions.ts (reading and comparing a program's version)
 │   │   └── claude/      The Claude Agent SDK provider: the session (session.ts: prompt ids, steering), result
 │   │                    classification (classify.ts), the user's `claude` (executable.ts), the SDK runtime (sdk.ts),
 │   │                    session files (artifacts.ts), the PreToolUse guard (guard.ts), the recorder (recorder.ts: the
@@ -175,16 +205,19 @@ src/
 │   │                    catalog (models.ts), the prompt queue the SDK reads from (async-queue.ts), the MCP servers
 │   │                    and skills a run loads (extensions.ts), the route to the API per compaction setting: eunoe
 │   │                    or direct, and the fallback notice (route.ts)
-│   │   └── codex/       The `codex app-server` provider: the JSON-RPC client (client.ts), the session (session.ts:
+│   │   └── codex/       The `codex app-server` provider: the JSON-RPC client (client/: makeCodexClient, the
+│   │                    process a scoped resource, its stdout and stderr read as streams, each request a Deferred
+│   │                    failing with CodexRequestError, the process group killed when its scope closes; client.ts
+│   │                    is its edge), the session (session.ts:
 │   │                    turns, steering, the agents Codex starts, compaction), the chat mapping (map.ts), failure
 │   │                    classes (classify.ts), the HTTP MCP endpoint (mcp.ts), the price table and what a turn costs
 │   │                    (pricing.ts, meter.ts), usage windows read like CodexBar and fast mode credits (usage.ts),
 │   │                    one-shot calls (complete.ts), models, sign-in, executable, MCP servers and skills
 │   │                    (extensions.ts)
 │   ├── tools/           The `shinsa` MCP server (index.ts: an MCP `Server` each provider exposes its own way) and the
-│   │                    tool schemas (specs.ts, schema.ts): hand-over and process tools (process.ts), the hand-overs
+│   │                    tool schemas (specs.ts, schema.ts): hand-over and process tools (process/handler.ts), the hand-overs
 │   │                    of each task shape: answer, report_diagnosis, submit_report, report_outcome, reshape_task
-│   │                    (shapes.ts), delegation and couriers (orchestration.ts), schedules (schedules.ts). The plan
+│   │                    (shapes/handler.ts), delegation and couriers (orchestration/handler.ts), the one Effect step every call runs through (call.ts), schedules (schedules.ts). The plan
 │   │                    parameters in `propose_plan` (verification as checks, impact, evidence, approval), the
 │   │                    `check_changes` of `complete_phase` and `complete_fix`, the `checks` of `complete_fix`, a
 │   │                    linked check on `attach_evidence` (`check`) and the steps `reshape_task` offers are generated
@@ -546,20 +579,23 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   (`docs/engine.md` → Guarantees).
 - **A failure that is not the outside world's is not thrown.** A deterministic failure (a pre-push hook rejection, a
   conflict while updating onto the base) is reported as a command and the effect settles, so the outbox never
-  retries it; one that is never worth retrying throws an `EffectError` with `retryable: false`; and every retry of a
+  retries it; one that is never worth retrying fails with an `EffectFailed` with `retryable: false`; and every retry of a
   push is reported to its task (`reportRetry`). No push skips the repository's hooks (`docs/engine.md` → Pushing the
   branch).
 - **Every command the server sends gets a fixed id from its cause** (`Engine.dispatch(command, { id })`), unique for
   distinct causes and identical for a repeat, naming everything the decision depends on; the list is
   `docs/engine.md` → Command receipts → Deterministic server ids.
 - **Timers that fire from state extend `StateClock`** (`runtime/clock.ts`; `MonitorClock`, `ScheduleClock`,
-  `UsageResumeClock`). The subclass lists what is due (`listEntries`); the base keeps one timer for the earliest,
-  re-arms on every state change, fires each due entry once at a time, and skips an entry core refused with a
+  `UsageResumeClock`). The subclass lists what is due (`listEntries`); the base keeps one timer fiber for the
+  earliest (`runtime/clock/service.ts`), re-armed on every state change and kept when the earliest due time stays
+  the same, fires each due entry once at a time, and skips an entry core refused with a
   `DomainError`, or answered with no events (`refuse`), until it leaves `listEntries`, so a refused or no-op command
   is never sent again and again.
-- **Effects can be cancelled.** A running effect's `context.signal` aborts when a decision cancels it or the server
-  stops. A handler that does outside work checks the signal before the step it must not take after a cancel (a merge,
-  a push, opening a pull request) and passes it to the commands it runs (checks, `git push`, `gh`).
+- **Effects can be cancelled.** A running effect's fiber is interrupted when a decision cancels it or the server
+  stops, so it takes no step after the cancel (a merge, a push, opening a pull request). A handler calls code not yet
+  moved to Effect through `EffectWorld.bridge`, which passes the commands it runs (checks, the push, `gh`) an
+  `AbortSignal` the interrupt aborts; a pair of steps that must happen together (a commit and its record) is
+  `Effect.uninterruptible`.
 - **Effects that touch the outside world must be safe to run twice** (a worktree is reused, an open pull request is
   reused, a merge reads GitHub first): replay-safe effects run again after a crash (`docs/engine.md` → Recovery).
 - **Rounds share the task's worktree and push where their round says** (`docs/engine.md` → Rounds): a later round's
@@ -615,7 +651,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   and a read of a data source (purposes `watch` and `intake`) in the repository itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
   task's worktree. Edits a read-only run leaves (the agent's while it plans included) are set aside, never in the
   repository itself: that is the human's own checkout. Setup verification asks for a default branch only when the
-  pipeline needs a worktree, and never for check commands (`runtime/effects.ts`); a worktree reused
+  pipeline needs a worktree, and never for check commands (`runtime/effects/setup/service.ts`); a worktree reused
   before any phase report is reset, which is how an investigation's scratch edits are dropped before its fix is
   planned.
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the
@@ -637,7 +673,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   the pull request syncs, the clocks and every running effect, and waits for them and for every running effect
   handler (`Engine.settle`) before it closes
   the log, so no `claude`, check or `gh` outlives the server (`docs/engine.md` → The agent loop → Restart
-  continuation). Eunoe's forwarder stops after the effects, once no `claude` can still talk to it. Your terminals' shells
+  continuation). Eunoe's forwarder stops after the effects, once no `claude` can still talk to it. Once HTTP has
+  stopped, `disposeRuntime` (`serve/wiring.ts`) releases the `EffectRunner`'s and then the `Engine`'s own
+  `ManagedRuntime`, before the log closes, so no fiber of theirs outlives the engine. Your terminals' shells
   are hung up before the clocks stop, and their screens saved. Anything new that starts a process or a timer is
   stopped there too.
 - **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that

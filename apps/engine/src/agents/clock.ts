@@ -1,59 +1,60 @@
-export const MINUTE_MS = 60_000;
+import { Clock, Duration, Effect, Scope } from 'effect';
+import { edgeRuntime } from '../runtime/edge.ts';
+import { type ClockTimers, NANOS_PER_MS, type RunClockHandle } from './clock/schema.ts';
+import { makeRunClock } from './clock/service.ts';
 
-export interface ClockTimers {
-  now: () => number;
-  start: (fire: () => void, ms: number) => unknown;
-  clear: (timer: unknown) => void;
+export type { ClockTimers } from './clock/schema.ts';
+
+function resolveTimersClock(timers: ClockTimers): Clock.Clock {
+  const nanos = () => BigInt(timers.now()) * NANOS_PER_MS;
+  return {
+    currentTimeMillisUnsafe: timers.now,
+    currentTimeMillis: Effect.sync(timers.now),
+    currentTimeNanosUnsafe: nanos,
+    currentTimeNanos: Effect.sync(nanos),
+    monotonicTimeNanosUnsafe: nanos,
+    monotonicTimeNanos: Effect.sync(nanos),
+    sleep: (duration) =>
+      Effect.callback<void>((resume) => {
+        const timer = timers.start(() => resume(Effect.void), Duration.toMillis(duration));
+        return Effect.sync(() => timers.clear(timer));
+      }),
+  };
 }
 
-const SYSTEM_TIMERS: ClockTimers = {
-  now: () => Date.now(),
-  start: (fire, ms) => setTimeout(fire, ms),
-  clear: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
-};
-
 export class RunClock {
-  #remaining: number;
-  #startedAt = 0;
-  #timer: unknown = null;
-  #pauses = 0;
-  #stopped = false;
-  readonly #onExpire: () => void;
-  readonly #timers: ClockTimers;
+  readonly #handle: RunClockHandle;
+  readonly #run: (effect: Effect.Effect<void>) => void;
 
-  constructor(limitMs: number, onExpire: () => void, timers: ClockTimers = SYSTEM_TIMERS) {
-    this.#remaining = limitMs;
-    this.#onExpire = onExpire;
-    this.#timers = timers;
+  constructor(limitMs: number, onExpire: () => void, timers?: ClockTimers) {
+    const clock = timers === undefined ? null : resolveTimersClock(timers);
+    const withClock = <A, E>(effect: Effect.Effect<A, E>) =>
+      clock === null ? effect : Effect.provideService(effect, Clock.Clock, clock);
+    this.#run = (effect) => {
+      edgeRuntime.runFork(withClock(effect));
+    };
+    this.#handle = edgeRuntime.runSync(
+      withClock(
+        makeRunClock(Duration.millis(limitMs), Effect.sync(onExpire)).pipe(
+          Scope.provide(edgeRuntime.runSync(Scope.make()))
+        )
+      )
+    );
   }
 
   start() {
-    this.#arm();
+    this.#run(this.#handle.start);
   }
 
   pause() {
-    this.#pauses += 1;
-    if (this.#pauses > 1 || this.#timer === null) return;
-    this.#timers.clear(this.#timer);
-    this.#timer = null;
-    this.#remaining -= this.#timers.now() - this.#startedAt;
+    this.#run(this.#handle.pause);
   }
 
   resume() {
-    if (this.#pauses === 0) return;
-    this.#pauses -= 1;
-    if (this.#pauses === 0) this.#arm();
+    this.#run(this.#handle.resume);
   }
 
   stop() {
-    this.#stopped = true;
-    if (this.#timer !== null) this.#timers.clear(this.#timer);
-    this.#timer = null;
-  }
-
-  #arm() {
-    if (this.#stopped) return;
-    this.#startedAt = this.#timers.now();
-    this.#timer = this.#timers.start(this.#onExpire, Math.max(0, this.#remaining));
+    this.#run(this.#handle.stop);
   }
 }

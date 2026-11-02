@@ -14,12 +14,13 @@ import {
   VERIFICATION_RULES,
   WATCHDOG_STARTS,
 } from '@shinsa/core';
-import { ORCHESTRATION_TOOL_SPECS } from './orchestration.ts';
-import { CHOICES_SPEC, PROCESS_TOOL_SPECS } from './process.ts';
+import { limitedPath, limitedText, textList } from './fields.ts';
+import { ORCHESTRATION_TOOL_SPECS } from './orchestration/schema.ts';
+import { CHOICES_SPEC, PROCESS_TOOL_SPECS } from './process/schema.ts';
 import { REPLY_SPEC } from './reply.ts';
 import { SCHEDULE_TOOL_SPECS } from './schedules.ts';
-import { limitedPath, limitedText, type ToolSpec, textList } from './schema.ts';
-import { SHAPE_TOOL_SPECS } from './shapes.ts';
+import type { ToolSpec } from './schema.ts';
+import { SHAPE_TOOL_SPECS } from './shapes/schema.ts';
 
 const L = PROTOCOL_LIMITS;
 

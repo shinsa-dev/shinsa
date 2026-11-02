@@ -43,7 +43,7 @@ import {
   type ShareTranscripts,
   type ShareWorktree,
 } from '../../src/remote/shares.ts';
-import { EffectError } from '../../src/runtime/failures.ts';
+import { EffectFailed } from '../../src/runtime/failures/schema.ts';
 import { EvidenceStore } from '../../src/store/evidence/index.ts';
 import { createGitRepo, createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
@@ -356,9 +356,9 @@ describe('making a share link', () => {
   test('a machine that is not paired fails for good, saying how to turn remote access on', async () => {
     const { publisher } = setUp({ paired: false });
     const failure = await publisher.link('task-1', CONTEXT).catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(EffectError);
-    expect((failure as EffectError).message).toBe(SHARE_NOT_PAIRED);
-    expect((failure as EffectError).policy.retryable).toBe(false);
+    expect(failure).toBeInstanceOf(EffectFailed);
+    expect((failure as EffectFailed).message).toBe(SHARE_NOT_PAIRED);
+    expect((failure as EffectFailed).retryable).toBe(false);
   });
 
   test('a task that is no longer shared gets no link', async () => {

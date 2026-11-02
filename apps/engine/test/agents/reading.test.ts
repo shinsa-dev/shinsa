@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { serializeTaskDetail } from '@shinsa/core';
-import { resolveTaskReading } from '../../src/agents/reading.ts';
+import { resolveTaskReading } from '../../src/agents/reading/task.ts';
 import { Transcripts } from '../../src/agents/transcripts/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';

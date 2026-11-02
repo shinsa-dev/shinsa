@@ -1,8 +1,8 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { IDLE_RELEASE_MS, IdleRelease, MAX_IDLE_PIN_MS } from '../../src/agents/idle.ts';
 import type { AgentSession } from '../../src/agents/providers/index.ts';
-import { log } from '../../src/log/index.ts';
 import { until } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 
 function createSession(background: () => boolean = () => false) {
   let checks = 0;
@@ -92,7 +92,7 @@ describe('releasing an idle session', () => {
   });
 
   test('a session that cannot say whether work is pending is released, and a failed release is logged', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const idle = new IdleRelease(() => Promise.reject(new Error('stuck')), { idleMs: 5 });
     const session: AgentSession = {
       done: Promise.resolve({ outcome: 'completed', summary: null }),
@@ -100,11 +100,10 @@ describe('releasing an idle session', () => {
       cancel: () => Promise.resolve(),
     };
     idle.wait('run-1', session);
-    await until('the warning', () => warn.mock.calls.length > 0);
-    expect(warn).toHaveBeenCalledWith('[Runs] Could not release an idle session', {
-      runId: 'run-1',
-      error: 'stuck',
-    });
-    warn.mockRestore();
+    await until('the warning', () => logs.fieldsOf('[Runs] Could not release an idle session').length > 0);
+    expect(logs.fieldsOf('[Runs] Could not release an idle session')).toEqual([
+      { runId: 'run-1', error: 'stuck' },
+    ]);
+    logs.restore();
   });
 });

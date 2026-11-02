@@ -20,8 +20,8 @@ import {
   resolveTurnFold,
   resolveTurnPlan,
   resolveTurnPrompt,
-  type TurnContext,
-} from '../../src/agents/turns.ts';
+} from '../../src/agents/turns/plan.ts';
+import { type TurnContext } from '../../src/agents/turns/schema.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { createGate, createRepo, createRound, createRun, createTask } from '../helpers/state.ts';
 

@@ -1,7 +1,7 @@
 import { DomainError, type RemoteUser } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
-import { EffectError } from '../runtime/failures.ts';
+import { EffectFailed } from '../runtime/failures/schema.ts';
 import type { Remote } from './index.ts';
 
 const FINAL = { retryable: false, delayMs: null };
@@ -36,7 +36,8 @@ export class Handoffs implements HandoffEffects {
     try {
       url = await this.#remote.createHandoff(taskId);
     } catch (error) {
-      if (error instanceof DomainError) throw new EffectError(error.message, error.message, FINAL);
+      if (error instanceof DomainError)
+        throw new EffectFailed({ message: error.message, detail: error.message, ...FINAL });
       throw error;
     }
     await this.#engine.dispatch(

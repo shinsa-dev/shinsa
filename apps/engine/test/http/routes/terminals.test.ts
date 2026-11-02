@@ -203,8 +203,10 @@ describe('services over HTTP', () => {
     });
     await post(`/api/services/${service.id}/restart`, undefined, null);
     await until('it failed', () => terminals.find(started.terminal.id).info.exitCode === 4);
-    await post('/api/services/start-all', { projectId }, null);
-    expect(terminals.find(started.terminal.id).info.status).toBe('running');
+    const all = (await (
+      await post('/api/services/start-all', { projectId }, null)
+    ).json()) as TerminalsSnapshot;
+    expect(all.terminals.find((each) => each.id === started.terminal.id)?.status).toBe('running');
     expect(await readCode(await post('/api/services/start-all', { projectId: 'nope' }, null))).toBe(
       'project_not_found'
     );

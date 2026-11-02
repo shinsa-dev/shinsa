@@ -1,8 +1,8 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { ShinsaCommand } from '@shinsa/core';
 import { SilenceWatch, Transcripts } from '../../src/agents/index.ts';
-import { log } from '../../src/log/index.ts';
 import { createTempDir, until } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { createGate, createRun, createStubEngine } from '../helpers/state.ts';
 
 const MINUTE = 60_000;
@@ -114,10 +114,16 @@ describe('the silent-run watch', () => {
     quiet.reject((command) => command.type === 'run.silence');
     quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
     quiet.watch.start();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
-    await until('the failed record to be logged', () => warn.mock.calls.length > 0);
-    warn.mockRestore();
+    const logs = captureLogs();
+    try {
+      quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
+      await until(
+        'the failed record to be logged',
+        () => logs.fieldsOf('[Silence] Could not record a quiet run').length > 0
+      );
+    } finally {
+      logs.restore();
+    }
     quiet.watch.stop();
     expect(silences(quiet.dispatched)).toHaveLength(1);
   });
