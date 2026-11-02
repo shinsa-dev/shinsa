@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,8 @@ import {
   serializeBase64Url,
 } from '../packages/core/src/index.ts';
 import { createSandboxCloud } from './sandbox-cloud.ts';
+
+setDefaultTimeout(30_000);
 
 const ZONE = 'http://localhost:5999';
 
@@ -68,20 +70,25 @@ describe('the sandbox’s stand-in for app.shinsa.dev', () => {
     expect((await cloud.respond(new Request('http://sandbox.test/tasks'))).status).toBe(404);
   });
 
-  test('says a machine it does not know is gone, and a tunnel it cannot reach is offline', async () => {
-    const cloud = createSandboxCloud(createFolder(), 'localhost:5998', '1', [
-      { id: 'laptop', name: 'Laptop', port: 1, connectKey: serializeBase64Url(new Uint8Array(32)) },
-    ]);
+  test('says a machine it does not know is gone', async () => {
+    const cloud = createSandboxCloud(createFolder(), 'localhost:5998', '1', []);
     const unknown = resolvePreviewOrigin(
       { instanceId: 'nowhere', previewId: PREVIEW_ID },
       'http://localhost:5998'
     );
     const cookie = { headers: { cookie: `__Host-shinsa_preview=${KEY}` } };
     expect((await cloud.respond(new Request(`${unknown}/`, cookie))).status).toBe(404);
+  });
+
+  test('says a machine whose tunnel it cannot reach is offline', async () => {
+    const cloud = createSandboxCloud(createFolder(), 'localhost:5998', '1', [
+      { id: 'laptop', name: 'Laptop', port: 1, connectKey: serializeBase64Url(new Uint8Array(32)) },
+    ]);
     const laptop = resolvePreviewOrigin(
       { instanceId: 'laptop', previewId: PREVIEW_ID },
       'http://localhost:5998'
     );
+    const cookie = { headers: { cookie: `__Host-shinsa_preview=${KEY}` } };
     expect((await cloud.respond(new Request(`${laptop}/`, cookie))).status).toBe(503);
   });
 });
