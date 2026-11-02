@@ -3381,8 +3381,8 @@ online, and the last list of it their own machine kept while it is not (Offline 
     refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause, but still drops
     those past 30 days, with their full tasks, each time remote access changes and when the engine starts. Removing
     the machine from remote access, or app.shinsa.dev forgetting it, drops every copy and full task at once.
-- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, only on the machine, since every
-  change to it but joining is refused from off the machine like the rest of remote access): one card per team with its name and
+- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, on the machine; every
+  change to it but joining is refused from off the machine like the rest of remote access, so app.shinsa.dev shows it read-only, below): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
   New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
   that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
@@ -3392,6 +3392,16 @@ online, and the last list of it their own machine kept while it is not (Offline 
   and `POST /api/remote/members/grant`,
   and the remote snapshot carries the teams (`RemoteSnapshot.teams`, `listTeamEntries`), so every change reaches every
   page at once.
+- **Settings → Teams on app.shinsa.dev** (`components/settings/hosted-teams.tsx`, `HostedTeamsSettings`) is read-only:
+  every change to a team is refused from off the machine, so it has no buttons and says that teams are made, linked and
+  changed in Settings on the machine itself (`TEAMS_ON_MACHINE_NOTE`). It never asks a machine: it reads your teams from
+  app.shinsa.dev (`dashboard.listTeams()`) and this browser's team keys (`teamKeys.selectTeamKey`, `listHostedTeams`),
+  so it shows even when no machine of yours is reachable. One card per team has its name, your role, its people and
+  machines counts and when it was made (`describeHostedTeam`), its machines with Online, Last seen or Never connected
+  (`listTeamMachineRows`, a fold that starts open) and its People (a fold that starts closed). A team this browser holds
+  no key for says to open its join link here once to read its tasks (`TEAM_KEY_MISSING`, the same line the team task
+  page shows). With no team the section says how to make or join one; a failed read shows its error. Sharing stays
+  only on the machine.
 - **Agents read it, never change it.** `shinsa teams list` (`teams_list`) is every agent's tool; every other `teams`
   command and both project team commands are human-only.
 
