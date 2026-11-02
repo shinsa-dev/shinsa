@@ -462,7 +462,10 @@ function resolveTriagePlan(
     optional: !pinned,
     open,
     waitsOnQuestion: resolveWaitsOnQuestion(open),
-    duplicateQuestion: resolveDuplicateQuestion(open, teammates?.tasks ?? []),
+    duplicateQuestion: resolveDuplicateQuestion(
+      pinned ? open.filter((candidate) => candidate.repoId === pinned.id) : open,
+      (teammates?.tasks ?? []).filter((candidate) => !pinned || candidate.repoName === pinned.name)
+    ),
     teammates,
     fallback: {
       title,
@@ -517,11 +520,18 @@ function resolveDuplicateWhy(answer: TriageAnswer, quoted: string) {
   return parseAnswerText(answer.duplicate_why, WHY_LIMIT) ?? `It asks for the same work as ${quoted}.`;
 }
 
+function isDuplicateAllowed(state: ShinsaState, candidate: Task, repoPath: string | null) {
+  if (repoPath === null || candidate.repoId === null) return false;
+  return state.repos[candidate.repoId]?.path === repoPath;
+}
+
 function parseDuplicate(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer, repoPath: string | null) {
   if (!plan.duplicateQuestion) return null;
   const named = parseDecisionAnswer(plan.duplicateQuestion, answer.duplicate_of);
   const teammate = plan.teammates?.tasks.find((candidate) => candidate.key === named);
   if (teammate) {
+    const repoName = plan.candidates.find((candidate) => candidate.path === repoPath)?.name;
+    if (teammate.repoName !== repoName) return null;
     const original = { ...teammate.original };
     return {
       duplicateOfTeammate: original,
@@ -529,7 +539,7 @@ function parseDuplicate(state: ShinsaState, plan: TriagePlan, answer: TriageAnsw
     };
   }
   const original = plan.open.find((candidate) => candidate.id === named);
-  if (!original || !isDependencyAllowed(state, plan, original, repoPath)) return null;
+  if (!original || !isDuplicateAllowed(state, original, repoPath)) return null;
   return { duplicateOf: original.id, why: resolveDuplicateWhy(answer, `“${original.title}”`) };
 }
 
