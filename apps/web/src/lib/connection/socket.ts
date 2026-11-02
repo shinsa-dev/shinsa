@@ -30,6 +30,7 @@ import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
+import { provideTransport } from '@/lib/runtime/socket/transport.ts';
 import { useSharedTranscript } from '@/lib/share/transcripts.ts';
 import { createSignal } from '@/lib/signal.ts';
 import {
@@ -216,7 +217,6 @@ export class Connection implements ShinsaConnection {
 
   start() {
     if (this.#fiber !== null || this.#stopped) return;
-    const transport = this.#options.transport ?? Socket.layerWebSocketConstructorGlobal;
     const session = {
       opened: (link: EngineLink) => this.#open(link),
       received: (message: ServerMessage) => this.#receive(message),
@@ -227,7 +227,7 @@ export class Connection implements ShinsaConnection {
       return yield* socket.connect(session);
     });
     this.#fiber = forkApp(
-      connect.pipe(Effect.provide(EngineSocket.layer.pipe(Layer.provideMerge(transport))))
+      connect.pipe(Effect.provide(EngineSocket.layer), provideTransport(this.#options.transport))
     );
   }
 

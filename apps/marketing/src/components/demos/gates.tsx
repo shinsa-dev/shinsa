@@ -3,7 +3,7 @@ import { Button } from '@shinsa/ui/components/button';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import * as React from 'react';
 import { TaskPage } from '@/routes/task/index.tsx';
-import { appendTranscript, onDemoCommand, resetTranscript } from '../../lib/demo-server.ts';
+import { appendTranscript, onDemoCommand, resetTranscript } from '../../lib/demo-server/sockets.ts';
 import {
   createGateScene,
   GATE_FEEDS,

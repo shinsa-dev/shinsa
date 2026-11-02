@@ -1,10 +1,10 @@
 import { resolveTeamViewPath, type TeamViewTarget } from '@shinsa/core';
-import { Clock, Effect, Layer } from 'effect';
-import { Socket } from 'effect/socket';
+import { Clock, Effect } from 'effect';
 import { forkApp } from '@/lib/runtime/app.ts';
 import { type RequestFetch, sendThrough } from '@/lib/runtime/fetch.ts';
 import { keepDialing } from '@/lib/runtime/socket/reconnect.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
+import { provideTransport } from '@/lib/runtime/socket/transport.ts';
 import {
   createShareReceiver,
   type ShareReceiverOptions,
@@ -35,7 +35,6 @@ function runTeamChannel(
   options: TeamChannelOptions,
   open: (socket: TeamSocket['Service']) => Effect.Effect<never, TeamChannelEnded>
 ) {
-  const transport = options.transport ?? Socket.layerWebSocketConstructorGlobal;
   const channel = Effect.gen(function* () {
     const socket = yield* TeamSocket;
     return yield* open(socket);
@@ -43,7 +42,8 @@ function runTeamChannel(
     Effect.catchTag('TeamChannelEnded', (ended) =>
       Effect.sync(() => handlers.onEnd({ reason: ended.reason, gone: ended.gone }))
     ),
-    Effect.provide(TeamSocket.layer.pipe(Layer.provideMerge(transport)))
+    Effect.provide(TeamSocket.layer),
+    provideTransport(options.transport)
   );
   const fiber = forkApp(options.fetch ? sendThrough(options.fetch)(channel) : channel);
   return () => fiber.interruptUnsafe();

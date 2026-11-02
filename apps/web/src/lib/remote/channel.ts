@@ -1,6 +1,7 @@
 import { Effect, Layer } from 'effect';
 import { Socket } from 'effect/socket';
 import { runApp } from '@/lib/runtime/app.ts';
+import { provideTransport } from '@/lib/runtime/socket/transport.ts';
 import type { ChannelLink, ChannelOptions, RemoteChannel } from './remote-channel/schema.ts';
 import { RemoteChannels } from './remote-channel/service.ts';
 
@@ -24,11 +25,11 @@ export function openRemoteChannel(options: ChannelOptions): Promise<RemoteChanne
   const openSocket = options.openSocket;
   const transport = openSocket
     ? Layer.succeed(Socket.WebSocketConstructor, (url) => openSocket(url))
-    : Socket.layerWebSocketConstructorGlobal;
+    : undefined;
   return runApp(
     Effect.gen(function* () {
       const channels = yield* RemoteChannels;
       return yield* channels.open(options);
-    }).pipe(Effect.map(adoptChannel), Effect.provide(RemoteChannels.layer.pipe(Layer.provide(transport))))
+    }).pipe(Effect.map(adoptChannel), Effect.provide(RemoteChannels.layer), provideTransport(transport))
   );
 }

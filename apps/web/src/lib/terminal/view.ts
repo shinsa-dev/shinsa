@@ -5,8 +5,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { type IDisposable, Terminal } from '@xterm/xterm';
-import { Effect, type Fiber, Layer, Result } from 'effect';
-import { Socket } from 'effect/socket';
+import { Effect, type Fiber, Result } from 'effect';
 import type { SearchOptions } from '@/lib/code/search.ts';
 import {
   changeTerminalFontSize,
@@ -15,6 +14,7 @@ import {
 } from '@/lib/preferences/terminal.ts';
 import { forkApp } from '@/lib/runtime/app.ts';
 import type { SocketFrame, SocketTransport } from '@/lib/runtime/socket/schema.ts';
+import { provideTransport } from '@/lib/runtime/socket/transport.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveTerminalKey, type TerminalKey } from '@/lib/terminal/keys.ts';
 import { silenceEngineAnswers } from '@/lib/terminal/replies.ts';
@@ -166,7 +166,6 @@ export class TerminalView {
   }
 
   #connect() {
-    const transport = this.#options.transport ?? Socket.layerWebSocketConstructorGlobal;
     const session: TerminalSession = {
       opened: (link) => {
         this.#link = link;
@@ -184,7 +183,7 @@ export class TerminalView {
       Effect.gen(function* () {
         const socket = yield* TerminalSocket;
         yield* socket.connect(id, session);
-      }).pipe(Effect.provide(TerminalSocket.layer.pipe(Layer.provideMerge(transport))))
+      }).pipe(Effect.provide(TerminalSocket.layer), provideTransport(this.#options.transport))
     );
   }
 

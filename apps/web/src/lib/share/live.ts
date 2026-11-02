@@ -6,11 +6,11 @@ import {
   type ShareLink,
   type ShareLiveView,
 } from '@shinsa/core';
-import { Effect, Layer, Option, Schema } from 'effect';
-import { Socket } from 'effect/socket';
+import { Effect, Option, Schema } from 'effect';
 import { forkApp } from '@/lib/runtime/app.ts';
 import { type RequestFetch, sendThrough } from '@/lib/runtime/fetch.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
+import { provideTransport } from '@/lib/runtime/socket/transport.ts';
 import { ShareGoneError } from '@/lib/share/sources.ts';
 import type { SharedSource } from '@/lib/share/view.ts';
 import { type ShareContent, type ShareSession, ShareLiveViewText } from './share-socket/schema.ts';
@@ -127,12 +127,11 @@ export function openShareStream(
     dropped: (drop) =>
       handlers.onError(drop.final ? new ShareGoneError(drop.reason) : new Error(drop.reason)),
   };
-  const transport = options.transport ?? Socket.layerWebSocketConstructorGlobal;
   const fetch = options.fetch;
   const stream = Effect.gen(function* () {
     const socket = yield* ShareSocket;
     yield* socket.connect(link, session);
-  }).pipe(Effect.provide(ShareSocket.layer.pipe(Layer.provideMerge(transport))));
+  }).pipe(Effect.provide(ShareSocket.layer), provideTransport(options.transport));
   const fiber = forkApp(fetch ? sendThrough(fetch)(stream) : stream);
   return () => {
     fiber.interruptUnsafe();

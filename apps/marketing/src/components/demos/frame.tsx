@@ -5,10 +5,9 @@ import type * as React from 'react';
 import { CardsTopBar } from '@/components/layout/cards/top-bar.tsx';
 import { DesktopChrome } from '@/lib/desktop.ts';
 import { type Route, RouteScope } from '@/router.ts';
-import { installDemoApi, installDemoConnection, installDemoServer } from '../../lib/demo-server.ts';
+import { installDemoConnection, installDemoServer } from '../../lib/demo-server/install.ts';
 
 if (import.meta.env.SSR) {
-  installDemoApi();
   installDemoConnection();
 } else {
   installDemoServer();
