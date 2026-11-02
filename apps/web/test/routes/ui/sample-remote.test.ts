@@ -46,7 +46,7 @@ describe('the /ui remote access samples', () => {
     expect(await devices.selectDevice('k3x9')).toMatchObject({ instanceId: 'k3x9' });
     expect(await devices.selectDevice('w4t8')).toBeNull();
     expect(await devices.listWaitingDevices()).toEqual([]);
-    expect((await dashboard.readSession())?.user.login).toBe('mona');
+    expect((await dashboard.readSession())?.user?.login).toBe('mona');
     const teams = await dashboard.listTeams();
     expect(teams.map((team) => [team.name, team.role, team.machines.length])).toEqual([
       ['Platform', 'owner', 2],
