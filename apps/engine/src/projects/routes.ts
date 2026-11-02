@@ -35,7 +35,7 @@ function findProject(engine: Engine, projectId: string) {
   return project;
 }
 
-function listLocalRepoViews(engine: Engine, roots: string[]): LocalRepoView[] {
+export function listLocalRepoViews(engine: Engine, roots: string[]): LocalRepoView[] {
   const state = engine.state;
   const projects = Object.values(state.projects);
   const folders = projects.flatMap((project) => project.folders);

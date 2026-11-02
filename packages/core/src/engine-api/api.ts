@@ -78,6 +78,7 @@ import {
   ScopeRefused,
   SearchAnswer,
   ServiceSuggestionsAnswer,
+  ServiceRunBody,
   ServiceSuggestionsQuery,
   SettingsAnswer,
   SlackAnswer,
@@ -537,8 +538,6 @@ const TerminalParams = { terminalId: Schema.String };
 
 const ServiceParams = { serviceId: Schema.String };
 
-const TaskIdBody = Schema.Struct({ taskId: Field });
-
 class TerminalsGroup extends HttpApiGroup.make('terminals')
   .add(
     HttpApiEndpoint.get('list', '/api/terminals', { success: TerminalsAnswer }),
@@ -602,17 +601,17 @@ class ServicesGroup extends HttpApiGroup.make('services')
     }).annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS),
     HttpApiEndpoint.post('start', '/api/services/:serviceId/start', {
       params: ServiceParams,
-      payload: TaskIdBody,
+      payload: [ServiceRunBody, Schema.Null],
       success: ObjectAnswer,
     }),
     HttpApiEndpoint.post('stop', '/api/services/:serviceId/stop', {
       params: ServiceParams,
-      payload: TaskIdBody,
+      payload: [ServiceRunBody, Schema.Null],
       success: ObjectAnswer,
     }),
     HttpApiEndpoint.post('restart', '/api/services/:serviceId/restart', {
       params: ServiceParams,
-      payload: TaskIdBody,
+      payload: [ServiceRunBody, Schema.Null],
       success: ObjectAnswer,
     })
   )

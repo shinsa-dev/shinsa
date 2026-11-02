@@ -348,6 +348,8 @@ export const TeamMemberBody = Schema.Struct({ teamId: FilledText, userId: Filled
 
 export const ProjectPathBody = Schema.Struct({ path: LoosePath });
 
+export const ServiceRunBody = Schema.Struct({ taskId: Field });
+
 export const TEAM_FAILURE: FieldFailure = { code: 'teamId_invalid', message: 'Name the team by its id.' };
 
 export const TEAM_USER_FAILURE: FieldFailure = {
@@ -647,7 +649,7 @@ export const LocalReposAnswer = Schema.Unknown.pipe(
 );
 
 export const CoverageAnswer = Schema.Unknown.pipe(
-  Schema.refine((value): value is { readonly detected: readonly CoverageDetection[] } =>
+  Schema.refine((value): value is { readonly detected: Readonly<Record<string, CoverageDetection | null>> } =>
     Predicate.isObject(value)
   )
 );

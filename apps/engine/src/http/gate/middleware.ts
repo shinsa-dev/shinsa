@@ -60,6 +60,11 @@ export const EngineGateLive = Layer.effect(
         return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
     });
 
+    const acceptsNoBody = (endpoint: HttpApiEndpoint.Top) =>
+      [...endpoint.payload.values()].some((entry) =>
+        entry.schemas.some((schema) => Schema.is(Schema.toType(schema))(null))
+      );
+
     const assertBody = Effect.fn('EngineGate.assertBody')(function* (endpoint: HttpApiEndpoint.Top) {
       const request = yield* HttpServerRequest.HttpServerRequest;
       if (READ_METHODS.has(request.method)) return;
@@ -76,6 +81,7 @@ export const EngineGateLive = Layer.effect(
       const bytes = yield* Effect.orDie(request.arrayBuffer);
       if (bytes.byteLength > limit)
         return yield* new RequestFailed({ code: 'body_too_large', message: describeBodyLimit(limit) });
+      if (bytes.byteLength === 0 && acceptsNoBody(endpoint)) return;
       yield* decodeJson(new TextDecoder().decode(bytes)).pipe(
         Effect.mapError(() => new RequestFailed({ code: BODY_INVALID, message: BODY_NOT_JSON }))
       );

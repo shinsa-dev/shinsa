@@ -41,7 +41,7 @@ const CLOSED = 4404;
 
 const BROWSER_ONLY = 'Only Shinsa’s page opens terminals.';
 
-function readText(body: JsonObject, field: string, limit: number) {
+export function readText(body: JsonObject, field: string, limit: number) {
   const value = body[field];
   if (typeof value !== 'string' || value.length === 0 || value.length > limit)
     throw new DomainError({
@@ -51,7 +51,7 @@ function readText(body: JsonObject, field: string, limit: number) {
   return value;
 }
 
-function readOptionalText(body: JsonObject, field: string, limit: number) {
+export function readOptionalText(body: JsonObject, field: string, limit: number) {
   return body[field] === undefined || body[field] === null ? null : readText(body, field, limit);
 }
 
@@ -60,7 +60,7 @@ async function readTaskId(request: Request) {
   return readOptionalText(await readJsonObject(request), 'taskId', 200);
 }
 
-function isFolder(path: string) {
+export function isFolder(path: string) {
   try {
     return statSync(path).isDirectory();
   } catch {
@@ -165,7 +165,7 @@ export function readServiceInput(
   };
 }
 
-function readServiceBatch(
+export function readServiceBatch(
   body: JsonObject,
   others: ServiceDefinition[],
   places: TerminalPlace[],
@@ -187,7 +187,7 @@ function readServiceBatch(
   return inputs;
 }
 
-function readServiceIds(body: JsonObject) {
+export function readServiceIds(body: JsonObject) {
   const ids = body.ids;
   if (
     !Array.isArray(ids) ||
@@ -202,7 +202,7 @@ function readServiceIds(body: JsonObject) {
   return [...new Set(ids as string[])];
 }
 
-function listNewServiceSuggestions(suggestions: ServiceSuggestion[], services: ServiceDefinition[]) {
+export function listNewServiceSuggestions(suggestions: ServiceSuggestion[], services: ServiceDefinition[]) {
   return suggestions.filter(
     (suggestion) =>
       !services.some(
@@ -213,7 +213,10 @@ function listNewServiceSuggestions(suggestions: ServiceSuggestion[], services: S
   );
 }
 
-function listNewSuggestions(places: TerminalPlace[], services: ServiceDefinition[]): ServiceSuggestion[] {
+export function listNewSuggestions(
+  places: TerminalPlace[],
+  services: ServiceDefinition[]
+): ServiceSuggestion[] {
   const roots = places.filter((place) => place.kind !== 'worktree').map((place) => place.path);
   return listNewServiceSuggestions(listServiceSuggestions(roots), services);
 }
@@ -222,7 +225,7 @@ function resolveBrowserRefusal(request: Request) {
   return request.headers.get('origin') === null ? BROWSER_ONLY : null;
 }
 
-function resolveServicePlaceIn(state: ShinsaState, service: ServiceDefinition, home: string) {
+export function resolveServicePlaceIn(state: ShinsaState, service: ServiceDefinition, home: string) {
   return resolveServicePlace(listTerminalPlaces(state, service.projectId), service.cwd, home);
 }
 
