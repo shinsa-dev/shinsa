@@ -15,7 +15,7 @@ import { listProjectChoices, type ProjectChoice } from './settings.ts';
 
 export const JOIN_PATH = '/api/remote/teams/join';
 
-const STATE_TIMEOUT_MS = 10_000;
+const STATE_TIMEOUT_MS = 4000;
 
 export interface JoinMachine {
   id: string;
@@ -35,7 +35,8 @@ type MachineConnection = Pick<ShinsaConnection, 'start' | 'subscribe' | 'snapsho
 
 export function listJoinRows(rows: readonly MachineRow[]) {
   return rows.filter(
-    (row): row is JoinRow => row.instance.role === 'owner' && row.device !== null && !row.device.waiting
+    (row): row is JoinRow =>
+      row.instance.role === 'owner' && row.instance.online && row.device !== null && !row.device.waiting
   );
 }
 

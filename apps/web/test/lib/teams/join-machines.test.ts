@@ -68,12 +68,13 @@ function createFakeConnection(state: WireState | null) {
 }
 
 describe('the machines the join page shares from', () => {
-  it('keeps only your own machines this browser was added to and is not waiting on', () => {
+  it('keeps only your own online machines this browser was added to and is not waiting on', () => {
     const rows = [
       describeMachine(STUDIO, createDevice(STUDIO.id)),
       describeMachine(LAPTOP, createDevice(LAPTOP.id, { waiting: { machineName: 'Laptop' } })),
       describeMachine(SHARED, createDevice(SHARED.id)),
       describeMachine({ ...STUDIO, id: 'none' }, null),
+      describeMachine({ ...STUDIO, id: 'z8v4', name: 'Mini', online: false }, createDevice('z8v4')),
     ];
     expect(listJoinRows(rows).map((row) => row.instance.name)).toEqual(['Studio']);
   });
