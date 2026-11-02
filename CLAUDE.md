@@ -114,9 +114,9 @@ web ──WebSocket──► shinsa engine
 |---|---|
 | `bun dev` | `shinsa engine` on :5180 and the web app on :5181 (proxies `/api` and `/ws`); the engine's `dev` and `start` scripts pass `SHINSA_PORT=5180` (an exported `SHINSA_PORT` wins), so a checkout never takes the Mac app's port |
 | `bun run build` then `bun start` | Production: `shinsa engine` serves `apps/web/dist` on :5180 |
-| `bun lint` | Biome (with the Grit plugins), `bun lint:conventions` (`scripts/lint-conventions.ts`, its rule tables and messages in `scripts/lint-rules.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) |
-| `bun format` | Biome's formatter only (`bun format:fix` writes) |
-| `bun check-types` | TypeScript in every workspace and `scripts/` |
+| `bun lint` | Oxlint, type-aware with the Effect rules (`bun lint:oxlint`: `effect-tsgo oxlint --type-aware`, the rules in `.oxlintrc.json`, the ones Oxlint lacks in the tested `shinsa` plugin in `scripts/oxlint/`), the same markup rules on the HTML pages (`bun lint:html`, `scripts/lint-html.ts`: each page read as JSX on its own lines), stylelint on the CSS (`bun lint:styles`, `.stylelintrc.json`), `bun lint:conventions` (`scripts/lint-conventions.ts`, its rule tables and messages in `scripts/lint-rules.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) |
+| `bun format` | oxfmt checks formatting, Tailwind class order and import order (`.oxfmtrc.json`; `bun format:fix` writes) |
+| `bun check-types` | TypeScript 7 with the Effect language service in every workspace and `scripts/` (`effect-tsgo tsc --noEmit`, the severities in `tsconfig.effect.json`; an Effect error or warning fails it) |
 | `bun run test` | Unit tests (Bun) in every workspace plus `scripts/*.test.ts` (`bun run test:scripts`, the root `bunfig.toml`); each workspace and `scripts/` fails below 100% line and function coverage. Every test script runs `bun test --randomize`, which shuffles the files and the tests in each file and prints the order's `--seed=N`: tests must not depend on order, within a file or across files (rerun a failing order with `bun test --randomize --seed N` in that package) |
 | `bunx knip` / `bun deps` | Dead code / workspace dependency drift |
 | `bun run --cwd apps/marketing dev` | The site on :5182 (`build`, `preview` likewise; Astro runs under Bun) |
@@ -132,17 +132,17 @@ log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cw
 
 ## Key conventions
 
-- **No comments.** Names and structure carry the meaning; the reasons live here and in `docs/`. `bun lint:conventions` enforces it (`biome-ignore` and `@ts-` are allowed; `packages/ui`, a reusable kit, is exempt).
+- **No comments.** Names and structure carry the meaning; the reasons live here and in `docs/`. `bun lint:conventions` enforces it (`oxlint-disable`, `stylelint-disable` and `@ts-` are allowed, each with its reason; `packages/ui`, a reusable kit, is exempt).
 - **The verb catalog**: `find*` throws, `select*` returns null, `list*`, `count*`, `resolve*` derives, `create*`/`update*`, `upsert*`/`write*`/`replace*`, `remove*`, `assert*`, `serialize*`, `request*`/`sync*`/`apply*`/`record*`. No `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*` (lint-enforced). The `conventions` skill has the examples.
 - **Effect 4 for everything that does I/O** (`effect` pinned at the same exact version in every workspace): every
   shape that crosses a boundary is a `Schema`, every expected failure a `Schema.TaggedError` in the type, every
   dependency a service provided by a `Layer`, every resource scoped and every retry a named `Schedule`. Pure logic
   (core's `decide`, the folds) stays plain functions over those schemas, never wrapped in an effect. The `effect`
-  skill is the one way to write it, every pattern compiled and tested in `scripts/effect-guide/`, and
-  `bun lint:conventions` checks every file that imports `effect` (`scripts/lint-effect.ts`). The apps move one service
-  at a time; code not yet moved keeps its current style until its task.
+  skill is the one way to write it, every pattern compiled and tested in `scripts/effect-guide/`; the Effect language
+  service in `bun check-types` and `bun lint:conventions` (`scripts/lint-effect.ts`, on every file that imports
+  `effect`) check it. The apps move one service at a time; code not yet moved keeps its current style until its task.
 - **Skills** (`.claude/skills`): `conventions` is the pattern catalog, load it before writing code; `effect` before any code that imports `effect`; `review` is the method for a cleanup or review pass (scope the diff, prove every finding by reverting its fix); `copy` for any string a person or an agent reads; `design` for UI.
-- **`packages/core` stays pure**: no `node:*`, no Bun, no I/O (Biome bans the imports). New behaviour is a command, events and effects there, and the I/O for the effect in `apps/engine`.
+- **`packages/core` stays pure**: no `node:*`, no Bun, no I/O (Oxlint bans the imports). New behaviour is a command, events and effects there, and the I/O for the effect in `apps/engine`.
 - **Icons** are Central Icons through `<Icon name='Icon…' />` (`@shinsa/ui/components/icon`); run `bun run --cwd packages/ui generate:icons` after using a new name. Primitives size their icons; don't pass a size inside a Button, Badge, tab or menu row.
 - **UI copy** follows the `copy` skill: sentence case, full sentences, no em dashes, plain professional words (task, review, workspace), never playful labels (the two layout names in `LAYOUT_NAMES`, Desk and Shelf, are names chosen on purpose, each with a plain hint line).
 - **Desktop first, responsive.** Screens are built for a full desktop window and must still work in an ~900px

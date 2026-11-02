@@ -36,6 +36,7 @@
           "obsoleteSchemaImport": "error",
           "outdatedApi": "error",
           "overriddenSchemaConstructor": "error",
+          "preferSchemaTaggedError": "error",
           "promiseInEffectSuccess": "error",
           "schemaClassMissingBrand": "error",
           "schemaClassObjectLiteral": "error",

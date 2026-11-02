@@ -97,8 +97,9 @@ describe('Effect code is held to the house style', () => {
     expect(messages('Effect.succeed(1).pipe(Effect.orDie); run().pipe(Effect.orDie);')).toEqual([]);
   });
 
-  test('Data errors, the wall clock and JSON.parse are caught', () => {
-    expect(messages("class A extends Data.TaggedError('A') {}")).toEqual([EFFECT_DATA_ERROR_MESSAGE]);
+  test('Data.Error, the wall clock and JSON.parse are caught', () => {
+    expect(messages('class A extends Data.Error {}')).toEqual([EFFECT_DATA_ERROR_MESSAGE]);
+    expect(messages("class B extends Data.TaggedError('B') {}")).toEqual([]);
     expect(messages('const now = Date.now(); const at = new Date();')).toEqual([
       EFFECT_CLOCK_MESSAGE,
       EFFECT_CLOCK_MESSAGE,

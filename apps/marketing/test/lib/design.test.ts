@@ -45,7 +45,7 @@ const SKILL_RULES: Record<string, readonly string[]> = {
     'describeError',
   ],
   '.claude/skills/review/SKILL.md': [
-    'bunx biome ci .',
+    'bun lint:oxlint',
     'bun lint:conventions',
     'valid, stale',
     'Lead with the verdict',

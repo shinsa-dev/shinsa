@@ -2,6 +2,7 @@ import { cognitiveComplexity } from './rules/cognitive-complexity.ts';
 import { noAccumulatingSpread } from './rules/no-accumulating-spread.ts';
 import { noArrayIndexKey } from './rules/no-array-index-key.ts';
 import { noAwaitInTernary } from './rules/no-await-in-ternary.ts';
+import { noConfusingVoidType } from './rules/no-confusing-void-type.ts';
 import { noDynamicNamespaceImportAccess } from './rules/no-dynamic-namespace-import-access.ts';
 import { noEvolvingTypes } from './rules/no-evolving-types.ts';
 import { noForEach } from './rules/no-for-each.ts';
@@ -24,6 +25,7 @@ export const SHINSA_RULES = {
   'no-accumulating-spread': noAccumulatingSpread,
   'no-array-index-key': noArrayIndexKey,
   'no-await-in-ternary': noAwaitInTernary,
+  'no-confusing-void-type': noConfusingVoidType,
   'no-dynamic-namespace-import-access': noDynamicNamespaceImportAccess,
   'no-evolving-types': noEvolvingTypes,
   'no-for-each': noForEach,

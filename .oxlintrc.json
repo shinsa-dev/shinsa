@@ -190,6 +190,7 @@
     "shinsa/cognitive-complexity": "warn",
     "shinsa/no-accumulating-spread": "error",
     "shinsa/no-await-in-ternary": "error",
+    "shinsa/no-confusing-void-type": "error",
     "shinsa/no-dynamic-namespace-import-access": "error",
     "shinsa/no-evolving-types": "error",
     "shinsa/no-for-each": "warn",

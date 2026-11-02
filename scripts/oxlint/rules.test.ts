@@ -3,6 +3,7 @@ import { cognitiveComplexity } from './rules/cognitive-complexity.ts';
 import { noAccumulatingSpread } from './rules/no-accumulating-spread.ts';
 import { noArrayIndexKey } from './rules/no-array-index-key.ts';
 import { noAwaitInTernary } from './rules/no-await-in-ternary.ts';
+import { noConfusingVoidType } from './rules/no-confusing-void-type.ts';
 import { noDynamicNamespaceImportAccess } from './rules/no-dynamic-namespace-import-access.ts';
 import { noEvolvingTypes } from './rules/no-evolving-types.ts';
 import { noForEach } from './rules/no-for-each.ts';
@@ -35,6 +36,24 @@ describe('the Shinsa Oxlint rules report what Biome reported', () => {
     ].join('\n');
     expect(linesOf(noAwaitInTernary, code)).toEqual([1, 2, 3]);
     expect(listReports(noAwaitInTernary, code)[0]?.message).toContain('Ternaries never wrap awaited calls');
+  });
+
+  test('void is only a return type, a type argument, a default or a this type', () => {
+    const code = [
+      'let a: void;',
+      'function b(thing: void) {}',
+      'interface C { prop: void }',
+      'type D = number | void;',
+      'function e(): void {}',
+      'function f(this: void) {}',
+      'function g<T = void>(arg: T) {}',
+      'type H = Promise<void>;',
+      'const i = Promise.withResolvers<void>();',
+      'type J = () => string | void;',
+      'function k<T extends void>() {}',
+    ].join('\n');
+    expect(linesOf(noConfusingVoidType, code, 'sample.ts')).toEqual([1, 2, 3, 4, 11]);
+    expect(listReports(noConfusingVoidType, code, 'sample.ts')[0]?.message).toContain('Use `undefined`');
   });
 
   test('a let with no type and no value, or only null or undefined, evolves into any', () => {

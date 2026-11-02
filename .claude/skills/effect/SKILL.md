@@ -28,7 +28,7 @@ import { camelToSnake } from 'effect/String';
 ```
 
 - Modules by name from `effect`; subsystems from their subpath (`effect/http`, `effect/http-api`, `effect/sql`, `effect/testing`, `effect/process`, `effect/crypto`, `effect/encoding`, `effect/observability`).
-- A module whose name shadows a global (`String`, `Array`, `Number`, `Boolean`, `Record`, `Function`) is imported as functions from its subpath (`import { camelToSnake } from 'effect/String'`), so no file shadows a global (Biome's `noShadowRestrictedNames`).
+- A module whose name shadows a global (`String`, `Array`, `Number`, `Boolean`, `Record`, `Function`) is imported as functions from its subpath (`import { camelToSnake } from 'effect/String'`), so no file shadows a global (Oxlint's `no-shadow-restricted-names`).
 - Drivers and platforms are `@effect/*` at the same version: `@effect/sql-d1` in the Worker, `@effect/sql-sqlite-bun` in the engine and in tests, `@effect/platform-bun` for the engine's runtime.
 - No aliases, no namespace imports (`import * as E`). The lint rules below match `Effect.`, `Schema.` and the rest by name.
 
@@ -88,7 +88,7 @@ const open = async () => { await connect(); };
 - `Effect.gen` for inline code; `Effect.fn('Service.method')` for every reusable function, named exactly like the service and method so traces read as the code; `Effect.fnUntraced` only on hot paths that are not a useful span.
 - Combinators for an `Effect.fn` go in as extra arguments, `Effect.fn('a')(function* () { … }, Effect.orDie)`, never as a `.pipe` after it.
 - `return yield* new SomeError(…)` to fail, so TypeScript knows the branch ends.
-- A generator with nothing to `yield*` is not an effect function: return `Effect.succeed(value)` or `Effect.sync(() => …)` (Biome's `useYield` catches it).
+- A generator with nothing to `yield*` is not an effect function: return `Effect.succeed(value)` or `Effect.sync(() => …)` (Oxlint's `require-yield` catches it).
 - A promise API is entered once, in `Effect.tryPromise({ try, catch })` with the rejection mapped to a tagged error; `Effect.promise` only for one that cannot reject. Nothing else awaits, chains `.then`, or builds a `new Promise`; a callback API is `Effect.callback` with a finalizer that cancels it.
 - Code that may throw (a library, `new URL`) goes in `Effect.try({ try, catch })`. Effect code itself never throws and never catches.
 - Add behaviour with combinators: `Effect.timeout`, `Effect.retry`, `Effect.withSpan`, `Effect.annotateLogs`, `Effect.tap`.
@@ -249,7 +249,20 @@ test('find fails with MachineNotFound', async () => {
 
 ## Lint
 
-`bun lint:conventions` checks every source file that imports `effect` or `@effect/*` (never tests), `apps/cloud` included, with `scripts/lint-effect.ts`:
+Three tools check Effect code, and each catches what the others cannot:
+
+- **The Effect language service** (`@effect/tsgo`), run by every `check-types` as `effect-tsgo tsc --noEmit` with the
+  severities in `tsconfig.effect.json`: every correctness rule is an error and a warning fails the build. It reads
+  types, so it catches an effect nobody runs (`floatingEffect`), a missing `yield*`, an error or a service left out of
+  a signature (`missingEffectError`, `missingEffectContext`, `missingLayerContext`), `any` or `unknown` in an error
+  channel, a schema class without its brand, an unstable API outside the allowed list (`effect/http`,
+  `effect/http-api`, `effect/sql` and the SQL drivers), and `Data.TaggedError` (`preferSchemaTaggedError`).
+- **Oxlint**, run type-aware as `effect-tsgo oxlint --type-aware` (`bun lint:oxlint`), for the house rules every file
+  meets: `no-console`, `require-yield`, `no-shadow-restricted-names`, floating promises and the rest of
+  `.oxlintrc.json`.
+- **`scripts/lint-effect.ts`**, in `bun lint:conventions`, for what no diagnostic expresses: it checks every source
+  file that imports `effect` or `@effect/*` (never tests), wherever it is, while the language service's matching
+  rules only look inside a generator or at every file of the repository:
 
 | Caught | Write instead |
 |---|---|
@@ -258,10 +271,8 @@ test('find fails with MachineNotFound', async () => {
 | `await`, `async`, `new Promise`, `.then` / `.catch` / `.finally` outside `Effect.try`, `Effect.tryPromise` or `Effect.promise` | `Effect.gen`, `Effect.fn` |
 | a function that only returns `Effect.gen` | `Effect.fn('name')(function* () { … })` |
 | `.pipe` after `Effect.fn` | combinators as more arguments to `Effect.fn` |
-| `Data.TaggedError`, `Data.Error` | `Schema.TaggedError` |
+| `Data.Error` | `Schema.TaggedError` |
 | `Date.now()`, `new Date()` | `Clock`, `DateTime` |
 | `JSON.parse` | `Schema.fromJsonString(Shape)` |
 | anything beside the one export of a `handler.ts`, `service.ts` or `middleware.ts` | its steps inside the export's body, its shapes and constants in `schema.ts` |
 | a function or an effect in a `schema.ts` | a schema transform, or the step next to the code that runs it |
-
-Biome adds `noConsole`, `useYield`, `noShadowRestrictedNames` and the rest of the house set.
