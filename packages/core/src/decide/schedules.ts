@@ -121,7 +121,10 @@ function assertTimeZone(timeZone: string) {
 function resolveTarget(decider: Decider, input: ScheduleTargetInput, task: Task): ScheduleTarget {
   if (input.kind === 'new_task') {
     if (input.repoId !== null && !decider.state.repos[input.repoId]) {
-      throw new DomainError('repo_not_found', `No repository ${input.repoId}. Name one of the project's.`);
+      throw new DomainError({
+        code: 'repo_not_found',
+        message: `No repository ${input.repoId}. Name one of the project's.`,
+      });
     }
     return {
       kind: 'new_task',

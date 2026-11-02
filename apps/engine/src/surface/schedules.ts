@@ -102,16 +102,17 @@ function assertHookSecret(client: SurfaceClient, values: Values) {
   const ref = readValue(values, 'signatureSecretRef');
   const signed = Boolean(values.webhook && readValue(values, 'signatureHeader'));
   if (ref && !client.hookSecrets) {
-    throw new DomainError(
-      'schedule_invalid',
-      '--signature-secret-ref is for agents. Set the signing secret with `shinsa schedules webhook-secret`.'
-    );
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message:
+        '--signature-secret-ref is for agents. Set the signing secret with `shinsa schedules webhook-secret`.',
+    });
   }
   if (ref && !signed) {
-    throw new DomainError(
-      'schedule_invalid',
-      'Give --signature-secret-ref with --webhook and --signature-header.'
-    );
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message: 'Give --signature-secret-ref with --webhook and --signature-header.',
+    });
   }
   if (signed) client.hookSecrets?.assertSecret(readValue(values, 'id') || null, ref || null);
 }
