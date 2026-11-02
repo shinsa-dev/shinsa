@@ -89,7 +89,7 @@ describe('delegations', () => {
     ];
     const fake = createFakeClient({
       '/api/delegations': { delegations },
-      '/api/delegations?task=Fix%20it': { delegations: [] },
+      '/api/delegations?task=Fix+it': { delegations: [] },
     });
     expect((await runSpec(fake, ['delegations', 'list'])).text.split('\n')).toEqual([
       'run-2  reviewer  Review it  (working) on task task-1',

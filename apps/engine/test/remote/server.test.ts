@@ -32,7 +32,6 @@ import {
   type RemoteSnapshot,
   TunnelConnector,
   resolveMachineName,
-  resolveRequestOrigin,
 } from '../../src/remote/index.ts';
 import type { PreviewLinks, PreviewPeer } from '../../src/remote/previews.ts';
 import type { ShareChannel } from '../../src/remote/share-channel.ts';
@@ -711,10 +710,6 @@ describe('the remote service', () => {
     expect(connectors).toHaveLength(1);
     expect(remote.tunnelHost).toBeNull();
     warn.mockRestore();
-  });
-
-  test('marks a request that came through the channel as remote', () => {
-    expect(resolveRequestOrigin(new Request('http://x/'))).toBe('local');
   });
 });
 

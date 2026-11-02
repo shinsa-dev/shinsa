@@ -16,7 +16,6 @@ import {
   MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
   type RemoteAccess,
-  type RequestOrigin,
   type TunnelStatus,
   resolveClaimUrl,
   resolveEnrollUrl,
@@ -48,21 +47,9 @@ export { TunnelConnector } from './connector/service.ts';
 export type { TunnelConnectorLayer } from './tunnel/index.ts';
 export { RemoteControl } from './client/index.ts';
 export { isTunnelRequest, resolveChannelOriginRefusal, resolveTunnelRoute } from './guard.ts';
-export { resolveLocalOnlyRoute } from './local-only.ts';
 export { REMOTE_FILE, RemoteStore } from './store.ts';
 
-const remoteRequests = new WeakSet<Request>();
-
 const REMOTE_ACCESS_CHANGED = 'Remote access to this machine changed.';
-
-export function markRemoteRequest(request: Request) {
-  remoteRequests.add(request);
-  return request;
-}
-
-export function resolveRequestOrigin(request: Request): RequestOrigin {
-  return remoteRequests.has(request) ? 'remote' : 'local';
-}
 
 export type { RemoteSnapshot } from '@shinsa/core';
 

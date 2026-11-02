@@ -73,7 +73,7 @@ function formatLink(snapshot: RemoteSnapshot) {
 }
 
 async function findRequestId(client: SurfaceClient, ref: string) {
-  const snapshot = await client.read<RemoteSnapshot>('/api/remote');
+  const snapshot = await client.api.remote.snapshot();
   const wanted = ref.replace(/^@/, '').toLowerCase();
   const matches = snapshot.requests.filter(
     (entry) => entry.id === ref || entry.user.login.toLowerCase() === wanted
@@ -99,7 +99,7 @@ const REQUEST_FIELD = {
 } as const;
 
 async function findMemberId(client: SurfaceClient, login: string) {
-  const snapshot = await client.read<RemoteSnapshot>('/api/remote');
+  const snapshot = await client.api.remote.snapshot();
   const wanted = login.replace(/^@/, '').toLowerCase();
   const member = snapshot.access?.members.find((entry) => entry.user.login.toLowerCase() === wanted);
   if (!member)
@@ -111,11 +111,11 @@ async function findMemberId(client: SurfaceClient, login: string) {
 }
 
 export const REMOTE_SPECS: SurfaceSpec[] = [
-  defineRead<RemoteSnapshot>({
+  defineRead({
     path: ['remote', 'status'],
     summary: 'Show whether this machine can be reached from Shinsa Cloud, and its enrolled devices.',
     fields: [],
-    request: () => '/api/remote',
+    read: (_values, client) => client.api.remote.snapshot(),
     format: formatRemote,
   }),
   defineAction({
@@ -124,7 +124,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     humanOnly: true,
     fields: [],
     act: async (client) => {
-      const data = await client.post<RemoteSnapshot>('/api/remote/pair', {});
+      const data = await client.api.remote.pair({ payload: {} });
       return { data, text: formatRemote(data) };
     },
   }),
@@ -134,7 +134,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     humanOnly: true,
     fields: [],
     act: async (client) => {
-      const data = await client.post<RemoteSnapshot>('/api/remote/enable', {});
+      const data = await client.api.remote.enable({ payload: {} });
       return { data, text: formatRemote(data) };
     },
   }),
@@ -144,7 +144,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     humanOnly: true,
     fields: [],
     act: async (client) => {
-      const data = await client.post<RemoteSnapshot>('/api/remote/disable', {});
+      const data = await client.api.remote.disable({ payload: {} });
       return { data, text: formatRemote(data) };
     },
   }),
@@ -154,7 +154,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     humanOnly: true,
     fields: [],
     act: async (client) => {
-      const data = await client.post<RemoteSnapshot>('/api/remote/remove', {});
+      const data = await client.api.remote.remove({ payload: {} });
       return { data, text: formatRemote(data) };
     },
   }),
@@ -164,7 +164,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     humanOnly: true,
     fields: [],
     act: async (client) => {
-      const data = await client.post<RemoteSnapshot>('/api/remote/link/create', {});
+      const data = await client.api.remote.createLink({ payload: {} });
       return { data, text: formatLink(data) };
     },
   }),
@@ -174,7 +174,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     humanOnly: true,
     fields: [],
     act: async (client) => {
-      const data = await client.post<RemoteSnapshot>('/api/remote/link/remove', {});
+      const data = await client.api.remote.removeLink({ payload: {} });
       return { data, text: formatRemote(data) };
     },
   }),
@@ -185,7 +185,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     fields: [REQUEST_FIELD],
     act: async (client, values) => {
       const requestId = await findRequestId(client, readValue(values, 'request'));
-      const data = await client.post<RemoteSnapshot>('/api/remote/requests/accept', { requestId });
+      const data = await client.api.remote.acceptRequest({ payload: { requestId } });
       return { data, text: formatRemote(data) };
     },
   }),
@@ -196,7 +196,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     fields: [REQUEST_FIELD],
     act: async (client, values) => {
       const requestId = await findRequestId(client, readValue(values, 'request'));
-      const data = await client.post<RemoteSnapshot>('/api/remote/requests/decline', { requestId });
+      const data = await client.api.remote.declineRequest({ payload: { requestId } });
       return { data, text: formatRemote(data) };
     },
   }),
@@ -216,7 +216,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     ],
     act: async (client, values) => {
       const userId = await findMemberId(client, readValue(values, 'login'));
-      const data = await client.post<RemoteSnapshot>('/api/remote/members/remove', { userId });
+      const data = await client.api.remote.removeMember({ payload: { userId } });
       return { data, text: formatRemote(data) };
     },
   }),
@@ -234,8 +234,10 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
       },
     ],
     act: async (client, values) => {
-      const data = await client.post<RemoteSnapshot>('/api/remote/devices/remove', {
-        publicKey: readValue(values, 'device'),
+      const data = await client.api.remote.removeDevice({
+        payload: {
+          publicKey: readValue(values, 'device'),
+        },
       });
       return { data, text: formatRemote(data) };
     },

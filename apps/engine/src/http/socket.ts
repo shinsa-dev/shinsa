@@ -2,7 +2,6 @@ import {
   type ChatEntry,
   type ParsedClientMessage,
   DEVELOPMENT_VERSION,
-  DomainError,
   type GuestActor,
   listSummarizedTasks,
   parseClientMessage,
@@ -19,16 +18,19 @@ import {
   serializeState,
   serializeViewState,
 } from '@shinsa/core';
+import { Cause, Effect } from 'effect';
 import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Remote } from '../remote/index.ts';
 import type { TeamFeeds } from '../remote/team-feeds.ts';
 import type { ResourceMonitor } from '../resources/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Terminals } from '../terminals/index.ts';
 import type { Classifier } from '../triage/message.ts';
-import { dispatchUserCommand } from './routes.ts';
+import { dispatchUserCommand } from './commands.ts';
+import { REQUEST_FAILED } from './schema.ts';
 
 export interface SocketData {
   kind: 'hub';
@@ -61,6 +63,8 @@ function send(socket: Socket, message: ServerMessage) {
 }
 
 const TRANSCRIPT_PAGE = 500;
+
+const COMMAND_FAILED = 'command_failed';
 
 export function createSocketHub(
   engine: Engine,
@@ -187,7 +191,10 @@ export function createSocketHub(
     }
   }
 
-  async function handleMessage(socket: Socket, message: ParsedClientMessage) {
+  const handleMessage = Effect.fn('SocketHub.handleMessage')(function* (
+    socket: Socket,
+    message: ParsedClientMessage
+  ) {
     switch (message.type) {
       case 'hello':
         if (socket.data.guest) return;
@@ -195,20 +202,21 @@ export function createSocketHub(
         syncSurfaces();
         return;
       case 'command': {
-        try {
-          await dispatchUserCommand(
-            engine,
-            message.command,
-            message.id,
-            classify,
-            socket.data.origin,
-            socket.data.guest
-          );
-          send(socket, { type: 'ack', id: message.id, error: null });
-        } catch (error) {
-          const code = error instanceof DomainError ? error.code : 'command_failed';
-          send(socket, { type: 'ack', id: message.id, error: { code, message: describeError(error) } });
-        }
+        const error = yield* dispatchUserCommand(engine, message.command, {
+          clientId: message.id,
+          classify,
+          origin: socket.data.origin,
+          guest: socket.data.guest,
+        }).pipe(
+          Effect.as(null),
+          Effect.catch((failure) =>
+            Effect.succeed({
+              code: failure.code === REQUEST_FAILED ? COMMAND_FAILED : failure.code,
+              message: failure.message,
+            })
+          )
+        );
+        send(socket, { type: 'ack', id: message.id, error });
         return;
       }
       case 'state.sync':
@@ -232,7 +240,7 @@ export function createSocketHub(
         socket.data.transcripts.delete(message.runId);
         return;
     }
-  }
+  });
 
   return {
     open(socket: Socket) {
@@ -266,9 +274,18 @@ export function createSocketHub(
         log.warn('[Socket] Ignored a message that is not a Shinsa message');
         return;
       }
-      handleMessage(socket, message).catch((error: unknown) => {
-        log.error('[Socket] Message failed', { type: message.type, error: describeError(error) });
-      });
+      edgeRuntime.runFork(
+        handleMessage(socket, message).pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() =>
+              log.error('[Socket] Message failed', {
+                type: message.type,
+                error: describeError(Cause.squash(cause)),
+              })
+            )
+          )
+        )
+      );
     },
     stop() {
       unsubscribeState();

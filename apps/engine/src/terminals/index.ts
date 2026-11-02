@@ -501,10 +501,5 @@ export class Terminals {
 }
 
 export { ServiceRefiner } from './refine.ts';
-export {
-  createTerminalRoutes,
-  createTerminalSockets,
-  readTerminalSocketId,
-  type TerminalSocketData,
-} from './routes.ts';
+export { createTerminalSockets, readTerminalSocketId, type TerminalSocketData } from './routes.ts';
 export type { TerminalViewer } from './session.ts';

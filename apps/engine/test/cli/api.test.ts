@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { DomainError } from '@shinsa/core';
+import { DomainError, type UserCommand } from '@shinsa/core';
 import { createApiClient, createSurfaceClient, NOT_RUNNING } from '../../src/cli/api.ts';
 
 interface Seen {
@@ -41,12 +41,12 @@ describe('the surface client', () => {
   test('every command of one invocation carries the key, the second and later ones numbered', async () => {
     const { base, seen } = serve(() => Response.json({ ok: true, taskId: 'task-1' }));
     const client = createSurfaceClient(base, 'cli:abc');
-    expect(await client.send({ type: 'task.cancel', taskId: 'task-1' })).toEqual({
+    expect(await client.send({ type: 'task.cancel', taskId: 'task-1' } as UserCommand)).toEqual({
       ok: true,
       taskId: 'task-1',
     });
-    await client.send({ type: 'task.complete', taskId: 'task-1' });
-    await client.send({ type: 'task.complete', taskId: 'task-2' });
+    await client.send({ type: 'task.complete', taskId: 'task-1' } as UserCommand);
+    await client.send({ type: 'task.complete', taskId: 'task-2' } as UserCommand);
     expect(seen.map((request) => [request.path, request.key, request.type])).toEqual([
       ['/api/commands', 'cli:abc', 'application/json'],
       ['/api/commands', 'cli:abc:1', 'application/json'],
@@ -59,8 +59,8 @@ describe('the surface client', () => {
   test('reads are plain GETs and posts send JSON without a key', async () => {
     const { base, seen } = serve(() => Response.json({ fine: true }));
     const client = createSurfaceClient(base, 'cli:abc');
-    expect(await client.read('/api/tasks?status=all')).toEqual({ fine: true });
-    expect(await client.post('/api/accounts/refresh', { now: 1 })).toEqual({ fine: true });
+    expect<unknown>(await client.api.tasks.list({ query: { status: 'all' } })).toEqual({ fine: true });
+    expect<unknown>(await client.api.accounts.refresh({ payload: { scope: 'now' } })).toEqual({ fine: true });
     expect(seen).toEqual([
       {
         method: 'GET',
@@ -74,22 +74,22 @@ describe('the surface client', () => {
         path: '/api/accounts/refresh',
         key: null,
         type: 'application/json',
-        body: { now: 1 },
+        body: { scope: 'now' },
       },
     ]);
   });
 
   test('an error body becomes a DomainError with the server’s code, or request_failed without one', async () => {
     const { base } = serve((request) =>
-      new URL(request.url).pathname === '/coded'
+      new URL(request.url).pathname === '/api/queue'
         ? Response.json({ error: { code: 'task_not_found', message: 'No task x.' } }, { status: 400 })
         : Response.json({ error: { message: 'Something broke.' } }, { status: 500 })
     );
     const client = createSurfaceClient(base, 'cli:abc');
-    const coded = await client.read('/coded').catch((error: unknown) => error);
+    const coded = await client.api.server.queue().catch((error: unknown) => error);
     expect(coded).toBeInstanceOf(DomainError);
     expect(coded).toMatchObject({ code: 'task_not_found', message: 'No task x.' });
-    expect(await client.read('/plain').catch((error: unknown) => error)).toMatchObject({
+    expect(await client.api.state.repos().catch((error: unknown) => error)).toMatchObject({
       code: 'request_failed',
       message: 'Something broke.',
     });
@@ -97,11 +97,15 @@ describe('the surface client', () => {
 
   test('a server that is not running, or answers without JSON, is explained', async () => {
     const { base } = serve(() => new Response('down', { status: 502 }));
-    await expect(createSurfaceClient(base, 'k').read('/api/queue')).rejects.toThrow(
+    await expect(createSurfaceClient(base, 'k').api.server.queue()).rejects.toThrow(
       `Shinsa on ${base} answered 502 without JSON.`
     );
-    await expect(createSurfaceClient('http://127.0.0.1:1', 'k').read('/api/queue')).rejects.toThrow(
+    await expect(createSurfaceClient('http://127.0.0.1:1', 'k').api.server.queue()).rejects.toThrow(
       NOT_RUNNING
+    );
+    const plain = serve(() => new Response('fine', { status: 200 }));
+    await expect(createSurfaceClient(plain.base, 'k').api.server.queue()).rejects.toThrow(
+      `Shinsa on ${plain.base} answered without JSON.`
     );
   });
   test('a request the engine does not answer wakes it once, then tries again', async () => {
@@ -114,9 +118,9 @@ describe('the surface client', () => {
       });
       return client;
     };
-    await expect(wakeOnto(base).read('/api/health')).resolves.toEqual({ ok: true });
-    await expect(wakeOnto('http://127.0.0.1:1').read('/api/health')).rejects.toThrow(NOT_RUNNING);
-    await expect(wakeOnto('http://127.0.0.1:1').read('/api/health')).rejects.toThrow(NOT_RUNNING);
+    expect<unknown>(await wakeOnto(base).api.server.health()).toEqual({ ok: true });
+    await expect(wakeOnto('http://127.0.0.1:1').api.server.health()).rejects.toThrow(NOT_RUNNING);
+    await expect(wakeOnto('http://127.0.0.1:1').api.server.health()).rejects.toThrow(NOT_RUNNING);
     expect(wakes).toBe(2);
     expect(createApiClient(base, () => Promise.resolve(false)).base).toBe(base);
   });
@@ -127,10 +131,16 @@ describe('the api client', () => {
     const { base, seen } = serve(() => Response.json({ ok: true, taskId: null }));
     const first = createApiClient(base);
     await first.readQueue();
-    await first.sendCommand({ type: 'task.cancel', taskId: 'task-1' });
-    await createApiClient(base).sendCommand({ type: 'task.cancel', taskId: 'task-1' });
-    expect(seen[0]?.path).toBe('/api/queue');
-    const keys = seen.slice(1).map((request) => request.key ?? '');
+    await first.sendCommand({ type: 'task.cancel', taskId: 'task-1' } as UserCommand);
+    await first.readRepos();
+    await createApiClient(base).sendCommand({ type: 'task.cancel', taskId: 'task-1' } as UserCommand);
+    expect(seen.map((request) => request.path)).toEqual([
+      '/api/queue',
+      '/api/commands',
+      '/api/repos',
+      '/api/commands',
+    ]);
+    const keys = [seen[1], seen[3]].map((request) => request?.key ?? '');
     expect(keys[0]).toMatch(/^cli:[0-9a-f-]{36}$/);
     expect(keys[1]).toMatch(/^cli:[0-9a-f-]{36}$/);
     expect(keys[1]).not.toBe(keys[0]);

@@ -43,8 +43,12 @@ export function resolveBodyRefusal(request: Request): string | null {
   return null;
 }
 
+export function describeBodyLimit(limit: number) {
+  return `The request body is over ${Math.floor(limit / 1024 / 1024)} MB.`;
+}
+
 export function resolveBodySizeRefusal(request: Request, limit: number): string | null {
   const length = Number(request.headers.get('content-length') ?? 0);
   if (length <= limit) return null;
-  return `The request body is over ${Math.floor(limit / 1024 / 1024)} MB.`;
+  return describeBodyLimit(limit);
 }

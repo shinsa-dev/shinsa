@@ -5,5 +5,5 @@ export {
   resolveRefusal,
   resolveUpgradeRefusal,
 } from './guard.ts';
-export type { Launcher } from './routes.ts';
+export type { Launcher } from './schema.ts';
 export { resolveServerUrl, startServer } from './server.ts';

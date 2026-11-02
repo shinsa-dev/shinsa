@@ -38,7 +38,7 @@ interface ReadDefinition<T> {
   summary: string;
   fields: FieldSpec[];
   humanOnly?: boolean;
-  request: (values: Values, client: SurfaceClient) => string | Promise<string>;
+  read: (values: Values, client: SurfaceClient) => Promise<T>;
   format: (data: T, values: Values, display: Display) => string;
 }
 
@@ -88,7 +88,7 @@ export function defineRead<T>(definition: ReadDefinition<T>): SurfaceSpec {
     access: 'read',
     ...(definition.humanOnly ? { humanOnly: true } : {}),
     run: async (client, values, display = PLAIN_DISPLAY) => {
-      const data = await client.read<T>(await definition.request(values, client));
+      const data = await definition.read(values, client);
       return { data, text: definition.format(data, values, display) };
     },
   };

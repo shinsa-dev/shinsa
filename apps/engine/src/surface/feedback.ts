@@ -2,7 +2,7 @@ import { FEEDBACK_REPOSITORY, type Feedback, type FeedbackLeak } from '@shinsa/c
 import type { FieldSpec } from './fields.ts';
 import { defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
-type FeedbackView = Feedback & { task: string | null; leaks: FeedbackLeak[] };
+type FeedbackView = Feedback & { readonly task: string | null; readonly leaks: readonly FeedbackLeak[] };
 
 const FEEDBACK_FIELD: FieldSpec = {
   name: 'feedback',
@@ -37,11 +37,11 @@ function describeFeedback(entry: FeedbackView) {
 }
 
 export const FEEDBACK_SPECS: SurfaceSpec[] = [
-  defineRead<{ feedback: FeedbackView[] }>({
+  defineRead({
     path: ['feedback', 'list'],
     summary: `List feedback on Shinsa: the issues that wait for you to open them on ${FEEDBACK_REPOSITORY}, and the ones you opened.`,
     fields: [],
-    request: () => '/api/feedback',
+    read: (_values, client) => client.api.state.feedback(),
     format: ({ feedback }) =>
       feedback.length === 0 ? 'No feedback yet.' : feedback.map(describeFeedback).join('\n'),
   }),

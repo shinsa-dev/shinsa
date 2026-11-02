@@ -9,7 +9,7 @@ import {
   type OnboardingStepId,
 } from '@shinsa/core';
 import { writeJsonFile } from '../config/file.ts';
-import type { JsonObject } from '../http/body.ts';
+import type { JsonObject } from '../http/schema.ts';
 import { describeError, log } from '../log/index.ts';
 import type { ProjectRevision } from './revise.ts';
 import { PrivateFoldersError } from './roots.ts';
