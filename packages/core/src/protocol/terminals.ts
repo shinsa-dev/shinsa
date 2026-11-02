@@ -3,6 +3,7 @@ import { isTaskSettled } from '../domain/stages.ts';
 import type { Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listProjectRepos, resolveTaskProject } from '../state/queries.ts';
+import { TerminalClientFrame, TerminalServerFrame } from './schema.ts';
 import type { ServiceDefinition } from './services.ts';
 
 export type TerminalStatus = 'running' | 'exited' | 'stopped';
@@ -42,48 +43,6 @@ export interface TerminalsSnapshot {
 export interface TerminalForeground {
   program: string | null;
 }
-
-export const TERMINAL_LIMITS = {
-  terminals: 32,
-  name: 60,
-  cols: 1000,
-  rows: 500,
-  command: 4000,
-} as const;
-
-const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-f]{6}$/i));
-
-export const TerminalColors = Schema.Struct({ foreground: HexColor, background: HexColor, cursor: HexColor });
-
-export type TerminalColors = typeof TerminalColors.Type;
-
-function Dimension(limit: number) {
-  return Schema.Number.check(
-    Schema.makeFilter(Number.isInteger),
-    Schema.isGreaterThan(0),
-    Schema.isLessThanOrEqualTo(limit)
-  );
-}
-
-const TerminalSize = {
-  cols: Dimension(TERMINAL_LIMITS.cols),
-  rows: Dimension(TERMINAL_LIMITS.rows),
-};
-
-export const TerminalClientFrame = Schema.Union([
-  Schema.Struct({ type: Schema.Literal('resize'), ...TerminalSize }),
-  Schema.Struct({ type: Schema.Literal('colors'), colors: TerminalColors }),
-  Schema.Struct({ type: Schema.Literal('clear') }),
-]);
-
-export type TerminalClientFrame = typeof TerminalClientFrame.Type;
-
-export const TerminalServerFrame = Schema.Union([
-  Schema.Struct({ type: Schema.Literal('reset'), ...TerminalSize }),
-  Schema.Struct({ type: Schema.Literal('live') }),
-]);
-
-export type TerminalServerFrame = typeof TerminalServerFrame.Type;
 
 const decodeTerminalClientFrame = Schema.decodeUnknownOption(Schema.fromJsonString(TerminalClientFrame));
 

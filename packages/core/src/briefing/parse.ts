@@ -1,6 +1,5 @@
 import { Option, Predicate, Schema } from 'effect';
 import { capitalise } from '../chat/text.ts';
-import { Salvaged, SalvagedItems, SalvagedOrNull } from '../domain/salvage.ts';
 import type { Queue, QueuedGate } from '../queue/types.ts';
 import {
   listBriefingEntries,
@@ -10,6 +9,7 @@ import {
   resolveFallbackNote,
 } from './fallback.ts';
 import { resolveNote } from './note.ts';
+import { BriefingAnswer, type BriefingPick } from './schema.ts';
 import { BRIEFING_LIMITS, type Briefing, type BriefingItem } from './types.ts';
 
 const ORDINAL_REFERENCE =
@@ -47,21 +47,6 @@ function cleanWhy(value: string | null, entry: QueuedGate, ids: string[]) {
   if (text.toLowerCase().startsWith(entry.task.title.toLowerCase())) return null;
   return text;
 }
-
-const BriefingPick = Schema.Struct({
-  task: Schema.optionalKey(Schema.Unknown),
-  task_id: Schema.optionalKey(Schema.Unknown),
-  taskId: Schema.optionalKey(Schema.Unknown),
-  why: SalvagedOrNull(Schema.String),
-});
-
-type BriefingPick = typeof BriefingPick.Type;
-
-const BriefingAnswer = Schema.Struct({
-  now: SalvagedOrNull(BriefingPick),
-  next: SalvagedItems(BriefingPick),
-  note: Salvaged(Schema.UndefinedOr(Schema.NullOr(Schema.String)), () => undefined),
-});
 
 const decodeBriefingAnswer = Schema.decodeUnknownOption(BriefingAnswer);
 

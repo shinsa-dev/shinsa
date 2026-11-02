@@ -1,10 +1,6 @@
 import { Option, Schema } from 'effect';
-import type { SlackMention } from './contract.ts';
+import { SlackDecision, type SlackEvaluation, type SlackMention } from './schema.ts';
 import { serializeSlackThread } from './thread.ts';
-
-const SlackDecision = Schema.Struct({ decision: Schema.Literals(['task', 'none']) });
-
-export type SlackEvaluation = (typeof SlackDecision.Type)['decision'];
 
 const decodeSlackDecision = Schema.decodeUnknownOption(SlackDecision);
 

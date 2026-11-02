@@ -1,4 +1,5 @@
 import { Option, Schema } from 'effect';
+import { ResourceSummary } from './schema.ts';
 
 export interface ResourceUse {
   cpuPercent: number;
@@ -13,18 +14,6 @@ export interface TaskResources {
   processes: number;
   worktreeBytes: number | null;
 }
-
-const Amount = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
-
-export const ResourceSummary = Schema.Struct({
-  cores: Schema.Finite.check(Schema.makeFilter(Number.isInteger), Schema.isGreaterThanOrEqualTo(1)),
-  cpuPercent: Amount.check(Schema.isLessThanOrEqualTo(100)),
-  memoryUsedBytes: Amount,
-  memoryTotalBytes: Amount,
-  diskFreeBytes: Schema.NullOr(Amount),
-}).check(Schema.makeFilter((summary) => summary.memoryUsedBytes <= summary.memoryTotalBytes));
-
-export type ResourceSummary = typeof ResourceSummary.Type;
 
 export interface MachineResources extends ResourceSummary {
   sampledAt: number;

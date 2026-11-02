@@ -49,8 +49,9 @@ import type { DelegationAgentCommand, DelegationSystemCommand } from './delegati
 import type { FeedbackAgentCommand, FeedbackSystemCommand } from './feedback.ts';
 import type { HandoffSystemCommand } from './handoffs.ts';
 import type { MemoryAgentCommand } from './memory.ts';
-import { isUserCommandType, type UserCommand } from './parse.ts';
+import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand } from './schedules.ts';
+import type { UserCommand } from './schema.ts';
 import type { ShareSystemCommand } from './shares.ts';
 import type { SlackSystemCommand } from './slack.ts';
 import type { WatchdogSystemCommand } from './watchdogs.ts';
@@ -321,5 +322,6 @@ export function isUserCommand(command: ShinsaCommand): command is UserCommand {
 
 export type CommandOf<T extends ShinsaCommand['type']> = Extract<ShinsaCommand, { type: T }>;
 
-export { ProjectInput, parseUserCommand, USER_COMMAND_TYPES, UserCommand } from './parse.ts';
+export { parseUserCommand } from './parse.ts';
+export { ProjectInput, USER_COMMAND_TYPES, UserCommand } from './schema.ts';
 export type { ReportFiling, ScheduleTargetInput } from './schedules.ts';

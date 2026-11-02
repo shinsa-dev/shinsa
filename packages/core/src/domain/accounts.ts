@@ -1,13 +1,5 @@
-import { FIELD_MESSAGES, ID_LIMIT, Id, NullByDefault, Strict, Text } from './fields.ts';
+import type { RunAccount } from './schema.ts';
 import type { RunRole } from './types.ts';
-
-export const RunAccount = Strict(
-  { id: Id(), email: NullByDefault(Text(ID_LIMIT), FIELD_MESSAGES.text) },
-  'An account',
-  '{key}'
-);
-
-export type RunAccount = typeof RunAccount.Type;
 
 export interface WeeklyReading {
   percent: number;

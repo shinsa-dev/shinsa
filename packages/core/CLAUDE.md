@@ -17,8 +17,9 @@ src/
 │                    HUMAN_ONLY_SETTINGS and HUMAN_ONLY_REPO_FIELDS, the fields only the human changes),
 │                    DomainError (errors.ts: a Schema.TaggedError with a code and a message), the field schemas
 │                    every parser builds on (fields.ts: Text, Id, Choice, List, Strict, Tagged, ID_LIMIT and the
-│                    FIELD_MESSAGES they refuse with), the branded ids (ids.ts: TaskId, RunId, GateId, ProjectId…
-│                    and Unbranded, the type a hand-built value is written in), issues.ts (listIssueMessages: a
+│                    FIELD_MESSAGES they refuse with), the domain's shapes (schema.ts: the branded ids TaskId, RunId,
+│                    GateId, ProjectId… and Unbranded, the type a hand-built value is written in; SettingsPatch,
+│                    RunAccount, FindingVerdict, ReviewComment and the schedule trigger, target and source), issues.ts (listIssueMessages: a
 │                    schema's issues as the house messages, `{path}` and `{key}` filled in), salvage.ts (Salvaged,
 │                    SalvagedOrNull, SalvagedItems, Truncated: a lenient wire field that falls back instead of
 │                    refusing), the tools of each role (tools.ts: listCallableToolNames, what a role may
@@ -59,9 +60,9 @@ src/
 ├── events/          ShinsaEvent: past-tense facts, the only way state changes (delegations.ts, schedules.ts split
 │                    out)
 ├── commands/        UserCommand (from the web), AgentCommand (from Shinsa's MCP tools), SystemCommand (from effects
-│                    and clocks), with delegations.ts and schedules.ts split out; parse.ts: the UserCommand schema, one
-│                    tagged struct per command (the type is derived from it, Unbranded), and parseUserCommand, which
-│                    decodes untrusted input into a Result of the command with branded ids or a DomainError
+│                    and clocks), with delegations.ts and schedules.ts split out; schema.ts: the UserCommand schema, one
+│                    tagged struct per command (the type is derived from it, Unbranded), and parse.ts:
+│                    parseUserCommand, which decodes untrusted input into a Result of the command with branded ids or a DomainError
 │                    (`command_invalid`, `command_forbidden`) before it reaches decide, which owns every range
 │                    (settings bounds included); USER_COMMAND_TYPES and SETTINGS_KEYS (domain) are the lists the
 │                    command line and the agents' management tools are generated against; isUserCommand (index.ts,
@@ -244,17 +245,19 @@ src/
 │                    the reviewer's gaps (describe.ts: describeCoverage, listCoverageGaps). Not `coverage/`: that name is
 │                    gitignored
 ├── schedules/       Schedule times (time.ts: next run, DST-safe daily, time zones), describing a schedule
-│                    (describe.ts), validating set_schedule and request_secret (validate.ts: one schema per tool
-│                    input, read with HandOverReader)
+│                    (describe.ts), validating set_schedule and request_secret (validate.ts, over one schema
+│                    per tool input in schema.ts, read with HandOverReader)
 ├── queue/           Needs you (rank.ts), the one table of gate words (reasons.ts), stepping through decisions
 │                    (step.ts), the stalled leaf of a chain (stalls.ts), silent runs (silence.ts), the `shinsa status`
 │                    summary (summary.ts)
 ├── briefing/        The Home guide: fallback, parsing the writer's answer, the note rule, reconciling a stored one,
 │                    plain text
-├── report/          The hand-over protocol: types, PROTOCOL_LIMITS (with minPlanPhases and findingCount), the enum
-│                    lists the tool schemas read (ATTENTION_LEVELS, FINDING_SEVERITIES, DELEGATION_MODES,
-│                    DELEGATION_ISOLATIONS, MERGE_STEP_TIMINGS, MERGE_STEP_KINDS) and validate*: one Schema.Struct per
-│                    hand-over shape, read by HandOverReader (reading.ts: walks a schema, keeps going past each
+├── report/          The hand-over protocol: types, the shapes (schema.ts: PROTOCOL_LIMITS with minPlanPhases and
+│                    findingCount, the enum lists the tool schemas read (ATTENTION_LEVELS, FINDING_SEVERITIES,
+│                    DELEGATION_MODES, DELEGATION_ISOLATIONS, MERGE_STEP_TIMINGS, MERGE_STEP_KINDS), one
+│                    Schema.Struct per hand-over, delegation and courier request, and the review link's
+│                    ReviewPayload) and validate*, which read them with HandOverReader (reading.ts: the builders
+│                    those schemas are made of, and the reader, which walks a schema, keeps going past each
 │                    failure and lists every error in field order, the Validation result), the delegation and courier
 │                    requests (orchestration.ts), plan changes between versions, Markdown, assembleReport, the steps
 │                    around the merge with their ticks (merge-steps.ts: listMergeSteps, resolveMergeStepKey), how to
@@ -307,7 +310,8 @@ src/
 │                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), what the guest a task was
 │                    handed to sees and may send (scope.ts: resolveScopedState, resolveScopedRefusal, SCOPED_COMMANDS;
 │                    decide refuses the rest when its context names a guest), and which machine a new task
-│                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and what the router reads, each machine's policies, projects and room: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer), and how busy a machine is (resources.ts: MachineResources, resolveResourceHeadroom, describeResourceSummary, parseResourceSummary). Key pairs and
+│                    goes to and how busy it is, its shapes in schema.ts (PlacementQuestion, PlacementCandidate,
+│                    ResourceSummary, PLACEMENT_LIMITS) beside contract.ts, the cloud API's (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and what the router reads, each machine's policies, projects and room: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer), and how busy a machine is (resources.ts: MachineResources, resolveResourceHeadroom, describeResourceSummary, parseResourceSummary). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
 │                    from the task, its current evidence and the project's name; everything its owner sees but
@@ -333,7 +337,8 @@ src/
 │                    join link with the key in its fragment, the team hello and welcome with the view bound into
 │                    the session key, and the team feed types (docs/engine.md → Teams)
 ├── slack/           The Slack bot, shared by the engine and the hosted Worker: the forwarded mention and its parser
-│                    (contract.ts: SlackMention, parseSlackMention, SLACK_LIMITS, SLACK_ENGINE_EVENTS_PATH), the
+│                    (schema.ts: SlackMention, SlackThreadMessage, SlackId, SLACK_LIMITS; contract.ts:
+│                    parseSlackMention, SLACK_ENGINE_EVENTS_PATH), the
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as
 │                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work
 │                    or not, task or none (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation), and
@@ -354,8 +359,9 @@ src/
 │                    decode one or return null), resolveSlackReadableText for Slack's <@U…> markup), and the
 │                    signature on a forwarded mention, made with the machine's connect key and checked within
 │                    SLACK_FORWARD_WINDOW_MS (forward.ts)
-└── protocol/        WebSocket messages (messages.ts: the ClientMessage schema and parseClientMessage, the
-                     page's message with branded ids or null), state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
+└── protocol/        The wire's shapes (schema.ts: ClientMessage, EngineInfo, the terminal frames and colours,
+                     SURFACES, TERMINAL_LIMITS), WebSocket messages (messages.ts: parseClientMessage, the page's
+                     message with branded ids or null), state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
                      serializeState), diff parsing,
                      the accounts snapshot (accounts.ts), MCP servers, plugins and
@@ -403,7 +409,11 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
 - **Untrusted input is read with a schema.** Every parser of input from outside (a command, a hand-over, a socket
   message, a review link, a placement answer, a resource summary, a Slack mention or evaluation, a briefing answer,
   engine info, a terminal frame) decodes one Effect `Schema` per shape, its type derived from it, never a reader by
-  hand. Limits stay in their tables (`PROTOCOL_LIMITS`, `SLACK_LIMITS`…) and the schemas read them; a refusal's message
+  hand. A folder's shapes live in its `schema.ts` (`commands/`, `domain/`, `report/`, `schedules/`, `remote/`,
+  `slack/`, `protocol/`, `briefing/`, `test-coverage/`): schemas, the types derived from them and the constants they
+  read, never a function (`bun lint:conventions` refuses one), as the effect skill's File layout has it. The parser or
+  validator that decodes them, and its decoder, sits in the logic file beside it; the builders the schemas are made of
+  (`domain/fields.ts`, `domain/salvage.ts`, `report/reading.ts`) are pure modules of their own. Limits stay in their tables (`PROTOCOL_LIMITS`, `SLACK_LIMITS`…) and the schemas read them; a refusal's message
   is the schema's annotation, so it reads the same wherever the field is used. Ids are branded where they enter
   (`TaskId`, `RunId`…); records, events and commands built inside are written `Unbranded`. `decide` and the folds stay
   plain functions: nothing in core is an `Effect`.

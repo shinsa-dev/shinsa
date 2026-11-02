@@ -1,32 +1,17 @@
 import {
-  DELEGATE_ROLES,
-  DELEGATION_LIMITS,
   type DelegateRole,
+  DELEGATION_LIMITS,
   type DelegationIsolation,
   type DelegationMode,
 } from '../domain/index.ts';
+import { HandOverReader, type Validation } from './reading.ts';
 import {
-  Flag,
-  HandOverReader,
-  HandOverRecord,
-  Items,
-  OptionalText,
-  OrAbsent,
-  CountUpTo,
-  OneOf,
-  Required,
-  type Validation,
-} from './reading.ts';
-import { PROTOCOL_LIMITS } from './validate.ts';
-
-const ROLES = DELEGATE_ROLES as readonly [DelegateRole, ...DelegateRole[]];
-
-export const DELEGATION_MODES: readonly [DelegationMode, ...DelegationMode[]] = ['async', 'wait'];
-
-export const DELEGATION_ISOLATIONS: readonly [DelegationIsolation, ...DelegationIsolation[]] = [
-  'shared',
-  'worktree',
-];
+  CourierTaskInput,
+  DelegationAnswerInput,
+  DelegationId,
+  DelegationRequestInput,
+  SplitInput,
+} from './schema.ts';
 
 export interface DelegationRequest {
   brief: string;
@@ -66,20 +51,6 @@ function resolveTitle(title: string | null, brief: string) {
   return line.length > DELEGATION_LIMITS.title ? `${line.slice(0, DELEGATION_LIMITS.title - 1)}…` : line;
 }
 
-const RequestKey = OptionalText(DELEGATION_LIMITS.requestKey);
-
-const DelegationRequestInput = HandOverRecord({
-  brief: Required(DELEGATION_LIMITS.brief),
-  title: OptionalText(DELEGATION_LIMITS.title),
-  role: OrAbsent(OneOf(ROLES)),
-  mode: OrAbsent(OneOf(DELEGATION_MODES)),
-  isolation: OrAbsent(OneOf(DELEGATION_ISOLATIONS)),
-  timeout_minutes: OrAbsent(CountUpTo(DELEGATION_LIMITS.maxWaitMinutes)),
-  client_request_id: RequestKey,
-  provider: OptionalText(DELEGATION_LIMITS.name),
-  model: OptionalText(DELEGATION_LIMITS.name),
-});
-
 export function validateDelegationRequest(input: Record<string, unknown>): Validation<DelegationRequest> {
   const reader = new HandOverReader();
   const request = reader.read(DelegationRequestInput, input, []);
@@ -96,17 +67,10 @@ export function validateDelegationRequest(input: Record<string, unknown>): Valid
   });
 }
 
-const DelegationId = Required(DELEGATION_LIMITS.name);
-
 export function validateDelegationReference(input: Record<string, unknown>): Validation<DelegationReference> {
   const reader = new HandOverReader();
   return reader.result({ delegationId: reader.read(DelegationId, input.delegation_id, ['delegation_id']) });
 }
-
-const DelegationAnswerInput = HandOverRecord({
-  delegation_id: DelegationId,
-  answer: Required(DELEGATION_LIMITS.answer),
-});
 
 export function validateDelegationAnswer(
   input: Record<string, unknown>
@@ -115,17 +79,6 @@ export function validateDelegationAnswer(
   const { delegation_id: delegationId, answer } = reader.read(DelegationAnswerInput, input, []);
   return reader.result({ delegationId, answer });
 }
-
-const CourierTaskInput = HandOverRecord({
-  request: Required(PROTOCOL_LIMITS.suggestionRequest),
-  client_request_id: RequestKey,
-  repository: OptionalText(DELEGATION_LIMITS.name),
-  fork_from: OptionalText(DELEGATION_LIMITS.name),
-  this_task_waits: Flag,
-  after_this: Flag,
-  stack_on_this: Flag,
-  backlog: Flag,
-});
 
 export function validateCourierTask(input: Record<string, unknown>): Validation<CourierRequest> {
   const reader = new HandOverReader();
@@ -141,15 +94,6 @@ export function validateCourierTask(input: Record<string, unknown>): Validation<
     backlog: task.backlog,
   });
 }
-
-const SplitInput = HandOverRecord({
-  tasks: Items(
-    HandOverRecord({ request: Required(PROTOCOL_LIMITS.suggestionRequest) }),
-    DELEGATION_LIMITS.splitTasks,
-    1
-  ),
-  this_task_waits: Flag,
-});
 
 export function validateSplit(input: Record<string, unknown>): Validation<SplitRequest> {
   const reader = new HandOverReader();

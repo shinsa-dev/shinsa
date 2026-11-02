@@ -1532,7 +1532,7 @@ Hand-overs). The last phase's instruction (`resolvePhaseInstruction`) and the ha
 the Agent can do inside the repository it does itself (code, tests, docs, `.env.example`, the migration file); a step
 names its variable and where to set it, never a secret's value. Shipping code is never your step: a step whose command
 stages, commits, pushes, or opens or merges a pull request (`git add`, `git commit`, `git push`, also with `-C`, and
-`gh pr create` or `merge`) is refused with the hand-over (`readMergeSteps` in `report/validate.ts`), since Shinsa ships
+`gh pr create` or `merge`) is refused with the hand-over (`MergeSteps` in `report/schema.ts`), since Shinsa ships
 this repository and work in another one is a task the Agent files with `create_task` (Where agents work → Work
 across repositories). A fix that changes them sends the whole new list in its
 `walkthrough` revision. The reviewer's brief lists them (`describeMergeStepsForReview`) and asks it to check the list
@@ -3689,7 +3689,7 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   app.shinsa.dev shows the section too, below Machines, read from the first machine of the dashboard: its status,
   Connect Slack and the connected workspaces, with a line that Disconnect is on the machine itself (`onMachine`),
   since it is refused remotely.
-- **A mention reaches the machine** as `SlackMention` (`slack/contract.ts`): the event id, the workspace, channel and
+- **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
   (`resolveSlackReadableText`), a permalink, and the thread's last 100 messages, bots marked. The tunnel route

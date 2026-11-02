@@ -59,9 +59,18 @@ export {
   ServiceId,
   SuggestionId,
   TaskId,
+  type FindingVerdict,
+  type ReviewComment,
+  type RunAccount,
+  type ScheduleSource,
+  type ScheduleTarget,
+  type ScheduleTrigger,
+  type ScheduleTriggerKind,
+  type SettingsPatch,
   type Unbranded,
   WatchdogId,
-} from './ids.ts';
+  type WebhookSignature,
+} from './schema.ts';
 export { ID_LIMIT } from './fields.ts';
 export { listIssueMessages, resolveIssuePath } from './issues.ts';
 export {

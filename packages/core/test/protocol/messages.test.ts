@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { isQuietSurface, isSurface, parseClientMessage, SURFACES } from '../../src/protocol/messages.ts';
+import { isQuietSurface, isSurface, parseClientMessage } from '../../src/protocol/messages.ts';
+import { SURFACES } from '../../src/protocol/schema.ts';
 
 describe('isSurface', () => {
   test('knows the desktop app and a browser page, nothing else', () => {

@@ -1,4 +1,4 @@
-import { SLACK_LIMITS } from './contract.ts';
+import { SLACK_LIMITS } from './schema.ts';
 
 export const SLACK_ENGINE_INTERACTIONS_PATH = '/api/slack/interactions';
 

@@ -6,7 +6,7 @@ export const COVERAGE_FORMATS = ['lcov', 'cobertura', 'go'] as const;
 
 export type CoverageFormat = (typeof COVERAGE_FORMATS)[number];
 
-export type { CoverageSetting } from './setting.ts';
+export type { CoverageSetting } from './schema.ts';
 
 export interface CoverageDetection {
   tool: string;

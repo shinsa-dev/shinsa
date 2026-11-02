@@ -13,22 +13,12 @@ import type {
   WorkReport,
 } from '../report/types.ts';
 import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
-import type { RunAccount, UsageWait, WeeklyReading } from './accounts.ts';
+import type { UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
-import {
-  Choice,
-  Count,
-  FIELD_MESSAGES,
-  Id,
-  Index,
-  NOTE_LIMIT,
-  NullByDefault,
-  Strict,
-  Text,
-} from './fields.ts';
 import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
+import type { FindingVerdict, ReviewComment, RunAccount } from './schema.ts';
 import type { ShareLimit, SharePreset } from './settings.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
 import type { SlackThreadLink } from './slack.ts';
@@ -175,35 +165,11 @@ export const FINDING_VERDICT_KINDS = ['fix', 'dismiss'] as const;
 
 export type FindingVerdictKind = (typeof FINDING_VERDICT_KINDS)[number];
 
-export const FindingVerdict = Strict(
-  {
-    index: Index,
-    verdict: Choice(FINDING_VERDICT_KINDS),
-    note: NullByDefault(Text(NOTE_LIMIT), FIELD_MESSAGES.text),
-  },
-  'A verdict'
-);
-
-export type FindingVerdict = typeof FindingVerdict.Type;
-
 export const COMMENT_SIDES = ['old', 'new'] as const;
 
 export type CommentSide = (typeof COMMENT_SIDES)[number];
 
 export const COMMENT_PATH_LIMIT = 1_024;
-
-export const ReviewComment = Strict(
-  {
-    path: Id(COMMENT_PATH_LIMIT),
-    side: Choice(COMMENT_SIDES),
-    line: Count,
-    endLine: NullByDefault(Count, FIELD_MESSAGES.count),
-    text: Text(),
-  },
-  'A comment'
-);
-
-export type ReviewComment = typeof ReviewComment.Type;
 
 export type ReviewEscalationReason = 'rounds' | 'stalled' | 'exhausted';
 

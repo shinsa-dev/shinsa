@@ -300,3 +300,17 @@ export class HandOverReader {
     }
   }
 }
+
+export function EndAfter<const K extends string>(start: K) {
+  return Schema.makeFilter(
+    (record: { readonly [P in K | 'end']: number | null }) =>
+      record[start] === null || record.end === null || record.end >= record[start]
+        ? undefined
+        : `{path}.end comes before {path}.${start}.`,
+    { after: 'end' }
+  );
+}
+
+export function TextList(max: number, item: number) {
+  return Items(Required(item), max);
+}

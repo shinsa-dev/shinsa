@@ -1,10 +1,8 @@
 import { Option, Schema } from 'effect';
 import { USER_COMMAND_TYPES, type UserCommand } from '../commands/index.ts';
-import { Salvaged, SalvagedItems } from '../domain/salvage.ts';
+import { DEVELOPMENT_VERSION, EngineInfo } from './schema.ts';
 
 export const ENGINE_PROTOCOL = 1;
-
-export const DEVELOPMENT_VERSION = '0.0.0';
 
 export const ENGINE_FEATURES = ['task.share', 'feedback', 'teams', 'review.approve_after_fix'] as const;
 
@@ -61,15 +59,6 @@ export const ENGINE_BASELINE_COMMANDS: readonly EngineCommand[] = [
   'memory.accept',
   'memory.remove',
 ];
-
-export const EngineInfo = Schema.Struct({
-  version: Salvaged(Schema.String, () => DEVELOPMENT_VERSION),
-  protocol: Schema.Number.check(Schema.makeFilter(Number.isInteger)),
-  commands: SalvagedItems(Schema.String),
-  features: SalvagedItems(Schema.String),
-});
-
-export type EngineInfo = typeof EngineInfo.Type;
 
 export interface ShinsaBuild {
   version: string;

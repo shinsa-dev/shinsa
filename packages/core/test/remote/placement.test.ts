@@ -4,7 +4,6 @@ import {
   isPlacementPoliciesValid,
   listPlacementCandidates,
   NO_PLACEMENT_MACHINE,
-  type PlacementCandidate,
   type PlacementMachine,
   parsePlacementAnswer,
   parsePlacementQuestion,
@@ -14,7 +13,7 @@ import {
   resolveRoutedPlacement,
   serializePlacementPrompt,
 } from '../../src/remote/placement.ts';
-import type { ResourceSummary } from '../../src/remote/resources.ts';
+import type { PlacementCandidate, ResourceSummary } from '../../src/remote/schema.ts';
 
 const GB = 1024 ** 3;
 

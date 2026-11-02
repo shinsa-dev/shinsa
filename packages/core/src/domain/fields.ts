@@ -110,7 +110,7 @@ export function List<S extends Schema.Top>(item: S, limit = LIST_LIMIT) {
     .annotateKey({ messageMissingKey: FIELD_MESSAGES.list });
 }
 
-export function KnownKeys(subject: string, keys: ReadonlyArray<string>, refuse: (key: string) => string) {
+function KnownKeys(subject: string, keys: ReadonlyArray<string>, refuse: (key: string) => string) {
   const message = `${subject} must be an object.`;
   return Schema.Record(Schema.String, Schema.Unknown)
     .annotate({ message })
@@ -142,4 +142,25 @@ export function Tagged<
     .annotate({ message: FIELD_MESSAGES.object })
     .pipe(Schema.decodeTo(Schema.Union(members), SchemaTransformation.passthrough({ strict: false })))
     .annotateKey({ messageMissingKey: FIELD_MESSAGES.object });
+}
+
+export function Command<const T extends string, const F extends Schema.Struct.Fields>(type: T, fields: F) {
+  return Schema.Struct({ type: Schema.Literal(type), ...fields });
+}
+
+export function OptionalChoice<const L extends string>(choices: Iterable<L>) {
+  return Optional(Choice(choices), resolveChoiceMessage(choices));
+}
+
+export function RoleMap<const R extends string, S extends Schema.Top>(
+  name: string,
+  roles: ReadonlyArray<R>,
+  value: S
+) {
+  return KnownKeys(name, roles, (role) => `${name} has no role ${role}.`).pipe(
+    Schema.decodeTo(
+      Schema.Record(Schema.Literals(roles), Schema.optionalKey(value)),
+      SchemaTransformation.passthrough({ strict: false })
+    )
+  );
 }
