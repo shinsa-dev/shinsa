@@ -1,17 +1,6 @@
-export type ProcessKind = 'agent' | 'services' | 'checks';
+import type { ProcessRoot, ProcessTracker, ServiceProcess } from './schema.ts';
 
-export interface ProcessRoot {
-  taskId: string;
-  kind: ProcessKind;
-  pid: number;
-}
-
-export interface ServiceProcess {
-  taskId: string;
-  pid: number;
-}
-
-export type ProcessTracker = (taskId: string, kind: ProcessKind, pid: number) => () => void;
+export type { ProcessKind, ProcessRoot, ProcessTracker, ServiceProcess } from './schema.ts';
 
 const NO_SERVICES = (): ServiceProcess[] => [];
 

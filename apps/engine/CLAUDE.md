@@ -126,7 +126,7 @@ src/
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
-├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile, GitLayer, GitHubLayer, ReposLayer, WorkspacesLayer, ChecksLayer, TerminalsLayer, ExtensionsLayer, SecretFiles and AccountsLayer that code not yet
+├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile, GitLayer, GitHubLayer, ReposLayer, WorkspacesLayer, ChecksLayer, TerminalsLayer, ExtensionsLayer, SecretFiles, AccountsLayer and VersionsLayer that code not yet
 │                        moved to Effect calls the foundation through), Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
@@ -211,11 +211,16 @@ src/
 │                        (/api/accounts), index.ts (the Accounts service: sign-ins, snapshot, notices, the weekly
 │                        reading a run is charged against)
 ├── eunoe/               Eunoe's core (`@chroxify/eunoe`) served inside the engine for its Claude sessions: server.ts
-│                        (EunoeServer: the forwarder on a loopback port of its own, started on first use; thread state
-│                        and the request log in data/eunoe; compaction notices and the stuck signal per session)
+│                        (EunoeServer: the forwarder on a loopback port of its own, started on first use; the request
+│                        log in data/eunoe; compaction notices and the stuck signal per session), forwarder.ts (the
+│                        server acquired in a scope stop() closes; ForwarderUnavailable), threads.ts (thread state in
+│                        data/eunoe/threads on JsonFile, decoded by StoredThread), schema.ts
 ├── schedules/           Schedules: the clock (clock.ts), the agent tools (tools.ts), the webhook receiver
-│                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts),
-│                        the routes for the webhook URL and secrets (routes.ts), the Schedules service (index.ts)
+│                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts:
+│                        a JSON body decoded by WebhookBodyText), the writer's wording of a suggested watch (suggest.ts,
+│                        its answer decoded by WatchAnswer in answer.ts), the routes for the webhook URL and secrets
+│                        (routes.ts), the Schedules service (index.ts), schema.ts (the shapes, WebhookOutcome, the
+│                        limits and RATE_WINDOW)
 ├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
 │                        credentials, the enrolled devices, who has access), control.ts (ControlClient for app.shinsa.dev: pairing, heartbeat, invites, members, hand-offs, guests; RevokedError),
 │                        cloudflared.ts (the pinned release, checked by SHA-256, installed under data/bin), connector.ts
@@ -281,9 +286,12 @@ src/
 │                        left out mid-run, by any name (loader.ts), /api/extensions (routes.ts), the Extensions
 │                        service (index.ts)
 ├── versions/            The agent programs' versions and their updates (docs/engine.md → Versions and updates):
-│                        the latest from the npm registry (registry.ts), each program's own updater, found from
-│                        where its binary lives (updaters.ts), /api/versions with the streamed update
-│                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
+│                        registry/ (NpmRegistry: the latest from the npm registry over HttpClient, decoded by
+│                        NpmLatest, NpmRegistryFailed), registry.ts its edge (requestLatestVersion), each program's own
+│                        updater, found from where its binary lives (updaters.ts), /api/versions with the streamed
+│                        update (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts),
+│                        schema.ts (the shapes, PROGRAMS, LATEST_TTL, UPDATE_TIMEOUT), program.ts (isProgramId),
+│                        layers.ts (VersionsLayer, in runtime/edge.ts)
 ├── files/               service.ts (JsonFile: read(path, schema), a missing file Option.none and broken text or a
 │                        breaking value the typed JsonFileUnreadable; keepAside, the `<name>.unreadable-<time>` copy;
 │                        write, atomic through `<name>.writing-<pid>` and mode 600), schema.ts, index.ts (the edge:
@@ -371,9 +379,10 @@ src/
 │                        (docs/engine.md → Test coverage of the change)
 ├── resources/           How busy this machine is (docs/engine.md → Remote access, How busy each machine is): index.ts
 │                        (ResourceMonitor: samples every 5 s while a socket listens, df and du every 10 minutes, the
-│                        memory reader per platform), sample.ts (the ps table, CPU from deltas of CPU time, vm_stat,
+│                        memory reader per platform), poller.ts (the sampling fiber on Schedule.spaced, interrupted
+│                        when the last socket closes), sample.ts (the ps table, CPU from deltas of CPU time, vm_stat,
 │                        /proc/meminfo, df, du, each task's use), ledger.ts (ProcessLedger: each task's agent, check
-│                        and service processes)
+│                        and service processes), schema.ts (the shapes and each interval as a Duration)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
 │                        (syncRepoRemote, upsertRepo) (index.ts); folders/ (RepoFolders: scanning the home folder
@@ -472,6 +481,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `WorktreeWorkspaces`, `MainCheckoutWorkspace` (`workspaces/`) | `WorkspacesLayer` (`workspaces/layers.ts`), needs `GitLayer` | the two places agents work (`TaskCheckoutMissing`, `CheckoutDirty`, `CheckoutOffBranch`) |
   | `CheckRunner`, `BaseCheckoutPools`, `SharedCaches` (`checks/`), `TaskCoverage` (`test-coverage/`) | `ChecksLayer` (`checks/layers.ts`), needs `GitLayer` | checks, their re-runs and base comparison, the turbo cache, changed-line coverage (`CoverageReportUnreadable`) |
   | `AccountRegistry`, `AccountFolders`, `UsageApi` (`accounts/`) | `AccountsLayer` (`accounts/layers.ts`), needs `JsonFile` | the accounts' JSON files decoded, each account's Claude folder, Claude's usage over `HttpClient` (`UsageReadFailed`) |
+  | `NpmRegistry` (`versions/registry/service.ts`) | `VersionsLayer` (`versions/layers.ts`) | the latest version of a package, decoded (`NpmRegistryFailed`) |
   | `SecretFiles` (`secrets/files/service.ts`) | `SecretFiles.layer`, needs `JsonFile` | secrets.json decoded, a file without a salt kept aside |
   | `TerminalFiles`, `TerminalPty` (`terminals/`) | `TerminalsLayer` (`terminals/layers.ts`), needs `JsonFile` and `Shell` | data/terminals/ decoded by schemas; the PTY as a scoped resource, the foreground program, a free port (`PortUnavailable`) |
   | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order; fails with the lock's `ServerRunning` or `LockContended`, which `startShinsa` turns into its `DomainError` |

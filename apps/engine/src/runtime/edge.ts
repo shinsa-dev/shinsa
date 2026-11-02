@@ -12,6 +12,7 @@ import { ReposLayer } from '../repos/layers.ts';
 import { SecretFiles } from '../secrets/files/service.ts';
 import { Shell } from '../shell/service.ts';
 import { TerminalsLayer } from '../terminals/layers.ts';
+import { VersionsLayer } from '../versions/layers.ts';
 import { WorkspacesLayer } from '../workspaces/layers.ts';
 
 const ShellLayer = Shell.layer.pipe(Layer.provideMerge(BunServices.layer));
@@ -27,7 +28,8 @@ export const edgeRuntime = ManagedRuntime.make(
       TerminalsLayer,
       ExtensionsLayer,
       SecretFiles.layer,
-      AccountsLayer
+      AccountsLayer,
+      VersionsLayer
     ).pipe(
       Layer.provideMerge(JsonFile.layer),
       Layer.provideMerge(Layer.merge(GitLayer, GitHubLayer)),

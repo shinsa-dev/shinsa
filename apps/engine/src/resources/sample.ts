@@ -1,34 +1,14 @@
-import type { ResourceUse } from '@shinsa/core';
-import type { ProcessKind, ProcessRoot } from './ledger.ts';
+import {
+  type CpuTimes,
+  type DiskReading,
+  KILOBYTE,
+  type MemoryReading,
+  type ProcessRoot,
+  type ProcessRow,
+  type ProcessUse,
+} from './schema.ts';
 
-export interface ProcessRow {
-  pid: number;
-  ppid: number;
-  pgid: number;
-  memoryBytes: number;
-  cpuSeconds: number;
-}
-
-export interface ProcessUse extends Record<ProcessKind, ResourceUse> {
-  processes: number;
-}
-
-export interface CpuTimes {
-  busy: number;
-  total: number;
-}
-
-export interface MemoryReading {
-  usedBytes: number;
-  totalBytes: number;
-}
-
-export interface DiskReading {
-  freeBytes: number;
-  totalBytes: number;
-}
-
-const KILOBYTE = 1024;
+export type { CpuTimes, DiskReading, MemoryReading, ProcessRow, ProcessUse } from './schema.ts';
 
 export function parseCpuTime(text: string) {
   const [days, clock] = text.includes('-') ? text.split('-') : ['0', text];

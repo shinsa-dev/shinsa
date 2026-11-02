@@ -2996,7 +2996,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   too (`placementPolicies`, at most 20 of 1 to 240 characters, Memory's limit), kept in Settings → Routing policies. The fleet sends `task.create` to the chosen
   machine (`ShinsaConnection.command`'s machine).
 - **How busy each machine is** (`apps/engine/src/resources/`, core's `remote/resources.ts`). While a page has a socket
-  open, each engine samples its machine every 5 s and pushes `resources` (`docs/protocol.md` → The socket); with no
+  open, each engine samples its machine every 5 s, on a fiber repeated with `Schedule.spaced` that the last socket
+  closing interrupts (`resources/poller.ts`), and pushes `resources` (`docs/protocol.md` → The socket); with no
   page, it samples nothing. One `ps` table gives each process's parent, group, memory and cumulative CPU time; CPU
   is the change in that time between two samples (Linux's `%cpu` is a lifetime average), and the machine's CPU the
   change in `os.cpus()` times, so the first reading comes about a second after a page connects. Memory used is total
@@ -4764,8 +4765,10 @@ must keep up with the SDK, never the other way round.
   update, as for runs). Then the Agent SDK: its version, the latest published and its `claudeCodeVersion`.
 - **The latest versions** come from the `latest` dist-tag on the npm registry (`GET <package>/latest`:
   `@anthropic-ai/claude-code`, `@openai/codex`, `@anthropic-ai/claude-agent-sdk`), all three at once, cached for 3
-  hours (`LATEST_TTL_MS`) and coalesced; `POST /api/versions/refresh` (Check for updates) reads them again. A lookup
-  that fails is logged and keeps the last known value.
+  hours (`LATEST_TTL_MS`) and coalesced; `POST /api/versions/refresh` (Check for updates) reads them again. Each
+  lookup is `NpmRegistry.latest` (`versions/registry/service.ts`) on Effect's `HttpClient`, the answer decoded by the
+  `NpmLatest` schema and given 10 s (`REGISTRY_TIMEOUT`); a refusal, an answer without a version, a timeout or an
+  unreachable registry is the typed `NpmRegistryFailed`, which is logged and keeps the last known value.
 - **Updating** (`POST /api/versions/update {program}`, `shinsa versions update <program>`, human-only) runs the
   program's own updater (`updaters.ts`): `claude update` for Claude Code; for Codex, from where the binary really
   lives: `brew upgrade codex` under a Homebrew `Cellar` or `Caskroom`, `bun add -g @openai/codex@latest` under
@@ -5267,7 +5270,10 @@ thread on Claude Code's session id, asks the Models API for the model's window o
 mode the setting names now, so a change applies to the next request. The forwarder sends the request to
 `https://api.anthropic.com` with the caller's own auth headers, streams the answer back, learns the thread's token
 ratio from its usage and retries once after a prompt-too-long error. Thread state lives in `data/eunoe/threads` (one
-JSON file per thread, keyed `<session id>-<first turn>`) and every request is one line of `data/eunoe/requests.jsonl`.
+JSON file per thread, keyed `<session id>-<first turn>`, read through `JsonFile` and decoded by the `StoredThread`
+schema, a damaged one read as empty, and written atomically) and every request is one line of
+`data/eunoe/requests.jsonl`. The forwarder's server is acquired in a scope the `EunoeServer` owns
+(`eunoe/forwarder.ts`), which `stop()` closes.
 Rotation needs nothing: auth headers pass through, and a session resumed on another account keeps its thread.
 Shutdown stops the forwarder after the effects, once no `claude` can still talk to it.
 
