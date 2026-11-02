@@ -30,6 +30,7 @@ interface CommandDefinition {
   agentTool?: ShinsaToolName;
   build: (values: Values, client: SurfaceClient) => UserCommand | Promise<UserCommand>;
   done?: (values: Values, receipt: CommandReceipt) => string;
+  after?: (values: Values, receipt: CommandReceipt, client: SurfaceClient) => string | null;
 }
 
 interface ReadDefinition<T> {
@@ -71,8 +72,10 @@ export function defineCommand(definition: CommandDefinition): SurfaceSpec {
         'check',
         definition.done?.(values, receipt) ?? 'Done.'
       );
+      const problem = definition.after?.(values, receipt, client) ?? null;
       const link = describeTaskLink(client, receipt);
-      return { data: receipt, text: link ? `${done}\n${display.style.dim(link)}` : done };
+      const text = [done, problem, link ? display.style.dim(link) : null].filter(Boolean).join('\n');
+      return { data: receipt, text };
     },
   };
 }

@@ -47,7 +47,7 @@ export interface ScheduleRun {
   detail: string | null;
 }
 
-export type ScheduleCreator = { kind: 'you' } | { kind: 'agent'; taskId: string; runId: string };
+export type ScheduleCreator = { kind: 'you' } | { kind: 'agent'; taskId: string; runId: string | null };
 
 export type ScheduleStop = 'finished' | 'target_gone';
 
