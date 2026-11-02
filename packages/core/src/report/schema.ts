@@ -257,8 +257,7 @@ export const Testing = ListOrRecord(
   HandOverRecord({ automated: AutomatedTesting, manual: Items(ManualStep, L.testingSteps) })
 );
 
-const SHIPPING_COMMAND =
-  /\bgit\s+(?:-C\s+\S+\s+)*(?:add|commit|push)\b|\bgh\s+pr\s+(?:create|merge)\b/;
+const SHIPPING_COMMAND = /\bgit\s+(?:-C\s+\S+\s+)*(?:add|commit|push)\b|\bgh\s+pr\s+(?:create|merge)\b/;
 
 const MergeStepInput = HandOverRecord({
   when: OneOf(MERGE_STEP_TIMINGS),
@@ -671,11 +670,7 @@ export const DELIVERY_FIELD: Record<
 
 const PIPELINE_STEP_NAMES = COMPOSABLE_STEPS as readonly [PipelineStep, ...PipelineStep[]];
 
-const INQUIRY_SHAPES: readonly [InquiryShape, ...InquiryShape[]] = [
-  'answer',
-  'investigate',
-  'research',
-];
+const INQUIRY_SHAPES: readonly [InquiryShape, ...InquiryShape[]] = ['answer', 'investigate', 'research'];
 
 export const ShapeReshape = HandOverRecord({
   shape: OneOf(INQUIRY_SHAPES),
@@ -695,18 +690,9 @@ export const REVIEW_EVIDENCE_KINDS = [
   'preview',
 ] as const satisfies readonly Evidence['kind'][];
 
-const CHECK_OUTCOMES = [
-  'pass',
-  'fail',
-  'skipped',
-] as const satisfies readonly ReportCheck['outcome'][];
+const CHECK_OUTCOMES = ['pass', 'fail', 'skipped'] as const satisfies readonly ReportCheck['outcome'][];
 
-const TEST_TARGETS = [
-  'url',
-  'file',
-  'command',
-  'screen',
-] as const satisfies readonly ManualTestTargetKind[];
+const TEST_TARGETS = ['url', 'file', 'command', 'screen'] as const satisfies readonly ManualTestTargetKind[];
 
 export const REVIEW_PAYLOAD_STAGES = [
   'shipping',

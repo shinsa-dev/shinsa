@@ -30,8 +30,10 @@ const Weekdays = Items(
   SCHEDULE_LIMITS.weekdays
 );
 
-const SIGNATURE_ENCODINGS: readonly [WebhookSignature['encoding'], ...WebhookSignature['encoding'][]] =
-  ['hex', 'base64'];
+const SIGNATURE_ENCODINGS: readonly [WebhookSignature['encoding'], ...WebhookSignature['encoding'][]] = [
+  'hex',
+  'base64',
+];
 
 const Signature = HandOverRecord({
   header: Required(SCHEDULE_LIMITS.header),
