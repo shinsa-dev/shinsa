@@ -42,8 +42,10 @@ src/
 │                        agent's tool gets PLAIN_DISPLAY
 ├── instance/            Which Shinsa this is and the one-server rule (docs/engine.md → Configuration and data):
 │                        install.ts (version, commit, install path, the server entry, resolveHealth for
-│                        /api/health), lock.ts (data/serve.lock: atomic create, the live-holder check, takeover,
-│                        ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
+│                        /api/health), lock/ (data/serve.lock as the scoped ServeLock layer: atomic create, the
+│                        live-holder check, takeover, released when its scope closes; ServerRunning and LockContended
+│                        in schema.ts, the file steps in file.ts; index.ts is the edge: acquireDataDirLock,
+│                        selectLockHolder and ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
 │                        source), targets.ts (ENGINE_TARGETS, the darwin and Linux builds scripts/build-engine.ts

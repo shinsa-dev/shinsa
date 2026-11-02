@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -11,8 +11,7 @@ import {
   resolveBootedAt,
   selectLockHolder,
 } from '../../src/instance/index.ts';
-import { log } from '../../src/log/index.ts';
-import { createTempDir } from '../helpers/index.ts';
+import { captureLogs, createTempDir } from '../helpers/index.ts';
 
 const BOOTED_AT = 1_000_000;
 
@@ -47,11 +46,11 @@ function writeHolder(dataDir: string, overrides: Partial<LockHolder> = {}) {
 }
 
 function quietly<T>(work: () => T) {
-  const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+  const logs = captureLogs();
   try {
-    return { result: work(), warnings: warn.mock.calls.map((call) => call[0]) };
+    return { result: work(), warnings: logs.entries.map((entry) => entry.message) };
   } finally {
-    warn.mockRestore();
+    logs.restore();
   }
 }
 

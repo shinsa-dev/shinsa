@@ -24,7 +24,14 @@ import { REMOTE_FILE } from '../src/remote/index.ts';
 import { EffectRunner, Engine } from '../src/runtime/index.ts';
 import { type Shinsa, startShinsa } from '../src/serve.ts';
 import { EventLog, resolveStateVersion } from '../src/store/index.ts';
-import { createGitRepo, createTempDir, createTestConfig, overrideEnv, until } from './helpers/index.ts';
+import {
+  captureLogs,
+  createGitRepo,
+  createTempDir,
+  createTestConfig,
+  overrideEnv,
+  until,
+} from './helpers/index.ts';
 
 setDefaultTimeout(30_000);
 
@@ -396,17 +403,16 @@ describe('one Shinsa per data directory', () => {
         bootedAt: resolveBootedAt(),
       })
     );
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const shinsa = await startShinsa(config, { models });
       started.push(shinsa);
       expect(selectLockHolder(config.dataDir)).toMatchObject({ pid: process.pid, url: shinsa.url });
-      expect(warn).toHaveBeenCalledWith('[Serve] Took over the lock a stopped Shinsa left behind', {
-        path: join(config.dataDir, LOCK_FILE),
-        pid: crashed.pid,
-      });
+      expect(logs.fieldsOf('[Serve] Took over the lock a stopped Shinsa left behind')).toEqual([
+        { path: join(config.dataDir, LOCK_FILE), pid: crashed.pid },
+      ]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 

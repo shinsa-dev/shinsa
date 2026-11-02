@@ -19,7 +19,7 @@ export {
   resolveBootedAt,
   ServerRunningError,
   selectLockHolder,
-} from './lock.ts';
+} from './lock/index.ts';
 export {
   createServiceRestarter,
   EngineRestarter,
