@@ -85,10 +85,10 @@ function formatSettings({ settings }: { settings: Settings }, values: Values) {
 
 function assertSettingKey(key: string) {
   if (!(SETTINGS_KEYS as readonly string[]).includes(key)) {
-    throw new DomainError(
-      'setting_unknown',
-      `No setting ${key}. The settings are ${SETTINGS_KEYS.join(', ')}.`
-    );
+    throw new DomainError({
+      code: 'setting_unknown',
+      message: `No setting ${key}. The settings are ${SETTINGS_KEYS.join(', ')}.`,
+    });
   }
 }
 
@@ -133,10 +133,14 @@ async function buildProjectInput(client: SurfaceClient, values: Values): Promise
   const ref = readValue(values, 'id');
   const existing = ref ? selectProject(projects, ref) : null;
   if (ref && !existing) {
-    throw new DomainError('project_not_found', `No project ${ref}. \`shinsa projects list\` lists them.`);
+    throw new DomainError({
+      code: 'project_not_found',
+      message: `No project ${ref}. \`shinsa projects list\` lists them.`,
+    });
   }
   const name = readValue(values, 'name') || existing?.name;
-  if (!name) throw new DomainError('arguments_invalid', 'Name the new project with --name.');
+  if (!name)
+    throw new DomainError({ code: 'arguments_invalid', message: 'Name the new project with --name.' });
   const folders = values.folders as string[] | undefined;
   return {
     ...(existing ? { id: existing.id } : {}),

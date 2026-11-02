@@ -6,9 +6,10 @@ import type { Decider } from './decider.ts';
 
 export function recordWelcome(decider: Decider, command: CommandOf<'onboarding.welcome'>) {
   const body = command.body.trim();
-  if (body.length === 0) throw new DomainError('welcome_invalid', 'The welcome needs a summary.');
+  if (body.length === 0)
+    throw new DomainError({ code: 'welcome_invalid', message: 'The welcome needs a summary.' });
   if (selectWelcomeTask(decider.state.tasks)) {
-    throw new DomainError('welcome_recorded', 'The welcome task is already there.');
+    throw new DomainError({ code: 'welcome_recorded', message: 'The welcome task is already there.' });
   }
   const taskId = decider.context.newId();
   decider.emit({

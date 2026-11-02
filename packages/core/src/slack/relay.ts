@@ -1,4 +1,4 @@
-import { encodeText, isSameSecret, serializeHex } from '../remote/bytes.ts';
+import { Effect, Option, Schema } from 'effect';
 import { SLACK_BLOCK_LIMITS } from './blocks.ts';
 import { SLACK_LIMITS } from './contract.ts';
 
@@ -16,13 +16,6 @@ export const SLACK_RELAY_PATHS = {
   react: '/__remote/slack/react',
 } as const;
 
-export const SLACK_FORWARD_HEADERS = {
-  signature: 'x-shinsa-slack-signature',
-  timestamp: 'x-shinsa-slack-timestamp',
-} as const;
-
-export const SLACK_FORWARD_WINDOW_MS = 5 * 60_000;
-
 export const SLACK_BLOCKS_REFUSED = 'slack_blocks_refused';
 
 export const SLACK_RELAY_MESSAGE_LIMITS = {
@@ -32,60 +25,79 @@ export const SLACK_RELAY_MESSAGE_LIMITS = {
 
 export const SLACK_SESSION_STATUSES = ['processing', 'suspended', 'active', 'closed'] as const;
 
-export type SlackSessionStatus = (typeof SLACK_SESSION_STATUSES)[number];
+const SlackId = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(SLACK_LIMITS.id),
+  Schema.isPattern(/^[A-Za-z0-9._-]+$/)
+);
 
-export interface SlackRelayPost {
-  teamId: string;
-  channelId: string;
-  threadTs: string;
-  replaceTs: string | null;
-  message: { text: string; blocks: unknown[] };
-}
+const SlackReactionName = Schema.String.check(Schema.isPattern(/^[a-z0-9_+-]{1,64}$/));
 
-export interface SlackRelayPosted {
-  ts: string;
-}
+const withNullDefault = <S extends Schema.Top>(schema: S) =>
+  Schema.NullOr(schema).pipe(Schema.withDecodingDefault(Effect.succeed(null)));
 
-export interface SlackRelaySession {
-  teamId: string;
-  channelId: string;
-  threadTs: string;
-  status: SlackSessionStatus;
-}
+const SlackThread = Schema.Struct({ teamId: SlackId, channelId: SlackId, threadTs: SlackId });
 
-export interface SlackRelaySessionSet {
-  applied: boolean;
-}
+export const SlackRelayPost = Schema.Struct({
+  ...SlackThread.fields,
+  replaceTs: withNullDefault(SlackId),
+  message: Schema.Struct({
+    text: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.text)),
+    blocks: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)).check(
+      Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.blocks)
+    ),
+  }),
+});
 
-export interface SlackRelayReaction {
-  teamId: string;
-  channelId: string;
-  threadTs: string;
-  messageTs: string;
-  add: string | null;
-  remove: string | null;
-}
+export type SlackRelayPost = typeof SlackRelayPost.Type;
 
-export interface SlackRelayReacted {
-  applied: boolean;
-}
+export const SlackRelayPosted = Schema.Struct({ ts: Schema.String });
 
-export interface SlackLink {
-  teamId: string;
-  teamName: string;
-  userId: string;
-  userName: string;
-  linkedAt: number;
-}
+export type SlackRelayPosted = typeof SlackRelayPosted.Type;
 
-export interface SlackLinks {
-  links: SlackLink[];
-}
+export const SlackSessionStatus = Schema.Literals(SLACK_SESSION_STATUSES);
+
+export type SlackSessionStatus = typeof SlackSessionStatus.Type;
+
+export const SlackRelaySession = Schema.Struct({ ...SlackThread.fields, status: SlackSessionStatus });
+
+export type SlackRelaySession = typeof SlackRelaySession.Type;
+
+export const SlackRelaySessionSet = Schema.Struct({ applied: Schema.Boolean });
+
+export type SlackRelaySessionSet = typeof SlackRelaySessionSet.Type;
+
+export const SlackRelayReaction = Schema.Struct({
+  ...SlackThread.fields,
+  messageTs: SlackId,
+  add: withNullDefault(SlackReactionName),
+  remove: withNullDefault(SlackReactionName),
+}).check(Schema.makeFilter((reaction) => reaction.add !== null || reaction.remove !== null));
+
+export type SlackRelayReaction = typeof SlackRelayReaction.Type;
+
+export const SlackRelayReacted = Schema.Struct({ applied: Schema.Boolean });
+
+export type SlackRelayReacted = typeof SlackRelayReacted.Type;
+
+export const SlackLink = Schema.Struct({
+  teamId: Schema.String,
+  teamName: Schema.String,
+  userId: Schema.String,
+  userName: Schema.String,
+  linkedAt: Schema.Number,
+});
+
+export type SlackLink = typeof SlackLink.Type;
+
+export const SlackLinks = Schema.Struct({ links: Schema.Array(SlackLink) });
+
+export type SlackLinks = typeof SlackLinks.Type;
 
 export interface SlackSnapshot {
   remote: boolean;
   connectUrl: string | null;
-  links: SlackLink[];
+  links: readonly SlackLink[];
   problem: string | null;
 }
 
@@ -95,69 +107,6 @@ export function resolveSlackConnectUrl(origin: string, instanceId: string) {
 
 export function resolveSlackTaskUrl(origin: string, taskId: string) {
   return `${origin}/tasks/${encodeURIComponent(taskId)}`;
-}
-
-const SIGNATURE_VERSION = 'v1';
-
-type Fields = Record<string, unknown>;
-
-function isFields(value: unknown): value is Fields {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-async function signForward(connectKey: string, timestamp: string, body: string) {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encodeText(`slack:${connectKey}`),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const payload = encodeText(`${SIGNATURE_VERSION}:${timestamp}:${body}`);
-  return `${SIGNATURE_VERSION}=${serializeHex(new Uint8Array(await crypto.subtle.sign('HMAC', key, payload)))}`;
-}
-
-export function createSlackForwardSignature(connectKey: string, timestamp: number, body: string) {
-  return signForward(connectKey, String(timestamp), body);
-}
-
-export async function verifySlackForwardSignature(
-  connectKey: string,
-  headers: { signature: string | null; timestamp: string | null },
-  body: string,
-  now: number
-) {
-  if (!headers.signature || !headers.timestamp || !/^\d{1,16}$/.test(headers.timestamp)) return false;
-  if (Math.abs(now - Number(headers.timestamp)) > SLACK_FORWARD_WINDOW_MS) return false;
-  return isSameSecret(await signForward(connectKey, headers.timestamp, body), headers.signature);
-}
-
-function readId(fields: Fields, key: string) {
-  const value = fields[key];
-  if (typeof value !== 'string' || value.length === 0 || value.length > SLACK_LIMITS.id) return null;
-  return /^[A-Za-z0-9._-]+$/.test(value) ? value : null;
-}
-
-function readMessage(value: unknown): SlackRelayPost['message'] | null {
-  if (!isFields(value)) return null;
-  const { text, blocks } = value;
-  if (typeof text !== 'string' || text.length === 0 || text.length > SLACK_RELAY_MESSAGE_LIMITS.text)
-    return null;
-  if (!Array.isArray(blocks) || blocks.length > SLACK_RELAY_MESSAGE_LIMITS.blocks) return null;
-  return blocks.every(isFields) ? { text, blocks } : null;
-}
-
-export function parseSlackRelayPost(value: unknown): SlackRelayPost | null {
-  if (!isFields(value)) return null;
-  const teamId = readId(value, 'teamId');
-  const channelId = readId(value, 'channelId');
-  const threadTs = readId(value, 'threadTs');
-  const replaceTs =
-    value.replaceTs === null || value.replaceTs === undefined ? null : readId(value, 'replaceTs');
-  const message = readMessage(value.message);
-  if (!teamId || !channelId || !threadTs || !message) return null;
-  if (replaceTs === null && value.replaceTs !== null && value.replaceTs !== undefined) return null;
-  return { teamId, channelId, threadTs, replaceTs, message };
 }
 
 export interface SlackNames {
@@ -192,37 +141,20 @@ export function resolveSlackLinkedPath(result: { team: string } | { error: strin
   return `${SLACK_RELAY_PATHS.linkedPage}?${params.toString()}`;
 }
 
-function readThread(value: Fields) {
-  const teamId = readId(value, 'teamId');
-  const channelId = readId(value, 'channelId');
-  const threadTs = readId(value, 'threadTs');
-  return teamId && channelId && threadTs ? { teamId, channelId, threadTs } : null;
+const decodeSlackRelayPost = Schema.decodeUnknownOption(SlackRelayPost);
+
+const decodeSlackRelaySession = Schema.decodeUnknownOption(SlackRelaySession);
+
+const decodeSlackRelayReaction = Schema.decodeUnknownOption(SlackRelayReaction);
+
+export function parseSlackRelayPost(value: unknown) {
+  return Option.getOrNull(decodeSlackRelayPost(value));
 }
 
-function isSessionStatus(value: unknown): value is SlackSessionStatus {
-  return SLACK_SESSION_STATUSES.some((status) => status === value);
+export function parseSlackRelaySession(value: unknown) {
+  return Option.getOrNull(decodeSlackRelaySession(value));
 }
 
-export function parseSlackRelaySession(value: unknown): SlackRelaySession | null {
-  if (!isFields(value)) return null;
-  const thread = readThread(value);
-  if (!thread || !isSessionStatus(value.status)) return null;
-  return { ...thread, status: value.status };
-}
-
-function readReactionName(fields: Fields, key: string): string | null | undefined {
-  const value = fields[key];
-  if (value === null || value === undefined) return null;
-  return typeof value === 'string' && /^[a-z0-9_+-]{1,64}$/.test(value) ? value : undefined;
-}
-
-export function parseSlackRelayReaction(value: unknown): SlackRelayReaction | null {
-  if (!isFields(value)) return null;
-  const thread = readThread(value);
-  const messageTs = readId(value, 'messageTs');
-  const add = readReactionName(value, 'add');
-  const remove = readReactionName(value, 'remove');
-  if (!thread || !messageTs || add === undefined || remove === undefined) return null;
-  if (add === null && remove === null) return null;
-  return { ...thread, messageTs, add, remove };
+export function parseSlackRelayReaction(value: unknown) {
+  return Option.getOrNull(decodeSlackRelayReaction(value));
 }

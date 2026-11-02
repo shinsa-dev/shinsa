@@ -123,7 +123,7 @@ export class Terminals {
 
   #assertWritable() {
     if (this.#options.readOnly)
-      throw new DomainError('inspect_read_only', 'Terminals are off in inspect mode.');
+      throw new DomainError({ code: 'inspect_read_only', message: 'Terminals are off in inspect mode.' });
   }
 
   get home() {
@@ -136,7 +136,7 @@ export class Terminals {
 
   find(id: string) {
     const session = this.#sessions.get(id);
-    if (!session) throw new DomainError('terminal_not_found', 'That terminal is closed.');
+    if (!session) throw new DomainError({ code: 'terminal_not_found', message: 'That terminal is closed.' });
     return session;
   }
 
@@ -258,7 +258,10 @@ export class Terminals {
 
   #open(start: TerminalStart, service: ServiceDefinition | null, env: Record<string, string> = {}) {
     if (this.#sessions.size >= TERMINAL_LIMITS.terminals)
-      throw new DomainError('terminal_limit', `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most.`);
+      throw new DomainError({
+        code: 'terminal_limit',
+        message: `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most.`,
+      });
     const info: TerminalInfo = {
       id: this.#newId(),
       ...start,
@@ -318,7 +321,8 @@ export class Terminals {
   run(id: string, command: string) {
     this.#assertWritable();
     const session = this.find(id);
-    if (!session.running) throw new DomainError('terminal_ended', 'That terminal has ended.');
+    if (!session.running)
+      throw new DomainError({ code: 'terminal_ended', message: 'That terminal has ended.' });
     session.type(command);
   }
 
@@ -349,7 +353,8 @@ export class Terminals {
 
   findService(id: string) {
     const service = this.#services.get(id);
-    if (!service) throw new DomainError('service_not_found', 'That service is not there anymore.');
+    if (!service)
+      throw new DomainError({ code: 'service_not_found', message: 'That service is not there anymore.' });
     return service;
   }
 
@@ -372,7 +377,10 @@ export class Terminals {
   addService(projectId: string, input: ServiceInput) {
     this.#assertWritable();
     if (this.#services.size >= SERVICE_LIMITS.services)
-      throw new DomainError('service_limit', `Shinsa keeps ${SERVICE_LIMITS.services} services at most.`);
+      throw new DomainError({
+        code: 'service_limit',
+        message: `Shinsa keeps ${SERVICE_LIMITS.services} services at most.`,
+      });
     const service: ServiceDefinition = { id: this.#newId(), projectId, ...input };
     this.#services.set(service.id, service);
     this.#saveServices();

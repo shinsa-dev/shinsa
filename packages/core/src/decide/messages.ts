@@ -271,15 +271,16 @@ function startNewWork(decider: Decider, task: Task, send: MessageSend, texts: st
 
 export function assertNotWatchHome(task: Task) {
   if (!isWatchHome(task)) return;
-  throw new DomainError('watch_home', 'A watch takes no messages.');
+  throw new DomainError({ code: 'watch_home', message: 'A watch takes no messages.' });
 }
 
 function assertMessageAccepted(state: ShinsaState, task: Task, text: string) {
-  if (text.length === 0) throw new DomainError('message_required', 'Write a message first.');
+  if (text.length === 0)
+    throw new DomainError({ code: 'message_required', message: 'Write a message first.' });
   assertNotWatchHome(task);
   const delivery = resolveMessageDelivery(state, task);
   if (delivery.effect === 'closed') {
-    throw new DomainError('task_settled', 'This task is finished. Start a new one.');
+    throw new DomainError({ code: 'task_settled', message: 'This task is finished. Start a new one.' });
   }
   return delivery;
 }

@@ -21,44 +21,57 @@ const LEAK_NAMES: Record<FeedbackLeak['kind'], string> = {
 
 function findFeedback(decider: Decider, feedbackId: string) {
   const entry = decider.state.feedback[feedbackId];
-  if (!entry) throw new DomainError('feedback_not_found', `No feedback ${feedbackId}`);
+  if (!entry) throw new DomainError({ code: 'feedback_not_found', message: `No feedback ${feedbackId}` });
   return entry;
 }
 
 function assertNote(note: string) {
-  if (note.length === 0) throw new DomainError('feedback_invalid', 'Write what you want to tell Shinsa.');
+  if (note.length === 0)
+    throw new DomainError({ code: 'feedback_invalid', message: 'Write what you want to tell Shinsa.' });
   if (note.length > FEEDBACK_LIMITS.note) {
-    throw new DomainError('feedback_invalid', `Feedback can be at most ${FEEDBACK_LIMITS.note} characters.`);
+    throw new DomainError({
+      code: 'feedback_invalid',
+      message: `Feedback can be at most ${FEEDBACK_LIMITS.note} characters.`,
+    });
   }
 }
 
 function assertIssueText(title: string, body: string) {
   if (title.length === 0 || body.length === 0) {
-    throw new DomainError('feedback_invalid', 'The issue needs a title and a description.');
+    throw new DomainError({
+      code: 'feedback_invalid',
+      message: 'The issue needs a title and a description.',
+    });
   }
   if (title.length > FEEDBACK_LIMITS.title || body.length > FEEDBACK_LIMITS.body) {
-    throw new DomainError(
-      'feedback_invalid',
-      `A title can be at most ${FEEDBACK_LIMITS.title} characters and a description ${FEEDBACK_LIMITS.body}.`
-    );
+    throw new DomainError({
+      code: 'feedback_invalid',
+      message: `A title can be at most ${FEEDBACK_LIMITS.title} characters and a description ${FEEDBACK_LIMITS.body}.`,
+    });
   }
 }
 
 function assertNotBusy(entry: Feedback) {
   if (entry.status === 'drafting') {
-    throw new DomainError('feedback_busy', 'Your agent is still writing this issue. Wait for the draft.');
+    throw new DomainError({
+      code: 'feedback_busy',
+      message: 'Your agent is still writing this issue. Wait for the draft.',
+    });
   }
   if (entry.status === 'filing') {
-    throw new DomainError('feedback_busy', 'This issue is being opened on GitHub. Wait for it to finish.');
+    throw new DomainError({
+      code: 'feedback_busy',
+      message: 'This issue is being opened on GitHub. Wait for it to finish.',
+    });
   }
 }
 
 function assertHumanFiles(decider: Decider) {
   if (!decider.context.onBehalf) return;
-  throw new DomainError(
-    'human_only',
-    'Only the human opens a public issue. Leave the draft for them to read.'
-  );
+  throw new DomainError({
+    code: 'human_only',
+    message: 'Only the human opens a public issue. Leave the draft for them to read.',
+  });
 }
 
 export function describeFeedbackLeaks(leaks: readonly FeedbackLeak[]) {
@@ -102,7 +115,7 @@ export function writeFeedback(decider: Decider, command: CommandOf<'feedback.wri
   const entry = findFeedback(decider, command.feedbackId);
   assertNotBusy(entry);
   if (entry.status === 'filed')
-    throw new DomainError('feedback_filed', 'This issue is already open on GitHub.');
+    throw new DomainError({ code: 'feedback_filed', message: 'This issue is already open on GitHub.' });
   draft(decider, {
     ...entry,
     note,
@@ -117,7 +130,10 @@ export function writeFeedback(decider: Decider, command: CommandOf<'feedback.wri
 export function updateFeedback(decider: Decider, command: CommandOf<'feedback.update'>) {
   const entry = findFeedback(decider, command.feedbackId);
   if (!isFeedbackFileable(entry)) {
-    throw new DomainError('feedback_not_draft', 'Only a draft that waits for you can be changed.');
+    throw new DomainError({
+      code: 'feedback_not_draft',
+      message: 'Only a draft that waits for you can be changed.',
+    });
   }
   const title = resolveFeedbackText(command.title);
   const body = resolveFeedbackText(command.body);
@@ -133,10 +149,14 @@ export function fileFeedback(decider: Decider, command: CommandOf<'feedback.file
   assertHumanFiles(decider);
   const entry = findFeedback(decider, command.feedbackId);
   if (!isFeedbackFileable(entry)) {
-    throw new DomainError('feedback_not_draft', 'Only a draft that waits for you can be opened as an issue.');
+    throw new DomainError({
+      code: 'feedback_not_draft',
+      message: 'Only a draft that waits for you can be opened as an issue.',
+    });
   }
   const leaks = listFeedbackEntryLeaks(decider.state, entry);
-  if (leaks.length > 0) throw new DomainError('feedback_private', describeFeedbackLeaks(leaks));
+  if (leaks.length > 0)
+    throw new DomainError({ code: 'feedback_private', message: describeFeedbackLeaks(leaks) });
   decider.emit({
     type: 'feedback.recorded',
     entry: { ...entry, status: 'filing', failure: null, updatedAt: decider.context.now },
@@ -147,7 +167,10 @@ export function fileFeedback(decider: Decider, command: CommandOf<'feedback.file
 export function dismissFeedback(decider: Decider, command: CommandOf<'feedback.dismiss'>) {
   const entry = findFeedback(decider, command.feedbackId);
   if (entry.status === 'filing') {
-    throw new DomainError('feedback_busy', 'This issue is being opened on GitHub. Wait for it to finish.');
+    throw new DomainError({
+      code: 'feedback_busy',
+      message: 'This issue is being opened on GitHub. Wait for it to finish.',
+    });
   }
   decider.emit({ type: 'feedback.removed', feedbackId: entry.id });
 }
@@ -237,16 +260,16 @@ function countTaskReports(decider: Decider, taskId: string) {
 function writeAgentFeedback(decider: Decider, note: string, taskId: string | null, runId: string | null) {
   if (isKnownNote(decider, note)) return;
   if (taskId && countTaskReports(decider, taskId) >= FEEDBACK_LIMITS.perTask) {
-    throw new DomainError(
-      'feedback_full',
-      `This task already reported ${FEEDBACK_LIMITS.perTask} things about Shinsa. Leave this one and carry on with your step.`
-    );
+    throw new DomainError({
+      code: 'feedback_full',
+      message: `This task already reported ${FEEDBACK_LIMITS.perTask} things about Shinsa. Leave this one and carry on with your step.`,
+    });
   }
   if (countAgentWaiting(decider) >= FEEDBACK_LIMITS.agentWaiting) {
-    throw new DomainError(
-      'feedback_full',
-      `The human already has ${FEEDBACK_LIMITS.agentWaiting} reports to read. Leave this one and carry on with your step.`
-    );
+    throw new DomainError({
+      code: 'feedback_full',
+      message: `The human already has ${FEEDBACK_LIMITS.agentWaiting} reports to read. Leave this one and carry on with your step.`,
+    });
   }
   draft(decider, createEntry(decider, { source: 'agent', note, taskId, runId }));
 }

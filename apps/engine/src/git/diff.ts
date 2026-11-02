@@ -37,7 +37,10 @@ async function readDiffText(source: DiffSource, args: string[], paths: readonly 
     env: source.env,
   });
   if (!read.ok || read.truncated)
-    throw new DomainError('diff_failed', read.stderr || 'The change is too large to show.');
+    throw new DomainError({
+      code: 'diff_failed',
+      message: read.stderr || 'The change is too large to show.',
+    });
   return decodeText(read.bytes);
 }
 

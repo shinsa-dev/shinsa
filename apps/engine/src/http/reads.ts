@@ -54,7 +54,7 @@ function readLimit(url: URL, fallback = DEFAULT_LIMIT) {
   const raw = url.searchParams.get('limit');
   const value = raw === null ? fallback : Number(raw);
   if (!Number.isInteger(value) || value < 1) {
-    throw new DomainError('limit_invalid', 'limit must be a whole number of 1 or more.');
+    throw new DomainError({ code: 'limit_invalid', message: 'limit must be a whole number of 1 or more.' });
   }
   return Math.min(value, MAX_LIMIT);
 }
@@ -62,7 +62,10 @@ function readLimit(url: URL, fallback = DEFAULT_LIMIT) {
 function readFilter(url: URL): TaskFilter {
   const raw = url.searchParams.get('status') ?? 'open';
   if (!TASK_FILTERS.has(raw as TaskFilter)) {
-    throw new DomainError('status_invalid', `status must be one of ${[...TASK_FILTERS].join(', ')}.`);
+    throw new DomainError({
+      code: 'status_invalid',
+      message: `status must be one of ${[...TASK_FILTERS].join(', ')}.`,
+    });
   }
   return raw as TaskFilter;
 }
@@ -128,9 +131,15 @@ function findTaskByRef(state: ShinsaState, ref: string) {
   );
   if (matches.length === 1 && matches[0]) return matches[0];
   if (matches.length > 1) {
-    throw new DomainError('task_ambiguous', `“${ref}” matches ${matches.length} tasks. Use the full id.`);
+    throw new DomainError({
+      code: 'task_ambiguous',
+      message: `“${ref}” matches ${matches.length} tasks. Use the full id.`,
+    });
   }
-  throw new DomainError('task_not_found', `No task ${ref}. \`shinsa tasks list\` lists them.`);
+  throw new DomainError({
+    code: 'task_not_found',
+    message: `No task ${ref}. \`shinsa tasks list\` lists them.`,
+  });
 }
 
 function resolveRunView(run: Run) {
@@ -163,7 +172,7 @@ function readKinds(url: URL) {
   const kinds = raw.split(',').map((kind) => kind.trim());
   for (const kind of kinds) {
     if (!CHAT_KINDS.has(kind as ChatEntry['type'])) {
-      throw new DomainError('kinds_invalid', `kinds are ${[...CHAT_KINDS].join(', ')}.`);
+      throw new DomainError({ code: 'kinds_invalid', message: `kinds are ${[...CHAT_KINDS].join(', ')}.` });
     }
   }
   return new Set(kinds as ChatEntry['type'][]);
@@ -174,7 +183,7 @@ function readIndex(url: URL, key: string) {
   if (raw === null) return null;
   const value = Number(raw);
   if (!Number.isInteger(value) || value < -1)
-    throw new DomainError(`${key}_invalid`, `${key} must be an index.`);
+    throw new DomainError({ code: `${key}_invalid`, message: `${key} must be an index.` });
   return value;
 }
 

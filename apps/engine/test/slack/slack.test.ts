@@ -239,7 +239,10 @@ describe('an answer from a question’s button', () => {
 
   test('says why when Shinsa refuses it, and fails on anything else', async () => {
     const { slack, stub } = setUp();
-    stub.reject(() => true, new DomainError('slack_answer_closed', 'This question is no longer open.'));
+    stub.reject(
+      () => true,
+      new DomainError({ code: 'slack_answer_closed', message: 'This question is no longer open.' })
+    );
     expect(await (await click(slack, JSON.stringify(ANSWER))).json()).toEqual({
       answered: false,
       reason: 'This question is no longer open.',

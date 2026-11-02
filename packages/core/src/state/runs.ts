@@ -53,19 +53,22 @@ function assertRunShape(run: Run) {
   const delegated = isDelegatedRun(run);
   const roles: readonly RunRole[] = delegated ? DELEGATE_ROLES : TOP_LEVEL_ROLES;
   if (!roles.includes(run.role)) {
-    throw new DomainError(
-      'run_role_unknown',
-      `Run ${run.id} has the role "${run.role}", which ${delegated ? 'a delegated run' : 'a run of its own'} cannot have.`
-    );
+    throw new DomainError({
+      code: 'run_role_unknown',
+      message: `Run ${run.id} has the role "${run.role}", which ${delegated ? 'a delegated run' : 'a run of its own'} cannot have.`,
+    });
   }
   if (run.role === 'agent' && !RUN_PURPOSES.includes(run.purpose)) {
-    throw new DomainError('run_purpose_unknown', `Agent run ${run.id} has no known purpose.`);
+    throw new DomainError({
+      code: 'run_purpose_unknown',
+      message: `Agent run ${run.id} has no known purpose.`,
+    });
   }
   if (run.role !== 'agent' && run.purpose !== undefined) {
-    throw new DomainError(
-      'run_purpose_unexpected',
-      `Run ${run.id} is a ${run.role} and cannot have a purpose.`
-    );
+    throw new DomainError({
+      code: 'run_purpose_unexpected',
+      message: `Run ${run.id} is a ${run.role} and cannot have a purpose.`,
+    });
   }
 }
 

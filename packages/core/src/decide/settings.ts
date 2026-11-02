@@ -23,7 +23,7 @@ import { removeProjectSuggestions } from './watch-suggestions.ts';
 
 function assertProject(decider: Decider, projectId: string | null | undefined) {
   if (projectId && !decider.state.projects[projectId]) {
-    throw new DomainError('project_not_found', `No project ${projectId}`);
+    throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}` });
   }
 }
 
@@ -34,7 +34,7 @@ function isWholeBetween(value: number, min: number, max: number) {
 function assertSettings(patch: Partial<Settings>) {
   const rounds = patch.maxFixRounds;
   if (rounds !== undefined && rounds !== null && !isWholeBetween(rounds, 1, Number.MAX_SAFE_INTEGER)) {
-    throw new DomainError('settings_invalid', 'Fix rounds must be 1 or more.');
+    throw new DomainError({ code: 'settings_invalid', message: 'Fix rounds must be 1 or more.' });
   }
   const delegations = patch.delegationLimit;
   if (
@@ -42,39 +42,42 @@ function assertSettings(patch: Partial<Settings>) {
     delegations !== null &&
     !isWholeBetween(delegations, 1, Number.MAX_SAFE_INTEGER)
   ) {
-    throw new DomainError('settings_invalid', 'Delegations at once must be 1 or more.');
+    throw new DomainError({ code: 'settings_invalid', message: 'Delegations at once must be 1 or more.' });
   }
   const attention = patch.attentionLimit;
   if (attention !== undefined && !isWholeBetween(attention, 1, Number.MAX_SAFE_INTEGER)) {
-    throw new DomainError('settings_invalid', 'The attention limit must be 1 or more.');
+    throw new DomainError({ code: 'settings_invalid', message: 'The attention limit must be 1 or more.' });
   }
   const capacity = patch.taskCapacity;
   if (capacity !== undefined && capacity !== null && !isWholeBetween(capacity, 1, Number.MAX_SAFE_INTEGER)) {
-    throw new DomainError('settings_invalid', 'Task capacity must be 1 or more.');
+    throw new DomainError({ code: 'settings_invalid', message: 'Task capacity must be 1 or more.' });
   }
   const policies = patch.placementPolicies;
   if (policies && !isPlacementPoliciesValid(policies)) {
-    throw new DomainError(
-      'settings_invalid',
-      `Keep to ${PLACEMENT_POLICY_LIMITS.perMachine} policies of ${PLACEMENT_POLICY_LIMITS.text} characters.`
-    );
+    throw new DomainError({
+      code: 'settings_invalid',
+      message: `Keep to ${PLACEMENT_POLICY_LIMITS.perMachine} policies of ${PLACEMENT_POLICY_LIMITS.text} characters.`,
+    });
   }
   const switchAt = patch.accountSwitchAt;
   if (switchAt !== undefined && !isWholeBetween(switchAt, 1, 100)) {
-    throw new DomainError('settings_invalid', 'Switch accounts at 1 to 100%.');
+    throw new DomainError({ code: 'settings_invalid', message: 'Switch accounts at 1 to 100%.' });
   }
   const lead = patch.compactionLeadMinutes;
   if (lead !== undefined && !isWholeBetween(lead, 1, MAX_COMPACTION_LEAD_MINUTES)) {
-    throw new DomainError('settings_invalid', `Compact 1 to ${MAX_COMPACTION_LEAD_MINUTES} minutes ahead.`);
+    throw new DomainError({
+      code: 'settings_invalid',
+      message: `Compact 1 to ${MAX_COMPACTION_LEAD_MINUTES} minutes ahead.`,
+    });
   }
   assertWatchdogSettings(patch);
   const budget = patch.taskBudgetUsd;
   if (budget !== undefined && budget !== null && !(Number.isFinite(budget) && budget > 0)) {
-    throw new DomainError('settings_invalid', 'The cost limit must be above zero.');
+    throw new DomainError({ code: 'settings_invalid', message: 'The cost limit must be above zero.' });
   }
   const usage = patch.taskUsageLimit;
   if (usage !== undefined && usage !== null && !isWholeBetween(usage, 1, 100)) {
-    throw new DomainError('settings_invalid', 'The usage limit must be 1 to 100%.');
+    throw new DomainError({ code: 'settings_invalid', message: 'The usage limit must be 1 to 100%.' });
   }
 }
 
@@ -92,7 +95,7 @@ function assertWatchdogSettings(patch: Partial<Settings>) {
   for (const [key, max, message] of WATCHDOG_SETTING_RULES) {
     const value = patch[key];
     if (value !== undefined && !isWholeBetween(value, 1, max)) {
-      throw new DomainError('settings_invalid', message.replace('{max}', String(max)));
+      throw new DomainError({ code: 'settings_invalid', message: message.replace('{max}', String(max)) });
     }
   }
 }
@@ -145,15 +148,15 @@ function assertHumanOnlyFields(decider: Decider, patch: object, fields: readonly
   if (!decider.context.onBehalf) return;
   const touched = fields.filter((field) => field in patch);
   if (touched.length === 0) return;
-  throw new DomainError(
-    'human_only',
-    `Only the human changes ${what} ${touched.join(', ')}. Tell them what you would change and why.`
-  );
+  throw new DomainError({
+    code: 'human_only',
+    message: `Only the human changes ${what} ${touched.join(', ')}. Tell them what you would change and why.`,
+  });
 }
 
 export function updateRepo(decider: Decider, command: CommandOf<'repo.update'>) {
   const repo = decider.state.repos[command.repoId];
-  if (!repo) throw new DomainError('repo_not_found', `No repository ${command.repoId}`);
+  if (!repo) throw new DomainError({ code: 'repo_not_found', message: `No repository ${command.repoId}` });
   assertHumanOnlyFields(decider, command.patch, HUMAN_ONLY_REPO_FIELDS, 'the repository’s');
   assertProject(decider, command.patch.projectId);
   const updated = { ...repo, ...command.patch };
@@ -169,11 +172,14 @@ export function removeRepo(decider: Decider, command: CommandOf<'repo.remove'>) 
 function readFolders(folders: readonly string[]) {
   const cleaned = [...new Set(folders.map((folder) => folder.trim().replace(/\/+$/, '')))].filter(Boolean);
   if (cleaned.length > PROJECT_LIMITS.folders) {
-    throw new DomainError('project_invalid', `A project can have at most ${PROJECT_LIMITS.folders} folders.`);
+    throw new DomainError({
+      code: 'project_invalid',
+      message: `A project can have at most ${PROJECT_LIMITS.folders} folders.`,
+    });
   }
   for (const folder of cleaned) {
     if (!folder.startsWith('/') || folder.length > PROJECT_LIMITS.folder) {
-      throw new DomainError('project_invalid', 'Give a full folder path.');
+      throw new DomainError({ code: 'project_invalid', message: 'Give a full folder path.' });
     }
   }
   return cleaned;
@@ -186,10 +192,10 @@ function resolveKey(decider: Decider, command: CommandOf<'project.write'>, exist
     return existing?.key ?? resolveProjectKey(command.project.name, others);
   }
   if (!isProjectKey(asked)) {
-    throw new DomainError('project_invalid', 'A key is 2 to 6 letters, like SW.');
+    throw new DomainError({ code: 'project_invalid', message: 'A key is 2 to 6 letters, like SW.' });
   }
   if (others.includes(asked)) {
-    throw new DomainError('project_key_taken', `Another project uses ${asked}.`);
+    throw new DomainError({ code: 'project_key_taken', message: `Another project uses ${asked}.` });
   }
   return asked;
 }
@@ -199,7 +205,7 @@ function assertFoldersFree(decider: Decider, projectId: string, folders: string[
     if (project.id === projectId) continue;
     const shared = folders.find((folder) => project.folders.includes(folder));
     if (shared) {
-      throw new DomainError('folder_taken', 'That folder is in another project.');
+      throw new DomainError({ code: 'folder_taken', message: 'That folder is in another project.' });
     }
   }
 }
@@ -215,17 +221,21 @@ function moveReposIntoFolders(decider: Decider, project: Project) {
 
 export function writeProject(decider: Decider, command: CommandOf<'project.write'>) {
   const name = command.project.name.trim();
-  if (name.length === 0) throw new DomainError('project_name_required', 'Name the project.');
+  if (name.length === 0)
+    throw new DomainError({ code: 'project_name_required', message: 'Name the project.' });
   if (name.length > PROJECT_LIMITS.name) {
-    throw new DomainError('project_invalid', `Keep the name to ${PROJECT_LIMITS.name} characters.`);
+    throw new DomainError({
+      code: 'project_invalid',
+      message: `Keep the name to ${PROJECT_LIMITS.name} characters.`,
+    });
   }
   const existing = command.project.id ? decider.state.projects[command.project.id] : undefined;
   const description = (command.project.description ?? existing?.description ?? '').trim();
   if (description.length > PROJECT_LIMITS.description) {
-    throw new DomainError(
-      'project_invalid',
-      `Keep the description to ${PROJECT_LIMITS.description} characters.`
-    );
+    throw new DomainError({
+      code: 'project_invalid',
+      message: `Keep the description to ${PROJECT_LIMITS.description} characters.`,
+    });
   }
   const id = existing?.id ?? decider.context.newId();
   const folders = readFolders(command.project.folders ?? existing?.folders ?? []);
@@ -265,7 +275,10 @@ export function changeFocus(decider: Decider, command: CommandOf<'focus.change'>
   assertProject(decider, command.projectId);
   const teamId = command.teamId ?? null;
   if (command.projectId && teamId) {
-    throw new DomainError('focus_refused', 'Focus on a project or on a team, not both at once.');
+    throw new DomainError({
+      code: 'focus_refused',
+      message: 'Focus on a project or on a team, not both at once.',
+    });
   }
   const focus = { projectId: command.projectId, teamId, until: command.until };
   if (isSameValue(focus, decider.state.focus)) return;

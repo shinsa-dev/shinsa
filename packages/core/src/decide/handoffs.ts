@@ -4,16 +4,21 @@ import type { Decider } from './decider.ts';
 
 function assertHumanHandsOff(decider: Decider) {
   if (!decider.context.onBehalf) return;
-  throw new DomainError(
-    'human_only',
-    'Only the human hands a task to someone else. Tell them they can hand it off from the task in Shinsa.'
-  );
+  throw new DomainError({
+    code: 'human_only',
+    message:
+      'Only the human hands a task to someone else. Tell them they can hand it off from the task in Shinsa.',
+  });
 }
 
 function assertHandsOff(task: Task) {
-  if (task.watchHome) throw new DomainError('handoff_refused', 'An automation cannot be handed off.');
+  if (task.watchHome)
+    throw new DomainError({ code: 'handoff_refused', message: 'An automation cannot be handed off.' });
   if (!isTaskSettled(task)) return;
-  throw new DomainError('handoff_refused', 'This task is finished, so there is nothing left to hand off.');
+  throw new DomainError({
+    code: 'handoff_refused',
+    message: 'This task is finished, so there is nothing left to hand off.',
+  });
 }
 
 export function handOffTask(decider: Decider, command: CommandOf<'task.hand_off'>) {
@@ -52,13 +57,16 @@ export function failHandoff(decider: Decider, command: CommandOf<'handoff.fail'>
 export function claimHandoff(decider: Decider, command: CommandOf<'handoff.claim'>) {
   const handoff = decider.state.tasks[command.taskId]?.handoff;
   if (!handoff)
-    throw new DomainError('handoff_gone', 'This link no longer hands off a task. Ask for a new one.');
+    throw new DomainError({
+      code: 'handoff_gone',
+      message: 'This link no longer hands off a task. Ask for a new one.',
+    });
   if (handoff.guest?.id === command.guest.id) return;
   if (handoff.guest) {
-    throw new DomainError(
-      'handoff_claimed',
-      'Someone else already opened this hand-off link. Ask the task’s owner for a new one.'
-    );
+    throw new DomainError({
+      code: 'handoff_claimed',
+      message: 'Someone else already opened this hand-off link. Ask the task’s owner for a new one.',
+    });
   }
   decider.emit({ type: 'handoff.claimed', taskId: command.taskId, guest: command.guest });
 }

@@ -312,7 +312,8 @@ export class Slack {
 
   async disconnect() {
     const credentials = this.#selectCredentials();
-    if (!credentials) throw new DomainError('remote_not_paired', 'Turn on remote access first.');
+    if (!credentials)
+      throw new DomainError({ code: 'remote_not_paired', message: 'Turn on remote access first.' });
     await this.#relay.requestUnlink(credentials.machineToken);
     return this.snapshot();
   }

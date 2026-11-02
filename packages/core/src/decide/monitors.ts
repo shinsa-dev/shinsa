@@ -27,7 +27,10 @@ export function waitFor(decider: Decider, command: CommandOf<'agent.wait_for'>) 
   const timeoutAt =
     chain?.timeoutAt ?? now + (command.timeoutMinutes ?? MONITOR_DEFAULTS.timeoutMinutes) * MINUTE_MS;
   if (timeoutAt <= nextCheckAt) {
-    throw new DomainError('monitor_invalid', 'The next check must come before the wait times out.');
+    throw new DomainError({
+      code: 'monitor_invalid',
+      message: 'The next check must come before the wait times out.',
+    });
   }
   const monitor: Monitor = {
     id: chain?.id ?? decider.context.newId(),
@@ -98,7 +101,7 @@ export function checkInNow(decider: Decider, command: CommandOf<'monitor.check_i
   const task = decider.task(command.taskId);
   const monitor = task.monitor;
   if (monitor?.status !== 'armed') {
-    throw new DomainError('monitor_not_armed', 'Nothing here waits for a check.');
+    throw new DomainError({ code: 'monitor_not_armed', message: 'Nothing here waits for a check.' });
   }
   wake(decider, task, monitor);
 }

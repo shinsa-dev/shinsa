@@ -7,6 +7,7 @@ import {
   REMOTE_NATIVE_CLIENT,
   REMOTE_NATIVE_REDIRECT_SCHEMES,
   REMOTE_PATHS,
+  REMOTE_SESSION_COOKIE,
   type RemoteSession,
   type RemoteUser,
   serializeBase64Url,
@@ -26,7 +27,7 @@ import {
 } from './http.ts';
 import type { CloudWorld } from './world.ts';
 
-const SESSION_COOKIE = '__Host-shinsa_session';
+const SESSION_COOKIE = REMOTE_SESSION_COOKIE;
 
 const OAUTH_COOKIE = '__Host-shinsa_oauth';
 

@@ -303,13 +303,16 @@ export class Engine {
       receipt.target !== identity.target ||
       receipt.fingerprint !== identity.fingerprint
     ) {
-      throw new DomainError(
-        'command_id_conflict',
-        `Command id ${identity.id} was already used for ${receipt.type} on ${receipt.target}. Send a different command with a new id.`
-      );
+      throw new DomainError({
+        code: 'command_id_conflict',
+        message: `Command id ${identity.id} was already used for ${receipt.type} on ${receipt.target}. Send a different command with a new id.`,
+      });
     }
     if (receipt.status === 'rejected') {
-      throw new DomainError(receipt.code ?? 'command_failed', receipt.error ?? 'The command was refused.');
+      throw new DomainError({
+        code: receipt.code ?? 'command_failed',
+        message: receipt.error ?? 'The command was refused.',
+      });
     }
     return this.#log.listEventsBetween(receipt.firstSeq, receipt.lastSeq);
   }

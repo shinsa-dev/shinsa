@@ -1,13 +1,6 @@
 import type { TeamTask } from '../share/teams.ts';
 import { encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
-import {
-  REMOTE_APP_ORIGIN,
-  REMOTE_CONNECT_PARAM,
-  REMOTE_PATHS,
-  type RemoteMember,
-  type RemoteRole,
-  type RemoteUser,
-} from './contract.ts';
+import { REMOTE_APP_ORIGIN, REMOTE_CONNECT_PARAM, REMOTE_PATHS, type TeamAction } from './contract.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parseSigningPublicKey, serializePublicKey } from './keys.ts';
 import {
@@ -33,82 +26,11 @@ export const TEAM_KEY_BYTES = 32;
 
 export const TEAM_SNAPSHOT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export const TEAM_NAME_LIMIT = 60;
-
-export const MAX_TEAM_MEMBERS = 20;
-
-export const MAX_OWNED_TEAMS = 10;
-
 export const TEAM_CHANNEL_PATH = '/team';
 
 export const TEAM_TASKS_PATH = '/api/teams/tasks';
 
 export const TEAM_VIEW_PATH = '/api/teams/view';
-
-export type TeamAction =
-  | 'invite'
-  | 'invite/remove'
-  | 'members/add'
-  | 'members/remove'
-  | 'requests/decline'
-  | 'leave'
-  | 'remove'
-  | 'connect';
-
-export interface TeamMachine {
-  id: string;
-  name: string;
-  userId: string;
-  online: boolean;
-  lastSeenAt: number | null;
-  signingKey?: string;
-}
-
-export interface RemoteTeam {
-  id: string;
-  name: string;
-  owner: RemoteUser;
-  role: RemoteRole;
-  members: RemoteMember[];
-  requests: RemoteMember[];
-  machines: TeamMachine[];
-  createdAt: number;
-}
-
-export interface TeamCreateRequest {
-  name: string;
-}
-
-export interface TeamCreateResponse {
-  team: RemoteTeam;
-  invite: string;
-}
-
-export interface TeamInviteResponse {
-  invite: string;
-}
-
-export interface TeamJoinRequest {
-  invite: string;
-}
-
-export type TeamJoinStatus = 'requested' | 'member';
-
-export interface TeamJoinResponse {
-  teamId: string;
-  name: string;
-  owner: RemoteUser;
-  status: TeamJoinStatus;
-}
-
-export interface TeamPreviewResponse {
-  name: string;
-  owner: RemoteUser;
-}
-
-export interface TeamConnectRequest {
-  instanceId: string;
-}
 
 export interface TeamJoinFragment {
   teamId: string;

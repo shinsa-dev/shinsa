@@ -494,7 +494,7 @@ function assertGuestScope(state: ShinsaState, command: ShinsaCommand, taskId: st
   const refusal = isUserCommand(command)
     ? resolveScopedRefusal(state, taskId, command)
     : SCOPE_MESSAGES.command;
-  if (refusal) throw new DomainError(SCOPE_REFUSAL_CODE, refusal);
+  if (refusal) throw new DomainError({ code: SCOPE_REFUSAL_CODE, message: refusal });
 }
 
 export function decide(state: ShinsaState, command: ShinsaCommand, context: DecideContext): Decision {

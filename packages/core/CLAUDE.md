@@ -13,7 +13,7 @@ src/
 │                    SETTINGS_KEYS (settings.ts; resolveAgentFastMode: a role's fast mode, else the global one;
 │                    resolveDelegationLimit: delegations at once under one step, null for no limit;
 │                    HUMAN_ONLY_SETTINGS and HUMAN_ONLY_REPO_FIELDS, the fields only the human changes),
-│                    DomainError (errors.ts), the tools of each role (tools.ts: listCallableToolNames, what a role may
+│                    DomainError (errors.ts: a Schema.TaggedError with a code and a message), the tools of each role (tools.ts: listCallableToolNames, what a role may
 │                    call, the one source for decide and prompts; listToolNames, what a session is served: one union
 │                    for the TASK_SESSION_ROLES; isHandOverTool, and PURPOSE_HAND_OVERS: the hand-over each purpose
 │                    of the task's agent may call), the delegation limits, isReadOnlyRole and isReadOnlyRun (the
@@ -272,7 +272,14 @@ src/
 ├── progress/        The steps a task shows on its page, and an ended round's (resolveRoundProgress)
 ├── remote/          Remote access, shared by the engine, the web app and the hosted Worker (`apps/cloud`), on
 │                    WebCrypto only: the append-only wire contract with the Worker (contract.ts: REMOTE_PATHS, the
-│                    tunnel host, the stable webhook URL and its engine path, the enrollment link's fragment), keys
+│                    tunnel host, the stable webhook URL and its engine path, the enrollment link's fragment, and
+│                    every request and answer as an Effect Schema with its type beside it: RemoteUser, RemoteTeam,
+│                    HeartbeatResponse…, their limits in REMOTE_TEXT_LIMITS, the branded path ids InstanceId, TeamId,
+│                    RemoteUserId and ClaimCode), the Worker's failures (errors.ts: one Schema.TaggedError per wire
+│                    code with its status, resolveRemoteFailureWire for its `{ error: { code, message } }` body), the
+│                    Worker's API declared once (api.ts: RemoteApi, an HttpApi of every /__remote/* route with its
+│                    params, payload, answer and failures; PageSession, a bearer or the session cookie, and
+│                    MachineSession, the machine token, providing CurrentUser and CurrentMachine), keys
 │                    (keys.ts: P-256 ECDH, fingerprints), the handshake (handshake.ts: the hellos, ee/es/se ECDH and
 │                    HKDF into one AES-GCM key per direction, the enrollment proof), sealed frames (frames.ts: a
 │                    counter nonce, in order, closed after one bad frame), the channel's messages (channel.ts: the app
@@ -322,10 +329,11 @@ src/
 │                    question, secret, plan, review and proposal gate, the result in mrkdwn, the bot's own posts
 │                    (Sent to, Kept for, Not a task, Connect Slack, offline), and resolveSlackPostMessage for a
 │                    `slack.post` from the outbox), and the relay's wire
-│                    contract (relay.ts: SLACK_RELAY_PATHS, the forward signature made with the machine's connect
-│                    key and checked within SLACK_FORWARD_WINDOW_MS, parseSlackRelayPost, parseSlackRelayReaction
-│                    and parseSlackRelaySession for a machine's post, reaction and thread status,
-│                    resolveSlackReadableText for Slack's <@U…> markup, SlackLinks)
+│                    contract (relay.ts: SLACK_RELAY_PATHS, a machine's post, reaction and thread status and
+│                    SlackLinks as Schemas (SlackRelayPost, SlackRelayReaction, SlackRelaySession; parseSlackRelay*
+│                    decode one or return null), resolveSlackReadableText for Slack's <@U…> markup), and the
+│                    signature on a forwarded mention, made with the machine's connect key and checked within
+│                    SLACK_FORWARD_WINDOW_MS (forward.ts)
 └── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
                      serializeState), diff parsing,

@@ -17,9 +17,10 @@ import { assertRepoPath, resolveWritableInside } from './paths.ts';
 import type { ApiRoute } from './routes.ts';
 
 function readText(value: unknown, name: string) {
-  if (typeof value !== 'string') throw new DomainError('body_invalid', `${name} must be text.`);
+  if (typeof value !== 'string')
+    throw new DomainError({ code: 'body_invalid', message: `${name} must be text.` });
   if (new TextEncoder().encode(value).length > CODE_LIMITS.blobBytes)
-    throw new DomainError('file_too_large', 'The editor saves files up to 2 MB.');
+    throw new DomainError({ code: 'file_too_large', message: 'The editor saves files up to 2 MB.' });
   return value;
 }
 
@@ -46,13 +47,16 @@ export function createEditRoutes(engine: Engine, workspaces: Workspaces): ApiRou
   async function respondWrite(reference: string, request: Request) {
     const task = selectTaskByReference(engine.state, reference);
     const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
-    if (!task || !repo) throw new DomainError('code_unavailable', 'This task has no code to edit.');
+    if (!task || !repo)
+      throw new DomainError({ code: 'code_unavailable', message: 'This task has no code to edit.' });
     const refusal = resolveEditRefusal(task);
-    if (refusal || !task.worktreePath) throw new DomainError('edit_refused', refusal ?? '');
+    if (refusal || !task.worktreePath)
+      throw new DomainError({ code: 'edit_refused', message: refusal ?? '' });
     const root = task.worktreePath;
     const edit = readFileWrite(await readJsonObject(request));
     const absolute = resolveWritableInside(root, edit.path);
-    if (!absolute) throw new DomainError('path_invalid', 'That path leaves the working copy.');
+    if (!absolute)
+      throw new DomainError({ code: 'path_invalid', message: 'That path leaves the working copy.' });
     const disk: { current: string | null; written: boolean } = { current: null, written: false };
     await workspaces.resolve(task).writeEdit(repo, task, edit.path, () => {
       disk.current = readCurrent(absolute);

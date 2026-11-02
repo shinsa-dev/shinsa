@@ -108,7 +108,7 @@ const NEXT_WORK: Record<WorkStep, string> = {
 
 function assertPipeline(steps: PipelineStep[]) {
   const errors = validatePipeline(steps);
-  if (errors.length > 0) throw new DomainError('pipeline_invalid', errors.join(' '));
+  if (errors.length > 0) throw new DomainError({ code: 'pipeline_invalid', message: errors.join(' ') });
 }
 
 function reshapeTask(
@@ -399,24 +399,28 @@ function resolveComposition(command: CommandOf<'agent.reshape'>): PipelineStep[]
 export function recordReshape(decider: Decider, command: CommandOf<'agent.reshape'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'reshape_task');
   if (!task.auto.shape) {
-    throw new DomainError(
-      'shape_chosen',
-      'The kind of this task was set when it was created. Plan it, or ask the human with `ask` if it should be something else.'
-    );
+    throw new DomainError({
+      code: 'shape_chosen',
+      message:
+        'The kind of this task was set when it was created. Plan it, or ask the human with `ask` if it should be something else.',
+    });
   }
   if (task.plan !== null || isShapeLocked(task)) {
-    throw new DomainError('plan_exists', 'This task already has a plan. Revise the plan instead.');
+    throw new DomainError({
+      code: 'plan_exists',
+      message: 'This task already has a plan. Revise the plan instead.',
+    });
   }
   if (isComposedByAgent(task)) {
-    throw new DomainError(
-      'steps_set',
-      'The steps of this task are already set. Plan them with `propose_plan`.'
-    );
+    throw new DomainError({
+      code: 'steps_set',
+      message: 'The steps of this task are already set. Plan them with `propose_plan`.',
+    });
   }
   const pipeline = resolveComposition(command);
   assertShipsOntoOpenPullRequest(task, pipeline);
   const errors = validateComposition(task, pipeline);
-  if (errors.length > 0) throw new DomainError('pipeline_invalid', errors.join(' '));
+  if (errors.length > 0) throw new DomainError({ code: 'pipeline_invalid', message: errors.join(' ') });
   const before = resolveTaskPipeline(task);
   if (isSamePipeline(listComposedSteps(before), pipeline)) return;
   decider.endRun(run, 'completed', command.reason);
@@ -448,16 +452,18 @@ function hasOpenPullRequest(task: Task) {
 function assertShipsOntoOpenPullRequest(task: Task, pipeline: PipelineStep[]) {
   if (!hasOpenPullRequest(task)) return;
   if (!pipeline.includes('pull_request')) {
-    throw new DomainError(
-      'pull_request_open',
-      'An earlier round of this task has an open pull request, so this round ships through one too: keep `build`, `pull_request` and `merge` in the steps.'
-    );
+    throw new DomainError({
+      code: 'pull_request_open',
+      message:
+        'An earlier round of this task has an open pull request, so this round ships through one too: keep `build`, `pull_request` and `merge` in the steps.',
+    });
   }
   if (pipeline.includes('your_ok')) {
-    throw new DomainError(
-      'pull_request_open',
-      "An earlier round of this task has an open pull request, so this round cannot wait for the human's OK before it plans: drop `your_ok` and the inquiry step before it, and plan the change."
-    );
+    throw new DomainError({
+      code: 'pull_request_open',
+      message:
+        "An earlier round of this task has an open pull request, so this round cannot wait for the human's OK before it plans: drop `your_ok` and the inquiry step before it, and plan the change.",
+    });
   }
 }
 
@@ -504,10 +510,11 @@ export function resolveRestingStage(task: Task) {
 }
 
 function throwFollowUpProposal(): never {
-  throw new DomainError(
-    'follow_up_proposal',
-    'This answers a follow-up on finished work, so it proposes no change. Call `answer` without `propose_change`; work worth doing outside this task goes to `suggest_tasks`.'
-  );
+  throw new DomainError({
+    code: 'follow_up_proposal',
+    message:
+      'This answers a follow-up on finished work, so it proposes no change. Call `answer` without `propose_change`; work worth doing outside this task goes to `suggest_tasks`.',
+  });
 }
 
 function finishFollowUp(decider: Decider, task: Task, run: Run) {

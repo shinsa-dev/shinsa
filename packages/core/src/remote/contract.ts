@@ -1,4 +1,4 @@
-import type { RemoteTeam } from './teams.ts';
+import { Schema } from 'effect';
 
 export const REMOTE_APP_ORIGIN = 'https://app.shinsa.dev';
 
@@ -9,6 +9,8 @@ export const REMOTE_CHANNEL_PATH = '/remote';
 export const REMOTE_CONNECT_PARAM = 'token';
 
 export const REMOTE_ENGINE_HOOK_PREFIX = '/api/hooks/';
+
+export const REMOTE_SESSION_COOKIE = '__Host-shinsa_session';
 
 export const REMOTE_PATHS = {
   app: '/',
@@ -58,134 +60,279 @@ export const REMOTE_NATIVE_CLIENT = 'native';
 
 export const REMOTE_NATIVE_REDIRECT_SCHEMES = ['shinsa:', 'shinsa-dev:'] as const;
 
-export interface PairStartRequest {
-  name: string;
-  publicKey: string;
-  version: string;
-}
+export const TEAM_NAME_LIMIT = 60;
 
-export interface PairStartResponse {
-  claimCode: string;
-  pollSecret: string;
-  url: string;
-  expiresAt: number;
-}
+export const MAX_TEAM_MEMBERS = 20;
 
-export interface PairPollRequest {
-  claimCode: string;
-  pollSecret: string;
-}
+export const MAX_OWNED_TEAMS = 10;
 
-export interface MachineCredentials {
-  instanceId: string;
-  machineToken: string;
-  tunnelToken: string;
-  tunnelHost: string;
-  connectKey: string;
-}
+export const REMOTE_TEXT_LIMITS = {
+  machineName: 80,
+  publicKey: 200,
+  version: 60,
+  claimCode: 20,
+  secret: 100,
+  localUrl: 200,
+  userId: 64,
+  nativeCode: 200,
+} as const;
 
-export type PairPollResponse =
-  | { status: 'pending' }
-  | { status: 'expired' }
-  | { status: 'claimed'; credentials: MachineCredentials; owner: string };
+const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 
-export interface HeartbeatRequest {
-  localUrl: string;
-  version: string;
-  signingKey?: string;
-}
+const RemoteText = (limit: number) => Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(limit));
 
-export interface RemoteUser {
-  id: string;
-  login: string;
-  name: string | null;
-  avatarUrl: string | null;
-}
+export const InstanceId = Schema.String.check(Schema.isPattern(SEGMENT)).pipe(Schema.brand('InstanceId'));
 
-export interface RemoteMember {
-  user: RemoteUser;
-  addedAt: number;
-}
+export type InstanceId = typeof InstanceId.Type;
 
-export interface RemoteAccess {
-  owner: RemoteUser;
-  members: RemoteMember[];
-}
+export const TeamId = Schema.String.check(Schema.isPattern(SEGMENT)).pipe(Schema.brand('TeamId'));
 
-export interface HeartbeatResponse extends RemoteAccess {
-  ok: true;
-  guests: RemoteMember[];
-  teams: RemoteTeam[];
-}
+export type TeamId = typeof TeamId.Type;
 
-export type RemoteRole = 'owner' | 'member' | 'guest';
+export const RemoteUserId = RemoteText(REMOTE_TEXT_LIMITS.userId).pipe(Schema.brand('RemoteUserId'));
 
-export interface RemoteInstance {
-  id: string;
-  name: string;
-  fingerprint: string;
-  online: boolean;
-  lastSeenAt: number | null;
-  createdAt: number;
-  owner: RemoteUser;
-  role: RemoteRole;
-}
+export type RemoteUserId = typeof RemoteUserId.Type;
 
-export interface RemoteSession {
-  user: RemoteUser | null;
-}
+export const ClaimCode = Schema.String.check(Schema.isPattern(SEGMENT)).pipe(Schema.brand('ClaimCode'));
 
-export interface InviteCreateResponse {
-  token: string;
-}
+export type ClaimCode = typeof ClaimCode.Type;
 
-export interface InviteAcceptRequest {
-  token: string;
-}
+export const RemoteOk = Schema.Struct({ ok: Schema.Literal(true) });
 
-export interface InviteAcceptResponse {
-  instanceId: string;
-  name: string;
-  owner: RemoteUser;
-  user: RemoteUser;
-  connect: ConnectResponse;
-}
+export const PairStartRequest = Schema.Struct({
+  name: RemoteText(REMOTE_TEXT_LIMITS.machineName),
+  publicKey: RemoteText(REMOTE_TEXT_LIMITS.publicKey),
+  version: RemoteText(REMOTE_TEXT_LIMITS.version),
+});
 
-export interface MemberRequest {
-  userId: string;
-}
+export type PairStartRequest = typeof PairStartRequest.Type;
 
-export interface HandoffRemoveRequest {
-  token: string;
-}
+export const PairStartResponse = Schema.Struct({
+  claimCode: Schema.String,
+  pollSecret: Schema.String,
+  url: Schema.String,
+  expiresAt: Schema.Number,
+});
 
-export interface NativeSignInTokenRequest {
-  code: string;
-  codeVerifier: string;
-}
+export type PairStartResponse = typeof PairStartResponse.Type;
 
-export interface NativeSignInTokenResponse {
-  token: string;
-  user: RemoteUser;
-}
+export const PairPollRequest = Schema.Struct({
+  claimCode: RemoteText(REMOTE_TEXT_LIMITS.claimCode),
+  pollSecret: RemoteText(REMOTE_TEXT_LIMITS.secret),
+});
 
-export interface PairView {
-  claimCode: string;
-  name: string;
-  fingerprint: string;
-  expiresAt: number;
-  claimed: boolean;
-}
+export type PairPollRequest = typeof PairPollRequest.Type;
 
-export interface PairApproveResponse {
-  instanceId: string;
-  name: string;
-}
+export const MachineCredentials = Schema.Struct({
+  instanceId: Schema.String,
+  machineToken: Schema.String,
+  tunnelToken: Schema.String,
+  tunnelHost: Schema.String,
+  connectKey: Schema.String,
+});
 
-export interface ConnectResponse {
-  url: string;
-  expiresAt: number;
-}
+export type MachineCredentials = typeof MachineCredentials.Type;
+
+export const PairPollResponse = Schema.Union([
+  Schema.Struct({ status: Schema.Literal('pending') }),
+  Schema.Struct({ status: Schema.Literal('expired') }),
+  Schema.Struct({ status: Schema.Literal('claimed'), credentials: MachineCredentials, owner: Schema.String }),
+]);
+
+export type PairPollResponse = typeof PairPollResponse.Type;
+
+export const HeartbeatRequest = Schema.Struct({
+  localUrl: RemoteText(REMOTE_TEXT_LIMITS.localUrl),
+  version: Schema.optionalKey(Schema.String),
+  signingKey: Schema.optionalKey(Schema.String),
+});
+
+export type HeartbeatRequest = typeof HeartbeatRequest.Type;
+
+export const RemoteUser = Schema.Struct({
+  id: Schema.String,
+  login: Schema.String,
+  name: Schema.NullOr(Schema.String),
+  avatarUrl: Schema.NullOr(Schema.String),
+});
+
+export type RemoteUser = typeof RemoteUser.Type;
+
+export const RemoteMember = Schema.Struct({ user: RemoteUser, addedAt: Schema.Number });
+
+export type RemoteMember = typeof RemoteMember.Type;
+
+export const RemoteAccess = Schema.Struct({ owner: RemoteUser, members: Schema.Array(RemoteMember) });
+
+export type RemoteAccess = typeof RemoteAccess.Type;
+
+export const RemoteRole = Schema.Literals(['owner', 'member', 'guest']);
+
+export type RemoteRole = typeof RemoteRole.Type;
+
+export const TEAM_ACTIONS = [
+  'invite',
+  'invite/remove',
+  'members/add',
+  'members/remove',
+  'requests/decline',
+  'leave',
+  'remove',
+  'connect',
+] as const;
+
+export type TeamAction = (typeof TEAM_ACTIONS)[number];
+
+export const TeamMachine = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  userId: Schema.String,
+  online: Schema.Boolean,
+  lastSeenAt: Schema.NullOr(Schema.Number),
+  signingKey: Schema.optionalKey(Schema.String),
+});
+
+export type TeamMachine = typeof TeamMachine.Type;
+
+export const RemoteTeam = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  owner: RemoteUser,
+  role: RemoteRole,
+  members: Schema.Array(RemoteMember),
+  requests: Schema.Array(RemoteMember),
+  machines: Schema.Array(TeamMachine),
+  createdAt: Schema.Number,
+});
+
+export type RemoteTeam = typeof RemoteTeam.Type;
+
+export const HeartbeatResponse = Schema.Struct({
+  ...RemoteAccess.fields,
+  ok: Schema.Literal(true),
+  guests: Schema.Array(RemoteMember),
+  teams: Schema.Array(RemoteTeam),
+});
+
+export type HeartbeatResponse = typeof HeartbeatResponse.Type;
+
+export const RemoteInstance = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  fingerprint: Schema.String,
+  online: Schema.Boolean,
+  lastSeenAt: Schema.NullOr(Schema.Number),
+  createdAt: Schema.Number,
+  owner: RemoteUser,
+  role: RemoteRole,
+});
+
+export type RemoteInstance = typeof RemoteInstance.Type;
+
+export const RemoteSession = Schema.Struct({ user: Schema.NullOr(RemoteUser) });
+
+export type RemoteSession = typeof RemoteSession.Type;
+
+export const ConnectResponse = Schema.Struct({ url: Schema.String, expiresAt: Schema.Number });
+
+export type ConnectResponse = typeof ConnectResponse.Type;
+
+export const ShareConnectResponse = Schema.Struct({ url: Schema.String, online: Schema.Boolean });
+
+export type ShareConnectResponse = typeof ShareConnectResponse.Type;
+
+export const InviteCreateResponse = Schema.Struct({ token: Schema.String });
+
+export type InviteCreateResponse = typeof InviteCreateResponse.Type;
+
+export const InviteAcceptRequest = Schema.Struct({ token: RemoteText(REMOTE_TEXT_LIMITS.secret) });
+
+export type InviteAcceptRequest = typeof InviteAcceptRequest.Type;
+
+export const InviteAcceptResponse = Schema.Struct({
+  instanceId: Schema.String,
+  name: Schema.String,
+  owner: RemoteUser,
+  user: RemoteUser,
+  connect: ConnectResponse,
+});
+
+export type InviteAcceptResponse = typeof InviteAcceptResponse.Type;
+
+export const MemberRequest = Schema.Struct({ userId: RemoteUserId });
+
+export type MemberRequest = typeof MemberRequest.Type;
+
+export const HandoffRemoveRequest = Schema.Struct({ token: RemoteText(REMOTE_TEXT_LIMITS.secret) });
+
+export type HandoffRemoveRequest = typeof HandoffRemoveRequest.Type;
+
+export const NativeSignInTokenRequest = Schema.Struct({
+  code: RemoteText(REMOTE_TEXT_LIMITS.nativeCode),
+  codeVerifier: RemoteText(REMOTE_TEXT_LIMITS.nativeCode),
+});
+
+export type NativeSignInTokenRequest = typeof NativeSignInTokenRequest.Type;
+
+export const NativeSignInTokenResponse = Schema.Struct({ token: Schema.String, user: RemoteUser });
+
+export type NativeSignInTokenResponse = typeof NativeSignInTokenResponse.Type;
+
+export const PairView = Schema.Struct({
+  claimCode: Schema.String,
+  name: Schema.String,
+  fingerprint: Schema.String,
+  expiresAt: Schema.Number,
+  claimed: Schema.Boolean,
+});
+
+export type PairView = typeof PairView.Type;
+
+export const PairApproveResponse = Schema.Struct({ instanceId: Schema.String, name: Schema.String });
+
+export type PairApproveResponse = typeof PairApproveResponse.Type;
+
+export const TeamCreateRequest = Schema.Struct({
+  name: Schema.Trim.check(
+    Schema.isNonEmpty({ message: 'Give the team a name.' }),
+    Schema.isMaxLength(TEAM_NAME_LIMIT)
+  ),
+});
+
+export type TeamCreateRequest = typeof TeamCreateRequest.Type;
+
+export const TeamCreateResponse = Schema.Struct({ team: RemoteTeam, invite: Schema.String });
+
+export type TeamCreateResponse = typeof TeamCreateResponse.Type;
+
+export const TeamInviteResponse = Schema.Struct({ invite: Schema.String });
+
+export type TeamInviteResponse = typeof TeamInviteResponse.Type;
+
+export const TeamJoinRequest = Schema.Struct({ invite: RemoteText(REMOTE_TEXT_LIMITS.secret) });
+
+export type TeamJoinRequest = typeof TeamJoinRequest.Type;
+
+export const TeamJoinStatus = Schema.Literals(['requested', 'member']);
+
+export type TeamJoinStatus = typeof TeamJoinStatus.Type;
+
+export const TeamJoinResponse = Schema.Struct({
+  teamId: Schema.String,
+  name: Schema.String,
+  owner: RemoteUser,
+  status: TeamJoinStatus,
+});
+
+export type TeamJoinResponse = typeof TeamJoinResponse.Type;
+
+export const TeamPreviewResponse = Schema.Struct({ name: Schema.String, owner: RemoteUser });
+
+export type TeamPreviewResponse = typeof TeamPreviewResponse.Type;
+
+export const TeamConnectRequest = Schema.Struct({ instanceId: InstanceId });
+
+export type TeamConnectRequest = typeof TeamConnectRequest.Type;
 
 export function resolveTunnelHost(instanceId: string) {
   return `t-${instanceId}.${REMOTE_TUNNEL_DOMAIN}`;

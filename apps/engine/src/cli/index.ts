@@ -376,7 +376,7 @@ async function routeCommand(command: string, args: string[], io: CliIo): Promise
       wake: io.wakeEngine,
     });
   }
-  throw new DomainError('command_unknown', describeUnknown(command));
+  throw new DomainError({ code: 'command_unknown', message: describeUnknown(command) });
 }
 
 const TOP_LEVEL_WORDS = [

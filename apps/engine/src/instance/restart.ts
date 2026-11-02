@@ -66,7 +66,7 @@ export class EngineRestarter {
 
   async request(when: EngineRestartWhen) {
     if (!(await this.#options.isService())) {
-      throw new DomainError('restart_unsupported', 'Only a background engine restarts.');
+      throw new DomainError({ code: 'restart_unsupported', message: 'Only a background engine restarts.' });
     }
     if (when === 'now' || !this.#isBusy(this.#source.state)) {
       this.#restartSoon();

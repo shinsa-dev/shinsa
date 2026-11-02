@@ -43,7 +43,8 @@ async function requestApi<T>(base: string, path: string, init?: RequestInit, wak
   } catch {
     throw new Error(`Shinsa on ${base} answered ${response.status} without JSON.`);
   }
-  if (isErrorBody(body)) throw new DomainError(body.error.code ?? 'request_failed', body.error.message);
+  if (isErrorBody(body))
+    throw new DomainError({ code: body.error.code ?? 'request_failed', message: body.error.message });
   return body as T;
 }
 

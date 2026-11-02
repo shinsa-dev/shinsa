@@ -101,7 +101,7 @@ const MAX_FEEDBACK = 20_000;
 const MAX_STEP_KEY = 120;
 
 function refuse(message: string): never {
-  throw new DomainError('command_invalid', message);
+  throw new DomainError({ code: 'command_invalid', message: message });
 }
 
 function isFields(value: unknown): value is Fields {
@@ -807,6 +807,7 @@ export function isUserCommandType(type: unknown): type is UserCommand['type'] {
 
 export function parseUserCommand(body: unknown): UserCommand {
   const fields = readObject(body, 'A command');
-  if (!isUserCommandType(fields.type)) throw new DomainError('command_forbidden', 'Unknown command.');
+  if (!isUserCommandType(fields.type))
+    throw new DomainError({ code: 'command_forbidden', message: 'Unknown command.' });
   return READERS[fields.type](fields);
 }

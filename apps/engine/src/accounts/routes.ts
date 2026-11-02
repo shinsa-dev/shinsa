@@ -7,7 +7,7 @@ function readAccountId(fields: JsonObject) {
   const id = fields.accountId;
   if (id === undefined || id === null) return null;
   if (typeof id !== 'string' || !id)
-    throw new DomainError('account_invalid', 'Name the account to sign in to.');
+    throw new DomainError({ code: 'account_invalid', message: 'Name the account to sign in to.' });
   return id;
 }
 

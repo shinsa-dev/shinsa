@@ -1,8 +1,16 @@
 import { describe, expect, test } from 'bun:test';
+import { Option, Result, Schema } from 'effect';
 import {
+  ClaimCode,
+  HeartbeatRequest,
+  InstanceId,
+  PairPollResponse,
+  PairStartRequest,
   parseEnrollFragment,
   parseRemoteHookPath,
   REMOTE_PATHS,
+  REMOTE_TEXT_LIMITS,
+  RemoteUserId,
   resolveEnrollUrl,
   resolveInstanceConnectPath,
   resolveInstanceLeavePath,
@@ -12,6 +20,10 @@ import {
   resolvePairPath,
   resolveRemoteHookUrl,
   resolveTunnelHost,
+  TEAM_ACTIONS,
+  TEAM_NAME_LIMIT,
+  TeamCreateRequest,
+  TeamId,
 } from '../../src/remote/contract.ts';
 
 describe('the remote contract', () => {
@@ -78,5 +90,46 @@ describe('the remote contract', () => {
     expect(parseEnrollFragment('#a..c')).toBeNull();
     expect(parseEnrollFragment('#a.b.c=')).toBeNull();
     expect(parseEnrollFragment('#a.b.c.d.e')).toBeNull();
+  });
+});
+
+describe('the remote contract schemas', () => {
+  test('a request keeps every limit the Worker checks', () => {
+    const decode = Schema.decodeUnknownOption(PairStartRequest);
+    const request = { name: 'Laptop', publicKey: 'k', version: '1.0.0' };
+    expect(Option.getOrNull(decode(request))).toEqual(request);
+    expect(Option.isNone(decode({ ...request, name: 'x'.repeat(REMOTE_TEXT_LIMITS.machineName + 1) }))).toBe(
+      true
+    );
+    expect(Option.isNone(decode({ ...request, version: '' }))).toBe(true);
+    expect(Option.isNone(decode({ name: 'Laptop', publicKey: 'k' }))).toBe(true);
+  });
+
+  test('a team name is trimmed, and a blank one is refused with the words the Worker says', () => {
+    const decode = Schema.decodeUnknownResult(TeamCreateRequest);
+    expect(Result.getOrThrow(decode({ name: '  Platform  ' }))).toEqual({ name: 'Platform' });
+    const blank = decode({ name: '   ' });
+    expect(Result.isFailure(blank) && blank.failure.message).toContain('Give the team a name.');
+    expect(Result.isFailure(decode({ name: 'x'.repeat(TEAM_NAME_LIMIT + 1) }))).toBe(true);
+  });
+
+  test('a heartbeat may leave the signing key out, and a poll answer is one of its three states', () => {
+    expect(Schema.decodeUnknownSync(HeartbeatRequest)({ localUrl: 'http://127.0.0.1:7446' })).toEqual({
+      localUrl: 'http://127.0.0.1:7446',
+    });
+    const decodePoll = Schema.decodeUnknownOption(PairPollResponse);
+    expect(Option.isSome(decodePoll({ status: 'pending' }))).toBe(true);
+    expect(Option.isNone(decodePoll({ status: 'claimed' }))).toBe(true);
+    expect(Option.isNone(decodePoll({ status: 'lost' }))).toBe(true);
+  });
+
+  test('an id in a path is one segment, branded so one kind is never passed for another', () => {
+    expect(InstanceId.make('a1-b_2')).toBe(InstanceId.make('a1-b_2'));
+    for (const id of ['', 'a/b', 'x'.repeat(65), '../x'])
+      expect(Option.isNone(Schema.decodeUnknownOption(InstanceId)(id))).toBe(true);
+    expect(Option.isNone(Schema.decodeUnknownOption(RemoteUserId)(''))).toBe(true);
+    expect(Option.isSome(Schema.decodeUnknownOption(TeamId)('team-1'))).toBe(true);
+    expect(Option.isSome(Schema.decodeUnknownOption(ClaimCode)('ABCD1234'))).toBe(true);
+    expect(TEAM_ACTIONS).toContain('requests/decline');
   });
 });

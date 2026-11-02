@@ -118,7 +118,8 @@ export async function resolveTaskRefs(
 ): Promise<TaskRefs> {
   const worktree = resolveTaskCheckout(task);
   const head = await resolveHead(repo, task, worktree, signal);
-  if (!head) throw new DomainError('code_unavailable', 'This task’s code is no longer here.');
+  if (!head)
+    throw new DomainError({ code: 'code_unavailable', message: 'This task’s code is no longer here.' });
   const base = await resolveBase(repo, task, head, baseBranch, signal);
   const dirty = await isDirty(worktree, signal);
   return {

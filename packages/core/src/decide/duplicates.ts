@@ -32,11 +32,11 @@ function closeAsLocalDuplicate(
 
 function assertCanDuplicate(task: Task, original: Task) {
   if (original.id === task.id) {
-    throw new DomainError('duplicate_of_itself', 'A task cannot duplicate itself.');
+    throw new DomainError({ code: 'duplicate_of_itself', message: 'A task cannot duplicate itself.' });
   }
-  if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
+  if (isTaskSettled(task)) throw new DomainError({ code: 'task_settled', message: 'This task is finished.' });
   if (original.duplicate) {
-    throw new DomainError('duplicate_of_duplicate', 'That task is itself a duplicate.');
+    throw new DomainError({ code: 'duplicate_of_duplicate', message: 'That task is itself a duplicate.' });
   }
 }
 
@@ -80,7 +80,7 @@ function hasStartedWork(decider: Decider, task: Task) {
 export function clearDuplicate(decider: Decider, command: CommandOf<'task.clear_duplicate'>) {
   const task = decider.task(command.taskId);
   if (!task.duplicate) {
-    throw new DomainError('not_duplicate', 'This task is not closed as a duplicate.');
+    throw new DomainError({ code: 'not_duplicate', message: 'This task is not closed as a duplicate.' });
   }
   decider.emit({ type: 'task.duplicate_cleared', taskId: task.id });
   if (hasStartedWork(decider, task)) {

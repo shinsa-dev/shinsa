@@ -48,7 +48,7 @@ import {
 import { ROW_INSET, SETTING_ROW, SETTINGS_SUBHEADING, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { UserRow } from './user-row.tsx';
 
-const NO_MEMBERS: RemoteMember[] = [];
+const NO_MEMBERS: readonly RemoteMember[] = [];
 
 const DESCRIPTION =
   'Reach this machine from any device through Shinsa Cloud, behind GitHub sign-in and end to end encrypted. Your devices and other people ask for access with the invite link, and nothing opens until you accept.';
@@ -305,7 +305,7 @@ function PeopleSection({
   onRemove,
 }: {
   owner: RemoteUser | null;
-  members: RemoteMember[];
+  members: readonly RemoteMember[];
   onRemove: (user: RemoteUser) => void;
 }) {
   return (

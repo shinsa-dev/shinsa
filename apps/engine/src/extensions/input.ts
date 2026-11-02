@@ -12,7 +12,7 @@ const REDACTED = '***';
 function parseTextMap(value: unknown, field: string) {
   if (value === undefined || value === null) return {};
   if (!isFields(value) || !Object.values(value).every((item) => typeof item === 'string')) {
-    throw new DomainError('server_invalid', `${field} must map names to text.`);
+    throw new DomainError({ code: 'server_invalid', message: `${field} must map names to text.` });
   }
   return value as Record<string, string>;
 }
@@ -20,7 +20,7 @@ function parseTextMap(value: unknown, field: string) {
 function parseArgs(value: unknown) {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
-    throw new DomainError('server_invalid', 'The arguments must be a list of text.');
+    throw new DomainError({ code: 'server_invalid', message: 'The arguments must be a list of text.' });
   }
   return value;
 }
@@ -82,13 +82,14 @@ export function parseServerDefinition(
 ): McpDefinition {
   const transport = fields.transport;
   if (transport !== 'stdio' && transport !== 'http' && transport !== 'sse') {
-    throw new DomainError('server_invalid', 'Pick a command, HTTP or SSE.');
+    throw new DomainError({ code: 'server_invalid', message: 'Pick a command, HTTP or SSE.' });
   }
   const env = keepSaved(parseTextMap(fields.env, 'The environment'), saved?.env ?? {});
   const headers = keepSaved(parseTextMap(fields.headers, 'The headers'), saved?.headers ?? {});
   if (transport === 'stdio') {
     const command = typeof fields.command === 'string' ? fields.command.trim() : '';
-    if (!command) throw new DomainError('server_invalid', 'Give the command that starts the MCP.');
+    if (!command)
+      throw new DomainError({ code: 'server_invalid', message: 'Give the command that starts the MCP.' });
     return {
       transport,
       command,
@@ -101,7 +102,8 @@ export function parseServerDefinition(
     };
   }
   const url = restoreUrl(typeof fields.url === 'string' ? fields.url.trim() : '', saved);
-  if (!isWebUrl(url)) throw new DomainError('server_invalid', 'Give the MCP’s http or https address.');
+  if (!isWebUrl(url))
+    throw new DomainError({ code: 'server_invalid', message: 'Give the MCP’s http or https address.' });
   return {
     transport,
     command: null,
@@ -117,22 +119,24 @@ export function parseServerDefinition(
 export function parseServerName(value: unknown, isTaken: (name: string) => boolean) {
   const name = typeof value === 'string' ? value.trim() : '';
   if (!MCP_NAME_PATTERN.test(name)) {
-    throw new DomainError('server_name_invalid', 'Use up to 64 letters, digits, - or _.');
+    throw new DomainError({ code: 'server_name_invalid', message: 'Use up to 64 letters, digits, - or _.' });
   }
   if (RESERVED_NAMES.has(name))
-    throw new DomainError('server_name_invalid', 'The name shinsa is Shinsa’s own.');
-  if (isTaken(name)) throw new DomainError('server_name_taken', `An MCP named ${name} exists.`);
+    throw new DomainError({ code: 'server_name_invalid', message: 'The name shinsa is Shinsa’s own.' });
+  if (isTaken(name))
+    throw new DomainError({ code: 'server_name_taken', message: `An MCP named ${name} exists.` });
   return name;
 }
 
 export function parseServerScope(value: unknown, state: ShinsaState): ExtensionScope {
   const scope = parseScope(value);
-  if (!scope) throw new DomainError('scope_invalid', 'Pick all, a project or a repository.');
+  if (!scope)
+    throw new DomainError({ code: 'scope_invalid', message: 'Pick all, a project or a repository.' });
   if (scope.kind === 'project' && !state.projects[scope.project]) {
-    throw new DomainError('scope_invalid', 'There is no project with that id.');
+    throw new DomainError({ code: 'scope_invalid', message: 'There is no project with that id.' });
   }
   if (scope.kind === 'repo' && !Object.values(state.repos).some((repo) => repo.path === scope.path)) {
-    throw new DomainError('scope_invalid', 'No agent has worked there yet.');
+    throw new DomainError({ code: 'scope_invalid', message: 'No agent has worked there yet.' });
   }
   return scope;
 }

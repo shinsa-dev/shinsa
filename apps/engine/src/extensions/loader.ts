@@ -190,12 +190,15 @@ export class ExtensionLoader {
     const server = selectByName(this.#extensions.deferred, (entry) => [entry.name, entry.claudeName], wanted);
     if (server) return server;
     if (selectByName(this.#extensions.loadedNames, (name) => [name], wanted) !== null) {
-      throw new DomainError('server_loaded', `${wanted} is already loaded in this run. Use its tools.`);
+      throw new DomainError({
+        code: 'server_loaded',
+        message: `${wanted} is already loaded in this run. Use its tools.`,
+      });
     }
-    throw new DomainError(
-      'server_not_loadable',
-      `There is no MCP server named ${wanted} to load. These can be loaded: ${this.#extensions.deferred.map((entry) => entry.name).join(', ')}. A server turned off in Settings → Integrations stays off.`
-    );
+    throw new DomainError({
+      code: 'server_not_loadable',
+      message: `There is no MCP server named ${wanted} to load. These can be loaded: ${this.#extensions.deferred.map((entry) => entry.name).join(', ')}. A server turned off in Settings → Integrations stays off.`,
+    });
   }
 
   async #loadServer(wanted: string) {
@@ -266,10 +269,10 @@ export class ExtensionLoader {
     const serverName = selectByName([...this.#proxied.keys()], (name) => [name], wanted) ?? wanted;
     const opened = this.#proxied.get(serverName);
     if (!opened) {
-      throw new DomainError(
-        'server_not_connected',
-        `${serverName} is not connected through Shinsa. Load it with load_mcp_server first.`
-      );
+      throw new DomainError({
+        code: 'server_not_connected',
+        message: `${serverName} is not connected through Shinsa. Load it with load_mcp_server first.`,
+      });
     }
     const result = await withTimeout(
       opened.client.callTool({
@@ -286,10 +289,10 @@ export class ExtensionLoader {
   #loadSkill(wanted: string) {
     const skill = selectByName(this.#extensions.deferredSkills, (entry) => [entry.name], wanted);
     if (!skill) {
-      throw new DomainError(
-        'skill_not_loadable',
-        `There is no skill named ${wanted} to load. These can be loaded: ${this.#extensions.deferredSkills.map((entry) => entry.name).join(', ')}.`
-      );
+      throw new DomainError({
+        code: 'skill_not_loadable',
+        message: `There is no skill named ${wanted} to load. These can be loaded: ${this.#extensions.deferredSkills.map((entry) => entry.name).join(', ')}.`,
+      });
     }
     return resolveSkillBody(readFileSync(skill.path, 'utf8'));
   }

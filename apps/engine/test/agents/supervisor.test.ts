@@ -1233,7 +1233,7 @@ describe('hand-overs', () => {
     const { call, path, reject, done, running } = await handOverSetup();
     reject(
       (command) => command.type === 'agent.complete_phase' || command.type === 'agent.complete_fix',
-      new DomainError('delegations_running', '1 task you delegated is still running.')
+      new DomainError({ code: 'delegations_running', message: '1 task you delegated is still running.' })
     );
     const before = await git(path, 'rev-parse', 'HEAD');
     writeFiles(path, { 'half-written.txt': 'partial' });

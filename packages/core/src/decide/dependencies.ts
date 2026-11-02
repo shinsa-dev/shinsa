@@ -32,11 +32,11 @@ export function resolveDependencies(decider: Decider, task: Task | null, ids: st
       continue;
     }
     if (dependency.stage === 'cancelled') {
-      throw new DomainError('dependency_cancelled', 'That task was cancelled.');
+      throw new DomainError({ code: 'dependency_cancelled', message: 'That task was cancelled.' });
     }
     if (isTaskComplete(dependency)) continue;
     if (task && isDependencyOf(decider.state, task.id, id)) {
-      throw new DomainError('dependency_cycle', 'That task already waits on this one.');
+      throw new DomainError({ code: 'dependency_cycle', message: 'That task already waits on this one.' });
     }
     kept.push(id);
   }
@@ -95,7 +95,8 @@ export function resolveStackParent(
   id: string,
   repoId = task?.repoId ?? null
 ) {
-  if (id === task?.id) throw new DomainError('stack_self', 'A task cannot stack on itself.');
+  if (id === task?.id)
+    throw new DomainError({ code: 'stack_self', message: 'A task cannot stack on itself.' });
   const refusal = selectStackRefusal(decider.state, task, decider.task(id), repoId);
   if (refusal) throw refusal;
   return id;
@@ -147,14 +148,14 @@ export function changeStack(decider: Decider, taskId: string, stacksOn: string |
 
 export function stackOnTask(decider: Decider, command: CommandOf<'task.stack_on'>) {
   const task = decider.task(command.taskId);
-  if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
+  if (isTaskSettled(task)) throw new DomainError({ code: 'task_settled', message: 'This task is finished.' });
   const stacksOn = command.stacksOn === null ? null : resolveStackParent(decider, task, command.stacksOn);
   if ((task.stacksOn ?? null) === stacksOn) return;
   if (!canChangeStack(task)) {
-    throw new DomainError(
-      'stack_started',
-      'This task has started building, so its bundle can no longer change.'
-    );
+    throw new DomainError({
+      code: 'stack_started',
+      message: 'This task has started building, so its bundle can no longer change.',
+    });
   }
   changeStack(decider, task.id, stacksOn, 'you');
   restartForStack(decider, task.id);

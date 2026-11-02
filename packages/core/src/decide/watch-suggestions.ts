@@ -52,10 +52,10 @@ export function suggestWatch(decider: Decider, input: WatchSuggestionInput) {
   const same = selectSameOpen(decider, input);
   if (same) return same.id;
   if (listOpenWatchSuggestions(decider.state).length >= SCHEDULE_LIMITS.openSuggestions) {
-    throw new DomainError(
-      'suggestion_limit',
-      `${SCHEDULE_LIMITS.openSuggestions} suggested watches already wait for the human. Ask them to accept or dismiss one first.`
-    );
+    throw new DomainError({
+      code: 'suggestion_limit',
+      message: `${SCHEDULE_LIMITS.openSuggestions} suggested watches already wait for the human. Ask them to accept or dismiss one first.`,
+    });
   }
   const suggestion: WatchSuggestion = {
     id: decider.context.newId(),
@@ -92,9 +92,13 @@ export function recordWatchSuggestion(decider: Decider, command: CommandOf<'watc
 
 export function findOpenWatchSuggestion(decider: Decider, suggestionId: string) {
   const suggestion = decider.state.watchSuggestions[suggestionId];
-  if (!suggestion) throw new DomainError('suggestion_not_found', `No suggested watch ${suggestionId}.`);
+  if (!suggestion)
+    throw new DomainError({ code: 'suggestion_not_found', message: `No suggested watch ${suggestionId}.` });
   if (suggestion.status !== 'open') {
-    throw new DomainError('suggestion_decided', `That watch was already ${suggestion.status}.`);
+    throw new DomainError({
+      code: 'suggestion_decided',
+      message: `That watch was already ${suggestion.status}.`,
+    });
   }
   return suggestion;
 }

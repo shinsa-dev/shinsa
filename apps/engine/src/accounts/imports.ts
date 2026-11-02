@@ -36,14 +36,15 @@ export class AccountImports {
 
   importAccount(origin: unknown, email: unknown) {
     if (typeof email !== 'string' || !email.trim())
-      throw new DomainError('import_invalid', 'Name the account to sign in to.');
-    if (origin !== 'cswap') throw new DomainError('import_invalid', 'Sign in to an account claude-swap has.');
+      throw new DomainError({ code: 'import_invalid', message: 'Name the account to sign in to.' });
+    if (origin !== 'cswap')
+      throw new DomainError({ code: 'import_invalid', message: 'Sign in to an account claude-swap has.' });
     return this.#importCswap(email.trim());
   }
 
   async #importCswap(email: string) {
     if (this.#options.store.selectByIdentity({ email, organization: null }))
-      throw new DomainError('account_exists', `${email} is already added.`);
+      throw new DomainError({ code: 'account_exists', message: `${email} is already added.` });
     await this.#options.signIn(email);
   }
 }

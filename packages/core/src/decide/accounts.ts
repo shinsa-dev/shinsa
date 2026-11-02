@@ -36,7 +36,8 @@ function isSameAccount(a: RunAccount | null | undefined, b: RunAccount | null | 
 
 export function bindAccount(decider: Decider, command: CommandOf<'task.bind_account'>) {
   const task = decider.task(command.taskId);
-  if (isTaskClosed(task)) throw new DomainError('task_settled', 'This task is finished. Start a new one.');
+  if (isTaskClosed(task))
+    throw new DomainError({ code: 'task_settled', message: 'This task is finished. Start a new one.' });
   if (isSameAccount(task.account, command.account)) return;
   decider.emit({ type: 'task.account_bound', taskId: task.id, account: command.account });
 }
@@ -79,7 +80,7 @@ function findArmedWait(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   const wait = task.usageWait;
   if (wait?.status !== 'armed') {
-    throw new DomainError('usage_wait_missing', 'Nothing here waits for a usage reset.');
+    throw new DomainError({ code: 'usage_wait_missing', message: 'Nothing here waits for a usage reset.' });
   }
   return { task, wait };
 }

@@ -197,7 +197,7 @@ export class Remote {
 
   async startPairing() {
     if (this.store.file.credentials)
-      throw new DomainError('remote_paired', 'This machine is already paired.');
+      throw new DomainError({ code: 'remote_paired', message: 'This machine is already paired.' });
     if (this.#pairing) return this.#pairing.view;
     const machine = await this.store.resolveMachineKey();
     const start = await this.control.requestPairStart({
@@ -247,7 +247,8 @@ export class Remote {
 
   #assertPaired() {
     const { credentials } = this.store.file;
-    if (!credentials) throw new DomainError('remote_not_paired', 'Turn on remote access first.');
+    if (!credentials)
+      throw new DomainError({ code: 'remote_not_paired', message: 'Turn on remote access first.' });
     return credentials;
   }
 
@@ -358,7 +359,8 @@ export class Remote {
 
   async createHandoff(taskId: string) {
     const { credentials } = this.store.file;
-    if (!(credentials && this.isEnabled)) throw new DomainError('remote_not_enabled', HANDOFF_NOT_ENABLED);
+    if (!(credentials && this.isEnabled))
+      throw new DomainError({ code: 'remote_not_enabled', message: HANDOFF_NOT_ENABLED });
     const existing = this.store.file.handoffs.find((entry) => entry.taskId === taskId);
     if (existing) return this.#resolveHandoffUrl(existing);
     await this.store.resolveMachineKey();
@@ -535,12 +537,15 @@ export class Remote {
     const access = this.store.file.access;
     const team = this.store.selectTeam(teamId);
     if (!(team && this.store.selectTeamKey(teamId)))
-      throw new DomainError('team_not_found', 'This machine is not in that team.');
+      throw new DomainError({ code: 'team_not_found', message: 'This machine is not in that team.' });
     const teammate = [team.owner, ...team.members.map((member) => member.user)].find(
       (user) => user.id === userId
     );
     if (!(access && teammate) || access.owner.id === userId)
-      throw new DomainError('teammate_not_found', 'No one else in that team has that GitHub account.');
+      throw new DomainError({
+        code: 'teammate_not_found',
+        message: 'No one else in that team has that GitHub account.',
+      });
     if (!access.members.some((member) => member.user.id === userId)) {
       const member = await this.#requestMemberAddition(credentials.machineToken, userId);
       this.#recordAccess({ ...access, members: [...access.members, member] });
@@ -569,7 +574,11 @@ export class Remote {
 
   #findRequest(requestId: string) {
     const request = this.store.file.requests.find((entry) => entry.id === requestId);
-    if (!request) throw new DomainError('request_not_found', 'That access request was already handled.');
+    if (!request)
+      throw new DomainError({
+        code: 'request_not_found',
+        message: 'That access request was already handled.',
+      });
     return request;
   }
 
@@ -615,7 +624,10 @@ export class Remote {
       return await this.control.requestMemberAddition(machineToken, userId);
     } catch (error) {
       if (error instanceof ControlError && error.status === 409)
-        throw new DomainError('members_full', `This machine has ${MAX_INSTANCE_MEMBERS} members already.`);
+        throw new DomainError({
+          code: 'members_full',
+          message: `This machine has ${MAX_INSTANCE_MEMBERS} members already.`,
+        });
       throw error;
     }
   }
@@ -628,10 +640,10 @@ export class Remote {
     const credentials = this.#assertPaired();
     const access = this.store.file.access;
     if (!access?.members.some((member) => member.user.id === userId))
-      throw new DomainError(
-        'member_not_found',
-        'No member with that GitHub account has access to this machine.'
-      );
+      throw new DomainError({
+        code: 'member_not_found',
+        message: 'No member with that GitHub account has access to this machine.',
+      });
     await this.control.requestMemberRemoval(credentials.machineToken, userId);
     this.#recordAccess({
       ...access,

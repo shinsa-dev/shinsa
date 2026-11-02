@@ -68,19 +68,22 @@ function resolveDefaults(fields: JsonObject): Partial<Settings> {
   if (fields.defaultModel !== undefined) {
     const model = fields.defaultModel;
     if (model !== null && (typeof model !== 'string' || !MODEL_ID.test(model))) {
-      throw new DomainError('model_invalid', 'Pick a model from the list.');
+      throw new DomainError({ code: 'model_invalid', message: 'Pick a model from the list.' });
     }
     patch.defaultModel = model;
   }
   if (fields.mergeMethod !== undefined) {
     if (!MERGE_METHODS.has(fields.mergeMethod as Settings['mergeMethod'])) {
-      throw new DomainError('merge_method_invalid', 'Merge with squash, merge or rebase.');
+      throw new DomainError({ code: 'merge_method_invalid', message: 'Merge with squash, merge or rebase.' });
     }
     patch.mergeMethod = fields.mergeMethod as Settings['mergeMethod'];
   }
   if (fields.approvePlans !== undefined) {
     if (!PLAN_APPROVALS.has(fields.approvePlans as PlanApproval)) {
-      throw new DomainError('plans_invalid', 'Approve plans when you ask, for large plans or always.');
+      throw new DomainError({
+        code: 'plans_invalid',
+        message: 'Approve plans when you ask, for large plans or always.',
+      });
     }
     patch.approvePlans = fields.approvePlans as PlanApproval;
   }
@@ -178,7 +181,7 @@ export class Onboarding {
   async complete() {
     const { store } = this.#context;
     if (store.config.roots.length === 0) {
-      throw new DomainError('roots_required', 'Choose your repository folders first.');
+      throw new DomainError({ code: 'roots_required', message: 'Choose your repository folders first.' });
     }
     if (store.config.onboardedAt === null) store.update({ onboardedAt: Date.now() });
     await this.#recordWelcome();
@@ -222,11 +225,16 @@ export class Onboarding {
   async openInstall(fields: JsonObject) {
     const { terminals, config, engine } = this.#context;
     if (typeof fields.id !== 'string' && typeof fields.command !== 'string' && fields.all !== true)
-      throw new DomainError(
-        'body_invalid',
-        'Send “id” as the check to fix, such as gh, “all” for every missing tool, or a “command” from the help task.'
-      );
-    if (!terminals) throw new DomainError('terminals_off', 'Terminals are off, so run the command yourself.');
+      throw new DomainError({
+        code: 'body_invalid',
+        message:
+          'Send “id” as the check to fix, such as gh, “all” for every missing tool, or a “command” from the help task.',
+      });
+    if (!terminals)
+      throw new DomainError({
+        code: 'terminals_off',
+        message: 'Terminals are off, so run the command yourself.',
+      });
     if (typeof fields.id === 'string')
       return { terminal: openInstallTerminal(terminals, fields.id, config.userHome, this.#scripts) };
     if (fields.all === true) {

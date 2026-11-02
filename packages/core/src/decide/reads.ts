@@ -58,13 +58,14 @@ function resolveSourceReport(command: CommandOf<'agent.file_report'>, origin: Re
   const reportId = command.reportId?.trim() || null;
   const link = command.link?.trim() || null;
   if (reportId === null && link === null) {
-    throw new DomainError(
-      'report_unnamed',
-      'Give the report’s `report_id` or `link` in the source, so Shinsa never files it twice.'
-    );
+    throw new DomainError({
+      code: 'report_unnamed',
+      message: 'Give the report’s `report_id` or `link` in the source, so Shinsa never files it twice.',
+    });
   }
   const text = command.text.trim();
-  if (!text) throw new DomainError('report_empty', 'Give the report’s own words in `text`.');
+  if (!text)
+    throw new DomainError({ code: 'report_empty', message: 'Give the report’s own words in `text`.' });
   return {
     ...origin,
     reportId,
@@ -76,10 +77,10 @@ function resolveSourceReport(command: CommandOf<'agent.file_report'>, origin: Re
 }
 
 function refuseFiled(filed: Task): never {
-  throw new DomainError(
-    'report_filed',
-    `This report was already filed as ${filed.handle ?? filed.id} “${filed.title}”. Skip it and go on.`
-  );
+  throw new DomainError({
+    code: 'report_filed',
+    message: `This report was already filed as ${filed.handle ?? filed.id} “${filed.title}”. Skip it and go on.`,
+  });
 }
 
 function assertNotFiled(decider: Decider, task: Task, report: SourceReport) {
@@ -101,10 +102,11 @@ function linkFiledReport(decider: Decider, task: Task, watchdog: Watchdog, filed
 
 function assertRepoOfProject(decider: Decider, task: Task, repoId: string | null) {
   if (repoId === null || decider.state.repos[repoId]?.projectId === task.projectId) return;
-  throw new DomainError(
-    'repo_project',
-    'That repository is not in this task’s project. Name one of the project’s repositories, or leave `repository` out.'
-  );
+  throw new DomainError({
+    code: 'repo_project',
+    message:
+      'That repository is not in this task’s project. Name one of the project’s repositories, or leave `repository` out.',
+  });
 }
 
 function resolveRequestKey(report: SourceReport) {
@@ -120,10 +122,11 @@ function fileForIntake(decider: Decider, task: Task, run: Run, command: CommandO
   });
   assertNotFiled(decider, task, report);
   if (command.forkOf === task.id) {
-    throw new DomainError(
-      'fork_intake',
-      '`fork_from` names this task, which reads the source. Name the task that shipped the feature, or leave it out.'
-    );
+    throw new DomainError({
+      code: 'fork_intake',
+      message:
+        '`fork_from` names this task, which reads the source. Name the task that shipped the feature, or leave it out.',
+    });
   }
   assertRepoOfProject(decider, task, command.repoId);
   createTask(
@@ -147,7 +150,10 @@ function fileForIntake(decider: Decider, task: Task, run: Run, command: CommandO
 function fileForWatchdog(decider: Decider, task: Task, run: Run, command: CommandOf<'agent.file_report'>) {
   const watchdog = selectWatchingRun(task, run.id);
   if (!watchdog?.source) {
-    throw new DomainError('watchdog_not_found', 'No watchdog waits on this check. End your turn.');
+    throw new DomainError({
+      code: 'watchdog_not_found',
+      message: 'No watchdog waits on this check. End your turn.',
+    });
   }
   const report = resolveSourceReport(command, {
     scheduleId: null,
@@ -155,10 +161,11 @@ function fileForWatchdog(decider: Decider, task: Task, run: Run, command: Comman
     server: watchdog.source.server,
   });
   if (command.forkOf !== null && command.forkOf !== task.id) {
-    throw new DomainError(
-      'fork_watchdog',
-      'A watchdog files forks of the task that shipped the change it watches. Leave `fork_from` out.'
-    );
+    throw new DomainError({
+      code: 'fork_watchdog',
+      message:
+        'A watchdog files forks of the task that shipped the change it watches. Leave `fork_from` out.',
+    });
   }
   const filed = selectFiledTask(decider, task.projectId ?? null, report);
   if (filed) {
@@ -194,20 +201,22 @@ export function fileReport(decider: Decider, command: CommandOf<'agent.file_repo
     fileForIntake(decider, task, run, command);
     return;
   }
-  throw new DomainError(
-    'wrong_step',
-    'You file reports only while you read a data source, for an automation or a watchdog. Use `create_task` for other work.'
-  );
+  throw new DomainError({
+    code: 'wrong_step',
+    message:
+      'You file reports only while you read a data source, for an automation or a watchdog. Use `create_task` for other work.',
+  });
 }
 
 function resolveReadReport(command: CommandOf<'agent.report_read'>): ReadReport {
   const summary = command.summary.trim();
-  if (!summary) throw new DomainError('summary_required', 'Say in `summary` what you read and filed.');
+  if (!summary)
+    throw new DomainError({ code: 'summary_required', message: 'Say in `summary` what you read and filed.' });
   if (summary.length > SCHEDULE_LIMITS.readSummary) {
-    throw new DomainError(
-      'summary_too_long',
-      `The summary is ${summary.length} characters; the limit is ${SCHEDULE_LIMITS.readSummary}.`
-    );
+    throw new DomainError({
+      code: 'summary_too_long',
+      message: `The summary is ${summary.length} characters; the limit is ${SCHEDULE_LIMITS.readSummary}.`,
+    });
   }
   return { summary, reached: command.reached, live: command.live ?? null };
 }

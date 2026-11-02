@@ -38,17 +38,23 @@ function resolveFileName(name: string) {
 export function readAttachmentUpload(body: Record<string, unknown>): AttachmentUpload {
   const { name, mimeType, data } = body;
   if (typeof name !== 'string' || name.trim().length === 0 || name.length > NAME_LIMIT) {
-    throw new DomainError('attachment_name_invalid', 'Name the file in at most 255 characters.');
+    throw new DomainError({
+      code: 'attachment_name_invalid',
+      message: 'Name the file in at most 255 characters.',
+    });
   }
   if (
     mimeType !== undefined &&
     mimeType !== null &&
     (typeof mimeType !== 'string' || !MIME_TYPE.test(mimeType))
   ) {
-    throw new DomainError('attachment_type_invalid', 'Give the file type as a MIME type such as image/png.');
+    throw new DomainError({
+      code: 'attachment_type_invalid',
+      message: 'Give the file type as a MIME type such as image/png.',
+    });
   }
   if (typeof data !== 'string' || !BASE64.test(data)) {
-    throw new DomainError('attachment_data_invalid', 'Send the file as base64.');
+    throw new DomainError({ code: 'attachment_data_invalid', message: 'Send the file as base64.' });
   }
   return { name: name.trim(), mimeType: mimeType ?? null, data };
 }
@@ -62,12 +68,13 @@ export class AttachmentStore {
 
   write(upload: AttachmentUpload): StoredAttachment {
     const bytes = Buffer.from(upload.data, 'base64');
-    if (bytes.byteLength === 0) throw new DomainError('attachment_empty', 'The file is empty.');
+    if (bytes.byteLength === 0)
+      throw new DomainError({ code: 'attachment_empty', message: 'The file is empty.' });
     if (bytes.byteLength > ATTACHMENT_LIMIT_BYTES) {
-      throw new DomainError(
-        'attachment_too_large',
-        `The file is over ${ATTACHMENT_LIMIT_BYTES / 1024 / 1024} MB.`
-      );
+      throw new DomainError({
+        code: 'attachment_too_large',
+        message: `The file is over ${ATTACHMENT_LIMIT_BYTES / 1024 / 1024} MB.`,
+      });
     }
     const id = Bun.randomUUIDv7();
     const fileName = resolveFileName(upload.name);

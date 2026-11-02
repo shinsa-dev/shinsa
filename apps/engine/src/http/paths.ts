@@ -38,6 +38,6 @@ export function assertRepoPath(value: string | null, options: { root?: boolean }
     path.includes('\0') ||
     path.startsWith('/') ||
     segments.some((segment) => segment === '' || segment === '.' || segment === '..');
-  if (invalid) throw new DomainError('path_invalid', 'Name a file inside the repository.');
+  if (invalid) throw new DomainError({ code: 'path_invalid', message: 'Name a file inside the repository.' });
   return path;
 }

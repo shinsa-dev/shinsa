@@ -9,6 +9,9 @@
     "check-types": "tsc --noEmit",
     "test": "bun test --randomize"
   },
+  "dependencies": {
+    "effect": "4.1.1"
+  },
   "devDependencies": {
     "@types/bun": "^1.4.2",
     "typescript": "^7.0.2"

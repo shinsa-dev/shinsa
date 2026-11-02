@@ -177,6 +177,7 @@ export class MachinesGroup extends HttpApiGroup.make('machines')
 ```
 
 - **An API is declared once with `HttpApi`**, every endpoint with its params, payload, success and error schemas, where both sides can import it (core, for the cloud API). The server implements it with `HttpApiBuilder.group`; every caller gets a typed client from `HttpApiClient.make`. No hand-written route table, request parser or `fetch` wrapper next to it.
+- The cloud API is `RemoteApi` in core (`remote/api.ts`), its schemas `remote/contract.ts` and its failures `remote/errors.ts`, one class per wire code whose body stays `{ error: { code, message } }` through `resolveRemoteFailureWire`. A new route, payload or failure is added there first; the Worker implements it and every client is derived from it.
 - Authentication is one `HttpApiMiddleware.Service` with its `security` (`HttpApiSecurity.bearer`, a cookie), which provides the signed-in account as a service to every handler behind it. A handler never reads a header to authenticate.
 - A Worker is served with `HttpRouter.toWebHandler(layer)`, which returns `{ handler, dispose }`.
 - A params, query or payload failure is an `HttpApiSchemaError`, which HttpApi answers with an **empty 400**. An app whose clients need a body renders those, and every defect, in **one** error middleware; that is the only place an error body is shaped.

@@ -52,7 +52,7 @@ function findTaskOf(state: ShinsaState, runId: string) {
 
 export function findHookUrl(context: ScheduleToolContext, scheduleId: string) {
   const hook = context.secrets.selectHook(scheduleId);
-  if (!hook) throw new DomainError('schedule_not_found', 'This schedule has no webhook.');
+  if (!hook) throw new DomainError({ code: 'schedule_not_found', message: 'This schedule has no webhook.' });
   const remote = context.hookUrl(scheduleId, hook.token);
   if (remote) return remote;
   return `${context.baseUrl()}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${hook.token}`;

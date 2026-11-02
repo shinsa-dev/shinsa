@@ -69,18 +69,19 @@ export function assertDelegationScope(decider: Decider, command: ShinsaCommand &
   const run = decider.state.runs[command.runId];
   if (!run) return;
   if (isDelegatedRun(run) && STEP_ONLY_COMMANDS.has(command.type)) {
-    throw new DomainError(
-      'delegated_run',
-      'Another agent delegated this work to you, so you have no hand-over tools. Put your result in your final reply and end your turn.'
-    );
+    throw new DomainError({
+      code: 'delegated_run',
+      message:
+        'Another agent delegated this work to you, so you have no hand-over tools. Put your result in your final reply and end your turn.',
+    });
   }
   if (!HAND_OVER_COMMANDS.has(command.type)) return;
   const live = listLiveChildRuns(decider.state, run.id).length;
   if (live === 0) return;
-  throw new DomainError(
-    'delegations_running',
-    `${describeDelegations(live)} still running. End your turn and their results wake you, or stop them with \`delegation_cancel\`, before you hand over.`
-  );
+  throw new DomainError({
+    code: 'delegations_running',
+    message: `${describeDelegations(live)} still running. End your turn and their results wake you, or stop them with \`delegation_cancel\`, before you hand over.`,
+  });
 }
 
 function selectRequested(decider: Decider, parent: Run, requestKey: string) {
@@ -93,10 +94,10 @@ function selectRequested(decider: Decider, parent: Run, requestKey: string) {
 function findChild(decider: Decider, parent: Run, childRunId: string): DelegatedRun {
   const child = decider.state.runs[childRunId];
   if (!child || !isDelegatedRun(child) || child.delegation.parentRunId !== parent.id) {
-    throw new DomainError(
-      'delegation_not_found',
-      `No task ${childRunId} was delegated by you. Use the task_id that \`delegate_task\` returned.`
-    );
+    throw new DomainError({
+      code: 'delegation_not_found',
+      message: `No task ${childRunId} was delegated by you. Use the task_id that \`delegate_task\` returned.`,
+    });
   }
   return child;
 }
@@ -107,10 +108,10 @@ function assertDelegationRoom(decider: Decider, parent: Run) {
   const root = selectRootRun(decider.state, parent) ?? parent;
   const live = countLiveUnderRoot(decider.state, root.id);
   if (live >= limit) {
-    throw new DomainError(
-      'delegation_limit',
-      `${live} delegations under this step are still running, and the human allows ${limit} at once (the Delegations at once setting). End your turn, and the next one to finish wakes you and frees a place, or stop one with \`delegation_cancel\`.`
-    );
+    throw new DomainError({
+      code: 'delegation_limit',
+      message: `${live} delegations under this step are still running, and the human allows ${limit} at once (the Delegations at once setting). End your turn, and the next one to finish wakes you and frees a place, or stop one with \`delegation_cancel\`.`,
+    });
   }
 }
 
@@ -118,18 +119,22 @@ export function requestDelegation(decider: Decider, command: CommandOf<'agent.de
   const { run: parent, task } = findCurrentRun(decider, command.runId, 'delegate_task');
   if (selectRequested(decider, parent, command.requestKey)) return;
   if (!DELEGATE_ROLES.includes(command.role)) {
-    throw new DomainError('delegation_role', `Delegate to one of: ${DELEGATE_ROLES.join(', ')}.`);
+    throw new DomainError({
+      code: 'delegation_role',
+      message: `Delegate to one of: ${DELEGATE_ROLES.join(', ')}.`,
+    });
   }
   assertDelegationRoom(decider, parent);
   const depth = (parent.delegation?.depth ?? 0) + 1;
   if (isReadOnlyRun(parent) && !isReadOnlyRole(command.role)) {
-    throw new DomainError('delegation_ceiling', describeCeiling(parent));
+    throw new DomainError({ code: 'delegation_ceiling', message: describeCeiling(parent) });
   }
   if (command.isolation === 'worktree' && (!task.worktreePath || !command.baseCommit)) {
-    throw new DomainError(
-      'isolation_unavailable',
-      'This task has no commit to copy into a separate checkout. Leave isolation unset to work in the same checkout.'
-    );
+    throw new DomainError({
+      code: 'isolation_unavailable',
+      message:
+        'This task has no commit to copy into a separate checkout. Leave isolation unset to work in the same checkout.',
+    });
   }
   const settings = decider.state.settings;
   const role = RUN_AGENT_ROLE[command.role];
@@ -188,7 +193,7 @@ export function cancelDelegation(decider: Decider, command: CommandOf<'agent.can
 export function cancelDelegationByUser(decider: Decider, command: CommandOf<'delegation.cancel'>) {
   const run = decider.state.runs[command.runId];
   if (!run || !isDelegatedRun(run)) {
-    throw new DomainError('delegation_not_found', `No delegation ${command.runId}`);
+    throw new DomainError({ code: 'delegation_not_found', message: `No delegation ${command.runId}` });
   }
   if (run.endedAt !== null) return;
   decider.stopRun(run, 'Stopped by you.');
@@ -200,13 +205,14 @@ export function answerDelegation(decider: Decider, command: CommandOf<'agent.ans
   const child = findChild(decider, parent, command.childRunId);
   const question = child.delegation.question;
   if (child.endedAt !== null || !question || question.answer !== null) {
-    throw new DomainError(
-      'no_question',
-      `“${child.delegation.title}” has no question waiting for an answer.`
-    );
+    throw new DomainError({
+      code: 'no_question',
+      message: `“${child.delegation.title}” has no question waiting for an answer.`,
+    });
   }
   const answer = command.answer.trim();
-  if (answer.length === 0) throw new DomainError('answer_required', 'Write the answer first.');
+  if (answer.length === 0)
+    throw new DomainError({ code: 'answer_required', message: 'Write the answer first.' });
   decider.emit({ type: 'delegation.answered', runId: child.id, questionId: question.id, answer });
   decider.run({ kind: 'delegation.reply', runId: child.id, questionId: question.id });
 }
@@ -236,10 +242,10 @@ export function routeQuestion(
   const current = asker.delegation.question;
   if (current?.id === command.gateId) return;
   if (current && current.answer === null) {
-    throw new DomainError(
-      'question_open',
-      'Your earlier question is still waiting for an answer. Wait for it before you ask another.'
-    );
+    throw new DomainError({
+      code: 'question_open',
+      message: 'Your earlier question is still waiting for an answer. Wait for it before you ask another.',
+    });
   }
   decider.emit({
     type: 'delegation.asked',

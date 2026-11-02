@@ -87,19 +87,19 @@ export function answerSlackQuestion(decider: Decider, command: CommandOf<'slack.
   const { answer } = command;
   const gate = decider.state.gates[answer.gateId];
   if (gate?.status !== 'open' || gate.type !== 'question')
-    throw new DomainError('slack_answer_closed', 'This question is no longer open.');
+    throw new DomainError({ code: 'slack_answer_closed', message: 'This question is no longer open.' });
   const link = decider.state.tasks[gate.taskId]?.slack;
   if (!link || !isSameSlackThread(link, answer) || link.userId !== answer.userId)
-    throw new DomainError(
-      'slack_answer_refused',
-      'Only the person who started this task from Slack can answer it here. Answer it in Shinsa.'
-    );
+    throw new DomainError({
+      code: 'slack_answer_refused',
+      message: 'Only the person who started this task from Slack can answer it here. Answer it in Shinsa.',
+    });
   const choice = gate.choices?.[answer.choice];
   if (choice === undefined)
-    throw new DomainError(
-      'slack_answer_choice',
-      'That choice is no longer on the question. Answer it in Shinsa.'
-    );
+    throw new DomainError({
+      code: 'slack_answer_choice',
+      message: 'That choice is no longer on the question. Answer it in Shinsa.',
+    });
   answerGate(decider, gate.id, 'reply', choice);
 }
 

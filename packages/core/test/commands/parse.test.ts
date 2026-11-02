@@ -580,7 +580,9 @@ describe('parseUserCommand for the process commands', () => {
       [{ type: 'settings.change', patch: { taskBudgetUsd: '5' } }, 'taskBudgetUsd must be a number.'],
     ];
     for (const [body, message] of refused) {
-      expect(() => parseUserCommand(body)).toThrow(new DomainError('command_invalid', message));
+      expect(() => parseUserCommand(body)).toThrow(
+        new DomainError({ code: 'command_invalid', message: message })
+      );
     }
   });
 });

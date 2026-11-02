@@ -114,10 +114,11 @@ async function waitForEngine(io: EngineIo, accept: (health: ServerHealth) => boo
 
 function assertManaged(io: EngineControl) {
   if (io.bundled) return;
-  throw new DomainError(
-    'engine_unmanaged',
-    'This shinsa runs from source, so it does not start or stop the engine. `bun dev` runs the engine and Ctrl-C stops it.'
-  );
+  throw new DomainError({
+    code: 'engine_unmanaged',
+    message:
+      'This shinsa runs from source, so it does not start or stop the engine. `bun dev` runs the engine and Ctrl-C stops it.',
+  });
 }
 
 async function assertEngineJob(io: EngineControl) {
@@ -199,7 +200,7 @@ export async function restartEngine(io: EngineIo, whenIdle: boolean) {
   await assertEngineJob(io);
   const before = await readHealth(io.base);
   if (whenIdle) {
-    if (!before) throw new DomainError('engine_stopped', ENGINE_STOPPED);
+    if (!before) throw new DomainError({ code: 'engine_stopped', message: ENGINE_STOPPED });
     const client = createSurfaceClient(io.base, `cli:${Bun.randomUUIDv7()}`);
     const answer = await client.post<{ restarting: boolean }>('/api/engine/restart', { when: 'idle' });
     if (!answer.restarting) {

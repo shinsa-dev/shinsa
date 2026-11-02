@@ -45,11 +45,6 @@ export interface ShareLiveView {
   updatedAt: number;
 }
 
-export interface ShareConnectResponse {
-  url: string;
-  online: boolean;
-}
-
 const SEGMENT = /^[A-Za-z0-9_-]+$/;
 
 const SHARE_PAGE = new RegExp(`^${REMOTE_PATHS.sharePage}/([A-Za-z0-9_-]+)$`);

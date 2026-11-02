@@ -93,10 +93,10 @@ export class ServerRunningError extends DomainError {
   readonly dataDir: string;
 
   constructor(dataDir: string, holder: LockHolder) {
-    super(
-      'server_running',
-      `Shinsa is already running on ${dataDir}: ${describeHolder(holder)}. Stop it first, or set SHINSA_HOME to another folder.`
-    );
+    super({
+      code: 'server_running',
+      message: `Shinsa is already running on ${dataDir}: ${describeHolder(holder)}. Stop it first, or set SHINSA_HOME to another folder.`,
+    });
     this.holder = holder;
     this.dataDir = dataDir;
   }
@@ -173,8 +173,8 @@ export function acquireDataDirLock(
       rmSync(path, { force: true });
     }
   }
-  throw new DomainError(
-    'server_lock_contended',
-    `Another Shinsa kept taking the lock on ${dataDir} while this one started. Try again.`
-  );
+  throw new DomainError({
+    code: 'server_lock_contended',
+    message: `Another Shinsa kept taking the lock on ${dataDir} while this one started. Try again.`,
+  });
 }

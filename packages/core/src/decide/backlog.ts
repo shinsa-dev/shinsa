@@ -18,7 +18,7 @@ export const PLAN_READY_REASON = 'plan ready for you';
 
 function assertBacklogFits(task: Task) {
   const refusal = resolveBacklogRefusal(task);
-  if (refusal) throw new DomainError(refusal, BACKLOG_REFUSAL_TEXT[refusal]);
+  if (refusal) throw new DomainError({ code: refusal, message: BACKLOG_REFUSAL_TEXT[refusal] });
 }
 
 function hasOpenPlanGate(decider: Decider, taskId: string) {

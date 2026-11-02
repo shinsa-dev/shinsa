@@ -103,7 +103,7 @@ function describeRepoCount(count: number) {
 
 function assertContinue(values: string[]) {
   if (values.length !== 1 || values[0] !== CONTINUE) {
-    throw new DomainError('answer_invalid', 'Continue to the next step.');
+    throw new DomainError({ code: 'answer_invalid', message: 'Continue to the next step.' });
   }
 }
 
@@ -305,10 +305,10 @@ function findGroupValue(group: OnboardingChoiceGroup, values: string[]) {
   const option = group.options.find((entry) => entry.value === picks[0]);
   if (picks.length !== 1 || !option) {
     const labels = group.options.map((entry) => entry.label);
-    throw new DomainError(
-      'answer_invalid',
-      `Pick one ${group.label.toLowerCase()} option: ${describeList(labels, 'or')}.`
-    );
+    throw new DomainError({
+      code: 'answer_invalid',
+      message: `Pick one ${group.label.toLowerCase()} option: ${describeList(labels, 'or')}.`,
+    });
   }
   return parseChoiceValue(option.value)?.value as string;
 }
@@ -381,7 +381,10 @@ const ACCOUNTS: StepDefinition = {
     assertContinue(values);
     const accounts = await context.listAccounts();
     if (!accounts.some((account) => account.signedIn)) {
-      throw new DomainError('account_required', 'Sign in to a Claude account first. Agents work under it.');
+      throw new DomainError({
+        code: 'account_required',
+        message: 'Sign in to a Claude account first. Agents work under it.',
+      });
     }
   },
 };
@@ -405,10 +408,10 @@ const PREREQUISITES: StepDefinition = {
   answer: async (values, context) => {
     assertContinue(values);
     if (!(await context.checkPrerequisites()).ready) {
-      throw new DomainError(
-        'tools_missing',
-        'Install the missing tools first. Setup finishes once every one is there.'
-      );
+      throw new DomainError({
+        code: 'tools_missing',
+        message: 'Install the missing tools first. Setup finishes once every one is there.',
+      });
     }
   },
 };

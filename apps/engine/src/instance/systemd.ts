@@ -71,10 +71,10 @@ export function createSystemdService(options: SystemdOptions): EngineService {
   const assertInstalled = () => {
     if (existsSync(path)) return Promise.resolve();
     return Promise.reject(
-      new DomainError(
-        'engine_not_installed',
-        'The engine is not set up as a service yet. `shinsa start` sets it up.'
-      )
+      new DomainError({
+        code: 'engine_not_installed',
+        message: 'The engine is not set up as a service yet. `shinsa start` sets it up.',
+      })
     );
   };
 
@@ -89,10 +89,11 @@ export function createSystemdService(options: SystemdOptions): EngineService {
     revivesKilled: false,
     prepare: async () => {
       if (!(await systemctl(['show-environment'])).ok) {
-        throw new DomainError(
-          'engine_no_systemd',
-          'This machine has no systemd user manager to keep the engine running. Log in as this user over SSH rather than with `su`, or run `shinsa engine` under a process manager of your own.'
-        );
+        throw new DomainError({
+          code: 'engine_no_systemd',
+          message:
+            'This machine has no systemd user manager to keep the engine running. Log in as this user over SSH rather than with `su`, or run `shinsa engine` under a process manager of your own.',
+        });
       }
       const unit = resolveUnit(options.program, options.env);
       if (readUnit(path) !== unit) {

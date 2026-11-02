@@ -54,7 +54,10 @@ export async function findOpenGate(
   const detail = await readTask(client, ref);
   const gate = detail.gates.find(predicate);
   if (!gate) {
-    throw new DomainError('gate_not_found', `“${detail.task.title}” has no ${describe} waiting.`);
+    throw new DomainError({
+      code: 'gate_not_found',
+      message: `“${detail.task.title}” has no ${describe} waiting.`,
+    });
   }
   return gate;
 }
@@ -67,12 +70,13 @@ export async function findMergeStep(client: SurfaceClient, ref: string, step: st
     steps[Number(wanted) - 1] ??
     steps.find((candidate) => candidate.key === step || candidate.title.toLowerCase() === wanted);
   if (found) return { taskId: detail.task.id, step: found };
-  throw new DomainError(
-    'merge_step_not_found',
-    steps.length === 0
-      ? `“${detail.task.title}” has no steps around the merge.`
-      : `“${detail.task.title}” has no step ${step}. \`shinsa tasks show\` lists its steps, numbered from 1.`
-  );
+  throw new DomainError({
+    code: 'merge_step_not_found',
+    message:
+      steps.length === 0
+        ? `“${detail.task.title}” has no steps around the merge.`
+        : `“${detail.task.title}” has no step ${step}. \`shinsa tasks show\` lists its steps, numbered from 1.`,
+  });
 }
 
 export async function findWatchdog(client: SurfaceClient, ref: string, watchdog: string) {
@@ -83,12 +87,13 @@ export async function findWatchdog(client: SurfaceClient, ref: string, watchdog:
     watchdogs[Number(wanted) - 1] ??
     watchdogs.find((candidate) => candidate.id === watchdog || candidate.title.toLowerCase() === wanted);
   if (found) return { taskId: detail.task.id, watchdog: found };
-  throw new DomainError(
-    'watchdog_not_found',
-    watchdogs.length === 0
-      ? `“${detail.task.title}” has no watchdogs.`
-      : `“${detail.task.title}” has no watchdog ${watchdog}. \`shinsa tasks show\` lists them, numbered from 1.`
-  );
+  throw new DomainError({
+    code: 'watchdog_not_found',
+    message:
+      watchdogs.length === 0
+        ? `“${detail.task.title}” has no watchdogs.`
+        : `“${detail.task.title}” has no watchdog ${watchdog}. \`shinsa tasks show\` lists them, numbered from 1.`,
+  });
 }
 
 export async function findAccount(client: SurfaceClient, ref: string): Promise<RunAccount> {
@@ -98,7 +103,10 @@ export async function findAccount(client: SurfaceClient, ref: string): Promise<R
     (candidate) => candidate.id === ref || candidate.email?.toLowerCase() === lower
   );
   if (!account) {
-    throw new DomainError('account_not_found', `No account ${ref}. \`shinsa accounts list\` lists them.`);
+    throw new DomainError({
+      code: 'account_not_found',
+      message: `No account ${ref}. \`shinsa accounts list\` lists them.`,
+    });
   }
   return { id: account.id, email: account.email };
 }
@@ -107,7 +115,10 @@ export async function findRepoId(client: SurfaceClient, ref: string) {
   const { repos } = await client.read<{ repos: Repo[] }>('/api/repos');
   const repo = repos.find((candidate) => candidate.id === ref || candidate.name === ref);
   if (!repo)
-    throw new DomainError('repo_not_found', `No repository ${ref}. \`shinsa repos list\` lists them.`);
+    throw new DomainError({
+      code: 'repo_not_found',
+      message: `No repository ${ref}. \`shinsa repos list\` lists them.`,
+    });
   return repo.id;
 }
 
@@ -127,7 +138,10 @@ export async function findProject(client: SurfaceClient, ref: string) {
   const { projects } = await client.read<ProjectsRead>('/api/projects');
   const project = selectProject(projects, ref);
   if (!project) {
-    throw new DomainError('project_not_found', `No project ${ref}. \`shinsa projects list\` lists them.`);
+    throw new DomainError({
+      code: 'project_not_found',
+      message: `No project ${ref}. \`shinsa projects list\` lists them.`,
+    });
   }
   return project;
 }

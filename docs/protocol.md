@@ -188,7 +188,11 @@ memory), so code never reads one.
     methods' spans `<Name>.<method>`. An error is a `Schema.TaggedError` whose `_tag` is its class name and says what
     happened (`MachineNotFound`, `PairingExpired`), never a generic error with a code string. A schema and the type
     it derives share one name (`MachineId`, `typeof MachineId.Type`). In Effect code `find*` fails with a `*NotFound`
-    error and `select*` returns an `Option`.
+    error and `select*` returns an `Option`. A failure the Worker answers is one class per wire code in core's
+    `remote/errors.ts` (`NotFound` is `not_found`, `MembersFull` is `members_full`), its status part of its
+    definition and its body `{ error: { code, message } }` (`resolveRemoteFailureWire`). `DomainError` keeps its
+    `code` string until `decide` returns a `Result` of named errors: it is a `Schema.TaggedError` with a `code` and a
+    `message`.
 
 ## The task
 

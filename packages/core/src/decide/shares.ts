@@ -15,18 +15,20 @@ import type { Decider } from './decider.ts';
 
 function assertHumanShares(decider: Decider) {
   if (!decider.context.onBehalf) return;
-  throw new DomainError(
-    'human_only',
-    'Only the human decides what is shared outside this machine. Tell them they can share it from the task in Shinsa.'
-  );
+  throw new DomainError({
+    code: 'human_only',
+    message:
+      'Only the human decides what is shared outside this machine. Tell them they can share it from the task in Shinsa.',
+  });
 }
 
 function assertShareLimit(task: Task, limit: ShareLimit) {
   if (limit !== 'until_done' || !isTaskSettled(task)) return;
-  throw new DomainError(
-    'share_refused',
-    'This task is finished, so sharing it until it finishes would end at once. Pick a time limit instead.'
-  );
+  throw new DomainError({
+    code: 'share_refused',
+    message:
+      'This task is finished, so sharing it until it finishes would end at once. Pick a time limit instead.',
+  });
 }
 
 function endShare(decider: Decider, task: Task, reason: ShareEnd) {
@@ -44,7 +46,8 @@ export function shareTask(decider: Decider, command: CommandOf<'task.share'>) {
   const shared = decider.task(command.taskId);
   if (isShareExpired(decider, shared)) endShare(decider, shared, 'expired');
   const task = decider.task(command.taskId);
-  if (task.watchHome) throw new DomainError('share_refused', 'An automation has nothing to share.');
+  if (task.watchHome)
+    throw new DomainError({ code: 'share_refused', message: 'An automation has nothing to share.' });
   const limit = command.limit ?? task.share?.limit ?? resolveShareLimit(decider.state.settings);
   const preset = command.preset ?? task.share?.preset ?? resolveSharePreset(decider.state.settings);
   assertShareLimit(task, limit);
@@ -122,12 +125,14 @@ function endPreview(decider: Decider, taskId: string, serviceId: string, reason:
 }
 
 function assertServicesRun(task: Task) {
-  if (task.watchHome) throw new DomainError('share_refused', 'An automation has no services to share.');
+  if (task.watchHome)
+    throw new DomainError({ code: 'share_refused', message: 'An automation has no services to share.' });
   if (!isTaskSettled(task)) return;
-  throw new DomainError(
-    'share_refused',
-    'This task is finished, so its services no longer run here. Start the service from an open task to share it.'
-  );
+  throw new DomainError({
+    code: 'share_refused',
+    message:
+      'This task is finished, so its services no longer run here. Start the service from an open task to share it.',
+  });
 }
 
 export function sharePreview(decider: Decider, command: CommandOf<'preview.share'>) {
