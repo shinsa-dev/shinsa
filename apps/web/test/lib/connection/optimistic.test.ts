@@ -32,6 +32,12 @@ describe('optimistic commands', () => {
     expect(applyOptimistic(state, [])).toBe(state);
   });
 
+  it('keep the state as it was when deciding a command fails on a bug', () => {
+    const state = createShinsaState({ tasks: [createTask({ id: 't1', stage: 'triage' })] });
+    const broken = { ...state, gates: null } as unknown as typeof state;
+    expect(applyOptimistic(broken, [{ type: 'task.cancel', taskId: 't1' }], 5_000)).toBe(broken);
+  });
+
   it('give the runs a command starts ids of their own until the server names them', () => {
     const state = createShinsaState({
       repos: [createRepo({ id: 'r1' })],

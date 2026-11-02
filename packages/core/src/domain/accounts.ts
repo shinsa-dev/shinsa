@@ -1,9 +1,5 @@
+import type { RunAccount } from './schema.ts';
 import type { RunRole } from './types.ts';
-
-export interface RunAccount {
-  id: string;
-  email: string | null;
-}
 
 export interface WeeklyReading {
   percent: number;

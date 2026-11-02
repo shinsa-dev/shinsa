@@ -1,26 +1,28 @@
+import { Option, Schema } from 'effect';
 import type { ChatEntry } from '../chat/protocol.ts';
-import type { UserCommand } from '../commands/index.ts';
 import type { MachineResources } from '../remote/resources.ts';
 import type { RemoteSnapshot } from '../remote/status.ts';
 import type { TeamFeedSnapshot } from '../remote/teams.ts';
 import type { AccountsSnapshot } from './accounts.ts';
-import type { EngineInfo } from './engine.ts';
 import type { StatePatch } from './patch.ts';
 import type { WireState } from './runs.ts';
+import {
+  ClientMessage,
+  type EngineInfo,
+  type ParsedClientMessage,
+  type Surface,
+  SurfaceName,
+} from './schema.ts';
 import type { TaskDetail } from './summaries.ts';
 import type { TerminalsSnapshot } from './terminals.ts';
 
-export const SURFACES = ['desktop', 'browser'] as const;
+export const isSurface = Schema.is(SurfaceName);
 
-export type Surface = (typeof SURFACES)[number];
+const decodeClientMessage = Schema.decodeUnknownOption(Schema.fromJsonString(ClientMessage));
 
-export type ClientMessage =
-  | { type: 'hello'; surface: Surface }
-  | { type: 'command'; id: string; command: UserCommand }
-  | { type: 'state.sync' }
-  | { type: 'task.detail'; taskId: string }
-  | { type: 'transcript.subscribe'; runId: string; from: number }
-  | { type: 'transcript.unsubscribe'; runId: string };
+export function parseClientMessage(text: string): ParsedClientMessage | null {
+  return Option.getOrNull(decodeClientMessage(text));
+}
 
 export type ServerMessage =
   | { type: 'state'; state: WireState }
@@ -35,10 +37,6 @@ export type ServerMessage =
   | { type: 'resources'; resources: MachineResources }
   | { type: 'remote'; remote: RemoteSnapshot }
   | { type: 'teams'; teams: TeamFeedSnapshot };
-
-export function isSurface(value: unknown): value is Surface {
-  return SURFACES.some((surface) => surface === value);
-}
 
 export function isQuietSurface(surface: Surface, desktopConnected: boolean) {
   return desktopConnected && surface !== 'desktop';

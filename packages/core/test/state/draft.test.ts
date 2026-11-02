@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createState, decide, replayEventLog } from '../../src/index.ts';
+import { createState, replayEventLog } from '../../src/index.ts';
 import {
   createDraft,
   removeEntry,
@@ -8,7 +8,7 @@ import {
   sealDraft,
   writeEntry,
 } from '../../src/state/draft.ts';
-import { createHarness, createTask, registerRepo } from '../harness.ts';
+import { createHarness, createTask, registerRepo, decideOrThrow } from '../harness.ts';
 
 describe('state drafts', () => {
   test('name every part of the state, so a patch carries every change', () => {
@@ -53,7 +53,7 @@ describe('state drafts', () => {
     const repoId = registerRepo(harness);
     const taskId = createTask(harness, { repoId });
     const before = harness.state;
-    const decision = decide(
+    const decision = decideOrThrow(
       before,
       { type: 'task.prioritize', taskId, priority: 'urgent' },
       { now: 9_000, newId: () => 'unused' }
@@ -64,7 +64,7 @@ describe('state drafts', () => {
     expect(decision.state.repos).toBe(before.repos);
     expect(decision.state.runs).toBe(before.runs);
     expect(decision.changes).toEqual({ tasks: [taskId] });
-    const unchanged = decide(
+    const unchanged = decideOrThrow(
       decision.state,
       { type: 'task.prioritize', taskId, priority: 'urgent' },
       { now: 9_001, newId: () => 'unused' }

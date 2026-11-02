@@ -1,4 +1,4 @@
-import { SLACK_LIMITS, type SlackMention, type SlackThreadMessage } from './contract.ts';
+import { SLACK_LIMITS, type SlackMention, type SlackThreadMessage } from './schema.ts';
 
 function serializeLine(
   message: Pick<SlackThreadMessage, 'userName' | 'text'> & { bot?: boolean },

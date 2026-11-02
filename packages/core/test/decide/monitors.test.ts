@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { isTaskLive } from '../../src/decide/liveness.ts';
-import { decide, listActiveRuns, resolveQueue } from '../../src/index.ts';
+import { listActiveRuns, resolveQueue } from '../../src/index.ts';
 import {
   buildAll,
   createHarness,
   createTask,
+  decideOrThrow,
   failing,
   type Harness,
   PASSING,
@@ -267,7 +268,7 @@ describe('when the wait ends', () => {
       timeoutMinutes: null,
       maxAttempts: null,
     };
-    expect(() => decide(state, command, { now: 2_000, newId: () => 'id' })).toThrow(
+    expect(() => decideOrThrow(state, command, { now: 2_000, newId: () => 'id' })).toThrow(
       'This task is finished. End your turn.'
     );
   });

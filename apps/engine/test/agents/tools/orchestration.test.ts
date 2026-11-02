@@ -10,6 +10,7 @@ import {
   type ShinsaEvent,
   type ShinsaState,
 } from '@shinsa/core';
+import { Result } from 'effect';
 import {
   type DelegationOutcome,
   handleOrchestrationTool,
@@ -38,7 +39,7 @@ function createCore() {
   const dispatch = (command: ShinsaCommand): Promise<ShinsaEvent[]> => {
     dispatched.push(command);
     clock += 1;
-    const decision = decide(state, command, { now: clock, newId: () => `id${++counter}` });
+    const decision = Result.getOrThrow(decide(state, command, { now: clock, newId: () => `id${++counter}` }));
     const events = decision.events.map(
       (event) => ({ ...event, seq: state.seq + 1, at: clock }) as ShinsaEvent
     );

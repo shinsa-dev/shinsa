@@ -4,7 +4,6 @@ import {
   isPlacementPoliciesValid,
   listPlacementCandidates,
   NO_PLACEMENT_MACHINE,
-  type PlacementCandidate,
   type PlacementMachine,
   parsePlacementAnswer,
   parsePlacementQuestion,
@@ -14,7 +13,7 @@ import {
   resolveRoutedPlacement,
   serializePlacementPrompt,
 } from '../../src/remote/placement.ts';
-import type { ResourceSummary } from '../../src/remote/resources.ts';
+import type { PlacementCandidate, ResourceSummary } from '../../src/remote/schema.ts';
 
 const GB = 1024 ** 3;
 
@@ -349,8 +348,7 @@ describe('placement policies', () => {
     expect([long?.name.length, long?.description.length, long?.repositories[0]?.length]).toEqual([
       120, 300, 120,
     ]);
-    const older: Partial<PlacementCandidate> = { ...question.machines[0] };
-    delete older.resources;
+    const { resources: _resources, ...older }: Partial<PlacementCandidate> = { ...question.machines[0] };
     expect(
       parsePlacementQuestion({ ...question, machines: [older, { ...older, id: 'b' }] })?.machines[1]
         ?.resources

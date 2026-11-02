@@ -3,11 +3,11 @@ import {
   describeGigabytes,
   describeResourceSummary,
   parseResourceSummary,
-  type ResourceSummary,
   resolveMemoryPercent,
   resolveResourceHeadroom,
   resolveResourceSummary,
 } from '../../src/remote/resources.ts';
+import type { ResourceSummary } from '../../src/remote/schema.ts';
 
 const GB = 1024 ** 3;
 

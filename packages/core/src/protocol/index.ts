@@ -45,14 +45,12 @@ export {
   selectPatchedFiles,
 } from './diff.ts';
 export {
-  DEVELOPMENT_VERSION,
   ENGINE_BASELINE_COMMANDS,
   ENGINE_FEATURES,
   ENGINE_PROTOCOL,
   type EngineCommand,
   type EngineFeature,
   type EngineFit,
-  type EngineInfo,
   type EngineRestartWhen,
   hasEngineFeature,
   isEngineProtocolMatch,
@@ -98,14 +96,12 @@ export {
 } from './extensions.ts';
 export { APP_IDENTITY, resolveEngineLabel } from './identity.ts';
 export {
-  type ClientMessage,
   type DiffFile,
   isQuietSurface,
   isSurface,
+  parseClientMessage,
   type RepoCandidate,
   type ServerMessage,
-  SURFACES,
-  type Surface,
   type TaskDiff,
 } from './messages.ts';
 export type {
@@ -180,14 +176,10 @@ export {
   parseTerminalServerFrame,
   resolveTaskTerminalPlace,
   resolveTerminalLabel,
-  TERMINAL_LIMITS,
-  type TerminalClientFrame,
-  type TerminalColors,
   type TerminalForeground,
   type TerminalInfo,
   type TerminalPlace,
   type TerminalPlaceKind,
-  type TerminalServerFrame,
   type TerminalStatus,
   type TerminalsSnapshot,
 } from './terminals.ts';
@@ -200,3 +192,15 @@ export type {
   UpdateStreamLine,
   VersionsSnapshot,
 } from './versions.ts';
+export {
+  type ClientMessage,
+  DEVELOPMENT_VERSION,
+  type EngineInfo,
+  type ParsedClientMessage,
+  type Surface,
+  SURFACES,
+  TERMINAL_LIMITS,
+  type TerminalClientFrame,
+  type TerminalColors,
+  type TerminalServerFrame,
+} from './schema.ts';

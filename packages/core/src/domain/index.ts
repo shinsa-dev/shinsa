@@ -48,6 +48,32 @@ export {
 } from './duplicates.ts';
 export { DomainError } from './errors.ts';
 export {
+  FeedbackId,
+  GateId,
+  IdText,
+  MemoryId,
+  ProjectId,
+  RepoId,
+  RunId,
+  ScheduleId,
+  ServiceId,
+  SuggestionId,
+  TaskId,
+  type FindingVerdict,
+  type ReviewComment,
+  type RunAccount,
+  type ScheduleSource,
+  type ScheduleTarget,
+  type ScheduleTrigger,
+  type ScheduleTriggerKind,
+  type SettingsPatch,
+  type Unbranded,
+  WatchdogId,
+  type WebhookSignature,
+} from './schema.ts';
+export { ID_LIMIT } from './fields.ts';
+export { listIssueMessages, resolveIssuePath } from './issues.ts';
+export {
   type CurrentEvidenceItem,
   type EarlierEvidenceItem,
   type EvidenceItem,

@@ -318,20 +318,31 @@ export class Engine {
   }
 
   #decide(command: ShinsaCommand, identity: ReceiptIdentity, now: number, context: BehalfContext) {
+    const result = this.#attemptDecision(command, identity, now, context);
+    if (result._tag === 'Success') return result.success;
+    this.#recordRejection(identity, now, result.failure);
+    throw result.failure;
+  }
+
+  #attemptDecision(command: ShinsaCommand, identity: ReceiptIdentity, now: number, context: BehalfContext) {
     try {
       return decide(this.#state, command, { now, newId: () => Bun.randomUUIDv7(), ...context });
     } catch (error) {
-      this.#log.recordReceipt({
-        ...identity,
-        status: 'rejected',
-        code: error instanceof DomainError ? error.code : 'command_failed',
-        error: describeError(error),
-        firstSeq: this.#state.seq + 1,
-        lastSeq: this.#state.seq,
-        at: now,
-      });
+      this.#recordRejection(identity, now, error);
       throw error;
     }
+  }
+
+  #recordRejection(identity: ReceiptIdentity, now: number, error: unknown) {
+    this.#log.recordReceipt({
+      ...identity,
+      status: 'rejected',
+      code: error instanceof DomainError ? error.code : 'command_failed',
+      error: describeError(error),
+      firstSeq: this.#state.seq + 1,
+      lastSeq: this.#state.seq,
+      at: now,
+    });
   }
 
   #apply(command: ShinsaCommand, identity: ReceiptIdentity, supplied: boolean, context: BehalfContext) {

@@ -9,7 +9,7 @@ describe('the coverage setting', () => {
   test('a repository without one measures automatically, and never shares the default', () => {
     const first = resolveRepoCoverage({});
     expect(first).toEqual({ mode: 'auto' });
-    first.mode = 'off';
+    Object.assign(first, { mode: 'off' });
     expect(resolveRepoCoverage(null)).toEqual({ mode: 'auto' });
     expect(resolveRepoCoverage({ coverage: { mode: 'off' } })).toEqual({ mode: 'off' });
   });

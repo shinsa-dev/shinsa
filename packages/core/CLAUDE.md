@@ -15,7 +15,14 @@ src/
 │                    SETTINGS_KEYS (settings.ts; resolveAgentFastMode: a role's fast mode, else the global one;
 │                    resolveDelegationLimit: delegations at once under one step, null for no limit;
 │                    HUMAN_ONLY_SETTINGS and HUMAN_ONLY_REPO_FIELDS, the fields only the human changes),
-│                    DomainError (errors.ts: a Schema.TaggedError with a code and a message), the tools of each role (tools.ts: listCallableToolNames, what a role may
+│                    DomainError (errors.ts: a Schema.TaggedError with a code and a message), the field schemas
+│                    every parser builds on (fields.ts: Text, Id, Choice, List, Strict, Tagged, ID_LIMIT and the
+│                    FIELD_MESSAGES they refuse with), the domain's shapes (schema.ts: the branded ids TaskId, RunId,
+│                    GateId, ProjectId… and Unbranded, the type a hand-built value is written in; SettingsPatch,
+│                    RunAccount, FindingVerdict, ReviewComment and the schedule trigger, target and source), issues.ts (listIssueMessages: a
+│                    schema's issues as the house messages, `{path}` and `{key}` filled in), salvage.ts (Salvaged,
+│                    SalvagedOrNull, SalvagedItems, Truncated: a lenient wire field that falls back instead of
+│                    refusing), the tools of each role (tools.ts: listCallableToolNames, what a role may
 │                    call, the one source for decide and prompts; listToolNames, what a session is served: one union
 │                    for the TASK_SESSION_ROLES; isHandOverTool, and PURPOSE_HAND_OVERS: the hand-over each purpose
 │                    of the task's agent may call), the delegation limits, isReadOnlyRole and isReadOnlyRun (the
@@ -53,8 +60,10 @@ src/
 ├── events/          ShinsaEvent: past-tense facts, the only way state changes (delegations.ts, schedules.ts split
 │                    out)
 ├── commands/        UserCommand (from the web), AgentCommand (from Shinsa's MCP tools), SystemCommand (from effects
-│                    and clocks), with delegations.ts and schedules.ts split out; parse.ts: parseUserCommand checks
-│                    the shape of untrusted input field by field before it reaches decide, which owns every range
+│                    and clocks), with delegations.ts and schedules.ts split out; schema.ts: the UserCommand schema, one
+│                    tagged struct per command (the type is derived from it, Unbranded), and parse.ts:
+│                    parseUserCommand, which decodes untrusted input into a Result of the command with branded ids or a DomainError
+│                    (`command_invalid`, `command_forbidden`) before it reaches decide, which owns every range
 │                    (settings bounds included); USER_COMMAND_TYPES and SETTINGS_KEYS (domain) are the lists the
 │                    command line and the agents' management tools are generated against; isUserCommand (index.ts,
 │                    on isUserCommandType) tells a user command from an agent or system one
@@ -82,7 +91,9 @@ src/
 │                    and pull request, where a merged pull request marks every round still shipped on it merged,
 │                    rounds when a task rests, closes or reopens for a follow-up, a waiting round changed or
 │                    removed with the later ones renumbered)
-├── decide/          decide() (index.ts): one exhaustive switch over the command, then releaseWaiting,
+├── decide/          decide() (index.ts): a Result of the Decision or the DomainError that refused the command
+│   │                (a bug that is not a DomainError still throws); inside, one exhaustive switch over the
+│   │                command, then releaseWaiting,
 │   │                startQueuedRounds, enforceLiveness and dispatchRuns, over a Decider (decider.ts) that works on a draft and emits
 │   │                events and effects (taskSession: the one session every run of a task resumes, whatever its
 │   │                kind of work, the watch session watchdog checks resume apart from it (isWatchSession), and the
@@ -234,15 +245,20 @@ src/
 │                    the reviewer's gaps (describe.ts: describeCoverage, listCoverageGaps). Not `coverage/`: that name is
 │                    gitignored
 ├── schedules/       Schedule times (time.ts: next run, DST-safe daily, time zones), describing a schedule
-│                    (describe.ts), validating set_schedule and request_secret (validate.ts)
+│                    (describe.ts), validating set_schedule and request_secret (validate.ts, over one schema
+│                    per tool input in schema.ts, read with HandOverReader)
 ├── queue/           Needs you (rank.ts), the one table of gate words (reasons.ts), stepping through decisions
 │                    (step.ts), the stalled leaf of a chain (stalls.ts), silent runs (silence.ts), the `shinsa status`
 │                    summary (summary.ts)
 ├── briefing/        The Home guide: fallback, parsing the writer's answer, the note rule, reconciling a stored one,
 │                    plain text
-├── report/          The hand-over protocol: types, PROTOCOL_LIMITS (with minPlanPhases and findingCount), the enum
-│                    lists the tool schemas read (ATTENTION_LEVELS, FINDING_SEVERITIES, DELEGATION_MODES,
-│                    DELEGATION_ISOLATIONS, MERGE_STEP_TIMINGS, MERGE_STEP_KINDS) and validate*, the delegation and courier
+├── report/          The hand-over protocol: types, the shapes (schema.ts: PROTOCOL_LIMITS with minPlanPhases and
+│                    findingCount, the enum lists the tool schemas read (ATTENTION_LEVELS, FINDING_SEVERITIES,
+│                    DELEGATION_MODES, DELEGATION_ISOLATIONS, MERGE_STEP_TIMINGS, MERGE_STEP_KINDS), one
+│                    Schema.Struct per hand-over, delegation and courier request, and the review link's
+│                    ReviewPayload) and validate*, which read them with HandOverReader (reading.ts: the builders
+│                    those schemas are made of, and the reader, which walks a schema, keeps going past each
+│                    failure and lists every error in field order, the Validation result), the delegation and courier
 │                    requests (orchestration.ts), plan changes between versions, Markdown, assembleReport, the steps
 │                    around the merge with their ticks (merge-steps.ts: listMergeSteps, resolveMergeStepKey), how to
 │                    test the change (testing.ts: MANUAL_TEST_TARGETS, parseTestFile, listTestingLines), the pull request
@@ -294,7 +310,8 @@ src/
 │                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), what the guest a task was
 │                    handed to sees and may send (scope.ts: resolveScopedState, resolveScopedRefusal, SCOPED_COMMANDS;
 │                    decide refuses the rest when its context names a guest), and which machine a new task
-│                    goes to (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and what the router reads, each machine's policies, projects and room: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer), and how busy a machine is (resources.ts: MachineResources, resolveResourceHeadroom, describeResourceSummary, parseResourceSummary). Key pairs and
+│                    goes to and how busy it is, its shapes in schema.ts (PlacementQuestion, PlacementCandidate,
+│                    ResourceSummary, PLACEMENT_LIMITS) beside contract.ts, the cloud API's (placement.ts: resolveMachineLoad, resolveProjectMachine, resolvePlacement, and what the router reads, each machine's policies, projects and room: PLACEMENT_SYSTEM, serializePlacementPrompt, parsePlacementQuestion, parsePlacementAnswer), and how busy a machine is (resources.ts: MachineResources, resolveResourceHeadroom, describeResourceSummary, parseResourceSummary). Key pairs and
 │                    secrets are made by the caller, so core stays free of randomness
 ├── share/           What a task shows outside the machine (resolveSharedTask: a SharedTask copied field by field
 │                    from the task, its current evidence and the project's name; everything its owner sees but
@@ -320,7 +337,8 @@ src/
 │                    join link with the key in its fragment, the team hello and welcome with the view bound into
 │                    the session key, and the team feed types (docs/engine.md → Teams)
 ├── slack/           The Slack bot, shared by the engine and the hosted Worker: the forwarded mention and its parser
-│                    (contract.ts: SlackMention, parseSlackMention, SLACK_LIMITS, SLACK_ENGINE_EVENTS_PATH), the
+│                    (schema.ts: SlackMention, SlackThreadMessage, SlackId, SLACK_LIMITS; contract.ts:
+│                    parseSlackMention, SLACK_ENGINE_EVENTS_PATH), the
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as
 │                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work
 │                    or not, task or none (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation), and
@@ -341,7 +359,9 @@ src/
 │                    decode one or return null), resolveSlackReadableText for Slack's <@U…> markup), and the
 │                    signature on a forwarded mention, made with the machine's connect key and checked within
 │                    SLACK_FORWARD_WINDOW_MS (forward.ts)
-└── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
+└── protocol/        The wire's shapes (schema.ts: ClientMessage, EngineInfo, the terminal frames and colours,
+                     SURFACES, TERMINAL_LIMITS), WebSocket messages (messages.ts: parseClientMessage, the page's
+                     message with branded ids or null), state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
                      the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
                      serializeState), diff parsing,
                      the accounts snapshot (accounts.ts), MCP servers, plugins and
@@ -378,12 +398,25 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
 - **Nothing runs on import.** `package.json` says `"sideEffects": false`, so a bundler keeps only what a caller
   imports: the desktop app's main bundle, which needs only `ENGINE_PROTOCOL`, holds that one module instead of the
   whole domain. A module that registers something or writes a global when imported would be dropped silently.
-- **Validate before emitting.** A command that is not allowed throws `DomainError` and leaves no events. Anything
+- **Validate before emitting.** A command that is not allowed is refused: `decide` returns `Result.fail` of a
+  `DomainError` and leaves no events. Inside, the Decider's checks still throw `DomainError`; `decide` alone turns it
+  into the `Result` and rethrows anything else, so a bug is never read as a refusal. Anything
   that arrives from outside the server (`UserCommand` over HTTP or the socket) goes through `parseUserCommand` first,
   so `decide` only ever sees well-typed fields: a wrong type, an unknown setting or repository field, a priority or
   merge method outside its set is refused there, and the result carries only the fields the command defines. Ranges
   (a fix round count of 1 or more, a switch percentage from 1 to 100) are `decide`'s, so a command from inside the
   server meets the same bounds.
+- **Untrusted input is read with a schema.** Every parser of input from outside (a command, a hand-over, a socket
+  message, a review link, a placement answer, a resource summary, a Slack mention or evaluation, a briefing answer,
+  engine info, a terminal frame) decodes one Effect `Schema` per shape, its type derived from it, never a reader by
+  hand. A folder's shapes live in its `schema.ts` (`commands/`, `domain/`, `report/`, `schedules/`, `remote/`,
+  `slack/`, `protocol/`, `briefing/`, `test-coverage/`): schemas, the types derived from them and the constants they
+  read, never a function (`bun lint:conventions` refuses one), as the effect skill's File layout has it. The parser or
+  validator that decodes them, and its decoder, sits in the logic file beside it; the builders the schemas are made of
+  (`domain/fields.ts`, `domain/salvage.ts`, `report/reading.ts`) are pure modules of their own. Limits stay in their tables (`PROTOCOL_LIMITS`, `SLACK_LIMITS`…) and the schemas read them; a refusal's message
+  is the schema's annotation, so it reads the same wherever the field is used. Ids are branded where they enter
+  (`TaskId`, `RunId`…); records, events and commands built inside are written `Unbranded`. `decide` and the folds stay
+  plain functions: nothing in core is an `Effect`.
 - **Repeated commands are no-ops.** Effects retry and tools get called twice; a command that changes nothing emits
   nothing.
 - **The invariants**, checked after every random command in `test/decide/invariants.test.ts` (and listed nowhere

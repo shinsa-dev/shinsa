@@ -191,8 +191,9 @@ memory), so code never reads one.
     error and `select*` returns an `Option`. A failure the Worker answers is one class per wire code in core's
     `remote/errors.ts` (`NotFound` is `not_found`, `MembersFull` is `members_full`), its status part of its
     definition and its body `{ error: { code, message } }` (`resolveRemoteFailureWire`). `DomainError` keeps its
-    `code` string until `decide` returns a `Result` of named errors: it is a `Schema.TaggedError` with a `code` and a
-    `message`.
+    `code` string: it is a `Schema.TaggedError` with a `code` and a `message`, and `decide` returns a `Result` of the
+    `Decision` or that error. An id that enters through a schema is branded with its own name (`TaskId`, `RunId`,
+    `GateId`, `ProjectId`, in `domain/schema.ts`), and the type a value is built in by hand is `Unbranded<T>` of it.
 
 ## The task
 
@@ -778,8 +779,15 @@ iteration is open (`reply_required`) and refused otherwise (`reply_unasked`), ea
 
 ## Commands
 
-Every command has an id; a repeat is answered from its receipt. `parseUserCommand` checks a user command field by field
-before `decide` sees it; `decide` throws `DomainError` (nothing emitted) for anything not allowed.
+Every command has an id; a repeat is answered from its receipt. `parseUserCommand` decodes a user command with the
+`UserCommand` schema (`commands/schema.ts`, one tagged struct per command, the type derived from it) before `decide`
+sees it, and returns a `Result`: the command with its ids branded, or a `DomainError` (`command_invalid` for a field,
+`command_forbidden` for an unknown type) whose message names the field as before. `decide` returns `Result.fail` of a
+`DomainError` (nothing emitted) for anything not allowed and `Result.succeed` of the `Decision` otherwise; a bug that
+is not a `DomainError` still throws. Every hand-over a tool takes is likewise one schema per shape
+(`report/schema.ts`, `schedules/schema.ts`), read by `HandOverReader` in the `validate*` beside them, which lists every
+error at once in field order. Each folder of core keeps its shapes in its `schema.ts` and the code that reads them
+apart from it (`packages/core/CLAUDE.md` → Rules).
 
 ### User commands
 
@@ -1205,7 +1213,7 @@ something out of (`apps/engine/src/extensions/loader.ts`), any role, delegated r
 
 ### Hand-overs
 
-The fields each hand-over tool takes, checked by `validate*` in `packages/core/src/report/validate.ts` (types in
+The fields each hand-over tool takes, checked by `validate*` in `packages/core/src/report/validate.ts` over the schemas in `report/schema.ts` (types in
 `report/types.ts`). Every limit is a number in `PROTOCOL_LIMITS` or `SHAPE_LIMITS` and is published in the tool's schema.
 
 | Tool | Fields (required in bold) | Limits |
@@ -1250,7 +1258,8 @@ component (`docs/design.md` → Checklists).
 ## The socket
 
 The web and the server talk over `/ws` in JSON messages (`packages/core/src/protocol/messages.ts`; how they flow is
-`docs/engine.md` → The socket). A **surface** (`Surface`, `SURFACES`) is what a page runs in: `desktop` (the Mac app)
+`docs/engine.md` → The socket). The server reads each page message with the `ClientMessage` schema
+(`parseClientMessage`: the message with its `taskId` and `runId` branded, or null for one it cannot read). A **surface** (`Surface`, `SURFACES`) is what a page runs in: `desktop` (the Mac app)
 or `browser` (a tab, Floaty).
 
 | Page → server (`ClientMessage`) | What it does |

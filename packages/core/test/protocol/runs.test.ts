@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { decide, serializeRun, serializeState } from '../../src/index.ts';
-import { buildAll, createHarness, createTask, failing } from '../harness.ts';
+import { serializeRun, serializeState } from '../../src/index.ts';
+import { buildAll, createHarness, createTask, failing, decideOrThrow } from '../harness.ts';
 
 function reachFix() {
   const harness = createHarness();
@@ -51,7 +51,7 @@ describe('wire state', () => {
     const { harness, taskId } = reachFix();
     const wire = serializeState(harness.state);
     expect(serializeState(wire)).toBe(wire);
-    const decided = decide(
+    const decided = decideOrThrow(
       wire,
       { type: 'task.prioritize', taskId, priority: 'urgent' },
       {

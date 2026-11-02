@@ -15,7 +15,7 @@ Shinsa is written in Effect 4 (`effect` pinned at **4.1.1**, the same exact vers
 
 All code that does I/O, holds a resource, reads time, config or randomness, or crosses a boundary (HTTP, SQL, a process, a socket, a file) is Effect code. Every shape that crosses a boundary is a `Schema`.
 
-**Pure logic stays plain functions.** Core's `decide`, the folds and the derivations take values and return values: they use Schema types and return a `Result` instead of throwing once they move, but they are not wrapped in `Effect.succeed`, take no services and never `yield*`. Wrapping pure code in an Effect adds a runtime and hides nothing. Effect code calls pure code directly.
+**Pure logic stays plain functions.** Core's `decide`, the folds and the derivations take values and return values: they use Schema types and return a `Result` instead of throwing (`decide` returns `Result<Decision, DomainError>`), but they are not wrapped in `Effect.succeed`, take no services and never `yield*`. Wrapping pure code in an Effect adds a runtime and hides nothing. Effect code calls pure code directly.
 
 ## Imports
 
@@ -36,6 +36,10 @@ import { camelToSnake } from 'effect/String';
 
 A module is a folder. Its shapes and its logic live in separate files, and a logic file holds exactly one thing.
 
+**One layout in every package and app.** Core, the engine, the Worker, the web app and the desktop app all use it: a folder per module, its shapes in `schema.ts`, its logic in `handler.ts`, `service.ts` or `middleware.ts` (or one pure module named for its concern), the same names for the same roles. A move to Effect never invents a layout of its own for one app or code path; when one fits badly, change this section for every app at once.
+
+**Rewrite into Effect, never translate.** A move is not the same code with `Effect.gen` around it: a hand-written check becomes a schema, a thrown error a tagged error in the type, a module-level singleton a service with its layer, a `try`/`finally` a scoped resource, a retry loop a `Schedule`, a callback or event emitter a `Stream`, an ad hoc timeout `Effect.timeout`. Redesign a module when Effect has the better shape for it; behaviour and the tests' expectations stay.
+
 ```
 routes/teams/                       store/machines/
 ├── schema.ts    the shapes          ├── schema.ts    Machine, NewMachine, the row schemas, MACHINE_COLUMNS
@@ -46,6 +50,7 @@ routes/teams/                       store/machines/
 - **`handler.ts`** (an HttpApi group or a set of plain routes), **`service.ts`** (a service and its layer) and **`middleware.ts`** hold one export and nothing beside it: no helper above it, no constant, no type. Its steps live **inside** its body, after the services it yields once, so each step sees them without yielding them again. Plain routes are `Layer.unwrap(Effect.gen(function* () { …; return Layer.mergeAll(HttpRouter.add(…)) }))`; an HttpApi group's steps go in `HttpApiBuilder.group`'s builder.
 - **Read untrusted input with a schema, never by hand.** A webhook body, a cookie, a third party's answer is a `Schema.Struct` of the fields the code reads (`Schema.NonEmptyString` for an id, `Schema.optionalKey(Schema.Never)` for a field that must be absent, `Schema.Literal` for a type tag), decoded once with `Schema.decodeUnknownOption` or `Effect`. No `readString(fields, 'key')` helpers.
 - **A step two modules need is a module of its own**, named for what it does and exporting peers only (`domain/machines.ts`: `removeMachine`, `createConnectAnswer`; `auth/tokens.ts`: `createSession`, `selectRequestUser`; `http/cookies.ts`: `serializeCookie`). A module like that has no private helper above its exports.
+- Core follows the same split: each folder keeps its shapes in its `schema.ts` (`commands/schema.ts`, `report/schema.ts`, `protocol/schema.ts`…) and its parsers, validators and decoders in the logic file beside it; the builders the schemas are made of (`domain/fields.ts`, `report/reading.ts`) are pure modules of their own.
 - A pure module of functions (`http/cookies.ts`, `routes/previews/address.ts`) is plain TypeScript and that is right: pure code is never wrapped in an effect. What makes it clean is that it is one concern, named for it.
 
 ```ts
