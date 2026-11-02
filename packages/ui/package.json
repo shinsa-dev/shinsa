@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check-types": "tsc --noEmit && tsc --noEmit -p scripts",
+    "check-types": "effect-tsgo tsc --noEmit && effect-tsgo tsc --noEmit -p scripts",
     "generate:icons": "bun run scripts/generate-icons.ts",
     "test": "bun test --randomize"
   },

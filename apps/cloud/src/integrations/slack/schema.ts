@@ -13,7 +13,7 @@ export const SLACK_BOT_SCOPES = [
   'users:read',
 ] as const;
 
-export class SlackCallFailed extends Schema.TaggedError<SlackCallFailed>()('SlackCallFailed', {
+export class SlackCallFailed extends Schema.TaggedError<SlackCallFailed, { readonly brand: unique symbol }>()('SlackCallFailed', {
   method: Schema.String,
   code: Schema.String,
 }) {}

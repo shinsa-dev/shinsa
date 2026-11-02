@@ -100,7 +100,7 @@ const open = async () => { await connect(); };
 export const MachineId = Schema.String.check(Schema.isPattern(/^[a-z0-9-]{3,64}$/)).pipe(Schema.brand('MachineId'));
 export type MachineId = typeof MachineId.Type;
 
-export class Machine extends Schema.Class<Machine>('shinsa/guide/Machine')({
+export class Machine extends Schema.Class<Machine, { readonly brand: unique symbol }>('shinsa/guide/Machine')({
   id: MachineId,
   name: Schema.NonEmptyString.check(Schema.isMaxLength(64)),
   status: Schema.Literals(['online', 'offline']),
@@ -119,6 +119,7 @@ if (typeof body.name !== 'string' || body.name.length > 64) …
 
 - **One schema per shape, defined once, imported everywhere.** The type is `typeof X.Type` (and `typeof X.Encoded` for the wire form); a hand-written interface beside a schema is a second definition and drifts. Reuse fields (`Machine.fields.name`) instead of restating a check.
 - `Schema.Class` for a domain record, `Schema.Struct` for a payload, `Schema.Literals` for a closed set, `Schema.TaggedStruct` and `Schema.Union` for variants. Every id is branded (`Schema.brand('TaskId')`); build one in a test with `TaskId.make('…')`.
+- Every `Schema.Class`, `Schema.TaggedClass` and `Schema.TaggedError` takes a brand as its second type argument (`{ readonly brand: unique symbol }`), so two classes of the same shape never pass for each other (`schemaClassMissingBrand`, an error in `bun check-types`). A subclass never overrides the constructor (`overriddenSchemaConstructor`): build one with a `static create` that returns `Object.assign(new X({ … }), { … })`, its extra fields `declare readonly`.
 - Every limit lives in the schema (`isMaxLength`, `isPattern`, `isInt`), so the check, the type and the error message are the same everywhere it is used.
 - Decode untrusted input once, at the edge, into the typed value; inside, everything is already typed. Hoist decoders (`const decodeX = Schema.decodeUnknownEffect(X)`) instead of building one per call. Text is decoded with `Schema.fromJsonString(Shape)`, never `JSON.parse`.
 - Map a decode failure to the edge's own tagged error (`InvalidPayload`), never pass a `SchemaError` to a caller who cannot act on it.
@@ -128,7 +129,7 @@ if (typeof body.name !== 'string' || body.name.length > 64) …
 
 ```ts
 // right
-export class MachineNotFound extends Schema.TaggedError<MachineNotFound>()(
+export class MachineNotFound extends Schema.TaggedError<MachineNotFound, { readonly brand: unique symbol }>()(
   'MachineNotFound',
   { machineId: MachineId },
   { httpApiStatus: 404 }

@@ -1,14 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { PREVIEW_ORIGIN, REMOTE_APP_ORIGIN } from '@shinsa/core';
-import { ConfigProvider, Effect, Exit, Redacted } from 'effect';
+import { ConfigProvider, Effect, Exit, Layer, Redacted } from 'effect';
 import { CloudConfig } from '../../src/config/service.ts';
 import { TEST_ENV } from '../layers.ts';
 
 const readConfig = (env: Record<string, string>) =>
   Effect.runPromiseExit(
     CloudConfig.use(Effect.succeed).pipe(
-      Effect.provide(CloudConfig.layer),
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env)))
+      Effect.provide(CloudConfig.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env)))))
     )
   );
 

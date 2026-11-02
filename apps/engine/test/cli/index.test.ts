@@ -270,7 +270,7 @@ describe('shinsa engine', () => {
     try {
       const { io, errors } = createIo('1', {
         env: { [SERVICE_MARKER]: '1' },
-        runEngine: () => Promise.reject(new ServerRunningError('/data', holder)),
+        runEngine: () => Promise.reject(ServerRunningError.create('/data', holder)),
       });
       expect(await runCli(['engine'], io)).toBe(0);
       expect(errors).toEqual([]);
@@ -285,7 +285,7 @@ describe('shinsa engine', () => {
 
   test('from a terminal the same lock is an error, and so is any other failure under the service', async () => {
     const running = createIo('1', {
-      runEngine: () => Promise.reject(new ServerRunningError('/data', holder)),
+      runEngine: () => Promise.reject(ServerRunningError.create('/data', holder)),
     });
     expect(await runCli(['engine'], running.io)).toBe(1);
     expect(running.errors).toEqual([

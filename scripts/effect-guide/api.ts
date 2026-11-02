@@ -6,7 +6,7 @@ export class CurrentAccount extends Context.Service<CurrentAccount, { readonly l
   'shinsa/guide/CurrentAccount'
 ) {}
 
-export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
+export class Unauthorized extends Schema.TaggedError<Unauthorized, { readonly brand: unique symbol }>()(
   'Unauthorized',
   { message: Schema.String },
   { httpApiStatus: 401 }

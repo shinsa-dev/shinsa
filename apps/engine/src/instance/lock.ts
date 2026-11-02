@@ -89,16 +89,15 @@ function describeHolder(holder: LockHolder) {
 }
 
 export class ServerRunningError extends DomainError {
-  readonly holder: LockHolder;
-  readonly dataDir: string;
+  declare readonly holder: LockHolder;
+  declare readonly dataDir: string;
 
-  constructor(dataDir: string, holder: LockHolder) {
-    super({
+  static create(dataDir: string, holder: LockHolder) {
+    const error = new ServerRunningError({
       code: 'server_running',
       message: `Shinsa is already running on ${dataDir}: ${describeHolder(holder)}. Stop it first, or set SHINSA_HOME to another folder.`,
     });
-    this.holder = holder;
-    this.dataDir = dataDir;
+    return Object.assign(error, { holder, dataDir });
   }
 }
 
@@ -167,7 +166,7 @@ export function acquireDataDirLock(
     if (writeExclusive(path, JSON.stringify(claim))) return new HeldLock(path, claim);
     const text = readText(path);
     const stale = text === null ? null : parseHolder(text);
-    if (stale && isLive(stale)) throw new ServerRunningError(dataDir, stale);
+    if (stale && isLive(stale)) throw ServerRunningError.create(dataDir, stale);
     if (text !== null && readText(path) === text) {
       log.warn('[Serve] Took over the lock a stopped Shinsa left behind', { path, pid: stale?.pid ?? null });
       rmSync(path, { force: true });

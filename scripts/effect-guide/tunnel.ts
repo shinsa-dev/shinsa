@@ -1,6 +1,6 @@
 import { Config, Context, Effect, Layer, type Redacted, Schedule, Schema } from 'effect';
 
-export class TunnelError extends Schema.TaggedError<TunnelError>()('TunnelError', {
+export class TunnelError extends Schema.TaggedError<TunnelError, { readonly brand: unique symbol }>()('TunnelError', {
   message: Schema.String,
   retryable: Schema.Boolean,
 }) {}

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "bun --bun astro build",
-    "check-types": "bun --bun astro sync && tsc --noEmit",
+    "check-types": "bun --bun astro sync && effect-tsgo tsc --noEmit",
     "deploy": "wrangler deploy",
     "deploy:preview": "wrangler preview",
     "dev": "bun --bun astro dev --port 5182",

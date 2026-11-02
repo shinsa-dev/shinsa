@@ -6,7 +6,7 @@ export const TokenHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/))
 
 export type TokenHash = typeof TokenHash.Type;
 
-export class CryptoFailed extends Schema.TaggedError<CryptoFailed>()('CryptoFailed', {
+export class CryptoFailed extends Schema.TaggedError<CryptoFailed, { readonly brand: unique symbol }>()('CryptoFailed', {
   message: Schema.String,
 }) {}
 

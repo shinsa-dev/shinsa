@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check-types": "tsc --noEmit",
+    "check-types": "effect-tsgo tsc --noEmit",
     "dev": "SHINSA_PORT=${SHINSA_PORT:-5180} bun --watch src/main.ts engine",
     "docs:cli": "bun -e \"import { replaceReference } from './src/cli/help.ts'; const doc = Bun.file('../../docs/cli.md'); await Bun.write(doc, replaceReference(await doc.text()))\"",
     "start": "SHINSA_PORT=${SHINSA_PORT:-5180} bun src/main.ts engine",

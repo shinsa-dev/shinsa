@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "check-types": "turbo run check-types && tsc --noEmit -p tsconfig.json",
+    "check-types": "turbo run check-types && effect-tsgo tsc --noEmit -p tsconfig.json",
     "deps": "sherif -i @types/node",
     "dev": "turbo run dev --filter=!@shinsa/desktop",
     "format": "biome format .",
@@ -24,6 +24,7 @@
     "@babel/parser": "^8.0.5",
     "@biomejs/biome": "2.5.9",
     "@effect/sql-sqlite-bun": "4.1.1",
+    "@effect/tsgo": "0.63.0",
     "@types/bun": "^1.4.2",
     "@types/node": "^24.0.0",
     "cspell": "10.4.0",
