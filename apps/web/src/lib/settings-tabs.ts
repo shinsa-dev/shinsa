@@ -33,7 +33,9 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
       'Attention',
       'Notifications',
       'Context',
-      ...(isRemoteBuild() ? [MACHINES_SECTION] : [REMOTE_ACCESS_SECTION, TEAMS_SECTION, SLACK_SECTION]),
+      ...(isRemoteBuild()
+        ? [MACHINES_SECTION, TEAMS_SECTION]
+        : [REMOTE_ACCESS_SECTION, TEAMS_SECTION, SLACK_SECTION]),
       'Setup',
       UPDATES_SECTION,
     ],
