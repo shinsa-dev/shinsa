@@ -10,6 +10,7 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
+  type Task,
   validateReportFiling,
   validateScheduleRequest,
 } from '@shinsa/core';
@@ -17,6 +18,7 @@ import { assertProtocol, readString } from '../agents/handover.ts';
 import { findForkSource } from '../agents/tools/forks.ts';
 import { describeError } from '../log/index.ts';
 import type { SecretStore } from '../secrets/index.ts';
+import type { SurfaceHookSecrets } from '../surface/index.ts';
 import { WEBHOOK_ROUTE_PREFIX } from './webhook.ts';
 
 export interface ScheduleToolCall {
@@ -36,8 +38,9 @@ export interface ScheduleToolContext {
 
 const RECENT_RUNS = 5;
 
-const NO_SECRET =
-  'A signature check needs the signing secret. Ask for it with request_secret and pass the secret-ref it returns as webhook.signature.secret_ref.';
+function describeNoSecret(field: string) {
+  return `A signature check needs the signing secret. Ask for it with request_secret and pass the secret-ref it returns as ${field}.`;
+}
 
 function serializeTime(at: number | null) {
   return at === null ? null : new Date(at).toISOString();
@@ -90,12 +93,15 @@ function describeSaved(
   ].join('\n');
 }
 
-function assertSigningSecret(context: ScheduleToolContext, state: ShinsaState, request: ScheduleRequest) {
-  const trigger = request.trigger;
-  if (trigger?.kind !== 'webhook' || !trigger.signature || request.secretRef) return;
-  const existing = request.scheduleId ? state.schedules[request.scheduleId] : undefined;
-  if (existing && context.secrets.selectHook(existing.id)?.secret) return;
-  throw new Error(NO_SECRET);
+function assertSigningSecret(
+  context: ScheduleToolContext,
+  scheduleId: string | null,
+  ref: string | null,
+  field: string
+) {
+  if (ref) return;
+  if (scheduleId && context.secrets.selectHook(scheduleId)?.secret) return;
+  throw new Error(describeNoSecret(field));
 }
 
 function writeSigningSecret(
@@ -110,7 +116,7 @@ function writeSigningSecret(
     context.secrets.writeHookSecret(schedule.id, context.secrets.removeRef(ref, taskId));
     return null;
   } catch (error) {
-    return `The schedule was saved, but its signing secret was not: ${describeError(error)} Then call set_schedule with schedule_id ${schedule.id} and the new ref.`;
+    return `The schedule was saved, but its signing secret was not: ${describeError(error)} Then call set_schedule with schedule_id ${schedule.id} and the new ref as webhook.signature.secret_ref.`;
   }
 }
 
@@ -132,7 +138,9 @@ async function writeSchedule(
 ) {
   const request = assertProtocol(validateScheduleRequest(input, context.now()));
   const task = findTaskOf(call.state(), call.runId);
-  assertSigningSecret(context, call.state(), request);
+  if (request.trigger?.kind === 'webhook' && request.trigger.signature) {
+    assertSigningSecret(context, request.scheduleId, request.secretRef, 'webhook.signature.secret_ref');
+  }
   const existing = request.scheduleId ? call.state().schedules[request.scheduleId] : undefined;
   const events = await call.dispatch({
     type: 'agent.set_schedule',
@@ -142,7 +150,7 @@ async function writeSchedule(
     name: request.name,
     text: request.text,
     trigger: request.trigger,
-    target: request.target,
+    target: resolveTarget(call.state(), task, request),
     source: request.source,
     enabled: request.enabled,
     maxRuns: request.maxRuns,
@@ -221,6 +229,23 @@ function resolveFiledRepo(state: ShinsaState, runId: string, name: string | null
   );
 }
 
+function resolveScheduleRepo(state: ShinsaState, task: Task, reference: string) {
+  const projectRepos = task.projectId ? listProjectRepos(state, task.projectId) : [];
+  const candidates = projectRepos.length > 0 ? projectRepos : Object.values(state.repos);
+  const repo =
+    candidates.find((candidate) => candidate.id === reference) ??
+    candidates.find((candidate) => candidate.name === reference);
+  if (repo) return repo.id;
+  const known = candidates.map((candidate) => candidate.name);
+  throw new Error(`There is no repository "${reference}". Name one of: ${known.join(', ') || 'none'}.`);
+}
+
+function resolveTarget(state: ShinsaState, task: Task, request: ScheduleRequest) {
+  const { target, repository } = request;
+  if (target?.kind !== 'new_task' || repository === null) return target;
+  return { ...target, repoId: resolveScheduleRepo(state, task, repository) };
+}
+
 async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall) {
   const { forkFrom, repository, ...filing } = assertProtocol(validateReportFiling(input));
   const state = call.state();
@@ -241,6 +266,20 @@ async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall
   const task = created?.type === 'task.created' ? call.state().tasks[created.taskId] : undefined;
   if (!task) throw new Error('Nothing was filed. Call file_report again.');
   return `Filed ${task.handle ?? task.id} “${task.title}”. Go on with the next report.`;
+}
+
+export function createHookSecrets(
+  context: ScheduleToolContext,
+  state: () => ShinsaState,
+  taskId: string
+): SurfaceHookSecrets {
+  return {
+    assertSecret: (scheduleId, ref) => assertSigningSecret(context, scheduleId, ref, 'signature_secret_ref'),
+    writeSecret: (scheduleId, ref) => {
+      const schedule = state().schedules[scheduleId];
+      return schedule ? writeSigningSecret(context, schedule, ref, taskId) : null;
+    },
+  };
 }
 
 export function handleScheduleTool(

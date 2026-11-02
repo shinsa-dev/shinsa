@@ -2,7 +2,7 @@ import { parseUserCommand, type ShinsaEvent, type UserCommand } from '@shinsa/co
 import { createSurfaceClient } from '../../cli/api.ts';
 import type { ProjectChanges } from '../../projects/routes.ts';
 import type { DispatchOptions, Engine } from '../../runtime/engine.ts';
-import type { SurfaceClient } from '../../surface/index.ts';
+import type { SurfaceClient, SurfaceHookSecrets } from '../../surface/index.ts';
 
 export type CommandRouter = (command: UserCommand, options: DispatchOptions) => Promise<ShinsaEvent[]>;
 
@@ -10,6 +10,7 @@ export interface ManageAccess {
   baseUrl: () => string;
   projects: ProjectChanges;
   route: CommandRouter;
+  hookSecrets?: (taskId: string) => SurfaceHookSecrets;
 }
 
 interface ManageClientOptions {
@@ -19,10 +20,11 @@ interface ManageClientOptions {
   byTask: string;
   projects?: ProjectChanges;
   route?: CommandRouter;
+  hookSecrets?: SurfaceHookSecrets;
 }
 
 export function createManageClient(options: ManageClientOptions): SurfaceClient {
-  const { engine, base, key, byTask, projects } = options;
+  const { engine, base, key, byTask, projects, hookSecrets } = options;
   const route = options.route ?? ((command, dispatchOptions) => engine.dispatch(command, dispatchOptions));
   const from = { onBehalf: true, byTask };
   let sent = 0;
@@ -36,6 +38,7 @@ export function createManageClient(options: ManageClientOptions): SurfaceClient 
           },
         }
       : {}),
+    ...(hookSecrets ? { hookSecrets } : {}),
     send: async (command) => {
       sent += 1;
       const events = await route(parseUserCommand(command), {
@@ -43,7 +46,12 @@ export function createManageClient(options: ManageClientOptions): SurfaceClient 
         ...from,
       });
       const created = events.find((event) => event.type === 'task.created');
-      return { ok: true, taskId: created?.type === 'task.created' ? created.taskId : null };
+      const written = events.find((event) => event.type === 'schedule.written');
+      return {
+        ok: true,
+        taskId: created?.type === 'task.created' ? created.taskId : null,
+        ...(written?.type === 'schedule.written' ? { scheduleId: written.schedule.id } : {}),
+      };
     },
   };
 }

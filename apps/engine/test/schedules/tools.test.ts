@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { listActiveRuns, type ShinsaCommand, type ShinsaEvent } from '@shinsa/core';
+import { createManageClient } from '../../src/agents/manage/client.ts';
 import { Schedules } from '../../src/schedules/index.ts';
+import { readArgv, selectSpec } from '../../src/surface/index.ts';
 import { createWorld, startTask, type World } from './fixtures.ts';
 
 const NOW = Date.now();
@@ -227,6 +229,169 @@ describe('set_schedule', () => {
       }
     );
     await expect(reply).rejects.toThrow('Nothing was saved.');
+  });
+});
+
+describe('set_schedule refuses what it would drop', () => {
+  test('signature fields on webhook itself are refused and point at webhook.signature', async () => {
+    const world = await createWorld();
+    const { tool } = setUp(world);
+    const misplaced = {
+      message: 'Hook',
+      webhook: { header: 'x-sig', secret_ref: `secret-ref:${'0'.repeat(32)}` },
+    };
+    await expect(tool('set_schedule', misplaced)).rejects.toThrow(
+      'header, secret_ref go under webhook.signature, not on webhook itself'
+    );
+    await expect(tool('set_schedule', { message: 'Hook', webhook: { secret: 'shh' } })).rejects.toThrow(
+      'webhook has no secret. Its fields are signature, replay_key.'
+    );
+    expect(world.engine.state.schedules).toEqual({});
+  });
+});
+
+describe('set_schedule with new_task in a repository it names', () => {
+  async function registerWeb(world: World, projectName: string | null) {
+    await world.engine.dispatch({
+      type: 'repo.register',
+      repo: { name: 'web', path: '/code/web', defaultBranch: 'main', remote: null, checkCommands: [] },
+      projectName,
+    });
+    return Object.values(world.engine.state.repos).find((repo) => repo.name === 'web')?.id ?? '';
+  }
+
+  function repoOf(world: World) {
+    const target = only(world).target;
+    return target.kind === 'new_task' ? target.repoId : null;
+  }
+
+  test('by name or by id, and the calling task’s repository when it names none', async () => {
+    const world = await createWorld();
+    const webId = await registerWeb(world, null);
+    const { tool } = setUp(world);
+    const audit = { message: 'Audit.', every_minutes: 60, new_task: true };
+    await tool('set_schedule', { ...audit, repository: 'web' });
+    expect(repoOf(world)).toBe(webId);
+    const id = only(world).id;
+    await tool('set_schedule', { schedule_id: id, new_task: true, repository: world.repoId });
+    expect(repoOf(world)).toBe(world.repoId);
+    await tool('delete_schedule', { schedule_id: id });
+    await tool('set_schedule', audit);
+    expect(repoOf(world)).toBe(world.repoId);
+  });
+
+  test('a task in a project names only that project’s repositories', async () => {
+    const base = await createWorld();
+    const webId = await registerWeb(base, 'Paywalls');
+    const reader = await startTask(base.engine, webId, base.dir, 'Read the paywall reports');
+    const world = { ...base, ...reader };
+    const { tool } = setUp(world);
+    await expect(
+      tool('set_schedule', { message: 'Audit.', every_minutes: 60, new_task: true, repository: 'app' })
+    ).rejects.toThrow('There is no repository "app". Name one of: web.');
+  });
+
+  test('an unknown repository, or one without new_task, is refused', async () => {
+    const world = await createWorld();
+    const { tool } = setUp(world);
+    const audit = { message: 'Audit.', every_minutes: 60 };
+    await expect(tool('set_schedule', { ...audit, new_task: true, repository: 'nope' })).rejects.toThrow(
+      'There is no repository "nope". Name one of: app.'
+    );
+    await expect(tool('set_schedule', { ...audit, repository: 'app' })).rejects.toThrow(
+      'repository only goes with new_task'
+    );
+    expect(world.engine.state.schedules).toEqual({});
+  });
+});
+
+describe('a schedule an agent writes with schedules_write', () => {
+  function writeThroughSurface(world: World, schedules: Schedules, words: string[]) {
+    const client = createManageClient({
+      engine: world.engine,
+      base: 'http://127.0.0.1:1',
+      key: null,
+      byTask: world.taskId,
+      hookSecrets: schedules.hookSecrets(world.taskId),
+    });
+    const found = selectSpec(['schedules', 'write', ...words]);
+    if (!found) throw new Error('no schedules write');
+    return found.spec.run(client, readArgv(found.spec.fields, found.rest).values);
+  }
+
+  test('is that task’s, so set_schedule and delete_schedule can change it', async () => {
+    const world = await createWorld();
+    const { schedules, tool } = setUp(world);
+    await writeThroughSurface(world, schedules, [
+      '--message',
+      'Audit.',
+      '--every-minutes',
+      '60',
+      '--new-task',
+      '--time-zone',
+      'UTC',
+    ]);
+    const schedule = only(world);
+    expect(schedule.createdBy).toEqual({ kind: 'agent', taskId: world.taskId, runId: null });
+    expect(await tool('set_schedule', { schedule_id: schedule.id, name: 'Hourly audit' })).toContain(
+      'Saved “Hourly audit”'
+    );
+    expect(await tool('delete_schedule', { schedule_id: schedule.id })).toBe('Deleted “Hourly audit”.');
+  });
+
+  test('its signing secret comes from the ref, as with set_schedule', async () => {
+    const world = await createWorld();
+    const { schedules } = setUp(world);
+    const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
+    const hook = [
+      '--message',
+      'Push',
+      '--new-task',
+      '--webhook',
+      '--signature-header',
+      'x-sig',
+      '--time-zone',
+      'UTC',
+    ];
+    await expect(writeThroughSurface(world, schedules, hook)).rejects.toThrow(
+      'pass the secret-ref it returns as signature_secret_ref.'
+    );
+    expect(world.engine.state.schedules).toEqual({});
+    const result = await writeThroughSurface(world, schedules, [...hook, '--signature-secret-ref', ref]);
+    const id = only(world).id;
+    expect(result.data).toEqual({ ok: true, taskId: null, scheduleId: id });
+    expect(world.secrets.selectHook(id)?.secret).toBe('shh');
+    expect(result.text).not.toContain('was not');
+    const again = await writeThroughSurface(world, schedules, ['--id', id, ...hook]);
+    expect(again.text).toContain('Saved the schedule.');
+    expect(world.secrets.selectHook(id)?.secret).toBe('shh');
+  });
+
+  test('a spent ref still saves the schedule and says how to set the secret', async () => {
+    const world = await createWorld();
+    const { schedules } = setUp(world);
+    const result = await writeThroughSurface(world, schedules, [
+      '--message',
+      'Push',
+      '--new-task',
+      '--webhook',
+      '--signature-header',
+      'x-sig',
+      '--signature-secret-ref',
+      `secret-ref:${'0'.repeat(32)}`,
+      '--time-zone',
+      'UTC',
+    ]);
+    expect(result.text).toContain(`The schedule was saved, but its signing secret was not:`);
+    expect(result.text).toContain(`set_schedule with schedule_id ${only(world).id}`);
+  });
+
+  test('a secret for a schedule that is gone is not written', async () => {
+    const world = await createWorld();
+    const { schedules } = setUp(world);
+    const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
+    expect(schedules.hookSecrets(world.taskId).writeSecret('gone', ref)).toBeNull();
+    expect(world.secrets.hasRef(ref)).toBe(true);
   });
 });
 
