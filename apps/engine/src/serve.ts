@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, ManagedRuntime } from 'effect';
 import type { ServerConfig } from './config/index.ts';
+import { resolveLockError } from './instance/lock/index.ts';
 import { JsonLogger } from './log/service.ts';
 import type { Shinsa, ShinsaOptions } from './serve/schema.ts';
 import { Serve } from './serve/service.ts';
@@ -15,7 +16,8 @@ export function startShinsa(requested: ServerConfig, options: ShinsaOptions = {}
         const serve = Context.get(context, Serve);
         return { url: serve.url, engine: serve.engine, stop };
       }),
-      Effect.onError(() => runtime.disposeEffect)
+      Effect.onError(() => runtime.disposeEffect),
+      Effect.mapError(resolveLockError)
     )
   );
 }

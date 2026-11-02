@@ -1,15 +1,15 @@
 import type { ShinsaEvent, ShinsaEventInput } from '@shinsa/core';
 import { Context, Effect, Layer, Result, Schema } from 'effect';
+import { isReadonlyArrayNonEmpty, map } from 'effect/Array';
 import { SqlClient, SqlSchema } from 'effect/sql';
+import { readStoredPayload } from '../shared/payload.ts';
 import {
+  EVENT_PAYLOAD_MESSAGES,
   type EventAppend,
   type EventRead,
   EventRow,
-  MISMATCHED_EVENT,
-  NOT_JSON_EVENT,
+  EventRows,
   SeqRange,
-  StoredEventPayload,
-  StoredJson,
   type UnreadableEvent,
 } from './schema.ts';
 
@@ -25,9 +25,6 @@ export class Events extends Context.Service<
     Events,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      const decodeJson = Schema.decodeUnknownResult(StoredJson);
-      const decodePayload = Schema.decodeUnknownResult(StoredEventPayload);
-
       const listAfter = SqlSchema.findAll({
         Request: Schema.Int,
         Result: EventRow,
@@ -39,28 +36,24 @@ export class Events extends Context.Service<
         execute: ({ firstSeq, lastSeq }) =>
           sql`SELECT seq, at, type, payload FROM events WHERE seq BETWEEN ${firstSeq} AND ${lastSeq} ORDER BY seq`,
       });
-      const insertRow = SqlSchema.void({
-        Request: EventRow,
-        execute: (row) => sql`INSERT INTO events ${sql.insert(row)}`,
+      const insertRows = SqlSchema.void({
+        Request: EventRows,
+        execute: (rows) => sql`INSERT INTO events ${sql.insert(rows)}`,
       });
-
-      const readPayload = (row: EventRow): Result.Result<ShinsaEventInput, string> => {
-        const json = decodeJson(row.payload);
-        if (Result.isFailure(json)) return Result.fail(`${NOT_JSON_EVENT}: ${json.failure.message}`);
-        const payload = decodePayload(json.success);
-        if (Result.isFailure(payload) || payload.success.type !== row.type)
-          return Result.fail(MISMATCHED_EVENT);
-        return Result.succeed(payload.success as unknown as ShinsaEventInput);
-      };
 
       const readRows = (rows: readonly EventRow[]): EventRead => {
         const events: ShinsaEvent[] = [];
         const unreadable: UnreadableEvent[] = [];
         for (const row of rows) {
-          const payload = readPayload(row);
+          const payload = readStoredPayload(row.payload, 'type', row.type, EVENT_PAYLOAD_MESSAGES);
           if (Result.isFailure(payload))
             unreadable.push({ seq: row.seq, type: row.type, error: payload.failure });
-          else events.push({ ...payload.success, seq: row.seq, at: row.at } as ShinsaEvent);
+          else
+            events.push({
+              ...(payload.success as unknown as ShinsaEventInput),
+              seq: row.seq,
+              at: row.at,
+            } as ShinsaEvent);
         }
         return { events, unreadable, lastSeq: rows.at(-1)?.seq ?? 0 };
       };
@@ -80,12 +73,14 @@ export class Events extends Context.Service<
         const stored = events.map(
           (event, index) => ({ ...event, seq: fromSeq + index + 1, at }) as ShinsaEvent
         );
-        for (const event of stored) {
-          const { seq, at: _at, ...payload } = event;
-          yield* insertRow({ seq, at, type: event.type, payload: JSON.stringify(payload) }).pipe(
-            Effect.orDie
-          );
-        }
+        if (!isReadonlyArrayNonEmpty(stored)) return stored;
+        const rows = map(stored, ({ seq, at: _at, ...payload }) => ({
+          seq,
+          at,
+          type: payload.type,
+          payload: JSON.stringify(payload),
+        }));
+        yield* insertRows(rows).pipe(Effect.orDie);
         return stored;
       });
 

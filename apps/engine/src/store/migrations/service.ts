@@ -33,7 +33,7 @@ export class LogMigrator extends Context.Service<
       );
 
       const writeVersion = (version: number) =>
-        sql`PRAGMA user_version = ${sql.literal(String(Math.trunc(version)))}`.pipe(Effect.orDie);
+        sql`PRAGMA user_version = ${sql.literal(String(Math.trunc(version)))}`;
 
       const assertReadable = Effect.fn('LogMigrator.assertReadable')(function* (version: number) {
         if (version >= LOG_BASELINE) return;
@@ -49,7 +49,7 @@ export class LogMigrator extends Context.Service<
       const stamp = Effect.fn('LogMigrator.stamp')(function* (migrations: readonly LogMigration[]) {
         if ((yield* selectVersion) !== 0) return;
         if (Option.isSome(yield* selectAnyEvent(undefined).pipe(Effect.orDie))) return;
-        yield* writeVersion(resolveLogVersion(migrations));
+        yield* writeVersion(resolveLogVersion(migrations)).pipe(Effect.orDie);
       });
 
       const assertCurrent = Effect.fn('LogMigrator.assertCurrent')(function* (
@@ -72,10 +72,11 @@ export class LogMigrator extends Context.Service<
         yield* sql
           .withTransaction(
             Effect.gen(function* () {
-              for (const migration of pending)
-                yield* migration.migrate.pipe(Effect.provideService(SqlClient.SqlClient, sql));
+              yield* Effect.forEach(pending, (migration) => migration.migrate, { discard: true }).pipe(
+                Effect.provideService(SqlClient.SqlClient, sql)
+              );
               yield* sql`DELETE FROM snapshots`;
-              yield* sql`PRAGMA user_version = ${sql.literal(String(resolveLogVersion(migrations)))}`;
+              yield* writeVersion(resolveLogVersion(migrations));
             })
           )
           .pipe(Effect.orDie);

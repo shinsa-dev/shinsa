@@ -24,24 +24,22 @@ export class Shell extends Context.Service<
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-      const readOutput = (
+      const readOutput = Effect.fnUntraced(function* (
         stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>,
         onLine: CommandRequest['onLine']
-      ) => {
+      ) {
         const text = stream.pipe(Stream.decodeText());
-        if (!onLine) return Effect.orDie(Stream.mkString(text));
-        return Effect.gen(function* () {
-          const output = yield* Ref.make('');
-          yield* text.pipe(
-            Stream.tap((part) => Ref.update(output, (all) => all + part)),
-            Stream.splitLines,
-            Stream.filter((line) => line.trim() !== ''),
-            Stream.runForEach(onLine),
-            Effect.orDie
-          );
-          return yield* Ref.get(output);
-        });
-      };
+        if (!onLine) return yield* Effect.orDie(Stream.mkString(text));
+        const output = yield* Ref.make('');
+        yield* text.pipe(
+          Stream.tap((part) => Ref.update(output, (all) => all + part)),
+          Stream.splitLines,
+          Stream.filter((line) => line.trim() !== ''),
+          Stream.runForEach(onLine),
+          Effect.orDie
+        );
+        return yield* Ref.get(output);
+      });
 
       const run = Effect.fn('Shell.run')(function* (request: CommandRequest) {
         const [program, ...args] = request.argv;
@@ -77,7 +75,7 @@ export class Shell extends Context.Service<
               )
             );
             const exited = handle.exitCode.pipe(
-              Effect.catch(() => Effect.succeed(KILLED_EXIT_CODE)),
+              Effect.orElseSucceed(() => KILLED_EXIT_CODE),
               Effect.tap(() =>
                 Effect.flatMap(Ref.get(stopped), (reason) =>
                   reason === null ? Effect.void : stopProcessGroup(handle.pid)

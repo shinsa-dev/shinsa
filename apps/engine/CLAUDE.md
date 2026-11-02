@@ -94,7 +94,9 @@ src/
 │                        string, in its own process group; a timeout or an interrupt kills the whole group and still
 │                        answers its output; a missing program is the typed CommandNotFound; stopTree), schema.ts
 │                        (CommandRequest, CommandResult, CommandNotFound, COMMAND_TIMEOUT, QUIET_ENV, the exit
-│                        codes), processes.ts (stopping a group or a process, the ps table's descendants), index.ts
+│                        codes), processes.ts (stopping a group or a process, the ps table's descendants), errno.ts
+│                        (selectErrnoCode: a system error's code, read by the SystemError schema; the lock uses it too),
+│                        index.ts
 │                        (the edge: runCommand, runCommandOrThrow, killProcessGroup, killProcessTree, the same
 │                        results as before, CommandNotFound answered as exit code 127); login.ts
 │                        reads the login shell's environment once (`-lic`, then `-lc` when that prints nothing, plus
@@ -113,7 +115,9 @@ src/
 │                        (LogMigrator over LOG_BASELINE and the ordered LOG_MIGRATIONS in list.ts, the log's version in
 │                        user_version, an older log refused with LogVersionError, inspect mode refusing a log that needs
 │                        migrating); layers.ts (StoreLayer(path): the tables, the services and the empty-log stamp on
-│                        one SqlClient). event-log.ts is the edge: EventLog, the same methods as before, each running
+│                        one SqlClient; a command's events and its effects are each written in one statement, the
+│                        effects' status is the closed set EffectRowStatus, and shared/payload.ts reads a stored event
+│                        or effect for both tables). event-log.ts is the edge: EventLog, the same methods as before, each running
 │                        a service through its own ManagedRuntime. Beside the log, evidence/ (Evidence: attached
 │                        evidence under `<task id>/round-<n>/`, chat tool images at the top, all served under
 │                        /api/evidence by http/evidence.ts, immutable and in byte ranges; EvidenceStore is its edge)
@@ -399,8 +403,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `Shell` (`shell/service.ts`) | `Shell.layer`, needs `BunServices.layer` | `run(request)` → `CommandResult` or `CommandNotFound`; `stopTree(pid)` |
   | `Events`, `Outbox`, `Receipts`, `Briefings`, `Snapshots`, `LogMigrator`, `CommandLog` (`store/`) | `StoreLayer(path)` | the event log's tables on one `SqlClient`, every row decoded |
   | `Evidence`, `Attachments` (`store/`) | `Evidence.layer(dir)`, `Attachments.layer(dir)` | the files beside the log |
-  | `ServeLock` (`instance/lock/service.ts`) | `ServeLock.layer(dataDir, holder)`, scoped | `data/serve.lock`, given back when its scope closes; `ServerRunning`, `LockContended` |
-  | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order |
+  | `ServeLock` (`instance/lock/service.ts`) | `ServeLock.acquire(dataDir, owner)` in a scope, or `ServeLock.layer` | `data/serve.lock`, tried at most three times while a stopped holder's file is taken over (`TAKEOVER_SCHEDULE`), and given back when its scope closes; `ServerRunning`, `LockContended` |
+  | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order; fails with the lock's `ServerRunning` or `LockContended`, which `startShinsa` turns into its `DomainError` |
 
   Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand` and the kill
   helpers run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);

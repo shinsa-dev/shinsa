@@ -1,10 +1,8 @@
-import { Schema } from 'effect';
+import { Schedule, Schema } from 'effect';
 
 export const LOCK_FILE = 'serve.lock';
 
 export const BOOT_TOLERANCE_MS = 60_000;
-
-export const TAKEOVER_ATTEMPTS = 3;
 
 export const LockHolder = Schema.Struct({
   version: Schema.String,
@@ -18,6 +16,8 @@ export const LockHolder = Schema.Struct({
 });
 
 export type LockHolder = typeof LockHolder.Type;
+
+export const LockHolderJson = Schema.fromJsonString(LockHolder);
 
 export type LockOwner = Omit<LockHolder, 'bootedAt'>;
 
@@ -45,3 +45,9 @@ export class LockFileFailed extends Schema.TaggedError<LockFileFailed, { readonl
   'LockFileFailed',
   { code: Schema.NullOr(Schema.String), message: Schema.String }
 ) {}
+
+export class LockBusy extends Schema.TaggedError<LockBusy, { readonly brand: unique symbol }>()('LockBusy', {
+  dataDir: Schema.String,
+}) {}
+
+export const TAKEOVER_SCHEDULE = Schedule.recurs(2);

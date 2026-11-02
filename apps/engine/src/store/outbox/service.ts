@@ -8,19 +8,22 @@ import {
   type ShinsaEffect,
 } from '@shinsa/core';
 import { Context, Effect, Layer, Option, Result, Schema } from 'effect';
+import { isReadonlyArrayNonEmpty, map } from 'effect/Array';
 import { SqlClient, SqlSchema } from 'effect/sql';
-import { StoredJson } from '../events/schema.ts';
+import { readStoredPayload } from '../shared/payload.ts';
 import {
   type CancelledEffect,
+  CancelRequest,
   ChangedRow,
+  EFFECT_PAYLOAD_MESSAGES,
+  type EffectRowStatus,
   ENDED_WITH_PROCESS,
   type EffectEnqueue,
   EffectRow,
   EffectStatus,
   LastEffectIdRow,
-  MISMATCHED_EFFECT,
+  NewEffectRows,
   NextAvailableRow,
-  NOT_JSON_EFFECT,
   OpenEffectRow,
   type Reconciled,
   REQUEUED,
@@ -28,7 +31,6 @@ import {
   SETTLED_RETENTION_MS,
   StatusRow,
   type StoredEffect,
-  StoredEffectPayload,
   UNKNOWN_KIND,
 } from './schema.ts';
 
@@ -40,7 +42,7 @@ export class Outbox extends Context.Service<
     settle(id: number, now: number): Effect.Effect<boolean>;
     retry(id: number, availableAt: number, error: string): Effect.Effect<boolean>;
     fail(id: number, now: number, error: string): Effect.Effect<boolean>;
-    selectStatus(key: string): Effect.Effect<Option.Option<string>>;
+    selectStatus(key: string): Effect.Effect<Option.Option<EffectRowStatus>>;
     readonly selectNextAvailableAt: Effect.Effect<Option.Option<number>>;
     readonly listStatuses: Effect.Effect<EffectStatus[]>;
     reconcile(now: number): Effect.Effect<Reconciled>;
@@ -50,9 +52,6 @@ export class Outbox extends Context.Service<
     Outbox,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      const decodeJson = Schema.decodeUnknownResult(StoredJson);
-      const decodePayload = Schema.decodeUnknownResult(StoredEffectPayload);
-
       const listOpenOfTask = SqlSchema.findAll({
         Request: Schema.Struct({ kinds: Schema.Array(Schema.String), taskId: Schema.String }),
         Result: OpenEffectRow,
@@ -70,26 +69,18 @@ export class Outbox extends Context.Service<
               WHERE status IN ('pending', 'running') AND kind IN ${sql.in(kinds)} ORDER BY id`,
       });
       const markCancelled = SqlSchema.void({
-        Request: Schema.Struct({ id: Schema.Int, at: Schema.Number, reason: Schema.String }),
-        execute: ({ id, at, reason }) =>
-          sql`UPDATE effects SET status = 'cancelled', settled_at = ${at}, last_error = ${reason} WHERE id = ${id}`,
+        Request: CancelRequest,
+        execute: ({ ids, at, reason }) =>
+          sql`UPDATE effects SET status = 'cancelled', settled_at = ${at}, last_error = ${reason} WHERE id IN ${sql.in(ids)}`,
       });
       const selectLastEffectId = SqlSchema.findOne({
         Request: Schema.Void,
         Result: LastEffectIdRow,
         execute: () => sql`SELECT COALESCE(MAX(seq), 0) AS id FROM sqlite_sequence WHERE name = 'effects'`,
       });
-      const insertEffect = SqlSchema.void({
-        Request: Schema.Struct({
-          key: Schema.String,
-          lane: Schema.String,
-          kind: Schema.String,
-          payload: Schema.String,
-          status: Schema.Literal('pending'),
-          availableAt: Schema.Number,
-          createdAt: Schema.Number,
-        }),
-        execute: (row) => sql`INSERT INTO effects ${sql.insert(row)} ON CONFLICT (key) DO NOTHING`,
+      const insertEffects = SqlSchema.void({
+        Request: NewEffectRows,
+        execute: (rows) => sql`INSERT INTO effects ${sql.insert(rows)} ON CONFLICT (key) DO NOTHING`,
       });
       const listClaimable = SqlSchema.findAll({
         Request: Schema.Number,
@@ -169,21 +160,20 @@ export class Outbox extends Context.Service<
           sql`DELETE FROM effects WHERE status IN ('done', 'cancelled') AND settled_at < ${before}`,
       });
 
-      const readPayload = (row: EffectRow): Result.Result<ShinsaEffect, string> => {
-        const json = decodeJson(row.payload);
-        if (Result.isFailure(json)) return Result.fail(`${NOT_JSON_EFFECT}: ${json.failure.message}`);
-        const payload = decodePayload(json.success);
-        if (Result.isFailure(payload) || payload.success.kind !== row.kind)
-          return Result.fail(MISMATCHED_EFFECT);
-        return Result.succeed(payload.success as unknown as ShinsaEffect);
-      };
+      const readPayload = (row: EffectRow) =>
+        Result.map(
+          readStoredPayload(row.payload, 'kind', row.kind, EFFECT_PAYLOAD_MESSAGES),
+          (payload) => payload as unknown as ShinsaEffect
+        );
 
       const cancelRows = Effect.fn('Outbox.cancelRows')(function* (
-        rows: readonly (typeof OpenEffectRow.Type)[],
+        rows: readonly OpenEffectRow[],
         at: number,
         reason: string
       ) {
-        for (const row of rows) yield* markCancelled({ id: row.id, at, reason }).pipe(Effect.orDie);
+        if (rows.length > 0) {
+          yield* markCancelled({ ids: rows.map((row) => row.id), at, reason }).pipe(Effect.orDie);
+        }
         return rows.map((row): CancelledEffect => ({
           id: row.id,
           key: row.key,
@@ -205,22 +195,22 @@ export class Outbox extends Context.Service<
       });
 
       const enqueue = Effect.fn('Outbox.enqueue')(function* (input: EffectEnqueue) {
-        const cancelled: CancelledEffect[] = [];
-        for (const cancellation of input.cancellations)
-          cancelled.push(...(yield* cancel(cancellation, input.at)));
+        const cancelled = yield* Effect.forEach(input.cancellations, (cancellation) =>
+          cancel(cancellation, input.at)
+        );
+        if (!isReadonlyArrayNonEmpty(input.effects)) return cancelled.flat();
         const seed = yield* resolveSeed(input.lastSeq);
-        for (const [index, effect] of input.effects.entries()) {
-          yield* insertEffect({
-            key: resolveEffectKey(effect, seed + index),
-            lane: resolveEffectLane(effect),
-            kind: effect.kind,
-            payload: JSON.stringify(effect),
-            status: 'pending',
-            availableAt: input.at,
-            createdAt: input.at,
-          }).pipe(Effect.orDie);
-        }
-        return cancelled;
+        const rows = map(input.effects, (effect, index) => ({
+          key: resolveEffectKey(effect, seed + index),
+          lane: resolveEffectLane(effect),
+          kind: effect.kind,
+          payload: JSON.stringify(effect),
+          status: 'pending' as const,
+          availableAt: input.at,
+          createdAt: input.at,
+        }));
+        yield* insertEffects(rows).pipe(Effect.orDie);
+        return cancelled.flat();
       });
 
       const claim = Effect.fn('Outbox.claim')(

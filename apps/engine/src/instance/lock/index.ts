@@ -58,7 +58,7 @@ export function acquireDataDirLock(
   const scope = Scope.makeUnsafe();
   const context = edgeRuntime.runSync(
     Layer.buildWithScope(ServeLock.layer(dataDir, owner, options), scope).pipe(
-      Effect.catch((error) => Effect.die(resolveLockError(error)))
+      Effect.mapError(resolveLockError)
     )
   );
   const lock = Context.get(context, ServeLock);

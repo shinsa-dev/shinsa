@@ -3,7 +3,6 @@ import { Context, Effect, Layer, Option } from 'effect';
 import { prepareDataDir, type ServerConfig } from '../config/index.ts';
 import { resolveServerUrl } from '../http/index.ts';
 import { resolveServerInstance } from '../instance/index.ts';
-import { resolveLockError } from '../instance/lock/index.ts';
 import { ServeLock } from '../instance/lock/service.ts';
 import type { Engine } from '../runtime/index.ts';
 import { EventLog } from '../store/index.ts';
@@ -19,20 +18,12 @@ export class Serve extends Context.Service<Serve, { readonly url: string; readon
       Effect.gen(function* () {
         const instance = yield* Effect.promise(() => resolveServerInstance());
         yield* Effect.sync(() => mkdirSync(config.dataDir, { recursive: true }));
-        const lock = config.inspect
-          ? Option.none<ServeLock['Service']>()
-          : Option.some(
-              Context.get(
-                yield* Layer.build(
-                  ServeLock.layer(config.dataDir, {
-                    ...instance,
-                    port: config.port,
-                    url: resolveServerUrl(config.hostname, config.port),
-                  })
-                ).pipe(Effect.catch((error) => Effect.die(resolveLockError(error)))),
-                ServeLock
-              )
-            );
+        const acquireLock = ServeLock.acquire(config.dataDir, {
+          ...instance,
+          port: config.port,
+          url: resolveServerUrl(config.hostname, config.port),
+        }).pipe(Effect.asSome);
+        const lock = yield* config.inspect ? Effect.succeedNone : acquireLock;
         yield* Effect.sync(() => prepareDataDir(config));
         const eventLog = yield* Effect.acquireRelease(
           Effect.sync(() => new EventLog(config.databasePath)),

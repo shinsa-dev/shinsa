@@ -1,6 +1,6 @@
 import { APP_IDENTITY } from '@shinsa/core';
 import { Config, Effect, Option, Schema } from 'effect';
-import { MAX_PORT } from './machine/schema.ts';
+import { MachinePort } from './machine/schema.ts';
 import {
   DEFAULT_HOSTNAME,
   HOSTNAME_SETTING,
@@ -11,6 +11,8 @@ import {
 } from './schema.ts';
 
 const decodeWholeNumber = Schema.decodeUnknownOption(WholeNumberText);
+
+const isPort = Schema.is(MachinePort);
 
 export const readWholeNumber = Effect.fn('Settings.readWholeNumber')(function* (
   key: string,
@@ -27,7 +29,7 @@ export const readWholeNumber = Effect.fn('Settings.readWholeNumber')(function* (
 
 export const readPort = Effect.fn('Settings.readPort')(function* () {
   const port = yield* readWholeNumber('SHINSA_PORT', APP_IDENTITY.port);
-  if (port > MAX_PORT) {
+  if (!isPort(port)) {
     return yield* new SettingInvalid({
       key: 'SHINSA_PORT',
       message: `SHINSA_PORT must be a port number, not "${port}".`,

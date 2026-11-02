@@ -61,6 +61,8 @@ export const KILLED_EXIT_CODE = 137;
 
 export const CANCELLED_BEFORE_START = 'The command was cancelled before it started.';
 
+export const SystemError = Schema.Struct({ code: Schema.String });
+
 export const NO_SUCH_PROCESS = 'ESRCH';
 
 export const NOT_PERMITTED = 'EPERM';

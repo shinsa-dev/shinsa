@@ -14,10 +14,8 @@ export const NAME_ID_LENGTH = 12;
 
 export const MEGABYTE = 1024 * 1024;
 
-export interface EvidenceFolder {
-  taskId: string;
-  round: number;
-}
+export const EvidenceFolder = Schema.Struct({ taskId: Schema.String, round: Schema.Int });
+export type EvidenceFolder = typeof EvidenceFolder.Type;
 
 export type TextExtension = 'txt' | 'md';
 

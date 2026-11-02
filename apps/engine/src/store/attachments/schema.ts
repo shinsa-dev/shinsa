@@ -20,17 +20,18 @@ export const AttachmentName = Schema.String.check(Schema.isMaxLength(NAME_LIMIT)
   Schema.decodeTo(Schema.Trim.check(Schema.isNonEmpty()))
 );
 
-export const AttachmentMimeType = Schema.optionalKey(
-  Schema.NullOr(Schema.String.check(Schema.isPattern(/^[\w.+-]+\/[\w.+-]+$/)))
-);
+const MimeType = Schema.String.check(Schema.isPattern(/^[\w.+-]+\/[\w.+-]+$/));
+
+export const AttachmentMimeType = Schema.optionalKey(Schema.NullOr(MimeType));
 
 export const AttachmentData = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9+/]*={0,2}$/));
 
-export interface AttachmentUpload {
-  name: string;
-  mimeType: string | null;
-  data: string;
-}
+export const AttachmentUpload = Schema.Struct({
+  name: AttachmentName,
+  mimeType: Schema.NullOr(MimeType),
+  data: AttachmentData,
+});
+export type AttachmentUpload = typeof AttachmentUpload.Type;
 
 export const NAME_INVALID = {
   code: 'attachment_name_invalid',

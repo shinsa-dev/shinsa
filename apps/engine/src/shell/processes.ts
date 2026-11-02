@@ -1,17 +1,14 @@
-import { Effect, Predicate } from 'effect';
+import { Effect } from 'effect';
 import { describeError } from '../log/redact.ts';
+import { selectErrnoCode } from './errno.ts';
 import { NO_SUCH_PROCESS, NOT_PERMITTED, SignalRefused } from './schema.ts';
-
-function readErrorCode(error: unknown) {
-  return Predicate.hasProperty(error, 'code') && Predicate.isString(error.code) ? error.code : null;
-}
 
 const sendKill = (pid: number) =>
   Effect.try({
     try: () => {
       process.kill(pid, 'SIGKILL');
     },
-    catch: (error) => new SignalRefused({ code: readErrorCode(error), message: describeError(error) }),
+    catch: (error) => new SignalRefused({ code: selectErrnoCode(error), message: describeError(error) }),
   });
 
 export const stopProcessGroup = Effect.fn('stopProcessGroup')(function* (pid: number) {

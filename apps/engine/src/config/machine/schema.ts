@@ -4,9 +4,9 @@ const MachineText = Schema.Trim.check(Schema.isNonEmpty());
 
 const MachineRoots = Schema.Array(MachineText);
 
-export const MAX_PORT = 65_535;
+const MAX_PORT = 65_535;
 
-const MachinePort = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: MAX_PORT }));
+export const MachinePort = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: MAX_PORT }));
 
 const MachineTime = Schema.Finite.check(Schema.isGreaterThan(0));
 
