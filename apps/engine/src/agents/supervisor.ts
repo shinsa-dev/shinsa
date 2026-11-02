@@ -689,7 +689,10 @@ export class RunSupervisor {
       },
       storeImage: (data, mediaType) => this.#storeImage(data, mediaType),
     });
-    const scoped = this.#scopes.acquire(run.taskId, session);
+    const scoped = this.#scopes.acquire(
+      { taskId: run.taskId, runId: run.id, parentRunId: run.delegation?.parentRunId ?? null },
+      session
+    );
     active.session = session;
     loader?.attach(session);
     try {
@@ -906,7 +909,7 @@ export class RunSupervisor {
     const active = this.#active.get(runId);
     if (!active) return;
     stopActiveRun(active);
-    await settleWithin(Promise.allSettled([active.session?.cancel()]), this.#stopMs);
+    await settleWithin(this.#scopes.cancel(runId), this.#stopMs);
   }
 
   holdNewRuns(onHeld: () => void) {

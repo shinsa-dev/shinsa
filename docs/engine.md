@@ -311,7 +311,7 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
   `resume: false` and `sessionId: null`. The provider copies that session (Claude's `forkSession`, Codex
   `thread/fork`) and the run links the copy's own id, so every later run resumes the copy (`Decider.taskSession`) and
   the source session is never touched. A fork run that failed before it linked a session forks again on its retry.
-  In the engine the fork is a turn plan (`resolveForkPlan` in `agents/turns.ts`): a provider with `sessions.fork`
+  In the engine the fork is a turn plan (`resolveForkPlan` in `agents/turns/plan.ts`): a provider with `sessions.fork`
   that owns the source session and still has it (`inspectSession`) gets it as `resume` with `fork: true`, which
   Claude passes as the SDK's `forkSession` and Codex sends as `thread/fork` with the run's own sandbox and tools, and
   the session the provider reports is the fork's own. Otherwise (a provider without `sessions.fork`, the session on
@@ -367,7 +367,7 @@ have not worked in that repository yet"); Shinsa stays in the background as the 
 `VOICE_RULE` in `prompts/rules.ts`, in every working role's house rules and every delegate's prompt, forbids
 writing that Shinsa knows, has or did what the agent itself knows or did, and allows naming Shinsa only where the
 reader has to act in it (a setting, a command, a gate). The hand-over is the reply: the answer, diagnosis, report
-and outcome tool descriptions (`agents/tools/shapes.ts`) say to write it to the human in the first person, the
+and outcome tool descriptions (`agents/tools/shapes/handler.ts`) say to write it to the human in the first person, the
 tool's reply (`HANDED_OVER` in `agents/handover.ts`) says the human reads it as the agent's reply and to stop and
 write nothing more, and the house rules forbid announcing, pointing at, repeating or summarising it ("My answer is
 above"). Text the agent writes in that turn anyway folds into the chat's work, under the card
@@ -2284,7 +2284,7 @@ whose context can be thrown away. It is never a way to split a round by step or 
 no separate fixer. The house rules (`resolveOrchestrationRules`) and the `delegate_task` description say so. Ported from T3 Code's orchestration v2, Kanna's sub-chats and Paperclip's structure
 (harness plan WS6 names the sources). The rules live in `packages/core/src/decide/delegations.ts`
 and `couriers.ts`, the projection in `state/delegations.ts`, the tools in
-`apps/engine/src/agents/tools/orchestration.ts` and the delivery in `agents/delegations.ts`, `agents/deliveries.ts`
+`apps/engine/src/agents/tools/orchestration/handler.ts` and the delivery in `agents/delegations/delivery.ts`, `agents/deliveries/service.ts`
 and the run supervisor.
 
 - **A delegation is a sub-run, not a sub-task.** It is a `Run` of the same task with a
@@ -4950,7 +4950,7 @@ what it costs at the start of every run, so you can turn off what you do not use
 
 ## The agent loop
 
-How one run executes, from the supervisor (`agents/supervisor.ts`, `agents/turns.ts`) down to the Claude adapter
+How one run executes, from the supervisor (`agents/supervisor.ts`, `agents/turns/plan.ts`) down to the Claude adapter
 (`agents/providers/claude/`). Harness plan WS1 names the T3 Code and Kanna sources.
 
 **Attempts and conditional writes.** Every execution of a run is an attempt with its own id, `<run>:<n>` numbered
@@ -4998,7 +4998,7 @@ attempt on the same account, after 15 s, then 30 s, then 60 s (`config.overloadR
 doubled each time), and only a fourth overloaded attempt ends the run, for core to resume it once. It never reaches
 the rejection seam, so the account is not marked or switched. Each wait is a `retrying` notice in the chat
 (`{ provider, detail, attempt, attempts, retryAt }`, the line "Claude was busy, trying again · 1 of 3"). A cancel, a
-restart or the run's time limit ends the wait at once (`waitToRetry` and `stopActiveRun` in `agents/active.ts`).
+restart or the run's time limit ends the wait at once (`waitToRetry` and `stopActiveRun` in `agents/active/run.ts`).
 
 **Steering by prompt id.** Every prompt the adapter sends carries a uuid, and a turn is matched to its prompts by the
 ids the CLI echoes on its result (`user_message_uuids`), never by counting. A result that answers none of our prompts
@@ -5028,7 +5028,7 @@ item, backticks, `run` blocks, references), when to delegate, and the command su
 says: how to brief a delegate, read another task or suggest one is in that tool's own description, and the
 `handover` skill keeps only what the hand-over schemas cannot say. `test/prompts/rules.test.ts` holds both. A session
 that already has them does not need them again, so a resumed turn sends only the instruction after them
-(`resolveTurnPrompt` in `agents/turns.ts`, `splitHouseRules` in core). It sends the full brief whenever the session
+(`resolveTurnPrompt` in `agents/turns/plan.ts`, `splitHouseRules` in core). It sends the full brief whenever the session
 might not have these exact rules: a fresh session, a handoff (a provider switch, a lost session restored on a new one,
 an account whose session cannot be resumed, which the CLI reports as lost), a session whose earlier briefs never
 carried the same text (a follow-up answerer resuming the Agent's session gets the answerer's rules), and a session
@@ -5154,7 +5154,7 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
 - **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the built-in list
   when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
 
-**Resume fallback** (`turns.ts`). Before resuming, the supervisor checks the session: a session owned by another
+**Resume fallback** (`agents/turns/plan.ts`). Before resuming, the supervisor checks the session: a session owned by another
 provider is handed over; one marked lost (`run.session_lost`, recorded for every run that used it, so no retry or
 recovery resumes it again) or a provider without resumable sessions is restored; otherwise the provider inspects it.
 Claude looks for `<id>.jsonl` under `$CLAUDE_CONFIG_DIR/projects` (relative to the worktree when relative,
@@ -5275,7 +5275,7 @@ Shutdown stops the forwarder after the effects, once no `claude` can still talk 
 *Boundary folds.* The Agent keeps one session for the task, but a step does not need the raw history of the steps
 before it. When the Agent's run resumes its session for a build phase, a fix or an operation (any purpose with a
 round brief, never planning, so a watchdog check in its watch session and a data source read fold the checks and reads
-before them too; `resolveTurnFold` in `agents/turns.ts`), on the run's first attempt and with its own step
+before them too; `resolveTurnFold` in `agents/turns/plan.ts`), on the run's first attempt and with its own step
 prompt (never a restart, an answer or a delivery), as a new step rather than one carrying on (core marks a run that
 continues another, after a recovery nudge, a `wait_for` wake-up or a usage-limit resume, with `Run.continues`, and
 that run never folds), with context management on its default (`fold`) on a provider whose capabilities include
@@ -5295,7 +5295,7 @@ nothing before its turn is left as it is, and so is a step whose history is unde
 `foldFloor`) while its cache is still warm: there a fold would rewrite more of the cache than it saves, so the fold is
 dropped and the step reads its warm cache. Whether it is warm is the expiry the session's last run recorded when it
 ended (`resolveCacheExpiry`, the same reading idle compaction uses, kept on the run by `run.cached` so it survives a
-restart; `isSessionCacheWarm` in `agents/turns.ts`), passed to the fold as `cacheWarm`. Once that time has passed, or
+restart; `isSessionCacheWarm` in `agents/turns/plan.ts`), passed to the fold as `cacheWarm`. Once that time has passed, or
 no run of the session recorded one, the next request rewrites the whole prefix anyway, so a step of any size folds
 first and writes only the folded prefix.
 
@@ -5736,8 +5736,14 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell)
   (`agents/silence/`) a fiber on its interval.
 - **The agents.** The registry is the `Providers` service, which fails with `NoAgentProvider` for an id it does not
   have. A session is a scoped resource (`acquireAgentSession`): closing its scope cancels it and waits for it to end.
-  Every task has a scope, and every attempt of a run a child scope that holds its session (`agents/supervisor/`), so
-  ending an attempt, cancelling the task or stopping the engine closes them and the processes they started stop. The
+  Scopes follow the runs (`agents/supervisor/`): every task has a scope, a run's scope sits under its task's or, for a
+  delegation, under the scope of the run that delegated it, and each attempt of a run has a scope under the run's that
+  holds its session. An attempt that ends closes its own scope; the run's stays open while a delegation under it still
+  runs (a parent waiting on one), and closes with the last of them. `run.cancel` closes the run's scope, which cancels
+  its session and every delegation below it and waits for them, at most `stopMs`; cancelling a task reaches its runs
+  as `run.cancel` effects, and stopping the engine closes every task's scope. A session's `cancel()` stops its own
+  process tree (`claude` kills its process group, `codex` its app-server); the processes a run started are also on
+  the task's process ledger (`trackProcess`), which shows them while they run. The
   `codex app-server` client is a scoped resource of its own (`makeCodexClient`), its process group killed when the
   scope closes. A question's reply is a `Deferred`; idle release and idle compaction are fibers per run and per task.
   Quick calls and every tool call run as effects with typed failures (`QuickAttemptFailed`, `ToolCallFailed`) that

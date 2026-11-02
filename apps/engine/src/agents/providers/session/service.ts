@@ -10,6 +10,7 @@ export const acquireAgentSession = Effect.fn('AgentSession.acquire')(function* (
         ? Effect.void
         : Effect.promise(() => started.cancel()).pipe(
             Effect.andThen(Effect.promise(() => started.done)),
+            Effect.flatMap((ended) => Deferred.succeed(result, ended)),
             Effect.ignoreCause
           )
     )

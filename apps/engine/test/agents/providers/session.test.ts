@@ -38,13 +38,15 @@ describe('an agent session as a scoped resource', () => {
     expect(fake.calls).toEqual([]);
   });
 
-  test('closing its scope cancels a running session and waits for it to end', async () => {
+  test('closing its scope cancels a running session, waits for it to end and still gives its result', async () => {
     const fake = createSession();
     const scope = Effect.runSync(Scope.make());
-    await Effect.runPromise(acquireAgentSession(() => fake.session).pipe(Scope.provide(scope)));
+    const scoped = await Effect.runPromise(
+      acquireAgentSession(() => fake.session).pipe(Scope.provide(scope))
+    );
     await Effect.runPromise(Scope.close(scope, Exit.void));
     expect(fake.calls).toEqual(['cancel']);
-    expect(await fake.session.done).toEqual({ outcome: 'cancelled', summary: null });
+    expect(await Effect.runPromise(scoped.done)).toEqual({ outcome: 'cancelled', summary: null });
   });
 
   test('interrupting the fiber that holds it cancels the session', async () => {

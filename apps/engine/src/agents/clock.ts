@@ -1,12 +1,12 @@
 import { Clock, Duration, Effect, Scope } from 'effect';
 import { edgeRuntime } from '../runtime/edge.ts';
-import { type ClockTimers, NANOS_PER_MILLI, type RunClockHandle } from './clock/schema.ts';
+import { type ClockTimers, NANOS_PER_MS, type RunClockHandle } from './clock/schema.ts';
 import { makeRunClock } from './clock/service.ts';
 
 export type { ClockTimers } from './clock/schema.ts';
 
 function resolveTimersClock(timers: ClockTimers): Clock.Clock {
-  const nanos = () => BigInt(timers.now()) * NANOS_PER_MILLI;
+  const nanos = () => BigInt(timers.now()) * NANOS_PER_MS;
   return {
     currentTimeMillisUnsafe: timers.now,
     currentTimeMillis: Effect.sync(timers.now),

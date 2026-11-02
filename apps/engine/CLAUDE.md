@@ -155,15 +155,18 @@ src/
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
 │   │                    config/paths.ts, removed by the scratch.remove effect once the task settles; supervisor/:
-│   │                    makeTaskScopes, one scope per task with a child scope per attempt holding its session, closed
-│   │                    when the attempt ends and every task's at shutdown; TaskScopes in index.ts is its edge), the
-│   │                    live state of a run (active.ts), resume or
+│   │                    makeTaskScopes: a scope per task, a run's scope under its task's or, for a delegation, under
+│   │                    the scope of the run that delegated it, and an attempt's scope holding its session under
+│   │                    its run's; a run's scope outlives its attempt while a delegation under it runs, `run.cancel`
+│   │                    closes it (its delegations with it) and shutdown closes every task's; TaskScopes in
+│   │                    index.ts is its edge), the
+│   │                    live state of a run (active/: run.ts, its shape in schema.ts), resume or
 │   │                    hand over per turn, the house rules only to a session without them and the round's
-│   │                    whole brief to an agent session that may not hold the round (turns.ts), the
-│   │                    tool calls (tool-calls.ts), questions and their waiters (questions.ts; questions/: each
+│   │                    whole brief to an agent session that may not hold the round (turns/plan.ts), the
+│   │                    tool calls (tool-calls/: ToolCallFailed, each call an Effect in service.ts), questions and their waiters (questions.ts; questions/: each
 │   │                    reply a Deferred, ReplyWaiters its edge), idle release (idle.ts, the edge over idle/:
 │   │                    makeIdleRelease, one timer fiber per waiting run in a FiberMap), delegated reports in and
-│   │                    out of a turn (deliveries.ts, delegations.ts), the account seam: leases and rejections
+│   │                    out of a turn (deliveries/service.ts, delegations/delivery.ts), the account seam: leases and rejections
 │   │                    (accounts.ts), idle compaction (compaction.ts, the edge over compaction/: makeIdleCompaction,
 │   │                    the wait and the running compaction as fibers per task, the window in window.ts; stopping
 │   │                    one aborts it and waits for it), quiet runs (silence.ts, the edge over
@@ -171,9 +174,9 @@ src/
 │   │                    (handover.ts), RunClock (clock.ts, the edge over clock/:
 │   │                    makeRunClock, a countdown fiber paused by interruption; ClockTimers become an Effect
 │   │                    Clock), the commands no agent may run (policy.ts: also the
-│   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
+│   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading/task.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
-│   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
+│   │                    (repository-work/service.ts: `list_repository_work` and task.record_overlaps before a hand-over),
 │   │                    the task's own service runs and the services it adds and removes (services.ts: `list_services`,
 │   │                    `run_service`, `add_service`, `remove_service`),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
@@ -206,9 +209,9 @@ src/
 │   │                    one-shot calls (complete.ts), models, sign-in, executable, MCP servers and skills
 │   │                    (extensions.ts)
 │   ├── tools/           The `shinsa` MCP server (index.ts: an MCP `Server` each provider exposes its own way) and the
-│   │                    tool schemas (specs.ts, schema.ts): hand-over and process tools (process.ts), the hand-overs
+│   │                    tool schemas (specs.ts, schema.ts): hand-over and process tools (process/handler.ts), the hand-overs
 │   │                    of each task shape: answer, report_diagnosis, submit_report, report_outcome, reshape_task
-│   │                    (shapes.ts), delegation and couriers (orchestration.ts), schedules (schedules.ts). The plan
+│   │                    (shapes/handler.ts), delegation and couriers (orchestration/handler.ts), the one Effect step every call runs through (call.ts), schedules (schedules.ts). The plan
 │   │                    parameters in `propose_plan` (verification as checks, impact, evidence, approval), the
 │   │                    `check_changes` of `complete_phase` and `complete_fix`, the `checks` of `complete_fix`, a
 │   │                    linked check on `attach_evidence` (`check`) and the steps `reshape_task` offers are generated
