@@ -119,6 +119,83 @@ describe('duplicates', () => {
     expect(harness.task(taskId).stage).toBe('triage');
   });
 
+  test('triage keeps near-identical requests in different repositories of a project apart', () => {
+    const harness = createHarness();
+    const docs = registerRepo(harness, 'docs');
+    const skills = registerRepo(harness, 'skills');
+    const original = createTask(harness, {
+      request: 'Document the new config option in the framework docs',
+      repoId: docs,
+    });
+    harness.send({
+      type: 'task.create',
+      request: 'Teach the framework skill the new config option',
+      repoId: skills,
+    });
+    const taskId = Object.keys(harness.state.tasks).find((id) => id !== original) ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId,
+      title: 'Teach the framework skill the new config option',
+      repoId: skills,
+      size: 'small',
+      branch: 'fix/skill-option',
+      waitsOn: [],
+      duplicateOf: original,
+      reasons: { duplicate: 'Both cover the new config option.' },
+    });
+
+    const task = harness.task(taskId);
+    expect(task.repoId).toBe(skills);
+    expect(task.stage).not.toBe('cancelled');
+    expect(task.duplicate ?? null).toBeNull();
+    expect(harness.events.some((event) => event.type === 'task.duplicated')).toBe(false);
+    expect(harness.effectsOf('config.verify').map((effect) => effect.taskId)).toContain(taskId);
+  });
+
+  test('triage closes no task as a duplicate when either has no repository', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness);
+    const original = createTask(harness, { request: 'Add dark mode', repoId });
+    harness.send({ type: 'task.create', request: 'Dark theme', repoId: null });
+    const loose = Object.keys(harness.state.tasks).find((id) => id !== original) ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId: loose,
+      title: 'Dark theme',
+      repoId: null,
+      size: 'small',
+      branch: 'fix/dark',
+      waitsOn: [],
+      duplicateOf: original,
+    });
+    expect(harness.task(loose).duplicate ?? null).toBeNull();
+
+    const repeat = triageAsDuplicate(harness, 'Dark theme again', loose);
+    expect(harness.task(repeat).duplicate ?? null).toBeNull();
+  });
+
+  test('a task cannot be closed as a duplicate of one in another repository', () => {
+    const harness = createHarness();
+    const docs = registerRepo(harness, 'docs');
+    const skills = registerRepo(harness, 'skills');
+    const original = createTask(harness, { request: 'Document the option', repoId: docs });
+    const copy = createTask(harness, { request: 'Teach the skill the option', repoId: skills });
+    expect(() => harness.send({ type: 'task.mark_duplicate', taskId: copy, duplicateOf: original })).toThrow(
+      'That task works in another repository, so it cannot be the original.'
+    );
+    expect(harness.task(copy).stage).not.toBe('cancelled');
+  });
+
+  test('a task with no repository yet can still be closed as a duplicate', () => {
+    const harness = createHarness();
+    const original = createTask(harness, { request: 'Add dark mode' });
+    harness.send({ type: 'task.create', request: 'Dark theme', repoId: null });
+    const copy = Object.keys(harness.state.tasks).find((id) => id !== original) ?? '';
+    harness.send({ type: 'task.mark_duplicate', taskId: copy, duplicateOf: original });
+    expect(harness.task(copy).duplicate).toEqual({ of: original, by: 'you', why: null });
+  });
+
   test('not a duplicate starts a task triage closed as if it was never flagged', () => {
     const harness = createHarness();
     const original = createTask(harness, { request: 'Add dark mode' });

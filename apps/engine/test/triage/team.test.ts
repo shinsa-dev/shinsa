@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Project, RemoteTeam, TeamFeedMachine, TeamFeedTask } from '@shinsa/core';
 import { resolveTeammateCheck, TEAMMATE_TEXT_LIMIT } from '../../src/triage/team.ts';
-import { createTask } from '../helpers/state.ts';
+import { createRepo, createTask } from '../helpers/state.ts';
 
 const MONA = { id: '1', login: 'mona', name: null, avatarUrl: null };
 
@@ -60,7 +60,7 @@ function listing(
     }),
     gates: [],
     project: null,
-    repo: null,
+    repo: createRepo({ name: 'web' }),
     owner: 'mona',
     machine: 'Studio',
     teamId: 'team1',
@@ -78,7 +78,7 @@ describe('resolveTeammateCheck', () => {
     expect(resolveTeammateCheck({ ...PROJECT, teamIds: [] }, { feed, teams: TEAMS, self: null })).toBeNull();
   });
 
-  test('lists the open tasks of the project’s teams only, each keyed apart from local tasks', () => {
+  test('lists the open tasks in a repository of the project’s teams only, each keyed apart from local tasks', () => {
     const feed = {
       machines: [machine()],
       tasks: [
@@ -86,6 +86,7 @@ describe('resolveTeammateCheck', () => {
         listing({}, { id: 'kt2', stage: 'merged', title: 'Old work' }),
         listing({ teamId: 'team2' }, { id: 'kt3', title: 'Another team' }),
         listing({}, { id: 'kt4', handle: null, title: 'Second', request: 'Make it faster' }),
+        listing({ repo: null }, { id: 'kt5', title: 'No repository' }),
       ],
     };
     const check = resolveTeammateCheck(PROJECT, { feed, teams: TEAMS, self: null });
@@ -100,6 +101,7 @@ describe('resolveTeammateCheck', () => {
           title: 'Add dark mode',
           owner: MONA_PROFILE,
         },
+        repoName: 'web',
         stage: 'building',
         request: 'Add a dark theme',
         goal: null,

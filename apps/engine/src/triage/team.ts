@@ -21,6 +21,7 @@ export type TeamReader = () => TeamReading;
 export interface TeammateTask {
   key: string;
   original: TeammateOriginal;
+  repoName: string;
   stage: TaskStage;
   request: string;
   goal: string | null;
@@ -74,10 +75,12 @@ export function resolveTeammateCheck(project: Project | null, reading: TeamReadi
   const tasks: TeammateTask[] = [];
   for (const listing of feed.tasks) {
     const id = `${listing.instanceId} ${listing.task.id}`;
-    if (!teamIds.has(listing.teamId) || isTaskSettled(listing.task) || seen.has(id)) continue;
+    if (!teamIds.has(listing.teamId) || isTaskSettled(listing.task) || !listing.repo || seen.has(id))
+      continue;
     seen.add(id);
     tasks.push({
       key: `${TEAMMATE_KEY_PREFIX}${tasks.length + 1}`,
+      repoName: listing.repo.name,
       original: {
         teamId: listing.teamId,
         machineId: listing.instanceId,
