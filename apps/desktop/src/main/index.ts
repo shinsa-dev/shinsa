@@ -1,168 +1,103 @@
 import { join } from 'node:path';
+import { Effect, Layer, ManagedRuntime } from 'effect';
+import { FetchHttpClient } from 'effect/http';
 import { app, session } from 'electron';
 import { resolveUserDataDir } from '../app/dev-bundle.ts';
 import { APP_NAME } from '../app/schema.ts';
+import { AppLifecycle } from '../app/service.ts';
+import { PageBridge } from '../bridge/service.ts';
+import { CommandLine } from '../command-line/service.ts';
+import { Connection } from '../connection/service.ts';
 import { URL_SCHEME } from '../deep-links/schema.ts';
-import { type EngineAction, type EngineScreen, LOGIN_ITEMS_URL, PRIVACY_URL } from '../engine/schema.ts';
-import { describeEngineScreen } from '../engine/screen.ts';
+import { EngineActions } from '../engine-actions/service.ts';
+import { EngineSupervisor } from '../engine/service.ts';
+import { FirstHealth } from '../first-health/service.ts';
+import { DesktopHost } from '../host/service.ts';
+import { AppMenu } from '../menu/service.ts';
 import { isPermissionAllowed } from '../navigation/origin.ts';
-import type { ServerHealth } from '../server/schema.ts';
-import { syncCommandLine } from './command-line.ts';
-import {
-  clearBadge,
-  ensureEngine,
-  openExternal,
-  readEngineDetails,
-  readOrigin,
-  readPage,
-  requestHealth,
-  requestTrayQueue,
-  restartEngine as kickEngine,
-  showServer,
-  showServerPage,
-  showWaiting,
-  startWindow,
-  updateTray,
-  watchEngineActions,
-  writeClipboard,
-} from './runtime.ts';
+import { Notifications } from '../notifications/service.ts';
+import { Prefs } from '../prefs/service.ts';
+import { EngineServer } from '../server/service.ts';
+import { StatusTray } from '../tray/service.ts';
+import { UpdateLog } from '../update-log/service.ts';
+import { Updater } from '../updates/service.ts';
+import { AppWindow } from '../window/service.ts';
+import { DialogsLive } from './dialogs.ts';
+import { FilesLive } from './files.ts';
+import { DesktopHostLive } from './host.ts';
+import { LaunchctlLive } from './launchctl.ts';
+import { LoginItemsLive } from './login-items.ts';
+import { LoginShellLive } from './login-shell.ts';
+import { NativeNoticesLive } from './native-notices.ts';
+import { NativeTrayLive } from './native-tray.ts';
+import { NativeWindowLive } from './native-window.ts';
+import { PageChannelLive } from './page-channel.ts';
+import { DesktopShellLive } from './shell.ts';
+import { UpdateClientLive } from './update-client.ts';
 
-const RETRY_MS = 2000;
+const AppReady = Layer.effectDiscard(Effect.promise(() => app.whenReady()));
 
-const WATCH_MS = 5000;
+const ElectronLayer = Layer.mergeAll(
+  FetchHttpClient.layer,
+  DesktopHostLive,
+  FilesLive,
+  LaunchctlLive,
+  LoginItemsLive,
+  LoginShellLive,
+  UpdateClientLive,
+  DialogsLive,
+  DesktopShellLive
+);
 
-const MISSES_BEFORE_WAITING = 3;
+const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, CommandLine.layer).pipe(
+  Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer, EngineActions.layer)),
+  Layer.provideMerge(ElectronLayer)
+);
 
-let ready = false;
-let connecting = false;
-let misses = 0;
-let shownScreen = '';
-let firstHealth: Promise<ServerHealth | null> | null = null;
+const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AppMenu.layer, StatusTray.layer).pipe(
+  Layer.provideMerge(Updater.layer),
+  Layer.provideMerge(Notifications.layer),
+  Layer.provideMerge(AppWindow.layer),
+  Layer.provideMerge(
+    Layer.mergeAll(NativeWindowLive, NativeTrayLive, NativeNoticesLive, PageChannelLive).pipe(
+      Layer.provide(AppReady)
+    )
+  ),
+  Layer.provideMerge(EngineLayer)
+);
+
+const Main = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const host = yield* DesktopHost;
+    const { origin } = yield* EngineServer;
+    const updater = yield* Updater;
+    const commandLine = yield* CommandLine;
+    const connection = yield* Connection;
+    yield* Effect.sync(() => {
+      if (host.packaged) app.setAsDefaultProtocolClient(URL_SCHEME);
+      else app.dock?.setIcon(join(app.getAppPath(), 'resources', 'icon.png'));
+      session.defaultSession.setPermissionRequestHandler((_contents, permission, callback, details) =>
+        callback(isPermissionAllowed(permission, details.requestingUrl, origin))
+      );
+      session.defaultSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
+        isPermissionAllowed(permission, requestingOrigin, origin)
+      );
+    });
+    yield* updater.start;
+    yield* Effect.forkScoped(commandLine.sync);
+    yield* Effect.forkScoped(connection.start);
+  })
+).pipe(Layer.provide(Connection.layer.pipe(Layer.provideMerge(WindowLayer))));
 
 app.setName(APP_NAME);
 app.setPath('userData', resolveUserDataDir(app.getPath('appData'), app.isPackaged));
 
 if (app.requestSingleInstanceLock()) {
-  firstHealth = requestHealth();
-  void app.whenReady().then(start);
+  const runtime = ManagedRuntime.make(Main);
+  runtime.runFork(Effect.logDebug('Shinsa started'));
+  app.on('will-quit', () => {
+    Effect.runFork(runtime.disposeEffect);
+  });
 } else {
   app.exit(0);
-}
-
-async function start() {
-  if (app.isPackaged) app.setAsDefaultProtocolClient(URL_SCHEME);
-  else app.dock?.setIcon(join(app.getAppPath(), 'resources', 'icon.png'));
-  applySessionPolicy(await readOrigin());
-  await startWindow();
-  ready = true;
-  watchEngineActions((action) => void runEngineAction(action));
-  void syncCommandLine();
-  await connect();
-  setInterval(() => void watchEngine(), WATCH_MS);
-}
-
-function applySessionPolicy(origin: string) {
-  const policy = session.defaultSession;
-  policy.setPermissionRequestHandler((_contents, permission, callback, details) =>
-    callback(isPermissionAllowed(permission, details.requestingUrl, origin))
-  );
-  policy.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
-    isPermissionAllowed(permission, requestingOrigin, origin)
-  );
-}
-
-function showApp(health: ServerHealth) {
-  void refreshTray(health);
-  void showServer(health);
-  misses = 0;
-  shownScreen = '';
-  void showServerPage();
-}
-
-async function showScreen(screen: EngineScreen) {
-  const view = describeEngineScreen(screen);
-  const key = JSON.stringify(view);
-  if ((await readPage()) === 'waiting' && key === shownScreen) return;
-  shownScreen = key;
-  void clearBadge();
-  void showWaiting(view);
-}
-
-async function connect() {
-  if (!ready || connecting) return;
-  connecting = true;
-  const found = await (firstHealth ?? requestHealth());
-  firstHealth = null;
-  if (found) {
-    connecting = false;
-    showApp(found);
-    return;
-  }
-  for (;;) {
-    const result = await ensureEngine(() => void showScreen({ kind: 'starting' }));
-    if (result._tag === 'Running') {
-      connecting = false;
-      showApp(result.health);
-      return;
-    }
-    await showScreen(result.screen);
-    if (result.screen.kind !== 'dev' && result.screen.kind !== 'approval') {
-      connecting = false;
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
-  }
-}
-
-async function watchEngine() {
-  if (!ready || connecting) return;
-  const page = await readPage();
-  if (page === 'waiting') {
-    const health = await requestHealth();
-    await refreshTray(health);
-    if (health) await connect();
-    return;
-  }
-  if (page !== 'app') return;
-  const health = await requestHealth();
-  await refreshTray(health);
-  misses = health ? 0 : misses + 1;
-  if (misses >= MISSES_BEFORE_WAITING) {
-    misses = 0;
-    await connect();
-  }
-}
-
-async function refreshTray(health: ServerHealth | null) {
-  if (!health) {
-    await updateTray(null, null);
-    return;
-  }
-  await updateTray(health, await requestTrayQueue());
-}
-
-async function restartEngine() {
-  await showScreen({ kind: 'starting' });
-  await kickEngine();
-  await connect();
-}
-
-async function runEngineAction(action: EngineAction) {
-  switch (action) {
-    case 'open-login-items':
-      await openExternal(LOGIN_ITEMS_URL);
-      return;
-    case 'open-privacy':
-      await openExternal(PRIVACY_URL);
-      return;
-    case 'copy-details':
-      await writeClipboard(await readEngineDetails());
-      return;
-    case 'restart':
-      await restartEngine();
-      return;
-    case 'retry':
-      await connect();
-      return;
-  }
 }

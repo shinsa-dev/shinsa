@@ -1,4 +1,5 @@
-import { Schema } from 'effect';
+import { Duration, Schema } from 'effect';
+import type { FileEntry } from '../files/schema.ts';
 
 export const COMMAND_DIR = '.local/bin';
 
@@ -8,7 +9,7 @@ export const PATH_MARKER = '__SHINSA_PATH__';
 
 export const BUNDLED_PROGRAM = /\.app\/Contents\/Resources\/engine\/bin\/shinsa$/;
 
-export const LOGIN_SHELL_TIMEOUT_MS = 5000;
+export const LOGIN_SHELL_TIMEOUT = Duration.seconds(5);
 
 export const Shell = Schema.Literals(['zsh', 'bash', 'fish']);
 
@@ -20,7 +21,7 @@ export const SHELLS: readonly { shell: Shell; programs: readonly string[] }[] = 
   { shell: 'fish', programs: ['/opt/homebrew/bin/fish', '/usr/local/bin/fish'] },
 ];
 
-export type CommandLink = { kind: 'missing' } | { kind: 'link'; target: string } | { kind: 'file' };
+export type CommandLink = FileEntry;
 
 export type LinkPlan = 'create' | 'replace' | 'keep' | 'leave';
 
@@ -28,4 +29,9 @@ export interface ProfileEdit {
   file: string;
   text: string;
   mode: 'append' | 'write';
+}
+
+export interface CommandLineSync {
+  readonly link: LinkPlan;
+  readonly addedTo: readonly Shell[];
 }

@@ -1,16 +1,19 @@
 import {
   appendFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
 import { Effect, Layer } from 'effect';
-import { FileWriteFailed } from '../files/schema.ts';
+import { type FileEntry, FileWriteFailed } from '../files/schema.ts';
 import { Files } from '../files/service.ts';
 
 const writing = (path: string, write: () => void) =>
@@ -22,6 +25,16 @@ export const FilesLive = Layer.succeed(
     readText: (path) => Effect.option(Effect.try(() => readFileSync(path, 'utf8'))),
     readSize: (path) => Effect.option(Effect.try(() => statSync(path).size)),
     exists: (path) => Effect.sync(() => existsSync(path)),
+    readEntry: (path) =>
+      Effect.try((): FileEntry => {
+        if (!lstatSync(path).isSymbolicLink()) return { kind: 'file' };
+        return { kind: 'link', target: readlinkSync(path) };
+      }).pipe(Effect.orElseSucceed((): FileEntry => ({ kind: 'missing' }))),
+    link: (target, path) =>
+      writing(path, () => {
+        mkdirSync(dirname(path), { recursive: true });
+        symlinkSync(target, path);
+      }),
     writeText: (path, text) =>
       writing(path, () => {
         mkdirSync(dirname(path), { recursive: true });

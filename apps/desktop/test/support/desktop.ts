@@ -4,16 +4,20 @@ import { TestClock } from 'effect/testing';
 import { AppLifecycle } from '../../src/app/service.ts';
 import type { DesktopStart } from '../../src/bridge/schema.ts';
 import { PageBridge } from '../../src/bridge/service.ts';
+import { CommandLine } from '../../src/command-line/service.ts';
+import { Connection } from '../../src/connection/service.ts';
 import type { MessageDialog } from '../../src/dialogs/schema.ts';
 import { Dialogs } from '../../src/dialogs/service.ts';
 import { EngineActions } from '../../src/engine-actions/service.ts';
 import type { EngineAction, Registration } from '../../src/engine/schema.ts';
 import { EngineSupervisor } from '../../src/engine/service.ts';
-import { FileWriteFailed } from '../../src/files/schema.ts';
+import { type FileEntry, FileWriteFailed } from '../../src/files/schema.ts';
 import { Files } from '../../src/files/service.ts';
+import { FirstHealth } from '../../src/first-health/service.ts';
 import { DesktopHost } from '../../src/host/service.ts';
 import { Launchctl } from '../../src/launchctl/service.ts';
 import { LoginItems } from '../../src/login-items/service.ts';
+import { LoginShell } from '../../src/login-shell/service.ts';
 import type { MenuCommand, MenuSection } from '../../src/menu/schema.ts';
 import { AppMenu } from '../../src/menu/service.ts';
 import { NativeNotices } from '../../src/native-notices/service.ts';
@@ -91,6 +95,9 @@ export interface DesktopWorld {
   pageMessages: Queue.Queue<PageMessage> | null;
   start: ((frame: SenderFrame) => Effect.Effect<DesktopStart | null>) | null;
   actions: EngineAction[];
+  links: Map<string, string>;
+  shellPath: (program: string) => string | null;
+  shells: string[];
 }
 
 export const CONTENTS_ID = 7;
@@ -149,6 +156,9 @@ export function createWorld(overrides: Partial<DesktopWorld> = {}): DesktopWorld
     pageMessages: null,
     start: null,
     actions: [],
+    links: new Map(),
+    shellPath: () => null,
+    shells: [],
     ...overrides,
   };
 }
@@ -207,7 +217,19 @@ function makeWorldLayer(world: DesktopWorld) {
         readText: (path) => Effect.sync(() => Option.fromNullishOr(world.files.get(path))),
         readSize: (path) =>
           Effect.sync(() => Option.map(Option.fromNullishOr(world.files.get(path)), (text) => text.length)),
-        exists: (path) => Effect.sync(() => world.files.has(path)),
+        exists: (path) => Effect.sync(() => world.files.has(path) || world.links.has(path)),
+        readEntry: (path) =>
+          Effect.sync((): FileEntry => {
+            const target = world.links.get(path);
+            if (target !== undefined) return { kind: 'link', target };
+            return world.files.has(path) ? { kind: 'file' } : { kind: 'missing' };
+          }),
+        link: (target, path) =>
+          world.unwritable.has(path)
+            ? Effect.fail(new FileWriteFailed({ path, message: 'read-only' }))
+            : Effect.sync(() => {
+                world.links.set(path, target);
+              }),
         writeText: (path, text) =>
           world.unwritable.has(path)
             ? Effect.fail(new FileWriteFailed({ path, message: 'read-only' }))
@@ -230,6 +252,7 @@ function makeWorldLayer(world: DesktopWorld) {
         remove: (path) =>
           Effect.sync(() => {
             world.files.delete(path);
+            world.links.delete(path);
           }),
       })
     ),
@@ -256,6 +279,16 @@ function makeWorldLayer(world: DesktopWorld) {
           world.loginItems.push('unregister');
           world.registration = 'not-registered';
         }),
+      })
+    ),
+    Layer.succeed(
+      LoginShell,
+      LoginShell.of({
+        run: (program, args) =>
+          Effect.sync(() => {
+            world.shells.push(`${program} ${args.join(' ')}`);
+            return Option.fromNullishOr(world.shellPath(program));
+          }),
       })
     ),
     makeHttpLayer(world),
@@ -454,7 +487,8 @@ function makeDesktopLayer(world: DesktopWorld) {
     PageBridge,
     AppMenu.layer,
     StatusTray.layer,
-    EngineSupervisor.layer
+    EngineSupervisor.layer,
+    CommandLine.layer
   ).pipe(
     Layer.provideMerge(Updater.layer),
     Layer.provideMerge(Notifications.layer),
@@ -482,5 +516,20 @@ export function runDesktop<A, E>(world: DesktopWorld, effect: Effect.Effect<A, E
   });
   return Effect.runPromise(
     Effect.scoped(watched).pipe(Effect.provide(Layer.merge(makeDesktopLayer(world), Logger.layer([]))))
+  );
+}
+
+function makeConnectedLayer(world: DesktopWorld) {
+  return Connection.layer.pipe(
+    Layer.provideMerge(FirstHealth.layer),
+    Layer.provideMerge(makeDesktopLayer(world))
+  );
+}
+
+export type ConnectedServices = Layer.Success<ReturnType<typeof makeConnectedLayer>>;
+
+export function runConnected<A, E>(world: DesktopWorld, effect: Effect.Effect<A, E, ConnectedServices>) {
+  return Effect.runPromise(
+    Effect.scoped(effect).pipe(Effect.provide(Layer.merge(makeConnectedLayer(world), Logger.layer([]))))
   );
 }

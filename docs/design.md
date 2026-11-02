@@ -2018,7 +2018,7 @@ Only these, and they win over anything below:
       Login Items, Try again), Port 7446 is taken, The engine keeps stopping (Start engine, Copy details, with the
       engine log's warnings and errors under it), or The engine is not running (Start engine, Open Privacy & Security,
       Copy details). The page opens Shinsa by itself as soon as the engine answers, and the window switches to it if
-      the engine stops answering for 15 s while you work (`apps/desktop/src/lib/engine.ts`,
+      the engine stops answering for 15 s while you work (`apps/desktop/src/engine/screen.ts`, `src/connection/service.ts`,
       `static/waiting.html`).
     - **The window**: closing it hides it and the Dock icon with it, so the app lives on in the menu bar (the page
       keeps its socket, so notifications go on); the menu bar item's Open Shinsa, a `shinsa://` link, a

@@ -4,3 +4,5 @@ export class FileWriteFailed extends Schema.TaggedError<FileWriteFailed, { reado
   'FileWriteFailed',
   { path: Schema.String, message: Schema.String }
 ) {}
+
+export type FileEntry = { kind: 'missing' } | { kind: 'link'; target: string } | { kind: 'file' };
