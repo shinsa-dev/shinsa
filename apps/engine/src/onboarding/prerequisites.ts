@@ -1,36 +1,22 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { type CommandResult, runCommand } from '../shell/index.ts';
+import {
+  type CommandRunner,
+  PREREQUISITE_TIMEOUT_MS,
+  type Prerequisite,
+  type PrerequisiteId,
+  type PrerequisiteNeeds,
+  type PrerequisiteReport,
+} from './schema.ts';
 
-export type CommandRunner = (
-  command: string[],
-  cwd: string,
-  options?: { timeoutMs?: number }
-) => Promise<CommandResult>;
-
-export type PrerequisiteId = 'git' | 'brew' | 'gh' | 'claude' | 'bun' | 'codex';
-
-export interface Prerequisite {
-  id: PrerequisiteId;
-  label: string;
-  ok: boolean;
-  detail: string;
-  fix: string | null;
-  command: string | null;
-  optional?: boolean;
-  signIn?: true;
-}
-
-export interface PrerequisiteReport {
-  ready: boolean;
-  checks: Prerequisite[];
-}
-
-export interface PrerequisiteNeeds {
-  bun: boolean;
-}
-
-const CHECK_TIMEOUT_MS = 15_000;
+export type {
+  CommandRunner,
+  Prerequisite,
+  PrerequisiteId,
+  PrerequisiteNeeds,
+  PrerequisiteReport,
+} from './schema.ts';
 
 const NOT_FOUND_CODE = 127;
 
@@ -170,7 +156,7 @@ export async function resolvePrerequisites(
   run: CommandRunner = runCommand,
   needs: PrerequisiteNeeds = { bun: true }
 ): Promise<PrerequisiteReport> {
-  const ask = (command: string[]) => run(command, cwd, { timeoutMs: CHECK_TIMEOUT_MS });
+  const ask = (command: string[]) => run(command, cwd, { timeoutMs: PREREQUISITE_TIMEOUT_MS });
   const [git, brew, gh, ghAuth, claude, bun, codex] = await Promise.all([
     ask(['git', '--version']),
     ask(['brew', '--version']),

@@ -1,7 +1,6 @@
 import { homedir } from 'node:os';
 import {
   DomainError,
-  HOUR_MS,
   type ProgramId,
   type ProgramVersion,
   type ProgramVersionStatus,
@@ -19,46 +18,27 @@ import {
   locateCodex,
   readCodexVersion,
 } from '../agents/providers/codex/executable.ts';
-import { compareVersions, type ProgramLocation } from '../agents/providers/versions.ts';
+import { compareVersions } from '../agents/providers/versions.ts';
 import { createReadOnlyError } from '../instance/index.ts';
 import { describeError, log, redactSecrets } from '../log/index.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
+import { isProgramId } from './program.ts';
 import { requestLatestVersion } from './registry.ts';
-import { resolveUpdater, type Updater } from './updaters.ts';
+import {
+  LATEST_TTL_MS,
+  type LineListener,
+  PROGRAM_IDS,
+  PROGRAMS,
+  SDK_PACKAGE,
+  UPDATE_ENV,
+  UPDATE_TIMEOUT_MS,
+  type Updater,
+  type UpdateRun,
+  type VersionsOptions,
+} from './schema.ts';
+import { resolveUpdater } from './updaters.ts';
 
-export const LATEST_TTL_MS = 3 * HOUR_MS;
-
-const UPDATE_TIMEOUT_MS = 10 * 60_000;
-
-const SDK_PACKAGE = '@anthropic-ai/claude-agent-sdk';
-
-const PROGRAMS: Record<ProgramId, { label: string; package: string; overrideEnv: string }> = {
-  claude: { label: 'Claude Code', package: '@anthropic-ai/claude-code', overrideEnv: 'CLAUDE_EXECUTABLE' },
-  codex: { label: 'Codex', package: '@openai/codex', overrideEnv: 'CODEX_EXECUTABLE' },
-};
-
-const PROGRAM_IDS = Object.keys(PROGRAMS) as ProgramId[];
-
-type LineListener = (line: string) => void;
-
-export type UpdateRunner = (
-  updater: Updater,
-  onLine: LineListener,
-  signal: AbortSignal
-) => Promise<CommandResult>;
-
-export interface VersionsOptions {
-  inspect?: boolean;
-  locate?: (program: ProgramId) => ProgramLocation;
-  readVersion?: (program: ProgramId, path: string) => Promise<string | null>;
-  minimum?: (program: ProgramId) => string;
-  sdk?: () => { version: string; claudeCodeVersion: string };
-  latest?: (name: string) => Promise<string>;
-  updater?: (program: ProgramId, path: string) => Updater;
-  run?: UpdateRunner;
-  onUpdated?: (program: ProgramId) => Promise<unknown>;
-  now?: () => number;
-}
+export { LATEST_TTL_MS, type UpdateRun, type UpdateRunner, type VersionsOptions } from './schema.ts';
 
 function locateInstalledProgram(program: ProgramId) {
   return program === 'claude' ? locateClaude() : locateCodex();
@@ -74,7 +54,7 @@ function resolveMinimumVersion(program: ProgramId) {
 
 function runUpdater(updater: Updater, onLine: LineListener, signal: AbortSignal) {
   return runCommand(updater.command, homedir(), {
-    env: { NO_COLOR: '1', FORCE_COLOR: '0', ...updater.env },
+    env: { ...UPDATE_ENV, ...updater.env },
     timeoutMs: UPDATE_TIMEOUT_MS,
     onLine,
     signal,
@@ -98,7 +78,7 @@ function cleanOutputLine(line: string) {
 }
 
 function readProgramId(value: unknown): ProgramId {
-  if (value === 'claude' || value === 'codex') return value;
+  if (isProgramId(value)) return value;
   throw new DomainError({ code: 'program_invalid', message: 'Update claude or codex.' });
 }
 
@@ -199,7 +179,7 @@ export class Versions {
     return this.snapshot();
   }
 
-  startUpdate(program: unknown): (onLine: LineListener) => Promise<UpdateOutcome> {
+  startUpdate(program: unknown): UpdateRun {
     const id = readProgramId(program);
     const { label, overrideEnv } = PROGRAMS[id];
     if (this.#options.inspect) {

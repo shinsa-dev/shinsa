@@ -2,19 +2,9 @@ import { accessSync, constants, realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ProgramId } from '@shinsa/core';
 import { whichOnPath } from '../agents/providers/versions.ts';
+import { CODEX_LATEST, type Updater, type UpdaterDeps } from './schema.ts';
 
-export interface Updater {
-  command: string[];
-  label: string;
-  env?: Record<string, string>;
-}
-
-export interface UpdaterDeps {
-  which?: (command: string) => string | null;
-  isExecutable?: (path: string) => boolean;
-}
-
-const CODEX_LATEST = '@openai/codex@latest';
+export type { Updater, UpdaterDeps } from './schema.ts';
 
 function readRealPath(path: string) {
   try {

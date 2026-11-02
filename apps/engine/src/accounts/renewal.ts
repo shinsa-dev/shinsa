@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { RunFailure } from '@shinsa/core';
 import { readStoredLogin, type SecretReader, type StoredLogin } from './credentials.ts';
 import type { Env } from './paths.ts';
+import { LOGIN_EXPIRY_MARGIN_MS } from './schema.ts';
 import type { StoredAccount } from './store.ts';
 
 export interface LoginRenewalOptions {
@@ -21,8 +22,6 @@ const TOKEN_FAILURE_CODES: ReadonlySet<string> = new Set([
   'authentication_failed',
   'api_error_401',
 ]);
-
-const EXPIRY_MARGIN_MS = 60_000;
 
 export function isTokenFailure(failure: RunFailure) {
   return failure.class === 'auth' && TOKEN_FAILURE_CODES.has(failure.code ?? '');
@@ -63,7 +62,7 @@ export class LoginRenewal {
   async renew(account: StoredAccount) {
     const current = await this.#read(account);
     const expiresAt = current?.expiresAt ?? null;
-    return expiresAt !== null && expiresAt > this.#options.now() + EXPIRY_MARGIN_MS;
+    return expiresAt !== null && expiresAt > this.#options.now() + LOGIN_EXPIRY_MARGIN_MS;
   }
 
   async recordFailed(account: StoredAccount) {

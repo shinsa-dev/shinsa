@@ -338,4 +338,11 @@ describe('searchFiles', () => {
       searchFiles(path, sha, { query: '(', regex: true, caseSensitive: true, wholeWord: false, glob: null })
     ).rejects.toMatchObject({ code: 'read_failed' });
   });
+
+  test('a blob reader that stopped fails the read with its reason', async () => {
+    const { path, sha } = await createSampleRepo();
+    const stopped = () => Promise.reject(new Error('The reader stopped.'));
+    const reader = { info: stopped, contents: stopped } as unknown as CatFile;
+    await expect(listCommitTree(path, sha, 'src', undefined, reader)).rejects.toThrow('The reader stopped.');
+  });
 });

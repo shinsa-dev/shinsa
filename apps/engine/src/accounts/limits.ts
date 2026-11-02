@@ -1,8 +1,15 @@
-import { existsSync, readFileSync } from 'node:fs';
 import type { AccountUsage, ChatNotice, UsageWindow } from '@shinsa/core';
-import { writeJsonFile } from '../config/file.ts';
-import { describeError, log } from '../log/index.ts';
-import { KEYED_WINDOWS, type KeyedWindow, resolveWindowId, type UsageRead } from './usage.ts';
+import { describeError } from '../log/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
+import { AccountRegistry } from './registry/service.ts';
+import {
+  KEYED_WINDOWS,
+  type KeyedWindow,
+  LIMITED_BACKOFF_MS,
+  USAGE_TTL_MS,
+  type UsageRead,
+} from './schema.ts';
+import { resolveWindowId } from './usage/answer.ts';
 
 export type UsageReader = (accountId: string) => Promise<UsageRead>;
 
@@ -17,9 +24,7 @@ export interface UsageLimitsOptions {
 
 type RateLimitNotice = Extract<ChatNotice, { kind: 'rate_limit' }>;
 
-export const USAGE_TTL_MS = 60_000;
-
-const LIMITED_BACKOFF_MS = 5 * 60_000;
+export { USAGE_TTL_MS } from './schema.ts';
 
 const NO_WINDOWS = 'Claude reports no usage limits for this account.';
 
@@ -33,24 +38,6 @@ export function createUnknownUsage(): AccountUsage {
   return { status: 'unknown', windows: [], detail: null, checkedAt: null, source: null };
 }
 
-function readCache(path: string): Map<string, AccountUsage> {
-  const entries = new Map<string, AccountUsage>();
-  if (!existsSync(path)) return entries;
-  try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { accounts?: Record<string, AccountUsage> };
-    for (const [id, usage] of Object.entries(parsed.accounts ?? {})) {
-      if (!Array.isArray(usage?.windows)) continue;
-      entries.set(id, { ...usage, source: 'cache' });
-    }
-  } catch (error) {
-    log.warn('[Accounts] The usage cache could not be read; starting without it', {
-      path,
-      error: describeError(error),
-    });
-  }
-  return entries;
-}
-
 export class UsageLimits {
   readonly #options: UsageLimitsOptions;
   readonly #entries: Map<string, AccountUsage>;
@@ -59,7 +46,7 @@ export class UsageLimits {
 
   constructor(options: UsageLimitsOptions) {
     this.#options = options;
-    this.#entries = readCache(options.path);
+    this.#entries = edgeRuntime.runSync(AccountRegistry.use((registry) => registry.readUsage(options.path)));
   }
 
   get #now() {
@@ -84,12 +71,9 @@ export class UsageLimits {
   }
 
   #persist() {
-    const accounts = Object.fromEntries(this.#entries);
-    try {
-      writeJsonFile(this.#options.path, { version: 1, accounts });
-    } catch (error) {
-      log.warn('[Accounts] Could not keep the usage cache', { error: describeError(error) });
-    }
+    const { path } = this.#options;
+    const entries = this.#entries;
+    edgeRuntime.runSync(AccountRegistry.use((registry) => registry.keepUsage(path, entries)));
   }
 
   remove(accountId: string) {

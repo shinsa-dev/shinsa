@@ -9,7 +9,8 @@ import {
 import type { ProjectChanges } from '../projects/routes.ts';
 import { type LoginResolver, listLocalRepos, readOriginRemote } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
-import { applyRevision, type ProjectRevision } from './revise.ts';
+import { applyRevision } from './revise.ts';
+import type { ProjectRevision } from './schema.ts';
 
 export interface ProjectSetup {
   engine: Engine;

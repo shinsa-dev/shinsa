@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type Body,
@@ -10,7 +10,6 @@ import {
   foldThread,
   type Prepared,
   rewriteAsync,
-  type ThreadState,
   type ThreadStore,
   type WindowLookup,
 } from '@chroxify/eunoe';
@@ -18,45 +17,24 @@ import type { ChatNotice } from '@shinsa/core';
 import type { EunoeLink, EunoeStatus, EunoeWatcher } from '../agents/providers/claude/index.ts';
 import { DIRECT_BASE_URL } from '../agents/providers/claude/route.ts';
 import { describeError, log } from '../log/index.ts';
+import { createForwarderScope, type Forwarder } from './forwarder.ts';
+import {
+  CHARS_PER_TOKEN,
+  type EunoeServerOptions,
+  FOLD_FLOOR_TOKENS,
+  IDLE_TIMEOUT_S,
+  LOOPBACK,
+  REQUEST_LOG,
+  type RequestEntry,
+  STOPPING,
+  THREADS_DIR,
+} from './schema.ts';
+import { createFileStore } from './threads.ts';
 
-export interface EunoeServerOptions {
-  dir: string;
-  upstream?: string;
-  port?: number;
-  window?: WindowLookup;
-  tuning?: Partial<CoreConfig>;
-  foldFloor?: number;
-}
+export type { EunoeServerOptions } from './schema.ts';
+export { createFileStore } from './threads.ts';
 
-type Entry = Record<string, unknown>;
-
-const STOPPING = 'Shinsa is stopping.';
-
-const IDLE_TIMEOUT_S = 255;
-
-const FOLD_FLOOR_TOKENS = 40_000;
-
-const CHARS_PER_TOKEN = 3.6;
-
-function resolveThreadFile(dir: string, key: string) {
-  return join(dir, `${key.replace(/[^\w-]/g, '_')}.json`);
-}
-
-export function createFileStore(dir: string): ThreadStore {
-  return {
-    read: (key) => {
-      try {
-        return JSON.parse(readFileSync(resolveThreadFile(dir, key), 'utf8')) as ThreadState;
-      } catch {
-        return {};
-      }
-    },
-    save: (key, state) => {
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(resolveThreadFile(dir, key), JSON.stringify(state));
-    },
-  };
-}
+type Entry = RequestEntry;
 
 export function resolveCompactionNotice(entry: Entry): ChatNotice | null {
   if (entry.compacted !== true) return null;
@@ -89,7 +67,8 @@ export class EunoeServer implements EunoeLink {
   readonly #watchers = new Map<string, Set<EunoeWatcher>>();
   readonly #folds = new Map<string, { warm: boolean }>();
   readonly #mainThreads = new Map<string, string>();
-  #server: ReturnType<typeof Bun.serve> | null = null;
+  readonly #forwarder = createForwarderScope();
+  #server: Forwarder | null = null;
   #stopped = false;
 
   constructor(options: EunoeServerOptions) {
@@ -98,20 +77,22 @@ export class EunoeServer implements EunoeLink {
     this.#port = options.port ?? 0;
     this.#window = options.window ?? createWindowLookup();
     this.#config = { ...CORE_DEFAULTS, mode: 'compact', ...options.tuning };
-    this.#store = createFileStore(join(this.dir, 'threads'));
+    this.#store = createFileStore(join(this.dir, THREADS_DIR));
     this.#foldFloor = options.foldFloor ?? FOLD_FLOOR_TOKENS;
   }
 
   ensure(): Promise<EunoeStatus> {
     if (this.#stopped) return Promise.resolve({ ok: false, reason: STOPPING });
-    try {
-      this.#server ??= this.#serve();
-    } catch (error) {
-      const reason = `Eunoe could not start: ${describeError(error)}`;
+    const started = this.#server
+      ? { ok: true as const, server: this.#server }
+      : this.#forwarder.open(() => this.#serve());
+    if (!started.ok) {
+      const reason = `Eunoe could not start: ${started.reason}`;
       log.warn('[Eunoe] The forwarder is not available; runs talk to Claude directly', { reason });
       return Promise.resolve({ ok: false, reason });
     }
-    return Promise.resolve({ ok: true, url: `http://127.0.0.1:${this.#server.port}`, dir: this.dir });
+    this.#server = started.server;
+    return Promise.resolve({ ok: true, url: `http://${LOOPBACK}:${started.server.port}`, dir: this.dir });
   }
 
   watch(sessionId: string, watcher: EunoeWatcher) {
@@ -134,9 +115,8 @@ export class EunoeServer implements EunoeLink {
 
   async stop() {
     this.#stopped = true;
-    const server = this.#server;
     this.#server = null;
-    await server?.stop(true);
+    await this.#forwarder.close();
   }
 
   #serve() {
@@ -148,7 +128,7 @@ export class EunoeServer implements EunoeLink {
       record: (entry) => this.#record(entry),
     });
     const server = Bun.serve({
-      hostname: '127.0.0.1',
+      hostname: LOOPBACK,
       port: this.#port,
       idleTimeout: IDLE_TIMEOUT_S,
       fetch: forward,
@@ -202,7 +182,7 @@ export class EunoeServer implements EunoeLink {
   #record(entry: Entry) {
     const line = JSON.stringify({ ts: new Date().toISOString(), mode: this.#config.mode, ...entry });
     try {
-      appendFileSync(join(this.dir, 'requests.jsonl'), `${line}\n`);
+      appendFileSync(join(this.dir, REQUEST_LOG), `${line}\n`);
     } catch (error) {
       log.warn('[Eunoe] Could not write the request log', { error: describeError(error) });
     }

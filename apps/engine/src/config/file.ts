@@ -1,5 +1,4 @@
-import { copyFileSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { keepJsonFileAside, writeJsonFile } from '../files/index.ts';
 import { log } from '../log/index.ts';
 import { readMachineConfig } from './machine/index.ts';
 import type { MachineConfig } from './machine/schema.ts';
@@ -7,18 +6,7 @@ import type { MachineConfig } from './machine/schema.ts';
 export { createMachineConfig, parseMachineConfig, readMachineConfig } from './machine/index.ts';
 export type { MachineConfig } from './machine/schema.ts';
 
-function keepUnreadable(path: string) {
-  const copy = `${path}.unreadable-${Date.now()}`;
-  copyFileSync(path, copy);
-  return copy;
-}
-
-export function writeJsonFile(path: string, value: unknown) {
-  mkdirSync(dirname(path), { recursive: true });
-  const staging = `${path}.writing-${process.pid}`;
-  writeFileSync(staging, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  renameSync(staging, path);
-}
+export { writeJsonFile } from '../files/index.ts';
 
 export class ConfigStore {
   readonly path: string;
@@ -26,7 +14,7 @@ export class ConfigStore {
 
   constructor(path: string, read = readMachineConfig(path)) {
     this.path = path;
-    const copy = read.unreadable ? keepUnreadable(path) : null;
+    const copy = read.unreadable ? keepJsonFileAside(path) : null;
     for (const problem of read.problems) {
       log.warn('[Config] Part of config.json was not used', { path, problem, ...(copy ? { copy } : {}) });
     }

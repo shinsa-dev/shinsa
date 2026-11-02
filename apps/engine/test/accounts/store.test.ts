@@ -15,8 +15,7 @@ import {
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
 import { AccountStore, removeAccountDir } from '../../src/accounts/store.ts';
-import { log } from '../../src/log/index.ts';
-import { createTempDir, writeFiles } from '../helpers/index.ts';
+import { captureLogs, createTempDir, writeFiles } from '../helpers/index.ts';
 
 function createStore(
   options: { ids?: string[]; shared?: Record<string, string>; globalConfig?: unknown } = {}
@@ -164,16 +163,16 @@ describe('account store', () => {
     const locked = shared.store.create().configDir as string;
     writeFiles(shared.sharedDir, { 'CLAUDE.md': 'shared' });
     chmodSync(locked, 0o500);
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       shared.store.linkSharedEntries(locked);
-      expect(warn.mock.calls.map(([message, fields]) => [message, fields?.entry])).toEqual([
-        ['[Accounts] Could not share a Claude setting with an account', 'CLAUDE.md'],
-      ]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
       chmodSync(locked, 0o700);
     }
+    expect(logs.entries.map((entry) => [entry.message, entry.entry])).toEqual([
+      ['[Accounts] Could not share a Claude setting with an account', 'CLAUDE.md'],
+    ]);
   });
 
   test('linking recreates an account folder that went missing, private and with its settings seeded', () => {
@@ -207,15 +206,15 @@ describe('account store', () => {
   });
 
   test('without shared settings the new .claude.json only skips onboarding', () => {
-    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const { store } = createStore({ globalConfig: null });
       const dir = store.create().configDir as string;
       expect(readJson(join(dir, '.claude.json'))).toEqual({ hasCompletedOnboarding: true });
-      expect(info.mock.calls[0]?.[0]).toBe('[Accounts] No shared Claude settings to copy into a new account');
     } finally {
-      info.mockRestore();
+      logs.restore();
     }
+    expect(logs.entries[0]?.message).toBe('[Accounts] No shared Claude settings to copy into a new account');
   });
 
   test('an existing .claude.json in the account folder is never overwritten', () => {
@@ -240,6 +239,9 @@ describe('account store', () => {
     mkdirSync(fresh);
     store.writeAccountConfig(fresh, { theme: 'light' });
     expect(readJson(join(fresh, '.claude.json'))).toEqual({ theme: 'light' });
+    writeFileSync(join(fresh, '.claude.json'), '{ broken');
+    store.writeAccountConfig(fresh, { theme: 'dark' });
+    expect(readJson(join(fresh, '.claude.json'))).toEqual({ theme: 'dark' });
   });
 
   test('accounts are found by id or by their email and organization in any case', () => {
@@ -366,19 +368,19 @@ describe('account store', () => {
     const { home, reopen } = createStore();
     mkdirSync(home, { recursive: true });
     writeFileSync(join(home, 'accounts.json'), '{ broken');
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const store = reopen();
       expect(store.list()).toEqual([]);
       const copies = readdirSync(home).filter((name) => name.startsWith('accounts.json.unreadable-'));
       expect(copies).toHaveLength(1);
       expect(readFileSync(join(home, copies[0] as string), 'utf8')).toBe('{ broken');
-      expect(warn.mock.calls[0]?.[0]).toBe(
-        '[Accounts] The account list could not be read; starting with none'
-      );
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
+    expect(logs.entries[0]?.message).toBe(
+      '[Accounts] The account list could not be read; starting with none'
+    );
   });
 
   test('accounts with missing or invalid fields are dropped or cleaned on read', () => {

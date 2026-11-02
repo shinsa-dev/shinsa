@@ -1,15 +1,12 @@
 import type { ConfigStore } from '../config/index.ts';
-import { type Discovery, discoverRoots } from './discover.ts';
-
-type RootSourceKind = 'configured' | 'environment' | 'discovered';
-
-export interface RootSource {
-  listRoots: () => Promise<string[]>;
-}
-
-export type Discoverer = (home: string) => Promise<Discovery>;
-
-const DISCOVERY_TTL_MS = 10 * 60 * 1000;
+import { discoverRoots } from './edge.ts';
+import {
+  DISCOVERY_TTL_MS,
+  type Discoverer,
+  type Discovery,
+  type RootSource,
+  type RootSourceKind,
+} from './schema.ts';
 
 export class Roots implements RootSource {
   readonly #fromEnvironment: string[];

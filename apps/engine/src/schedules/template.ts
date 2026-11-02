@@ -1,21 +1,18 @@
-export interface WebhookRequest {
-  method: string;
-  path: string;
-  query: string;
-  headers: Readonly<Record<string, string>>;
-  bodyText: string;
-}
+import { Option, Predicate, Schema } from 'effect';
+import {
+  CREDENTIAL_NAME,
+  FORM_CONTENT_TYPE,
+  MENTION,
+  PLACEHOLDER,
+  REDACTED,
+  WebhookBodyText,
+  type WebhookRequest,
+  WORD_JOINER,
+} from './schema.ts';
 
-const CREDENTIAL_NAME =
-  /^(authorization|proxy-authorization|cookie|set-cookie)$|token|secret|signature|key|password|auth|credential|hmac|jwt|assertion/i;
+export type { WebhookRequest } from './schema.ts';
 
-const REDACTED = '[redacted]';
-
-const PLACEHOLDER = /\{\{([^{}]*)\}\}/g;
-
-const MENTION = /[\p{Sc}@]|(?<=^|\s)\/(?=[^\s/]+(?:\s|$))|shinsa(?=:)|webhook(?=-data)/giu;
-
-const WORD_JOINER = '⁠';
+const decodeBody = Schema.decodeUnknownOption(WebhookBodyText);
 
 export function redactHeaders(headers: Readonly<Record<string, string>>): Record<string, string> {
   return Object.fromEntries(
@@ -23,12 +20,10 @@ export function redactHeaders(headers: Readonly<Record<string, string>>): Record
   );
 }
 
+const decodeComponent = Option.liftThrowable(decodeURIComponent);
+
 function decodeName(name: string) {
-  try {
-    return decodeURIComponent(name.replaceAll('+', ' '));
-  } catch {
-    return name;
-  }
+  return Option.getOrElse(decodeComponent(name.replaceAll('+', ' ')), () => name);
 }
 
 export function redactQuery(query: string) {
@@ -46,20 +41,16 @@ export function redactQuery(query: string) {
 
 function parseBody(request: WebhookRequest): unknown {
   const contentType = (request.headers['content-type'] ?? '').toLowerCase();
-  if (contentType.includes('application/x-www-form-urlencoded')) {
+  if (contentType.includes(FORM_CONTENT_TYPE)) {
     return Object.fromEntries(new URLSearchParams(request.bodyText));
   }
-  try {
-    return JSON.parse(request.bodyText) as unknown;
-  } catch {
-    return undefined;
-  }
+  return Option.getOrUndefined(decodeBody(request.bodyText));
 }
 
 function lookup(root: unknown, segments: readonly string[]): unknown {
   let current = root;
   for (const segment of segments) {
-    if (current === null || typeof current !== 'object' || !Object.hasOwn(current, segment)) return undefined;
+    if (!Predicate.isObject(current) || !Object.hasOwn(current, segment)) return undefined;
     current = (current as Record<string, unknown>)[segment];
   }
   return current;

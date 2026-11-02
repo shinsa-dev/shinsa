@@ -10,7 +10,7 @@ import type { RunRejection } from '../../src/agents/index.ts';
 import type { ProviderUsageReading, ProviderUsageSource } from '../../src/agents/providers/index.ts';
 import { log } from '../../src/log/index.ts';
 import { type CommandOptions, type CommandResult, runCommand } from '../../src/shell/index.ts';
-import { createTempDir, createTestConfig, overrideEnv, until } from '../helpers/index.ts';
+import { captureLogs, createTempDir, createTestConfig, overrideEnv, until } from '../helpers/index.ts';
 import { createGate, createRun, createStubEngine, createTask, type StubEngine } from '../helpers/state.ts';
 
 const HOUR = 60 * 60 * 1000;
@@ -101,7 +101,7 @@ function createWorld(options: WorldOptions = {}) {
       return Promise.resolve(secrets.get(service) ?? null);
     },
     requestHttp: (_url, init) => {
-      const token = (init.headers as Record<string, string>).Authorization?.replace('Bearer ', '') ?? '';
+      const token = new Headers(init.headers).get('authorization')?.replace('Bearer ', '') ?? '';
       const body = usage.get(token);
       return Promise.resolve(body ? Response.json(body) : new Response('no', { status: 401 }));
     },
@@ -780,31 +780,31 @@ describe('moving a rejected attempt to another account', () => {
     );
     expect(createWorld({ root: world.root }).accounts.snapshot().accounts[0]?.spentUntil).toBeNull();
     writeFileSync(path, '{ not json');
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       expect(createWorld({ root: world.root }).accounts.snapshot().accounts[0]?.spentUntil).toBeNull();
-      expect(warn.mock.calls.map((call) => call[0])).toEqual([
-        '[Accounts] The spent accounts could not be read; starting without them',
-      ]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
+    expect(logs.entries.filter((entry) => entry.level === 'warn').map((entry) => entry.message)).toEqual([
+      '[Accounts] The spent accounts could not be read; starting without them',
+    ]);
   });
 
   test('a spent mark that cannot be written is logged and still keeps the account out', async () => {
     const world = createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     mkdirSync(join(world.config.dataDir, 'account-marks.json'), { recursive: true });
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       reject(world, a.id, { resetAt: world.now + HOUR });
       expect(world.accounts.snapshot().accounts[0]?.spentUntil).toBe(world.now + HOUR);
-      expect(warn.mock.calls.map((call) => call[0])).toContain(
-        '[Accounts] Could not keep the spent accounts'
-      );
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
+    expect(logs.entries.map((entry) => entry.message)).toContain(
+      '[Accounts] Could not keep the spent accounts'
+    );
   });
 
   test('a signed-out account asks for a sign-in unless another account can take over', async () => {

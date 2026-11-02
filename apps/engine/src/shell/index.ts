@@ -1,6 +1,7 @@
 import { Duration, Effect } from 'effect';
-import { redactSecrets } from '../log/redact.ts';
 import { edgeRuntime } from '../runtime/edge.ts';
+import { resolveCancel } from './abort.ts';
+import { describeFailure } from './failure.ts';
 import { stopProcessGroup } from './processes.ts';
 import {
   CANCELLED_BEFORE_START,
@@ -13,6 +14,7 @@ import {
 } from './schema.ts';
 import { Shell } from './service.ts';
 
+export { describeFailure } from './failure.ts';
 export { listDescendants } from './processes.ts';
 export type { CommandResult } from './schema.ts';
 
@@ -29,14 +31,6 @@ function resolveTimeout(timeoutMs: number | null | undefined) {
   if (timeoutMs === undefined) return COMMAND_TIMEOUT;
   return timeoutMs === null ? null : Duration.millis(timeoutMs);
 }
-
-const awaitAbort = (signal: AbortSignal) =>
-  Effect.callback<void>((resume) => {
-    if (signal.aborted) return resume(Effect.void);
-    const onAbort = () => resume(Effect.void);
-    signal.addEventListener('abort', onAbort, { once: true });
-    return Effect.sync(() => signal.removeEventListener('abort', onAbort));
-  });
 
 const notStarted = (stderr: string, code = NOT_STARTED_EXIT_CODE): CommandResult => ({
   ok: false,
@@ -63,7 +57,7 @@ const runEdgeCommand = Effect.fn('runCommand')(function* (
       input: options.input,
       env: options.env,
       timeout: resolveTimeout(options.timeoutMs),
-      cancel: signal ? awaitAbort(signal) : undefined,
+      cancel: resolveCancel(signal),
       onLine: onLine ? (line) => Effect.sync(() => onLine(line)) : undefined,
       onSpawn: onSpawn ? (pid) => Effect.sync(() => onSpawn(pid)) : undefined,
     })
@@ -72,13 +66,6 @@ const runEdgeCommand = Effect.fn('runCommand')(function* (
 
 export function runCommand(command: string[], cwd: string, options: CommandOptions = {}) {
   return edgeRuntime.runPromise(runEdgeCommand(command, cwd, options));
-}
-
-export function describeFailure(command: string[], result: CommandResult) {
-  const reason = result.timedOut
-    ? 'it ran too long and was stopped'
-    : result.stderr || result.stdout || `exit ${result.code}`;
-  return redactSecrets(`${command.slice(0, 3).join(' ')} failed: ${reason}`);
 }
 
 export function runCommandOrThrow(command: string[], cwd: string, options: CommandOptions = {}) {

@@ -1,5 +1,6 @@
 import { type CheckNote, PROTOCOL_LIMITS } from '@shinsa/core';
-import { type CheckRun, tailOutput } from './index.ts';
+import { tailOutput } from './output.ts';
+import type { CheckRun } from './schema.ts';
 
 const NOTE_LINES: Record<CheckNote, string> = {
   passed_alone: 'Passed when the failing test files were re-run alone.',
