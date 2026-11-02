@@ -9,8 +9,40 @@ on:
 permissions: {}
 
 jobs:
-  report:
+  rerun:
     if: >-
+      contains(fromJSON('["failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion) &&
+      contains(fromJSON('["push", "workflow_dispatch", "workflow_run"]'), github.event.workflow_run.event) &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      rerun: ${{ steps.decide.outputs.rerun }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Rerun the jobs no runner picked up
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+        run: bun scripts/watch-rerun.ts
+
+  report:
+    needs: rerun
+    if: >-
+      always() &&
+      needs.rerun.outputs.rerun != 'true' &&
       contains(fromJSON('["failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion) &&
       contains(fromJSON('["push", "workflow_dispatch", "workflow_run"]'), github.event.workflow_run.event) &&
       github.event.workflow_run.head_repository.full_name == github.repository
