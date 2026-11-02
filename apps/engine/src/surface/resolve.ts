@@ -1,11 +1,4 @@
-import {
-  DomainError,
-  type Focus,
-  type Gate,
-  type MergeStepView,
-  type RunAccount,
-  type Watchdog,
-} from '@shinsa/core';
+import { DomainError, type Focus, type Gate, type RunAccount } from '@shinsa/core';
 import type { ProjectView } from '@shinsa/core/engine-api/schema';
 import type { resolveTaskView } from '../http/task-views.ts';
 import type { SurfaceClient } from './client.ts';
@@ -17,15 +10,6 @@ export type { ProjectView };
 export interface ProjectsRead {
   readonly projects: readonly ProjectView[];
   readonly focus: Focus;
-}
-
-interface TaskDetail {
-  task: TaskView;
-  gates: Gate[];
-  mergeSteps: MergeStepView[];
-  watchdogs: Watchdog[];
-  text: string;
-  suggestions: { id: string; title: string; why: string; status: string; waitsOnThis: boolean }[];
 }
 
 export function readTask(client: SurfaceClient, ref: string) {
