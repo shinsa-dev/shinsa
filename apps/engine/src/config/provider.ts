@@ -1,5 +1,6 @@
 import { ConfigProvider } from 'effect';
-import type { Env, MachineConfig } from './schema.ts';
+import type { MachineConfig } from './machine/schema.ts';
+import type { Env } from './schema.ts';
 
 export function createConfigProvider(env: Env, machine: MachineConfig) {
   const file = ConfigProvider.fromUnknown({

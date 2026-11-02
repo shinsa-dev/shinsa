@@ -1,9 +1,9 @@
 import { APP_IDENTITY } from '@shinsa/core';
 import { Config, Effect, Option, Schema } from 'effect';
+import { MAX_PORT } from './machine/schema.ts';
 import {
   DEFAULT_HOSTNAME,
   HOSTNAME_SETTING,
-  MAX_PORT,
   type ServerAddress,
   SettingInvalid,
   WholeNumberText,

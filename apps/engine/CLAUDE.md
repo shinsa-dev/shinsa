@@ -70,12 +70,14 @@ src/
 │                        plugins, services, remote, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
-├── config/              schema.ts (ServerConfig, MachineConfig and each config.json field's schema, ENGINE_SETTINGS:
+├── config/              schema.ts (ServerConfig, SettingInvalid and ENGINE_SETTINGS:
 │                        every SHINSA_* setting as a Config with its default), service.ts (EngineConfig: ServerConfig
 │                        read once through the ConfigProvider of provider.ts, the environment first, then config.json,
 │                        then the default; settings.ts reads the port, lists and numbers, a bad value the typed
-│                        SettingInvalid), machine.ts (config.json decoded field by field: a bad field dropped and
-│                        named, unreadable JSON kept aside), paths.ts (where ~/.config/shinsa, config.json and data/
+│                        SettingInvalid), machine/ (MachineConfigFile in service.ts: read, an Effect.fn reading
+│                        config.json, unreadable text or JSON a MachineConfigUnreadable answered as the defaults; the
+│                        pure parseMachineConfig in decode.ts decodes it field by field, a bad field dropped and
+│                        named; the shapes and each field's schema in schema.ts; readMachineConfig the edge), paths.ts (where ~/.config/shinsa, config.json and data/
 │                        are), file.ts (ConfigStore: config.json written atomically), index.ts (the edge:
 │                        resolveConfig, resolveServerAddress, prepareDataDir). The port defaults to core's
 │                        APP_IDENTITY: 7446; package.json's dev and start scripts pin 5180 so a checkout never meets

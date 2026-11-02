@@ -1,11 +1,11 @@
 import { copyFileSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { log } from '../log/index.ts';
-import { readMachineConfig } from './machine.ts';
-import type { MachineConfig } from './schema.ts';
+import { readMachineConfig } from './machine/index.ts';
+import type { MachineConfig } from './machine/schema.ts';
 
-export { createMachineConfig, parseMachineConfig, readMachineConfig } from './machine.ts';
-export type { MachineConfig } from './schema.ts';
+export { createMachineConfig, parseMachineConfig, readMachineConfig } from './machine/index.ts';
+export type { MachineConfig } from './machine/schema.ts';
 
 function keepUnreadable(path: string) {
   const copy = `${path}.unreadable-${Date.now()}`;

@@ -4,7 +4,7 @@ import { ConfigProvider, Effect } from 'effect';
 import { BUNDLE, type ShinsaBundle } from '../instance/bundle.ts';
 import { log } from '../log/index.ts';
 import { edgeRuntime } from '../runtime/edge.ts';
-import { readMachineConfig } from './machine.ts';
+import { MachineConfigFile } from './machine/service.ts';
 import { resolveShinsaPaths } from './paths.ts';
 import { createConfigProvider } from './provider.ts';
 import { BACKUP_EXCLUSION, type Env, NEVER_INDEX_MARKER, type ServerConfig } from './schema.ts';
@@ -16,11 +16,13 @@ export { resolveScratchPath, resolveShinsaPaths } from './paths.ts';
 export type { Env, ServerConfig } from './schema.ts';
 
 export function resolveServerAddress(env: Env) {
-  const machine = readMachineConfig(resolveShinsaPaths(env).configPath).config;
   return edgeRuntime.runSync(
-    readServerAddress().pipe(
-      Effect.provideService(ConfigProvider.ConfigProvider, createConfigProvider(env, machine))
-    )
+    Effect.gen(function* () {
+      const machine = yield* (yield* MachineConfigFile).read(resolveShinsaPaths(env).configPath);
+      return yield* readServerAddress().pipe(
+        Effect.provideService(ConfigProvider.ConfigProvider, createConfigProvider(env, machine.config))
+      );
+    })
   );
 }
 

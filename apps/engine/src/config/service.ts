@@ -1,7 +1,7 @@
 import { join, resolve } from 'node:path';
 import { ConfigProvider, Context, Effect, Layer, Option } from 'effect';
 import { resolveBundlePath, type ShinsaBundle } from '../instance/bundle.ts';
-import { readMachineConfig } from './machine.ts';
+import { MachineConfigFile } from './machine/service.ts';
 import { resolveShinsaPaths, resolveUserHome } from './paths.ts';
 import { createConfigProvider } from './provider.ts';
 import {
@@ -24,7 +24,7 @@ export class EngineConfig extends Context.Service<EngineConfig, ServerConfig>()(
       EngineConfig,
       Effect.gen(function* () {
         const paths = resolveShinsaPaths(env);
-        const machine = readMachineConfig(paths.configPath);
+        const machine = yield* (yield* MachineConfigFile).read(paths.configPath);
         const read = Effect.gen(function* () {
           const settings = yield* Effect.orDie(ENGINE_SETTINGS);
           const dataDir = paths.dataDir;
@@ -76,5 +76,5 @@ export class EngineConfig extends Context.Service<EngineConfig, ServerConfig>()(
           Effect.provideService(ConfigProvider.ConfigProvider, createConfigProvider(env, machine.config))
         );
       })
-    );
+    ).pipe(Layer.provide(MachineConfigFile.layer));
 }

@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import { readMachineConfig } from '../../src/config/machine.ts';
+import { readMachineConfig } from '../../src/config/machine/index.ts';
+import { MachineConfigFile } from '../../src/config/machine/service.ts';
 import type { Env } from '../../src/config/schema.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { runTest } from '../harness.ts';
@@ -56,5 +57,38 @@ describe('readMachineConfig', () => {
       'editor must be text; it was ignored.',
       'terminal must be text; it was ignored.',
     ]);
+  });
+});
+
+describe('MachineConfigFile', () => {
+  function readFile(path: string) {
+    return runTest(MachineConfigFile.use((file) => file.read(path)));
+  }
+
+  test('a missing config.json reads as the defaults with no problems', async () => {
+    const read = await readFile(join(createTempDir(), 'config.json'));
+    expect(read).toEqual({
+      config: expect.objectContaining({ roots: [], port: null }),
+      problems: [],
+      unreadable: false,
+    });
+  });
+
+  test('keeps the good fields of a config.json and names the bad ones', async () => {
+    const path = join(createTempDir(), 'config.json');
+    writeFileSync(path, JSON.stringify({ roots: ['/code', '/code'], port: 'x', editor: 'zed' }));
+    const read = await readFile(path);
+    expect(read.config).toMatchObject({ roots: ['/code'], port: null, editor: 'zed' });
+    expect(read.problems).toEqual(['port must be a port number; it was ignored.']);
+    expect(read.unreadable).toBe(false);
+  });
+
+  test('a config.json that is not JSON is unreadable and read as the defaults', async () => {
+    const path = join(createTempDir(), 'config.json');
+    writeFileSync(path, '{"roots": [');
+    const read = await readFile(path);
+    expect(read.unreadable).toBe(true);
+    expect(read.config.roots).toEqual([]);
+    expect(read.problems).toEqual(['The file is not valid JSON (Expected a valid JSON string).']);
   });
 });
