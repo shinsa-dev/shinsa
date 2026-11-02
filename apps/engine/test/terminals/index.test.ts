@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -8,11 +8,10 @@ import {
   type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
 import { Terminals, type TerminalsOptions } from '../../src/terminals/index.ts';
 import { TYPE_LIMITS } from '../../src/terminals/session.ts';
 import { parseStoredService, parseStoredTerminal } from '../../src/terminals/store.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+import { captureLogs, createTempDir, until } from '../helpers/index.ts';
 import { createFakeSpawner, createFakeViewer, createInfo } from './fakes.ts';
 
 const START = { projectId: 'p1', cwd: '/code/web', place: 'repository', taskId: null } as const;
@@ -170,10 +169,10 @@ describe('Terminals', () => {
     const dataDir = createTempDir();
     mkdirSync(join(dataDir, 'terminals'));
     writeFileSync(join(dataDir, 'terminals/terminals.json'), '{');
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     expect(createTerminals({ dataDir }).terminals.snapshot().terminals).toEqual([]);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Terminals] Could not read the saved terminals')).toHaveLength(1);
     writeFileSync(join(dataDir, 'terminals/terminals.json'), 'null');
     expect(createTerminals({ dataDir }).terminals.snapshot().terminals).toEqual([]);
   });
@@ -247,6 +246,16 @@ describe('Terminals services', () => {
     terminals.startService(service.id, main('folder'));
     expect(terminals.find(terminal.id).info).toMatchObject({ status: 'running', place: 'folder' });
     expect(fake.spawned).toHaveLength(2);
+  });
+
+  it('reads the last lines a service printed, and nothing for one that has not run', async () => {
+    const { terminals, fake } = createTerminals();
+    const service = terminals.addService('p1', SERVICE);
+    expect(await terminals.readServiceOutput(service.id, null, 10)).toEqual([]);
+    terminals.startService(service.id, main('repository'));
+    fake.spawned[0]?.emit('listening on 4000\r\nready\r\n');
+    expect(await terminals.readServiceOutput(service.id, null, 1)).toEqual(['ready']);
+    expect(await terminals.readServiceOutput(service.id, null, 10)).toEqual(['listening on 4000', 'ready']);
   });
 
   it('restarts a running service, stopping it first, and starts a stopped one', async () => {
@@ -378,9 +387,10 @@ describe('Terminals services', () => {
       JSON.stringify({ terminals: [createInfo({ id: 'orphan', serviceId: 'gone' })] })
     );
     writeFileSync(join(dataDir, 'terminals/services.json'), '{');
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const { terminals } = createTerminals({ dataDir });
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Terminals] Could not read the saved services')).toHaveLength(1);
     expect(terminals.snapshot().terminals[0]).toMatchObject({ serviceId: null, status: 'stopped' });
   });
 

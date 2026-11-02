@@ -1,11 +1,10 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BaseCheckouts, type BaseRequest } from '../../src/checks/base.ts';
 import { type CheckFailure, listCheckFailures } from '../../src/checks/failures.ts';
 import type { CheckRun } from '../../src/checks/index.ts';
-import { log } from '../../src/log/index.ts';
-import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import { captureLogs, createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 
 const BROKEN_TEST = `import { expect, test } from 'bun:test';
 test('is broken', () => {
@@ -138,14 +137,13 @@ describe('running a failing check on the base commit', () => {
   test('no base commit, a value that is not one, or a base git cannot check out is no comparison', async () => {
     const setup = await createBase({});
     const bases = new BaseCheckouts(join(createTempDir(), 'bases'));
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const command = failing();
       expect(await bases.compareWithBase(requestOf(setup, runOf(command), ''))).toBeNull();
       expect(await bases.compareWithBase(requestOf(setup, runOf(command), '--help'))).toBeNull();
       expect(await bases.compareWithBase(requestOf(setup, runOf(command), 'f'.repeat(40)))).toBeNull();
-      expect(warn).toHaveBeenCalledWith(
-        '[Checks] Could not run a check on the base commit',
+      expect(logs.fieldsOf('[Checks] Could not run a check on the base commit')).toContainEqual(
         expect.objectContaining({ repoId: 'repo-1', command })
       );
       const broken = {
@@ -158,7 +156,7 @@ describe('running a failing check on the base commit', () => {
         known: 1,
       });
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 

@@ -1,13 +1,12 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { type Evidence, parseReviewPayload, type Task } from '@shinsa/core';
 import { PullRequestDescriptions, serializeReviewLink } from '../../src/github/description.ts';
-import { log } from '../../src/log/index.ts';
 import { EvidenceStore } from '../../src/store/evidence/index.ts';
-import { createTempDir, overrideEnv } from '../helpers/index.ts';
+import { captureLogs, createTempDir, overrideEnv } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 
 let restore: (() => void) | null = null;
@@ -98,7 +97,7 @@ describe('PullRequestDescriptions', () => {
 
   test('a repository id GitHub will not give links the evidence to Shinsa and logs why', async () => {
     useFakeGitHub();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const { store, copy } = createStore();
     const task = createTask();
     const evidence = [piece(task, 'shot', { kind: 'screenshot', uri: copy('shot.png') })];
@@ -107,18 +106,17 @@ describe('PullRequestDescriptions', () => {
       task,
       evidence
     );
+    logs.restore();
     expect(description.uploads).toEqual([]);
     expect(description.body).toContain('- **shot**, a screenshot: [open it in Shinsa]');
-    expect(warn).toHaveBeenCalledWith(
-      '[GitHub] Could not read the repository id; the description links evidence to Shinsa',
-      expect.objectContaining({ taskId: task.id, repoId: 'repo-1' })
-    );
-    warn.mockRestore();
+    expect(
+      logs.fieldsOf('[GitHub] Could not read the repository id; the description links evidence to Shinsa')
+    ).toEqual([expect.objectContaining({ taskId: task.id, repoId: 'repo-1' })]);
   });
 
   test('an upload GitHub refuses is logged and linked to Shinsa, the others still go up', async () => {
     useFakeGitHub({ repositoryId: 4242, failUploads: true });
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const { store, copy } = createStore();
     const task = createTask();
     const evidence = [piece(task, 'shot', { kind: 'screenshot', uri: copy('shot.png') })];
@@ -127,12 +125,11 @@ describe('PullRequestDescriptions', () => {
       task,
       evidence
     );
+    logs.restore();
     expect(description.uploads).toEqual([]);
-    expect(warn).toHaveBeenCalledWith(
-      '[GitHub] Could not upload evidence; the description links it to Shinsa',
-      expect.objectContaining({ taskId: task.id, evidenceId: 'shot' })
-    );
-    warn.mockRestore();
+    expect(logs.fieldsOf('[GitHub] Could not upload evidence; the description links it to Shinsa')).toEqual([
+      expect.objectContaining({ taskId: task.id, evidenceId: 'shot' }),
+    ]);
   });
 });
 

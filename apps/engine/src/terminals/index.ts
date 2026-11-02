@@ -6,12 +6,9 @@ import {
   TERMINAL_LIMITS,
   type TerminalForeground,
   type TerminalInfo,
-  type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import {
-  type ForegroundReader,
-  type PortPicker,
   pickFreePort,
   readForegroundProgram,
   resolveLoginShell,
@@ -19,62 +16,21 @@ import {
   resolveShellCommand,
   resolveTerminalEnv,
   spawnTerminalProcess,
-  type TerminalSpawner,
 } from './pty.ts';
 import { resolveServiceRunIn } from './routes.ts';
+import {
+  NOTIFY_MS,
+  type RemoteUrlSource,
+  SCREEN_MS,
+  type ServiceInput,
+  type ServiceRun,
+  type TerminalStart,
+  type TerminalsOptions,
+} from './schema.ts';
 import { TerminalSession, type TerminalViewer } from './session.ts';
 import { TerminalStore } from './store.ts';
 
-type Env = Record<string, string | undefined>;
-
-export interface TerminalsOptions {
-  dataDir: string;
-  home: string;
-  version: string;
-  readOnly?: boolean;
-  env?: Env;
-  spawn?: TerminalSpawner;
-  readForeground?: ForegroundReader;
-  pickPort?: PortPicker;
-  now?: () => number;
-  newId?: () => string;
-  notifyMs?: number;
-  screenMs?: number;
-}
-
-export interface TerminalStart {
-  projectId: string;
-  cwd: string;
-  place: TerminalPlaceKind;
-  taskId: string | null;
-}
-
-export interface ServiceRun {
-  cwd: string;
-  place: TerminalPlaceKind;
-  taskId: string | null;
-  env?: Record<string, string>;
-}
-
-export interface ServiceInput {
-  name: string;
-  cwd: string;
-  command: string;
-  env: Record<string, string>;
-  previewUrl: string | null;
-  portVariable: string;
-}
-
 type Listener = (snapshot: TerminalsSnapshot) => void;
-
-export interface RemoteUrlSource {
-  resolveRemoteUrl(info: TerminalInfo, service: ServiceDefinition): string | null;
-  subscribe(listener: () => void): unknown;
-}
-
-const NOTIFY_MS = 50;
-
-const SCREEN_MS = 2_000;
 
 function normaliseName(name: string | null) {
   const trimmed = name?.trim().slice(0, TERMINAL_LIMITS.name) ?? '';
@@ -501,5 +457,6 @@ export class Terminals {
 }
 
 export { ServiceRefiner } from './refine.ts';
+export type { RemoteUrlSource, ServiceInput, ServiceRun, TerminalStart, TerminalsOptions } from './schema.ts';
 export { createTerminalSockets, readTerminalSocketId, type TerminalSocketData } from './routes.ts';
 export type { TerminalViewer } from './session.ts';

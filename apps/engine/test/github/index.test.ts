@@ -10,6 +10,7 @@ import {
   readPullRequest,
   readPullRequestDiff,
   readRepoFile,
+  readStackedPullRequest,
   resolveCheckRuns,
   resolveCheckRunsState,
   resolveChecks,
@@ -409,6 +410,7 @@ describe('the gh calls', () => {
       (await readPullRequest(github, createTask({ pullRequest: { number: 7 } as Task['pullRequest'] })))
         ?.pullRequest
     ).toMatchObject({ number: 7 });
+    expect((await readStackedPullRequest(github, 7))?.pullRequest).toMatchObject({ number: 7 });
     expect(await readPullRequest(github, createTask({ branch: 'fix/other' }))).toBeNull();
     expect(await readPullRequest(github, createTask({ branch: null }))).toBeNull();
   });

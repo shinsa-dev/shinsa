@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CoverageSetting, Repo, Task } from '@shinsa/core';
 import { createWorktree } from '../../src/git/index.ts';
-import { measureTaskCoverage } from '../../src/test-coverage/index.ts';
+import { listCoverageDetections, measureTaskCoverage } from '../../src/test-coverage/index.ts';
 import { createGitRepo, createTempDir, git, until, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
@@ -109,6 +109,9 @@ describe('measuring the changed lines', () => {
     expect(
       await measure(repo, { worktreePath: worktree }, custom('mkdir -p coverage/lcov.info'))
     ).toMatchObject({ status: 'unavailable', reason: expect.stringContaining('EISDIR') });
+    expect(
+      await measure(repo, { worktreePath: worktree }, custom('true', 'src/math.js/lcov.info'))
+    ).toMatchObject({ status: 'unavailable', reason: expect.stringContaining('math.js/lcov.info') });
     expect(await measure(repo, { worktreePath: worktree }, custom('true', 'coverage/data'))).toEqual({
       status: 'unavailable',
       command: 'true',
@@ -216,5 +219,25 @@ describe('measuring the changed lines', () => {
       'bun test src/math.test.js',
     ]);
     expect(some).toMatchObject({ status: 'measured' });
+  });
+});
+
+describe('the coverage each repository would measure', () => {
+  test('names the runner found in each repository, and none where there is none', () => {
+    const bun = createTempDir();
+    writeFiles(bun, { 'package.json': JSON.stringify({ scripts: { test: 'bun test' } }) });
+    const bare = createTempDir();
+    expect(
+      listCoverageDetections([
+        { id: 'bun', path: bun },
+        { id: 'bare', path: bare },
+      ])
+    ).toEqual({
+      bun: {
+        tool: "Bun's test runner",
+        command: "The test checks of each task, run once more with Bun's test runner's coverage report.",
+      },
+      bare: null,
+    });
   });
 });

@@ -7,7 +7,6 @@ import {
   listSchedules,
   type Schedule,
   type ScheduleRequest,
-  type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
   type Task,
@@ -17,26 +16,15 @@ import {
 import { assertProtocol, readString } from '../agents/handover.ts';
 import { findForkSource } from '../agents/tools/forks.ts';
 import { describeError } from '../log/index.ts';
-import type { SecretStore } from '../secrets/index.ts';
 import type { SurfaceHookSecrets } from '../surface/index.ts';
-import { WEBHOOK_ROUTE_PREFIX } from './webhook.ts';
+import {
+  RECENT_RUNS,
+  type ScheduleToolCall,
+  type ScheduleToolContext,
+  WEBHOOK_ROUTE_PREFIX,
+} from './schema.ts';
 
-export interface ScheduleToolCall {
-  runId: string;
-  attemptId: string;
-  state: () => ShinsaState;
-  dispatch: (command: ShinsaCommand) => Promise<ShinsaEvent[]>;
-}
-
-export interface ScheduleToolContext {
-  secrets: SecretStore;
-  baseUrl: () => string;
-  hookUrl: (scheduleId: string, token: string) => string | null;
-  timeZone: string;
-  now: () => number;
-}
-
-const RECENT_RUNS = 5;
+export type { ScheduleToolCall, ScheduleToolContext } from './schema.ts';
 
 function describeNoSecret(field: string) {
   return `A signature check needs the signing secret. Ask for it with request_secret and pass the secret-ref it returns as ${field}.`;

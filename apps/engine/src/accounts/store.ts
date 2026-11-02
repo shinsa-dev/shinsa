@@ -1,43 +1,12 @@
-import {
-  copyFileSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { join } from 'node:path';
-import { type AccountOrigin, DomainError } from '@shinsa/core';
-import { writeJsonFile } from '../config/file.ts';
-import { describeError, log } from '../log/index.ts';
-import {
-  ACCOUNT_OWNED_ENTRIES,
-  resolveAccountDir,
-  resolveRegistryPath,
-  SEEDED_CONFIG_KEYS,
-} from './paths.ts';
+import { existsSync } from 'node:fs';
+import { DomainError } from '@shinsa/core';
+import { edgeRuntime } from '../runtime/edge.ts';
+import { AccountFolders } from './folders/service.ts';
+import { resolveAccountDir, resolveRegistryPath } from './paths.ts';
+import { AccountRegistry } from './registry/service.ts';
+import type { AccountDetails, AccountIdentity, Registry, StoredAccount } from './schema.ts';
 
-export interface StoredAccount {
-  id: string;
-  configDir: string | null;
-  email: string | null;
-  organization: string | null;
-  plan: string | null;
-  origin: AccountOrigin;
-  addedAt: number;
-  paused: boolean;
-  switchAt: number | null;
-}
-
-interface Registry {
-  version: 1;
-  defaultAccountId: string | null;
-  accounts: StoredAccount[];
-}
+export type { AccountDetails, AccountIdentity, StoredAccount } from './schema.ts';
 
 export interface AccountStoreOptions {
   home: string;
@@ -45,54 +14,6 @@ export interface AccountStoreOptions {
   sharedGlobalConfig: string;
   now?: () => number;
   newId?: () => string;
-}
-
-export type AccountDetails = Partial<Pick<StoredAccount, 'email' | 'organization' | 'plan'>>;
-
-export type AccountIdentity = Pick<StoredAccount, 'email' | 'organization'>;
-
-type Fields = Record<string, unknown>;
-
-const ORIGINS = new Set<AccountOrigin>(['claude', 'login', 'cswap']);
-
-function readText(fields: Fields, key: string) {
-  const value = fields[key];
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function readAccount(value: unknown): StoredAccount | null {
-  if (!value || typeof value !== 'object') return null;
-  const fields = value as Fields;
-  const id = readText(fields, 'id');
-  const origin = fields.origin as AccountOrigin;
-  if (!id || !ORIGINS.has(origin)) return null;
-  const switchAt = fields.switchAt;
-  return {
-    id,
-    configDir: readText(fields, 'configDir'),
-    email: readText(fields, 'email'),
-    organization: readText(fields, 'organization'),
-    plan: readText(fields, 'plan'),
-    origin,
-    addedAt: typeof fields.addedAt === 'number' ? fields.addedAt : 0,
-    paused: fields.paused === true,
-    switchAt: typeof switchAt === 'number' && switchAt >= 1 && switchAt <= 100 ? Math.round(switchAt) : null,
-  };
-}
-
-function createRegistry(): Registry {
-  return { version: 1, defaultAccountId: null, accounts: [] };
-}
-
-function parseRegistry(value: unknown): Registry {
-  const fields = (value && typeof value === 'object' ? value : {}) as Fields;
-  const accounts = (Array.isArray(fields.accounts) ? fields.accounts : [])
-    .map(readAccount)
-    .filter((account): account is StoredAccount => account !== null);
-  const preferred = readText(fields, 'defaultAccountId');
-  const fallback = accounts[0]?.id ?? null;
-  const defaultAccountId = accounts.some((account) => account.id === preferred) ? preferred : fallback;
-  return { version: 1, defaultAccountId, accounts };
 }
 
 function isSameText(a: string, b: string) {
@@ -103,23 +24,6 @@ function isSameIdentity(a: AccountIdentity, b: AccountIdentity) {
   if (!a.email || !b.email || !isSameText(a.email, b.email)) return false;
   if (!a.organization || !b.organization) return true;
   return isSameText(a.organization, b.organization);
-}
-
-function isLink(path: string) {
-  try {
-    return lstatSync(path).isSymbolicLink();
-  } catch {
-    return false;
-  }
-}
-
-function exists(path: string) {
-  try {
-    lstatSync(path);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function isSharedLogin(account: StoredAccount) {
@@ -143,23 +47,12 @@ export class AccountStore {
   }
 
   #read(): Registry {
-    if (!existsSync(this.#path)) return createRegistry();
-    try {
-      return parseRegistry(JSON.parse(readFileSync(this.#path, 'utf8')));
-    } catch (error) {
-      const copy = `${this.#path}.unreadable-${Date.now()}`;
-      copyFileSync(this.#path, copy);
-      log.warn('[Accounts] The account list could not be read; starting with none', {
-        path: this.#path,
-        copy,
-        error: describeError(error),
-      });
-      return createRegistry();
-    }
+    return edgeRuntime.runSync(AccountRegistry.use((registry) => registry.readAccounts(this.#path)));
   }
 
   #write() {
-    writeJsonFile(this.#path, this.#registry);
+    const registry = this.#registry;
+    edgeRuntime.runSync(AccountRegistry.use((accounts) => accounts.writeAccounts(this.#path, registry)));
     for (const listener of this.#listeners) listener();
   }
 
@@ -247,57 +140,15 @@ export class AccountStore {
     return { ...account };
   }
 
-  #seedGlobalConfig(configDir: string) {
-    const target = join(configDir, '.claude.json');
-    if (existsSync(target)) return;
-    let shared: Fields = {};
-    try {
-      shared = JSON.parse(readFileSync(this.#options.sharedGlobalConfig, 'utf8')) as Fields;
-    } catch (error) {
-      log.info('[Accounts] No shared Claude settings to copy into a new account', {
-        error: describeError(error),
-      });
-    }
-    const seeded: Fields = { hasCompletedOnboarding: true };
-    for (const key of SEEDED_CONFIG_KEYS) if (shared[key] !== undefined) seeded[key] = shared[key];
-    writeFileSync(target, `${JSON.stringify(seeded, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
-  }
-
-  writeAccountConfig(configDir: string, patch: Fields) {
-    const target = join(configDir, '.claude.json');
-    let current: Fields = {};
-    try {
-      current = JSON.parse(readFileSync(target, 'utf8')) as Fields;
-    } catch {
-      current = {};
-    }
-    writeJsonFile(target, { ...current, ...patch });
+  writeAccountConfig(configDir: string, patch: Record<string, unknown>) {
+    edgeRuntime.runSync(AccountFolders.use((folders) => folders.writeConfig(configDir, patch)));
   }
 
   linkSharedEntries(configDir: string) {
-    if (!existsSync(configDir)) {
-      mkdirSync(configDir, { recursive: true, mode: 0o700 });
-      this.#seedGlobalConfig(configDir);
-    }
-    let entries: string[];
-    try {
-      entries = readdirSync(this.#options.sharedDir);
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (ACCOUNT_OWNED_ENTRIES.has(entry)) continue;
-      const target = join(configDir, entry);
-      if (exists(target)) continue;
-      try {
-        symlinkSync(join(this.#options.sharedDir, entry), target);
-      } catch (error) {
-        log.warn('[Accounts] Could not share a Claude setting with an account', {
-          entry,
-          error: describeError(error),
-        });
-      }
-    }
+    const { sharedDir, sharedGlobalConfig } = this.#options;
+    edgeRuntime.runSync(
+      AccountFolders.use((folders) => folders.prepare(configDir, { sharedDir, sharedGlobalConfig }))
+    );
   }
 
   createFolder(id: string) {
@@ -348,15 +199,5 @@ export class AccountStore {
 }
 
 export function removeAccountDir(configDir: string) {
-  let entries: string[] = [];
-  try {
-    entries = readdirSync(configDir);
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    const path = join(configDir, entry);
-    if (isLink(path)) unlinkSync(path);
-  }
-  rmSync(configDir, { recursive: true, force: true });
+  edgeRuntime.runSync(AccountFolders.use((folders) => folders.remove(configDir)));
 }
