@@ -48,6 +48,23 @@ export {
 } from './duplicates.ts';
 export { DomainError } from './errors.ts';
 export {
+  FeedbackId,
+  GateId,
+  ID_LIMIT,
+  IdText,
+  MemoryId,
+  ProjectId,
+  RepoId,
+  RunId,
+  ScheduleId,
+  ServiceId,
+  SuggestionId,
+  TaskId,
+  type Unbranded,
+  WatchdogId,
+} from './ids.ts';
+export { listIssueMessages, resolveIssuePath } from './issues.ts';
+export {
   type CurrentEvidenceItem,
   type EarlierEvidenceItem,
   type EvidenceItem,
