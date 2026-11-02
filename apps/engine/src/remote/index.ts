@@ -1,6 +1,13 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import type { AccessRequest, RemoteMember, RemoteSnapshot, RemoteUser, TaskGuest } from '@shinsa/core';
+import type {
+  AccessRequest,
+  PairingView,
+  RemoteMember,
+  RemoteSnapshot,
+  RemoteUser,
+  TaskGuest,
+} from '@shinsa/core';
 import {
   type ConnectClaim,
   DomainError,
@@ -9,7 +16,7 @@ import {
   MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
   type RemoteAccess,
-  type RequestOrigin,
+  type TunnelStatus,
   resolveClaimUrl,
   resolveEnrollUrl,
   resolveRemoteHookUrl,
@@ -20,35 +27,29 @@ import {
 import { describeError, log } from '../log/index.ts';
 import { resolveBrowserCommand } from '../shell/browser.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
+import { RemoteAccessScope } from './access/index.ts';
 import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
-import { ControlClient, ControlError } from './control.ts';
+import {
+  type PairedMachine,
+  type PairingRun,
+  RemoteControl,
+  selectRemoteFailureTag,
+} from './client/index.ts';
 import { isOwnerOnlyRoute } from './local-only.ts';
-import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
 import { listTeamEntries, RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
-import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
+import { Tunnel, type TunnelConnectorLayer, type TunnelPing } from './tunnel/index.ts';
 
 export { type ChannelPeer, RemoteChannel } from './channel.ts';
-export { createInstalledConnector } from './connector.ts';
-export { ControlClient } from './control.ts';
+export { createInstalledConnector } from './connector/installed.ts';
+export { createRefusedConnector } from './connector/refused.ts';
+export { TunnelConnectFailed } from './connector/schema.ts';
+export { TunnelConnector } from './connector/service.ts';
+export type { TunnelConnectorLayer } from './tunnel/index.ts';
+export { RemoteControl } from './client/index.ts';
 export { isTunnelRequest, resolveChannelOriginRefusal, resolveTunnelRoute } from './guard.ts';
-export { resolveLocalOnlyRoute } from './local-only.ts';
 export { REMOTE_FILE, RemoteStore } from './store.ts';
-export { type StartConnector, TunnelSupervisor } from './supervisor.ts';
 
-const remoteRequests = new WeakSet<Request>();
-
-function isAnyChannel() {
-  return true;
-}
-
-export function markRemoteRequest(request: Request) {
-  remoteRequests.add(request);
-  return request;
-}
-
-export function resolveRequestOrigin(request: Request): RequestOrigin {
-  return remoteRequests.has(request) ? 'remote' : 'local';
-}
+const REMOTE_ACCESS_CHANGED = 'Remote access to this machine changed.';
 
 export type { RemoteSnapshot } from '@shinsa/core';
 
@@ -60,17 +61,15 @@ type ProofKeys = Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>;
 
 export interface RemoteOptions {
   path: string;
-  control?: ControlClient;
-  connect: StartConnector;
-  ping?: (url: string) => Promise<boolean>;
+  control?: RemoteControl;
+  connector: TunnelConnectorLayer;
+  ping?: TunnelPing;
   localUrl: () => string;
   version: string;
   maxBodyBytes: number;
-  timings?: TunnelTimings;
   now?: () => number;
   machineName: string;
   openUrl: (url: string) => Promise<void>;
-  pairPollMs?: number;
 }
 
 type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
@@ -103,25 +102,18 @@ export function createUrlOpener(cwd: string) {
   return (url: string) => openRemoteUrl(url, cwd);
 }
 
-export async function requestHealth(url: string) {
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
 export class Remote {
   readonly store: RemoteStore;
-  readonly control: ControlClient;
-  readonly supervisor: TunnelSupervisor;
+  readonly control: RemoteControl;
+  readonly access = new RemoteAccessScope();
+  readonly #tunnel: Tunnel;
+  #tunnelStatus: TunnelStatus = 'off';
   readonly #options: RemoteOptions;
   readonly #now: () => number;
-  readonly #channels = new Set<RemoteChannel>();
+  readonly #channels = new Map<RemoteChannel, () => void>();
   readonly #listeners = new Set<() => void>();
   readonly #waiters = new Map<string, ((approved: boolean) => void)[]>();
-  #pairing: Pairing | null = null;
+  #pairing: { view: PairingView; run: PairingRun } | null = null;
   #claimer: HandoffClaimer | null = null;
   #leaver: GuestLeaver | null = null;
   #guestRevision = 0;
@@ -130,26 +122,26 @@ export class Remote {
     this.#options = options;
     this.#now = options.now ?? Date.now;
     this.store = new RemoteStore(options.path);
-    this.control = options.control ?? new ControlClient();
-    this.supervisor = new TunnelSupervisor({
-      control: {
-        recordHeartbeat: (token, request) => this.#recordHeartbeat(token, request),
-        recordOffline: (token) => this.control.recordOffline(token),
-      },
-      connect: options.connect,
-      ping: options.ping ?? requestHealth,
-      localUrl: options.localUrl,
+    this.control = options.control ?? new RemoteControl();
+    this.#tunnel = new Tunnel({
+      control: this.control,
+      connector: options.connector,
+      ping: options.ping,
       version: options.version,
+      localUrl: options.localUrl,
       signingKey: async () => (await this.store.resolveSigningKey()).publicKey,
-      onRevoked: () => this.#forget(),
+      guestRevision: () => this.#guestRevision,
+      guests: () => this.store.file.guests,
       onAccess: (access, guests) => this.#recordAccess(access, guests),
       onTeams: (teams) => {
         if (this.store.recordTeams(teams)) this.#publish();
       },
-      ...(options.timings ? { timings: options.timings } : {}),
-      now: this.#now,
+      onStatus: (status) => {
+        this.#tunnelStatus = status;
+        this.#publish();
+      },
+      onRevoked: () => this.#forget(),
     });
-    this.supervisor.subscribe(() => this.#publish());
   }
 
   get appOrigin() {
@@ -170,7 +162,7 @@ export class Remote {
     return {
       paired: file.credentials !== null,
       enabled: this.isEnabled,
-      status: this.supervisor.status,
+      status: this.#tunnelStatus,
       instanceId: file.credentials?.instanceId ?? null,
       owner: file.owner,
       machineName: this.#options.machineName,
@@ -205,15 +197,13 @@ export class Remote {
       publicKey: machine.publicKey,
       version: this.#options.version,
     });
-    const pairing = new Pairing({
-      control: this.control,
-      start,
-      pollMs: this.#options.pairPollMs ?? PAIR_POLL_MS,
-      now: this.#now,
-    });
+    const pairing = {
+      view: { claimCode: start.claimCode, url: start.url, expiresAt: start.expiresAt },
+      run: this.control.startPairing(start),
+    };
     this.#pairing = pairing;
     this.#publish();
-    void pairing.done.then((end) => {
+    void pairing.run.done.then((end) => {
       if (this.#pairing === pairing) this.#pairing = null;
       if (end.status === 'claimed') this.#recordPaired(end.machine);
       this.#publish();
@@ -231,7 +221,7 @@ export class Remote {
   }
 
   cancelPairing() {
-    this.#pairing?.cancel();
+    this.#pairing?.run.cancel();
   }
 
   #recordPaired(machine: PairedMachine) {
@@ -334,13 +324,6 @@ export class Remote {
     this.#leaver = leaver;
   }
 
-  async #recordHeartbeat(...[token, request]: Parameters<ControlClient['recordHeartbeat']>) {
-    const revision = this.#guestRevision;
-    const answer = await this.control.recordHeartbeat(token, request);
-    if (revision === this.#guestRevision) return answer;
-    return { ...answer, guests: this.store.file.guests };
-  }
-
   #updateGuests(change: (guests: RemoteMember[]) => RemoteMember[]) {
     this.#guestRevision += 1;
     this.store.update((file) => ({ ...file, guests: change(file.guests) }));
@@ -395,7 +378,7 @@ export class Remote {
     try {
       return await this.control.requestGuestAddition(credentials.machineToken, userId);
     } catch (error) {
-      if (error instanceof ControlError && error.status === 409)
+      if (selectRemoteFailureTag(error) === 'GuestsFull')
         return `This machine already has ${MAX_INSTANCE_GUESTS} people working on its tasks. Ask its owner to remove one.`;
       log.warn('[Remote] Could not add the guest a task was handed to', { error: describeError(error) });
       return HANDOFF_UNAVAILABLE;
@@ -623,7 +606,7 @@ export class Remote {
     try {
       return await this.control.requestMemberAddition(machineToken, userId);
     } catch (error) {
-      if (error instanceof ControlError && error.status === 409)
+      if (selectRemoteFailureTag(error) === 'MembersFull')
         throw new DomainError({
           code: 'members_full',
           message: `This machine has ${MAX_INSTANCE_MEMBERS} members already.`,
@@ -693,13 +676,17 @@ export class Remote {
   start() {
     const { credentials } = this.store.file;
     if (!(this.isEnabled && credentials)) return;
-    this.supervisor.start(credentials);
+    this.#tunnel.start(credentials);
+  }
+
+  requestHeartbeat() {
+    return this.#tunnel.requestHeartbeat();
   }
 
   async stop() {
-    this.#pairing?.cancel();
-    this.#closeChannels(isAnyChannel);
-    await this.supervisor.stop();
+    this.#pairing?.run.cancel();
+    this.access.end();
+    await this.#tunnel.stop();
   }
 
   #forget() {
@@ -715,7 +702,7 @@ export class Remote {
       teamKeys: [],
       grants: [],
     }));
-    this.#closeChannels(isAnyChannel);
+    this.access.end();
     this.#publish();
   }
 
@@ -737,7 +724,10 @@ export class Remote {
       recordSeen: (device) => this.store.recordDeviceSeen(device, this.#now()),
       maxBodyBytes: this.#options.maxBodyBytes,
     });
-    this.#channels.add(channel);
+    const release = this.access.acquire(() => {
+      if (this.#channels.delete(channel)) channel.fail(REMOTE_ACCESS_CHANGED);
+    });
+    this.#channels.set(channel, release);
     return channel;
   }
 
@@ -755,14 +745,20 @@ export class Remote {
 
   closeChannel(channel: RemoteChannel) {
     channel.close();
+    this.#releaseChannel(channel);
+  }
+
+  #releaseChannel(channel: RemoteChannel) {
+    const release = this.#channels.get(channel);
     this.#channels.delete(channel);
+    release?.();
   }
 
   #closeChannels(match: (channel: RemoteChannel) => boolean) {
-    for (const channel of [...this.#channels]) {
+    for (const channel of [...this.#channels.keys()]) {
       if (!match(channel)) continue;
-      channel.fail('Remote access to this machine changed.');
-      this.#channels.delete(channel);
+      this.#releaseChannel(channel);
+      channel.fail(REMOTE_ACCESS_CHANGED);
     }
   }
 

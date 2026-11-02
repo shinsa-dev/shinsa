@@ -1,7 +1,6 @@
 import { dirname, join } from 'node:path';
 import {
   type Bytes,
-  type ConnectResponse,
   createFrameOpener,
   createTeamHello,
   decodeText,
@@ -29,7 +28,7 @@ import {
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { ChannelPeer } from './channel.ts';
-import { ControlError } from './control.ts';
+import { selectRemoteFailureTag } from './client/index.ts';
 import type { Remote } from './index.ts';
 import { createChannelEphemeral } from './share-channel.ts';
 import { resolveKeyDigest, TEAM_SNAPSHOTS_FILE, TeamSnapshots } from './team-snapshots.ts';
@@ -80,7 +79,7 @@ export interface TeamStreamTarget {
   view: TeamView;
 }
 
-type FeedRemote = Pick<Remote, 'store' | 'control' | 'appOrigin' | 'isEnabled' | 'subscribe'>;
+type FeedRemote = Pick<Remote, 'store' | 'control' | 'access' | 'appOrigin' | 'isEnabled' | 'subscribe'>;
 
 export interface TeamFeedsOptions {
   remote: FeedRemote;
@@ -469,16 +468,20 @@ export class TeamFeeds {
     const key = resolveFeedKey(feed.teamId, feed.machine.id);
     const closes = this.#heldRelays.get(key) ?? new Set<() => void>();
     this.#heldRelays.set(key, closes);
-    const close = () => {
-      if (!closes.delete(close)) return;
+    const forget = () => {
+      if (!closes.delete(close)) return false;
       if (closes.size === 0) this.#heldRelays.delete(key);
-      peer.close(NORMAL_CLOSE, TEAM_FEED_OFFLINE);
+      release();
+      return true;
     };
+    const close = () => {
+      if (forget()) peer.close(NORMAL_CLOSE, TEAM_FEED_OFFLINE);
+    };
+    const release = this.#remote.access.acquire(close);
     closes.add(close);
     return {
       close: () => {
-        closes.delete(close);
-        if (closes.size === 0) this.#heldRelays.delete(key);
+        forget();
       },
     };
   }
@@ -559,6 +562,13 @@ export class TeamFeeds {
     if (held) return held;
     const recorder = new TeamViewRecorder();
     let open = true;
+    const close = (reason: string, closedReason: string) => {
+      open = false;
+      this.#relays.delete(stop);
+      release();
+      peer.send(serializeShareMessage({ t: 'closed', reason }));
+      peer.close(NORMAL_CLOSE, closedReason);
+    };
     const stopStream = this.openStream(
       {
         teamId: target.teamId,
@@ -573,13 +583,7 @@ export class TeamFeeds {
           if (recorder.receive(message)) this.#keepView(feed, target.taskId, recorder);
         },
         onEnd: (end) => {
-          if (!open) return;
-          open = false;
-          this.#relays.delete(stop);
-          peer.send(
-            serializeShareMessage({ t: 'closed', reason: end.gone ? end.reason : TEAM_FEED_OFFLINE })
-          );
-          peer.close(NORMAL_CLOSE, end.reason);
+          if (open) close(end.gone ? end.reason : TEAM_FEED_OFFLINE, end.reason);
         },
       }
     );
@@ -587,8 +591,14 @@ export class TeamFeeds {
       if (!open) return;
       open = false;
       this.#relays.delete(stop);
+      release();
       stopStream();
     };
+    const release = this.#remote.access.acquire(() => {
+      if (!open) return;
+      stopStream();
+      close(TEAM_FEED_OFFLINE, TEAM_FEED_OFFLINE);
+    });
     this.#relays.add(stop);
     return { close: stop };
   }
@@ -596,11 +606,16 @@ export class TeamFeeds {
   openStream(target: TeamStreamTarget, handlers: TeamStreamHandlers) {
     let socket: FeedSocket | null = null;
     let ended = false;
-    const end = (result: TeamStreamEnd) => {
-      if (ended) return;
+    const halt = () => {
       ended = true;
       socket?.close();
       socket = null;
+    };
+    const release = this.#remote.access.acquire(halt);
+    const end = (result: TeamStreamEnd) => {
+      if (ended) return;
+      halt();
+      release();
       handlers.onEnd(result);
     };
     const begin = async () => {
@@ -661,7 +676,8 @@ export class TeamFeeds {
       });
     };
     begin().catch((error: unknown) => {
-      if (error instanceof ControlError && (error.status === 403 || error.status === 404)) {
+      const tag = selectRemoteFailureTag(error);
+      if (tag === 'NotOwner' || tag === 'NotFound') {
         end({ reason: TEAM_FEED_REFUSED, gone: true });
         return;
       }
@@ -673,20 +689,18 @@ export class TeamFeeds {
       end({ reason: TEAM_FEED_OFFLINE, gone: false });
     });
     return () => {
-      ended = true;
-      socket?.close();
-      socket = null;
+      halt();
+      release();
     };
   }
 
   async #requestChannelUrl(target: TeamStreamTarget) {
     const credentials = this.#remote.store.file.credentials;
     if (!credentials) return null;
-    const answer = await this.#remote.control.requestTeamAction<ConnectResponse>(
+    const answer = await this.#remote.control.requestTeamConnect(
       credentials.machineToken,
       target.teamId,
-      'connect',
-      { instanceId: target.instanceId }
+      target.instanceId
     );
     return answer.url;
   }

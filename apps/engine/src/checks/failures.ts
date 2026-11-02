@@ -1,20 +1,9 @@
 import { isAbsolute, relative } from 'node:path';
 import { describeCount } from '@shinsa/core';
 import { listFailedTestCases } from './reruns.ts';
+import type { CheckFailure, FailureDiff, FailureKind } from './schema.ts';
 
-type FailureKind = 'test' | 'type' | 'lint' | 'error';
-
-export interface CheckFailure {
-  kind: FailureKind;
-  file: string;
-  key: string;
-  label: string;
-}
-
-export interface FailureDiff {
-  added: CheckFailure[];
-  known: CheckFailure[];
-}
+export type { CheckFailure, FailureDiff } from './schema.ts';
 
 interface Diagnostic {
   kind: FailureKind;

@@ -11,8 +11,6 @@ import {
   type OnboardingStatus,
   PROJECT_COLORS,
   type ProjectInput,
-  type Repo,
-  type RootSuggestions,
   SETTINGS_KEYS,
   type Settings,
   type UserCommand,
@@ -123,13 +121,13 @@ function resolveFolderPath(path: string) {
   return path.startsWith('~') ? path : resolve(path);
 }
 
-function resolveNewColor(projects: ProjectView[]) {
+function resolveNewColor(projects: readonly ProjectView[]) {
   const used = new Set(projects.map((project) => project.color));
   return PROJECT_COLORS.find((color) => !used.has(color)) ?? PROJECT_COLORS[0];
 }
 
 async function buildProjectInput(client: SurfaceClient, values: Values): Promise<ProjectInput> {
-  const { projects } = await client.read<ProjectsRead>('/api/projects');
+  const { projects } = await client.api.state.projects();
   const ref = readValue(values, 'id');
   const existing = ref ? selectProject(projects, ref) : null;
   if (ref && !existing) {
@@ -186,7 +184,8 @@ function requestProjectChange(
   path: string
 ) {
   if (!client.projects) {
-    return client.post<unknown>(`/api/projects/${encodeURIComponent(projectId)}/${kind}`, { path });
+    const request = { params: { projectId }, payload: { path } };
+    return kind === 'repos' ? client.api.projects.addRepo(request) : client.api.projects.addFolder(request);
   }
   if (kind === 'repos') return client.projects.upsertRepo(projectId, path);
   return client.projects.upsertFolder(projectId, path);
@@ -205,9 +204,9 @@ async function upsertProjectPath(client: SurfaceClient, values: Values, kind: 'r
 }
 
 async function saveFolders(client: SurfaceClient, change: (roots: string[]) => string[]) {
-  const status = await client.read<OnboardingStatus>('/api/onboarding');
+  const status = await client.api.onboarding.status();
   const roots = change(status.roots.configured);
-  const data = await client.post<OnboardingStatus>('/api/onboarding/setup', { roots });
+  const data = await client.api.onboarding.setup({ payload: { roots } });
   return { data, text: formatFolders(data) };
 }
 
@@ -219,13 +218,13 @@ function formatFolders(status: OnboardingStatus) {
 }
 
 export const CONFIG_SPECS: SurfaceSpec[] = [
-  defineRead<{ settings: Settings }>({
+  defineRead({
     path: ['settings', 'get'],
     summary: 'Show every setting, or one.',
     fields: [
       { name: 'key', kind: 'text', positional: 'one', description: `One of ${SETTINGS_KEYS.join(', ')}.` },
     ],
-    request: () => '/api/settings',
+    read: (_values, client) => client.api.state.settings(),
     format: formatSettings,
   }),
   defineCommand({
@@ -252,19 +251,19 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     },
     done: (values) => `Set ${readValue(values, 'key')}.`,
   }),
-  defineRead<ProjectsRead>({
+  defineRead({
     path: ['projects', 'list'],
     summary: 'List the projects, each with its key and repositories.',
     fields: [],
-    request: () => '/api/projects',
+    read: (_values, client) => client.api.state.projects(),
     format: ({ projects }) =>
       projects.length === 0 ? 'No projects.' : projects.map(describeProjectLine).join('\n'),
   }),
-  defineRead<ProjectsRead>({
+  defineRead({
     path: ['projects', 'show'],
     summary: 'Show a project: its description, repositories and folders.',
     fields: [PROJECT_FIELD],
-    request: () => '/api/projects',
+    read: (_values, client) => client.api.state.projects(),
     format: (data, values) => {
       const ref = readValue(values, 'project');
       const project = selectProject(data.projects, ref);
@@ -352,11 +351,11 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     fields: [PROJECT_FIELD, PATH_FIELD],
     act: (client, values) => upsertProjectPath(client, values, 'folders'),
   }),
-  defineRead<ProjectsRead>({
+  defineRead({
     path: ['focus', 'show'],
     summary: 'Show the project you are focused on.',
     fields: [],
-    request: () => '/api/projects',
+    read: (_values, client) => client.api.state.projects(),
     format: ({ projects, focus }) => {
       const project = projects.find((candidate) => candidate.id === focus.projectId);
       if (!project) return 'No focus: everything shows.';
@@ -384,11 +383,11 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     build: () => ({ type: 'focus.change', projectId: null, until: null }),
     done: () => 'Everything shows again.',
   }),
-  defineRead<{ repos: Repo[] }>({
+  defineRead({
     path: ['repos', 'list'],
     summary: 'List the repositories agents have worked in.',
     fields: [],
-    request: () => '/api/repos',
+    read: (_values, client) => client.api.state.repos(),
     format: ({ repos }) =>
       repos.length === 0
         ? 'No repositories yet. Shinsa registers one the first time it works there.'
@@ -460,18 +459,18 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     }),
     done: () => 'Removed the repository.',
   }),
-  defineRead<OnboardingStatus>({
+  defineRead({
     path: ['folders', 'list'],
     summary: 'List the folders Shinsa looks in for repositories.',
     fields: [],
-    request: () => '/api/onboarding',
+    read: (_values, client) => client.api.onboarding.status(),
     format: formatFolders,
   }),
-  defineRead<RootSuggestions>({
+  defineRead({
     path: ['folders', 'suggest'],
     summary: 'Find the folders on this machine that hold git repositories.',
     fields: [{ name: 'refresh', kind: 'boolean', description: 'Scan again instead of using the last scan.' }],
-    request: (values) => (values.refresh ? '/api/onboarding/roots?refresh=1' : '/api/onboarding/roots'),
+    read: (values, client) => client.api.onboarding.roots({ query: values.refresh ? { refresh: '1' } : {} }),
     format: ({ suggestions }) =>
       suggestions.length === 0
         ? 'No folders with repositories found.'

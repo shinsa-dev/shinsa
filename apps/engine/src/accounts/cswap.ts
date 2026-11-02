@@ -1,10 +1,11 @@
 import { homedir } from 'node:os';
 import { log } from '../log/index.ts';
 import type { CommandOptions, CommandResult } from '../shell/index.ts';
+import { parseCswapList } from './answers.ts';
+import { CSWAP_BINARIES, CSWAP_LIST_TTL_MS, CSWAP_TIMEOUT_MS, type CswapAccount } from './schema.ts';
 
-export interface CswapAccount {
-  email: string;
-}
+export { parseCswapList } from './answers.ts';
+export type { CswapAccount } from './schema.ts';
 
 export type CswapRunner = (command: string[], cwd: string, options: CommandOptions) => Promise<CommandResult>;
 
@@ -12,31 +13,6 @@ export interface CswapOptions {
   run: CswapRunner;
   which?: (command: string) => string | null;
   now?: () => number;
-}
-
-const BINARIES = ['cswap', 'claude-swap'];
-
-const CSWAP_TIMEOUT_MS = 30_000;
-
-const LIST_TTL_MS = 10 * 60_000;
-
-type Fields = Record<string, unknown>;
-
-function isFields(value: unknown): value is Fields {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-export function parseCswapList(stdout: string): CswapAccount[] {
-  try {
-    const parsed = JSON.parse(stdout) as { accounts?: unknown };
-    const accounts = Array.isArray(parsed.accounts) ? parsed.accounts : [];
-    return accounts.flatMap((account): CswapAccount[] => {
-      if (!isFields(account) || typeof account.email !== 'string' || account.kind === 'api_key') return [];
-      return [{ email: account.email }];
-    });
-  } catch {
-    return [];
-  }
 }
 
 export class Cswap {
@@ -49,7 +25,7 @@ export class Cswap {
 
   #binary() {
     const which = this.#options.which ?? ((command: string) => Bun.which(command));
-    for (const name of BINARIES) {
+    for (const name of CSWAP_BINARIES) {
       const path = which(name);
       if (path) return path;
     }
@@ -58,7 +34,7 @@ export class Cswap {
 
   async list(): Promise<CswapAccount[]> {
     const now = (this.#options.now ?? Date.now)();
-    if (this.#listed && now - this.#listed.at < LIST_TTL_MS) return this.#listed.accounts;
+    if (this.#listed && now - this.#listed.at < CSWAP_LIST_TTL_MS) return this.#listed.accounts;
     const binary = this.#binary();
     if (!binary) return [];
     const result = await this.#options.run([binary, 'list', '--json'], homedir(), {

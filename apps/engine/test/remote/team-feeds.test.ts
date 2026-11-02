@@ -18,10 +18,11 @@ import {
   type TeamSnapshot,
   type TeamTask,
 } from '@shinsa/core';
+import { NotFound } from '@shinsa/core/remote/errors';
 import { log } from '../../src/log/index.ts';
-import { ControlClient } from '../../src/remote/control.ts';
+import { RemoteControl } from '../../src/remote/client/index.ts';
+import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
-import { createTeamFeedRoutes } from '../../src/remote/routes.ts';
 import {
   type FeedSocket,
   TEAM_FEED_OFFLINE,
@@ -34,7 +35,7 @@ import { TEAM_VIEWS_DIR, TeamViews } from '../../src/remote/team-views.ts';
 import { TEAM_GONE_REASON, Teams } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
-import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
+import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
 
 const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
 
@@ -84,8 +85,8 @@ function writeRemoteFile(file: Record<string, unknown>) {
 function createRemote(path: string, plane: FakeControlPlane) {
   return new Remote({
     path,
-    control: new ControlClient({ origin: plane.origin }),
-    connect: () => Promise.reject(new Error('no tunnel in this test')),
+    control: new RemoteControl({ origin: plane.origin }),
+    connector: createRefusedConnector('no tunnel in this test'),
     localUrl: () => 'http://127.0.0.1:1',
     version: '1',
     maxBodyBytes: 1024,
@@ -278,28 +279,6 @@ describe('watching teammates’ machines', () => {
     feeds.stop();
   });
 
-  test('serves the tasks to the engine’s read API, open ones on request', async () => {
-    const { feeds } = setUp();
-    feeds.start();
-    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
-    const [route] = createTeamFeedRoutes(feeds);
-    const request = (query: string) =>
-      route?.respond(
-        [] as unknown as RegExpExecArray,
-        new Request(`http://localhost/api/teams/tasks${query}`)
-      );
-    const all = (await (await request(''))?.json()) as {
-      tasks: { task: { id: string } }[];
-      machines: unknown[];
-    };
-    expect(all.tasks.map((task) => task.task.id)).toEqual(['task-1', 'task-2']);
-    expect(all.machines).toHaveLength(1);
-    const open = (await (await request('?team=team1&open=true'))?.json()) as { tasks: unknown[] };
-    expect(open.tasks).toHaveLength(1);
-    expect(route?.pattern.test('/api/teams/tasks')).toBe(true);
-    feeds.stop();
-  });
-
   test('follows the teammate’s machine as it changes, and keeps its last list while it is offline', async () => {
     const { feeds, stub, laptop, sockets } = setUp();
     feeds.start();
@@ -358,7 +337,7 @@ describe('watching teammates’ machines', () => {
 
   test('is refused when app.shinsa.dev says the machine is not in the team', async () => {
     const { feeds, plane } = setUp();
-    plane.answers.set(CONNECT_PATH, () => Response.json({ error: { code: 'not_found' } }, { status: 404 }));
+    plane.answers.set(CONNECT_PATH, () => refuse(NotFound));
     feeds.start();
     await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'refused', TEAM_FEED_REFUSED]]);
@@ -367,7 +346,7 @@ describe('watching teammates’ machines', () => {
 
   test('a new member refused before the teammate’s machine heard of them gets in on the next try', async () => {
     const { feeds, plane, waits } = setUp();
-    plane.answers.set(CONNECT_PATH, () => Response.json({ error: { code: 'not_found' } }, { status: 404 }));
+    plane.answers.set(CONNECT_PATH, () => refuse(NotFound));
     feeds.start();
     await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
     plane.answers.set(CONNECT_PATH, () =>
@@ -545,7 +524,7 @@ describe('keeping a teammate’s last list', () => {
     const { feeds, laptop, plane, sockets, waits } = setUp();
     feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
-    plane.answers.set(CONNECT_PATH, () => Response.json({ error: { code: 'not_found' } }, { status: 404 }));
+    plane.answers.set(CONNECT_PATH, () => refuse(NotFound));
     sockets[0]?.drop();
     await until('the drop is seen', () => waits.length === 1);
     waits.shift()?.();

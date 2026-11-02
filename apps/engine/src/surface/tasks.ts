@@ -1,5 +1,4 @@
 import {
-  type ChatEntry,
   MESSAGE_KINDS,
   type MessageKind,
   ROUND_SHIPPINGS,
@@ -11,6 +10,7 @@ import {
   TASK_PRIORITIES,
   type TaskDiff,
 } from '@shinsa/core';
+import type { ChatPage, OpenTarget } from '@shinsa/core/engine-api/schema';
 import { type Display, describeTable, type Tone } from '../terminal/index.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import {
@@ -21,10 +21,9 @@ import {
   resolveOptionalAccount,
   resolveOptionalProjectId,
   resolveOptionalRepoId,
-  type TaskDetail,
   type TaskView,
 } from './resolve.ts';
-import { defineAction, defineCommand, defineRead, encode, readValue, type SurfaceSpec } from './spec.ts';
+import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 export const TASK_FIELD: FieldSpec = {
   name: 'task',
@@ -45,13 +44,6 @@ const TASK_FILTERS = ['open', 'needs_you', 'settled', 'all'] as const;
 
 const OPEN_TARGETS = ['editor', 'terminal', 'finder'] as const;
 
-interface ChatPage {
-  taskId: string;
-  runs: { id: string; role: string }[];
-  entries: (ChatEntry & { index: number; runId: string })[];
-  next: number | null;
-}
-
 const PAUSED_GATES: ReadonlySet<string> = new Set(['failure', 'configuration', 'sign_in']);
 
 const SETTLED_TONES: Partial<Record<TaskView['stage'], Tone>> = {
@@ -65,7 +57,7 @@ function resolveTaskTone(task: TaskView): Tone {
   return SETTLED_TONES[task.stage] ?? 'accent';
 }
 
-function formatTasks(tasks: TaskView[], display: Display) {
+function formatTasks(tasks: readonly TaskView[], display: Display) {
   if (tasks.length === 0) return 'No tasks.';
   const repos = tasks.some((task) => task.repo);
   const rows = tasks.map((task) => [
@@ -141,7 +133,7 @@ async function buildTaskCreate(values: Values, client: Parameters<SurfaceSpec['r
 }
 
 export const TASK_SPECS: SurfaceSpec[] = [
-  defineRead<{ tasks: TaskView[] }>({
+  defineRead({
     path: ['tasks', 'list'],
     summary: 'List tasks, most recently changed first.',
     fields: [
@@ -159,29 +151,28 @@ export const TASK_SPECS: SurfaceSpec[] = [
       { name: 'repo', kind: 'text', description: 'Only tasks in this repository (name or id).' },
       { name: 'limit', kind: 'integer', description: 'At most this many tasks (50 by default).' },
     ],
-    request: (values) => {
-      const params = new URLSearchParams();
+    read: (values, client) => {
+      const query: Record<string, string> = {};
       for (const [key, name] of [
         ['status', 'status'],
         ['q', 'query'],
         ['repo', 'repo'],
         ['limit', 'limit'],
       ] as const) {
-        if (values[name] !== undefined) params.set(key, String(values[name]));
+        if (values[name] !== undefined) query[key] = String(values[name]);
       }
-      const query = params.toString();
-      return query ? `/api/tasks?${query}` : '/api/tasks';
+      return client.api.tasks.list({ query });
     },
     format: ({ tasks }, _values, display) => formatTasks(tasks, display),
   }),
-  defineRead<TaskDetail>({
+  defineRead({
     path: ['tasks', 'show'],
     summary: 'Show a task: its state, plan, open decisions and recent activity.',
     fields: [TASK_FIELD],
-    request: (values) => `/api/tasks/${encode(values.task)}`,
+    read: (values, client) => client.api.tasks.read({ params: { taskRef: String(values.task) } }),
     format: (detail) => detail.text,
   }),
-  defineRead<ChatPage>({
+  defineRead({
     path: ['tasks', 'chat'],
     summary: "Read a task's chat: your messages, the agents' replies and, on request, their tool calls.",
     fields: [
@@ -199,23 +190,27 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'At most this many entries (50 by default; the latest without after).',
       },
     ],
-    request: (values) => {
-      const params = new URLSearchParams();
-      if (values.run) params.set('run', String(values.run));
-      if (values.kinds) params.set('kinds', readList(values, 'kinds').join(','));
-      if (values.after !== undefined) params.set('after', String(values.after));
-      if (values.limit !== undefined) params.set('limit', String(values.limit));
-      const query = params.toString();
-      return `/api/tasks/${encode(values.task)}/chat${query ? `?${query}` : ''}`;
-    },
+    read: (values, client) =>
+      client.api.tasks.chat({
+        params: { taskRef: String(values.task) },
+        query: {
+          ...(values.run ? { run: String(values.run) } : {}),
+          ...(values.kinds ? { kinds: readList(values, 'kinds').join(',') } : {}),
+          ...(values.after === undefined ? {} : { after: String(values.after) }),
+          ...(values.limit === undefined ? {} : { limit: String(values.limit) }),
+        },
+      }),
     format: formatChat,
   }),
-  defineRead<TaskDiff>({
+  defineRead({
     path: ['tasks', 'diff'],
     summary: 'List the files a task changed against its base branch.',
     fields: [TASK_FIELD],
-    request: async (values, client) =>
-      `/api/tasks/${encode(await findTaskId(client, readValue(values, 'task')))}/diff`,
+    read: async (values, client) =>
+      client.api.code.diff({
+        params: { taskRef: await findTaskId(client, readValue(values, 'task')) },
+        query: {},
+      }),
     format: formatDiff,
   }),
   defineCommand({
@@ -771,8 +766,9 @@ export const TASK_SPECS: SurfaceSpec[] = [
     ],
     act: async (client, values) => {
       const detail = await readTask(client, readValue(values, 'task'));
-      const data = await client.post<{ ok: boolean }>(`/api/tasks/${encode(detail.task.id)}/open`, {
-        target: values.in ?? 'editor',
+      const data = await client.api.tasks.open({
+        params: { taskRef: detail.task.id },
+        payload: { target: (values.in ?? 'editor') as OpenTarget },
       });
       return { data, text: data.ok ? 'Opened.' : 'Could not open it.' };
     },

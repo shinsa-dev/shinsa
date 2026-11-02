@@ -95,11 +95,28 @@ describe('running a check', () => {
     });
   });
 
+  test('a check whose checkout is gone fails with the reason it could not start, and runs nothing', async () => {
+    const gone = join(createDir(), 'gone');
+    const failed = await runCheck(checkOf('echo never'), gone, OPTIONS);
+    expect(failed.check.outcome).toBe('fail');
+    expect(failed.check.detail).not.toContain('never');
+    expect(failed.check.detail).not.toBe('');
+  });
+
   test('runs every check at low priority', async () => {
     const dir = createDir();
     const own = Number((await runCheck(checkOf(`ps -o nice= -p ${process.pid}`), dir, OPTIONS)).output);
     const run = await runCheck(checkOf('ps -o nice= -p $$'), dir, OPTIONS);
     expect(Number(run.output)).toBe(Math.min(19, own + 10));
+  });
+
+  test('names the process it started, so it is counted against its task', async () => {
+    const dir = createDir();
+    const pids: number[] = [];
+    const run = await runCheck(checkOf('echo $$'), dir, { ...OPTIONS, onSpawn: (pid) => pids.push(pid) });
+    expect(pids).toHaveLength(1);
+    expect(pids[0]).toBeGreaterThan(0);
+    expect(run.check.outcome).toBe('pass');
   });
 
   test('a check gets the variables it is given over the quiet defaults', async () => {

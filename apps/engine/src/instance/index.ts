@@ -1,5 +1,5 @@
 export { BUNDLE, resolveBundle, resolveBundlePath, type ShinsaBundle } from './bundle.ts';
-export { createReadOnlyError, INSPECT_MESSAGE, INSPECT_READ_ONLY } from './inspect.ts';
+export { createReadOnlyError, INSPECT_MESSAGE } from './inspect.ts';
 export {
   createServerInstance,
   describeVersion,

@@ -1,37 +1,22 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { CoverageDetection, CoverageFormat } from '@shinsa/core';
+import type { CoverageDetection } from '@shinsa/core';
+import { listDependencyNames, readPackageManifest } from '../files/manifest.ts';
+import {
+  CD_PREFIX,
+  type CoverageRun,
+  CWD_OPTION,
+  type Invocation,
+  JS_PREFIXES,
+  PY_PREFIXES,
+  PYTHON_MANIFESTS,
+  type Runner,
+  type RunnerName,
+  SHELL_OPERATORS,
+  VITEST_PROVIDERS,
+} from './schema.ts';
 
-export interface CoverageRun {
-  tool: string;
-  command: string;
-  cwd: string;
-  report: string;
-  format: CoverageFormat;
-}
-
-type RunnerName = 'bun' | 'vitest' | 'jest' | 'pytest' | 'go';
-
-interface Runner {
-  tool: string;
-  prefixes: string[];
-  convert: (prefix: string, args: string[], dir: string) => { command: string; report: string } | null;
-  format: CoverageFormat;
-}
-
-const JS_PREFIXES = ['', 'bunx', 'npx', 'pnpm exec', 'pnpm', 'yarn'];
-
-const PY_PREFIXES = ['', 'python -m', 'python3 -m', 'uv run', 'poetry run', 'pipenv run'];
-
-const SHELL_OPERATORS = /[;&|<>`$()]/;
-
-const CD_PREFIX = /^cd\s+(\S+)\s*&&\s*(.+)$/;
-
-const CWD_OPTION = /^--cwd(?:=(.+))?$/;
-
-const PYTHON_MANIFESTS = ['pyproject.toml', 'setup.cfg', 'setup.py', 'Pipfile', 'tox.ini'];
-
-const VITEST_PROVIDERS = ['@vitest/coverage-v8', '@vitest/coverage-istanbul'];
+export type { CoverageRun } from './schema.ts';
 
 function quote(path: string) {
   return `'${path.replace(/'/g, `'\\''`)}'`;
@@ -102,13 +87,6 @@ const RUNNERS: Record<RunnerName, Runner> = {
   },
 };
 
-interface Invocation {
-  cwd: string;
-  prefix: string;
-  name: RunnerName;
-  args: string[];
-}
-
 function readCwdOption(args: readonly string[], cwd: string) {
   const index = args.findIndex((arg) => CWD_OPTION.test(arg));
   if (index < 0) return cwd;
@@ -152,31 +130,14 @@ function readText(path: string) {
   return existsSync(path) ? readFileSync(path, 'utf8') : null;
 }
 
-function readManifest(path: string) {
-  try {
-    const manifest = JSON.parse(readText(join(path, 'package.json')) ?? 'null') as {
-      scripts?: Record<string, string>;
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    } | null;
-    if (!manifest) return null;
-    const names = [
-      ...Object.keys(manifest.dependencies ?? {}),
-      ...Object.keys(manifest.devDependencies ?? {}),
-    ];
-    return { test: manifest.scripts?.test ?? '', dependencies: new Set(names) };
-  } catch {
-    return null;
-  }
-}
-
 function resolveJavaScriptTool(path: string) {
-  const manifest = readManifest(path);
+  const manifest = readPackageManifest(path);
   if (!manifest) return null;
-  const has = (name: string) => manifest.dependencies.has(name);
+  const dependencies = new Set(listDependencyNames(manifest));
+  const has = (name: string) => dependencies.has(name);
   if (has('vitest') && VITEST_PROVIDERS.some(has)) return RUNNERS.vitest.tool;
   if (has('jest')) return RUNNERS.jest.tool;
-  if (/^bun test\b/.test(manifest.test.trim())) return RUNNERS.bun.tool;
+  if (/^bun test\b/.test((manifest.scripts?.test ?? '').trim())) return RUNNERS.bun.tool;
   return null;
 }
 

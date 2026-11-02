@@ -7,14 +7,12 @@ import {
   type ServiceView,
   SHARE_LIMITS,
   type ShareLimit,
-  type TerminalInfo,
-  type TerminalsSnapshot,
 } from '@shinsa/core';
 import { type Display, describeMark, describeTable, PLAIN_DISPLAY, type Tone } from '../terminal/index.ts';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findTaskId, type ProjectsRead, resolveOptionalTaskId, selectProject } from './resolve.ts';
-import { defineAction, defineCommand, encode, readValue, type SurfaceSpec } from './spec.ts';
+import { defineAction, defineCommand, readValue, type SurfaceSpec } from './spec.ts';
 
 const PROJECT_FIELD: FieldSpec = {
   name: 'project',
@@ -62,8 +60,8 @@ interface ServicesRead {
 
 async function readServices(client: SurfaceClient, projectRef: string): Promise<ServicesRead> {
   const [snapshot, { projects }] = await Promise.all([
-    client.read<TerminalsSnapshot>('/api/terminals'),
-    client.read<ProjectsRead>('/api/projects'),
+    client.api.terminals.list(),
+    client.api.state.projects(),
   ]);
   const project = projectRef ? selectProject(projects, projectRef) : null;
   if (projectRef && !project)
@@ -138,10 +136,10 @@ function defineServiceAction(action: 'start' | 'stop' | 'restart', summary: stri
       const { service } = await findServiceView(client, values);
       const taskRef = readValue(values, 'task');
       const taskId = await resolveOptionalTaskId(client, taskRef);
-      const data = await client.post<TerminalsSnapshot & { terminal?: TerminalInfo }>(
-        `/api/services/${encode(service.id)}/${action}`,
-        taskId ? { taskId } : {}
-      );
+      const data = await client.api.services[action]({
+        params: { serviceId: service.id },
+        payload: taskId ? { taskId } : {},
+      });
       const scope = taskId ? ` for ${taskRef}` : '';
       return {
         data,

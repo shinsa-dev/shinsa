@@ -29,7 +29,8 @@ import {
   type Task,
 } from '@shinsa/core';
 import { createWorktree } from '../../src/git/index.ts';
-import { ControlClient } from '../../src/remote/control.ts';
+import { RemoteControl } from '../../src/remote/client/index.ts';
+import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
 import { SHARE_GONE_REASON } from '../../src/remote/share-channel.ts';
 import {
@@ -187,8 +188,8 @@ function setUp(options: SetUp = {}) {
     );
   const remote = new Remote({
     path,
-    control: new ControlClient({ origin: plane.origin }),
-    connect: () => Promise.reject(new Error('no tunnel in this test')),
+    control: new RemoteControl({ origin: plane.origin }),
+    connector: createRefusedConnector('no tunnel in this test'),
     localUrl: () => 'http://127.0.0.1:1',
     version: '1',
     maxBodyBytes: 1024,

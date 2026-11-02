@@ -1,19 +1,9 @@
 import type { McpTransport } from '@shinsa/core';
+import { Option, Predicate, Schema } from 'effect';
+import { type Env, type McpDefinition, Fields, McpEntry } from './schema.ts';
 
-export interface McpDefinition {
-  transport: McpTransport;
-  command: string | null;
-  args: string[];
-  env: Record<string, string>;
-  cwd: string | null;
-  url: string | null;
-  headers: Record<string, string>;
-  bearerTokenEnv: string | null;
-}
-
-type Fields = Record<string, unknown>;
-
-export type Env = Record<string, string | undefined>;
+export type { Env } from './schema.ts';
+export type { McpDefinition };
 
 const HEADLESS_BROWSER_ENV = { PLAYWRIGHT_MCP_HEADLESS: 'true' };
 
@@ -39,56 +29,78 @@ export function resolveBrowserEnv<T extends string | undefined>(
   return { ...(chosen ? {} : RETINA_BROWSER_ENV), ...env, ...HEADLESS_BROWSER_ENV };
 }
 
-const TRANSPORTS = new Set<McpTransport>(['stdio', 'http', 'sse']);
-
 const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g;
 
-export function isFields(value: unknown): value is Fields {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+const decodeEntry = Schema.decodeUnknownOption(McpEntry);
+
+const decodeEntries = Schema.decodeUnknownOption(Fields);
+
+export const isFields = Schema.is(Fields);
+
+const DECLARED_TRANSPORTS: Record<string, McpTransport> = {
+  stdio: 'stdio',
+  http: 'http',
+  sse: 'sse',
+  'streamable-http': 'http',
+  streamable_http: 'http',
+};
+
+function readTrimmedText(value: string | undefined) {
+  return value?.trim() || null;
 }
 
-export function readTrimmedText(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
+function readTextMap(value: unknown): Record<string, string> {
+  return Option.match(decodeEntries(value), {
+    onNone: () => ({}),
+    onSome: (fields) =>
+      Object.fromEntries(
+        Object.entries(fields).filter((entry): entry is [string, string] => Predicate.isString(entry[1]))
+      ),
+  });
 }
 
-function readTexts(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+function resolveTransport(entry: McpEntry, url: string | null): McpTransport {
+  const declared = entry.type ?? entry.transport;
+  const known = Predicate.isString(declared) ? DECLARED_TRANSPORTS[declared] : undefined;
+  return known ?? (url ? 'http' : 'stdio');
 }
 
-function readTextMap(value: unknown) {
-  if (!isFields(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
-  );
-}
-
-function resolveTransport(declared: unknown, url: string | null): McpTransport {
-  if (TRANSPORTS.has(declared as McpTransport)) return declared as McpTransport;
-  if (declared === 'streamable-http' || declared === 'streamable_http') return 'http';
-  return url ? 'http' : 'stdio';
-}
-
-export function parseMcpEntry(value: unknown): McpDefinition | null {
-  if (!isFields(value)) return null;
-  const url = readTrimmedText(value.url);
-  const command = readTrimmedText(value.command);
-  const transport = resolveTransport(value.type ?? value.transport, url);
+function resolveDefinition(entry: McpEntry): McpDefinition | null {
+  const url = readTrimmedText(entry.url);
+  const command = readTrimmedText(entry.command);
+  const transport = resolveTransport(entry, url);
   if (transport === 'stdio' ? !command : !url) return null;
   return {
     transport,
     command: transport === 'stdio' ? command : null,
-    args: transport === 'stdio' ? readTexts(value.args) : [],
-    env: readTextMap(value.env),
-    cwd: readTrimmedText(value.cwd),
+    args: transport === 'stdio' ? [...(entry.args ?? [])] : [],
+    env: { ...entry.env },
+    cwd: readTrimmedText(entry.cwd),
     url: transport === 'stdio' ? null : url,
-    headers: readTextMap(value.headers ?? value.http_headers),
-    bearerTokenEnv: readTrimmedText(value.bearer_token_env_var),
+    headers: readTextMap(entry.headers ?? entry.http_headers),
+    bearerTokenEnv: readTrimmedText(entry.bearer_token_env_var),
   };
 }
 
+export function parseMcpEntry(value: unknown): McpDefinition | null {
+  return Option.getOrNull(Option.flatMapNullishOr(decodeEntry(value), resolveDefinition));
+}
+
+export function parseStoredDefinition(value: unknown): McpDefinition | null {
+  return Option.getOrNull(
+    Option.flatMapNullishOr(decodeEntry(value), (entry) => {
+      const definition = resolveDefinition(entry);
+      if (!definition) return null;
+      return {
+        ...definition,
+        bearerTokenEnv: definition.bearerTokenEnv ?? readTrimmedText(entry.bearerTokenEnv),
+      };
+    })
+  );
+}
+
 export function readMcpServers(value: unknown) {
-  if (!isFields(value)) return [];
-  return Object.entries(value).flatMap(([name, entry]) => {
+  return Object.entries(Option.getOrElse(decodeEntries(value), () => ({}))).flatMap(([name, entry]) => {
     const definition = parseMcpEntry(entry);
     return definition ? [{ name, definition }] : [];
   });

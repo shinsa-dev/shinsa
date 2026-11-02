@@ -13,7 +13,7 @@ import {
 import type { ModelSource } from '../agents/index.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
 import type { ConfigStore, ServerConfig } from '../config/index.ts';
-import type { JsonObject } from '../http/body.ts';
+import type { JsonObject } from '../http/schema.ts';
 import { createProjectChanges } from '../projects/routes.ts';
 import type { LoginResolver, Roots } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
@@ -36,9 +36,9 @@ import {
   listProjectSuggestions,
   type ProjectSetup,
 } from './projects.ts';
-import type { ProjectRevision } from './revise.ts';
 import { requestRevision } from './revise.ts';
 import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from './roots.ts';
+import type { ProjectRevision } from './schema.ts';
 import { createSetupSimulation } from './simulate.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 import { resolveHelpRequest, resolveWelcomeBody } from './welcome.ts';

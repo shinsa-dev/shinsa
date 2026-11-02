@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs';
 import {
   DomainError,
   type OnboardingCheck,
@@ -8,27 +7,12 @@ import {
   type OnboardingStep,
   type OnboardingStepId,
 } from '@shinsa/core';
-import { writeJsonFile } from '../config/file.ts';
-import type { JsonObject } from '../http/body.ts';
-import { describeError, log } from '../log/index.ts';
-import type { ProjectRevision } from './revise.ts';
+import type { JsonObject } from '../http/schema.ts';
+import { readSetupDraft, writeSetupDraft } from './drafts.ts';
 import { PrivateFoldersError } from './roots.ts';
+import type { ProjectRevision, SetupDraft } from './schema.ts';
 import type { SetupPatch, StepDefinition, StepReadContext } from './steps.ts';
 import { listFailingChecks } from './welcome.ts';
-
-interface Draft {
-  version: 6;
-  id: string;
-  index: number;
-  furthest: number;
-  saves: number;
-  revisit: boolean;
-  problem: string | null;
-  access: string[];
-  picked: string[];
-  revision: ProjectRevision | null;
-  help: string | null;
-}
 
 export type FlowContext = StepReadContext & {
   save: (patch: SetupPatch, commandId: string) => Promise<void>;
@@ -54,41 +38,6 @@ interface FlowOptions {
 const MAX_VALUES = 50;
 
 const MAX_PROJECT_REPOS = 400;
-
-function isDraft(value: unknown): value is Draft {
-  if (!value || typeof value !== 'object') return false;
-  const draft = value as Partial<Draft>;
-  return (
-    draft.version === 6 &&
-    typeof draft.id === 'string' &&
-    typeof draft.index === 'number' &&
-    typeof draft.furthest === 'number' &&
-    typeof draft.saves === 'number' &&
-    Array.isArray(draft.access) &&
-    Array.isArray(draft.picked) &&
-    (draft.help === null || typeof draft.help === 'string') &&
-    (draft.revision === null ||
-      (typeof draft.revision === 'object' &&
-        Array.isArray(draft.revision.projects) &&
-        Array.isArray(draft.revision.seen)))
-  );
-}
-
-function readDraft(path: string): Draft | null {
-  if (!existsSync(path)) return null;
-  try {
-    const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
-    if (isDraft(value)) return value;
-  } catch (error) {
-    log.warn('[Onboarding] The saved setup could not be read; starting again', {
-      path,
-      error: describeError(error),
-    });
-    return null;
-  }
-  log.warn('[Onboarding] The saved setup is not one Shinsa wrote; starting again', { path });
-  return null;
-}
 
 function parseStepId(value: unknown, steps: readonly StepDefinition[]) {
   const step = steps.find((entry) => entry.id === value);
@@ -152,7 +101,7 @@ function parseOnboardingReply(fields: JsonObject, steps: readonly StepDefinition
 
 export class OnboardingSetup {
   readonly #options: FlowOptions;
-  #draft: Draft | null = null;
+  #draft: SetupDraft | null = null;
   #tail: Promise<unknown> = Promise.resolve();
 
   constructor(options: FlowOptions) {
@@ -203,8 +152,8 @@ export class OnboardingSetup {
     return result;
   }
 
-  #open(): Draft {
-    this.#draft ??= readDraft(this.#options.path);
+  #open(): SetupDraft {
+    this.#draft ??= readSetupDraft(this.#options.path);
     const draft = this.#draft;
     if (!draft) return this.#start();
     const finished = draft.index >= this.#options.steps.length;
@@ -212,8 +161,8 @@ export class OnboardingSetup {
     return draft;
   }
 
-  #start(): Draft {
-    const draft: Draft = {
+  #start(): SetupDraft {
+    const draft: SetupDraft = {
       version: 6,
       id: Bun.randomUUIDv7(),
       index: 0,
@@ -231,7 +180,7 @@ export class OnboardingSetup {
     return draft;
   }
 
-  #assertReached(draft: Draft, index: number) {
+  #assertReached(draft: SetupDraft, index: number) {
     if (draft.index >= this.#options.steps.length) {
       throw new DomainError({ code: 'setup_finished', message: 'Setup is done. Restart it in Settings.' });
     }
@@ -240,7 +189,7 @@ export class OnboardingSetup {
     }
   }
 
-  #move(draft: Draft, index: number) {
+  #move(draft: SetupDraft, index: number) {
     draft.index = index;
     draft.furthest = Math.max(draft.furthest, index);
     draft.problem = null;
@@ -250,7 +199,7 @@ export class OnboardingSetup {
   }
 
   async #revise(
-    draft: Draft,
+    draft: SetupDraft,
     stepId: OnboardingStepId,
     text: string,
     projects: OnboardingProjectChoice[] | undefined
@@ -268,7 +217,7 @@ export class OnboardingSetup {
     this.#write(draft);
   }
 
-  async #help(draft: Draft, definition: StepDefinition) {
+  async #help(draft: SetupDraft, definition: StepDefinition) {
     const context = this.#options.resolveContext(draft.revision);
     const view = await definition.view(context, false, draft.picked);
     const failing = listFailingChecks(view.checks);
@@ -283,7 +232,7 @@ export class OnboardingSetup {
   }
 
   async #answer(
-    draft: Draft,
+    draft: SetupDraft,
     stepId: OnboardingStepId,
     values: string[],
     projects: OnboardingProjectChoice[] | undefined
@@ -315,12 +264,12 @@ export class OnboardingSetup {
     this.#move(draft, draft.index + 1);
   }
 
-  #write(draft: Draft) {
+  #write(draft: SetupDraft) {
     if (this.#options.readOnly) return;
-    writeJsonFile(this.#options.path, draft);
+    writeSetupDraft(this.#options.path, draft);
   }
 
-  async #present(draft: Draft): Promise<OnboardingFlow> {
+  async #present(draft: SetupDraft): Promise<OnboardingFlow> {
     const { steps } = this.#options;
     const context = this.#options.resolveContext(draft.revision);
     const definition = steps[draft.index];
@@ -341,14 +290,14 @@ export class OnboardingSetup {
     };
   }
 
-  #summarize(draft: Draft, step: StepDefinition, index: number, context: StepReadContext) {
+  #summarize(draft: SetupDraft, step: StepDefinition, index: number, context: StepReadContext) {
     const answered = draft.revisit || index < draft.furthest;
     if (!answered || index === draft.index) return Promise.resolve(null);
     return step.summarize(context);
   }
 
   async #view(
-    draft: Draft,
+    draft: SetupDraft,
     definition: StepDefinition | undefined,
     context: StepReadContext
   ): Promise<OnboardingStep | null> {

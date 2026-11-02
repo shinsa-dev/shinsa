@@ -23,16 +23,16 @@ function describeMemory(entry: MemoryView) {
 async function resolveScope(client: SurfaceClient, memoryId: string | null, project: string) {
   if (project) return await findProjectId(client, project);
   if (!memoryId) return null;
-  const { memory } = await client.read<{ memory: MemoryView[] }>('/api/memory');
+  const { memory } = await client.api.state.memory();
   return memory.find((entry) => entry.id === memoryId)?.projectId ?? null;
 }
 
 export const MEMORY_SPECS: SurfaceSpec[] = [
-  defineRead<{ memory: MemoryView[] }>({
+  defineRead({
     path: ['memory', 'list'],
     summary: 'List the rules agents remember, and the ones agents proposed that wait for you.',
     fields: [],
-    request: () => '/api/memory',
+    read: (_values, client) => client.api.state.memory(),
     format: ({ memory }) =>
       memory.length === 0 ? 'Agents remember nothing yet.' : memory.map(describeMemory).join('\n'),
   }),

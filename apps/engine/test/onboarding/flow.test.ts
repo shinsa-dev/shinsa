@@ -1,14 +1,13 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentModel, OnboardingFlow, OnboardingStepId } from '@shinsa/core';
 import { ConfigStore } from '../../src/config/index.ts';
-import { log } from '../../src/log/index.ts';
 import { type ClaudeAccount, type CommandRunner, Onboarding } from '../../src/onboarding/index.ts';
 import { Roots } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
-import { createTempDir, createTestConfig } from '../helpers/index.ts';
+import { captureLogs, createTempDir, createTestConfig } from '../helpers/index.ts';
 
 const MODELS: AgentModel[] = [
   { id: 'opus', label: 'Opus 5.5', description: '' },
@@ -475,25 +474,33 @@ describe('the saved setup', () => {
     const revision = { projects: [], turns: [{ request: 'a', reply: 'b' }] };
     writeFileSync(path, JSON.stringify({ ...saved, revision: { ...revision, seen: [] } }));
     expect((await world.open().onboarding.setup.resolve()).step?.id).toBe('accounts');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     writeFileSync(path, JSON.stringify({ ...saved, revision }));
     expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
-    expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Onboarding] The saved setup is not one Shinsa wrote; starting again')).toEqual([
+      { path },
+    ]);
   });
 
   test('a file it cannot read, or one it did not write, starts again', async () => {
     const world = setup();
     const path = join(world.config.dataDir, 'onboarding.json');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     writeFileSync(path, '{');
     expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
     writeFileSync(path, JSON.stringify({ version: 1, messages: [] }));
     expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
     writeFileSync(path, 'null');
     expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
-    expect(warn).toHaveBeenCalledTimes(3);
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Onboarding] The saved setup could not be read; starting again')).toEqual([
+      { path, error: expect.any(String) },
+    ]);
+    expect(logs.fieldsOf('[Onboarding] The saved setup is not one Shinsa wrote; starting again')).toEqual([
+      { path },
+      { path },
+    ]);
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ version: 6, index: 0, help: null });
   });
 

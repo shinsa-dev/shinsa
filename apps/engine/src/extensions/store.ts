@@ -1,199 +1,36 @@
-import { existsSync, readFileSync } from 'node:fs';
+import type { ContextOptimizer, ExtensionScope, McpServerStatus } from '@shinsa/core';
+import { Option, Schema } from 'effect';
+import { edgeRuntime } from '../runtime/edge.ts';
 import {
-  type ContextOptimizer,
-  createContextOptimizer,
-  type ExtensionScope,
-  type McpServerStatus,
-  type McpToolInfo,
-  OPTIMIZER_LIMITS,
-} from '@shinsa/core';
-import { writeJsonFile } from '../config/index.ts';
-import { describeError, log } from '../log/index.ts';
-import { isFields, type McpDefinition, parseMcpEntry, readTrimmedText } from './definitions.ts';
+  ExtensionScope as ScopeSchema,
+  type ExtensionsSettings,
+  OptimizerDays,
+  type ServerChoice,
+  type StoredServer,
+} from './schema.ts';
+import { ExtensionFiles } from './store/service.ts';
 
-export interface StoredServer {
-  id: string;
-  name: string;
-  definition: McpDefinition;
-  enabled: boolean;
-  scope: ExtensionScope;
-}
+export type { StoredServer } from './schema.ts';
 
-interface ServerChoice {
-  enabled?: boolean;
-  scope?: ExtensionScope;
-}
+const decodeScope = Schema.decodeUnknownOption(ScopeSchema);
 
-interface ExtensionsFile {
-  version: 1;
-  servers: StoredServer[];
-  choices: Record<string, ServerChoice>;
-  skills: Record<string, boolean>;
-  plugins: Record<string, boolean>;
-  statuses: Record<string, McpServerStatus>;
-  optimizer: ContextOptimizer;
-  seen: Record<string, number>;
-}
-
-const STATES = new Set<McpServerStatus['state']>(['connected', 'needs_sign_in', 'failing', 'unchecked']);
-
-function createFile(): ExtensionsFile {
-  return {
-    version: 1,
-    servers: [],
-    choices: {},
-    skills: {},
-    plugins: {},
-    statuses: {},
-    optimizer: createContextOptimizer(),
-    seen: {},
-  };
-}
-
-function readSwitches(value: unknown) {
-  if (!isFields(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean')
-  );
-}
-
-function readTool(value: unknown): McpToolInfo[] {
-  if (!isFields(value) || typeof value.name !== 'string') return [];
-  return [
-    { name: value.name, description: typeof value.description === 'string' ? value.description : null },
-  ];
-}
-
-function readStatus(value: unknown): McpServerStatus | null {
-  if (!isFields(value) || !STATES.has(value.state as McpServerStatus['state'])) return null;
-  return {
-    state: value.state as McpServerStatus['state'],
-    error: typeof value.error === 'string' ? value.error : null,
-    checkedAt: typeof value.checkedAt === 'number' ? value.checkedAt : null,
-    tools: Array.isArray(value.tools) ? value.tools.flatMap(readTool) : [],
-    tokens: typeof value.tokens === 'number' ? value.tokens : null,
-  };
-}
-
-export function isOptimizerDays(value: unknown): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= OPTIMIZER_LIMITS.minDays &&
-    value <= OPTIMIZER_LIMITS.maxDays
-  );
-}
-
-function readOptimizer(value: unknown): ContextOptimizer {
-  const optimizer = createContextOptimizer();
-  if (!isFields(value)) return optimizer;
-  return {
-    enabled: typeof value.enabled === 'boolean' ? value.enabled : optimizer.enabled,
-    days: isOptimizerDays(value.days) ? value.days : optimizer.days,
-    skills: typeof value.skills === 'boolean' ? value.skills : optimizer.skills,
-  };
-}
-
-function readSeen(value: unknown) {
-  if (!isFields(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === 'number')
-  );
-}
-
-function readStatuses(value: unknown) {
-  if (!isFields(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([id, entry]) => {
-      const status = readStatus(entry);
-      return status ? [[id, status]] : [];
-    })
-  );
-}
+export const isOptimizerDays = Schema.is(OptimizerDays);
 
 export function parseScope(value: unknown): ExtensionScope | null {
-  if (!isFields(value)) return null;
-  if (value.kind === 'everywhere') return { kind: 'everywhere' };
-  if (value.kind === 'project' && typeof value.project === 'string' && value.project) {
-    return { kind: 'project', project: value.project };
-  }
-  if (value.kind === 'repo' && typeof value.path === 'string' && value.path) {
-    return { kind: 'repo', path: value.path };
-  }
-  return null;
-}
-
-function readStoredServer(value: unknown): StoredServer | null {
-  if (!isFields(value) || typeof value.id !== 'string' || typeof value.name !== 'string') return null;
-  const definition = parseMcpEntry(value.definition);
-  if (!definition || !isFields(value.definition)) return null;
-  return {
-    id: value.id,
-    name: value.name,
-    definition: {
-      ...definition,
-      bearerTokenEnv: definition.bearerTokenEnv ?? readTrimmedText(value.definition.bearerTokenEnv),
-    },
-    enabled: value.enabled !== false,
-    scope: parseScope(value.scope) ?? { kind: 'everywhere' },
-  };
-}
-
-function readChoice(value: unknown): ServerChoice | null {
-  if (!isFields(value)) return null;
-  const scope = parseScope(value.scope);
-  return {
-    ...(typeof value.enabled === 'boolean' ? { enabled: value.enabled } : {}),
-    ...(scope ? { scope } : {}),
-  };
-}
-
-function readFile(path: string): ExtensionsFile {
-  if (!existsSync(path)) return createFile();
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
-    if (!isFields(parsed)) return createFile();
-    const servers = Array.isArray(parsed.servers)
-      ? parsed.servers.flatMap((s) => readStoredServer(s) ?? [])
-      : [];
-    const choices = isFields(parsed.choices)
-      ? Object.fromEntries(
-          Object.entries(parsed.choices).flatMap(([id, value]) => {
-            const choice = readChoice(value);
-            return choice ? [[id, choice]] : [];
-          })
-        )
-      : {};
-    return {
-      version: 1,
-      servers,
-      choices,
-      skills: readSwitches(parsed.skills),
-      plugins: readSwitches(parsed.plugins),
-      statuses: readStatuses(parsed.statuses),
-      optimizer: readOptimizer(parsed.optimizer),
-      seen: readSeen(parsed.seen),
-    };
-  } catch (error) {
-    log.warn('[Extensions] extensions.json could not be read; starting from none', {
-      path,
-      error: describeError(error),
-    });
-    return createFile();
-  }
+  return Option.getOrNull(decodeScope(value));
 }
 
 export class ExtensionStore {
   readonly path: string;
-  #file: ExtensionsFile;
+  #file: ExtensionsSettings;
 
   constructor(path: string) {
     this.path = path;
-    this.#file = readFile(path);
+    this.#file = edgeRuntime.runSync(ExtensionFiles.use((files) => files.readSettings(path)));
   }
 
-  #write(next: ExtensionsFile) {
-    writeJsonFile(this.path, next);
+  #write(next: ExtensionsSettings) {
+    edgeRuntime.runSync(ExtensionFiles.use((files) => files.writeSettings(this.path, next)));
     this.#file = next;
   }
 

@@ -126,9 +126,13 @@ describe('listing files', () => {
 
   test('a read that outlasts its time limit becomes a timeout refusal', async () => {
     const { path, sha } = await createSampleRepo();
+    const tree = await git(path, 'rev-parse', `${sha}^{tree}`);
+    const object = join(path, '.git', 'objects', tree.slice(0, 2), tree.slice(2));
+    rmSync(object);
+    Bun.spawnSync(['mkfifo', object]);
     const limits = CODE_LIMITS as { readMs: number };
     const readMs = limits.readMs;
-    limits.readMs = 0;
+    limits.readMs = 50;
     try {
       await expect(listCommitPaths(path, sha)).rejects.toMatchObject({ code: 'read_timeout' });
     } finally {
@@ -333,5 +337,12 @@ describe('searchFiles', () => {
     await expect(
       searchFiles(path, sha, { query: '(', regex: true, caseSensitive: true, wholeWord: false, glob: null })
     ).rejects.toMatchObject({ code: 'read_failed' });
+  });
+
+  test('a blob reader that stopped fails the read with its reason', async () => {
+    const { path, sha } = await createSampleRepo();
+    const stopped = () => Promise.reject(new Error('The reader stopped.'));
+    const reader = { info: stopped, contents: stopped } as unknown as CatFile;
+    await expect(listCommitTree(path, sha, 'src', undefined, reader)).rejects.toThrow('The reader stopped.');
   });
 });

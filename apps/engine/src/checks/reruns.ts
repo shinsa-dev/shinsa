@@ -1,24 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { listDependencyNames, listWorkspacePatterns, readPackageManifest } from '../files/manifest.ts';
+import type { FailedTestCase, FailedTestGroup, FailedTests, TestRunner } from './schema.ts';
 
-export type TestRunner = 'bun' | 'vitest' | 'jest';
-
-export interface FailedTestGroup {
-  runner: TestRunner;
-  packageDir: string;
-  files: string[];
-}
-
-export type FailedTests =
-  | { kind: 'none' }
-  | { kind: 'clean' }
-  | { kind: 'unknown' }
-  | { kind: 'files'; groups: FailedTestGroup[] };
-
-export interface FailedTestCase {
-  file: string;
-  test: string;
-}
+export type { FailedTestCase, FailedTestGroup, FailedTests, TestRunner } from './schema.ts';
 
 interface FailedFile {
   runner: TestRunner | null;
@@ -70,23 +55,9 @@ const UNATTRIBUTED =
 
 const COVERAGE_TOTAL = /All files\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)/;
 
-function readJson(path: string): Record<string, unknown> | null {
-  try {
-    const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 function listPatterns(root: string) {
-  const workspaces = readJson(join(root, 'package.json'))?.workspaces;
-  const listed = Array.isArray(workspaces)
-    ? workspaces
-    : ((workspaces as { packages?: unknown } | undefined)?.packages ?? []);
-  const patterns = Array.isArray(listed) ? listed.filter((item) => typeof item === 'string') : [];
+  const manifest = readPackageManifest(root);
+  const patterns = manifest ? listWorkspacePatterns(manifest) : [];
   const pnpm = join(root, 'pnpm-workspace.yaml');
   if (!existsSync(pnpm)) return patterns;
   const lines = readFileSync(pnpm, 'utf8').split('\n');
@@ -122,8 +93,7 @@ function resolvePackageDir(file: string, root: string) {
 }
 
 function readPackageName(dir: string) {
-  const name = readJson(join(dir, 'package.json'))?.name;
-  return typeof name === 'string' ? name : null;
+  return readPackageManifest(dir)?.name ?? null;
 }
 
 function resolveTestFile(root: string, dirs: readonly string[], failed: FailedFile) {
@@ -140,11 +110,9 @@ function resolveTestFile(root: string, dirs: readonly string[], failed: FailedFi
 }
 
 function resolveRunner(packageDir: string): TestRunner | null {
-  const manifest = readJson(join(packageDir, 'package.json')) ?? {};
-  const fields = ['dependencies', 'devDependencies'].map((key) => manifest[key] ?? {});
-  const names = fields.flatMap((field) => Object.keys(field as Record<string, unknown>));
-  const scripts = (manifest.scripts ?? {}) as Record<string, unknown>;
-  const words = [...names, String(scripts.test ?? '')].join(' ');
+  const manifest = readPackageManifest(packageDir);
+  const names = manifest ? listDependencyNames(manifest) : [];
+  const words = [...names, manifest?.scripts?.test ?? ''].join(' ');
   if (/\bvitest\b/.test(words)) return 'vitest';
   if (/\bjest\b/.test(words)) return 'jest';
   return null;

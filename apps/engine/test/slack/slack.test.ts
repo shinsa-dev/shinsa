@@ -11,15 +11,23 @@ import {
   serializeBase64Url,
 } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
-import { ControlClient, Remote } from '../../src/remote/index.ts';
+import { RemoteControl } from '../../src/remote/client/index.ts';
+import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
+import { Remote } from '../../src/remote/index.ts';
 import type { EffectContext } from '../../src/runtime/engine.ts';
 import { Engine } from '../../src/runtime/index.ts';
-import { SLACK_EVENT_BODY_LIMIT_BYTES, Slack, SlackRelay, SlackRelayError } from '../../src/slack/index.ts';
+import { SLACK_EVENT_BODY_LIMIT_BYTES, Slack } from '../../src/slack/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createGate, createStubEngine, createTask } from '../helpers/state.ts';
 
 const ORIGIN = 'https://app.test';
+
+type Relay = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+function createFetch(relay: Relay): typeof fetch {
+  return Object.assign(relay, { preconnect: fetch.preconnect });
+}
 
 const CONNECT_KEY = serializeBase64Url(new Uint8Array(32).fill(4));
 
@@ -73,7 +81,7 @@ interface Setup {
   clock: { now: number };
 }
 
-function createRemote(options: { enabled?: boolean; paired?: boolean } = {}) {
+function createRemote(options: { enabled?: boolean; paired?: boolean; fetch?: Relay } = {}) {
   const path = join(createTempDir(), 'remote.json');
   if (options.paired ?? true)
     writeFileSync(
@@ -82,8 +90,11 @@ function createRemote(options: { enabled?: boolean; paired?: boolean } = {}) {
     );
   return new Remote({
     path,
-    control: new ControlClient({ origin: ORIGIN }),
-    connect: () => Promise.reject(new Error('no tunnel in tests')),
+    control: new RemoteControl({
+      origin: ORIGIN,
+      ...(options.fetch ? { fetch: createFetch(options.fetch) } : {}),
+    }),
+    connector: createRefusedConnector('no tunnel in tests'),
     localUrl: () => 'http://127.0.0.1:7446',
     version: '1',
     maxBodyBytes: 1024,
@@ -120,23 +131,26 @@ function setUp(options: { enabled?: boolean; link?: SlackThreadLink | null } = {
   const answer: Setup['answer'] = { value: { decision: 'task' } };
   const slack = new Slack({
     engine: stub.engine,
-    remote: createRemote({ enabled: options.enabled }),
+    remote: createRemote({
+      enabled: options.enabled,
+      fetch: async (input, init) => {
+        const request = input instanceof Request ? input : new Request(String(input), init);
+        const url = new URL(request.url);
+        const text = await request.text();
+        const body = text ? (JSON.parse(text) as Record<string, unknown>) : null;
+        relay.push({
+          path: url.pathname,
+          method: request.method,
+          token: request.headers.get('authorization')?.replace('Bearer ', '') ?? null,
+          body,
+        });
+        const respond = answers[url.pathname];
+        return respond ? respond(body) : new Response('', { status: 404 });
+      },
+    }),
     ask: <T>(system: string, prompt: string) => {
       asked.push({ system, prompt });
       return Promise.resolve(answer.value as T);
-    },
-    fetch: async (input, init = {}) => {
-      const url = new URL(input);
-      const headers = new Headers(init.headers);
-      const body = init.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null;
-      relay.push({
-        path: url.pathname,
-        method: init.method ?? 'GET',
-        token: headers.get('authorization')?.replace('Bearer ', '') ?? null,
-        body,
-      });
-      const respond = answers[url.pathname];
-      return respond ? respond(body) : new Response('', { status: 404 });
     },
     now: () => clock.now,
     sleep: (ms) => {
@@ -271,10 +285,9 @@ describe('a post the outbox asks for', () => {
     };
     answers['/__remote/slack/post'] = () => new Response('busy', { status: 503 });
     const failed = slack.post(effect);
-    await expect(failed).rejects.toBeInstanceOf(SlackRelayError);
-    await expect(failed).rejects.toMatchObject({ code: 'relay_failed', isRetryable: true });
+    await expect(failed).rejects.toMatchObject({ _tag: 'RemoteUnreachable', status: 503, retryable: true });
     answers['/__remote/slack/post'] = () => Promise.reject(new Error('offline'));
-    await expect(slack.post(effect)).rejects.toMatchObject({ code: 'unreachable' });
+    await expect(slack.post(effect)).rejects.toMatchObject({ _tag: 'RemoteUnreachable', status: null });
   });
 
   test('a task’s post links to it on app.shinsa.dev', async () => {
@@ -371,7 +384,7 @@ describe('the status message of a task', () => {
     const { slack, stub, relay, answers } = setUp({ link: { ...LINK, statusTs: '300.1' } });
     answers['/__remote/slack/post'] = (body) =>
       body?.replaceTs
-        ? Response.json({ error: { code: 'slack_failed' } }, { status: 409 })
+        ? Response.json({ error: { code: 'slack_failed', message: 'Refused.' } }, { status: 409 })
         : Response.json({ ts: '200.9' });
     await slack.status(effect, context('status-1'));
     expect(callsTo(relay, 'post').map((call) => call.body?.replaceTs)).toEqual(['300.1', null]);
@@ -383,9 +396,13 @@ describe('the status message of a task', () => {
   test('keeps nothing when the relay refuses, and does nothing for a task without a thread', async () => {
     const { slack, stub, relay, answers } = setUp();
     answers['/__remote/slack/post'] = () =>
-      Response.json({ error: { code: 'post_not_yours' } }, { status: 403 });
+      Response.json({ error: { code: 'post_not_yours', message: 'Refused.' } }, { status: 403 });
     await slack.status(effect, context());
     expect(stub.dispatched).toEqual([]);
+    expect(warnings).toHaveBeenCalledWith(
+      '[Slack] app.shinsa.dev refused the post',
+      expect.objectContaining({ code: 'post_not_yours' })
+    );
     const plain = setUp({ link: null });
     await plain.slack.status(effect, context());
     await plain.slack.status({ ...effect, taskId: 'gone' }, context());
@@ -518,7 +535,7 @@ describe('reading a mention', () => {
     answers['/__remote/slack/react'] = () => Response.json({ applied: false });
     await slack.evaluate(effect, context());
     answers['/__remote/slack/react'] = () =>
-      Response.json({ error: { code: 'thread_not_forwarded' } }, { status: 403 });
+      Response.json({ error: { code: 'thread_not_forwarded', message: 'Refused.' } }, { status: 403 });
     await slack.evaluate({ ...effect, mention: { ...MENTION, eventId: 'Ev2' } }, context('read-2'));
     expect(stub.dispatched).toHaveLength(2);
     expect(warnings).toHaveBeenCalledWith('[Slack] The reaction could not be set', expect.anything());
@@ -562,14 +579,16 @@ describe('a mention through the real engine', () => {
     const posts: Record<string, unknown>[] = [];
     const slack = new Slack({
       engine,
-      remote: createRemote(),
+      remote: createRemote({
+        fetch: async (input, init) => {
+          const request = input instanceof Request ? input : new Request(String(input), init);
+          if (!request.url.endsWith('/post')) return Response.json({ applied: true });
+          const body = (await request.json()) as Record<string, unknown>;
+          posts.push(body);
+          return Response.json({ ts: body.replaceTs ?? `200.${posts.length}` });
+        },
+      }),
       ask: <T>() => Promise.resolve({ decision: 'task' } as T),
-      fetch: (input, init = {}) => {
-        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        if (!input.endsWith('/post')) return Promise.resolve(Response.json({ applied: true }));
-        posts.push(body);
-        return Promise.resolve(Response.json({ ts: body.replaceTs ?? `200.${posts.length}` }));
-      },
       statusIntervalMs: 0,
     });
     engine.onEffect((effect, effectContext) => {
@@ -602,9 +621,8 @@ describe('without injected clocks and networks', () => {
     });
     const slack = new Slack({
       engine: stub.engine,
-      remote: createRemote(),
+      remote: createRemote({ fetch: () => Promise.resolve(Response.json({ ts: '200.1' })) }),
       ask: <T>() => Promise.resolve(null as T),
-      fetch: () => Promise.resolve(Response.json({ ts: '200.1' })),
       statusIntervalMs: 20,
     });
     const effect = { kind: 'slack.status' as const, taskId: 't1', thread: THREAD };
@@ -621,10 +639,10 @@ describe('without injected clocks and networks', () => {
   });
 
   test('the relay client says app.shinsa.dev is unreachable when nothing answers', async () => {
-    const relay = new SlackRelay(() => 'http://127.0.0.1:1');
-    await expect(relay.requestLinks('token')).rejects.toMatchObject({
-      code: 'unreachable',
-      isRetryable: true,
+    const control = new RemoteControl({ origin: 'http://127.0.0.1:1' });
+    await expect(control.requestSlackLinks('token')).rejects.toMatchObject({
+      _tag: 'RemoteUnreachable',
+      retryable: true,
     });
   });
 });
@@ -657,15 +675,9 @@ describe('Settings → General → Slack', () => {
 
   test('disconnecting removes the machine’s links, and needs remote access', async () => {
     const { slack, relay } = setUp();
-    const [read, disconnect] = slack.routes();
-    if (!read || !disconnect) throw new Error('Slack has two routes.');
-    const match = /x/.exec('x') as RegExpExecArray;
-    const after = await disconnect.respond(match, new Request('http://x', { method: 'POST' }));
+    const after = await slack.disconnect();
     expect(relay.map((call) => call.path)).toEqual(['/__remote/slack/unlink', '/__remote/slack/links']);
-    expect(((await after.json()) as { remote: boolean }).remote).toBe(true);
-    expect((await read.respond(match, new Request('http://x'))).status).toBe(200);
-    expect(read.pattern.test('/api/slack')).toBe(true);
-    expect(disconnect.pattern.test('/api/slack/disconnect')).toBe(true);
+    expect(after.remote).toBe(true);
     await expect(setUp({ enabled: false }).slack.disconnect()).rejects.toBeInstanceOf(DomainError);
   });
 });

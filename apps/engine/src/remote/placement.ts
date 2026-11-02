@@ -6,12 +6,9 @@ import {
   type PlacementAnswer,
   type PlacementQuestion,
   parsePlacementAnswer,
-  parsePlacementQuestion,
   serializePlacementPrompt,
 } from '@shinsa/core';
 import type { QuickJson } from '../agents/quick/index.ts';
-import { readJsonObject } from '../http/body.ts';
-import type { ApiRoute } from '../http/routes.ts';
 
 export type PlacementAsker = (question: PlacementQuestion) => Promise<PlacementAnswer | null>;
 
@@ -34,22 +31,4 @@ export function createPlacementAsker(ask: QuickJson): PlacementAsker {
       throw new DomainError({ code: 'placement_unreadable', message: 'Claude named none of your machines.' });
     return answer;
   };
-}
-
-export function createPlacementRoutes(place: PlacementAsker): ApiRoute[] {
-  return [
-    {
-      method: 'POST',
-      pattern: /^\/api\/placement$/,
-      respond: async (_match, request) => {
-        const question = parsePlacementQuestion(await readJsonObject(request));
-        if (!question)
-          throw new DomainError({
-            code: 'placement_invalid',
-            message: 'Send the request and two or more machines with their policies, projects and load.',
-          });
-        return Response.json({ answer: await place(question) });
-      },
-    },
-  ];
 }

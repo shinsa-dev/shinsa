@@ -196,7 +196,7 @@ export class Shares implements ShareEffects, ShareLinks {
   readonly #random: (bytes: number) => Uint8Array<ArrayBuffer>;
   readonly #hashes = new Map<string, HashedFile>();
   readonly #code = new Map<string, { key: string; files: LiveFile[] }>();
-  readonly #channels = new Map<ShareChannel, string>();
+  readonly #channels = new Map<ShareChannel, { shareId: string; release: () => void }>();
   #pairedAs: string | null;
 
   constructor(options: SharesOptions) {
@@ -226,7 +226,6 @@ export class Shares implements ShareEffects, ShareLinks {
   }
 
   #syncRemote() {
-    if (!this.#remote.isEnabled) this.#endChannels(() => true, SHARE_REMOTE_CHANGED);
     const before = this.#pairedAs;
     this.#pairedAs = this.#selectInstanceId();
     if (before === null || before === this.#pairedAs) return;
@@ -253,11 +252,17 @@ export class Shares implements ShareEffects, ShareLinks {
   }
 
   #endChannels(match: (channel: ShareChannel, shareId: string) => boolean, reason: string) {
-    for (const [channel, shareId] of [...this.#channels]) {
+    for (const [channel, { shareId }] of [...this.#channels]) {
       if (!match(channel, shareId)) continue;
-      this.#channels.delete(channel);
+      this.#releaseChannel(channel);
       void channel.end(reason);
     }
+  }
+
+  #releaseChannel(channel: ShareChannel) {
+    const entry = this.#channels.get(channel);
+    this.#channels.delete(channel);
+    entry?.release();
   }
 
   #resolveShare(shareId: string) {
@@ -282,7 +287,10 @@ export class Shares implements ShareEffects, ShareLinks {
       authorize: (hello) => this.#authorize(hello, shareId),
       resolveLive: (taskId) => this.resolveLive(taskId),
     });
-    this.#channels.set(channel, shareId);
+    const release = this.#remote.access.acquire(() => {
+      if (this.#channels.delete(channel)) void channel.end(SHARE_REMOTE_CHANGED);
+    });
+    this.#channels.set(channel, { shareId, release });
     return channel;
   }
 
@@ -306,7 +314,7 @@ export class Shares implements ShareEffects, ShareLinks {
 
   closeChannel(channel: ShareChannel) {
     channel.close();
-    this.#channels.delete(channel);
+    this.#releaseChannel(channel);
   }
 
   async link(taskId: string, context: EffectContext) {

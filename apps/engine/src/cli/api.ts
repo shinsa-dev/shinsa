@@ -1,71 +1,26 @@
-import { DomainError, type QueueSummary, type Repo, type UserCommand } from '@shinsa/core';
+import type { QueueSummary, Repo, UserCommand } from '@shinsa/core';
 import { type CommandReceipt, resolveCommandKey, type SurfaceClient } from '../surface/index.ts';
+import { createEngineCalls, type EngineWake } from './client/index.ts';
+
+export { type EngineWake, NOT_RUNNING } from './client/index.ts';
 
 export interface ApiClient {
   base: string;
   sendCommand: (command: UserCommand) => Promise<CommandReceipt>;
   readQueue: () => Promise<QueueSummary>;
-  readRepos: () => Promise<{ repos: Repo[] }>;
-}
-
-function isErrorBody(body: unknown): body is { error: { code?: string; message: string } } {
-  return Boolean(body) && typeof body === 'object' && 'error' in (body as object);
-}
-
-export type EngineWake = () => Promise<boolean>;
-
-export const NOT_RUNNING =
-  'Shinsa is not running. Start it with `shinsa start`, or open the Shinsa app on a Mac.';
-
-async function reach(
-  base: string,
-  path: string,
-  init: RequestInit | undefined,
-  wake: EngineWake | undefined
-) {
-  try {
-    return await fetch(`${base}${path}`, init);
-  } catch {
-    if (!wake || !(await wake())) throw new Error(NOT_RUNNING);
-  }
-  try {
-    return await fetch(`${base}${path}`, init);
-  } catch {
-    throw new Error(NOT_RUNNING);
-  }
-}
-
-async function requestApi<T>(base: string, path: string, init?: RequestInit, wake?: EngineWake): Promise<T> {
-  const response = await reach(base, path, init, wake);
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new Error(`Shinsa on ${base} answered ${response.status} without JSON.`);
-  }
-  if (isErrorBody(body))
-    throw new DomainError({ code: body.error.code ?? 'request_failed', message: body.error.message });
-  return body as T;
-}
-
-function postJson(body: unknown, headers: Record<string, string> = {}): RequestInit {
-  return {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  };
+  readRepos: () => Promise<{ readonly repos: readonly Repo[] }>;
 }
 
 export function createSurfaceClient(base: string, key: string, wake?: EngineWake): SurfaceClient {
+  const api = createEngineCalls({ base, wake });
   let sent = 0;
   return {
     base,
-    read: (path) => requestApi(base, path, undefined, wake),
-    post: (path, body) => requestApi(base, path, postJson(body), wake),
+    api,
     send: (command) => {
       const header = resolveCommandKey(key, sent);
       sent += 1;
-      return requestApi(base, '/api/commands', postJson(command, { 'idempotency-key': header }), wake);
+      return api.commands.send({ headers: { 'idempotency-key': header }, payload: command });
     },
   };
 }
@@ -75,7 +30,7 @@ export function createApiClient(base: string, wake?: EngineWake): ApiClient {
   return {
     base,
     sendCommand: client.send,
-    readQueue: () => client.read('/api/queue'),
-    readRepos: () => client.read('/api/repos'),
+    readQueue: () => client.api.server.queue(),
+    readRepos: () => client.api.state.repos(),
   };
 }

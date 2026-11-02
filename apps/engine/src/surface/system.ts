@@ -2,15 +2,10 @@ import {
   type AccountPatch,
   type AccountSummary,
   type AccountsSnapshot,
-  type AgentProviderInfo,
-  type OnBehalfAction,
-  type OnboardingStatus,
   type ProgramVersion,
   type QueueSummary,
   type QueueSummaryEntry,
   resolveTerminalLabel,
-  type TerminalsSnapshot,
-  type UpdateOutcome,
   type VersionsSnapshot,
 } from '@shinsa/core';
 import { describeVersion, type ServerHealth } from '../instance/index.ts';
@@ -171,11 +166,11 @@ function buildAccountPatch(values: Values): AccountPatch {
 }
 
 export const SYSTEM_SPECS: SurfaceSpec[] = [
-  defineRead<AccountsSnapshot>({
+  defineRead({
     path: ['accounts', 'list'],
     summary: 'List the Claude accounts agents run on.',
     fields: [],
-    request: () => '/api/accounts',
+    read: (_values, client) => client.api.accounts.list(),
     format: formatAccounts,
   }),
   defineAction({
@@ -183,7 +178,7 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     summary: 'Check every account’s sign-in and usage again.',
     fields: [],
     act: async (client) => {
-      const data = await client.post<AccountsSnapshot>('/api/accounts/refresh', {});
+      const data = await client.api.accounts.refresh({ payload: {} });
       return { data, text: formatAccounts(data) };
     },
   }),
@@ -201,8 +196,10 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     ],
     act: async (client, values) => {
       const account = await resolveOptionalAccount(client, readValue(values, 'account'));
-      const data = await client.post<AccountsSnapshot>('/api/accounts/login', {
-        accountId: account?.id ?? null,
+      const data = await client.api.accounts.login({
+        payload: {
+          accountId: account?.id ?? null,
+        },
       });
       return { data, text: describeSignInStart(data) };
     },
@@ -216,9 +213,11 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
       { name: 'code', kind: 'text', positional: 'one', required: true, description: 'The code.' },
     ],
     act: async (client, values) => {
-      const data = await client.post<AccountsSnapshot>('/api/accounts/login/code', {
-        loginId: readValue(values, 'login'),
-        code: readValue(values, 'code'),
+      const data = await client.api.accounts.loginCode({
+        payload: {
+          loginId: readValue(values, 'login'),
+          code: readValue(values, 'code'),
+        },
       });
       return { data, text: formatAccounts(data) };
     },
@@ -237,9 +236,11 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
       },
     ],
     act: async (client, values) => {
-      const data = await client.post<AccountsSnapshot>('/api/accounts/import', {
-        origin: 'cswap',
-        email: readValue(values, 'email'),
+      const data = await client.api.accounts.import({
+        payload: {
+          origin: 'cswap',
+          email: readValue(values, 'email'),
+        },
       });
       return { data, text: describeSignInStart(data) };
     },
@@ -265,9 +266,11 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     ],
     act: async (client, values) => {
       const account = await findAccount(client, readValue(values, 'account'));
-      const data = await client.post<AccountsSnapshot>('/api/accounts/update', {
-        accountId: account.id,
-        patch: buildAccountPatch(values),
+      const data = await client.api.accounts.update({
+        payload: {
+          accountId: account.id,
+          patch: buildAccountPatch(values),
+        },
       });
       return { data, text: formatAccounts(data) };
     },
@@ -279,22 +282,22 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     fields: [ACCOUNT_FIELD],
     act: async (client, values) => {
       const account = await findAccount(client, readValue(values, 'account'));
-      const data = await client.post<AccountsSnapshot>('/api/accounts/remove', { accountId: account.id });
+      const data = await client.api.accounts.remove({ payload: { accountId: account.id } });
       return { data, text: formatAccounts(data) };
     },
   }),
-  defineRead<AccountsSnapshot>({
+  defineRead({
     path: ['usage'],
     summary: 'Show how much of each usage limit every account has used, and when it resets.',
     fields: [],
-    request: () => '/api/accounts',
+    read: (_values, client) => client.api.accounts.list(),
     format: formatUsage,
   }),
-  defineRead<AgentProviderInfo[]>({
+  defineRead({
     path: ['providers'],
     summary: 'List the agent providers and their models.',
     fields: [],
-    request: () => '/api/providers',
+    read: (_values, client) => client.api.server.providers(),
     format: (providers) =>
       providers
         .map(
@@ -303,12 +306,12 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
         )
         .join('\n'),
   }),
-  defineRead<VersionsSnapshot>({
+  defineRead({
     path: ['versions', 'list'],
     summary:
       'Show the installed Claude Code and Codex, the latest of each and the Claude Agent SDK Shinsa runs.',
     fields: [],
-    request: () => '/api/versions',
+    read: (_values, client) => client.api.versions.snapshot(),
     format: formatVersions,
   }),
   defineAction({
@@ -326,16 +329,16 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
       },
     ],
     act: async (client, values) => {
-      const data = await client.post<UpdateOutcome>('/api/versions/update', { program: values.program });
+      const data = await client.api.versions.update({ payload: { program: values.program } });
       return { data, text: `${data.message}\n${formatVersions(data.versions)}` };
     },
   }),
-  defineRead<TerminalsSnapshot>({
+  defineRead({
     path: ['terminals', 'list'],
     summary: 'List your terminals in Shinsa: each one’s folder and whether its shell still runs.',
     humanOnly: true,
     fields: [],
-    request: () => '/api/terminals',
+    read: (_values, client) => client.api.terminals.list(),
     format: ({ terminals }) =>
       terminals.length === 0
         ? 'No terminals.'
@@ -346,11 +349,12 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
             )
             .join('\n'),
   }),
-  defineRead<ServerHealth>({
+  defineRead({
     path: ['health'],
     summary: 'Check that Shinsa loaded its log cleanly, and which Shinsa is running.',
     fields: [],
-    request: () => '/api/health',
+    read: async (_values, client): Promise<ServerHealth> =>
+      (await client.api.server.health()) as ServerHealth,
     format: (health) =>
       [
         ...(health.ok
@@ -362,21 +366,21 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
         describeRunning(health),
       ].join('\n'),
   }),
-  defineRead<QueueSummary>({
+  defineRead({
     path: ['queue'],
     summary: 'What needs a decision, and what agents are working on.',
     fields: [],
-    request: () => '/api/queue',
+    read: (_values, client) => client.api.server.queue(),
     format: (summary, _values, display) => {
       const lines = describeQueue(summary, display);
       return lines.length > 0 ? lines.join('\n') : QUEUE_EMPTY;
     },
   }),
-  defineRead<{ actions: (OnBehalfAction & { byTask?: string | null })[] }>({
+  defineRead({
     path: ['activity'],
     summary: 'What agents did on your behalf, oldest first.',
     fields: [],
-    request: () => '/api/activity',
+    read: (_values, client) => client.api.state.activity(),
     format: ({ actions }) =>
       actions.length === 0
         ? 'Nothing yet.'
@@ -387,11 +391,11 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
             })
             .join('\n'),
   }),
-  defineRead<OnboardingStatus>({
+  defineRead({
     path: ['setup', 'status'],
     summary: 'Where setup stands, and where Shinsa keeps its data.',
     fields: [],
-    request: () => '/api/onboarding',
+    read: (_values, client) => client.api.onboarding.status(),
     format: (status) =>
       [
         status.completed ? 'Setup is done.' : 'Setup is not finished.',
@@ -399,11 +403,12 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
         `Config: ${status.paths.configPath}`,
       ].join('\n'),
   }),
-  defineRead<Prerequisites>({
+  defineRead({
     path: ['setup', 'check'],
     summary: 'Check the tools Shinsa needs: git, gh, claude and bun.',
     fields: [],
-    request: () => '/api/onboarding/prerequisites',
+    read: async (_values, client): Promise<Prerequisites> =>
+      (await client.api.onboarding.prerequisites()) as Prerequisites,
     format: (result, _values, display) =>
       result.checks.map((check) => describeCheck(check, display)).join('\n'),
   }),

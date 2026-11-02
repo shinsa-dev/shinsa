@@ -12,7 +12,7 @@ import {
 import type { CommandReceipt, SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findProjectId, findTaskId, resolveOptionalRepoId } from './resolve.ts';
-import { defineAction, defineCommand, defineRead, encode, readValue, type SurfaceSpec } from './spec.ts';
+import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 const SCHEDULE_FIELD: FieldSpec = {
   name: 'schedule',
@@ -29,13 +29,6 @@ const SUGGESTION_FIELD: FieldSpec = {
   required: true,
   description: 'The suggested watch, from `shinsa schedules suggestions`.',
 };
-
-interface Webhook {
-  url: string;
-  signature: { header: string; encoding: string; prefix: string } | null;
-  hasSecret: boolean;
-  replayKey: string | null;
-}
 
 function describeSchedule(schedule: Schedule, titleOf: (taskId: string) => string | null) {
   const state = schedule.stopped ? 'finished' : schedule.enabled ? 'on' : 'paused';
@@ -146,7 +139,7 @@ async function resolveTimeZone(client: SurfaceClient, values: Values) {
   if (given) return given;
   const id = readValue(values, 'id');
   if (id) {
-    const { schedules } = await client.read<{ schedules: Schedule[] }>('/api/schedules');
+    const { schedules } = await client.api.state.schedules();
     const existing = schedules.find((schedule) => schedule.id === id);
     if (existing) return existing.timeZone;
   }
@@ -154,11 +147,11 @@ async function resolveTimeZone(client: SurfaceClient, values: Values) {
 }
 
 export const SCHEDULE_SPECS: SurfaceSpec[] = [
-  defineRead<{ schedules: Schedule[] }>({
+  defineRead({
     path: ['schedules', 'list'],
     summary: 'List the schedules: what each sends, when, and whether it is on.',
     fields: [],
-    request: () => '/api/schedules',
+    read: (_values, client) => client.api.state.schedules(),
     format: ({ schedules }) =>
       schedules.length === 0
         ? 'No schedules.'
@@ -287,11 +280,11 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
     build: (values) => ({ type: 'schedule.remove', scheduleId: readValue(values, 'schedule') }),
     done: () => 'Deleted.',
   }),
-  defineRead<{ suggestions: WatchSuggestion[] }>({
+  defineRead({
     path: ['schedules', 'suggestions'],
     summary: 'List the suggested watches that wait for you to accept or dismiss them.',
     fields: [],
-    request: () => '/api/schedules',
+    read: (_values, client) => client.api.state.schedules(),
     format: ({ suggestions }) => {
       const open = suggestions.filter((suggestion) => suggestion.status === 'open');
       return open.length === 0 ? 'No suggested watches.' : open.map(describeSuggestion).join('\n');
@@ -314,11 +307,12 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
     build: (values) => ({ type: 'watch_suggestion.dismiss', suggestionId: readValue(values, 'suggestion') }),
     done: () => 'Dismissed.',
   }),
-  defineRead<Webhook>({
+  defineRead({
     path: ['schedules', 'webhook'],
     summary: "Show a webhook schedule's URL and its signature check.",
     fields: [SCHEDULE_FIELD],
-    request: (values) => `/api/schedules/${encode(values.schedule)}/webhook`,
+    read: (values, client) =>
+      client.api.secrets.webhook({ params: { scheduleId: readValue(values, 'schedule') } }),
     format: (hook) =>
       [
         hook.url,
@@ -337,8 +331,9 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
       { name: 'secret', kind: 'text', positional: 'one', required: true, description: 'The signing secret.' },
     ],
     act: async (client, values) => {
-      const data = await client.post(`/api/schedules/${encode(values.schedule)}/webhook`, {
-        secret: readValue(values, 'secret'),
+      const data = await client.api.secrets.writeWebhookSecret({
+        params: { scheduleId: readValue(values, 'schedule') },
+        payload: { secret: readValue(values, 'secret') },
       });
       return { data, text: 'Saved the signing secret.' };
     },

@@ -1,12 +1,5 @@
 import type { FieldSpec } from './fields.ts';
-import {
-  findProject,
-  findProjectId,
-  findRepoId,
-  findWatchdog,
-  type ProjectsRead,
-  selectProject,
-} from './resolve.ts';
+import { findProject, findProjectId, findRepoId, findWatchdog, selectProject } from './resolve.ts';
 import { defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 const TASK_FIELD: FieldSpec = {
@@ -80,11 +73,11 @@ export const WATCHDOG_SPECS: SurfaceSpec[] = [
     },
     done: () => 'Connected the source; the watchdog starts watching.',
   }),
-  defineRead<ProjectsRead>({
+  defineRead({
     path: ['sources', 'list'],
     summary: 'List a project’s data sources: the MCP servers its agents read, and what each holds.',
     fields: [PROJECT_FIELD],
-    request: () => '/api/projects',
+    read: (_values, client) => client.api.state.projects(),
     format: (data, values) => {
       const project = selectProject(data.projects, readValue(values, 'project'));
       if (!project) return `No project ${readValue(values, 'project')}.`;

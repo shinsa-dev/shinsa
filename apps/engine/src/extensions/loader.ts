@@ -5,6 +5,10 @@ import type { ToolSpec } from '../agents/tools/schema.ts';
 import { describeError, log } from '../log/index.ts';
 import type { McpDefinition } from './definitions.ts';
 import { listToolInfo, type OpenedClient, openMcpClient, withTimeout } from './health.ts';
+import {
+  MCP_HOT_LOAD_TIMEOUT_MS as HOT_LOAD_TIMEOUT_MS,
+  MCP_TOOL_CALL_TIMEOUT_MS as TOOL_CALL_TIMEOUT_MS,
+} from './schema.ts';
 
 export interface DeferredServer {
   name: string;
@@ -29,10 +33,6 @@ export interface LoadableExtensions {
 type HotLoadSession = Pick<AgentSession, 'loadMcpServers'>;
 
 export type OpenClient = (definition: McpDefinition) => Promise<OpenedClient>;
-
-const HOT_LOAD_TIMEOUT_MS = 20_000;
-
-const TOOL_CALL_TIMEOUT_MS = 120_000;
 
 const NAME = { type: 'string', maxLength: 128 };
 

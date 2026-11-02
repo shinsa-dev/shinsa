@@ -1,63 +1,8 @@
-import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
-import { basename, join } from 'node:path';
 import { type Repo, resolveTaskProject, type Task } from '@shinsa/core';
-import { inspectRepo, resolveRepoRemote, resolveRepoRoot } from '../git/index.ts';
-import { GITHUB_TIMEOUT_MS } from '../github/index.ts';
+import { inspectRepo, resolveRepoRemote } from '../git/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
-import { runCommand } from '../shell/index.ts';
-
-export interface LocalRepo {
-  path: string;
-  name: string;
-  touchedAt: number;
-}
-
-export type LoginResolver = () => Promise<string | null>;
-
-const MAX_LOCAL_REPOS = 80;
-
-function readDirectory(path: string) {
-  try {
-    return statSync(path).isDirectory() ? readdirSync(path) : [];
-  } catch {
-    return [];
-  }
-}
-
-function selectLocalRepo(path: string, name: string): LocalRepo | null {
-  try {
-    const stats = statSync(path);
-    if (!stats.isDirectory() || !existsSync(join(path, '.git'))) return null;
-    return { path: realpathSync(path), name, touchedAt: stats.mtimeMs };
-  } catch {
-    return null;
-  }
-}
-
-export function listLocalRepos(roots: string[], limit = MAX_LOCAL_REPOS): LocalRepo[] {
-  const found = new Map<string, LocalRepo>();
-  for (const root of roots) {
-    for (const entry of readDirectory(root)) {
-      const repo = selectLocalRepo(join(root, entry), entry);
-      if (repo && !found.has(repo.path)) found.set(repo.path, repo);
-    }
-  }
-  return [...found.values()].sort((a, b) => b.touchedAt - a.touchedAt).slice(0, limit);
-}
-
-export function createLoginResolver(cwd: string): LoginResolver {
-  let login: Promise<string | null> | null = null;
-  return () => {
-    login ??= runCommand(['gh', 'api', 'user', '--jq', '.login'], cwd, {
-      timeoutMs: GITHUB_TIMEOUT_MS,
-    }).then((result) => {
-      if (result.ok) return result.stdout.toLowerCase();
-      login = null;
-      return null;
-    });
-    return login;
-  };
-}
+import { listLocalRepos } from './edge.ts';
+import { type LocalRepo, type LoginResolver, RepoNotRegistered } from './schema.ts';
 
 function titleCase(text: string) {
   return text
@@ -122,7 +67,9 @@ export async function upsertRepo(
     { ...from, id: from.id ?? `repo:${candidate.path}:${engine.state.seq}` }
   );
   const registered = selectRepoByPath(engine, candidate.path);
-  if (!registered) throw new Error(`Could not register ${candidate.name}.`);
+  if (!registered) {
+    throw new RepoNotRegistered({ path: candidate.path, message: `Could not register ${candidate.name}.` });
+  }
   return registered;
 }
 
@@ -140,15 +87,14 @@ export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {
   return repos.find((repo) => path === repo.path || path.startsWith(`${repo.path}/`)) ?? null;
 }
 
-export async function listCandidateRepos(roots: string[], origin: string | null) {
-  const local = listLocalRepos(roots);
-  if (!origin) return local;
-  const root = await resolveRepoRoot(origin);
-  if (!root || local.some((repo) => repo.path === root)) return local;
-  return [{ path: root, name: basename(root), touchedAt: Date.now() }, ...local];
-}
-
-export { createDiscoverer, discoverRoots } from './discover.ts';
-export { readOriginRemote } from './remote.ts';
-export { type Discoverer, type RootSource, Roots } from './roots.ts';
-export { verifySetup } from './setup.ts';
+export {
+  createDiscoverer,
+  createLoginResolver,
+  discoverRoots,
+  listCandidateRepos,
+  listLocalRepos,
+  readOriginRemote,
+  verifySetup,
+} from './edge.ts';
+export { Roots } from './roots.ts';
+export type { Discoverer, LocalRepo, LoginResolver, RootSource } from './schema.ts';

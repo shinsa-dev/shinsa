@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -8,8 +8,7 @@ import {
   resolveHead,
   resolveIsolatedPath,
 } from '../../src/git/index.ts';
-import { log } from '../../src/log/index.ts';
-import { createGitRepo, createTempDir, git } from '../helpers/index.ts';
+import { captureLogs, createGitRepo, createTempDir, git } from '../helpers/index.ts';
 
 async function createCheckoutRepo() {
   const { repo, path } = await createGitRepo({ remote: false, files: { 'a.txt': 'one\n' } });
@@ -65,12 +64,12 @@ describe('a delegation’s own checkout', () => {
     const first = await createIsolatedWorktree(repo, worktreesDir, 'task-1', 'run-1', head);
     const loose = resolveIsolatedPath(worktreesDir, 'task-1', 'loose');
     mkdirSync(loose, { recursive: true });
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     await removeIsolatedWorktrees(repo, worktreesDir, 'task-1');
+    logs.restore();
     expect(existsSync(first)).toBe(false);
     expect(existsSync(join(worktreesDir, 'delegations', 'task-1'))).toBe(false);
-    expect(warn.mock.calls.some(([message]) => String(message).includes('delegation’s checkout'))).toBe(true);
-    warn.mockRestore();
+    expect(logs.entries.some((entry) => entry.message.includes('delegation’s checkout'))).toBe(true);
     expect(await git(repo.path, 'worktree', 'list')).not.toContain(join('delegations', 'task-1', 'run-1'));
     await removeIsolatedWorktrees(repo, worktreesDir, 'task-2');
   });

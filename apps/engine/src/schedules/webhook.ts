@@ -3,38 +3,26 @@ import { SCHEDULE_LIMITS, type Schedule } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { SecretStore } from '../secrets/index.ts';
+import {
+  FRAME_ID_BYTES,
+  PROMPT_EMPTY,
+  PROMPT_TOO_LONG,
+  RATE_WINDOW_MS,
+  WEBHOOK_MAX_BODY_BYTES,
+  WEBHOOK_RATE_LIMIT_PER_MINUTE,
+  WEBHOOK_ROUTE,
+  WEBHOOK_ROUTE_PREFIX,
+  type WebhookOutcome,
+  type WebhookReceiverOptions,
+} from './schema.ts';
 import { renderReplayKey, renderWebhookPrompt, type WebhookRequest } from './template.ts';
 import { constantTimeEquals, verifyWebhookSignature } from './verify.ts';
 
-export const WEBHOOK_ROUTE_PREFIX = '/api/hooks';
-
-export const WEBHOOK_MAX_BODY_BYTES = 1024 * 1024;
-
-export const WEBHOOK_RATE_LIMIT_PER_MINUTE = 60;
-
-const MINUTE = 60_000;
-
-const ROUTE = /^\/api\/hooks\/([^/]+)\/([^/]+)$/;
-
-const PROMPT_TOO_LONG = 'The filled-in prompt is too long.';
-
-const PROMPT_EMPTY = 'The filled-in prompt is empty.';
-
-type WebhookOutcome =
-  | 'accepted'
-  | 'duplicate'
-  | 'prompt_refused'
-  | 'not_found'
-  | 'disabled'
-  | 'rejected_signature'
-  | 'rate_limited'
-  | 'body_too_large'
-  | 'error';
-
-export interface WebhookReceiverOptions {
-  now?: () => number;
-  newId?: () => string;
-}
+export {
+  WEBHOOK_MAX_BODY_BYTES,
+  WEBHOOK_RATE_LIMIT_PER_MINUTE,
+  type WebhookReceiverOptions,
+} from './schema.ts';
 
 function respond(status: number, outcome: WebhookOutcome, body: Record<string, string> = {}) {
   return Response.json(
@@ -97,7 +85,7 @@ export class WebhookReceiver {
 
   #takeSlot(scheduleId: string) {
     const now = this.#now();
-    const recent = (this.#windows.get(scheduleId) ?? []).filter((at) => now - at < MINUTE);
+    const recent = (this.#windows.get(scheduleId) ?? []).filter((at) => now - at < RATE_WINDOW_MS);
     if (recent.length >= WEBHOOK_RATE_LIMIT_PER_MINUTE) {
       this.#windows.set(scheduleId, recent);
       return false;
@@ -107,7 +95,7 @@ export class WebhookReceiver {
   }
 
   #selectHook(path: string) {
-    const match = ROUTE.exec(path);
+    const match = WEBHOOK_ROUTE.exec(path);
     const scheduleId = decodeSegment(match?.[1]);
     const token = decodeSegment(match?.[2]);
     if (scheduleId === null || token === null) return null;
@@ -172,7 +160,7 @@ export class WebhookReceiver {
     if (replayKey !== null && (schedule.replayKeys[replayKey] ?? 0) > this.#now()) {
       return respond(202, 'duplicate', { deliveryId });
     }
-    const prompt = renderWebhookPrompt(schedule.text, delivery, randomBytes(6).toString('hex'));
+    const prompt = renderWebhookPrompt(schedule.text, delivery, randomBytes(FRAME_ID_BYTES).toString('hex'));
     const id = `webhook:${schedule.id}:${deliveryId}`;
     const problem = resolvePromptProblem(prompt);
     if (problem) {

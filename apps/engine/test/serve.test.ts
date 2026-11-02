@@ -3,6 +3,7 @@ import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AccountsSnapshot } from '@shinsa/core';
+import { Effect, Layer } from 'effect';
 import { Cswap } from '../src/accounts/cswap.ts';
 import type { ModelSource } from '../src/agents/index.ts';
 import { RunSupervisor } from '../src/agents/index.ts';
@@ -23,7 +24,7 @@ import {
   selectLockHolder,
 } from '../src/instance/index.ts';
 import { log } from '../src/log/index.ts';
-import { REMOTE_FILE } from '../src/remote/index.ts';
+import { REMOTE_FILE, TunnelConnectFailed, TunnelConnector } from '../src/remote/index.ts';
 import { EffectRunner, Engine } from '../src/runtime/index.ts';
 import { type Shinsa, startShinsa } from '../src/serve.ts';
 import { EventLog, resolveStateVersion } from '../src/store/index.ts';
@@ -338,10 +339,12 @@ describe('startShinsa', () => {
     const localUrls: string[] = [];
     const shinsa = await startShinsa(config, {
       models,
-      remoteConnect: (_token, localUrl) => {
-        localUrls.push(localUrl);
-        return Promise.reject(new Error('No tunnel in tests.'));
-      },
+      remoteConnector: Layer.succeed(TunnelConnector, {
+        open: (_token, localUrl) => {
+          localUrls.push(localUrl);
+          return Effect.fail(new TunnelConnectFailed({ message: 'No tunnel in tests.' }));
+        },
+      }),
     });
     started.push(shinsa);
     await until('the tunnel to start', () => localUrls.length > 0);

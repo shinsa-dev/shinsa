@@ -1,4 +1,5 @@
 import { DomainError, type RemoteTeamEntry, type RemoteUser } from '@shinsa/core';
+import type { EngineCalls } from '../cli/client/schema.ts';
 import type { RemoteSnapshot } from '../remote/index.ts';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec } from './fields.ts';
@@ -43,7 +44,7 @@ function formatTeams(snapshot: RemoteSnapshot) {
 }
 
 export async function findTeamId(client: SurfaceClient, ref: string) {
-  const snapshot = await client.read<RemoteSnapshot>('/api/remote');
+  const snapshot = await client.api.remote.snapshot();
   const wanted = ref.trim().toLowerCase();
   const matches = snapshot.teams.filter(
     (entry) => entry.id === ref.trim() || entry.name.toLowerCase() === wanted
@@ -61,7 +62,7 @@ export async function findTeamId(client: SurfaceClient, ref: string) {
 type Among = 'members' | 'requests' | 'teammates';
 
 async function findUserId(client: SurfaceClient, teamId: string, login: string, among: Among) {
-  const snapshot = await client.read<RemoteSnapshot>('/api/remote');
+  const snapshot = await client.api.remote.snapshot();
   const team = snapshot.teams.find((entry) => entry.id === teamId)?.team;
   const wanted = login.replace(/^@/, '').toLowerCase();
   const listed = team && (among === 'teammates' ? [{ user: team.owner }, ...team.members] : team[among]);
@@ -76,7 +77,11 @@ async function findUserId(client: SurfaceClient, teamId: string, login: string, 
   return found.user.id;
 }
 
-function defineTeamAction(path: string, summary: string, route: string, done: string): SurfaceSpec {
+type TeamRoute = (api: EngineCalls, payload: { teamId: string }) => Promise<unknown>;
+
+type MemberRoute = (api: EngineCalls, payload: { teamId: string; userId: string }) => Promise<unknown>;
+
+function defineTeamAction(path: string, summary: string, route: TeamRoute, done: string): SurfaceSpec {
   return defineAction({
     path: ['teams', path],
     summary,
@@ -84,7 +89,7 @@ function defineTeamAction(path: string, summary: string, route: string, done: st
     fields: [TEAM_FIELD],
     act: async (client, values) => {
       const teamId = await findTeamId(client, readValue(values, 'team'));
-      const data = await client.post<RemoteSnapshot>(route, { teamId });
+      const data = await route(client.api, { teamId });
       return { data, text: done };
     },
   });
@@ -93,7 +98,7 @@ function defineTeamAction(path: string, summary: string, route: string, done: st
 function defineMemberAction(
   path: string,
   summary: string,
-  route: string,
+  route: MemberRoute,
   among: Among,
   done: string
 ): SurfaceSpec {
@@ -105,7 +110,7 @@ function defineMemberAction(
     act: async (client, values) => {
       const teamId = await findTeamId(client, readValue(values, 'team'));
       const userId = await findUserId(client, teamId, readValue(values, 'login'), among);
-      const data = await client.post<RemoteSnapshot>(route, { teamId, userId });
+      const data = await route(client.api, { teamId, userId });
       return { data, text: done };
     },
   });
@@ -116,11 +121,11 @@ function describeLink(url: string) {
 }
 
 export const TEAM_SPECS: SurfaceSpec[] = [
-  defineRead<RemoteSnapshot>({
+  defineRead({
     path: ['teams', 'list'],
     summary: 'List the teams this machine is in, with their members and who asks to join.',
     fields: [],
-    request: () => '/api/remote',
+    read: (_values, client) => client.api.remote.snapshot(),
     format: formatTeams,
   }),
   defineAction({
@@ -137,8 +142,10 @@ export const TEAM_SPECS: SurfaceSpec[] = [
       },
     ],
     act: async (client, values) => {
-      const data = await client.post<{ teamId: string; url: string }>('/api/remote/teams/create', {
-        name: readValue(values, 'name'),
+      const data = await client.api.teams.create({
+        payload: {
+          name: readValue(values, 'name'),
+        },
       });
       return { data, text: describeLink(data.url) };
     },
@@ -157,8 +164,10 @@ export const TEAM_SPECS: SurfaceSpec[] = [
       },
     ],
     act: async (client, values) => {
-      const data = await client.post<{ status: string }>('/api/remote/teams/join', {
-        url: readValue(values, 'url'),
+      const data = await client.api.teams.join({
+        payload: {
+          url: readValue(values, 'url'),
+        },
       });
       const text =
         data.status === 'member'
@@ -174,54 +183,54 @@ export const TEAM_SPECS: SurfaceSpec[] = [
     fields: [TEAM_FIELD],
     act: async (client, values) => {
       const teamId = await findTeamId(client, readValue(values, 'team'));
-      const data = await client.post<{ url: string }>('/api/remote/teams/link', { teamId });
+      const data = await client.api.teams.link({ payload: { teamId } });
       return { data, text: describeLink(data.url) };
     },
   }),
   defineTeamAction(
     'link-off',
     'Turn a team’s link off, so nobody can ask to join with it any more.',
-    '/api/remote/teams/link/remove',
+    (api, payload) => api.teams.removeLink({ payload }),
     'The team’s link is off.'
   ),
   defineMemberAction(
     'accept',
     'Accept someone who asked to join a team you own.',
-    '/api/remote/teams/requests/accept',
+    (api, payload) => api.teams.acceptRequest({ payload }),
     'requests',
     'They are in the team now and see the tasks of its projects.'
   ),
   defineMemberAction(
     'decline',
     'Decline someone who asked to join a team you own.',
-    '/api/remote/teams/requests/decline',
+    (api, payload) => api.teams.declineRequest({ payload }),
     'requests',
     'Declined.'
   ),
   defineMemberAction(
     'remove-member',
     'Take someone out of a team you own. Their views of its tasks close at once.',
-    '/api/remote/teams/members/remove',
+    (api, payload) => api.teams.removeMember({ payload }),
     'members',
     'They are no longer in the team.'
   ),
   defineMemberAction(
     'grant',
     'Give a teammate full remote access to this machine. Their browsers that hold the team’s key are added without asking.',
-    '/api/remote/members/grant',
+    (api, payload) => api.remote.grantMember({ payload }),
     'teammates',
     'They can reach this machine now. Take it back with `shinsa remote remove-member`.'
   ),
   defineTeamAction(
     'leave',
     'Leave a team. Your projects stop showing their tasks to it.',
-    '/api/remote/teams/leave',
+    (api, payload) => api.teams.leave({ payload }),
     'You left the team.'
   ),
   defineTeamAction(
     'remove',
     'Delete a team you own, for every member.',
-    '/api/remote/teams/remove',
+    (api, payload) => api.teams.remove({ payload }),
     'The team is deleted.'
   ),
 ];
