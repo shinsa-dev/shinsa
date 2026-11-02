@@ -44,6 +44,7 @@ import {
   LocalOnlyRoute,
   LocalReposAnswer,
   MemoryAnswer,
+  ModelsAnswer,
   ObjectAnswer,
   OkAnswer,
   OnboardingAnswer,
@@ -208,7 +209,7 @@ class ServerGroup extends HttpApiGroup.make('server')
       .annotate(RouteFieldFailures, {
         when: { code: 'when_invalid', message: 'Restart now or once agents are idle.' },
       }),
-    HttpApiEndpoint.get('models', '/api/models', { success: ObjectAnswer }),
+    HttpApiEndpoint.get('models', '/api/models', { success: ModelsAnswer }),
     HttpApiEndpoint.get('providers', '/api/providers', { success: ProvidersAnswer }),
     HttpApiEndpoint.get('queue', '/api/queue', { success: QueueAnswer })
   )

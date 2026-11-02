@@ -10,6 +10,7 @@ import {
   ATTACHMENT_LIMIT_BYTES,
   ATTACHMENT_UPLOAD_LIMIT_BYTES,
   FilledText,
+  ModelsAnswer,
   IdempotencyKey,
   OpenRequest,
   ProjectPathBody,
@@ -26,6 +27,7 @@ const STRUCT_ANSWERS = new Set([
   'TeamLinkAnswer',
   'TeamCreateAnswer',
   'ProvidersAnswer',
+  'ModelsAnswer',
 ]);
 
 const ANSWERS = Object.entries(shapes).filter(
@@ -53,9 +55,11 @@ describe('EngineApi shapes', () => {
     });
   });
 
-  test('the providers answer is a list', () => {
-    expect(Schema.decodeUnknownSync(ProvidersAnswer)([])).toEqual([]);
-    expect(() => Schema.decodeUnknownSync(ProvidersAnswer)({})).toThrow();
+  test('the providers and the models answers are lists', () => {
+    for (const answer of [ProvidersAnswer, ModelsAnswer]) {
+      expect(Schema.decodeUnknownSync(answer)([])).toEqual([]);
+      expect(() => Schema.decodeUnknownSync(answer)({})).toThrow();
+    }
   });
 
   test('opening a file keeps a path only when it is text and a line only when it is a whole number above 0', () => {
@@ -75,6 +79,7 @@ describe('EngineApi shapes', () => {
       path: null,
       line: null,
     });
+    expect(decode({ target: 'finder' })).toEqual({ target: 'finder' });
     expect(() => decode({ target: 'vim' })).toThrow();
     expect(Schema.encodeSync(OpenRequest)({ target: 'editor', path: 'a', line: 2 })).toEqual({
       target: 'editor',

@@ -1,4 +1,4 @@
-import { DomainError, LOCAL_ONLY_MESSAGE, SCOPE_MESSAGES } from '@shinsa/core';
+import { LOCAL_ONLY_MESSAGE, SCOPE_MESSAGES } from '@shinsa/core';
 import { EngineGate } from '@shinsa/core/engine-api';
 import {
   BodyTooLarge,
@@ -17,8 +17,8 @@ import {
 import { Context, Effect, Layer, Schema, SchemaIssue } from 'effect';
 import { HttpServerRequest } from 'effect/http';
 import { type HttpApiEndpoint, HttpApiError } from 'effect/http-api';
-import { describeError } from '../../log/index.ts';
 import { isGuestRoute } from '../../remote/guest-routes.ts';
+import { resolveRequestFailure } from '../failures.ts';
 import { describeBodyLimit, resolveBodyRefusal, resolveBodySizeRefusal } from '../guard.ts';
 import {
   BODY_INVALID,
@@ -26,7 +26,6 @@ import {
   BODY_NOT_OBJECT,
   BROWSER_ONLY,
   READ_METHODS,
-  REQUEST_FAILED,
   RequestSource,
 } from '../schema.ts';
 import { HttpServices } from '../services/service.ts';
@@ -38,7 +37,6 @@ export const EngineGateLive = Layer.effect(
     const services = yield* HttpServices;
     const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
     const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
-    const isDomainError = Schema.is(DomainError);
 
     const assertScope = Effect.fn('EngineGate.assertScope')(function* (endpoint: HttpApiEndpoint.Top) {
       const source = yield* RequestSource;
@@ -112,14 +110,9 @@ export const EngineGateLive = Layer.effect(
       );
     });
 
-    const resolveDefect = (defect: unknown) =>
-      isDomainError(defect)
-        ? new RequestFailed({ code: defect.code, message: describeError(defect) })
-        : new RequestFailed({ code: REQUEST_FAILED, message: describeError(defect) });
-
     return (httpEffect, { endpoint }) =>
       Effect.andThen(Effect.andThen(assertScope(endpoint), assertBody(endpoint)), httpEffect).pipe(
-        Effect.catchDefect((defect) => Effect.fail(resolveDefect(defect))),
+        Effect.catchDefect((defect) => Effect.fail(resolveRequestFailure(defect))),
         Effect.catch((error: GateError): Effect.Effect<never, GateError> =>
           HttpApiError.HttpApiSchemaError.is(error) ? mapSchemaError(endpoint, error) : Effect.fail(error)
         ),

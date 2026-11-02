@@ -1,5 +1,5 @@
 import { Context, Predicate, Schema, SchemaGetter } from 'effect';
-import type { AgentProviderInfo } from '../agent-models/index.ts';
+import type { AgentModel, AgentProviderInfo } from '../agent-models/index.ts';
 import type { ChatEntry } from '../chat/protocol.ts';
 import type { UserCommand } from '../commands/schema.ts';
 import type { MemoryEntry } from '../domain/memory.ts';
@@ -266,7 +266,11 @@ export const OpenTarget = Schema.Literals(OPEN_TARGETS);
 
 export type OpenTarget = typeof OpenTarget.Type;
 
-export const OpenRequest = Schema.Struct({ target: OpenTarget, path: LooseText, line: LooseLine });
+export const OpenRequest = Schema.Struct({
+  target: OpenTarget,
+  path: Schema.optionalKey(LooseText),
+  line: Schema.optionalKey(LooseLine),
+});
 
 export type OpenRequest = typeof OpenRequest.Type;
 
@@ -371,10 +375,6 @@ export const TeamCreateAnswer = Schema.Struct({ teamId: Schema.String, url: Sche
 
 export const Bytes = Schema.Uint8Array;
 
-export interface EngineObject {
-  readonly [key: string]: unknown;
-}
-
 export interface TaskPullRequestView {
   readonly number: number;
   readonly state: string;
@@ -472,7 +472,7 @@ export interface WebhookView {
 }
 
 export const ObjectAnswer = Schema.Unknown.pipe(
-  Schema.refine((value): value is EngineObject => Predicate.isObject(value))
+  Schema.refine((value): value is object => Predicate.isObject(value))
 );
 
 export const TasksAnswer = Schema.Unknown.pipe(
@@ -522,7 +522,7 @@ export const MemoryAnswer = Schema.Unknown.pipe(
 );
 
 export const FeedbackAnswer = Schema.Unknown.pipe(
-  Schema.refine((value): value is { readonly feedback: readonly EngineObject[] } => Predicate.isObject(value))
+  Schema.refine((value): value is { readonly feedback: readonly object[] } => Predicate.isObject(value))
 );
 
 export const DelegationsAnswer = Schema.Unknown.pipe(
@@ -544,12 +544,16 @@ export const HealthAnswer = Schema.Unknown.pipe(
   Schema.refine(
     (
       value
-    ): value is EngineObject & {
+    ): value is {
       readonly ok: boolean;
       readonly version: string;
       readonly protocol: number;
     } => Predicate.isObject(value)
   )
+);
+
+export const ModelsAnswer = Schema.Unknown.pipe(
+  Schema.refine((value): value is readonly AgentModel[] => Array.isArray(value))
 );
 
 export const ProvidersAnswer = Schema.Unknown.pipe(
