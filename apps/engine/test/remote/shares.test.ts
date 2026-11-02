@@ -43,7 +43,7 @@ import {
   type ShareWorktree,
 } from '../../src/remote/shares.ts';
 import { EffectError } from '../../src/runtime/failures.ts';
-import { EvidenceStore } from '../../src/store/evidence.ts';
+import { EvidenceStore } from '../../src/store/evidence/index.ts';
 import { createGitRepo, createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';

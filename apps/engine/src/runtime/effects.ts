@@ -82,7 +82,7 @@ import {
 import type { ProcessTracker } from '../resources/index.ts';
 import type { WatchWriter } from '../schedules/suggest.ts';
 import type { Slack } from '../slack/index.ts';
-import { EvidenceStore } from '../store/evidence.ts';
+import { EvidenceStore } from '../store/evidence/index.ts';
 import { measureTaskCoverage } from '../test-coverage/index.ts';
 import { resolveRepoProject, type TriageResolver } from '../triage/index.ts';
 import type { RepositoryFinder } from '../triage/message.ts';

@@ -14,7 +14,7 @@ import {
   type Task,
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
-import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence.ts';
+import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence/index.ts';
 import { type Attachment, resolveRepositoryId, uploadAttachment } from './index.ts';
 
 const MEGABYTE = 1024 * 1024;

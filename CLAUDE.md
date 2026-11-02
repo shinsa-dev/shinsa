@@ -94,7 +94,7 @@ web ──WebSocket──► shinsa engine
 - **No backwards compatibility in code.** Shinsa has never shipped: a rename or a removal is done everywhere at once,
   with no readers for old events, stored shapes or transcripts and no redirects for old routes or ids
   (`docs/protocol.md` → Naming decisions). The one exception is the user's own event log: when a change would leave
-  old event shapes in it, the change adds one migration to `LOG_MIGRATIONS` (`apps/engine/src/store/migrations.ts`),
+  old event shapes in it, the change adds one migration to `LOG_MIGRATIONS` (`apps/engine/src/store/migrations/list.ts`),
   which rewrites them once on start, versioned by SQLite's `user_version`, so code never reads an old shape (`docs/engine.md` →
   State in memory).
 - **The hosted page can be newer than the engine it reaches.** app.shinsa.dev serves the web app built from `main`

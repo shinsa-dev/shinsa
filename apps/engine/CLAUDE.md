@@ -79,17 +79,23 @@ src/
 │                        isStartedFromTerminal (a TTY on stdin or stdout) decides whether `shinsa engine` needs it
 │                        (the default shell is zsh on the Mac, /bin/sh elsewhere); browser.ts
 │                        (resolveBrowserCommand: `open` on the Mac, `xdg-open` with a display, null without one)
-├── store/               EventLog (event-log.ts: the SQLite events, effects, receipts, snapshots and briefings (the
-│                        Home guide) tables; readEvents reports a damaged row instead of throwing and reads from a
-│                        position; migrate and assertCurrent run migrations.ts: the log's version in user_version,
-│                        LOG_BASELINE and the ordered LOG_MIGRATIONS after it, an older log refused with
-│                        LogVersionError, and inspect mode, which never writes, refusing a log that needs migrating),
-│                        the state snapshot (snapshot.ts: verifySnapshot, resolveStateVersion, a hash of
-│                        @shinsa/core's source) and EvidenceStore (evidence.ts: attached evidence under
-│                        `<task id>/round-<n>/`, chat tool images at the top, all served under /api/evidence by
-│                        http/evidence.ts, immutable and in byte ranges, and AttachmentStore (attachments.ts: the files you
-│                        attach to a request or message, `<UUIDv7>/<file name>`, uploaded by POST /api/attachments and
-│                        served under it the same way)
+├── store/               The event log on @effect/sql-sqlite-bun, one folder per table with its row schemas in schema.ts
+│                        and its service in service.ts, every row decoded: events/ (Events: read reports a damaged row
+│                        instead of failing and reads from a position), outbox/ (Outbox: the effects table, claimed
+│                        per lane, settled, retried, reconciled after a restart), receipts/, briefings/ (the Home
+│                        guide), snapshot/ (Snapshots: the state snapshot, verified by version, anchor and checksum;
+│                        version.ts: resolveStateVersion, a hash of @shinsa/core's source), commands/ (CommandLog: a
+│                        command's events, effects, cancellations and receipt in one transaction) and migrations/
+│                        (LogMigrator over LOG_BASELINE and the ordered LOG_MIGRATIONS in list.ts, the log's version in
+│                        user_version, an older log refused with LogVersionError, inspect mode refusing a log that needs
+│                        migrating); layers.ts (StoreLayer(path): the tables, the services and the empty-log stamp on
+│                        one SqlClient). event-log.ts is the edge: EventLog, the same methods as before, each running
+│                        a service through its own ManagedRuntime. Beside the log, evidence/ (Evidence: attached
+│                        evidence under `<task id>/round-<n>/`, chat tool images at the top, all served under
+│                        /api/evidence by http/evidence.ts, immutable and in byte ranges; EvidenceStore is its edge)
+│                        and attachments/ (Attachments: the files you attach to a request or message,
+│                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
+│                        /api/attachments and served under it the same way; AttachmentStore is its edge)
 ├── runtime/             Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the

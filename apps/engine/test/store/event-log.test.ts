@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import type { ShinsaEffect } from '@shinsa/core';
-import { SETTLED_RETENTION_MS } from '../../src/store/event-log.ts';
+import { SETTLED_RETENTION_MS } from '../../src/store/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { commitEvents, createTempDir } from '../helpers/index.ts';
 

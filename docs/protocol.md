@@ -134,7 +134,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 
 All twenty-one are decided and in the code. Shinsa has never shipped, so nothing reads the old names: every event,
 command, stored shape and route uses the current one. A change that would leave an old shape in the user's log ships
-a migration that rewrites it once on start (`apps/engine/src/store/migrations.ts`, `docs/engine.md` → State in
+a migration that rewrites it once on start (`apps/engine/src/store/migrations/list.ts`, `docs/engine.md` → State in
 memory), so code never reads one.
 
 1. **Plan, not spec**: `Plan`, `PlanDocument`, `PlanRevision`, `PlanFile`, `PlanQuestion`, `Task.plan`, `planFirst`,

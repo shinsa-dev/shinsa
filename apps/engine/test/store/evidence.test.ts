@@ -5,7 +5,7 @@ import {
   EVIDENCE_COPY_LIMIT_BYTES,
   EVIDENCE_ROUTE,
   resolveEvidenceFolder,
-} from '../../src/store/evidence.ts';
+} from '../../src/store/evidence/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
 import { createTempDir } from '../helpers/index.ts';
 

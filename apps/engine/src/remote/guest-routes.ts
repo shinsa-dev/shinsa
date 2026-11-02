@@ -1,6 +1,6 @@
 import { type ChatEntry, type ShinsaState, splitMessageAttachments } from '@shinsa/core';
-import { ATTACHMENT_ROUTE } from '../store/attachments.ts';
-import { EVIDENCE_ROUTE } from '../store/evidence.ts';
+import { ATTACHMENT_ROUTE } from '../store/attachments/index.ts';
+import { EVIDENCE_ROUTE } from '../store/evidence/index.ts';
 
 export interface RunEntryReader {
   listEntries(runId: string): ChatEntry[];

@@ -2,7 +2,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveBuildFolder, resolveBuildTarget } from '../src/instance/targets.ts';
-import { resolveStateVersion } from '../src/store/snapshot.ts';
+import { resolveStateVersion } from '../src/store/snapshot/version.ts';
 
 const engineDir = resolve(import.meta.dirname, '..');
 const target = resolveBuildTarget(Bun.env.SHINSA_ENGINE_TARGET);

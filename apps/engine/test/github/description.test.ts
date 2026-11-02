@@ -6,7 +6,7 @@ import { inflateRawSync } from 'node:zlib';
 import { type Evidence, parseReviewPayload, type Task } from '@shinsa/core';
 import { PullRequestDescriptions, serializeReviewLink } from '../../src/github/description.ts';
 import { log } from '../../src/log/index.ts';
-import { EvidenceStore } from '../../src/store/evidence.ts';
+import { EvidenceStore } from '../../src/store/evidence/index.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 

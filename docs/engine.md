@@ -4114,11 +4114,11 @@ truth, and a snapshot only saves replaying it.
   server keeps one; inspect mode never writes one, and an engine without a version (most tests) neither. A snapshot is
   only a shortcut: one that cannot be written is logged and left for the next.
 - **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
-  `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations.ts`) and every migration after it is one entry
-  in `LOG_MIGRATIONS`, in order, whose position is its version, so the current version is the baseline plus the
+  `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations/schema.ts`) and every migration after it is
+  one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
   list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
   Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
-  in one transaction, the snapshot is dropped and the version raised; a migration that throws leaves the log as it
+  in one transaction, the snapshot is dropped and the version raised; a migration that fails leaves the log as it
   was and the engine does not start. A log older than the baseline, or written before versions existed (version 0
   with events), is refused with a `LogVersionError` naming its version, never rewritten. Inspect mode writes nothing:
   `EventLog.assertCurrent` refuses a log that still needs migrating instead of reading it in an old shape. A log a
