@@ -16,8 +16,6 @@ import {
   signTeamSnapshot,
   TEAM_KEY_BYTES,
   TEAM_SHARE_PRESET,
-  type TeamAction,
-  type TeamInviteResponse,
   type TeamJoinStatus,
   type TeamListView,
   type TeamTask,
@@ -27,7 +25,7 @@ import {
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { ChannelPeer } from './channel.ts';
-import { ControlError } from './control.ts';
+import { type RemoteControl, selectRemoteFailureTag } from './client/index.ts';
 import type { Remote } from './index.ts';
 import { createChannelEphemeral, type HelloAnswer, type LiveShare, ShareChannel } from './share-channel.ts';
 import type { Shares, ShareTranscripts } from './shares.ts';
@@ -60,7 +58,7 @@ export interface TeamsOptions {
   random?: (bytes: number) => Uint8Array<ArrayBuffer>;
 }
 
-type Refusals = Partial<Record<number, DomainError>>;
+type Refusals = Partial<Record<string, DomainError>>;
 
 const OWNER_ONLY = new DomainError({ code: 'not_owner', message: 'Only the team’s owner can do this.' });
 
@@ -144,16 +142,17 @@ export class Teams implements TeamLinks {
     try {
       return await request;
     } catch (error) {
-      const refusal = error instanceof ControlError ? refusals[error.status] : undefined;
+      const tag = selectRemoteFailureTag(error);
+      const refusal = tag === null ? undefined : refusals[tag];
       throw refusal ?? error;
     }
   }
 
-  #action<T>(teamId: string, action: TeamAction, body: object = {}, refusals: Refusals = {}) {
+  #action<T>(request: (control: RemoteControl, token: string) => Promise<T>, refusals: Refusals = {}) {
     const token = this.#findMachineToken();
-    return this.#call(this.#remote.control.requestTeamAction<T>(token, teamId, action, body), {
-      403: OWNER_ONLY,
-      404: TEAM_GONE,
+    return this.#call(request(this.#remote.control, token), {
+      NotOwner: OWNER_ONLY,
+      NotFound: TEAM_GONE,
       ...refusals,
     });
   }
@@ -170,7 +169,7 @@ export class Teams implements TeamLinks {
     if (!trimmed) throw new DomainError({ code: 'name_invalid', message: 'Give the team a name.' });
     const token = this.#findMachineToken();
     const answer = await this.#call(this.#remote.control.requestTeamCreation(token, trimmed), {
-      409: new DomainError({
+      TeamsFull: new DomainError({
         code: 'teams_full',
         message: 'You own as many teams as you can. Remove one first.',
       }),
@@ -195,7 +194,7 @@ export class Teams implements TeamLinks {
       });
     const token = this.#findMachineToken();
     const answer = await this.#call(this.#remote.control.requestTeamJoin(token, fragment.invite), {
-      404: new DomainError({
+      NotFound: new DomainError({
         code: 'team_link_off',
         message: 'This team link was turned off. Ask the team’s owner for a new one.',
       }),
@@ -233,14 +232,14 @@ export class Teams implements TeamLinks {
 
   async renewInvite(teamId: string) {
     this.#findOwnTeam(teamId);
-    const { invite } = await this.#action<TeamInviteResponse>(teamId, 'invite');
+    const { invite } = await this.#action((control, token) => control.requestTeamInvite(token, teamId));
     this.#writeInvite(teamId, invite);
     return invite;
   }
 
   async turnOffInvite(teamId: string) {
     this.#findOwnTeam(teamId);
-    await this.#action(teamId, 'invite/remove');
+    await this.#action((control, token) => control.requestTeamInviteRemoval(token, teamId));
     this.#writeInvite(teamId, null);
   }
 
@@ -252,16 +251,14 @@ export class Teams implements TeamLinks {
 
   async acceptRequest(teamId: string, userId: string) {
     const team = this.#findOwnTeam(teamId);
-    const member = await this.#action<RemoteMember>(
-      teamId,
-      'members/add',
-      { userId },
+    const member = await this.#action(
+      (control, token) => control.requestTeamMemberAddition(token, teamId, userId),
       {
-        404: new DomainError({
+        NotFound: new DomainError({
           code: 'request_not_found',
           message: 'No one with that account asked to join this team.',
         }),
-        409: new DomainError({
+        MembersFull: new DomainError({
           code: 'members_full',
           message: 'This team has as many members as it can. Remove one first.',
         }),
@@ -276,7 +273,7 @@ export class Teams implements TeamLinks {
 
   async declineRequest(teamId: string, userId: string) {
     const team = this.#findOwnTeam(teamId);
-    await this.#action(teamId, 'requests/decline', { userId });
+    await this.#action((control, token) => control.requestTeamDecline(token, teamId, userId));
     this.#replaceTeam({ ...team, requests: withoutUser(team.requests, userId) });
   }
 
@@ -287,7 +284,7 @@ export class Teams implements TeamLinks {
         code: 'member_not_found',
         message: 'No one with that account is in this team.',
       });
-    await this.#action(teamId, 'members/remove', { userId });
+    await this.#action((control, token) => control.requestTeamMemberRemoval(token, teamId, userId));
     this.#replaceTeam({ ...team, members: withoutUser(team.members, userId) });
   }
 
@@ -306,9 +303,11 @@ export class Teams implements TeamLinks {
 
   async #endTeam(teamId: string, action: 'leave' | 'remove') {
     try {
-      await this.#remote.control.requestTeamAction(this.#findMachineToken(), teamId, action);
+      const token = this.#findMachineToken();
+      if (action === 'leave') await this.#remote.control.requestTeamLeave(token, teamId);
+      else await this.#remote.control.requestTeamRemoval(token, teamId);
     } catch (error) {
-      if (!(error instanceof ControlError && error.status === 404)) throw error;
+      if (selectRemoteFailureTag(error) !== 'NotFound') throw error;
     }
     this.#store.removeTeam(teamId);
     this.#remote.publish();

@@ -1,6 +1,13 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import type { AccessRequest, RemoteMember, RemoteSnapshot, RemoteUser, TaskGuest } from '@shinsa/core';
+import type {
+  AccessRequest,
+  PairingView,
+  RemoteMember,
+  RemoteSnapshot,
+  RemoteUser,
+  TaskGuest,
+} from '@shinsa/core';
 import {
   type ConnectClaim,
   DomainError,
@@ -21,15 +28,19 @@ import { describeError, log } from '../log/index.ts';
 import { resolveBrowserCommand } from '../shell/browser.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
 import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
-import { ControlClient, ControlError } from './control.ts';
+import {
+  type PairedMachine,
+  type PairingRun,
+  RemoteControl,
+  selectRemoteFailureTag,
+} from './client/index.ts';
 import { isOwnerOnlyRoute } from './local-only.ts';
-import { PAIR_POLL_MS, type PairedMachine, Pairing } from './pairing.ts';
 import { listTeamEntries, RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
 import { type StartConnector, TunnelSupervisor, type TunnelTimings } from './supervisor.ts';
 
 export { type ChannelPeer, RemoteChannel } from './channel.ts';
 export { createInstalledConnector } from './connector.ts';
-export { ControlClient } from './control.ts';
+export { RemoteControl } from './client/index.ts';
 export { isTunnelRequest, resolveChannelOriginRefusal, resolveTunnelRoute } from './guard.ts';
 export { resolveLocalOnlyRoute } from './local-only.ts';
 export { REMOTE_FILE, RemoteStore } from './store.ts';
@@ -60,7 +71,7 @@ type ProofKeys = Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>;
 
 export interface RemoteOptions {
   path: string;
-  control?: ControlClient;
+  control?: RemoteControl;
   connect: StartConnector;
   ping?: (url: string) => Promise<boolean>;
   localUrl: () => string;
@@ -70,7 +81,6 @@ export interface RemoteOptions {
   now?: () => number;
   machineName: string;
   openUrl: (url: string) => Promise<void>;
-  pairPollMs?: number;
 }
 
 type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
@@ -114,14 +124,14 @@ export async function requestHealth(url: string) {
 
 export class Remote {
   readonly store: RemoteStore;
-  readonly control: ControlClient;
+  readonly control: RemoteControl;
   readonly supervisor: TunnelSupervisor;
   readonly #options: RemoteOptions;
   readonly #now: () => number;
   readonly #channels = new Set<RemoteChannel>();
   readonly #listeners = new Set<() => void>();
   readonly #waiters = new Map<string, ((approved: boolean) => void)[]>();
-  #pairing: Pairing | null = null;
+  #pairing: { view: PairingView; run: PairingRun } | null = null;
   #claimer: HandoffClaimer | null = null;
   #leaver: GuestLeaver | null = null;
   #guestRevision = 0;
@@ -130,7 +140,7 @@ export class Remote {
     this.#options = options;
     this.#now = options.now ?? Date.now;
     this.store = new RemoteStore(options.path);
-    this.control = options.control ?? new ControlClient();
+    this.control = options.control ?? new RemoteControl();
     this.supervisor = new TunnelSupervisor({
       control: {
         recordHeartbeat: (token, request) => this.#recordHeartbeat(token, request),
@@ -205,15 +215,13 @@ export class Remote {
       publicKey: machine.publicKey,
       version: this.#options.version,
     });
-    const pairing = new Pairing({
-      control: this.control,
-      start,
-      pollMs: this.#options.pairPollMs ?? PAIR_POLL_MS,
-      now: this.#now,
-    });
+    const pairing = {
+      view: { claimCode: start.claimCode, url: start.url, expiresAt: start.expiresAt },
+      run: this.control.startPairing(start),
+    };
     this.#pairing = pairing;
     this.#publish();
-    void pairing.done.then((end) => {
+    void pairing.run.done.then((end) => {
       if (this.#pairing === pairing) this.#pairing = null;
       if (end.status === 'claimed') this.#recordPaired(end.machine);
       this.#publish();
@@ -231,7 +239,7 @@ export class Remote {
   }
 
   cancelPairing() {
-    this.#pairing?.cancel();
+    this.#pairing?.run.cancel();
   }
 
   #recordPaired(machine: PairedMachine) {
@@ -334,7 +342,7 @@ export class Remote {
     this.#leaver = leaver;
   }
 
-  async #recordHeartbeat(...[token, request]: Parameters<ControlClient['recordHeartbeat']>) {
+  async #recordHeartbeat(...[token, request]: Parameters<RemoteControl['recordHeartbeat']>) {
     const revision = this.#guestRevision;
     const answer = await this.control.recordHeartbeat(token, request);
     if (revision === this.#guestRevision) return answer;
@@ -395,7 +403,7 @@ export class Remote {
     try {
       return await this.control.requestGuestAddition(credentials.machineToken, userId);
     } catch (error) {
-      if (error instanceof ControlError && error.status === 409)
+      if (selectRemoteFailureTag(error) === 'GuestsFull')
         return `This machine already has ${MAX_INSTANCE_GUESTS} people working on its tasks. Ask its owner to remove one.`;
       log.warn('[Remote] Could not add the guest a task was handed to', { error: describeError(error) });
       return HANDOFF_UNAVAILABLE;
@@ -623,7 +631,7 @@ export class Remote {
     try {
       return await this.control.requestMemberAddition(machineToken, userId);
     } catch (error) {
-      if (error instanceof ControlError && error.status === 409)
+      if (selectRemoteFailureTag(error) === 'MembersFull')
         throw new DomainError({
           code: 'members_full',
           message: `This machine has ${MAX_INSTANCE_MEMBERS} members already.`,
@@ -697,7 +705,7 @@ export class Remote {
   }
 
   async stop() {
-    this.#pairing?.cancel();
+    this.#pairing?.run.cancel();
     this.#closeChannels(isAnyChannel);
     await this.supervisor.stop();
   }

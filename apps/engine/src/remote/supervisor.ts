@@ -1,6 +1,6 @@
 import type { MachineCredentials, RemoteAccess, RemoteMember, RemoteTeam, TunnelStatus } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
-import { type ControlClient, RevokedError } from './control.ts';
+import { type RemoteControl, selectRemoteFailureTag } from './client/index.ts';
 import { readAccess, readGuests, readTeams } from './store.ts';
 
 export type { TunnelStatus } from '@shinsa/core';
@@ -31,7 +31,7 @@ export const TUNNEL_TIMINGS: TunnelTimings = {
 };
 
 export interface TunnelSupervisorOptions {
-  control: Pick<ControlClient, 'recordHeartbeat' | 'recordOffline'>;
+  control: Pick<RemoteControl, 'recordHeartbeat' | 'recordOffline'>;
   connect: StartConnector;
   ping: (url: string) => Promise<boolean>;
   localUrl: () => string;
@@ -176,7 +176,7 @@ export class TunnelSupervisor {
       if (access && this.#isCurrent(generation)) this.#options.onAccess?.(access, readGuests(answer));
       if (teams && this.#isCurrent(generation)) this.#options.onTeams?.(teams);
     } catch (error) {
-      if (error instanceof RevokedError) {
+      if (selectRemoteFailureTag(error) === 'Revoked') {
         this.#revoke(generation);
         return false;
       }

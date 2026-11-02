@@ -1,7 +1,6 @@
 import { dirname, join } from 'node:path';
 import {
   type Bytes,
-  type ConnectResponse,
   createFrameOpener,
   createTeamHello,
   decodeText,
@@ -29,7 +28,7 @@ import {
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { ChannelPeer } from './channel.ts';
-import { ControlError } from './control.ts';
+import { selectRemoteFailureTag } from './client/index.ts';
 import type { Remote } from './index.ts';
 import { createChannelEphemeral } from './share-channel.ts';
 import { resolveKeyDigest, TEAM_SNAPSHOTS_FILE, TeamSnapshots } from './team-snapshots.ts';
@@ -661,7 +660,8 @@ export class TeamFeeds {
       });
     };
     begin().catch((error: unknown) => {
-      if (error instanceof ControlError && (error.status === 403 || error.status === 404)) {
+      const tag = selectRemoteFailureTag(error);
+      if (tag === 'NotOwner' || tag === 'NotFound') {
         end({ reason: TEAM_FEED_REFUSED, gone: true });
         return;
       }
@@ -682,11 +682,10 @@ export class TeamFeeds {
   async #requestChannelUrl(target: TeamStreamTarget) {
     const credentials = this.#remote.store.file.credentials;
     if (!credentials) return null;
-    const answer = await this.#remote.control.requestTeamAction<ConnectResponse>(
+    const answer = await this.#remote.control.requestTeamConnect(
       credentials.machineToken,
       target.teamId,
-      'connect',
-      { instanceId: target.instanceId }
+      target.instanceId
     );
     return answer.url;
   }

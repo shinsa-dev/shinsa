@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { HeartbeatResponse, MachineCredentials, RemoteAccess } from '@shinsa/core';
+import { Revoked } from '@shinsa/core/remote/errors';
 import { log } from '../../src/log/index.ts';
-import { RevokedError } from '../../src/remote/control.ts';
 import {
   resolveRestartDelay,
   TUNNEL_TIMINGS,
@@ -208,7 +208,7 @@ describe('the tunnel supervisor', () => {
 
   test('stops for good and reports it when the control plane revokes the machine', async () => {
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    const world = createWorld({ heartbeat: () => Promise.reject(new RevokedError()) });
+    const world = createWorld({ heartbeat: () => Promise.reject(new Revoked({ message: 'Removed.' })) });
     world.supervisor.start(CREDENTIALS);
     await until(() => world.revoked.length === 1);
     expect(world.supervisor.status).toBe('revoked');
@@ -224,7 +224,7 @@ describe('the tunnel supervisor', () => {
     const world = createWorld({
       heartbeat: () => {
         calls += 1;
-        return calls > 1 ? Promise.reject(new RevokedError()) : Promise.resolve(ANSWER);
+        return calls > 1 ? Promise.reject(new Revoked({ message: 'Removed.' })) : Promise.resolve(ANSWER);
       },
     });
     world.supervisor.start(CREDENTIALS);

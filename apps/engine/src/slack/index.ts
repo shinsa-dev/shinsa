@@ -30,11 +30,9 @@ import {
 import type { QuickJson } from '../agents/quick/index.ts';
 import type { ApiRoute } from '../http/routes.ts';
 import { describeError, log } from '../log/index.ts';
+import { isRemoteRetryable, selectRemoteFailureTag } from '../remote/client/index.ts';
 import type { Remote } from '../remote/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
-import { type Fetch, SlackRelay, SlackRelayError } from './relay.ts';
-
-export { SlackRelay, SlackRelayError } from './relay.ts';
 
 export const SLACK_EVENT_BODY_LIMIT_BYTES = 1024 * 1024;
 
@@ -48,7 +46,6 @@ export interface SlackOptions {
   engine: Engine;
   remote: Remote;
   ask: QuickJson;
-  fetch?: Fetch;
   now?: () => number;
   sleep?: Sleep;
   statusIntervalMs?: number;
@@ -68,6 +65,10 @@ function sleepFor(ms: number, signal: AbortSignal) {
   });
 }
 
+function isRelayRetryable(error: unknown) {
+  return selectRemoteFailureTag(error) === 'SlackFailed' || isRemoteRetryable(error);
+}
+
 function respondJsonError(code: string, message: string, status: number) {
   return Response.json({ error: { code, message } }, { status });
 }
@@ -76,7 +77,6 @@ export class Slack {
   readonly #engine: Engine;
   readonly #remote: Remote;
   readonly #ask: QuickJson;
-  readonly #relay: SlackRelay;
   readonly #now: () => number;
   readonly #sleep: Sleep;
   readonly #statusIntervalMs: number;
@@ -90,7 +90,6 @@ export class Slack {
     this.#engine = options.engine;
     this.#remote = options.remote;
     this.#ask = options.ask;
-    this.#relay = new SlackRelay(() => options.remote.appOrigin, options.fetch);
     this.#now = options.now ?? Date.now;
     this.#sleep = options.sleep ?? sleepFor;
     this.#statusIntervalMs = options.statusIntervalMs ?? STATUS_INTERVAL_MS;
@@ -174,17 +173,18 @@ export class Slack {
       return null;
     }
     try {
-      return await this.#relay.requestPost(credentials.machineToken, {
+      const posted = await this.#remote.control.requestSlackPost(credentials.machineToken, {
         teamId: thread.teamId,
         channelId: thread.channelId,
         threadTs: thread.threadTs,
         replaceTs,
         message,
       });
+      return posted.ts;
     } catch (error) {
-      if (error instanceof SlackRelayError && !error.isRetryable) {
+      if (!isRelayRetryable(error)) {
         log.warn('[Slack] app.shinsa.dev refused the post', {
-          code: error.code,
+          code: selectRemoteFailureTag(error),
           threadTs: thread.threadTs,
           error: describeError(error),
         });
@@ -198,7 +198,7 @@ export class Slack {
     const credentials = this.#selectCredentials();
     if (!credentials || add === remove) return;
     try {
-      const applied = await this.#relay.requestReaction(credentials.machineToken, {
+      const { applied } = await this.#remote.control.requestSlackReaction(credentials.machineToken, {
         teamId: thread.teamId,
         channelId: thread.channelId,
         threadTs: thread.threadTs,
@@ -273,7 +273,7 @@ export class Slack {
     if (!credentials || this.#sessionRefused.has(thread.teamId) || this.#sessionShown.get(taskId) === status)
       return;
     try {
-      const applied = await this.#relay.requestSession(credentials.machineToken, {
+      const { applied } = await this.#remote.control.requestSlackSession(credentials.machineToken, {
         teamId: thread.teamId,
         channelId: thread.channelId,
         threadTs: thread.threadTs,
@@ -296,7 +296,7 @@ export class Slack {
     if (!credentials) return { remote: false, connectUrl: null, links: [], problem: null };
     const connectUrl = resolveSlackConnectUrl(this.#remote.appOrigin, credentials.instanceId);
     try {
-      const links = await this.#relay.requestLinks(credentials.machineToken);
+      const { links } = await this.#remote.control.requestSlackLinks(credentials.machineToken);
       return { remote: true, connectUrl, links, problem: null };
     } catch (error) {
       log.warn('[Slack] Could not read the Slack links', { error: describeError(error) });
@@ -314,7 +314,7 @@ export class Slack {
     const credentials = this.#selectCredentials();
     if (!credentials)
       throw new DomainError({ code: 'remote_not_paired', message: 'Turn on remote access first.' });
-    await this.#relay.requestUnlink(credentials.machineToken);
+    await this.#remote.control.requestSlackUnlink(credentials.machineToken);
     return this.snapshot();
   }
 
