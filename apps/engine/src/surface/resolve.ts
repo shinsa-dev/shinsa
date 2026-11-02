@@ -9,7 +9,7 @@ import {
   type RunAccount,
   type Watchdog,
 } from '@shinsa/core';
-import type { resolveTaskView } from '../http/reads.ts';
+import type { resolveTaskView } from '../http/task-views.ts';
 import type { SurfaceClient } from './client.ts';
 import { encode } from './spec.ts';
 

@@ -657,15 +657,9 @@ describe('Settings → General → Slack', () => {
 
   test('disconnecting removes the machine’s links, and needs remote access', async () => {
     const { slack, relay } = setUp();
-    const [read, disconnect] = slack.routes();
-    if (!read || !disconnect) throw new Error('Slack has two routes.');
-    const match = /x/.exec('x') as RegExpExecArray;
-    const after = await disconnect.respond(match, new Request('http://x', { method: 'POST' }));
+    const after = await slack.disconnect();
     expect(relay.map((call) => call.path)).toEqual(['/__remote/slack/unlink', '/__remote/slack/links']);
-    expect(((await after.json()) as { remote: boolean }).remote).toBe(true);
-    expect((await read.respond(match, new Request('http://x'))).status).toBe(200);
-    expect(read.pattern.test('/api/slack')).toBe(true);
-    expect(disconnect.pattern.test('/api/slack/disconnect')).toBe(true);
+    expect(after.remote).toBe(true);
     await expect(setUp({ enabled: false }).slack.disconnect()).rejects.toBeInstanceOf(DomainError);
   });
 });

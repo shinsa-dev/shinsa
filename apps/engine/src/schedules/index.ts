@@ -2,7 +2,6 @@ import type { StateClockOptions } from '../runtime/clock.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { SecretStore } from '../secrets/index.ts';
 import { ScheduleClock } from './clock.ts';
-import { createScheduleRoutes } from './routes.ts';
 import {
   createHookSecrets,
   handleScheduleTool,
@@ -65,10 +64,6 @@ export class Schedules {
       if (schedule.trigger.kind === 'webhook') this.#secrets.upsertHook(schedule.id);
     }
     this.#secrets.pruneHooks(new Set(schedules.map((schedule) => schedule.id)));
-  }
-
-  routes() {
-    return createScheduleRoutes(this.#engine, this.#secrets, this.context);
   }
 
   isWebhook(pathname: string) {

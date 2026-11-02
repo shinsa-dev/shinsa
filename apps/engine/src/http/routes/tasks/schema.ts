@@ -1,7 +1,7 @@
 import type { FieldFailure } from '@shinsa/core/engine-api/schema';
 import { Schema } from 'effect';
 
-export const TASK_FILTERS = ['open', 'needs_you', 'settled', 'all'] as const;
+const TASK_FILTERS = ['open', 'needs_you', 'settled', 'all'] as const;
 
 export const TaskFilter = Schema.Literals(TASK_FILTERS);
 
@@ -17,7 +17,7 @@ export const ListLimit = Schema.NumberFromString.check(Schema.isInt(), Schema.is
 
 export const ChatIndex = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(-1));
 
-export const CHAT_KINDS = ['user', 'agent', 'tool_call', 'tool_result', 'status', 'error', 'notice'] as const;
+const CHAT_KINDS = ['user', 'agent', 'tool_call', 'tool_result', 'status', 'error', 'notice'] as const;
 
 export const ChatKinds = Schema.Array(Schema.Literals(CHAT_KINDS));
 

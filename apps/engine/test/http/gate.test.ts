@@ -233,4 +233,16 @@ describe('the request gate', () => {
       { code: 'handoff_scope' },
     ]);
   });
+
+  test('through the channel an inspect-mode engine refuses a write once the route is reachable', async () => {
+    const handle = createGate({ inspect: true });
+    expect(await readFailure(await handle(post('/api/test/upload', '{}'), OWNER))).toEqual([
+      403,
+      { code: 'inspect_read_only', message: 'Inspect mode is read-only.' },
+    ]);
+    expect(
+      await readFailure(await handle(post('/api/test/open', '{"target":"editor"}'), OWNER))
+    ).toMatchObject([403, { code: 'local_only' }]);
+    expect((await handle(get('/api/tasks/task-2'), OWNER)).status).toBe(200);
+  });
 });

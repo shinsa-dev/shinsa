@@ -28,7 +28,6 @@ import {
   verifySlackForwardSignature,
 } from '@shinsa/core';
 import type { QuickJson } from '../agents/quick/index.ts';
-import type { ApiRoute } from '../http/routes.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Remote } from '../remote/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
@@ -316,20 +315,5 @@ export class Slack {
       throw new DomainError({ code: 'remote_not_paired', message: 'Turn on remote access first.' });
     await this.#relay.requestUnlink(credentials.machineToken);
     return this.snapshot();
-  }
-
-  routes(): ApiRoute[] {
-    return [
-      {
-        method: 'GET',
-        pattern: /^\/api\/slack$/,
-        respond: async () => Response.json(await this.snapshot()),
-      },
-      {
-        method: 'POST',
-        pattern: /^\/api\/slack\/disconnect$/,
-        respond: async () => Response.json(await this.disconnect()),
-      },
-    ];
   }
 }

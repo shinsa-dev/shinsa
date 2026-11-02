@@ -21,7 +21,6 @@ import {
 import { log } from '../../src/log/index.ts';
 import { ControlClient } from '../../src/remote/control.ts';
 import { Remote } from '../../src/remote/index.ts';
-import { createTeamFeedRoutes } from '../../src/remote/routes.ts';
 import {
   type FeedSocket,
   TEAM_FEED_OFFLINE,
@@ -275,28 +274,6 @@ describe('watching teammates’ machines', () => {
     const heard = changes.length;
     feeds.sync();
     expect(changes).toHaveLength(heard);
-    feeds.stop();
-  });
-
-  test('serves the tasks to the engine’s read API, open ones on request', async () => {
-    const { feeds } = setUp();
-    feeds.start();
-    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
-    const [route] = createTeamFeedRoutes(feeds);
-    const request = (query: string) =>
-      route?.respond(
-        [] as unknown as RegExpExecArray,
-        new Request(`http://localhost/api/teams/tasks${query}`)
-      );
-    const all = (await (await request(''))?.json()) as {
-      tasks: { task: { id: string } }[];
-      machines: unknown[];
-    };
-    expect(all.tasks.map((task) => task.task.id)).toEqual(['task-1', 'task-2']);
-    expect(all.machines).toHaveLength(1);
-    const open = (await (await request('?team=team1&open=true'))?.json()) as { tasks: unknown[] };
-    expect(open.tasks).toHaveLength(1);
-    expect(route?.pattern.test('/api/teams/tasks')).toBe(true);
     feeds.stop();
   });
 

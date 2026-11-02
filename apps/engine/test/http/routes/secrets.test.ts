@@ -26,7 +26,10 @@ function setUp(world: World, hookUrl?: (scheduleId: string, token: string) => st
       headers: { 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }),
     });
-    if (!response.ok) throw await readFailure(response);
+    if (!response.ok) {
+      const failure = await readFailure(response);
+      throw Object.assign(new Error(failure.message), failure);
+    }
     return (await response.json()) as Record<string, unknown>;
   };
   return { call };

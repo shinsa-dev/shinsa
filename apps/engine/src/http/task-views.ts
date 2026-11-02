@@ -111,7 +111,7 @@ export function resolveRunView(run: Run): RunView {
   };
 }
 
-export function listTaskRuns(state: ShinsaState, taskId: string) {
+function listTaskRuns(state: ShinsaState, taskId: string) {
   return Object.values(state.runs)
     .filter((run) => run.taskId === taskId)
     .sort((a, b) => a.startedAt - b.startedAt);

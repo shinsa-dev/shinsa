@@ -9,7 +9,6 @@ import {
   MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
   type RemoteAccess,
-  type RequestOrigin,
   resolveClaimUrl,
   resolveEnrollUrl,
   resolveRemoteHookUrl,
@@ -31,23 +30,11 @@ export { type ChannelPeer, RemoteChannel } from './channel.ts';
 export { createInstalledConnector } from './connector.ts';
 export { ControlClient } from './control.ts';
 export { isTunnelRequest, resolveChannelOriginRefusal, resolveTunnelRoute } from './guard.ts';
-export { resolveLocalOnlyRoute } from './local-only.ts';
 export { REMOTE_FILE, RemoteStore } from './store.ts';
 export { type StartConnector, TunnelSupervisor } from './supervisor.ts';
 
-const remoteRequests = new WeakSet<Request>();
-
 function isAnyChannel() {
   return true;
-}
-
-export function markRemoteRequest(request: Request) {
-  remoteRequests.add(request);
-  return request;
-}
-
-export function resolveRequestOrigin(request: Request): RequestOrigin {
-  return remoteRequests.has(request) ? 'remote' : 'local';
 }
 
 export type { RemoteSnapshot } from '@shinsa/core';

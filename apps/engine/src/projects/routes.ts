@@ -1,20 +1,13 @@
 import { DomainError, type Project, type Repo, selectFolderProject } from '@shinsa/core';
 import { resolveRepoRoot } from '../git/index.ts';
-import { readJsonObject } from '../http/body.ts';
-import type { ApiRoute } from '../http/routes.ts';
-import { type LoginResolver, listLocalRepos, type RootSource, upsertRepo } from '../repos/index.ts';
+import { type LoginResolver, listLocalRepos, upsertRepo } from '../repos/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
-import { listCoverageDetections } from '../test-coverage/index.ts';
 import { resolveProjectFolder } from './folders.ts';
 
 interface ProjectChangesContext {
   engine: Engine;
   resolveLogin: LoginResolver;
   userHome: string;
-}
-
-interface ProjectRoutesContext extends ProjectChangesContext {
-  roots: RootSource;
 }
 
 export interface ProjectChanges {
@@ -81,44 +74,4 @@ export function createProjectChanges({
       return { project: engine.state.projects[projectId] ?? project };
     },
   };
-}
-
-function readPath(fields: Record<string, unknown>) {
-  return typeof fields.path === 'string' ? fields.path : '';
-}
-
-export function createProjectRoutes(context: ProjectRoutesContext): ApiRoute[] {
-  const { engine, roots } = context;
-  const changes = createProjectChanges(context);
-  return [
-    {
-      method: 'GET',
-      pattern: /^\/api\/repos\/local$/,
-      respond: async () => Response.json({ repos: listLocalRepoViews(engine, await roots.listRoots()) }),
-    },
-    {
-      method: 'GET',
-      pattern: /^\/api\/repos\/coverage$/,
-      respond: () =>
-        Promise.resolve(
-          Response.json({ detected: listCoverageDetections(Object.values(engine.state.repos)) })
-        ),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/projects\/([^/]+)\/repos$/,
-      respond: async ([, id = ''], request) =>
-        Response.json(
-          await changes.upsertRepo(decodeURIComponent(id), readPath(await readJsonObject(request)))
-        ),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/projects\/([^/]+)\/folders$/,
-      respond: async ([, id = ''], request) =>
-        Response.json(
-          await changes.upsertFolder(decodeURIComponent(id), readPath(await readJsonObject(request)))
-        ),
-    },
-  ];
 }

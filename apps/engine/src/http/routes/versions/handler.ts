@@ -4,7 +4,7 @@ import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/
 import { Effect, Queue, Stream } from 'effect';
 import { HttpServerResponse } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
-import { requestPromise, requestSync, resolveRequestFailure } from '../../failures.ts';
+import { requestPromise, requestSync, type resolveRequestFailure } from '../../failures.ts';
 import { HttpServices } from '../../services/service.ts';
 import { UPDATE_STREAM_HEADERS, UPDATE_STREAM_TYPE } from './schema.ts';
 

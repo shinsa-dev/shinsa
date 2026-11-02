@@ -15,9 +15,13 @@ async function setup(roots: string[] = []) {
   );
   const { engine } = routes.context;
   const call = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
-    const response =
-      method === 'GET' ? await routes.send(path) : await routes.post(path, body === undefined ? {} : body);
-    if (!response.ok) throw await readFailure(response);
+    const response = await (method === 'GET'
+      ? routes.send(path)
+      : routes.post(path, body === undefined ? {} : body));
+    if (!response.ok) {
+      const failure = await readFailure(response);
+      throw Object.assign(new Error(failure.message), failure);
+    }
     return (await response.json()) as Record<string, unknown>;
   };
   await engine.dispatch({

@@ -5,6 +5,7 @@ import {
   BrowserOnlyRoute,
   ContentTypeInvalid,
   GuestRoute,
+  InspectReadOnly,
   LocalOnly,
   LocalOnlyRoute,
   RequestBodyLimit,
@@ -17,6 +18,7 @@ import {
 import { Context, Effect, Layer, Schema, SchemaIssue } from 'effect';
 import { HttpServerRequest } from 'effect/http';
 import { type HttpApiEndpoint, HttpApiError } from 'effect/http-api';
+import { INSPECT_MESSAGE } from '../../instance/index.ts';
 import { isGuestRoute } from '../../remote/guest-routes.ts';
 import { resolveRequestFailure } from '../failures.ts';
 import { describeBodyLimit, resolveBodyRefusal, resolveBodySizeRefusal } from '../guard.ts';
@@ -58,6 +60,8 @@ export const EngineGateLive = Layer.effect(
       if (source.guest && !admitsGuest) return yield* new ScopeRefused({ message: SCOPE_MESSAGES.task });
       if (Context.get(endpoint.annotations, LocalOnlyRoute))
         return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
+      if (services.config.inspect && !READ_METHODS.has(request.method))
+        return yield* new InspectReadOnly({ message: INSPECT_MESSAGE });
     });
 
     const acceptsNoBody = (endpoint: HttpApiEndpoint.Top) =>

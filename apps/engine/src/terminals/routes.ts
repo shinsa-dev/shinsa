@@ -11,23 +11,14 @@ import {
   type ServiceDefinition,
   type ServiceSuggestion,
   type ShinsaState,
-  TERMINAL_LIMITS,
   type TerminalPlace,
   type TerminalPlaceKind,
 } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import { resolveSharedCacheEnv } from '../checks/caches.ts';
-import { type JsonObject, readJsonObject } from '../http/body.ts';
-import type { Engine } from '../runtime/engine.ts';
+import type { JsonObject } from '../http/schema.ts';
 import { listServiceSuggestions } from './detect.ts';
 import type { ServiceInput, ServiceRun, TerminalStart, Terminals, TerminalViewer } from './index.ts';
-import type { ServiceRefiner } from './refine.ts';
-
-export interface TerminalRoute {
-  method: 'GET' | 'POST';
-  pattern: RegExp;
-  respond: (match: RegExpExecArray, request: Request) => Promise<Response>;
-}
 
 export interface TerminalSocketData {
   kind: 'terminal';
@@ -38,8 +29,6 @@ export interface TerminalSocketData {
 const SOCKET_PATH = /^\/ws\/terminals\/([A-Za-z0-9-]{1,64})$/;
 
 const CLOSED = 4404;
-
-const BROWSER_ONLY = 'Only Shinsa’s page opens terminals.';
 
 export function readText(body: JsonObject, field: string, limit: number) {
   const value = body[field];
@@ -53,11 +42,6 @@ export function readText(body: JsonObject, field: string, limit: number) {
 
 export function readOptionalText(body: JsonObject, field: string, limit: number) {
   return body[field] === undefined || body[field] === null ? null : readText(body, field, limit);
-}
-
-async function readTaskId(request: Request) {
-  if (!request.body) return null;
-  return readOptionalText(await readJsonObject(request), 'taskId', 200);
 }
 
 export function isFolder(path: string) {
@@ -221,10 +205,6 @@ export function listNewSuggestions(
   return listNewServiceSuggestions(listServiceSuggestions(roots), services);
 }
 
-function resolveBrowserRefusal(request: Request) {
-  return request.headers.get('origin') === null ? BROWSER_ONLY : null;
-}
-
 export function resolveServicePlaceIn(state: ShinsaState, service: ServiceDefinition, home: string) {
   return resolveServicePlace(listTerminalPlaces(state, service.projectId), service.cwd, home);
 }
@@ -254,210 +234,6 @@ export function resolveServiceRunIn(
 
 export function readTerminalSocketId(pathname: string) {
   return SOCKET_PATH.exec(pathname)?.[1] ?? null;
-}
-
-export function createTerminalRoutes(
-  engine: Engine,
-  terminals: Terminals,
-  refiner: ServiceRefiner | null = null
-): TerminalRoute[] {
-  const { home } = terminals;
-  const respond = (body: unknown) => Response.json(body);
-  const guarded =
-    (handler: (match: RegExpExecArray, body: JsonObject) => unknown) =>
-    async (match: RegExpExecArray, request: Request) => {
-      const refusal = resolveBrowserRefusal(request);
-      if (refusal) throw new DomainError({ code: 'browser_only', message: refusal });
-      return respond((await handler(match, await readJsonObject(request))) ?? terminals.snapshot());
-    };
-  const withTask =
-    (handler: (match: RegExpExecArray, taskId: string | null) => unknown) =>
-    async (match: RegExpExecArray, request: Request) => {
-      const taskId = await readTaskId(request);
-      return respond((await handler(match, taskId)) ?? terminals.snapshot());
-    };
-  const id = (match: RegExpExecArray) => decodeURIComponent(match[1] ?? '');
-  const projectOf = (projectId: string) => {
-    if (!engine.state.projects[projectId])
-      throw new DomainError({ code: 'project_not_found', message: 'That project is not there anymore.' });
-    return listTerminalPlaces(engine.state, projectId);
-  };
-  const others = (projectId: string, except: string | null) =>
-    terminals.snapshot().services.filter((each) => each.projectId === projectId && each.id !== except);
-  const placeOf = (service: ServiceDefinition) => resolveServicePlaceIn(engine.state, service, home);
-  const serviceRun = (serviceId: string, taskId: string | null): ServiceRun => {
-    const service = terminals.findService(serviceId);
-    if (taskId !== null && !engine.state.tasks[taskId])
-      throw new DomainError({ code: 'task_not_found', message: 'That task is not there anymore.' });
-    const run = resolveServiceRunIn(engine.state, service, taskId, terminals);
-    if (!run)
-      throw new DomainError({
-        code: 'service_place_invalid',
-        message: taskId === null ? 'Its folder is no longer in the project.' : 'It cannot run in this task.',
-      });
-    if (!isFolder(run.cwd))
-      throw new DomainError({ code: 'terminal_place_missing', message: 'That folder is not there anymore.' });
-    return run;
-  };
-  return [
-    {
-      method: 'GET',
-      pattern: /^\/api\/terminals\/([^/]+)\/foreground$/,
-      respond: async (match) => respond(await terminals.readForeground(id(match))),
-    },
-    {
-      method: 'GET',
-      pattern: /^\/api\/services\/suggestions$/,
-      respond: async (_match, request) => {
-        const params = new URL(request.url).searchParams;
-        const projectId = params.get('projectId') ?? '';
-        const suggestions = listNewSuggestions(projectOf(projectId), others(projectId, null));
-        if (!(refiner && params.get('refine') === '1')) return respond({ suggestions, refined: false });
-        const answer = await refiner.refine(projectId, suggestions);
-        return respond({
-          suggestions: listNewServiceSuggestions(answer.suggestions, others(projectId, null)),
-          refined: answer.refined,
-        });
-      },
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/services$/,
-      respond: guarded((_match, body) => {
-        const projectId = readText(body, 'projectId', 200);
-        const places = projectOf(projectId);
-        const service = terminals.addService(
-          projectId,
-          readServiceInput(body, others(projectId, null), places, home)
-        );
-        return { service, ...terminals.snapshot() };
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/services\/batch$/,
-      respond: guarded((_match, body) => {
-        const projectId = readText(body, 'projectId', 200);
-        const places = projectOf(projectId);
-        const inputs = readServiceBatch(body, others(projectId, null), places, home);
-        if (terminals.snapshot().services.length + inputs.length > SERVICE_LIMITS.services)
-          throw new DomainError({
-            code: 'service_limit',
-            message: `Shinsa keeps ${SERVICE_LIMITS.services} services at most.`,
-          });
-        const added = inputs.map((input) => terminals.addService(projectId, input));
-        return { added, ...terminals.snapshot() };
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/services\/remove$/,
-      respond: guarded((_match, body) => {
-        terminals.removeServices(readServiceIds(body));
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/services\/start-all$/,
-      respond: async (_match, request) => {
-        const projectId = readText(await readJsonObject(request), 'projectId', 200);
-        projectOf(projectId);
-        for (const service of others(projectId, null)) {
-          const place = placeOf(service);
-          if (place) terminals.startService(service.id, { cwd: service.cwd, place, taskId: null });
-        }
-        return respond(terminals.snapshot());
-      },
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/services\/([^/]+)\/update$/,
-      respond: guarded((match, body) => {
-        const service = terminals.findService(id(match));
-        terminals.updateService(
-          service.id,
-          readServiceInput(body, others(service.projectId, service.id), projectOf(service.projectId), home)
-        );
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/services\/([^/]+)\/start$/,
-      respond: withTask((match, taskId) => ({
-        terminal: terminals.startService(id(match), serviceRun(id(match), taskId)),
-        ...terminals.snapshot(),
-      })),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/services\/([^/]+)\/stop$/,
-      respond: withTask(async (match, taskId) => {
-        await terminals.stopService(id(match), taskId);
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/services\/([^/]+)\/restart$/,
-      respond: withTask(async (match, taskId) => ({
-        terminal: await terminals.restartService(id(match), serviceRun(id(match), taskId)),
-        ...terminals.snapshot(),
-      })),
-    },
-    {
-      method: 'GET',
-      pattern: /^\/api\/terminals$/,
-      respond: () => Promise.resolve(respond(terminals.snapshot())),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/terminals$/,
-      respond: guarded((_match, body) => {
-        const projectId = readText(body, 'projectId', 200);
-        if (!engine.state.projects[projectId])
-          throw new DomainError({ code: 'project_not_found', message: 'That project is not there anymore.' });
-        const path = readText(body, 'path', 4096);
-        const command = readOptionalText(body, 'command', TERMINAL_LIMITS.command);
-        const start = resolveTerminalStart(
-          listTerminalPlaces(engine.state, projectId),
-          projectId,
-          path,
-          home
-        );
-        const terminal = terminals.create(start);
-        if (command) terminals.run(terminal.id, command);
-        return { terminal, ...terminals.snapshot() };
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/terminals\/order$/,
-      respond: guarded((_match, body) => {
-        const ids = Array.isArray(body.ids) ? body.ids.filter((each) => typeof each === 'string') : [];
-        terminals.reorder(readText(body, 'projectId', 200), ids);
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/terminals\/([^/]+)\/rename$/,
-      respond: guarded((match, body) => {
-        terminals.rename(id(match), readOptionalText(body, 'name', TERMINAL_LIMITS.name));
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/terminals\/([^/]+)\/restart$/,
-      respond: guarded((match) => {
-        terminals.restart(id(match));
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/terminals\/([^/]+)\/close$/,
-      respond: guarded((match) => {
-        terminals.close(id(match));
-      }),
-    },
-  ];
 }
 
 type TerminalSocket = ServerWebSocket<TerminalSocketData>;

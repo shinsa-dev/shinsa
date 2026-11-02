@@ -18,6 +18,7 @@ const TestRoutes = HttpRouter.addAll([
   HttpRouter.route('GET', '/api/queue', HttpServerResponse.jsonUnsafe({ decisions: [] })),
   HttpRouter.route('POST', '/api/queue', HttpServerResponse.jsonUnsafe({ wrote: true })),
   HttpRouter.route('GET', '/api/boom', Effect.die(new Error('The disk is full.'))),
+  HttpRouter.route('GET', '/api/thrown', Effect.die('The socket closed.')),
   HttpRouter.route('GET', '/api/refused', Effect.fail(new ConnectRefused({ message: 'Sign in again.' }))),
   HttpRouter.route('GET', '/share', HttpServerResponse.text('share socket')),
 ]);
@@ -133,6 +134,11 @@ describe('Ingress on this machine', () => {
       message: '[Server] Request failed',
       fields: { path: '/api/boom', error: 'The disk is full.' },
     });
+    const thrown = await call(handle, '/api/thrown');
+    expect([thrown.status, await thrown.json()]).toEqual([
+      400,
+      { error: { code: 'request_failed', message: 'The socket closed.' } },
+    ]);
     const refused = await call(handle, '/api/refused');
     expect([refused.status, await refused.json()]).toEqual([
       401,
