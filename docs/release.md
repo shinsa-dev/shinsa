@@ -348,6 +348,15 @@ workflow on every branch, three times each, so it is not used. Set two repositor
 schedule's URL (Settings → Schedules in Shinsa), and `SHINSA_WATCH_SECRET`, its signing secret. Without them the
 workflow passes with a warning.
 
+Before it reports, its `rerun` job (`scripts/watch-rerun.ts`, tested at 100%) reads the run's jobs and, when every
+failed or cancelled job never got a runner (no runner id and no steps, as when GitHub has no `macos-15` runner to give
+and ends the job with "not acquired by Runner"), reruns only the failed jobs with `gh run rerun --failed` instead of
+reporting: a missing runner is GitHub's capacity, not a bug to fix. It reruns attempts 1 and 2 only, so a third attempt
+that still gets no runner is reported, and only while the run is still the newest of its workflow on `main`, since
+rerunning an older canary would cancel the newer one in progress. A run where any job started and failed is reported
+as before, and so is one whose rerun decision itself fails. The job has `actions: write`, the one permission a rerun
+needs; the report keeps none.
+
 ## Watching issues
 
 `.github/workflows/watch-issues.yml` (Watch issues) runs when an issue is opened in this repository, and for nothing

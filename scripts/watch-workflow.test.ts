@@ -5,7 +5,25 @@ import { join } from 'node:path';
 interface Workflow {
   on: { workflow_run: { workflows: string[]; types: string[]; branches: string[] } };
   permissions: Record<string, string>;
-  jobs: { report: { if: string; steps: { env: Record<string, string>; run: string }[] } };
+  jobs: Record<'rerun' | 'report', Job>;
+}
+
+interface Job {
+  if: string;
+  needs?: string;
+  permissions?: Record<string, string>;
+  outputs?: Record<string, string>;
+  steps: { id?: string; uses?: string; env?: Record<string, string>; run?: string }[];
+}
+
+const RUN_CONDITIONS = [
+  `contains(fromJSON('["failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion)`,
+  `contains(fromJSON('["push", "workflow_dispatch", "workflow_run"]'), github.event.workflow_run.event)`,
+  'github.event.workflow_run.head_repository.full_name == github.repository',
+] as const;
+
+function expression(path: string) {
+  return `\${{ ${path} }}`;
 }
 
 const workflow = Bun.YAML.parse(
@@ -13,8 +31,9 @@ const workflow = Bun.YAML.parse(
 ) as Workflow;
 
 describe('the watch on main', () => {
-  const report = workflow.jobs.report;
+  const { rerun, report } = workflow.jobs;
   const step = report.steps[0];
+  const decide = rerun.steps.find((candidate) => candidate.id === 'decide');
 
   it('runs only once a Test or Release run on main has finished', () => {
     expect(workflow.on.workflow_run).toEqual({
@@ -26,20 +45,39 @@ describe('the watch on main', () => {
   });
 
   it('reports only a run that failed, timed out or could not start', () => {
-    expect(report.if).toContain(
-      `contains(fromJSON('["failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion)`
-    );
+    expect(report.if).toContain(RUN_CONDITIONS[0]);
   });
 
   it('never reports a pull request run, even one from a fork whose branch is named main', () => {
-    expect(report.if).toContain(
-      `contains(fromJSON('["push", "workflow_dispatch", "workflow_run"]'), github.event.workflow_run.event)`
-    );
-    expect(report.if).toContain('github.event.workflow_run.head_repository.full_name == github.repository');
+    expect(report.if).toContain(RUN_CONDITIONS[1]);
+    expect(report.if).toContain(RUN_CONDITIONS[2]);
+  });
+
+  it('decides on a rerun for the same runs it would report', () => {
+    for (const condition of RUN_CONDITIONS) expect(rerun.if).toContain(condition);
+  });
+
+  it('reruns with the one write permission it needs, through the tested script', () => {
+    expect(rerun.permissions).toEqual({ actions: 'write', contents: 'read' });
+    expect(decide?.run).toBe('bun scripts/watch-rerun.ts');
+    expect(decide?.env).toEqual({
+      GH_TOKEN: expression('github.token'),
+      GH_REPO: expression('github.repository'),
+      RUN_ID: expression('github.event.workflow_run.id'),
+      RUN_ATTEMPT: expression('github.event.workflow_run.run_attempt'),
+      WORKFLOW_ID: expression('github.event.workflow_run.workflow_id'),
+    });
+    expect(rerun.outputs).toEqual({ rerun: expression('steps.decide.outputs.rerun') });
+  });
+
+  it('reports after the rerun decision, unless it reran, and even when the decision failed', () => {
+    expect(report.needs).toBe('rerun');
+    expect(report.if).toStartWith("always() && needs.rerun.outputs.rerun != 'true' &&");
+    expect(report.permissions).toBeUndefined();
   });
 
   it('signs the event it sends and names each attempt of a run once', () => {
-    expect(step?.env.DELIVERY).toMatch(
+    expect(step?.env?.DELIVERY).toMatch(
       /^\$\{\{ github\.event\.workflow_run\.id \}\}-\$\{\{ github\.event\.workflow_run\.run_attempt \}\}$/
     );
     expect(step?.run).toContain('openssl dgst -sha256 -hmac "$SHINSA_WATCH_SECRET" -r "$GITHUB_EVENT_PATH"');
