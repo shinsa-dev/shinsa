@@ -1,10 +1,17 @@
-import { Predicate, Schema, SchemaGetter } from 'effect';
+import { Duration, Predicate, Schema, SchemaGetter } from 'effect';
 
 export const DEV_PORT = 5181;
 
 export const SERVER_HOST = '127.0.0.1';
 
-export const HEALTH_TIMEOUT_MS = 1500;
+export const HEALTH_TIMEOUT = Duration.millis(1500);
+
+const EngineUnreachableReason = Schema.Literals(['refused', 'timeout', 'invalid']);
+
+export class EngineUnreachable extends Schema.TaggedError<
+  EngineUnreachable,
+  { readonly brand: unique symbol }
+>()('EngineUnreachable', { origin: Schema.String, reason: EngineUnreachableReason }) {}
 
 export const ServerHealth = Schema.Struct({
   version: Schema.NullOr(Schema.String),

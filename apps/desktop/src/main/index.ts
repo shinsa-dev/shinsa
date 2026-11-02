@@ -20,10 +20,16 @@ import type { ServerHealth } from '../server/schema.ts';
 import { describeServer } from '../server/url.ts';
 import { describeAppVersion, parseUpdateChannel } from '../updates/channel.ts';
 import { syncCommandLine } from './command-line.ts';
-import { EngineSupervisor } from './engine.ts';
 import { applyMenu } from './menu.ts';
 import { showNotice, watchNoticeFailures } from './notifications.ts';
-import { requestHealth, requestTrayQueue, resolveAppServerUrl } from './server.ts';
+import {
+  ensureEngine,
+  readEngineDetails,
+  readOrigin,
+  requestHealth,
+  requestTrayQueue,
+  restartEngine as kickEngine,
+} from './runtime.ts';
 import { StatusTray } from './tray.ts';
 import { Updater } from './updater.ts';
 import { MainWindow } from './window.ts';
@@ -35,7 +41,6 @@ const WATCH_MS = 5000;
 const MISSES_BEFORE_WAITING = 3;
 
 let main: MainWindow | null = null;
-let engine: EngineSupervisor | null = null;
 let pendingPath: string | null = null;
 let connecting = false;
 let misses = 0;
@@ -65,7 +70,7 @@ function watchApp() {
   app.on('activate', () => main?.show());
   app.on('before-quit', () => main?.markQuitting());
   watchPage();
-  firstHealth = requestHealth(resolveAppServerUrl());
+  firstHealth = requestHealth();
   void app.whenReady().then(start);
 }
 
@@ -83,8 +88,7 @@ async function start() {
   if (app.isPackaged) app.setAsDefaultProtocolClient(URL_SCHEME);
   else app.dock?.setIcon(join(app.getAppPath(), 'resources', 'icon.png'));
   applyAboutPanel();
-  const origin = resolveAppServerUrl();
-  engine = new EngineSupervisor(origin);
+  const origin = await readOrigin();
   main = new MainWindow(
     origin,
     () => void connect(),
@@ -194,7 +198,7 @@ function applyAboutPanel(credits = aboutCredits) {
 }
 
 function showApp(current: MainWindow, health: ServerHealth) {
-  void refreshTray(current.origin, health);
+  void refreshTray(health);
   applyAboutPanel(describeServer(current.origin, health));
   misses = 0;
   shownScreen = '';
@@ -212,10 +216,9 @@ function showScreen(current: MainWindow, screen: EngineScreen) {
 
 async function connect() {
   const current = main;
-  const supervisor = engine;
-  if (!current || !supervisor || connecting) return;
+  if (!current || connecting) return;
   connecting = true;
-  const found = await (firstHealth ?? requestHealth(current.origin));
+  const found = await (firstHealth ?? requestHealth());
   firstHealth = null;
   if (found) {
     connecting = false;
@@ -223,8 +226,8 @@ async function connect() {
     return;
   }
   for (;;) {
-    const result = await supervisor.ensure(() => showScreen(current, { kind: 'starting' }));
-    if ('health' in result) {
+    const result = await ensureEngine(() => showScreen(current, { kind: 'starting' }));
+    if (result._tag === 'Running') {
       connecting = false;
       showApp(current, result.health);
       return;
@@ -242,14 +245,14 @@ async function watchEngine() {
   const current = main;
   if (!current || connecting) return;
   if (current.showsWaiting) {
-    const health = await requestHealth(current.origin);
-    await refreshTray(current.origin, health);
+    const health = await requestHealth();
+    await refreshTray(health);
     if (health) await connect();
     return;
   }
   if (!current.showsApp) return;
-  const health = await requestHealth(current.origin);
-  await refreshTray(current.origin, health);
+  const health = await requestHealth();
+  await refreshTray(health);
   misses = health ? 0 : misses + 1;
   if (misses >= MISSES_BEFORE_WAITING) {
     misses = 0;
@@ -257,19 +260,19 @@ async function watchEngine() {
   }
 }
 
-async function refreshTray(origin: string, health: ServerHealth | null) {
+async function refreshTray(health: ServerHealth | null) {
   if (!health) {
     tray?.update(null, null);
     return;
   }
-  tray?.update(health, await requestTrayQueue(origin));
+  tray?.update(health, await requestTrayQueue());
 }
 
 async function restartEngine() {
   const current = main;
-  if (!current || !engine) return;
+  if (!current) return;
   showScreen(current, { kind: 'starting' });
-  await engine.restart();
+  await kickEngine();
   await connect();
 }
 
@@ -282,7 +285,7 @@ async function runEngineAction(action: EngineAction) {
       await shell.openExternal(PRIVACY_URL);
       return;
     case 'copy-details':
-      void clipboard.writeText(engine?.readDetails() ?? '');
+      void clipboard.writeText(await readEngineDetails());
       return;
     case 'restart':
       await restartEngine();

@@ -1,5 +1,6 @@
 import { APP_IDENTITY, resolveEngineLabel } from '@shinsa/core';
-import { Schema } from 'effect';
+import { Duration, Schedule, Schema } from 'effect';
+import { ServerHealth } from '../server/schema.ts';
 
 export const APP_ID = process.env.SHINSA_APP_ID || APP_IDENTITY.appId;
 
@@ -105,3 +106,35 @@ export const EngineLogEntry = Schema.fromJsonString(
 );
 
 export const BUSY_PORT = /Is port (\d+) in use\?/;
+
+export const KICK_AFTER = Duration.seconds(3);
+
+const ENGINE_POLL = Duration.millis(400);
+
+const START_WAIT = Duration.seconds(25);
+
+const LOAD_WAIT = Duration.seconds(3);
+
+export class EngineNotStarted extends Schema.TaggedError<
+  EngineNotStarted,
+  { readonly brand: unique symbol }
+>()('EngineNotStarted', { retryable: Schema.Boolean }) {}
+
+export class EngineJobMissing extends Schema.TaggedError<
+  EngineJobMissing,
+  { readonly brand: unique symbol }
+>()('EngineJobMissing', { target: Schema.String }) {}
+
+export const START_SCHEDULE = Schedule.max([Schedule.spaced(ENGINE_POLL), Schedule.during(START_WAIT)]).pipe(
+  Schedule.setInputType<EngineNotStarted>(),
+  Schedule.while(({ input }) => input.retryable)
+);
+
+export const LOAD_SCHEDULE = Schedule.max([Schedule.spaced(ENGINE_POLL), Schedule.during(LOAD_WAIT)]);
+
+export const EngineOutcome = Schema.Union([
+  Schema.TaggedStruct('Running', { health: ServerHealth }),
+  Schema.TaggedStruct('Waiting', { screen: EngineScreen }),
+]);
+
+export type EngineOutcome = typeof EngineOutcome.Type;

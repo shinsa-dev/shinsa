@@ -1,11 +1,28 @@
 import { describe, expect, it } from 'bun:test';
-import { Result, Schema } from 'effect';
-import { parseTrayQueue, parseTrayQueueText } from '../../src/tray/queue.ts';
+import { Effect, Option, Result, Schema } from 'effect';
+import { EngineServer } from '../../src/server/service.ts';
 import { TrayQueue } from '../../src/tray/schema.ts';
+import { answerJson, createWorld, type HttpAnswer, runDesktop } from '../support/desktop.ts';
 
-describe('parseTrayQueue', () => {
-  it('reads what needs you and what is working, with a page path for each task', () => {
-    const queue = parseTrayQueue({
+function requestQueueWith(answer: HttpAnswer) {
+  const world = createWorld({ answer: (path) => (path === '/api/queue' ? answer : 'refuse') });
+  return runDesktop(
+    world,
+    EngineServer.use((server) => Effect.option(server.requestQueue))
+  ).then(Option.getOrNull);
+}
+
+function parseTrayQueue(value: unknown) {
+  return requestQueueWith(answerJson(value));
+}
+
+function parseTrayQueueText(text: string) {
+  return requestQueueWith({ status: 200, body: text });
+}
+
+describe('the tray’s queue', () => {
+  it('reads what needs you and what is working, with a page path for each task', async () => {
+    const queue = await parseTrayQueue({
       briefing: null,
       decisions: [
         {
@@ -31,8 +48,8 @@ describe('parseTrayQueue', () => {
     });
   });
 
-  it('shortens a long title and skips an entry that is not a task', () => {
-    const queue = parseTrayQueue({
+  it('shortens a long title and skips an entry that is not a task', async () => {
+    const queue = await parseTrayQueue({
       decisions: [
         { taskId: 't1', title: 'A'.repeat(60), label: 'Merge' },
         null,
@@ -45,11 +62,11 @@ describe('parseTrayQueue', () => {
     expect(queue?.working).toEqual([]);
   });
 
-  it('refuses an answer that is not the queue', () => {
-    expect(parseTrayQueue(null)).toBeNull();
-    expect(parseTrayQueue({ decisions: [] })).toBeNull();
-    expect(parseTrayQueueText('not json')).toBeNull();
-    expect(parseTrayQueueText('{"decisions":[],"working":[]}')).toEqual({ decisions: [], working: [] });
+  it('refuses an answer that is not the queue', async () => {
+    expect(await parseTrayQueue(null)).toBeNull();
+    expect(await parseTrayQueue({ decisions: [] })).toBeNull();
+    expect(await parseTrayQueueText('not json')).toBeNull();
+    expect(await parseTrayQueueText('{"decisions":[],"working":[]}')).toEqual({ decisions: [], working: [] });
   });
 
   it('only reads the queue, and never writes one back', () => {
