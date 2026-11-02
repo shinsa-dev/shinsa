@@ -135,13 +135,10 @@ export class Engine {
     this.#stateVersion = options.stateVersion ?? null;
     this.#snapshotEvery = options.snapshotEvery ?? SNAPSHOT_EVERY;
     this.#snapshotQuietMs = options.snapshotQuietMs ?? SNAPSHOT_QUIET_MS;
-    if (this.readOnly) {
-      const rewritten = eventLog.applyLegacyView();
-      if (rewritten > 0)
-        log.info('[Engine] Reading events an older Shinsa wrote in their new shape', { rewritten });
-    } else {
-      const rewritten = eventLog.replaceLegacyEvents();
-      if (rewritten > 0) log.info('[Engine] Rewrote events an older Shinsa wrote', { rewritten });
+    if (this.readOnly) eventLog.assertCurrent();
+    else {
+      const migrations = eventLog.migrate();
+      if (migrations.length > 0) log.info('[Engine] Migrated the event log', { migrations });
     }
     const snapshot = this.#readSnapshot();
     const read = eventLog.readEvents(snapshot?.seq ?? 0);

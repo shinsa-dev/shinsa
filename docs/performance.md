@@ -120,8 +120,7 @@ it, and `/api/health` answers `ok` with no problems in 209 to 216 ms.
   first entry of its transcript), so there is no route to read one.
 - **The Home guide was an event.** Every rewrite of the guide added a `briefing.written` row that a later one made
   useless, pruned only at the next start. The guide now lives in its own table, changes the state without an event
-  and reaches the page as a patch at the same log position; the first start moved the old rows out once
-  (`docs/engine.md` → State in memory).
+  and reaches the page as a patch at the same log position.
 
 **Third pass: the inline Services popover (2026-10-26).** The same steps after the Services popover took over Add
 services and Manage from their dialogs, against `cf3625c` (the second pass, before it), each served built by its

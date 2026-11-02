@@ -81,9 +81,9 @@ src/
 │                        (resolveBrowserCommand: `open` on the Mac, `xdg-open` with a display, null without one)
 ├── store/               EventLog (event-log.ts: the SQLite events, effects, receipts, snapshots and briefings (the
 │                        Home guide) tables; readEvents reports a damaged row instead of throwing and reads from a
-│                        position; replaceLegacyEvents, the one-time rewrite of older events and move of briefings
-│                        out of the log, versioned by user_version, its rules in legacy.ts; applyLegacyView, the
-│                        same rewrite in memory for inspect mode, which never writes),
+│                        position; migrate and assertCurrent run migrations.ts: the log's version in user_version,
+│                        LOG_BASELINE and the ordered LOG_MIGRATIONS after it, an older log refused with
+│                        LogVersionError, and inspect mode, which never writes, refusing a log that needs migrating),
 │                        the state snapshot (snapshot.ts: verifySnapshot, resolveStateVersion, a hash of
 │                        @shinsa/core's source) and EvidenceStore (evidence.ts: attached evidence under
 │                        `<task id>/round-<n>/`, chat tool images at the top, all served under /api/evidence by

@@ -1454,7 +1454,7 @@ wrote it (Agents, above). So the work is split:
   edge cases worth trying. The review gate's body and the pull request's description write both parts
   (`serializeTestingMarkdown`: "Covered by tests", then numbered "Try it yourself" steps with "Expected:"), and
   `read_task` lists them (`listTestingLines`). A plain list of strings, the older form, is read as what the tests
-  cover; logs written before the guide are rewritten once on start (`store/legacy.ts`, log version 3).
+  cover.
   `assembleReport` keeps the latest phase's walkthrough, so a later phase may restate the whole.
 - **The reviewer checks it from outside.** Its own session sees the request, the plan, the phase summaries and the
   Agent's judgement calls as numbered claims, each its title, the call and its reason (`describeJudgementCallsForReview`), never the Agent's conversation. Besides
@@ -1927,10 +1927,6 @@ checks it ran.
     usage limit reads (below). `resolveCostUnit` makes a line's unit the weekly window when
     every priced run has a share, and dollars otherwise: a task that ran partly on an account still learning, or on
     an API key, shows dollars rather than a share that leaves part out.
-- **Logs before log version 4** carried one number per meter, `weeklyPercent`: the account's movement over the
-  attempt, charged in full to every run on the account at the time; nothing when it was zero; and, when a reading
-  dropped, the account's whole percentage (a task could show more than 100%). It is not a reading, so the rewrite drops
-  it, and those runs get their share from their cost once the account's rate is learned from new readings.
 - **Limits per task** (`listTaskBudgets`), both off by default and both soft: a run never stops mid-turn, but a
   run that would start past a limit does not start, and the task pauses with a failure gate (`cause: budget`)
   whose body names the limit it reached, not what the task spent ("This task reached its $5.00 cost limit, so the
@@ -4071,62 +4067,19 @@ truth, and a snapshot only saves replaying it.
   boot that replayed events past it, 3 s after the last of 2,000 events since the last one (so a burst of work is never
   stalled by the write), and when the engine stops. `shinsa engine` builds its engine with the version, so every
   server keeps one; inspect mode never writes one, and an engine without a version (most tests) neither. A snapshot is
-  only a shortcut: one that cannot be written is logged and left for the next. Anchoring on the newest row at or
-  before its position lets a log whose last rows were moved out (below) still take one.
-- **Older events in the user's log are rewritten once, on start.** Code never reads an old shape; when a change would
-  leave one in a user's log, `store/legacy.ts` gets its rules and `LOG_VERSION` goes up by one. Logs written before
-  the task Agent kept runs as
-  `planner`, `builder`, `fixer`, `shipper` or `operator`, answers as `task.answered`, `specFirst` on `task.created`,
-  the removed `worktreesDirectory` setting and worktrees without a `workspace`. Before it replays anything, a writable
-  engine runs `EventLog.replaceLegacyEvents` (the rules are `store/legacy.ts`): a top-level run of one of those roles
-  becomes the `agent` with the matching purpose (`plan`, `build`, `fix`, `fix`, `operate`), an `agent` run without one
-  takes its task's stage at the time (else `build` for a phase, `plan` otherwise), a delegated run keeps a helper role
-  (`builder` when its role is not one), no other run keeps a purpose, `task.answered` becomes `task.delivered` with
-  step `answer`, and the rest take the current field. Logs from before the guide moved out of the log (above, The
-  briefing) have their `briefing.written` rows moved: the newest per project goes to the `briefings` table with its
-  row's time, every such row and the receipts of `briefing.write` are deleted, and the log position they reached is
-  kept in `seq_floor`, so the next event never takes a position an earlier event had (server ids such as `boot:<seq>`
-  name it). Logs from before the walkthrough's guide for testing (log version 3) have a `testing` list of strings in
-  `phase.completed`, `work.submitted` and `walkthrough.revised`; it becomes `{ automated: <the list>, manual: [] }`.
-  Logs from before weekly readings (log version 4) have `weeklyPercent` on `run.metered`; it is dropped (Cost, above).
-  Logs from before the watch learned that a pull request can have no CI (log version 5, `WATCH_CI_LOG_VERSION`) have
-  `pull_request.watched` events whose `watch` lacks `ciAbsent`; it is set to `false`, so an old watch never reads as a
-  head that gets no checks.
-  Logs from before GitButler support was removed (log version 6, `NO_GITBUTLER_LOG_VERSION`) can name the `gitbutler`
-  workspace: on `repo.registered`, `repo.updated` and `worktree.requested` it becomes `worktrees`, and on
-  `worktree.created` it becomes `main_checkout`, since that task's checkout is the repository itself and only the
-  main-checkout strategy works there without creating, cleaning or removing a worktree (it refuses to commit while
-  the checkout is not on the task's branch). A `gate.opened` with `cause: 'workspace_update'` loses the cause, so it
-  is a plain failure gate whose retry pushes again. Old `task.stacked`, `task.unstacked` and `task.conflict_held`
-  events are types core no longer knows and replay as no-ops, and a `workspace.update` effect still open in the outbox
-  is failed on restart without running ("Shinsa does not know this kind of effect; another version wrote it.",
-  `reconcileAfterRestart`).
-  Logs from before review findings had three levels (log version 7, `FINDING_LEVELS_LOG_VERSION`) can have
-  `review.reported` findings of severity `suggestion`; each becomes `optional`.
-  Logs from before a schedule could read a data source (log version 8, `SCHEDULE_SOURCE_LOG_VERSION`) have
-  `schedule.written` events without `source` or `lastReadAt`; both are set to `null`, so an old schedule reads nothing
-  and has never finished a read.
-  Logs from before a watchdog filed through `file_report` (log version 9, `WATCHDOG_READS_LOG_VERSION`) have a
-  watchdog's one `forkTaskId` on `watchdog.armed` and `watchdog.checked`, which becomes `forkTaskIds` (that task, or
-  none), an armed watchdog without `linkedTaskIds` (set to none), and `task.created` reports without `watchdogId`, which is set to `null`.
-  Logs from before Approve plans had three choices (log version 10, `PLAN_APPROVAL_LOG_VERSION`) have
-  `settings.changed` events with `approvePlans` as a switch: on becomes `large` and off `when_asked`.
-  Logs from before share presets (log version 13, `SHARE_PRESET_LOG_VERSION`) have `task.shared` events without
-  `preset`, which become Standard shares (`preset: 'standard'`).
-  Logs from before teams (log version 14, `TEAM_FOCUS_LOG_VERSION`) have `focus.changed` events without `teamId`,
-  which gain `teamId: null`.
-  Logs from before agent-chosen checks (log version 15, `PLAN_CHECKS_LOG_VERSION`) can have `plan.proposed` events
-  whose `document.verification` is a list of prose strings; they carry no command, so they are dropped and only
-  `PlanCheck` records stay (the prose remains in the plan's `body`).
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 15) marks the log so
-  each pass runs once: a log is read only for the event types of the passes newer than its version (a log at 4 only
-  its `pull_request.watched` events and the GitButler names, `listLegacyEventTypes`). A role it does not know stays as written:
-  the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
-  `run_purpose_unknown`, `run_purpose_unexpected`), so it shows in `/api/health` problems instead of reaching a page.
-  Inspect mode writes nothing: it runs the same rules in memory on its read-only view instead
-  (`EventLog.applyLegacyView`), so an old log reads in the new shape with no false problems, its `briefing.written`
-  rows are hidden from the events and their newest guide per project shown over the `briefings` table, and its
-  snapshot is skipped (the whole log replays); the file on disk keeps its old rows and `user_version`.
+  only a shortcut: one that cannot be written is logged and left for the next.
+- **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
+  `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations.ts`) and every migration after it is one entry
+  in `LOG_MIGRATIONS`, in order, whose position is its version, so the current version is the baseline plus the
+  list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
+  Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
+  in one transaction, the snapshot is dropped and the version raised; a migration that throws leaves the log as it
+  was and the engine does not start. A log older than the baseline, or written before versions existed (version 0
+  with events), is refused with a `LogVersionError` naming its version, never rewritten. Inspect mode writes nothing:
+  `EventLog.assertCurrent` refuses a log that still needs migrating instead of reading it in an old shape. A log a
+  newer Shinsa wrote opens as it is, and an event type this one does not know replays as a no-op or shows as a
+  problem. When a change would leave an old shape in a user's log, add the migration that rewrites it in the same
+  change.
 
 ## Command receipts
 
@@ -5252,8 +5205,7 @@ event because replay must reproduce it):
 | `off` | Direct to Anthropic, auto-compact off: a full context fails the turn as `context_window_full` and the step starts a fresh session with the handoff |
 
 Codex compacts its own threads under every setting but `off`; eunoe and its folds sit in front of the Anthropic API
-only. The setting's earlier values (`eunoe_compact` and `eunoe_default`, now `fold`; `claude`, now `provider`) are
-rewritten once in the event log on start (`store/legacy.ts`, log version 11).
+only.
 
 *Why the library in process.* Since 1.3, `@chroxify/eunoe` exports its core: `rewrite`, `foldThread`,
 `createForwarder` and a `ThreadStore` interface, with no disk, environment or global state of its own. Shinsa
@@ -6382,7 +6334,8 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   replaced by a full replay, problems kept across one, none written read-only or without a version, a write once
   quiet after a boot or a burst, a failed write logged, the Home guide kept beside the log and back after a boot, and
   the state version following the source (`test/serve.test.ts`: a real server keeps one and its next start reads it);
-  `test/store/legacy.test.ts` the one-time rewrite and the move of briefings out of the log; and that a
+  `test/store/migrations.test.ts` the log's version: a new log stamped, an old one refused, pending migrations run
+  once in order and rolled back together, inspect mode refused a log that needs migrating; and that a
   listener's state before and changes patch one state into the next. `test/agents/transcripts` covers a transcript
   line torn by a crash, reading from a position, the entries kept in memory, each new entry's position and
 following a file through its watch and the check every second, both triggered by hand, never waited for;

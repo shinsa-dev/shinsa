@@ -14,14 +14,7 @@ import {
   type StoredBriefing,
 } from '@shinsa/core';
 import { describeError } from '../log/index.ts';
-import {
-  type LegacyBriefingRow,
-  listLegacyBriefings,
-  listLegacyEventTypes,
-  listLegacyRewrites,
-  type ProjectBriefing,
-  type StoredEventRow,
-} from './legacy.ts';
+import { assertCurrentLog, type LogMigration, migrateLog, stampEmptyLog } from './migrations.ts';
 import { type SnapshotRead, type SnapshotRow, type StateSnapshot, verifySnapshot } from './snapshot.ts';
 
 interface EventRow {
@@ -29,6 +22,11 @@ interface EventRow {
   at: number;
   type: string;
   payload: string;
+}
+
+export interface ProjectBriefing {
+  projectId: string | null;
+  stored: StoredBriefing;
 }
 
 export interface UnreadableEvent {
@@ -122,10 +120,6 @@ export const SETTLED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const SEED_STRIDE = 1000;
 
-const LOG_VERSION = 15;
-
-const BRIEFING_EVENT = 'briefing.written';
-
 const REQUEUED = 'Requeued after the previous server process ended.';
 
 const ENDED_WITH_PROCESS = 'Cancelled because the server process ended before the effect finished.';
@@ -190,14 +184,8 @@ function serializeReceipt(row: ReceiptRow): CommandReceipt {
   };
 }
 
-interface LegacyView {
-  rewrites: Map<number, StoredEventRow>;
-  briefings: ProjectBriefing[];
-}
-
 export class EventLog {
   readonly #db: Database;
-  #legacy: LegacyView | null = null;
 
   constructor(path: string) {
     this.#db = new Database(path, { create: true, strict: true });
@@ -251,25 +239,21 @@ export class EventLog {
     this.#db.run(
       'CREATE TABLE IF NOT EXISTS briefings (project TEXT PRIMARY KEY, at INTEGER NOT NULL, payload TEXT NOT NULL)'
     );
-    this.#db.run('CREATE TABLE IF NOT EXISTS seq_floor (seq INTEGER NOT NULL)');
+    stampEmptyLog(this.#db);
   }
 
-  #selectLastSeq() {
-    return (
-      this.#db
-        .query<{ seq: number }, []>(
-          'SELECT MAX(COALESCE((SELECT MAX(seq) FROM events), 0), COALESCE((SELECT MAX(seq) FROM seq_floor), 0)) AS seq'
-        )
-        .get()?.seq ?? 0
-    );
+  migrate(migrations?: readonly LogMigration[]) {
+    return migrateLog(this.#db, migrations);
+  }
+
+  assertCurrent(migrations?: readonly LogMigration[]) {
+    assertCurrentLog(this.#db, migrations);
   }
 
   #readRows(rows: EventRow[]): EventRead {
     const events: ShinsaEvent[] = [];
     const unreadable: UnreadableEvent[] = [];
-    for (const stored of rows) {
-      if (this.#legacy && stored.type === BRIEFING_EVENT) continue;
-      const row = { ...stored, ...this.#legacy?.rewrites.get(stored.seq) };
+    for (const row of rows) {
       const parsed = parseEventPayload(row.payload, row.type);
       if (typeof parsed === 'string') unreadable.push({ seq: row.seq, type: row.type, error: parsed });
       else events.push({ ...parsed, seq: row.seq, at: row.at });
@@ -283,7 +267,7 @@ export class EventLog {
         .query<EventRow, [number]>('SELECT seq, at, type, payload FROM events WHERE seq > ? ORDER BY seq')
         .all(after)
     );
-    return { ...read, lastSeq: Math.max(read.lastSeq, after, this.#selectLastSeq()) };
+    return { ...read, lastSeq: Math.max(read.lastSeq, after) };
   }
 
   #resolveAnchor(seq: number) {
@@ -317,7 +301,6 @@ export class EventLog {
   }
 
   selectSnapshot(version: string): SnapshotRead | null {
-    if (this.#legacy) return null;
     const row = this.#db
       .query<SnapshotRow, []>(
         'SELECT seq, version, anchor, checksum, problems, payload FROM snapshots ORDER BY seq DESC LIMIT 1'
@@ -327,80 +310,14 @@ export class EventLog {
     return verifySnapshot(row, { version, anchor: this.#resolveAnchor(row.seq) });
   }
 
-  #selectLogVersion() {
-    return this.#db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
-  }
-
-  replaceLegacyEvents() {
-    const version = this.#selectLogVersion();
-    if (version >= LOG_VERSION) return 0;
-    return this.#db.transaction(() => {
-      const changed = this.#rewriteLegacyRows(version) + this.#moveLegacyBriefings();
-      if (changed > 0) this.#db.run('DELETE FROM snapshots');
-      this.#db.run(`PRAGMA user_version = ${LOG_VERSION}`);
-      return changed;
-    })();
-  }
-
-  applyLegacyView() {
-    const version = this.#selectLogVersion();
-    if (version >= LOG_VERSION) return 0;
-    const rewrites = this.#listLegacyRows(version);
-    const briefingRows = this.#listLegacyBriefingRows();
-    const changed = rewrites.length + briefingRows.length;
-    if (changed === 0) return 0;
-    this.#legacy = {
-      rewrites: new Map(rewrites.map((row) => [row.seq, row])),
-      briefings: listLegacyBriefings(briefingRows),
-    };
-    return changed;
-  }
-
-  #listLegacyRows(version: number) {
-    const types = listLegacyEventTypes(version);
-    const rows = this.#db
-      .query<EventRow, string[]>(
-        `SELECT seq, at, type, payload FROM events WHERE type IN (${listPlaceholders(types)}) ORDER BY seq`
-      )
-      .all(...types);
-    return listLegacyRewrites(rows);
-  }
-
-  #rewriteLegacyRows(version: number) {
-    const update = this.#db.prepare('UPDATE events SET type = ?, payload = ? WHERE seq = ?');
-    const rewrites = this.#listLegacyRows(version);
-    for (const row of rewrites) update.run(row.type, row.payload, row.seq);
-    return rewrites.length;
-  }
-
-  #listLegacyBriefingRows() {
-    return this.#db
-      .query<LegacyBriefingRow, [string]>('SELECT seq, at, payload FROM events WHERE type = ? ORDER BY seq')
-      .all(BRIEFING_EVENT);
-  }
-
-  #moveLegacyBriefings() {
-    const rows = this.#listLegacyBriefingRows();
-    if (rows.length === 0) return 0;
-    for (const { projectId, stored } of listLegacyBriefings(rows)) this.writeBriefing(projectId, stored);
-    this.#db.run('INSERT INTO seq_floor (seq) VALUES (?)', [this.#selectLastSeq()]);
-    this.#db.run('DELETE FROM events WHERE type = ?', [BRIEFING_EVENT]);
-    this.#db.run("DELETE FROM receipts WHERE type = 'briefing.write'");
-    return rows.length;
-  }
-
   listBriefings(): ProjectBriefing[] {
     const rows = this.#db
       .query<{ payload: string }, []>('SELECT payload FROM briefings ORDER BY project')
       .all();
-    const stored = rows.flatMap((row) => {
+    return rows.flatMap((row) => {
       const briefing = parseStoredBriefing(row.payload);
       return briefing ? [briefing] : [];
     });
-    const legacy = this.#legacy?.briefings ?? [];
-    if (legacy.length === 0) return stored;
-    const keys = new Set(legacy.map((briefing) => briefingKey(briefing.projectId)));
-    return [...stored.filter((briefing) => !keys.has(briefingKey(briefing.projectId))), ...legacy];
   }
 
   writeBriefing(projectId: string | null, stored: StoredBriefing) {

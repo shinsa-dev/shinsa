@@ -358,8 +358,8 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
   input. Never store a shared constant into state by reference (`createSettings()`, not `DEFAULT_SETTINGS`).
 - **No old logs.** Shinsa has never shipped, so there is nothing to replay but logs the current code wrote: rename or
   remove an event or a field outright, with no reader for the old shape and no default that only an old log needs.
-  The server rewrites old shapes in the user's log once on start (`apps/engine/src/store/legacy.ts`), so core
-  never sees them.
+  A change that would leave an old shape in the user's log ships a migration in `apps/engine/src/store/migrations.ts`,
+  so core never sees one.
 - **Nothing runs on import.** `package.json` says `"sideEffects": false`, so a bundler keeps only what a caller
   imports: the desktop app's main bundle, which needs only `ENGINE_PROTOCOL`, holds that one module instead of the
   whole domain. A module that registers something or writes a global when imported would be dropped silently.
