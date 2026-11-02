@@ -36,6 +36,10 @@ import { camelToSnake } from 'effect/String';
 
 A module is a folder. Its shapes and its logic live in separate files, and a logic file holds exactly one thing.
 
+**One layout in every package and app.** Core, the engine, the Worker, the web app and the desktop app all use it: a folder per module, its shapes in `schema.ts`, its logic in `handler.ts`, `service.ts` or `middleware.ts` (or one pure module named for its concern), the same names for the same roles. A move to Effect never invents a layout of its own for one app or code path; when one fits badly, change this section for every app at once.
+
+**Rewrite into Effect, never translate.** A move is not the same code with `Effect.gen` around it: a hand-written check becomes a schema, a thrown error a tagged error in the type, a module-level singleton a service with its layer, a `try`/`finally` a scoped resource, a retry loop a `Schedule`, a callback or event emitter a `Stream`, an ad hoc timeout `Effect.timeout`. Redesign a module when Effect has the better shape for it; behaviour and the tests' expectations stay.
+
 ```
 routes/teams/                       store/machines/
 ├── schema.ts    the shapes          ├── schema.ts    Machine, NewMachine, the row schemas, MACHINE_COLUMNS
