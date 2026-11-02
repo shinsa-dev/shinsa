@@ -222,13 +222,29 @@ src/
 │                        (routes.ts), the Schedules service (index.ts), schema.ts (the shapes, WebhookOutcome, the
 │                        limits and RATE_WINDOW)
 ├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
-│                        credentials, the enrolled devices, who has access), control.ts (ControlClient for app.shinsa.dev: pairing, heartbeat, invites, members, hand-offs, guests; RevokedError),
-│                        cloudflared.ts (the pinned release, checked by SHA-256, installed under data/bin), connector.ts
-│                        (cloudflared with the token in its environment), supervisor.ts (TunnelSupervisor: heartbeat,
-│                        health pings, restarts and back-off, revocation), guard.ts (what the tunnel may reach),
-│                        channel.ts
-│                        (RemoteChannel: the handshake, sealed frames, the app socket and HTTP inside), pairing.ts
-│                        (Pairing: polling app.shinsa.dev until GitHub sign-in claims the instance), local-only.ts
+│                        credentials, the enrolled devices, who has access; the only place the keys live),
+│                        client/ (RemoteClient in service.ts: every call to app.shinsa.dev derived from core's
+│                        RemoteApi through HttpApiClient (pairing, machine, machineTeams, slackRelay), the
+│                        Redacted machine token through the MachineSession client middleware, each call under
+│                        Effect.timeout; every refusal its typed failure from core's remote/errors, a 401 on a
+│                        machine call Revoked, and a status the API does not declare, a timeout or no answer
+│                        RemoteUnreachable in schema.ts with `retryable`; index.ts is the edge, RemoteControl,
+│                        with selectRemoteFailureTag and isRemoteRetryable for callers not moved yet),
+│                        pairing/ (Pairings: the claim code, then a forked poll every PairPollInterval, 2 s, until
+│                        GitHub sign-in claims the instance, it expires or you cancel), cloudflared/ (Cloudflared:
+│                        the pinned release downloaded, checked by SHA-256 and unpacked under data/bin, each step
+│                        under a timeout; asset.ts picks the platform's build), connector/ (TunnelConnector:
+│                        cloudflared as a scoped process with the token in its environment, up once it prints
+│                        CONNECTED_PATTERN, stopped and failed as TunnelConnectFailed after ConnectTimeout, 30 s;
+│                        installed.ts and refused.ts the two layers), health/ (TunnelHealth: one ping of the
+│                        tunnel's /health), tunnel/ (TunnelSupervisor: connect, then pings on PING_SCHEDULE with a
+│                        heartbeat every fourth, a restart after three failed pings or an exit on
+│                        RESTART_SCHEDULE (every second for a minute, then 2, 4, 10 and 30 s), Revoked ending it for
+│                        good; index.ts the Tunnel edge), access/ (AccessScope: the remote-access scope every
+│                        sealed channel and team feed socket is leased from, ended when access goes off, the
+│                        machine is revoked or removed, closing them all in parallel; RemoteAccessScope is its
+│                        edge), guard.ts (what the tunnel may reach), channel.ts (RemoteChannel: the handshake,
+│                        sealed frames, the app socket and HTTP inside, a lease on the access scope), local-only.ts
 │                        (the routes a remote request is refused), routes.ts (/api/remote), placement.ts (POST /api/placement: the
 │                        classifier reads every machine's policies with a new task's request and names its machine),
 │                        shares.ts (Shares: the share.link effect, which makes a link's id and key; the live
@@ -240,11 +256,12 @@ src/
 │                        share.describe effect),
 │                        share-channel.ts (ShareChannel: the tunnel's /share channel, the hello checked against
 │                        the link's key, sealed frames out, nothing read after the hello; a host authorizes the
-│                        hello, so team views run on it too), teams.ts (Teams: making, joining, leaving and
+│                        hello, so team views run on it too; a lease on the access scope), teams.ts (Teams: making, joining, leaving and
 │                        answering requests through app.shinsa.dev with the machine token, the team keys in
 │                        remote.json, and the tunnel's /team channel, checked against membership, the key and the
 │                        team's projects, ended the moment access ends), team-feeds.ts (TeamFeeds: a list channel
-│                        to every other machine of each team whose key this machine holds, GET /api/teams/tasks,
+│                        to every other machine of each team whose key this machine holds, each socket a lease on
+│                        the access scope, GET /api/teams/tasks,
 │                        the teams socket message and the /api/teams/view relay of one task), team-snapshots.ts
 │                        (TeamSnapshots: each teammate machine's last list), team-views.ts (TeamViews and
 │                        TeamViewRecorder: each of their tasks' last full page, replayed while the machine is
@@ -260,10 +277,9 @@ src/
 │                        per thread or slack.start_task; the
 │                        slack.post and slack.status effects, the status message edited at most every 5 s and only
 │                        when it changes, the thread's status and the mention's one reaction moved with it; GET
-│                        /api/slack and POST /api/slack/disconnect), relay.ts (SlackRelay: posts, reactions, the
-│                        thread's status, links
-│                        and unlink on app.shinsa.dev with
-│                        the machine token; SlackRelayError, retried only when the relay is down or busy)
+│                        /api/slack and POST /api/slack/disconnect); posts, reactions, the thread's status, links and
+│                        unlink go through RemoteClient's slackRelay group with the machine token, retried only
+│                        on SlackFailed or a retryable RemoteUnreachable (the relay down, busy or unreachable)
 ├── secrets/             secrets.json: webhook tokens and signing secrets, one-use secret refs, MCP sign-ins. schema.ts
 │                        (each entry's schema, SECRET_REF_TTL), files/ (SecretFiles: read and written on JsonFile, a
 │                        file without a salt kept aside), store.ts the edge (SecretStore)
@@ -485,6 +501,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `RepoFolders`, `RepoSetup`, `GitHubLogins` (`repos/`) | `ReposLayer` (`repos/layers.ts`), needs `GitLayer` and `GitHubLayer` | finding repositories and their origin, the setup check, the GitHub login |
   | `WorktreeWorkspaces`, `MainCheckoutWorkspace` (`workspaces/`) | `WorkspacesLayer` (`workspaces/layers.ts`), needs `GitLayer` | the two places agents work (`TaskCheckoutMissing`, `CheckoutDirty`, `CheckoutOffBranch`) |
   | `CheckRunner`, `BaseCheckoutPools`, `SharedCaches` (`checks/`), `TaskCoverage` (`test-coverage/`) | `ChecksLayer` (`checks/layers.ts`), needs `GitLayer` | checks, their re-runs and base comparison, the turbo cache, changed-line coverage (`CoverageReportUnreadable`) |
+  | `ExtensionDiscovery`, `ExtensionFiles`, `McpClients`, `ExtensionUsage` (`extensions/`) | `ExtensionsLayer` (`extensions/layers.ts`), needs `JsonFile` | what Claude Code, Codex, plugins and repositories set up, decoded; extensions.json and the usage cache; scoped MCP clients and timed calls (`McpServerFailed`); when each server and skill was last used |
   | `AccountRegistry`, `AccountFolders`, `UsageApi` (`accounts/`) | `AccountsLayer` (`accounts/layers.ts`), needs `JsonFile` | the accounts' JSON files decoded, each account's Claude folder, Claude's usage over `HttpClient` (`UsageReadFailed`) |
   | `NpmRegistry` (`versions/registry/service.ts`) | `VersionsLayer` (`versions/layers.ts`) | the latest version of a package, decoded (`NpmRegistryFailed`) |
   | `SecretFiles` (`secrets/files/service.ts`) | `SecretFiles.layer`, needs `JsonFile` | secrets.json decoded, a file without a salt kept aside |
@@ -493,7 +510,11 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 
   Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
-  terminals' store and PTY, the accounts' and secrets' stores, and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
+  terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' stores, the npm
+  registry, Eunoe's forwarder and threads, the resource poller, the setup draft, triage's classifier timeout, the
+  briefing's debounce and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config,
+  `runPromise` for processes); `Extensions`, `Versions`, `ResourceMonitor`, `EunoeServer`, `Accounts` and
+  `Terminals` stay the objects their callers hold;
   `EventLog`, `EvidenceStore` and `AttachmentStore` each own a `ManagedRuntime` over their layer and `runSync` it;
   `acquireDataDirLock` builds `ServeLock` in a scope of its own. Each edge throws the errors and messages it threw
   before. A module that moves to Effect yields the service instead and stops calling its edge; once nothing calls an

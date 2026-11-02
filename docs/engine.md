@@ -2743,19 +2743,36 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   answered, the one invite link (`link`: its secret, its invite token and when it was made) and the access
   requests waiting for an answer (`requests`), and the machine's ECDSA P-256 signing key pair (`signing`, made on
   first use, `RemoteStore.resolveSigningKey`), which signs its team list views (Teams → Offline teammates). Read leniently: a file missing part of its credentials reads as not paired, never enabled.
-- **The control-plane client** (`ControlClient`): pair start and poll, heartbeat, offline, removal, all to
-  `SHINSA_REMOTE_ORIGIN` (app.shinsa.dev by default). A 401 to a call made with the machine token is `RevokedError`.
-- **`cloudflared`** (`cloudflared.ts`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on first use into
-  `data/bin/cloudflared-<version>`, checked against its pinned SHA-256 before it is unpacked or made executable. The
-  connector (`connector.ts`) runs `cloudflared tunnel --no-autoupdate run --url <engine URL>` with the tunnel token in
-  `TUNNEL_TOKEN`, never in its arguments (a process list shows arguments), and counts it up once it prints
-  `Registered tunnel connection` (30 s at most).
-- **The supervisor** (`TunnelSupervisor`, Kanna's timings): connect, heartbeat with the engine's URL and version, ping
-  `https://<tunnel host>/health` every 30 seconds and heartbeat every fourth ping; three failed pings in a row, or
-  `cloudflared` exiting, restart it, every second for the first minute of a failure streak, then after 2, 4, 10 and 30
-  seconds. A revoked machine gives up for good and forgets its credentials. Turning it off marks the instance
-  offline, capped at 2 seconds. It comes up with the engine when `remote.json` says enabled, and goes down before
-  the terminals do at shutdown.
+- **The control-plane client** (`RemoteClient`, `remote/client/`): one client derived from core's `RemoteApi` through
+  `HttpApiClient`, its groups pairing, machine, machineTeams and slackRelay, all to `SHINSA_REMOTE_ORIGIN`
+  (app.shinsa.dev by default, the `RemoteOrigin` reference). Every request and answer is decoded by the schemas the
+  Worker serves, and every refusal arrives as its typed failure from core's `remote/errors` (`Revoked` for a 401 to a
+  call made with the machine token, `NotFound`, `MembersFull`, `GuestsFull`…). The machine token is `Redacted` and goes
+  in through the `MachineSession` client middleware, never into a log or an error. Each call runs under
+  `Effect.timeout` (15 s; marking the instance offline 2 s); a timeout, no answer, an answer that does not decode or a
+  status the API does not declare is `RemoteUnreachable`, `retryable` when there was no answer, a 429 or a 5xx.
+  Callers not moved to Effect yet go through `RemoteControl` (`client/index.ts`) and pick a failure by its tag
+  (`selectRemoteFailureTag`).
+- **`cloudflared`** (`Cloudflared`, `remote/cloudflared/`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on
+  first use into `data/bin/cloudflared-<version>`, checked against its pinned SHA-256 before it is unpacked or made
+  executable; a download that does not match is refused, and the download (2 min) and unpacking (30 s) each run under a
+  timeout. The connector (`TunnelConnector`, `remote/connector/`) runs `cloudflared tunnel --no-autoupdate run --url
+  <engine URL>` as a scoped process with the tunnel token in `TUNNEL_TOKEN`, never in its arguments (a process list
+  shows arguments), and counts it up once it prints `Registered tunnel connection`; one that has not within
+  `ConnectTimeout` (30 s, an `Effect.timeout`) is stopped and fails as `TunnelConnectFailed`, and closing its scope
+  stops the process.
+- **The supervisor** (`TunnelSupervisor`, `remote/tunnel/`, Kanna's timings): connect, heartbeat with the engine's URL
+  and version, ping `https://<tunnel host>/health` (`TunnelHealth`) on `PING_SCHEDULE`, every 30 seconds, and
+  heartbeat every fourth ping; three failed pings in a row, or `cloudflared` exiting, restart it on `RESTART_SCHEDULE`:
+  every second for the first minute of a failure streak, then after 2, 4, 10 and 30 seconds. `Revoked` gives up for
+  good and forgets the credentials. Turning it off closes the supervisor's scope, which stops `cloudflared`, and marks
+  the instance offline, capped at 2 seconds. It comes up with the engine when `remote.json` says enabled, and goes
+  down before the terminals do at shutdown.
+- **The remote-access scope** (`AccessScope`, `remote/access/`): turning remote access on opens one scope, and every
+  sealed channel (the app's `RemoteChannel`, each `ShareChannel`, each team channel) and every team feed socket is a
+  lease on it. Turning access off, a revocation or removing the machine ends the scope, which closes every one of them
+  at once with its own close reason; a channel that ends by itself gives its lease back. The keys stay in `remote.json`
+  alone: the scope holds only what closes a socket.
 - **The tunnel entry point** (`guard.ts`, `http/server.ts`): a request with `cf-connecting-ip`, which Cloudflare
   stamps on everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request and is decided
   before the local guard. It sees `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks) and
@@ -2776,17 +2793,17 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   and HTTP requests (`/api/` only, at most 32 open, bodies up to the attachment limit) run through the same API
   routes, marked remote (`markRemoteRequest`, `resolveRequestOrigin`), without the Host and Origin guard, whose job the
   handshake did. Removing a device closes its channels; turning remote access off or a revocation closes all of them.
-- **Pairing** (`pairing.ts`, `Remote.startPairing`): Settings → Remote access → Turn on, or `shinsa remote pair`,
+- **Pairing** (`Pairings`, `remote/pairing/`, `Remote.startPairing`): Settings → Remote access → Turn on, or `shinsa remote pair`,
   makes the machine's key if it has none, asks app.shinsa.dev for a claim code with the machine's name (its host name
   without `.local`, an all-capitals one such as `MAC` written `Mac`), its public key and the engine's version, and opens the pairing page in your browser (`open`),
-  where you sign in with GitHub and approve. The engine polls every 2 seconds with a poll secret that never leaves it,
+  where you sign in with GitHub and approve. The engine polls every 2 seconds (`PairPollInterval`, a forked fiber cancelled with the pairing) with a poll secret that never leaves it,
   through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
   `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
   (`remote_paired`): remove it first.
 - **The invite link and access requests** (`Remote.createLink`, `removeLink`, `acceptRequest`, `declineRequest`):
   a machine has one link, for your own devices and for other people alike, since nobody gets in until you accept
   them. It is a reusable secret (32 random bytes) kept in `remote.json` with the invite token Shinsa Cloud gives over
-  the machine token (`ControlClient.requestInvite`), until you turn it off (`requestInviteRemoval` removes the token
+  the machine token (`RemoteClient`'s machine group, `requestInvite`), until you turn it off (`requestInviteRemoval` removes the token
   there too); making it while it is on keeps the one there, so a new link only comes after turning it off. The link
   is `https://app.shinsa.dev/enroll#<instance>.<machine key>.<secret>.<invite token>`, and everything after `#` stays
   in the browser. `shinsa remote link` shows it (making it when it is off) and `shinsa remote link-off` turns it off.
@@ -3811,7 +3828,8 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   passing failure never turns the status off. The posts, reactions and status message carry on as they are.
 - **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
-  at all is retried by the outbox; any other refusal (the thread was never sent here, the app was removed from the
+  at all is retried by the outbox (the relay call through `RemoteClient` fails with `SlackFailed` or a retryable
+  `RemoteUnreachable`); any other refusal, a typed failure of its own, (the thread was never sent here, the app was removed from the
   workspace) is logged (`[Slack] app.shinsa.dev refused the post`) and dropped, since sending it again cannot work.
   With remote access off nothing is posted. A machine that is offline when someone mentions the bot gets "is offline"
   in the thread from app.shinsa.dev, and the mention is not kept: mention it again once Shinsa runs there.
@@ -5685,8 +5703,11 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
 
 The engine moves to Effect 4 one piece at a time (the `effect` skill is how it is written). Its foundation already
 has: the configuration, the log, the shell, the event log and the files beside it, the data folder lock and the
-start and stop of the engine itself; on top of it, the JSON files the engine keeps and git. Each is a service with a layer (`apps/engine/CLAUDE.md` → Rules has the table);
-the rest of the engine has not moved yet and calls them through an edge.
+start and stop of the engine itself. On top of it every folder that does I/O is a set of services: the JSON files the
+engine keeps, git, GitHub, repositories and workspaces, checks and coverage, terminals, extensions, accounts and
+secrets, versions, Eunoe, resources, schedules, onboarding, triage and the briefing. Each is a service with a layer
+(`apps/engine/CLAUDE.md` → Rules has the table); the agent runs, the HTTP surface and the CLI have not moved yet and
+call them through an edge.
 
 ```
 startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
@@ -5698,10 +5719,13 @@ startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
                   └─ the work: runs, clocks, effects, …
                 stop() = dispose: finalizers in reverse
 
-unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, Git, GitHub, repos, workspaces,
-                                       checks, coverage, terminals)
-  log.*, resolveConfig, runCommand, killProcessTree, writeJsonFile, the git/, github/, repos/ functions,
-  Workspaces, runChecks, BaseCheckouts, measureTaskCoverage, TerminalStore, spawnTerminalProcess
+unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, Git,
+                              GitHub, repos, workspaces, checks, coverage,
+                              terminals, extensions, accounts, secrets,
+                              versions)
+  log.*, resolveConfig, runCommand, writeJsonFile, the git/, github/,
+  repos/ functions, Workspaces, runChecks, measureTaskCoverage, Terminals,
+  Extensions, Accounts, SecretStore, Versions, ResourceMonitor, EunoeServer
 ```
 
 - **Configuration.** `EngineConfig` reads the whole `ServerConfig` once, through one `ConfigProvider` that looks in
@@ -5772,6 +5796,24 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   terminals use. `SecretFiles` reads and writes `secrets.json` on `JsonFile`, its refs, hooks and MCP sign-ins each
   decoded, and a file without a salt kept aside. Every interval and timeout is a named `Duration` in its folder's
   `schema.ts`.
+- **Extensions.** `ExtensionDiscovery` reads what Claude Code, Codex, plugins and repositories set up, every settings
+  file, plugin manifest and skill's front matter decoded by a lenient schema (`extensions/schema.ts`), a file it cannot
+  read named as a problem. `ExtensionFiles` keeps `extensions.json` and the usage cache on `JsonFile`. `McpClients`
+  opens an MCP client as a scoped resource closed with its scope, runs any MCP call under its timeout (the mid-run
+  loader's too), a call that fails or does not answer the typed `McpServerFailed`, and checks a server's health under
+  `MCP_CHECK_TIMEOUT` (15 s). `ExtensionUsage` reads when agents last used each server and skill, transcript lines and
+  stored sign-ins decoded by schemas.
+- **Versions, Eunoe, resources and schedules.** `NpmRegistry` asks the npm registry for a program's latest version
+  over `HttpClient`, its answer decoded by `NpmLatest`, a timeout (`REGISTRY_TIMEOUT`, 10 s), a refused request or
+  an unreadable answer the typed `NpmRegistryFailed`. Eunoe's forwarder is a server acquired in a scope that `stop()`
+  closes, a port it cannot take `ForwarderUnavailable`, and its thread state lives on `JsonFile`, decoded by
+  `StoredThread`. How busy the machine is is sampled by a fiber repeated on `Schedule.spaced` (`RESOURCE_INTERVAL`,
+  5 s) and interrupted when the last page leaves. A webhook's JSON body and the writer's wording of a suggested watch
+  are decoded by schemas.
+- **Onboarding, triage and the briefing.** The saved setup is read and written on `JsonFile`, decoded by
+  `SetupDraft`; a draft that breaks it is logged and onboarding starts again. Triage asks the classifier under
+  `CLASSIFY_TIMEOUT` (30 s), no answer the typed `ClassifierFailed`. The Home guide's write waits on a fiber
+  (`BRIEFING_DEBOUNCE`, 4 s) that a newer change interrupts and starts again.
 - **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
   its release as a finalizer: the lock, the log, the HTTP server, Eunoe's forwarder, the work. `stop()` disposes the
   runtime, which runs them in reverse: the work (live runs first, then the clocks and the effects, The agent loop →
@@ -5779,9 +5821,12 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   nothing it took stays held, and a second `stop()` waits for the first.
 - **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
-  terminals' store and PTY, and the accounts' and secrets' files run the services through `edgeRuntime`, a
-  `ManagedRuntime` of the logger, the shell, `JsonFile`, git's, GitHub's, the repositories', the workspaces', the
-  checks', the terminals', the extensions', the accounts' and the secrets' services for the process; `Accounts`, its
+  terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' files, the npm
+  registry, Eunoe's forwarder and threads, the resource poller, the setup draft, triage's timeout and the briefing's
+  debounce run the services through `edgeRuntime`, a `ManagedRuntime` of the logger, the shell, `JsonFile`, git's,
+  GitHub's, the repositories', the workspaces', the checks', the terminals', the extensions', the accounts', the
+  secrets' and the versions' services for the process; `Extensions`, `Versions`, `ResourceMonitor` and
+  `EunoeServer` stay the objects their callers hold; `Accounts`, its
   `AccountStore`, `UsageLimits`, `AccountRotation` and `AccountLogins`, and `SecretStore` stay the objects their
   callers hold; `BaseCheckouts` holds the pool its service made, and `Terminals` and `ServiceRefiner` stay the objects
   their callers hold, over those services; `Workspaces` hands out one `WorkspaceStrategy` of promises per mode over the

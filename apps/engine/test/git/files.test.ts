@@ -126,9 +126,13 @@ describe('listing files', () => {
 
   test('a read that outlasts its time limit becomes a timeout refusal', async () => {
     const { path, sha } = await createSampleRepo();
+    const tree = await git(path, 'rev-parse', `${sha}^{tree}`);
+    const object = join(path, '.git', 'objects', tree.slice(0, 2), tree.slice(2));
+    rmSync(object);
+    Bun.spawnSync(['mkfifo', object]);
     const limits = CODE_LIMITS as { readMs: number };
     const readMs = limits.readMs;
-    limits.readMs = 0;
+    limits.readMs = 50;
     try {
       await expect(listCommitPaths(path, sha)).rejects.toMatchObject({ code: 'read_timeout' });
     } finally {
