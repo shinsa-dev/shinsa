@@ -223,7 +223,7 @@ function details(pull: FakePullRequest) {
 }
 
 function readBody() {
-  return flag('--body-file') === '-' ? readFileSync('/dev/stdin', 'utf8') : undefined;
+  return flag('--body-file') === '-' ? readFileSync(0, 'utf8') : undefined;
 }
 
 function failRead() {
