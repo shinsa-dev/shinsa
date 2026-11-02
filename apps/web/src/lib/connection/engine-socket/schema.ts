@@ -1,18 +1,21 @@
 import { ClientMessage, ServerMessage } from '@shinsa/core';
-import { type Effect, type Layer, Schedule, Schema } from 'effect';
-import type { Socket } from 'effect/socket';
+import { type Effect, Schedule, Schema } from 'effect';
+import type { ReconnectPlan } from '@/lib/runtime/socket/schema.ts';
 
 export const ENGINE_SOCKET_PATH = '/ws';
 
-export const ENGINE_OPEN_TIMEOUT = '10 seconds';
+const ENGINE_REDIAL = '250 millis';
 
-export const ENGINE_REDIAL = '250 millis';
-
-export const ENGINE_RECONNECT = Schedule.duration(ENGINE_REDIAL).pipe(
-  Schedule.concat(Schedule.duration('1 second')),
+const ENGINE_BACKOFF = Schedule.duration('1 second').pipe(
   Schedule.concat(Schedule.duration('2 seconds')),
   Schedule.concat(Schedule.spaced('5 seconds'))
 );
+
+export const ENGINE_RECONNECT: ReconnectPlan = {
+  first: Schedule.duration(ENGINE_REDIAL).pipe(Schedule.concat(ENGINE_BACKOFF)),
+  backoff: ENGINE_BACKOFF,
+  redial: ENGINE_REDIAL,
+};
 
 export const ClientMessageText = Schema.fromJsonString(ClientMessage);
 
@@ -29,14 +32,10 @@ export class CommandRefused extends Schema.TaggedError<CommandRefused, { readonl
   { code: Schema.String, message: Schema.String }
 ) {}
 
-export type SocketTransport = Layer.Layer<Socket.WebSocketConstructor>;
-
 export class EngineSocketClosed extends Schema.TaggedError<
   EngineSocketClosed,
   { readonly brand: unique symbol }
->()('EngineSocketClosed', { synced: Schema.Boolean }) {}
-
-export const WEB_SOCKET_OPEN = 1;
+>()('EngineSocketClosed', { connected: Schema.Boolean, final: Schema.Boolean }) {}
 
 export interface EngineLink {
   isOpen(): boolean;

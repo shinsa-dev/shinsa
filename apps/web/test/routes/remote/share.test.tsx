@@ -54,7 +54,7 @@ function connect(session: Response | null = null) {
   const machine = createFakeShareMachine();
   globalThis.WebSocket = Object.assign(
     function createFakeSocket(url: string) {
-      return machine.options.createSocket(url);
+      return machine.createSocket(url);
     },
     { OPEN: ORIGINAL_SOCKET.OPEN }
   ) as unknown as typeof WebSocket;
@@ -68,7 +68,7 @@ function connect(session: Response | null = null) {
     if (input === '/__remote/session') return Promise.resolve(session ?? new Response('', { status: 401 }));
     if (input.startsWith('blob:'))
       return (blobs.get(input) ?? Promise.resolve('')).then((text) => new Response(text));
-    return machine.options.fetch(input);
+    return machine.options.fetch(new Request(new URL(input, location.href)));
   }) as never);
   return machine;
 }

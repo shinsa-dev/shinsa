@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import { serializePublicKey } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
-import { ChannelError, openRemoteChannel } from '@/lib/remote/channel.ts';
+import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import { ChannelSocket, RemoteLink } from '@/lib/remote/link.ts';
+import { ChannelError } from '@/lib/remote/remote-channel/schema.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { CloudRefused } from '@/lib/runtime/remote/schema.ts';
 import { createKeyPair, FakeMac, type FakeMacOptions } from './fake-mac.ts';

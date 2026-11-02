@@ -17,15 +17,19 @@ import {
   verifyTeamSnapshot,
 } from '@shinsa/core';
 import { resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
-import { waitFor } from '@/lib/share/live.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { openTeamChannel } from './channel.ts';
+import type { StoredTeamKey } from './join.ts';
 import {
-  openTeamChannel,
   TEAM_MACHINE_OFFLINE,
   type TeamChannelHandlers,
   type TeamChannelTarget,
-} from './channel.ts';
-import type { StoredTeamKey } from './join.ts';
+} from './team-socket/schema.ts';
+
+function waitFor(ms: number, run: () => void) {
+  const timer = setTimeout(run, ms);
+  return () => clearTimeout(timer);
+}
 
 const FEED_RETRY_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 

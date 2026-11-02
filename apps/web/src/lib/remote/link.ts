@@ -1,6 +1,12 @@
 import { type Bytes, type ChannelHeaders, CONNECT_TOKEN_TTL_MS, type ConnectResponse } from '@shinsa/core';
-import { ChannelError, type ChannelOptions, openRemoteChannel, type RemoteChannel } from './channel.ts';
+import { openRemoteChannel } from './channel.ts';
 import { type DashboardClient, isMachineGone } from './dashboard.ts';
+import {
+  CHANNEL_REPLACED,
+  ChannelError,
+  type ChannelOptions,
+  type RemoteChannel,
+} from './remote-channel/schema.ts';
 import type { EnrolledDevice } from './schema.ts';
 
 const CONNECTING = 0;
@@ -118,7 +124,7 @@ export class RemoteLink {
   #adopt(channel: RemoteChannel, connecting: Promise<RemoteChannel>) {
     if (this.#channel !== connecting) {
       channel.close();
-      throw new ChannelError('A newer connection to your machine replaced this one.');
+      throw new ChannelError({ message: CHANNEL_REPLACED });
     }
     this.#current = channel;
     channel.subscribeClose(() => {

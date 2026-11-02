@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import {
   NO_TEAM_FEED,
   SIGNING_KEY_ALGORITHM,
@@ -9,7 +9,6 @@ import {
   type TeamMachine,
   type TeamSnapshotBody,
 } from '@shinsa/core';
-import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/channel.ts';
 import {
   describeTeamTaskOwner,
   describeTeamTaskPlace,
@@ -22,6 +21,7 @@ import {
   resolveTeamTaskTarget,
   selectTeamTaskHeldAt,
 } from '@/lib/teams/feeds.ts';
+import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
 import { createGate, createProject, createRepo, createTask } from '../../support/state.ts';
 import { createTeam } from '../../support/teams.ts';
 import { createTeamFeedTask, TEAM_KEY } from './machine.ts';
@@ -217,6 +217,36 @@ describe('the hosted dashboard’s team feeds', () => {
     opened[0]?.handlers.onMessage({ t: 'view', data: '{"tasks":[]}' });
     opened[0]?.handlers.onEnd({ reason: 'Offline.', gone: false });
     expect(waits).toEqual([]);
+  });
+
+  it('waits on the page’s own timer by default, and cancels it when stopped', async () => {
+    const timers: number[] = [];
+    const scheduled = spyOn(globalThis, 'setTimeout').mockImplementation(((_run: () => void, ms: number) => {
+      timers.push(ms);
+      return 7;
+    }) as unknown as typeof setTimeout);
+    const cleared = spyOn(globalThis, 'clearTimeout').mockImplementation(() => undefined);
+    const opened: TeamChannelHandlers[] = [];
+    const feeds = new HostedTeamFeeds({
+      listTeams: () =>
+        Promise.resolve([
+          createTeam({
+            machines: [{ id: 'p7m2', name: 'Studio', userId: '7', online: true, lastSeenAt: 1 }],
+          }),
+        ]),
+      selectTeamKey: (teamId) => Promise.resolve({ teamId, name: 'Platform', key: TEAM_KEY, joinedAt: 1 }),
+      openChannel: (_target, handlers) => {
+        opened.push(handlers);
+        return () => undefined;
+      },
+    });
+    await feeds.start();
+    opened[0]?.onEnd({ reason: 'Offline.', gone: false });
+    feeds.stop();
+    expect(timers).toEqual([1_000]);
+    expect(cleared).toHaveBeenCalledWith(7);
+    scheduled.mockRestore();
+    cleared.mockRestore();
   });
 
   it('stops before it opens anything when stopped while the teams load', async () => {

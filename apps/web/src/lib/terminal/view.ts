@@ -5,12 +5,16 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { type IDisposable, Terminal } from '@xterm/xterm';
+import { Effect, type Fiber, Layer, Result } from 'effect';
+import { Socket } from 'effect/socket';
 import type { SearchOptions } from '@/lib/code/search.ts';
 import {
   changeTerminalFontSize,
   readTerminalFontSize,
   subscribeTerminalFontSize,
 } from '@/lib/preferences/terminal.ts';
+import { forkApp } from '@/lib/runtime/app.ts';
+import type { SocketFrame, SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveTerminalKey, type TerminalKey } from '@/lib/terminal/keys.ts';
 import { silenceEngineAnswers } from '@/lib/terminal/replies.ts';
@@ -23,14 +27,8 @@ import {
   resolveTerminalOptions,
   type VariableReader,
 } from '@/lib/terminal/theme.ts';
-
-export interface TerminalSocket {
-  binaryType: BinaryType;
-  readonly readyState: number;
-  send: (data: string | Uint8Array<ArrayBuffer>) => void;
-  close: () => void;
-  addEventListener: (type: 'open' | 'message' | 'close', listener: (event: Event) => void) => void;
-}
+import type { TerminalLink, TerminalSession } from './terminal-socket/schema.ts';
+import { TerminalSocket } from './terminal-socket/service.ts';
 
 type TerminalRenderer = (terminal: Terminal) => IDisposable | null;
 
@@ -41,8 +39,7 @@ export interface TerminalViewOptions {
   scheme: ColorScheme;
   mac: boolean;
   read?: VariableReader;
-  openSocket?: (path: string) => TerminalSocket;
-  retry?: (reconnect: () => void, delayMs: number) => void;
+  transport?: SocketTransport;
   loadRenderer?: TerminalRenderer;
   observeSize?: SizeObserver;
   openLink?: (url: string) => void;
@@ -56,36 +53,20 @@ export interface FindResults {
 
 export type TerminalConnection = 'connecting' | 'open' | 'closed' | 'gone';
 
-const OPEN = 1;
-
-const GONE = 4404;
-
-const RETRY_STEPS_MS = [250, 1000, 2000, 5000];
-
 export const WEBGL_LIMIT = 6;
 
 const ENCODER = new TextEncoder();
 
 const FORM_FEED = '\u000c';
 
-function openTerminalSocket(path: string): TerminalSocket {
-  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  return new WebSocket(`${protocol}://${location.host}${path}`);
-}
-
-function retryLater(reconnect: () => void, delayMs: number) {
-  setTimeout(reconnect, delayMs);
-}
-
 export function createWebglRenderer(terminal: Terminal): IDisposable | null {
-  try {
+  const loaded = Result.try(() => {
     const renderer = new WebglAddon();
     renderer.onContextLoss(renderer.dispose.bind(renderer));
     terminal.loadAddon(renderer);
     return renderer;
-  } catch {
-    return null;
-  }
+  });
+  return Result.getOrNull(loaded);
 }
 
 function observeElementSize(element: HTMLElement, onResize: () => void) {
@@ -109,10 +90,9 @@ export class TerminalView {
   readonly #fit = new FitAddon();
   readonly #search = new SearchAddon();
   readonly #signal = createSignal();
-  #socket: TerminalSocket | null = null;
+  #link: TerminalLink | null = null;
+  #fiber: Fiber.Fiber<void> | null = null;
   #connection: TerminalConnection = 'connecting';
-  #attempt = 0;
-  #disposed = false;
   #renderer: IDisposable | null = null;
   #stopObserving: (() => void) | null = null;
   #stopHover: (() => void) | null = null;
@@ -186,35 +166,31 @@ export class TerminalView {
   }
 
   #connect() {
-    const socket = (this.#options.openSocket ?? openTerminalSocket)(
-      `/ws/terminals/${encodeURIComponent(this.id)}`
+    const transport = this.#options.transport ?? Socket.layerWebSocketConstructorGlobal;
+    const session: TerminalSession = {
+      opened: (link) => {
+        this.#link = link;
+        this.#setConnection('open');
+        this.#sendColors();
+      },
+      received: (frame) => this.#receive(frame),
+      closed: (gone) => {
+        this.#link = null;
+        this.#setConnection(gone ? 'gone' : 'closed');
+      },
+    };
+    const id = this.id;
+    this.#fiber = forkApp(
+      Effect.gen(function* () {
+        const socket = yield* TerminalSocket;
+        yield* socket.connect(id, session);
+      }).pipe(Effect.provide(TerminalSocket.layer.pipe(Layer.provideMerge(transport))))
     );
-    socket.binaryType = 'arraybuffer';
-    this.#socket = socket;
-    socket.addEventListener('open', () => {
-      this.#attempt = 0;
-      this.#setConnection('open');
-      this.#sendColors();
-    });
-    socket.addEventListener('message', (event) => this.#receive((event as MessageEvent).data));
-    socket.addEventListener('close', (event) => {
-      if (this.#disposed || this.#socket !== socket) return;
-      if ((event as CloseEvent).code === GONE) {
-        this.#setConnection('gone');
-        return;
-      }
-      this.#setConnection('closed');
-      const delay = RETRY_STEPS_MS[Math.min(this.#attempt, RETRY_STEPS_MS.length - 1)] ?? 5000;
-      this.#attempt += 1;
-      (this.#options.retry ?? retryLater)(() => {
-        if (!this.#disposed) this.#connect();
-      }, delay);
-    });
   }
 
-  #receive(data: unknown) {
+  #receive(data: SocketFrame) {
     if (typeof data !== 'string') {
-      this.terminal.write(new Uint8Array(data as ArrayBuffer));
+      this.terminal.write(data);
       return;
     }
     const frame = parseTerminalServerFrame(data);
@@ -229,12 +205,13 @@ export class TerminalView {
       });
   }
 
-  #send(data: Uint8Array<ArrayBuffer>) {
-    if (this.#socket?.readyState === OPEN) this.#socket.send(data);
+  #send(data: SocketFrame) {
+    const link = this.#link;
+    if (link?.isOpen()) forkApp(link.send(data));
   }
 
   #sendFrame(frame: TerminalClientFrame) {
-    if (this.#socket?.readyState === OPEN) this.#socket.send(JSON.stringify(frame));
+    this.#send(JSON.stringify(frame));
   }
 
   #sendColors() {
@@ -361,12 +338,12 @@ export class TerminalView {
   }
 
   dispose() {
-    this.#disposed = true;
+    this.#link = null;
+    this.#fiber?.interruptUnsafe();
     this.unmount();
     this.releaseRenderer();
     this.#stopFontSize();
     this.#stopHover?.();
-    this.#socket?.close();
     this.terminal.dispose();
   }
 }

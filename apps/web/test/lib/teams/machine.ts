@@ -13,8 +13,9 @@ import {
   type TeamHello,
   verifyTeamHello,
 } from '@shinsa/core';
-import type { ShareSocket } from '@/lib/share/live.ts';
-import type { TeamChannelTarget } from '@/lib/teams/channel.ts';
+import type { Socket } from 'effect/socket';
+import type { TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
+import { createSocketTransport } from '../../support/engine-socket.ts';
 import { createTask } from '../../support/state.ts';
 
 export const TEAM_KEY = 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk';
@@ -26,10 +27,11 @@ export const TEAM_TARGET: TeamChannelTarget = {
   view: { kind: 'list' },
 };
 
-type Listener = (event: { data?: unknown }) => void;
+type Listener = (event: Socket.WebSocketEvent) => void;
 
-export class FakeTeamSocket implements ShareSocket {
+export class FakeTeamSocket implements Socket.WebSocketLike {
   binaryType = 'blob';
+  readyState = 0;
   closed = false;
   readonly url: string;
   readonly listeners = new Map<string, Listener[]>();
@@ -40,17 +42,28 @@ export class FakeTeamSocket implements ShareSocket {
     this.url = url;
     this.#answer = answer;
     if (opens) queueMicrotask(() => this.emit('open', {}));
+    else this.readyState = 1;
   }
 
   addEventListener(type: string, listener: Listener) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
   }
 
-  emit(type: string, event: { data?: unknown }) {
+  removeEventListener(type: string, listener: Listener) {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) ?? []).filter((known) => known !== listener)
+    );
+  }
+
+  emit(type: string, event: Socket.WebSocketEvent) {
+    if (type === 'open') this.readyState = 1;
+    if (type === 'close') this.readyState = 3;
     for (const listener of this.listeners.get(type) ?? []) listener(event);
   }
 
-  send(data: string) {
+  send(data: string | Uint8Array) {
+    if (typeof data !== 'string') return;
     this.sent.push(data);
     void this.#answer(this, data);
   }
@@ -107,16 +120,16 @@ export function createFakeTeamMachine() {
       machine.latest().emit('message', { data: frame.buffer });
     },
     options: {
-      fetch: ((url: string, init?: RequestInit) => {
-        machine.requests.push({ url, body: JSON.parse(String(init?.body ?? '{}')) });
-        if (machine.status !== 200) return Promise.resolve(new Response('', { status: machine.status }));
-        return Promise.resolve(Response.json({ url: 'wss://t-p7m2.shinsa.dev/team?token=t', expiresAt: 1 }));
-      }) as unknown as typeof fetch,
-      createSocket: (url: string) => {
+      fetch: async (request: Request) => {
+        machine.requests.push({ url: new URL(request.url).pathname, body: await request.json() });
+        if (machine.status !== 200) return new Response('', { status: machine.status });
+        return Response.json({ url: 'wss://t-p7m2.shinsa.dev/team?token=t', expiresAt: 1 });
+      },
+      transport: createSocketTransport((url) => {
         const socket = new FakeTeamSocket(url, machine.answer);
         machine.sockets.push(socket);
         return socket;
-      },
+      }),
     },
   };
   return machine;

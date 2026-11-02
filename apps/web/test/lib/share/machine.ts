@@ -15,7 +15,9 @@ import {
   serializeShareMessage,
   verifyShareHello,
 } from '@shinsa/core';
-import type { ShareSocket, ShareStreamOptions } from '@/lib/share/live.ts';
+import type { Socket } from 'effect/socket';
+import type { ShareStreamOptions } from '@/lib/share/live.ts';
+import { createSocketTransport, type PendingRetry } from '../../support/engine-socket.ts';
 
 export const SHARE_LINK: ShareLink = {
   instanceId: 'k3x9',
@@ -23,10 +25,11 @@ export const SHARE_LINK: ShareLink = {
   key: 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk',
 };
 
-type Listener = (event: { data?: unknown }) => void;
+type Listener = (event: Socket.WebSocketEvent) => void;
 
-class FakeShareSocket implements ShareSocket {
+class FakeShareSocket implements Socket.WebSocketLike {
   binaryType = 'blob';
+  readyState = 0;
   closed = false;
   readonly url: string;
   readonly listeners = new Map<string, Listener[]>();
@@ -36,18 +39,28 @@ class FakeShareSocket implements ShareSocket {
   constructor(url: string, machine: FakeShareMachine) {
     this.url = url;
     this.#machine = machine;
-    queueMicrotask(() => this.emit('open', {}));
+    queueMicrotask(() => this.emit(machine.refuseOpen ? 'close' : 'open', {}));
   }
 
   addEventListener(type: string, listener: Listener) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
   }
 
-  emit(type: string, event: { data?: unknown }) {
+  removeEventListener(type: string, listener: Listener) {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) ?? []).filter((known) => known !== listener)
+    );
+  }
+
+  emit(type: string, event: Socket.WebSocketEvent) {
+    if (type === 'open') this.readyState = 1;
+    if (type === 'close') this.readyState = 3;
     for (const listener of this.listeners.get(type) ?? []) listener(event);
   }
 
-  send(data: string) {
+  send(data: string | Uint8Array) {
+    if (typeof data !== 'string') return;
     this.sent.push(data);
     void this.#machine.answer(this, data);
   }
@@ -60,6 +73,7 @@ class FakeShareSocket implements ShareSocket {
 export interface FakeShareMachine {
   sockets: FakeShareSocket[];
   online: boolean;
+  refuseOpen: boolean;
   status: number;
   key: string;
   seal: ((plain: Bytes) => Promise<Bytes>) | null;
@@ -69,24 +83,27 @@ export interface FakeShareMachine {
   sendView: (view: ShareLiveView) => Promise<void>;
   sendFile: (id: string, version: string, type: ShareFileType, text: string) => Promise<void>;
   latest: () => FakeShareSocket;
-  options: Required<Pick<ShareStreamOptions, 'fetch' | 'createSocket' | 'createUrl' | 'revokeUrl' | 'wait'>>;
-  waits: (() => void)[];
+  createSocket: (url: string) => FakeShareSocket;
+  options: Required<Pick<ShareStreamOptions, 'fetch' | 'transport' | 'createUrl' | 'revokeUrl'>>;
+  waits: PendingRetry[];
   revoked: string[];
 }
 
 export function createFakeShareMachine(): FakeShareMachine {
   let readied: () => void = () => undefined;
   let blobs = 0;
+  const waits: PendingRetry[] = [];
   const machine: FakeShareMachine = {
     sockets: [],
     online: true,
+    refuseOpen: false,
     status: 200,
     key: SHARE_LINK.key,
     seal: null,
     ready: new Promise((resolve) => {
       readied = resolve;
     }),
-    waits: [],
+    waits,
     revoked: [],
     latest: () => {
       const socket = machine.sockets.at(-1);
@@ -123,26 +140,23 @@ export function createFakeShareMachine(): FakeShareMachine {
       await machine.send({ t: 'body', id, chunk: serializeBase64Url(encodeText(text)) });
       await machine.send({ t: 'end', id });
     },
+    createSocket: (url) => {
+      const socket = new FakeShareSocket(url, machine);
+      machine.sockets.push(socket);
+      return socket;
+    },
     options: {
-      fetch: (() => {
+      fetch: () => {
         if (machine.status !== 200) return Promise.resolve(new Response('', { status: machine.status }));
         return Promise.resolve(Response.json({ url: 'wss://t-k3x9.shinsa.dev', online: machine.online }));
-      }) as unknown as typeof fetch,
-      createSocket: (url) => {
-        const socket = new FakeShareSocket(url, machine);
-        machine.sockets.push(socket);
-        return socket;
       },
+      transport: createSocketTransport((url) => machine.createSocket(url), waits),
       createUrl: () => {
         blobs += 1;
         return `blob:share-${blobs}`;
       },
       revokeUrl: (url) => {
         machine.revoked.push(url);
-      },
-      wait: (_ms, run) => {
-        machine.waits.push(run);
-        return () => undefined;
       },
     },
   };

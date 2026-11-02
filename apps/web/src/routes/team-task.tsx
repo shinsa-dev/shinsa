@@ -14,12 +14,7 @@ import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { type Mention, resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
 import { SHARED_READ_ONLY_NOTE } from '@/lib/share/page.ts';
-import {
-  openLocalTeamView,
-  openTeamChannel,
-  openTeamTaskStream,
-  type TeamTransport,
-} from '@/lib/teams/channel.ts';
+import { openLocalTeamView, openTeamChannel, openTeamTaskStream } from '@/lib/teams/channel.ts';
 import {
   describeTeamTaskOwner,
   listHeldTeamMachines,
@@ -28,6 +23,7 @@ import {
   selectTeamTaskHeldAt,
 } from '@/lib/teams/feeds.ts';
 import { TEAM_KEY_MISSING } from '@/lib/teams/settings.ts';
+import type { TeamTransport } from '@/lib/teams/team-socket/schema.ts';
 
 function useHostedKey(teamId: string) {
   const services = React.useContext(RemoteServicesContext);

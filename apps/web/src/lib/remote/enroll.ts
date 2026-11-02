@@ -1,9 +1,10 @@
 import type { RemoteInstance } from '@shinsa/core';
 import { Clock, Effect, Predicate, type Schedule } from 'effect';
 import { runApp } from '@/lib/runtime/app.ts';
-import { ChannelError, type ChannelOptions, openRemoteChannel, type RemoteChannel } from './channel.ts';
+import { openRemoteChannel } from './channel.ts';
 import type { DashboardClient } from './dashboard.ts';
 import { createDeviceKeys, type DeviceStore } from './devices.ts';
+import { ChannelError, type ChannelOptions, type RemoteChannel } from './remote-channel/schema.ts';
 import {
   type ClaimStanding,
   ENROLL_RETRY,
@@ -49,7 +50,7 @@ function enterStep<A>(step: () => Promise<A>) {
     catch: (error) =>
       new EnrollFailed({
         message: Predicate.isError(error) ? error.message : String(error),
-        refused: error instanceof ChannelError && error.refused,
+        refused: error instanceof ChannelError && error.refused === true,
       }),
   });
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { type ShareMessage, serializeShareMessage } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
-import { UNREADABLE_MESSAGE } from '@/lib/share/live.ts';
+import { UNREADABLE_MESSAGE } from '@/lib/share/share-socket/schema.ts';
 import { ShareGoneError } from '@/lib/share/sources.ts';
 import type { SharedSource } from '@/lib/share/view.ts';
 import {
@@ -9,11 +9,14 @@ import {
   openTeamChannel,
   openTeamTaskStream,
   resolveLocalTeamViewUrl,
+} from '@/lib/teams/channel.ts';
+import {
   TEAM_MACHINE_OFFLINE,
   TEAM_TASK_GONE,
   type TeamChannelEnd,
   type TeamChannelHandlers,
-} from '@/lib/teams/channel.ts';
+} from '@/lib/teams/team-socket/schema.ts';
+import { createRetryClock, createSocketTransport, type PendingRetry } from '../../support/engine-socket.ts';
 import { createSharedTask } from '../share/fixtures.ts';
 import { createFakeTeamMachine, FakeTeamSocket, TEAM_TARGET } from './machine.ts';
 
@@ -139,11 +142,11 @@ describe('a team task through this machine’s engine', () => {
     const { messages, ends, handlers } = listen();
     const stop = openLocalTeamView(TARGET, handlers, {
       origin: { protocol: 'http:', host: 'localhost:5180' },
-      createSocket: (url) => {
+      transport: createSocketTransport((url) => {
         const socket = new FakeTeamSocket(url, () => Promise.resolve(), false);
         sockets.push(socket);
         return socket;
-      },
+      }),
     });
     const socket = sockets[0] as FakeTeamSocket;
     expect(socket.url).toBe('ws://localhost:5180/api/teams/view?team=team1&machine=p7m2&task=kai-task');
@@ -172,19 +175,26 @@ describe('a team task through this machine’s engine', () => {
 
   it('ends as offline when the relay closes or sends something unreadable', () => {
     const sockets: FakeTeamSocket[] = [];
-    const createSocket = (url: string) => {
+    const transport = createSocketTransport((url) => {
       const socket = new FakeTeamSocket(url, () => Promise.resolve(), false);
       sockets.push(socket);
       return socket;
-    };
+    });
     const unreadable = listen();
-    openLocalTeamView(TARGET, unreadable.handlers, { createSocket });
+    openLocalTeamView(TARGET, unreadable.handlers, { transport });
     sockets[0]?.emit('message', { data: new ArrayBuffer(2) });
     expect(unreadable.ends).toEqual([{ reason: UNREADABLE_MESSAGE, gone: false }]);
     const dropped = listen();
-    openLocalTeamView(TARGET, dropped.handlers, { createSocket });
+    openLocalTeamView(TARGET, dropped.handlers, { transport });
     sockets[1]?.emit('close', {});
     expect(dropped.ends).toEqual([{ reason: TEAM_MACHINE_OFFLINE, gone: false }]);
+    const unopened = listen();
+    openLocalTeamView(TARGET, unopened.handlers, {
+      transport: createSocketTransport((url) =>
+        Object.assign(new FakeTeamSocket(url, () => Promise.resolve(), false), { readyState: 3 })
+      ),
+    });
+    expect(unopened.ends).toEqual([{ reason: TEAM_MACHINE_OFFLINE, gone: false }]);
   });
 });
 
@@ -207,15 +217,12 @@ describe('a teammate’s task page stream', () => {
     const { opened, stopped, transport } = createTransport();
     const sources: SharedSource[] = [];
     const errors: Error[] = [];
-    const waits: (() => void)[] = [];
+    const waits: PendingRetry[] = [];
     const stop = openTeamTaskStream(
       transport,
       { onSource: (source) => sources.push(source), onError: (error) => errors.push(error) },
       {
-        wait: (_ms, run) => {
-          waits.push(run);
-          return () => undefined;
-        },
+        clock: createRetryClock(waits),
         createUrl: () => 'blob:1',
         revokeUrl: () => undefined,
       }
@@ -225,7 +232,7 @@ describe('a teammate’s task page stream', () => {
     expect(sources.map((source) => source.updatedAt)).toEqual([3]);
     opened[0]?.onEnd({ reason: TEAM_MACHINE_OFFLINE, gone: false });
     expect(errors.map((error) => error.message)).toEqual([TEAM_MACHINE_OFFLINE]);
-    waits.shift()?.();
+    waits.shift()?.reconnect();
     expect(opened).toHaveLength(2);
     opened[1]?.onEnd({ reason: 'Gone.', gone: true });
     expect(errors.at(-1)).toBeInstanceOf(ShareGoneError);
@@ -237,19 +244,11 @@ describe('a teammate’s task page stream', () => {
 
   it('closes its transport and any wait when the page closes', () => {
     const { opened, stopped, transport } = createTransport();
-    let cancelled = false;
-    const waits: (() => void)[] = [];
+    const waits: PendingRetry[] = [];
     const stop = openTeamTaskStream(
       transport,
       { onSource: () => undefined, onError: () => undefined },
-      {
-        wait: (_ms, run) => {
-          waits.push(run);
-          return () => {
-            cancelled = true;
-          };
-        },
-      }
+      { clock: createRetryClock(waits) }
     );
     stop();
     expect(stopped).toEqual([1]);
@@ -260,19 +259,12 @@ describe('a teammate’s task page stream', () => {
     const stopSecond = openTeamTaskStream(
       second.transport,
       { onSource: () => undefined, onError: () => undefined },
-      {
-        wait: (_ms, run) => {
-          waits.push(run);
-          return () => {
-            cancelled = true;
-          };
-        },
-      }
+      { clock: createRetryClock(waits) }
     );
     second.opened[0]?.onEnd({ reason: TEAM_MACHINE_OFFLINE, gone: false });
     stopSecond();
-    expect(cancelled).toBe(true);
-    waits.shift()?.();
+    expect(waits[0]?.cancelled).toBe(true);
+    waits.shift()?.reconnect();
     expect(second.opened).toHaveLength(1);
   });
 });

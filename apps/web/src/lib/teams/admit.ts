@@ -1,11 +1,13 @@
 import { type RemoteTeam, resolveKeyFingerprint, type TeamListView } from '@shinsa/core';
-import { type ChannelOptions, openRemoteChannel, type RemoteChannel } from '@/lib/remote/channel.ts';
+import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import { createDeviceKeys, type DeviceStore } from '@/lib/remote/devices.ts';
 import type { MachineRow } from '@/lib/remote/machines.ts';
+import type { ChannelOptions, RemoteChannel } from '@/lib/remote/remote-channel/schema.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
-import { openTeamChannel, type TeamChannelHandlers, type TeamChannelTarget } from './channel.ts';
+import { openTeamChannel } from './channel.ts';
 import type { StoredTeamKey } from './join.ts';
+import type { TeamChannelHandlers, TeamChannelTarget } from './team-socket/schema.ts';
 
 type OpenTeam = (target: TeamChannelTarget, handlers: TeamChannelHandlers) => () => void;
 

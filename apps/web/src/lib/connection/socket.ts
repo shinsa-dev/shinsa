@@ -29,6 +29,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
+import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { useSharedTranscript } from '@/lib/share/transcripts.ts';
 import { createSignal } from '@/lib/signal.ts';
 import {
@@ -36,7 +37,6 @@ import {
   CommandRefused,
   type EngineLink,
   NOT_CONNECTED_MESSAGE,
-  type SocketTransport,
   UPDATE_ENGINE_MESSAGE,
 } from './engine-socket/schema.ts';
 import { EngineSocket } from './engine-socket/service.ts';

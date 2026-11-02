@@ -7,3 +7,7 @@ export function enterPromise<A>(step: () => Promise<A>) {
     catch: (error) => new StepFailed({ message: Predicate.isError(error) ? error.message : String(error) }),
   });
 }
+
+export function enterPromiseOr<A, E, R>(step: () => Promise<A>, failed: Effect.Effect<never, E, R>) {
+  return Effect.catchTag(enterPromise(step), 'StepFailed', () => failed);
+}

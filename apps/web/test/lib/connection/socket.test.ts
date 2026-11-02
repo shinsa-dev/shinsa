@@ -258,6 +258,9 @@ describe('Connection', () => {
     latest().close();
     expect(retries.at(-1)?.delayMs).toBe(250);
     expect(subject.snapshot().status).toBe('closed');
+    retries.at(-1)?.reconnect();
+    latest().close();
+    expect(retries.map((retry) => retry.delayMs).slice(5)).toEqual([250, 1000]);
   });
 
   it('keeps backing off when each socket opens and breaks before its state arrives', () => {

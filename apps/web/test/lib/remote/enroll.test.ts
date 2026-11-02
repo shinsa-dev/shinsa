@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { serializeBase64Url, serializePublicKey } from '@shinsa/core';
 import { Schedule } from 'effect';
-import {
-  ChannelError,
-  type ChannelOptions,
-  openRemoteChannel,
-  type RemoteChannel,
-} from '@/lib/remote/channel.ts';
+import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import {
   claimHandoff,
   type EnrollOptions,
@@ -14,6 +9,7 @@ import {
   requestWaitingAnswer,
   resolveClaimStanding,
 } from '@/lib/remote/enroll.ts';
+import { ChannelError, type ChannelOptions, type RemoteChannel } from '@/lib/remote/remote-channel/schema.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
 
@@ -182,7 +178,7 @@ describe('a device that left while it waited for an answer', () => {
     const waiting = await createWaiting((options) => {
       options.openSocket?.(options.url as string);
       options.onPending?.();
-      return Promise.reject(new ChannelError('The connection to your machine closed.'));
+      return Promise.reject(new ChannelError({ message: 'The connection to your machine closed.' }));
     });
     expect(await requestWaitingAnswer(waiting.device, waiting.options)).toBe('waiting');
     expect(waiting.closed).toEqual(['wss://t-k3x9.shinsa.dev/remote']);
@@ -190,11 +186,13 @@ describe('a device that left while it waited for an answer', () => {
   });
 
   it('forgets the key once the request was declined, and waits when the machine cannot be reached', async () => {
-    const declined = await createWaiting(() => Promise.reject(new ChannelError('Declined.', true)));
+    const declined = await createWaiting(() =>
+      Promise.reject(new ChannelError({ message: 'Declined.', refused: true }))
+    );
     expect(await requestWaitingAnswer(declined.device, declined.options)).toBe('declined');
     expect(declined.removed).toEqual(['k3x9']);
     const offline = await createWaiting(() =>
-      Promise.reject(new ChannelError('Couldn’t reach your machine.'))
+      Promise.reject(new ChannelError({ message: 'Couldn’t reach your machine.' }))
     );
     expect(await requestWaitingAnswer(offline.device, offline.options)).toBe('waiting');
     expect(offline.removed).toEqual([]);

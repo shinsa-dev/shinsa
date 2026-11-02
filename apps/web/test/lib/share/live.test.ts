@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import type { ShareLiveView } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
-import {
-  openShareStream,
-  SHARE_OFFLINE,
-  SHARE_UNREACHABLE,
-  type ShareStreamHandlers,
-} from '@/lib/share/live.ts';
+import { openShareStream, type ShareStreamHandlers } from '@/lib/share/live.ts';
+import { SHARE_OFFLINE, SHARE_UNREACHABLE } from '@/lib/share/share-socket/schema.ts';
 import { ShareGoneError } from '@/lib/share/sources.ts';
 import type { SharedSource } from '@/lib/share/view.ts';
 import { createSharedTask, DIFF } from './fixtures.ts';
@@ -83,7 +79,7 @@ describe('a live share link', () => {
     const machine = createFakeShareMachine();
     const original = globalThis.WebSocket;
     globalThis.WebSocket = function createFakeSocket(url: string) {
-      return machine.options.createSocket(url);
+      return machine.createSocket(url);
     } as unknown as typeof WebSocket;
     const { sources, errors, handlers } = listen();
     const stop = openShareStream(SHARE_LINK, handlers, { fetch: machine.options.fetch });
@@ -110,14 +106,14 @@ describe('a live share link', () => {
     await waitFor(() => expect(errors.map((error) => error.message)).toEqual([SHARE_UNREACHABLE]));
     machine.status = 200;
     machine.online = false;
-    machine.waits.shift()?.();
+    machine.waits.shift()?.reconnect();
     await waitFor(() => expect(errors.at(-1)?.message).toBe(SHARE_OFFLINE));
     machine.online = true;
-    machine.waits.shift()?.();
+    machine.waits.shift()?.reconnect();
     await machine.ready;
     machine.latest().emit('close', {});
     await waitFor(() => expect(errors).toHaveLength(3));
-    machine.waits.shift()?.();
+    machine.waits.shift()?.reconnect();
     await waitFor(() => expect(machine.sockets).toHaveLength(2));
     await new Promise((resolve) => setTimeout(resolve, 10));
     await machine.sendView(createView());
@@ -127,12 +123,22 @@ describe('a live share link', () => {
     expect(errors).toHaveLength(3);
   });
 
+  it('says the machine is offline when its socket closes before it opens, and tries again', async () => {
+    const machine = createFakeShareMachine();
+    machine.refuseOpen = true;
+    const { errors, handlers } = listen();
+    const stop = openShareStream(SHARE_LINK, handlers, machine.options);
+    await waitFor(() => expect(errors.map((error) => error.message)).toEqual([SHARE_OFFLINE]));
+    expect(machine.waits.map((wait) => wait.delayMs)).toEqual([1_000]);
+    stop();
+  });
+
   it('closes on anything it cannot read: a broken frame, a text message after the welcome, or no frame at all', async () => {
     const unreachable = createFakeShareMachine();
     const offline = listen();
     openShareStream(SHARE_LINK, offline.handlers, {
       ...unreachable.options,
-      fetch: (() => Promise.reject(new Error('offline'))) as unknown as typeof fetch,
+      fetch: () => Promise.reject(new Error('offline')),
     });
     await waitFor(() => expect(offline.errors[0]?.message).toBe(SHARE_UNREACHABLE));
     const machine = createFakeShareMachine();
