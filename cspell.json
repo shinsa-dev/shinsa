@@ -5,6 +5,7 @@
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_", "\\\\bxox\\[[a-z]+\\]-", "AKIA\\["],
   "words": [
     "shellcheck",
+    "dgst",
     "cfargotunnel",
     "addexclusion",
     "APFS",
