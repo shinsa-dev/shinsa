@@ -1,6 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { SERVICE_PORT_VARIABLE, type ServiceSource, type ServiceSuggestion } from '@shinsa/core';
+import { listWorkspacePatterns, parseDenoTasks, parsePackageManifest } from '../files/manifest.ts';
+
+export { parseDenoTasks } from '../files/manifest.ts';
 
 interface PackageFile {
   name: string | null;
@@ -59,47 +62,15 @@ function listFolders(parent: string) {
     .filter((entry) => !SKIPPED_FOLDERS.has(entry) && isFolder(join(parent, entry)));
 }
 
-function readStrings(value: unknown) {
-  return Array.isArray(value) ? value.filter((each): each is string => typeof each === 'string') : [];
-}
-
-function readWorkspaces(value: unknown) {
-  if (Array.isArray(value)) return readStrings(value);
-  if (value && typeof value === 'object') return readStrings((value as { packages?: unknown }).packages);
-  return [];
-}
-
-function readStringRecord(value: unknown) {
-  const record: Record<string, string> = {};
-  if (!value || typeof value !== 'object') return record;
-  for (const [key, each] of Object.entries(value)) if (typeof each === 'string') record[key] = each;
-  return record;
-}
-
-function parseJsonObject(text: string | null) {
-  if (text === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
 export function parsePackageFile(text: string | null): PackageFile | null {
-  const fields = parseJsonObject(text);
-  if (!fields) return null;
+  const manifest = parsePackageManifest(text);
+  if (!manifest) return null;
   return {
-    name: typeof fields.name === 'string' ? fields.name : null,
-    scripts: readStringRecord(fields.scripts),
-    workspaces: readWorkspaces(fields.workspaces),
-    packageManager: typeof fields.packageManager === 'string' ? fields.packageManager : null,
+    name: manifest.name ?? null,
+    scripts: { ...manifest.scripts },
+    workspaces: [...listWorkspacePatterns(manifest)],
+    packageManager: manifest.packageManager ?? null,
   };
-}
-
-export function parseDenoTasks(text: string | null) {
-  const fields = parseJsonObject(text);
-  return fields ? readStringRecord(fields.tasks) : {};
 }
 
 export function parsePnpmWorkspaces(text: string | null) {
@@ -208,7 +179,7 @@ function createSuggestion(
   return { name, cwd, command, source, recommended, previewUrl: null, portVariable: SERVICE_PORT_VARIABLE };
 }
 
-function listWorkspacePatterns(root: string, file: PackageFile) {
+function listDeclaredWorkspaces(root: string, file: PackageFile) {
   const declared = [...file.workspaces, ...parsePnpmWorkspaces(readText(join(root, 'pnpm-workspace.yaml')))];
   return declared.length > 0 ? declared : CONVENTIONAL_WORKSPACES;
 }
@@ -218,7 +189,7 @@ function listPackageSuggestions(root: string): ServiceSuggestion[] {
   if (!file) return [];
   const manager = resolvePackageManager(root, file);
   const suggestions: ServiceSuggestion[] = [];
-  for (const folder of expandWorkspaces(root, listWorkspacePatterns(root, file))) {
+  for (const folder of expandWorkspaces(root, listDeclaredWorkspaces(root, file))) {
     const workspace = parsePackageFile(readText(join(folder, 'package.json')));
     const script = workspace ? resolveRunScript(workspace) : null;
     if (!script) continue;

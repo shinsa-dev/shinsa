@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   isServiceEnvKey,
   isServicePreviewUrl,
@@ -9,33 +7,19 @@ import {
 } from '@shinsa/core';
 import type { JsonSchema } from '../agents/providers/index.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
+import { listDependencyNames, readPackageManifest } from '../files/manifest.ts';
+import { parseRefinedEntries } from './answer.ts';
+import {
+  type CachedRefinement,
+  type FolderDigest,
+  REFINE_LIMITS,
+  type RefinedEntry,
+  type RefinedSuggestions,
+} from './schema.ts';
 
-export interface RefinedSuggestions {
-  suggestions: ServiceSuggestion[];
-  refined: boolean;
-}
-
-interface FolderDigest {
-  folder: string;
-  scripts: Record<string, string>;
-  dependencies: string[];
-}
-
-interface RefinedEntry {
-  index: number;
-  name: string;
-  command: string;
-  previewUrl: string;
-  portVariable: string;
-  recommended: boolean;
-}
-
-interface CachedRefinement {
-  fingerprint: string;
-  answer: Promise<ServiceSuggestion[] | null>;
-}
-
-export const REFINE_LIMITS = { scripts: 12, script: 200, dependencies: 60 };
+export { parseRefinedEntries } from './answer.ts';
+export { REFINE_LIMITS } from './schema.ts';
+export type { RefinedSuggestions } from './schema.ts';
 
 const REFINE_SYSTEM = [
   'You set up the services of a software project: the commands a developer keeps running while they work, such as a web dev server, an API or a worker.',
@@ -71,33 +55,12 @@ const REFINE_SCHEMA: JsonSchema = {
   required: ['services'],
 };
 
-function readPackageFields(folder: string) {
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8'));
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function listStringEntries(value: unknown) {
-  if (!value || typeof value !== 'object') return [];
-  return Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string');
-}
-
 export function readFolderDigest(folder: string): FolderDigest {
-  const fields = readPackageFields(folder);
-  const scripts = listStringEntries(fields?.scripts)
+  const manifest = readPackageManifest(folder);
+  const scripts = Object.entries(manifest?.scripts ?? {})
     .slice(0, REFINE_LIMITS.scripts)
     .map(([name, script]) => [name, script.slice(0, REFINE_LIMITS.script)]);
-  const dependencies = [
-    ...listStringEntries(fields?.dependencies),
-    ...listStringEntries(fields?.devDependencies),
-  ]
-    .map(([name]) => name)
-    .slice(0, REFINE_LIMITS.dependencies);
+  const dependencies = (manifest ? listDependencyNames(manifest) : []).slice(0, REFINE_LIMITS.dependencies);
   return { folder, scripts: Object.fromEntries(scripts), dependencies };
 }
 
@@ -111,31 +74,6 @@ function serializeRefinePrompt(candidates: ServiceSuggestion[], digests: FolderD
       source: each.source,
     })),
     folders: digests,
-  });
-}
-
-function parseEntry(value: unknown): RefinedEntry | null {
-  if (!value || typeof value !== 'object') return null;
-  const entry = value as Record<string, unknown>;
-  const { index, name, command, previewUrl, portVariable, recommended } = entry;
-  if (
-    !Number.isInteger(index) ||
-    typeof name !== 'string' ||
-    typeof command !== 'string' ||
-    typeof previewUrl !== 'string' ||
-    typeof portVariable !== 'string' ||
-    typeof recommended !== 'boolean'
-  )
-    return null;
-  return { index: index as number, name, command, previewUrl, portVariable, recommended };
-}
-
-export function parseRefinedEntries(value: unknown): RefinedEntry[] | null {
-  const services = (value as { services?: unknown } | null)?.services;
-  if (!Array.isArray(services)) return null;
-  return services.flatMap((each) => {
-    const entry = parseEntry(each);
-    return entry ? [entry] : [];
   });
 }
 

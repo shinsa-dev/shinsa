@@ -33,15 +33,6 @@ export function resolveWorkingDiff(
   return runDiff(History.use((history) => history.workingDiff(worktree, base, paths, signal)));
 }
 
-export function readChangedLinesPatch(
-  worktree: string,
-  base: string,
-  signal?: AbortSignal,
-  paths: readonly string[] = []
-) {
-  return runDiff(History.use((history) => history.changedLinesPatch(worktree, base, signal, paths)));
-}
-
 export function readWorkingPatch(worktree: string, base: string, signal?: AbortSignal) {
   return runDiff(History.use((history) => history.workingPatch(worktree, base, signal)));
 }

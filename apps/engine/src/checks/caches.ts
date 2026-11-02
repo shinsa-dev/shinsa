@@ -1,37 +1,14 @@
-import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-
-const UNUSED_CACHE_MS = 14 * 24 * 60 * 60 * 1000;
+import { edgeRuntime } from '../runtime/edge.ts';
+import { SharedCaches } from './caches/service.ts';
 
 export function resolveRepoCachePath(dataDir: string, repoId: string) {
-  return join(dataDir, 'caches', repoId);
+  return edgeRuntime.runSync(SharedCaches.useSync((caches) => caches.resolvePath(dataDir, repoId)));
 }
 
-export function resolveSharedCacheEnv(
-  checkout: string,
-  dataDir: string,
-  repoId: string
-): Record<string, string> {
-  if (!existsSync(join(checkout, 'turbo.json'))) return {};
-  return { TURBO_CACHE_DIR: join(resolveRepoCachePath(dataDir, repoId), 'turbo') };
-}
-
-function listEntries(dir: string) {
-  return existsSync(dir) ? readdirSync(dir).filter((name) => !name.startsWith('.')) : [];
+export function resolveSharedCacheEnv(checkout: string, dataDir: string, repoId: string) {
+  return edgeRuntime.runSync(SharedCaches.use((caches) => caches.resolveEnv(checkout, dataDir, repoId)));
 }
 
 export function pruneSharedCaches(dataDir: string, repoIds: string[], now: number) {
-  const known = new Set(repoIds);
-  for (const repoId of listEntries(join(dataDir, 'caches'))) {
-    const path = resolveRepoCachePath(dataDir, repoId);
-    if (!known.has(repoId)) {
-      rmSync(path, { recursive: true, force: true });
-      continue;
-    }
-    const turbo = join(path, 'turbo');
-    for (const name of listEntries(turbo)) {
-      const entry = join(turbo, name);
-      if (now - statSync(entry).mtimeMs > UNUSED_CACHE_MS) rmSync(entry, { recursive: true, force: true });
-    }
-  }
+  edgeRuntime.runSync(SharedCaches.use((caches) => caches.prune(dataDir, repoIds, now)));
 }

@@ -126,7 +126,7 @@ src/
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
-├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile, GitLayer, GitHubLayer, ReposLayer and WorkspacesLayer that code not yet
+├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile, GitLayer, GitHubLayer, ReposLayer, WorkspacesLayer, ChecksLayer and TerminalsLayer that code not yet
 │                        moved to Effect calls the foundation through), Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
@@ -269,7 +269,9 @@ src/
 ├── files/               service.ts (JsonFile: read(path, schema), a missing file Option.none and broken text or a
 │                        breaking value the typed JsonFileUnreadable; keepAside, the `<name>.unreadable-<time>` copy;
 │                        write, atomic through `<name>.writing-<pid>` and mode 600), schema.ts, index.ts (the edge:
-│                        writeJsonFile, keepJsonFileAside; config/file.ts re-exports writeJsonFile)
+│                        writeJsonFile, keepJsonFileAside; config/file.ts re-exports writeJsonFile), manifest.ts (the
+│                        one reader of a checkout's package.json and deno.json, through the lenient PackageManifest
+│                        schema: a field that breaks its shape is dropped, the rest kept)
 ├── git/                 service.ts (Git: attempt answers a CommandResult, run fails with GitFailed and retries a held
 │                        index.lock on LOCK_RETRY, read answers a command's raw bytes with its byte or line cap, a
 │                        5 s timeout, each chunk as it comes and the request's abort, literal pathspecs), schema.ts
@@ -327,22 +329,27 @@ src/
 ├── checks/              The checks a `checks.run` effect names (the agent's and the repository's baseline; nothing is
 │                        guessed from package.json), all at once with no machine-wide limit: each through `sh -c` in the
 │                        task's checkout at low priority (`nice -n 10` where it exists) with CHECK_ENV, stopped after
-│                        CHECK_TIMEOUT_MS (15 minutes); a command named twice runs once (index.ts: runChecks). A
-│                        failure re-runs its failing test files alone once (reruns.ts; all pass: `passed_alone`), then
-│                        runs on the task's base commit in a kept detached checkout, cached per base commit and command
-│                        (base.ts: BaseCheckouts, compareWithBase), comparing the failures themselves (failures.ts:
+│                        CHECK_TIMEOUT_MS (15 minutes); a command named twice runs once. runner/ (CheckRunner:
+│                        command, run, confirm, runAll). A failure re-runs its failing test files alone once
+│                        (reruns.ts; all pass: `passed_alone`), then runs on the task's base commit in a kept detached
+│                        checkout, cached per base commit and command (base/: BaseCheckoutPools.make(dir), any failure
+│                        logged and answered as no comparison), comparing the failures themselves (failures.ts:
 │                        listCheckFailures reads failing tests by file and name, or tsc, Biome, ESLint, Prettier and
 │                        path:line diagnostics by file, code and message, never the line; resolveFailureDiff,
 │                        describeFailureDiff): none new is `fails_on_base`, not blocking; new ones block, named first;
 │                        output it cannot read, or a failing file or a path in the command missing on the base, is
-│                        never compared); evidence.ts writes each check's output
-│                        as one piece of Shinsa's `check` evidence with its id (serializeCheckOutput)
-│                        (docs/engine.md → Checks)
+│                        never compared); caches/ (SharedCaches: the turbo cache per repository); output.ts (the
+│                        output's tail and the failing files); evidence.ts writes each check's output as one piece of
+│                        Shinsa's `check` evidence with its id (serializeCheckOutput); install.ts the lockfile's
+│                        install command; schema.ts the shapes and limits; layers.ts (ChecksLayer, with
+│                        test-coverage's TaskCoverage); index.ts, base.ts and caches.ts are the edges (runChecks,
+│                        BaseCheckouts…) (docs/engine.md → Checks)
 ├── test-coverage/       Changed-line coverage, once before review, from the tests among the task's checks: detect.ts
 │                        (resolveCoverageRun: a test check's command run again with its runner's coverage report in a
-│                        temporary folder; resolveCoverageDetection for Settings), index.ts
-│                        (measureTaskCoverage: run each like a check, merge the reports, diff against the task's base, and
-│                        core's measureCoverage; listCoverageDetections for GET /api/repos/coverage)
+│                        temporary folder; resolveCoverageDetection for Settings), service.ts (TaskCoverage.measure:
+│                        run each like a check in a temporary folder released with its scope, merge the reports, diff
+│                        against the task's base, and core's measureCoverage; CoverageReportUnreadable), schema.ts,
+│                        index.ts the edge (measureTaskCoverage; listCoverageDetections for GET /api/repos/coverage)
 │                        (docs/engine.md → Test coverage of the change)
 ├── resources/           How busy this machine is (docs/engine.md → Remote access, How busy each machine is): index.ts
 │                        (ResourceMonitor: samples every 5 s while a socket listens, df and du every 10 minutes, the
@@ -390,20 +397,24 @@ src/
 │                        of task is shaped first (resolveRoundShape); resolveRoundRepository finds the repository a
 │                        task with none needs once its work needs one (the setup check calls it)
 ├── briefing/            The Home guide, debounced, written beside the log through Engine.writeBriefing
-├── terminals/           Your terminals (docs/engine.md → Terminals): pty.ts (your login shell in Bun's PTY, its
-│                        environment, hanging up), mirror.ts (the headless xterm.js copy of the screen, the answers to
-│                        a program's questions), session.ts (TerminalSession: viewers, batching, back-pressure, exit,
-│                        typing a command at the prompt), xterm-types.d.ts (the add-ons' `@xterm/xterm` types mapped to
-│                        `@xterm/headless` in tsconfig, so the DOM types never reach the engine),
-│                        store.ts (data/terminals/: the terminals, their screens and services.json), detect.ts (the
-│                        services found in a project's folders: workspace scripts, Deno, bin/dev and Procfile lines, each
-│                        Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the quick call
-│                        that names them, adds a port flag and a preview URL, cached per project),
-│                        routes.ts (/api/terminals, the foreground check, /api/services with its batch add, and /ws/terminals/<id>),
-│                        index.ts (Terminals: the list, create, rename, reorder, restart, run, close, stop, and the
-│                        services: add, update, remove, start, stop, restart, a run per task, closing a task's
-│                        runs, resume after a restart);
-│                        pty.ts also reads the program in front of a shell (readForegroundProgram)
+├── terminals/           Your terminals (docs/engine.md → Terminals): pty/ (TerminalPty: your login shell in Bun's PTY as
+│                        a scoped resource, hung up and killed after HANG_UP_GRACE; the program in front of a shell
+│                        through Shell; a free port on PORT_RETRY, PortUnavailable), pty.ts its edge (the shell, its
+│                        environment, spawnTerminalProcess, readForegroundProgram, pickFreePort), mirror.ts (the
+│                        headless xterm.js copy of the screen, the answers to a program's questions), session.ts
+│                        (TerminalSession: viewers, batching, back-pressure, exit, typing a command at the prompt),
+│                        xterm-types.d.ts (the add-ons' `@xterm/xterm` types mapped to `@xterm/headless` in tsconfig,
+│                        so the DOM types never reach the engine), store/ (TerminalFiles: data/terminals/, the
+│                        terminals, their screens and services.json on JsonFile, each entry decoded by StoredTerminal
+│                        or StoredService), store.ts its edge (TerminalStore, parseStoredTerminal, parseStoredService),
+│                        detect.ts (the services found in a project's folders: workspace scripts, Deno, bin/dev and
+│                        Procfile lines, each Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the
+│                        quick call that names them, adds a port flag and a preview URL, cached per project; its answer
+│                        decoded in answer.ts), routes.ts (/api/terminals, the foreground check, /api/services with
+│                        its batch add, and /ws/terminals/<id>), index.ts (Terminals: the list, create, rename,
+│                        reorder, restart, run, close, stop, and the services: add, update, remove, start, stop,
+│                        restart, a run per task, closing a task's runs, resume after a restart), schema.ts,
+│                        layers.ts (TerminalsLayer)
 └── http/                server.ts (Bun.serve; a taken port names itself and config.json's `port`), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts (the
                          page's `/ws`; server.ts sends `/ws/terminals/<id>` to terminals/),
@@ -441,10 +452,13 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `GitHubProcess`, `GitHubCli`, `PullRequests`, `RepoCiReader`, `PullRequestDescriber` (`github/`) | `GitHubLayer` (`github/layers.ts`), needs `Shell`; a test gives `GitHubProcess.layerTest(answer)` instead | gh with its timeout, gh's answers decoded (`GitHubFailed`, `GitHubAnswerInvalid`), pull requests (`MergeMethodInvalid`, `NoGitHubRemote`), CI, the description |
   | `RepoFolders`, `RepoSetup`, `GitHubLogins` (`repos/`) | `ReposLayer` (`repos/layers.ts`), needs `GitLayer` and `GitHubLayer` | finding repositories and their origin, the setup check, the GitHub login |
   | `WorktreeWorkspaces`, `MainCheckoutWorkspace` (`workspaces/`) | `WorkspacesLayer` (`workspaces/layers.ts`), needs `GitLayer` | the two places agents work (`TaskCheckoutMissing`, `CheckoutDirty`, `CheckoutOffBranch`) |
+  | `CheckRunner`, `BaseCheckoutPools`, `SharedCaches` (`checks/`), `TaskCoverage` (`test-coverage/`) | `ChecksLayer` (`checks/layers.ts`), needs `GitLayer` | checks, their re-runs and base comparison, the turbo cache, changed-line coverage (`CoverageReportUnreadable`) |
+  | `TerminalFiles`, `TerminalPty` (`terminals/`) | `TerminalsLayer` (`terminals/layers.ts`), needs `JsonFile` and `Shell` | data/terminals/ decoded by schemas; the PTY as a scoped resource, the foreground program, a free port (`PortUnavailable`) |
   | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order; fails with the lock's `ServerRunning` or `LockContended`, which `startShinsa` turns into its `DomainError` |
 
   Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
-  helpers, `writeJsonFile`, the functions of `git/`, `github/` and `repos/`, and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
+  helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
+  terminals' store and PTY, and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
   `EventLog`, `EvidenceStore` and `AttachmentStore` each own a `ManagedRuntime` over their layer and `runSync` it;
   `acquireDataDirLock` builds `ServeLock` in a scope of its own. Each edge throws the errors and messages it threw
   before. A module that moves to Effect yields the service instead and stops calling its edge; once nothing calls an

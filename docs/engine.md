@@ -5689,9 +5689,10 @@ startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
                   └─ the work: runs, clocks, effects, …
                 stop() = dispose: finalizers in reverse
 
-unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, Git, GitHub, repos, workspaces)
+unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, Git, GitHub, repos, workspaces,
+                                       checks, coverage, terminals)
   log.*, resolveConfig, runCommand, killProcessTree, writeJsonFile, the git/, github/, repos/ functions,
-  Workspaces
+  Workspaces, runChecks, BaseCheckouts, measureTaskCoverage, TerminalStore, spawnTerminalProcess
 ```
 
 - **Configuration.** `EngineConfig` reads the whole `ServerConfig` once, through one `ConfigProvider` that looks in
@@ -5739,15 +5740,29 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   login once gh answers it and asks again after a failure. `WorktreeWorkspaces` and `MainCheckoutWorkspace` are the
   two places agents work, each a `Workspace` of effects whose failures are typed (`TaskCheckoutMissing`,
   `CheckoutDirty`, `CheckoutOffBranch`, and git's own), over `Git`, `Checkout` and `Remote`.
+- **Checks, coverage and terminals.** `CheckRunner` runs a check through `Shell` at low priority, re-runs its failing
+  test files alone and asks the base for a comparison, a command named twice in a round run once (`Effect.cached`);
+  `BaseCheckoutPools.make(dir)` is the pool of detached base checkouts, each one's creation and each command's result
+  cached the same way, and any failure on the base logged and answered as no comparison; `SharedCaches` is the turbo
+  cache per repository. `TaskCoverage` measures the changed lines in a temporary folder acquired and released in a
+  scope, a report it cannot place or read the typed `CoverageReportUnreadable`, answered as unavailable with its
+  reason. `TerminalFiles` keeps data/terminals/ on `JsonFile`, every saved terminal and service decoded by a schema
+  (`StoredTerminal`, `StoredService`) and one that breaks it dropped; `TerminalPty` spawns your shell in Bun's PTY as
+  a scoped resource whose release hangs it up and kills it after `HANG_UP_GRACE` (3 s), reads the program in front
+  through `Shell`, and picks a free port with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
+  `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
+  lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
 - **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
   its release as a finalizer: the lock, the log, the HTTP server, Eunoe's forwarder, the work. `stop()` disposes the
   runtime, which runs them in reverse: the work (live runs first, then the clocks and the effects, The agent loop →
   Restart continuation), Eunoe, HTTP, the log, then the lock. A start that fails partway disposes it as well, so
   nothing it took stays held, and a second `stop()` waits for the first.
 - **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
-  helpers, `writeJsonFile` and the functions of `git/`, `github/` and `repos/` run the services through
-  `edgeRuntime`, a `ManagedRuntime` of the logger, the shell, `JsonFile`, git's, GitHub's, the repositories' and the
-  workspaces' services for the process; `Workspaces` hands out one `WorkspaceStrategy` of promises per mode over the
+  helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, and the
+  terminals' store and PTY run the services through `edgeRuntime`, a `ManagedRuntime` of the logger, the shell,
+  `JsonFile`, git's, GitHub's, the repositories', the workspaces', the checks' and the terminals' services for the
+  process; `BaseCheckouts` holds the pool its service made, and `Terminals` and `ServiceRefiner` stay the objects
+  their callers hold, over those services; `Workspaces` hands out one `WorkspaceStrategy` of promises per mode over the
   services, and `RepoCiCache` and `PullRequestDescriptions` each hold the cache their service made;
   `EventLog`, `EvidenceStore` and `AttachmentStore` each run their layer in a runtime of their own; the CLI's
   `acquireDataDirLock` builds `ServeLock` in a scope it closes on `release()`. Each throws the errors and messages it
