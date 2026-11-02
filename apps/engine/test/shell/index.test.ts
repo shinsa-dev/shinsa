@@ -1,7 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { log } from '../../src/log/index.ts';
 import {
   describeFailure,
   killProcessGroup,
@@ -10,7 +9,7 @@ import {
   runCommand,
   runCommandOrThrow,
 } from '../../src/shell/index.ts';
-import { createTempDir, overrideEnv, until } from '../helpers/index.ts';
+import { captureLogs, createTempDir, overrideEnv, until } from '../helpers/index.ts';
 
 function readProcessState(pid: number) {
   return Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)])
@@ -125,7 +124,7 @@ describe('runCommand', () => {
   });
 
   test('a group that already ended when the timeout fires is not reported as a failed stop', async () => {
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     try {
       const result = await runCommand(
         ['perl', '-e', 'if (fork() == 0) { setpgrp(0, 0); sleep 1; exit 0 } exit 0'],
@@ -133,26 +132,24 @@ describe('runCommand', () => {
         { timeoutMs: 50 }
       );
       expect(result.timedOut).toBe(true);
-      expect(warn.mock.calls.filter(([message]) => message === '[Shell] Could not stop a command')).toEqual(
-        []
-      );
+      expect(logs.fieldsOf('[Shell] Could not stop a command')).toEqual([]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 
   test('a group that cannot be signalled is logged, the command still ends as timed out', async () => {
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const kill = spyOn(process, 'kill').mockImplementation(() => {
       throw Object.assign(new Error('kill() failed: EPERM'), { code: 'EPERM' });
     });
     try {
       const result = await runCommand(['sh', '-c', 'sleep 0.3'], createTempDir(), { timeoutMs: 20 });
       expect(result.timedOut).toBe(true);
-      expect(warn.mock.calls.map(([message]) => message)).toContain('[Shell] Could not stop a command');
+      expect(logs.entries.map(({ message }) => message)).toContain('[Shell] Could not stop a command');
     } finally {
       kill.mockRestore();
-      warn.mockRestore();
+      logs.restore();
     }
   });
 });
@@ -171,12 +168,12 @@ describe('killProcessGroup', () => {
     const pid = Number(new TextDecoder().decode((await reader.read()).value).trim());
     reader.releaseLock();
     await until('the leader to exit', () => readProcessState(pid).startsWith('Z'));
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     try {
       killProcessGroup(pid);
-      expect(warn).not.toHaveBeenCalled();
+      expect(logs.entries).toEqual([]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
       parent.kill();
       await parent.exited;
     }
@@ -237,20 +234,35 @@ describe('killProcessTree', () => {
       }
       return real(pid, signal);
     });
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     try {
       await killProcessTree(leader.pid);
-      expect(warn).toHaveBeenCalledWith('[Shell] Could not stop a process', {
+      expect(logs.fieldsOf('[Shell] Could not stop a process')).toContainEqual({
         pid: child,
         error: 'not permitted',
       });
     } finally {
       kill.mockRestore();
-      warn.mockRestore();
+      logs.restore();
       Bun.spawnSync(['kill', '-9', String(child)]);
       await leader.exited;
     }
     await killProcessTree(leader.pid);
+  });
+});
+
+test('an empty command is a failed result, and a signal that never aborts lets a command finish', async () => {
+  expect(await runCommand([], createTempDir())).toEqual({
+    ok: false,
+    code: 127,
+    stdout: '',
+    stderr: 'No command was given.',
+    timedOut: false,
+  });
+  const controller = new AbortController();
+  expect(await runCommand(['echo', 'done'], createTempDir(), { signal: controller.signal })).toMatchObject({
+    ok: true,
+    stdout: 'done',
   });
 });
 
