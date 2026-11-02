@@ -1118,7 +1118,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 ## Effects
 
-`ShinsaEffect` (`effects/index.ts`), run by `EffectRunner` (`apps/engine/src/runtime/effects.ts`) from the outbox.
+`ShinsaEffect` (`effects/index.ts`), run by `EffectHandlers` (`apps/engine/src/runtime/effects/runner/service.ts`, a service per area beside it) from the outbox.
 `process_bound` effects are cancelled on boot; `replay_safe` ones are requeued and must be safe to run twice.
 
 | Effect | Recovery | Lane | Reports back with |
@@ -1597,7 +1597,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
 | State snapshots | `apps/engine/src/store/snapshot.ts`, `apps/engine/src/store/event-log.ts` |
 | Event log, receipts, outbox | `apps/engine/src/store/event-log.ts`, `apps/engine/src/runtime/engine.ts` |
-| Effect handlers | `apps/engine/src/runtime/effects.ts` |
+| Effect handlers | `apps/engine/src/runtime/effects/` (`runner/service.ts` routes each kind to its area's service) |
 | Agent tools (MCP) | `apps/engine/src/agents/tools/`; the loader tools `apps/engine/src/extensions/loader.ts` |
 | Management tools | `apps/engine/src/agents/manage/` |
 | Command surface and `humanOnly` | `apps/engine/src/surface/`, reference `docs/cli.md` |
