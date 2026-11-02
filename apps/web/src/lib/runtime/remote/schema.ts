@@ -8,6 +8,8 @@ export const CLOUD_ANSWER_UNREADABLE_MESSAGE = 'Shinsa Cloud sent an answer this
 
 export const CLOUD_FAILED_CODE = 'failed';
 
+export const CLOUD_NOT_FOUND = { status: 404, code: 'not_found', message: 'No such endpoint.' } as const;
+
 export const CloudErrorBody = Schema.Struct({
   error: Schema.Struct({
     code: Schema.optionalKey(Schema.String),

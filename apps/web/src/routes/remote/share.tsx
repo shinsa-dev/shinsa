@@ -7,7 +7,8 @@ import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { useSharedView } from '@/hooks/use-shared-view.ts';
 import { openShareStream } from '@/lib/share/live.ts';
 import { SHARED_READ_ONLY_NOTE } from '@/lib/share/page.ts';
-import { requestViewerLogin, SHARE_GONE } from '@/lib/share/sources.ts';
+import { SHARE_GONE } from '@/lib/share/sources.ts';
+import { requestViewerLogin } from '@/lib/share/viewer.ts';
 
 export function SharePage({ link }: { link: ShareLink | null }) {
   if (!link)

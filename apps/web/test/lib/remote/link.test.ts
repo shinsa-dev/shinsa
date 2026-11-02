@@ -2,9 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import { serializePublicKey } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
 import { ChannelError, openRemoteChannel } from '@/lib/remote/channel.ts';
-import { DashboardError } from '@/lib/remote/dashboard.ts';
-import type { EnrolledDevice } from '@/lib/remote/devices.ts';
 import { ChannelSocket, RemoteLink } from '@/lib/remote/link.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
+import { CloudRefused } from '@/lib/runtime/remote/schema.ts';
 import { createKeyPair, FakeMac, type FakeMacOptions } from './fake-mac.ts';
 
 interface LinkClock {
@@ -169,9 +169,9 @@ describe('the link to a remote machine', () => {
     const keys = await createKeyPair();
     const device: EnrolledDevice = { instanceId: 'k3x9', machineKey: 'key', keys, enrolledAt: 1 };
     const failures = [
-      new DashboardError('not_found', 'No such machine.', 404),
-      new DashboardError('forbidden', 'This request needs an Origin.', 403),
-      new DashboardError('failed', 'Shinsa Cloud is down.', 503),
+      new CloudRefused({ code: 'not_found', message: 'No such machine.', status: 404 }),
+      new CloudRefused({ code: 'forbidden', message: 'This request needs an Origin.', status: 403 }),
+      new CloudRefused({ code: 'failed', message: 'Shinsa Cloud is down.', status: 503 }),
       new Error('Offline.'),
     ];
     const removed: string[] = [];

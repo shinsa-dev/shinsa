@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
-import { requestSharedText, requestViewerLogin, SHARE_GONE, ShareGoneError } from '@/lib/share/sources.ts';
+import { requestSharedText, SHARE_GONE, ShareGoneError } from '@/lib/share/sources.ts';
+import { requestViewerLogin } from '@/lib/share/viewer.ts';
+import { answerFetch } from '../../support/fetch-fake.ts';
 import { DIFF } from './fixtures.ts';
 
 afterEach(() => {
@@ -26,10 +28,21 @@ describe('a shared file', () => {
 
 describe('who is looking at a shared page', () => {
   it('is the GitHub login signed in to app.shinsa.dev, or no one', async () => {
-    const signedIn = Response.json({ user: { id: '1', login: 'mona', avatarUrl: null } });
-    expect(await requestViewerLogin(answer(signedIn))).toBe('mona');
-    expect(await requestViewerLogin(answer(Response.json({ user: null })))).toBeNull();
-    expect(await requestViewerLogin(answer(new Response('', { status: 500 })))).toBeNull();
-    expect(await requestViewerLogin(answer(new Error('offline')))).toBeNull();
+    const answers: (Response | Error)[] = [
+      Response.json({ user: { id: '1', login: 'mona', name: null, avatarUrl: null } }),
+      Response.json({ user: null }),
+      new Response('', { status: 500 }),
+      new Error('offline'),
+    ];
+    const requests = answerFetch(() => {
+      const next = answers.shift() as Response | Error;
+      if (next instanceof Error) throw next;
+      return next;
+    });
+    expect(await requestViewerLogin()).toBe('mona');
+    expect(await requestViewerLogin()).toBeNull();
+    expect(await requestViewerLogin()).toBeNull();
+    expect(await requestViewerLogin()).toBeNull();
+    expect(requests.map(({ path }) => path)).toEqual(Array(4).fill('/__remote/session'));
   });
 });

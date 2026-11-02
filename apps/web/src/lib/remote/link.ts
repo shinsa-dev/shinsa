@@ -1,7 +1,7 @@
 import { type Bytes, type ChannelHeaders, CONNECT_TOKEN_TTL_MS, type ConnectResponse } from '@shinsa/core';
 import { ChannelError, type ChannelOptions, openRemoteChannel, type RemoteChannel } from './channel.ts';
-import { type DashboardClient, DashboardError } from './dashboard.ts';
-import type { EnrolledDevice } from './devices.ts';
+import { type DashboardClient, isMachineGone } from './dashboard.ts';
+import type { EnrolledDevice } from './schema.ts';
 
 const CONNECTING = 0;
 
@@ -68,10 +68,6 @@ export interface RemoteLinkOptions {
 interface HeldConnect {
   url: string;
   reusableUntil: number;
-}
-
-function isRemoved(error: unknown) {
-  return error instanceof DashboardError && error.status === 404;
 }
 
 function listRequestHeaders(headers: Headers): ChannelHeaders {
@@ -147,7 +143,7 @@ export class RemoteLink {
       connecting.catch((error: unknown) => {
         if (this.#channel === connecting) this.#forget();
         if ((error as ChannelError).refused) this.#options.onRefused?.(error as ChannelError);
-        if (isRemoved(error)) this.#options.onRemoved?.();
+        if (isMachineGone(error)) this.#options.onRemoved?.();
       });
     }
     return this.#channel;

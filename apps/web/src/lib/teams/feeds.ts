@@ -135,7 +135,7 @@ export interface TeamFeedSource {
 }
 
 export interface HostedTeamFeedsOptions {
-  listTeams: () => Promise<RemoteTeam[]>;
+  listTeams: () => Promise<readonly RemoteTeam[]>;
   selectTeamKey: (teamId: string) => Promise<StoredTeamKey | null>;
   openChannel?: (target: TeamChannelTarget, handlers: TeamChannelHandlers) => () => void;
   wait?: (ms: number, run: () => void) => () => void;
@@ -171,7 +171,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
 
   async start() {
     this.#started = true;
-    let teams: RemoteTeam[];
+    let teams: readonly RemoteTeam[];
     try {
       teams = await this.#options.listTeams();
     } catch {

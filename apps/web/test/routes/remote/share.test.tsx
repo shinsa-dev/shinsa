@@ -63,7 +63,8 @@ function connect(session: Response | null = null) {
     blobs.set(url, blob.text());
     return url;
   }) as never);
-  spyOn(globalThis, 'fetch').mockImplementation(((input: string) => {
+  spyOn(globalThis, 'fetch').mockImplementation(((target: string | URL) => {
+    const input = target instanceof URL ? target.pathname : target;
     if (input === '/__remote/session') return Promise.resolve(session ?? new Response('', { status: 401 }));
     if (input.startsWith('blob:'))
       return (blobs.get(input) ?? Promise.resolve('')).then((text) => new Response(text));
@@ -184,7 +185,7 @@ describe('the shared page on app.shinsa.dev', () => {
   });
 
   it('says you shared it when you are signed in to app.shinsa.dev as its owner', async () => {
-    const machine = connect(Response.json({ user: { id: '1', login: 'mona', avatarUrl: null } }));
+    const machine = connect(Response.json({ user: { id: '1', login: 'mona', name: null, avatarUrl: null } }));
     await open(machine);
     expect(await screen.findByText('Shared by you from Studio')).toBeTruthy();
   });

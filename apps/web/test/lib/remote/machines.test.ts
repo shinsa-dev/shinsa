@@ -5,7 +5,6 @@ import { Effect, Layer } from 'effect';
 import { Socket } from 'effect/socket';
 import { Connection } from '@/lib/connection/socket.ts';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
-import type { EnrolledDevice } from '@/lib/remote/devices.ts';
 import {
   createFleetMember,
   describeMachine,
@@ -15,6 +14,7 @@ import {
   resolveMachineDetail,
   resolveTaskCapacityValue,
 } from '@/lib/remote/machines.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { describeMentionText } from '@/lib/remote/users.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
 
@@ -129,7 +129,9 @@ describe('a machine in the dashboard', () => {
       onRefused: () => undefined,
       openChannel: (options) => openRemoteChannel({ ...options, openSocket: mac.openSocket }),
       createConnection: (transport) => {
-        const open = Effect.runSync(Effect.provide(Socket.WebSocketConstructor.use(Effect.succeed), transport));
+        const open = Effect.runSync(
+          Effect.provide(Socket.WebSocketConstructor.use(Effect.succeed), transport)
+        );
         sockets.push(() => open(''));
         return new Connection({ transport });
       },

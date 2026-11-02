@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { createDeviceKeys, createDeviceStore, type KeyValueStore } from '@/lib/remote/devices.ts';
+import { createDeviceKeys, createDeviceStore } from '@/lib/remote/devices.ts';
 import { createIndexedStore } from '@/lib/remote/indexed-store.ts';
+import type { KeyValueStore } from '@/lib/remote/schema.ts';
 import { createFakeIndexedDb } from './fake-indexed-db.ts';
 
 function createMemoryStore(): KeyValueStore & { values: Map<string, unknown> } {
@@ -61,6 +62,22 @@ describe('the devices this browser enrolled', () => {
     memory.values.set('other', waiting);
     memory.values.set('device:broken', null);
     expect(await devices.listWaitingDevices()).toEqual([waiting]);
+  });
+});
+
+describe('a store this browser cannot read', () => {
+  it('fails in words instead of passing on the store’s own error', async () => {
+    const refuse = () => Promise.reject(new Error('QuotaExceededError'));
+    const devices = createDeviceStore({ read: refuse, write: refuse, remove: refuse, listKeys: refuse });
+    for (const step of [
+      () => devices.selectDevice('k3x9'),
+      () => devices.listWaitingDevices(),
+      () => devices.removeDevice('k3x9'),
+    ])
+      await expect(step()).rejects.toMatchObject({
+        _tag: 'DeviceStoreFailed',
+        message: 'This browser could not read the keys it keeps.',
+      });
   });
 });
 

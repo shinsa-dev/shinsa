@@ -5,10 +5,11 @@ import { formatSince } from '@/lib/format/time.ts';
 import { describeMachineLoad } from '@/lib/new-task.ts';
 import type { ChannelError } from './channel.ts';
 import type { DashboardClient } from './dashboard.ts';
-import type { DeviceStore, EnrolledDevice } from './devices.ts';
+import type { DeviceStore } from './devices.ts';
 import type { FleetMember } from './fleet.ts';
 import { RemoteLink, type RemoteLinkOptions } from './link.ts';
 import { resolveMachineLabel } from './mode.ts';
+import type { EnrolledDevice } from './schema.ts';
 import type { Mention } from './users.ts';
 
 export interface MachineRow {

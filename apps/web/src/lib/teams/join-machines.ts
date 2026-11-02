@@ -1,18 +1,21 @@
-import { describeList, type Project, type TeamJoinStatus, type UserCommand } from '@shinsa/core';
+import { describeList, type UserCommand } from '@shinsa/core';
+import { type Duration, Effect, Option } from 'effect';
+import { HttpClientRequest } from 'effect/http';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
-import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
+import type { DeviceStore } from '@/lib/remote/devices.ts';
 import type { FleetMember } from '@/lib/remote/fleet.ts';
 import { RemoteLink, type RemoteLinkOptions } from '@/lib/remote/link.ts';
 import { listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { decodeAnswer } from '@/lib/runtime/engine/answers.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
+import { sendThrough } from '@/lib/runtime/fetch.ts';
+import { enterPromise } from '@/lib/runtime/promise.ts';
+import { JoinedTeam, PROJECTS_TIMEOUT } from './schema.ts';
 import { listProjectChoices, type ProjectChoice } from './settings.ts';
 
-export const JOIN_PATH = '/api/remote/teams/join';
-
-export const PROJECTS_PATH = '/api/projects';
-
-export const COMMANDS_PATH = '/api/commands';
-
-const PROJECTS_TIMEOUT_MS = 4000;
+export { COMMANDS_PATH, JOIN_PATH, PROJECTS_PATH } from './schema.ts';
 
 export interface JoinMachine {
   id: string;
@@ -41,71 +44,40 @@ export function listJoinCommands(teamId: string, projectIds: readonly string[]):
   return [...new Set(projectIds)].map((projectId) => ({ type: 'project.add_to_team', projectId, teamId }));
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
+function onMachine(member: Pick<FleetMember, 'fetch'>, origin: string) {
+  return <A, E>(effect: Effect.Effect<A, E, EngineClient>) =>
+    effect.pipe(
+      Effect.provide(EngineClient.through(HttpClientRequest.prependUrl(origin))),
+      sendThrough(member.fetch)
+    );
 }
 
-async function readAnswer<T>(response: Response) {
-  const answer = (await readJson(response)) as (T & { error?: { message?: string } }) | null;
-  if (response.ok && answer) return answer;
-  throw new Error(answer?.error?.message ?? `Shinsa answered with status ${response.status}.`);
-}
+const decodeJoined = decodeAnswer(JoinedTeam);
 
-async function readJoinAnswer(response: Response) {
-  const answer = await readAnswer<{ teamId?: string; status?: TeamJoinStatus }>(response);
-  if (typeof answer.teamId === 'string') return answer.teamId;
-  throw new Error(`Shinsa answered with status ${response.status}.`);
-}
+const shareFrom = Effect.fn('JoinMachines.share')(function* (url: string, projectIds: readonly string[]) {
+  if (projectIds.length === 0) return;
+  const engine = yield* EngineClient;
+  const { teamId } = yield* decodeJoined(yield* engine.teams.join({ payload: { url } }));
+  for (const command of listJoinCommands(teamId, projectIds))
+    yield* engine.commands.send({ headers: {}, payload: command });
+});
 
-function postJson(origin: string, path: string, body: unknown) {
-  return new Request(new URL(path, origin), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+const readProjects = Effect.fn('JoinMachines.readProjects')(function* () {
+  const engine = yield* EngineClient;
+  const answer = yield* engine.state.projects();
+  return listProjectChoices({
+    projects: Object.fromEntries(answer.projects.map((project) => [project.id, project])),
   });
-}
-
-async function readJoinProjects(member: Pick<FleetMember, 'fetch'>, origin: string) {
-  const answer = await readAnswer<{ projects?: Project[] }>(
-    await member.fetch(new Request(new URL(PROJECTS_PATH, origin)))
-  );
-  const projects = Object.fromEntries((answer.projects ?? []).map((project) => [project.id, project]));
-  return listProjectChoices({ projects });
-}
+});
 
 export function createJoinMachine(member: JoinFetch, projects: ProjectChoice[], origin: string): JoinMachine {
+  const through = onMachine(member, origin);
   return {
     id: member.id,
     name: member.name,
     projects,
-    share: async (url, projectIds) => {
-      if (projectIds.length === 0) return;
-      const teamId = await readJoinAnswer(await member.fetch(postJson(origin, JOIN_PATH, { url })));
-      for (const command of listJoinCommands(teamId, projectIds)) {
-        await readAnswer(await member.fetch(postJson(origin, COMMANDS_PATH, command)));
-      }
-    },
+    share: (url, projectIds) => runApp(through(shareFrom(url, projectIds))),
   };
-}
-
-function resolveWithin<T>(promise: Promise<T>, timeoutMs: number) {
-  return new Promise<T | null>((resolve) => {
-    const timer = setTimeout(() => resolve(null), timeoutMs);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      () => {
-        clearTimeout(timer);
-        resolve(null);
-      }
-    );
-  });
 }
 
 interface JoinMember {
@@ -142,34 +114,42 @@ export function createJoinMachinesSource(
   },
   options: {
     origin?: string;
-    timeoutMs?: number;
+    timeout?: Duration.Input;
     createMember?: (row: JoinRow, dashboard: JoinDashboard) => JoinMember;
   } = {}
 ): OpenJoinMachines {
   const createMember = options.createMember ?? createJoinMember;
-  return async () => {
+  const timeout = options.timeout ?? PROJECTS_TIMEOUT;
+  const open = Effect.fn('JoinMachines.open')(function* () {
     const origin = options.origin ?? location.origin;
-    const rows = listJoinRows(await listMachineRows(services.dashboard, services.devices));
+    const rows = listJoinRows(
+      yield* enterPromise(() => listMachineRows(services.dashboard, services.devices))
+    );
     const closers: (() => void)[] = [];
-    const machines = await Promise.all(
-      rows.map(async (row) => {
+    const machines = yield* Effect.forEach(
+      rows,
+      (row) => {
         const entry = createMember(row, services.dashboard);
         closers.push(entry.close);
-        const projects = await resolveWithin(
-          readJoinProjects(entry.member, origin),
-          options.timeoutMs ?? PROJECTS_TIMEOUT_MS
+        return onMachine(
+          entry.member,
+          origin
+        )(readProjects()).pipe(
+          Effect.timeoutOption(timeout),
+          Effect.map(Option.map((projects) => createJoinMachine(entry.member, projects, origin))),
+          Effect.orElseSucceed(Option.none)
         );
-        if (!projects) return null;
-        return createJoinMachine(entry.member, projects, origin);
-      })
+      },
+      { concurrency: 'unbounded' }
     );
     return {
-      machines: machines.filter((machine) => machine !== null),
+      machines: machines.flatMap((machine) => Option.toArray(machine)),
       close: () => {
         for (const close of closers.splice(0)) close();
       },
     };
-  };
+  });
+  return () => runApp(open());
 }
 
 export type JoinPicks = Readonly<Record<string, readonly string[]>>;
@@ -178,8 +158,12 @@ export function countJoinPicks(picks: JoinPicks) {
   return Object.values(picks).reduce((total, projectIds) => total + projectIds.length, 0);
 }
 
-export async function shareJoinPicks(machines: readonly JoinMachine[], picks: JoinPicks, url: string) {
-  for (const machine of machines) await machine.share(url, picks[machine.id] ?? []);
+export function shareJoinPicks(machines: readonly JoinMachine[], picks: JoinPicks, url: string) {
+  return runApp(
+    Effect.forEach(machines, (machine) => enterPromise(() => machine.share(url, picks[machine.id] ?? [])), {
+      discard: true,
+    })
+  );
 }
 
 export function describeJoinPicks(machines: readonly JoinMachine[], picks: JoinPicks) {

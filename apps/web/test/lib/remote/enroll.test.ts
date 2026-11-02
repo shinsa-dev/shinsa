@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import { serializeBase64Url, serializePublicKey } from '@shinsa/core';
+import { Schedule } from 'effect';
 import {
   ChannelError,
   type ChannelOptions,
   openRemoteChannel,
   type RemoteChannel,
 } from '@/lib/remote/channel.ts';
-import type { EnrolledDevice } from '@/lib/remote/devices.ts';
 import {
   claimHandoff,
   type EnrollOptions,
@@ -14,6 +14,7 @@ import {
   requestWaitingAnswer,
   resolveClaimStanding,
 } from '@/lib/remote/enroll.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
 
 const SECRET = serializeBase64Url(new Uint8Array(32).fill(9));
@@ -45,7 +46,7 @@ function createOptions(mac: FakeMac, overrides: Partial<EnrollOptions> = {}) {
     name: 'Kai iPhone',
     onPending: () => steps.push('pending'),
     now: () => 42,
-    retryMs: 1,
+    retry: Schedule.spaced('1 millis'),
     createKeys: createKeyPair,
     openChannel: (channel) => openRemoteChannel({ ...channel, openSocket: mac.openSocket }),
     ...overrides,

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import { type RemoteInstance, type RemoteTeam, resolveKeyFingerprint } from '@shinsa/core';
 import type { ChannelOptions, RemoteChannel } from '@/lib/remote/channel.ts';
-import type { EnrolledDevice } from '@/lib/remote/devices.ts';
 import { describeMachine } from '@/lib/remote/machines.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { admitTeamMachines, readTeamMachineGrant } from '@/lib/teams/admit.ts';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/channel.ts';
 import { createKeyPair } from '../remote/fake-mac.ts';

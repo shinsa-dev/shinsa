@@ -7,9 +7,10 @@ import * as React from 'react';
 import { SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import { resolveDeviceName } from '@/lib/remote/device-name.ts';
-import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
+import type { DeviceStore } from '@/lib/remote/devices.ts';
 import { type EnrollInput, requestDeviceAccess, selectWaitingDevice } from '@/lib/remote/enroll.ts';
 import { clearEnrollFragment, MACHINE_ICON } from '@/lib/remote/mode.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { RemoteBenefits, RemoteHero, RemoteLoading } from './shell.tsx';
 
 const ENROLL_POINTS: { icon: IconName; title: string; detail: string }[] = [

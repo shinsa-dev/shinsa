@@ -36,42 +36,39 @@ export class EngineSocket extends Context.Service<
       const encode = Schema.encodeUnknownEffect(ClientMessageText);
       const decode = Schema.decodeUnknownOption(ServerMessageText);
 
-      const dial = Effect.fn('EngineSocket.dial')(
-        function* (session: EngineSession) {
-          let synced = false;
-          const closed = Effect.sync(() => {
-            session.closed();
-            return new EngineSocketClosed({ synced });
-          });
-          const pull = yield* Effect.catchTag(Socket.readerString(socket), 'SocketError', () =>
-            Effect.flatMap(closed, Effect.fail)
-          );
-          const writer = yield* socket.writer;
-          const webSocket = dialed;
-          session.opened({
-            isOpen: () => webSocket?.readyState === WEB_SOCKET_OPEN,
-            send: (message) =>
-              encode(message).pipe(
-                Effect.orDie,
-                Effect.flatMap(writer.write),
-                Effect.catchTag('SocketError', () => Effect.void)
-              ),
-          });
-          return yield* Stream.fromPull(Effect.succeed(pull)).pipe(
-            Stream.runForEach((text) =>
-              Effect.sync(() => {
-                const message = decode(text);
-                if (Option.isNone(message)) return;
-                if (message.value.type === 'state') synced = true;
-                session.received(message.value);
-              })
+      const dial = Effect.fn('EngineSocket.dial')(function* (session: EngineSession) {
+        let synced = false;
+        const closed = Effect.sync(() => {
+          session.closed();
+          return new EngineSocketClosed({ synced });
+        });
+        const pull = yield* Effect.catchTag(Socket.readerString(socket), 'SocketError', () =>
+          Effect.flatMap(closed, Effect.fail)
+        );
+        const writer = yield* socket.writer;
+        const webSocket = dialed;
+        session.opened({
+          isOpen: () => webSocket?.readyState === WEB_SOCKET_OPEN,
+          send: (message) =>
+            encode(message).pipe(
+              Effect.orDie,
+              Effect.flatMap(writer.write),
+              Effect.catchTag('SocketError', () => Effect.void)
             ),
-            Effect.catchTag('SocketError', () => Effect.flatMap(closed, Effect.fail)),
-            Effect.andThen(Effect.flatMap(closed, Effect.fail))
-          );
-        },
-        Effect.scoped
-      );
+        });
+        return yield* Stream.fromPull(Effect.succeed(pull)).pipe(
+          Stream.runForEach((text) =>
+            Effect.sync(() => {
+              const message = decode(text);
+              if (Option.isNone(message)) return;
+              if (message.value.type === 'state') synced = true;
+              session.received(message.value);
+            })
+          ),
+          Effect.catchTag('SocketError', () => Effect.flatMap(closed, Effect.fail)),
+          Effect.andThen(Effect.flatMap(closed, Effect.fail))
+        );
+      }, Effect.scoped);
 
       const connect = Effect.fn('EngineSocket.connect')(
         function* (session: EngineSession) {

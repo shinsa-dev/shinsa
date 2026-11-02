@@ -1,8 +1,8 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { type RemoteInstance, serializePublicKey } from '@shinsa/core';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
-import type { EnrolledDevice } from '@/lib/remote/devices.ts';
 import { describeMachine } from '@/lib/remote/machines.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import {
   COMMANDS_PATH,
   countJoinPicks,
@@ -87,7 +87,10 @@ describe('sharing projects from a machine', () => {
         name: 'Studio',
         fetch: (request) => {
           requests.push(request);
-          return Promise.resolve(Response.json({ teamId: 'team1', status: 'requested', ok: true }));
+          const joining = new globalThis.URL(request.url).pathname === JOIN_PATH;
+          return Promise.resolve(
+            Response.json(joining ? { teamId: 'team1', status: 'requested' } : { ok: true, taskId: null })
+          );
         },
       },
       CHOICES,
@@ -124,7 +127,7 @@ describe('sharing projects from a machine', () => {
       'Shinsa answered with status 502.'
     );
     await expect(refusing(Response.json({ status: 'requested' })).share(URL, ['web'])).rejects.toThrow(
-      'Shinsa answered with status 200.'
+      'Shinsa sent an answer this page can’t read.'
     );
     await expect(
       refusing(
@@ -148,7 +151,7 @@ describe('opening your machines for the join page', () => {
       },
       {
         origin: ORIGIN,
-        timeoutMs: 20,
+        timeout: '20 millis',
         createMember: (row) => ({
           member: {
             id: row.instance.id,

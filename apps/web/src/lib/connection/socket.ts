@@ -28,8 +28,8 @@ import { Socket } from 'effect/socket';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
-import { useSharedTranscript } from '@/lib/share/transcripts.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
+import { useSharedTranscript } from '@/lib/share/transcripts.ts';
 import { createSignal } from '@/lib/signal.ts';
 import {
   CONNECTION_LOST_MESSAGE,
