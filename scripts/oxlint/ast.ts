@@ -1,8 +1,8 @@
-import { type Node, visitorKeys } from 'oxc-parser';
+import { type ArrowFunctionExpression, type Function, type Node, visitorKeys } from 'oxc-parser';
 
 const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
-export function isFunction(node: Node) {
+export function isFunction(node: Node): node is Function | ArrowFunctionExpression {
   return FUNCTION_TYPES.has(node.type);
 }
 

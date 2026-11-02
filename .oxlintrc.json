@@ -75,7 +75,12 @@
     ],
     "eslint/no-self-assign": "error",
     "eslint/no-self-compare": "error",
-    "eslint/no-sequences": "error",
+    "eslint/no-sequences": [
+      "error",
+      {
+        "allowInParentheses": false
+      }
+    ],
     "eslint/no-setter-return": "error",
     "eslint/no-shadow": "error",
     "eslint/no-shadow-restricted-names": "error",
@@ -116,12 +121,6 @@
     "eslint/no-useless-rename": "error",
     "eslint/no-with": "error",
     "eslint/one-var": ["error", "never"],
-    "eslint/prefer-arrow-callback": [
-      "error",
-      {
-        "allowNamedFunctions": true
-      }
-    ],
     "eslint/prefer-const": "error",
     "eslint/prefer-exponentiation-operator": "error",
     "eslint/prefer-numeric-literals": "error",
@@ -189,19 +188,24 @@
     "react/void-dom-elements-no-children": "error",
     "shinsa/cognitive-complexity": "warn",
     "shinsa/no-accumulating-spread": "error",
+    "shinsa/no-assign-in-expressions": "error",
     "shinsa/no-await-in-ternary": "error",
     "shinsa/no-confusing-void-type": "error",
     "shinsa/no-dynamic-namespace-import-access": "error",
     "shinsa/no-evolving-types": "error",
     "shinsa/no-for-each": "warn",
     "shinsa/no-invalid-builtin-instantiation": "error",
+    "shinsa/no-redeclare": "error",
     "shinsa/no-redundant-use-strict": "error",
+    "shinsa/no-string-case-mismatch": "error",
     "shinsa/no-suspicious-semicolon-in-jsx": "error",
     "shinsa/no-this-in-static": "error",
     "shinsa/no-useless-continue": "error",
     "shinsa/no-useless-else": "error",
     "shinsa/no-useless-string-raw": "error",
     "shinsa/no-useless-undefined-initialization": "error",
+    "shinsa/no-void-type-return": "error",
+    "shinsa/use-arrow-function": "error",
     "shinsa/use-await": "error",
     "shinsa/use-optional-chain": "error",
     "shinsa/use-semantic-elements": "error",
@@ -220,6 +224,12 @@
     "typescript/dot-notation": "error",
     "typescript/no-duplicate-enum-values": "error",
     "typescript/no-empty-interface": "error",
+    "typescript/no-empty-object-type": [
+      "error",
+      {
+        "allowInterfaces": "always"
+      }
+    ],
     "typescript/no-explicit-any": "error",
     "typescript/no-extra-non-null-assertion": "error",
     "typescript/no-extraneous-class": "error",
@@ -255,6 +265,7 @@
     "typescript/no-this-alias": "error",
     "typescript/no-unnecessary-type-constraint": "error",
     "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-unsafe-function-type": "error",
     "typescript/no-useless-empty-export": "error",
     "typescript/no-wrapper-object-types": "error",
     "typescript/only-throw-error": "error",

@@ -2,19 +2,24 @@ import { describe, expect, test } from 'bun:test';
 import { cognitiveComplexity } from './rules/cognitive-complexity.ts';
 import { noAccumulatingSpread } from './rules/no-accumulating-spread.ts';
 import { noArrayIndexKey } from './rules/no-array-index-key.ts';
+import { noAssignInExpressions } from './rules/no-assign-in-expressions.ts';
 import { noAwaitInTernary } from './rules/no-await-in-ternary.ts';
 import { noConfusingVoidType } from './rules/no-confusing-void-type.ts';
 import { noDynamicNamespaceImportAccess } from './rules/no-dynamic-namespace-import-access.ts';
 import { noEvolvingTypes } from './rules/no-evolving-types.ts';
 import { noForEach } from './rules/no-for-each.ts';
 import { noInvalidBuiltinInstantiation } from './rules/no-invalid-builtin-instantiation.ts';
+import { noRedeclare } from './rules/no-redeclare.ts';
 import { noRedundantUseStrict } from './rules/no-redundant-use-strict.ts';
+import { noStringCaseMismatch } from './rules/no-string-case-mismatch.ts';
 import { noSuspiciousSemicolonInJsx } from './rules/no-suspicious-semicolon-in-jsx.ts';
 import { noThisInStatic } from './rules/no-this-in-static.ts';
 import { noUselessContinue } from './rules/no-useless-continue.ts';
 import { noUselessElse } from './rules/no-useless-else.ts';
 import { noUselessStringRaw } from './rules/no-useless-string-raw.ts';
 import { noUselessUndefinedInitialization } from './rules/no-useless-undefined-initialization.ts';
+import { noVoidTypeReturn } from './rules/no-void-type-return.ts';
+import { useArrowFunction } from './rules/use-arrow-function.ts';
 import { useAwait } from './rules/use-await.ts';
 import { useOptionalChain } from './rules/use-optional-chain.ts';
 import { useSemanticElements } from './rules/use-semantic-elements.ts';
@@ -350,5 +355,92 @@ describe('the Shinsa Oxlint rules report what Biome reported', () => {
     expect(reports.map((report) => report.message)).toEqual([
       "This function's cognitive complexity is 42, past 25. Split it into smaller steps.",
     ]);
+  });
+  test('an assignment inside a larger expression is reported, one on a line of its own is not', () => {
+    const code = [
+      'const a = (b = 1);',
+      'if ((b = 2)) use(b);',
+      'while ((b = next())) use(b);',
+      'use((b = 3));',
+      'b = 4;',
+      'b = c = 5;',
+      'const f = () => (b = 6);',
+      'for (let i = 0, j = 0; i < 1; i = i + 1, j = j + 1) use(j);',
+      'for (b = 0; b < 1; b = b + 1) use(b);',
+    ].join('\n');
+    expect(linesOf(noAssignInExpressions, code)).toEqual([1, 2, 3, 4]);
+  });
+
+  test('a var or function declared twice in one scope is reported, a value and a type of one name are not', () => {
+    const code = [
+      'var a = 1;',
+      'var a = 2;',
+      'function b() {}',
+      'var b;',
+      'export function c(d) { var d; { var e; } var { e: f, g = 1, ...h } = d; var [f2, , ...g2] = h; var f2; }',
+      'export const C = 1;',
+      'export type C = number;',
+      'export function o(x: string): void;',
+      'export function o(x: number): void;',
+      'export function o(_x: unknown) {}',
+      'const k = function (this: K, m) { var m; return this; };',
+      'if (a) { function inner() {} }',
+      'function inner() {}',
+      'const arrow = () => { var a; var a; };',
+      'class P { constructor(private q: string, r: string) { var r; } }',
+    ].join('\n');
+    expect(linesOf(noRedeclare, code, 'sample.ts')).toEqual([2, 4, 5, 5, 11, 14, 15]);
+    expect(listReports(noRedeclare, code)[0]?.message).toContain('`a`');
+  });
+
+  test('text compared with a case change it cannot match is reported', () => {
+    const code = [
+      "a.toUpperCase() === 'abc';",
+      "'ABC' == a.toLowerCase();",
+      'a.toLowerCase() === `ABC`;',
+      "a.toLowerCase() !== 'ABC';",
+      "a.toUpperCase() === 'ABC';",
+      "a.toUpperCase('x') === 'abc';",
+      "a.toString() === 'abc';",
+      "a[method]() === 'abc';",
+      `a.toLowerCase() === \`A\${b}\`;`,
+      'a.toLowerCase() === b;',
+      "switch (a.toLowerCase()) { case 'A': break; case 'b': break; default: break; }",
+      "switch (a) { case 'A': break; }",
+    ].join('\n');
+    expect(linesOf(noStringCaseMismatch, code)).toEqual([1, 2, 3, 11]);
+    expect(listReports(noStringCaseMismatch, code)[0]?.message).toContain('`toUpperCase()`');
+  });
+
+  test('a value returned from a function typed void is reported', () => {
+    const code = [
+      'function a(): void { return undefined; }',
+      'const b = (): void => { return 1 as never; };',
+      'function c(): void { return; }',
+      'function d(): number { return 1; }',
+      'function e(): void { const f = () => { return 1; }; f(); }',
+      'class G { h(): void { return undefined; } }',
+      'return 1;',
+    ].join('\n');
+    expect(linesOf(noVoidTypeReturn, code, 'sample.ts')).toEqual([1, 2, 6]);
+  });
+
+  test('an unnamed function expression with no this of its own is an arrow function', () => {
+    const code = [
+      'const a = function () { return 1; };',
+      '[1].map(function (n) { return n; });',
+      'const b = function named() { return 1; };',
+      'const c = function () { return this; };',
+      'const d = function* () { yield 1; };',
+      'const e = function () { return arguments.length; };',
+      'const f = function () { return () => this; };',
+      'const g = function () { return function () { return this; }; };',
+      'const h = { m() { return 1; }, get p() { return 1; }, q: function () { return 1; } };',
+      'class I { m() { return 1; } }',
+      'const j = function (this: J) { return 1; };',
+      'const k = function () { return new.target; };',
+      'class L extends M { n() { return function () { return super.x; }; } }',
+    ].join('\n');
+    expect(linesOf(useArrowFunction, code, 'sample.ts')).toEqual([1, 2, 8, 9]);
   });
 });
