@@ -25,6 +25,7 @@ import {
   useTerminals,
 } from '@/lib/connection/terminals.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import { createTask } from '../../support/state.ts';
 import {
   createService,
@@ -51,14 +52,14 @@ afterEach(() => {
 });
 
 function serve(body: unknown, status = 200) {
-  const fetch = mock(async (_url: string, _init?: RequestInit) => Response.json(body, { status }));
+  const fetch = mock(async (_url: URL, _init?: RequestInit) => Response.json(body, { status }));
   globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
   return fetch;
 }
 
 function readCall(fetch: ReturnType<typeof serve>, index = 0) {
-  const [url, init] = fetch.mock.calls[index] ?? [];
-  return { url, body: JSON.parse(String(init?.body)) };
+  const { path, body } = readFetchCall(...(fetch.mock.calls[index] as [URL, RequestInit]));
+  return { url: path, body };
 }
 
 describe('useTerminals', () => {
@@ -125,7 +126,7 @@ describe('changing terminals', () => {
     expect(await restartTerminal('one')).toBe(true);
     expect(await closeTerminal('one')).toBe(true);
     expect(await reorderTerminals('shop', ['one'])).toBe(true);
-    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+    expect(fetch.mock.calls.map((call) => readFetchCall(...call).path)).toEqual([
       '/api/terminals/one/rename',
       '/api/terminals/one/restart',
       '/api/terminals/one/close',
@@ -156,7 +157,7 @@ describe('services', () => {
   it('reads what runs in front of a shell and what the engine found to suggest', async () => {
     let fetch = serve({ program: 'vim' });
     expect(await requestTerminalForeground('one')).toEqual({ program: 'vim' });
-    expect(fetch.mock.calls[0]?.[0]).toBe('/api/terminals/one/foreground');
+    expect(readFetchCall(...(fetch.mock.calls[0] as [URL])).path).toBe('/api/terminals/one/foreground');
     const suggestion = {
       name: 'web',
       cwd: '/web',
@@ -168,10 +169,14 @@ describe('services', () => {
     };
     fetch = serve({ suggestions: [suggestion] });
     expect(await requestServiceSuggestions('shop')).toEqual([suggestion]);
-    expect(fetch.mock.calls[0]?.[0]).toBe('/api/services/suggestions?projectId=shop');
+    expect(readFetchCall(...(fetch.mock.calls[0] as [URL])).path).toBe(
+      '/api/services/suggestions?projectId=shop'
+    );
     fetch = serve({ suggestions: [suggestion], refined: true });
     expect(await requestRefinedServiceSuggestions('shop')).toEqual([suggestion]);
-    expect(fetch.mock.calls[0]?.[0]).toBe('/api/services/suggestions?projectId=shop&refine=1');
+    expect(readFetchCall(...(fetch.mock.calls[0] as [URL])).path).toBe(
+      '/api/services/suggestions?projectId=shop&refine=1'
+    );
     fetch = serve({ suggestions: [suggestion], refined: false });
     expect(await requestRefinedServiceSuggestions('shop')).toBeNull();
   });
@@ -225,7 +230,7 @@ describe('services', () => {
     expect(await stopService('api')).toBe(true);
     expect(await startAllServices('shop')).toBe(true);
     await requestServicesRemove(['api', 'web']);
-    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+    expect(fetch.mock.calls.map((call) => readFetchCall(...call).path)).toEqual([
       '/api/services/api/stop',
       '/api/services/start-all',
       '/api/services/remove',

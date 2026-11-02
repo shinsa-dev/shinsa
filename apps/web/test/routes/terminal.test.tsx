@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { connection } from '@/lib/connection/socket.ts';
 import { syncTerminalViews } from '@/lib/terminal/view.ts';
 import { TerminalPage } from '@/routes/terminal.tsx';
+import { readFetchCall } from '../support/fetch.ts';
 import { createShinsaState } from '../support/state.ts';
 import {
   createService,
@@ -59,7 +60,10 @@ function show(snapshot: TerminalsSnapshot | null, state = createTerminalState())
 }
 
 function readPosts() {
-  return requests.mock.calls.map(([url, init]) => [String(url), JSON.parse(String(init?.body ?? 'null'))]);
+  return requests.mock.calls.map(([url, init]) => {
+    const { path, body } = readFetchCall(url, init);
+    return [path, body] as const;
+  });
 }
 
 const SERVER = createTerminal({ id: 'server', name: 'Dev server' });

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { type AgentProviderInfo, KNOWN_AGENT_PROVIDERS } from '@shinsa/core';
 import { renderHook, waitFor } from '@testing-library/react';
 import { resetAgentProviders, useAgentProviders } from '@/lib/connection/models.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -45,7 +46,7 @@ describe('useAgentProviders', () => {
     answer(Response.json(SERVED));
     await waitFor(() => expect(live.result.current).toEqual(SERVED));
     expect(served).toHaveBeenCalledTimes(1);
-    expect(served.mock.calls[0]).toEqual(['/api/providers'] as never);
+    expect(readFetchCall(...(served.mock.calls[0] as unknown as [URL])).path).toBe('/api/providers');
     const later = renderHook(() => useAgentProviders());
     expect(later.result.current).toEqual(SERVED);
     expect(served).toHaveBeenCalledTimes(1);

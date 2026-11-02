@@ -4,7 +4,13 @@ export const ENGINE_UNREACHABLE_MESSAGE = 'Couldn’t reach Shinsa.';
 
 export const ENGINE_ANSWER_UNREADABLE_MESSAGE = 'Shinsa sent an answer this page can’t read.';
 
+export const ENGINE_STOPPED_MESSAGE = 'Shinsa stopped answering.';
+
 export const REQUEST_FAILED_CODE = 'request_failed';
+
+export const MACHINE_PARAM = 'machine';
+
+export const LINES_TYPE = 'application/x-ndjson';
 
 export const EngineErrorBody = Schema.Struct({
   error: Schema.Struct({ code: Schema.optionalKey(Schema.String), message: Schema.String }),
@@ -30,4 +36,11 @@ export class EngineAnswerInvalid extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()('EngineAnswerInvalid', { message: Schema.String }) {}
 
-export type EngineFailure = EngineUnreachable | EngineRefused | EngineReadOnly | EngineAnswerInvalid;
+export class EngineStopped extends Schema.TaggedError<EngineStopped, { readonly brand: unique symbol }>()(
+  'EngineStopped',
+  { message: Schema.String }
+) {}
+
+export type EngineHttpFailure = EngineUnreachable | EngineRefused | EngineReadOnly;
+
+export type EngineFailure = EngineHttpFailure | EngineAnswerInvalid;

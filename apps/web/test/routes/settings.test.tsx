@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { resetOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { SettingsPage } from '@/routes/settings.tsx';
 import { createAccount, createSnapshot } from '../support/accounts.ts';
+import { readFetchCall } from '../support/fetch.ts';
 import { findTooltipText } from '../support/hover.ts';
 import { createOnboardingStatus } from '../support/onboarding.ts';
 import { createRound } from '../support/rounds.ts';
@@ -98,7 +99,7 @@ describe('Settings tabs', () => {
   it('scrolls to Repository folders once the folders are in', async () => {
     const folders = Promise.withResolvers<Response>();
     requests.mockImplementation((input) => {
-      if (String(input) === '/api/onboarding') return folders.promise;
+      if (readFetchCall(input).path === '/api/onboarding') return folders.promise;
       return Promise.resolve(new Response('offline', { status: 503 }));
     });
     const scroll = mock((_options?: ScrollIntoViewOptions) => {});

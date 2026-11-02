@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 import * as socket from '@/lib/connection/socket.ts';
 import { TEAM_ACTIONS } from '@/lib/connection/teams.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
 import { createTeamEntry, TEAM_URL } from '../../support/teams.ts';
@@ -22,8 +23,8 @@ beforeEach(() => {
     input: RequestInfo | URL,
     init?: RequestInit
   ) => {
-    const path = String(input);
-    sent.push({ path, body: JSON.parse(String(init?.body)) });
+    const { path, body } = readFetchCall(input, init);
+    sent.push({ path, body });
     return Response.json(answers[path] ?? createRemoteSnapshot());
   }) as typeof fetch);
   commandSpy = spyOn(socket, 'sendCommand').mockResolvedValue(undefined as never);

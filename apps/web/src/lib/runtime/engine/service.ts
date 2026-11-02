@@ -1,19 +1,14 @@
 import { EngineApi } from '@shinsa/core/engine-api';
-import { EditConflict } from '@shinsa/core/engine-api/schema';
-import { Context, Effect, Layer, Option, Predicate } from 'effect';
-import { HttpClient, type HttpClientResponse, HttpIncomingMessage } from 'effect/http';
+import { Context, Effect, Layer, Predicate } from 'effect';
+import { HttpClient, HttpClientRequest } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
-import { READ_ONLY_REFUSAL, selectReadOnlyRefusal } from '@/lib/connection/read-only.ts';
+import { EngineHttp } from '../engine-http/service.ts';
 import {
   ENGINE_ANSWER_UNREADABLE_MESSAGE,
-  ENGINE_UNREACHABLE_MESSAGE,
   EngineAnswerInvalid,
-  EngineErrorBody,
   type EngineFailure,
-  EngineReadOnly,
-  EngineRefused,
-  EngineUnreachable,
-  REQUEST_FAILED_CODE,
+  LINES_TYPE,
+  MACHINE_PARAM,
 } from './schema.ts';
 
 export class EngineClient extends Context.Service<
@@ -23,41 +18,9 @@ export class EngineClient extends Context.Service<
   static readonly layer = Layer.effect(
     EngineClient,
     Effect.gen(function* () {
-      const decodeRefusal = HttpIncomingMessage.schemaBodyJson(EngineErrorBody);
-      const unreachable = new EngineUnreachable({ message: ENGINE_UNREACHABLE_MESSAGE });
       const unreadable = new EngineAnswerInvalid({ message: ENGINE_ANSWER_UNREADABLE_MESSAGE });
-      const refuse = (response: HttpClientResponse.HttpClientResponse) =>
-        decodeRefusal(response).pipe(
-          Effect.option,
-          Effect.flatMap((body) =>
-            Effect.fail(
-              new EngineRefused({
-                status: response.status,
-                code: Option.match(body, {
-                  onNone: () => REQUEST_FAILED_CODE,
-                  onSome: ({ error }) => error.code ?? REQUEST_FAILED_CODE,
-                }),
-                message: Option.match(body, {
-                  onNone: () => `Shinsa answered with status ${response.status}.`,
-                  onSome: ({ error }) => error.message,
-                }),
-              })
-            )
-          )
-        );
-      const httpClient = (yield* HttpClient.HttpClient).pipe(
-        HttpClient.transform(
-          Effect.fnUntraced(function* (sent, request) {
-            if (request.method !== 'GET' && selectReadOnlyRefusal() !== null)
-              return yield* new EngineReadOnly({ message: READ_ONLY_REFUSAL });
-            const response = yield* Effect.mapError(sent, () => unreachable);
-            if (response.status < 400 || response.status === EditConflict.status) return response;
-            return yield* refuse(response);
-          })
-        )
-      );
       return yield* HttpApiClient.makeWith(EngineApi, {
-        httpClient,
+        httpClient: yield* EngineHttp,
         transformResponse: Effect.mapError((error) =>
           Predicate.isTagged(error, 'SchemaError') || Predicate.isTagged(error, 'HttpClientError')
             ? unreadable
@@ -66,4 +29,19 @@ export class EngineClient extends Context.Service<
       });
     })
   );
+
+  static readonly through = (
+    prepare: (request: HttpClientRequest.HttpClientRequest) => HttpClientRequest.HttpClientRequest
+  ) =>
+    Layer.fresh(EngineClient.layer).pipe(
+      Layer.provide(Layer.fresh(EngineHttp.layer)),
+      Layer.provide(
+        Layer.effect(HttpClient.HttpClient, Effect.map(HttpClient.HttpClient, HttpClient.mapRequest(prepare)))
+      )
+    );
+
+  static readonly onMachine = (machineId: string) =>
+    EngineClient.through(HttpClientRequest.setUrlParam(MACHINE_PARAM, machineId));
+
+  static readonly askingLines = EngineClient.through(HttpClientRequest.setHeader('accept', LINES_TYPE));
 }

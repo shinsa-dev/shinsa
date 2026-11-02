@@ -1,13 +1,16 @@
 import type { AccountImport, AccountPatch, AccountsSnapshot, RunAccount } from '@shinsa/core';
+import { Effect } from 'effect';
 import { useSyncExternalStore } from 'react';
 import { describeBinding, describeRerun } from '@/lib/accounts/account.ts';
 import { createUsageRecheck } from '@/lib/accounts/recheck.ts';
 import { type SignInDialogState, selectDialogLogin } from '@/lib/accounts/sign-in.ts';
 import { describeUsageWaitToggled } from '@/lib/accounts/usage-wait.ts';
 import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { requestJson } from '@/lib/connection/http.ts';
 import { connection } from '@/lib/connection/socket.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { UsageRecheckFailed } from './schema.ts';
 
 const CLOSED: SignInDialogState = {
   open: false,
@@ -26,14 +29,24 @@ function updateDialog(patch: Partial<SignInDialogState>) {
   dialogSignal.publish();
 }
 
-async function requestAccounts(path: string, body: unknown) {
-  const answer = await requestJson<AccountsSnapshot>(path, body);
-  connection.replaceAccounts(answer);
-  return answer;
+type AccountEndpoints = EngineClient['Service']['accounts'];
+
+function requestAccounts(call: (accounts: AccountEndpoints) => Effect.Effect<AccountsSnapshot, Error>) {
+  return runApp(
+    Effect.gen(function* () {
+      const engine = yield* EngineClient;
+      const answer = yield* call(engine.accounts);
+      connection.replaceAccounts(answer);
+      return answer;
+    })
+  );
 }
 
-function updateAccounts(path: string, body: unknown, done?: string) {
-  return requestWithToast(() => requestAccounts(path, body), done);
+function updateAccounts(
+  call: (accounts: AccountEndpoints) => Effect.Effect<AccountsSnapshot, Error>,
+  done?: string
+) {
+  return requestWithToast(() => requestAccounts(call), done);
 }
 
 export function useAccounts() {
@@ -41,15 +54,17 @@ export function useAccounts() {
 }
 
 const usageRecheck = createUsageRecheck({
-  refresh: () => requestAccounts('/api/accounts/refresh', {}),
-  read: () => requestAccounts('/api/accounts/refresh', { scope: 'usage' }),
+  refresh: () => requestAccounts((accounts) => accounts.refresh({ payload: {} })),
+  read: () => requestAccounts((accounts) => accounts.refresh({ payload: { scope: 'usage' } })),
+});
+
+const recheckUsage = Effect.gen(function* () {
+  const result = yield* Effect.promise(() => usageRecheck.check());
+  if (!result.ok) return yield* new UsageRecheckFailed({ message: describeFailure(result.error) });
 });
 
 export function refreshUsage() {
-  return requestWithToast(async () => {
-    const result = await usageRecheck.check();
-    if (!result.ok) throw result.error;
-  });
+  return requestWithToast(() => runApp(recheckUsage));
 }
 
 export function watchUsage() {
@@ -61,11 +76,11 @@ export function resetUsageRecheck() {
 }
 
 export function submitLoginCode(loginId: string, code: string) {
-  return updateAccounts('/api/accounts/login/code', { loginId, code });
+  return updateAccounts((accounts) => accounts.loginCode({ payload: { loginId, code } }));
 }
 
 function cancelLogin(loginId: string) {
-  return updateAccounts('/api/accounts/login/cancel', { loginId });
+  return updateAccounts((accounts) => accounts.loginCancel({ payload: { loginId } }));
 }
 
 export function importAccount(entry: AccountImport) {
@@ -73,35 +88,43 @@ export function importAccount(entry: AccountImport) {
 }
 
 export function updateAccount(accountId: string, patch: AccountPatch, done: string) {
-  return updateAccounts('/api/accounts/update', { accountId, patch }, done);
+  return updateAccounts((accounts) => accounts.update({ payload: { accountId, patch } }), done);
 }
 
 export function removeAccount(accountId: string) {
-  return updateAccounts('/api/accounts/remove', { accountId }, 'Account removed.');
+  return updateAccounts((accounts) => accounts.remove({ payload: { accountId } }), 'Account removed.');
 }
 
-async function openSignIn(
+const openSignIn = Effect.fn('Accounts.openSignIn')(function* (
   start: Pick<SignInDialogState, 'accountId' | 'importing'>,
-  request: () => Promise<AccountsSnapshot>
+  call: (accounts: AccountEndpoints) => Effect.Effect<AccountsSnapshot, Error>
 ) {
   updateDialog({ open: true, ...start, loginId: null, failure: null });
-  try {
-    const answer = await request();
-    updateDialog({ loginId: answer.login?.id ?? null });
-  } catch (error) {
-    updateDialog({ failure: describeFailure(error) });
-  }
-}
+  const engine = yield* EngineClient;
+  const answer = yield* Effect.catch(call(engine.accounts), (error) =>
+    Effect.sync(() => {
+      updateDialog({ failure: describeFailure(error) });
+      return null;
+    })
+  );
+  if (answer === null) return;
+  connection.replaceAccounts(answer);
+  updateDialog({ loginId: answer.login?.id ?? null });
+});
 
 export function startSignIn(accountId: string | null = null) {
-  return openSignIn({ accountId, importing: null }, () =>
-    requestAccounts('/api/accounts/login', accountId ? { accountId } : {})
+  return runApp(
+    openSignIn({ accountId, importing: null }, (accounts) =>
+      accounts.login({ payload: accountId ? { accountId } : {} })
+    )
   );
 }
 
 function startImportSignIn(email: string) {
-  return openSignIn({ accountId: null, importing: email }, () =>
-    requestAccounts('/api/accounts/import', { origin: 'cswap', email })
+  return runApp(
+    openSignIn({ accountId: null, importing: email }, (accounts) =>
+      accounts.import({ payload: { origin: 'cswap', email } })
+    )
   );
 }
 

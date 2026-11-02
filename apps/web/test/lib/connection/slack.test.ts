@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'b
 import type { SlackSnapshot } from '@shinsa/core';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { refreshSlack, resetSlack, SLACK_ACTIONS, selectSlack, useSlack } from '@/lib/connection/slack.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 
 const SNAPSHOT: SlackSnapshot = {
   remote: true,
@@ -21,8 +22,7 @@ beforeEach(() => {
     input: RequestInfo | URL,
     init?: RequestInit
   ) => {
-    const path = String(input);
-    const method = init?.method ?? 'GET';
+    const { path, method } = readFetchCall(input, init);
     sent.push({ path, method });
     const answer = answers[`${method} ${path}`];
     return answer ? answer() : new Response('offline', { status: 503 });

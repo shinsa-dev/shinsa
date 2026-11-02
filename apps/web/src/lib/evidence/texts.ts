@@ -1,5 +1,5 @@
 import { describeFailure } from '@/lib/connection/commands.ts';
-import { requestText } from '@/lib/connection/http.ts';
+import { requestEvidenceBody } from '@/lib/connection/evidence.ts';
 import { createCache } from '@/lib/format/cache.ts';
 
 export const EVIDENCE_TEXT_LIMIT = 32;
@@ -26,7 +26,7 @@ export function requestEvidenceText(uri: string) {
   if (known !== null) return Promise.resolve(known);
   const running = pending.get(uri);
   if (running) return running;
-  const request = requestText(uri).then(
+  const request = requestEvidenceBody(uri).then(
     (body) => {
       recordEvidenceText(uri, body);
       return body;

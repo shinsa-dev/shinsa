@@ -4,6 +4,7 @@ import {
   requestAttachmentUpload,
   serializeFileData,
 } from '@/lib/connection/attachments.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -17,23 +18,28 @@ describe('serializeFileData', () => {
     const big = new Uint8Array(0x8000 * 2 + 5).fill(65);
     expect(atob(await serializeFileData(new Blob([big])))).toBe('A'.repeat(big.length));
   });
+
+  it('says so when the file cannot be read', async () => {
+    const broken = new Blob(['x']);
+    broken.arrayBuffer = () => Promise.reject(new Error('gone'));
+    await expect(serializeFileData(broken)).rejects.toThrow('Couldn’t read the file.');
+  });
 });
 
 describe('requestAttachmentUpload', () => {
   it('posts the name, type and data, and names a pasted image that has none', async () => {
-    const fetch = mock(async (_url: string, init: RequestInit) =>
-      Response.json({ url: '/x', body: init.body })
-    );
+    const fetch = mock(async (_url: URL, _init: RequestInit) => Response.json({ url: '/x' }));
     globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
     await requestAttachmentUpload(new File(['hi'], 'notes.txt', { type: 'text/plain' }));
     await requestAttachmentUpload(new File(['hi'], ''));
-    expect(fetch.mock.calls[0]?.[0]).toBe('/api/attachments');
-    expect(JSON.parse(String(fetch.mock.calls[0]?.[1].body))).toEqual({
+    const [first, second] = fetch.mock.calls.map((call) => readFetchCall(...call));
+    expect(first?.path).toBe('/api/attachments');
+    expect(first?.body).toEqual({
       name: 'notes.txt',
       mimeType: 'text/plain',
       data: 'aGk=',
     });
-    expect(JSON.parse(String(fetch.mock.calls[1]?.[1].body))).toMatchObject({
+    expect(second?.body).toMatchObject({
       name: 'Pasted image',
       mimeType: null,
     });

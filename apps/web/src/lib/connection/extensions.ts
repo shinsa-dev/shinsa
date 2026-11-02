@@ -8,32 +8,34 @@ import type {
   SkillSummary,
 } from '@shinsa/core';
 import { toast } from '@shinsa/ui/components/sonner';
+import { Clock, Effect } from 'effect';
 import * as React from 'react';
 import { describeFailure, requestWithToast } from '@/lib/connection/commands.ts';
-import { requestJson } from '@/lib/connection/http.ts';
 import {
   describeAlreadySignedIn,
   describeChecked,
   describeOptimizerChanged,
   describePluginToggled,
   describeServerRemoval,
-  describeSignedIn,
   describeSignedOut,
-  describeSignInFailed,
   describeSkillToggled,
 } from '@/lib/extensions.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { decodeAnswer } from '@/lib/runtime/engine/answers.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
+import { createSharedRun } from '@/lib/runtime/shared-run.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { SignInAnswer } from './schema.ts';
+import { stopSignInWatch, watchSignIn } from './sign-in-watch.ts';
+
+export { SIGN_IN_CHANNEL, SIGN_IN_LIMIT_MS, SIGN_IN_POLL_MS, stopSignInWatch } from './sign-in-watch.ts';
 
 interface ExtensionsView {
   snapshot: ExtensionsSnapshot | null;
   failure: string | null;
 }
 
-export const SIGN_IN_CHANNEL = 'shinsa-mcp';
-
-export const SIGN_IN_POLL_MS = 2_000;
-
-export const SIGN_IN_LIMIT_MS = 120_000;
+type ExtensionEndpoints = EngineClient['Service']['extensions'];
 
 export const CHECK_INTERVAL_MS = 60_000;
 
@@ -43,13 +45,11 @@ let view: ExtensionsView = { snapshot: null, failure: null };
 
 let viewText = '';
 
-let pending: Promise<void> | null = null;
-
-let checking: Promise<void> | null = null;
+let checking: { done: Promise<void> | null } | null = null;
 
 let checkedAt = Number.NEGATIVE_INFINITY;
 
-let stopWatch: (() => void) | null = null;
+const decodeSignIn = decodeAnswer(SignInAnswer);
 
 function publishExtensions(snapshot: ExtensionsSnapshot) {
   const text = JSON.stringify(snapshot);
@@ -64,13 +64,84 @@ function recordFailure(error: unknown) {
   signal.publish();
 }
 
+const read = createSharedRun(
+  Effect.gen(function* () {
+    const engine = yield* EngineClient;
+    publishExtensions(yield* engine.extensions.snapshot());
+  }).pipe(Effect.catch((error) => Effect.sync(() => recordFailure(error))))
+);
+
+const replaceExtensions = Effect.fn('Extensions.replace')(function* (
+  call: (extensions: ExtensionEndpoints) => Effect.Effect<ExtensionsSnapshot, Error>
+) {
+  const engine = yield* EngineClient;
+  const answer = yield* call(engine.extensions);
+  publishExtensions(answer);
+  return answer;
+});
+
+const serverCheck = Effect.fn('Extensions.serverCheck')(function* (
+  at: number | undefined,
+  run: { done: Promise<void> | null }
+) {
+  const now = at ?? (yield* Clock.currentTimeMillis);
+  if (now - checkedAt < CHECK_INTERVAL_MS) {
+    yield* Effect.promise(() => read.run());
+    return yield* Effect.promise(() => read.run());
+  }
+  checkedAt = now;
+  checking = run;
+  yield* replaceExtensions((extensions) => extensions.check({ payload: {} })).pipe(
+    Effect.catch((error) => Effect.sync(() => recordFailure(error))),
+    Effect.ensuring(
+      Effect.sync(() => {
+        if (checking === run) checking = null;
+      })
+    )
+  );
+});
+
+const signIn = Effect.fn('Extensions.signIn')(function* (server: McpServerSummary) {
+  const tab = window.open('about:blank', '_blank');
+  const engine = yield* EngineClient;
+  return yield* engine.extensions.signIn({ payload: { serverId: server.id } }).pipe(
+    Effect.flatMap(decodeSignIn),
+    Effect.map((answer) => {
+      publishExtensions(answer.snapshot);
+      if (!answer.authorizationUrl) {
+        tab?.close();
+        toast.success(describeAlreadySignedIn(server.name));
+        return true;
+      }
+      if (tab) tab.location.href = answer.authorizationUrl;
+      else window.open(answer.authorizationUrl, '_blank');
+      watchSignIn(server, { refresh: refreshExtensions, read: () => view.snapshot });
+      return true;
+    }),
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        tab?.close();
+        toast.error(error.message);
+        return false;
+      })
+    )
+  );
+});
+
+function updateExtensions(
+  call: (extensions: ExtensionEndpoints) => Effect.Effect<ExtensionsSnapshot, Error>,
+  done?: string
+) {
+  return requestWithToast(() => runApp(replaceExtensions(call)), done);
+}
+
 export function selectExtensions() {
   return view;
 }
 
 export function resetExtensions() {
   stopSignInWatch();
-  pending = null;
+  read.reset();
   checking = null;
   checkedAt = Number.NEGATIVE_INFINITY;
   viewText = '';
@@ -79,12 +150,7 @@ export function resetExtensions() {
 }
 
 export function refreshExtensions() {
-  pending ??= requestJson<ExtensionsSnapshot>('/api/extensions')
-    .then(publishExtensions, recordFailure)
-    .then(() => {
-      pending = null;
-    });
-  return pending;
+  return read.run();
 }
 
 export function useExtensions(active = true) {
@@ -94,26 +160,11 @@ export function useExtensions(active = true) {
   return React.useSyncExternalStore(signal.subscribe, selectExtensions);
 }
 
-async function requestExtensions(path: string, body: unknown) {
-  const answer = await requestJson<ExtensionsSnapshot>(path, body);
-  publishExtensions(answer);
-  return answer;
-}
-
-function updateExtensions(path: string, body: unknown, done?: string) {
-  return requestWithToast(() => requestExtensions(path, body), done);
-}
-
-export function requestServerCheck(now = Date.now()) {
-  if (checking !== null) return checking;
-  if (now - checkedAt < CHECK_INTERVAL_MS) return refreshExtensions().then(refreshExtensions);
-  checkedAt = now;
-  checking = requestExtensions('/api/extensions/check', {})
-    .then(() => undefined, recordFailure)
-    .then(() => {
-      checking = null;
-    });
-  return checking;
+export function requestServerCheck(now?: number) {
+  if (checking?.done) return checking.done;
+  const run: { done: Promise<void> | null } = { done: null };
+  run.done = runApp(serverCheck(now, run));
+  return run.done;
 }
 
 export function useServerCheck() {
@@ -139,24 +190,25 @@ export function useRefreshOnReturn() {
 
 export function checkServers(server: McpServerSummary | null = null) {
   return updateExtensions(
-    '/api/extensions/check',
-    server ? { serverId: server.id } : {},
+    (extensions) => extensions.check({ payload: server ? { serverId: server.id } : {} }),
     describeChecked(server)
   );
 }
 
 function addServer(input: McpServerInput, done: string) {
-  return updateExtensions('/api/extensions/servers/add', { server: input }, done);
+  return updateExtensions((extensions) => extensions.addServer({ payload: { server: input } }), done);
 }
 
 function updateServer(server: McpServerSummary, input: McpServerInput, done: string) {
-  return updateExtensions('/api/extensions/servers/update', { serverId: server.id, server: input }, done);
+  return updateExtensions(
+    (extensions) => extensions.updateServer({ payload: { serverId: server.id, server: input } }),
+    done
+  );
 }
 
 function removeServer(server: McpServerSummary) {
   return updateExtensions(
-    '/api/extensions/servers/remove',
-    { serverId: server.id },
+    (extensions) => extensions.removeServer({ payload: { serverId: server.id } }),
     describeServerRemoval(server).done
   );
 }
@@ -166,126 +218,42 @@ export function chooseServer(
   patch: { enabled?: boolean; scope?: ExtensionScope },
   done: string
 ) {
-  return updateExtensions('/api/extensions/servers/choose', { serverId: server.id, ...patch }, done);
+  return updateExtensions(
+    (extensions) => extensions.chooseServer({ payload: { serverId: server.id, ...patch } }),
+    done
+  );
 }
 
 function signOutServer(server: McpServerSummary) {
   return updateExtensions(
-    '/api/extensions/servers/sign-out',
-    { serverId: server.id },
+    (extensions) => extensions.signOut({ payload: { serverId: server.id } }),
     describeSignedOut(server.name)
   );
 }
 
 export function chooseSkill(skill: SkillSummary, enabled: boolean) {
   return updateExtensions(
-    '/api/extensions/skills/choose',
-    { skillId: skill.id, enabled },
+    (extensions) => extensions.chooseSkill({ payload: { skillId: skill.id, enabled } }),
     describeSkillToggled(skill.name, enabled)
   );
 }
 
 export function chooseOptimizer(optimizer: ContextOptimizer, patch: Partial<ContextOptimizer>) {
-  return updateExtensions('/api/extensions/optimizer', patch, describeOptimizerChanged(optimizer, patch));
+  return updateExtensions(
+    (extensions) => extensions.optimizer({ payload: { ...patch } }),
+    describeOptimizerChanged(optimizer, patch)
+  );
 }
 
 export function choosePlugin(plugin: PluginSummary, enabled: boolean) {
   return updateExtensions(
-    '/api/extensions/plugins/choose',
-    { pluginId: plugin.id, enabled },
+    (extensions) => extensions.choosePlugin({ payload: { pluginId: plugin.id, enabled } }),
     describePluginToggled(plugin.name, enabled)
   );
 }
 
-interface SignInAnswer {
-  authorizationUrl: string | null;
-  snapshot: ExtensionsSnapshot;
-}
-
-function isSignInSettled(snapshot: ExtensionsSnapshot | null, serverId: string) {
-  const server = snapshot?.servers.find((entry) => entry.id === serverId);
-  return server?.signedIn === true && server.status.state !== 'needs_sign_in';
-}
-
-interface SignInMessage {
-  channel?: unknown;
-  ok?: unknown;
-}
-
-function readSignInMessage(data: unknown, channel: boolean): SignInMessage | null {
-  if (typeof data !== 'object' || data === null) return channel ? {} : null;
-  const message = data as SignInMessage;
-  if (!channel && message.channel !== SIGN_IN_CHANNEL) return null;
-  return message;
-}
-
-export function stopSignInWatch() {
-  stopWatch?.();
-}
-
-function watchSignIn(server: McpServerSummary) {
-  stopSignInWatch();
-  const deadline = Date.now() + SIGN_IN_LIMIT_MS;
-  const channel = new BroadcastChannel(SIGN_IN_CHANNEL);
-  const stop = () => {
-    clearInterval(timer);
-    channel.close();
-    window.removeEventListener('focus', onReturn);
-    window.removeEventListener('message', onWindowMessage);
-    document.removeEventListener('visibilitychange', onReturn);
-    if (stopWatch === stop) stopWatch = null;
-  };
-  const poll = async () => {
-    await refreshExtensions();
-    if (stopWatch !== stop || !isSignInSettled(view.snapshot, server.id)) return;
-    stop();
-    toast.success(describeSignedIn(server.name));
-  };
-  const onMessage = (message: SignInMessage | null) => {
-    if (!message) return;
-    if (message.ok !== false) {
-      void poll();
-      return;
-    }
-    stop();
-    toast.error(describeSignInFailed(server.name));
-  };
-  const onReturn = () => {
-    if (document.visibilityState === 'visible') void poll();
-  };
-  const onWindowMessage = (event: MessageEvent) => onMessage(readSignInMessage(event.data, false));
-  const timer = setInterval(() => {
-    if (Date.now() >= deadline) stop();
-    else void poll();
-  }, SIGN_IN_POLL_MS);
-  channel.onmessage = (event: MessageEvent) => onMessage(readSignInMessage(event.data, true));
-  window.addEventListener('focus', onReturn);
-  window.addEventListener('message', onWindowMessage);
-  document.addEventListener('visibilitychange', onReturn);
-  stopWatch = stop;
-}
-
-export async function signInServer(server: McpServerSummary) {
-  const tab = window.open('about:blank', '_blank');
-  try {
-    const answer = await requestJson<SignInAnswer>('/api/extensions/servers/sign-in', {
-      serverId: server.id,
-    });
-    publishExtensions(answer.snapshot);
-    if (!answer.authorizationUrl) {
-      tab?.close();
-      toast.success(describeAlreadySignedIn(server.name));
-      return true;
-    }
-    if (tab) tab.location.href = answer.authorizationUrl;
-    else window.open(answer.authorizationUrl, '_blank');
-    watchSignIn(server);
-    return true;
-  } catch (error) {
-    tab?.close();
-    toast.error(describeFailure(error));
-    return false;
-  }
+export function signInServer(server: McpServerSummary) {
+  return runApp(signIn(server));
 }
 
 export interface ExtensionActions {

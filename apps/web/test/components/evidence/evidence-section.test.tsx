@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { EVIDENCE_EMPTY, EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { refreshHealth } from '@/lib/connection/health.ts';
 import { connection } from '@/lib/connection/socket.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import { FakeIntersectionObserver, installIntersectionObserver } from '../../support/intersection.ts';
 import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createEvidence, createRun, createShinsaState, createTask, NOW } from '../../support/state.ts';
@@ -32,7 +33,7 @@ function piece(id: string, overrides: Partial<Evidence>) {
 
 function answer(routes: Record<string, unknown>) {
   globalThis.fetch = mock(async (input: string | URL | Request) => {
-    const url = String(input);
+    const url = readFetchCall(input).path;
     const body = routes[url];
     if (body === undefined) return new Response('missing', { status: 404 });
     return typeof body === 'string' ? new Response(body) : Response.json(body);

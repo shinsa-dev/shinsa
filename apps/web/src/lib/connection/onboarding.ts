@@ -1,84 +1,136 @@
-import type {
-  OnboardingFlow,
-  OnboardingReply,
-  OnboardingStatus,
-  RootSuggestions,
-  TerminalInfo,
-} from '@shinsa/core';
+import type { OnboardingReply, OnboardingStatus } from '@shinsa/core';
+import { OpenAnswer } from '@shinsa/core/engine-api/schema';
+import { toast } from '@shinsa/ui/components/sonner';
+import { Effect } from 'effect';
 import * as React from 'react';
 import { requestWithToast } from '@/lib/connection/commands.ts';
-import { requestJson } from '@/lib/connection/http.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { decodeAnswer } from '@/lib/runtime/engine/answers.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { navigate } from '@/router.ts';
+import { InstallAnswer, PRIVACY_NOT_OPENED_MESSAGE, PrivacyNotOpened } from './schema.ts';
 
 const signal = createSignal();
 
 let status: OnboardingStatus | null = null;
 
-let statusRequest: Promise<void> | null = null;
+let asking = false;
+
+let known = false;
 
 function publishStatus(next: OnboardingStatus) {
   status = next;
+  known = true;
   signal.publish();
 }
 
+const decodeInstall = decodeAnswer(InstallAnswer);
+
+const decodeOpened = decodeAnswer(OpenAnswer);
+
+const readStatus = Effect.gen(function* () {
+  const engine = yield* EngineClient;
+  publishStatus(yield* engine.onboarding.status());
+}).pipe(
+  Effect.catch(() =>
+    Effect.sync(() => {
+      known = false;
+    })
+  ),
+  Effect.ensuring(
+    Effect.sync(() => {
+      asking = false;
+    })
+  )
+);
+
+const writeRoots = Effect.fn('Onboarding.writeRoots')(function* (roots: string[]) {
+  const engine = yield* EngineClient;
+  publishStatus(yield* engine.onboarding.setup({ payload: { roots } }));
+});
+
+const readRootSuggestions = Effect.gen(function* () {
+  const engine = yield* EngineClient;
+  return yield* engine.onboarding.roots({ query: { refresh: '1' } });
+});
+
+const openPrivacy = Effect.gen(function* () {
+  const engine = yield* EngineClient;
+  const opened = yield* decodeOpened(yield* engine.onboarding.privacy());
+  if (!opened.ok) return yield* new PrivacyNotOpened({ message: PRIVACY_NOT_OPENED_MESSAGE });
+});
+
+const readFlow = Effect.gen(function* () {
+  const engine = yield* EngineClient;
+  return yield* engine.onboarding.flow();
+});
+
+const reply = Effect.fn('Onboarding.reply')(function* (answer: OnboardingReply) {
+  const engine = yield* EngineClient;
+  const flow = yield* engine.onboarding.reply({ payload: { ...answer } });
+  asking = true;
+  yield* readStatus;
+  return flow;
+});
+
+const install = Effect.fn('Onboarding.install')(function* (
+  fix: { id: string } | { all: true } | { command: string }
+) {
+  const engine = yield* EngineClient;
+  const answer = yield* engine.onboarding.install({ payload: { ...fix } });
+  const installed = yield* decodeInstall(answer);
+  return installed.terminal;
+});
+
 export function refreshOnboardingStatus() {
-  statusRequest = requestJson<OnboardingStatus>('/api/onboarding').then(publishStatus, () => {
-    statusRequest = null;
-  });
-  return statusRequest;
+  asking = true;
+  return runApp(readStatus);
 }
 
 export function resetOnboardingStatus() {
   status = null;
-  statusRequest = null;
+  asking = false;
+  known = false;
   signal.publish();
 }
 
 export function useOnboardingStatus() {
   React.useEffect(() => {
-    if (!statusRequest) void refreshOnboardingStatus();
+    if (!asking && !known) void refreshOnboardingStatus();
   }, []);
   return React.useSyncExternalStore(signal.subscribe, () => status);
 }
 
 export function updateRoots(roots: string[], done: string) {
-  return requestWithToast(
-    async () => publishStatus(await requestJson<OnboardingStatus>('/api/onboarding/setup', { roots })),
-    done
-  );
+  return requestWithToast(() => runApp(writeRoots(roots)), done);
 }
 
 export function requestRootSuggestions() {
-  return requestJson<RootSuggestions>('/api/onboarding/roots?refresh=1');
+  return runApp(readRootSuggestions);
 }
 
 export function requestPrivacySettings() {
-  return requestWithToast(async () => {
-    const opened = await requestJson<{ ok: boolean }>('/api/onboarding/privacy', {});
-    if (!opened.ok) {
-      throw new Error(
-        'System Settings did not open. Open it yourself and go to Privacy & Security → Full Disk Access.'
-      );
-    }
-  });
+  return requestWithToast(() => runApp(openPrivacy));
 }
 
 export function requestOnboardingFlow() {
-  return requestJson<OnboardingFlow>('/api/onboarding/flow');
+  return runApp(readFlow);
 }
 
-export async function replyToOnboarding(reply: OnboardingReply) {
-  const flow = await requestJson<OnboardingFlow>('/api/onboarding/flow', reply);
-  await refreshOnboardingStatus();
-  return flow;
+export function replyToOnboarding(answer: OnboardingReply) {
+  return runApp(reply(answer));
 }
 
-export async function requestOnboardingInstall(fix: { id: string } | { all: true } | { command: string }) {
-  const answer = await requestJson<{ terminal: TerminalInfo }>('/api/onboarding/install', fix);
-  return answer.terminal;
+export function requestOnboardingInstall(fix: { id: string } | { all: true } | { command: string }) {
+  return runApp(install(fix));
 }
 
-export async function restartOnboarding() {
-  if (await requestWithToast(() => replyToOnboarding({ type: 'restart' }))) navigate('/onboarding');
+const restart = reply({ type: 'restart' }).pipe(
+  Effect.andThen(Effect.sync(() => navigate('/onboarding'))),
+  Effect.catch((error) => Effect.sync(() => toast.error(error.message)))
+);
+
+export function restartOnboarding() {
+  return runApp(restart);
 }

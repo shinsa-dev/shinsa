@@ -11,16 +11,24 @@ function readText(body: BodyInit | null | undefined) {
   return null;
 }
 
-export async function readFetchRequest(input: RequestInfo | URL, init?: RequestInit): Promise<FetchRequest> {
-  const request = input instanceof Request ? input : null;
-  const url = new URL(request ? request.url : String(input), location.href);
-  const path = url.origin === location.origin ? `${url.pathname}${url.search}` : url.href;
-  let text = readText(init?.body);
-  if (request) text = await request.text();
+function readPath(url: URL) {
+  return url.origin === location.origin ? `${url.pathname}${url.search}` : url.href;
+}
+
+export function readFetchCall(input: RequestInfo | URL, init?: RequestInit): FetchRequest {
+  const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+  const text = readText(init?.body);
   return {
-    path,
-    method: request?.method ?? init?.method ?? 'GET',
-    headers: new Headers(request?.headers ?? init?.headers),
+    path: readPath(url),
+    method: init?.method ?? (input instanceof Request ? input.method : 'GET'),
+    headers: new Headers(input instanceof Request ? input.headers : init?.headers),
     body: text ? JSON.parse(text) : null,
   };
+}
+
+export async function readFetchRequest(input: RequestInfo | URL, init?: RequestInit): Promise<FetchRequest> {
+  const call = readFetchCall(input, init);
+  if (!(input instanceof Request)) return call;
+  const text = await input.text();
+  return { ...call, body: text ? JSON.parse(text) : null };
 }

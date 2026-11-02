@@ -26,6 +26,7 @@ import {
   toggleStackTask,
   useNewTaskRequest,
 } from '@/lib/new-task.ts';
+import { readFetchCall } from '../support/fetch.ts';
 import { createMachineResources, createTaskResources } from '../support/resources.ts';
 import { createShinsaState, createTask } from '../support/state.ts';
 
@@ -423,8 +424,8 @@ describe('the machine a new task runs on', () => {
     const answer = { machineId: 'box', reason: 'Benchmarks run on the build box.' };
     const realFetch = globalThis.fetch;
     const posted: string[] = [];
-    globalThis.fetch = mock((url: string) => {
-      posted.push(url);
+    globalThis.fetch = mock((url: URL, init?: RequestInit) => {
+      posted.push(readFetchCall(url, init).path);
       return Promise.resolve(Response.json({ answer }));
     }) as unknown as typeof globalThis.fetch;
     const placed = await requestRoutedPlacement([studio, ruled], 'Run the benchmark');

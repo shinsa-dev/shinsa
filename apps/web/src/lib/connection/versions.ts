@@ -1,10 +1,14 @@
-import type { ProgramId, UpdateOutcome, UpdateStreamLine, VersionsSnapshot } from '@shinsa/core';
+import type { ProgramId, UpdateOutcome, VersionsSnapshot } from '@shinsa/core';
 import { toast } from '@shinsa/ui/components/sonner';
+import { Effect, Stream } from 'effect';
 import * as React from 'react';
-import { describeFailure } from '@/lib/connection/commands.ts';
-import { requestJson, requestLines } from '@/lib/connection/http.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { streamLines } from '@/lib/runtime/engine/lines.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
+import { createSharedRun } from '@/lib/runtime/shared-run.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { describeUpdater, describeUpdating, selectProgram } from '@/lib/versions.ts';
+import { UPDATE_UNFINISHED_MESSAGE, UpdateLine, UpdateUnfinished } from './schema.ts';
 
 interface VersionsView {
   snapshot: VersionsSnapshot | null;
@@ -18,8 +22,6 @@ const EMPTY: VersionsView = { snapshot: null, failure: null, updating: [] };
 
 let view: VersionsView = EMPTY;
 
-let pending: Promise<void> | null = null;
-
 function publish(patch: Partial<VersionsView>) {
   view = { ...view, ...patch };
   signal.publish();
@@ -29,27 +31,89 @@ function publishVersions(snapshot: VersionsSnapshot) {
   publish({ snapshot, failure: null });
 }
 
-function recordFailure(error: unknown) {
-  publish({ failure: describeFailure(error) });
-}
+const readLines = streamLines(UpdateLine);
+
+const read = createSharedRun(
+  Effect.gen(function* () {
+    const engine = yield* EngineClient;
+    publishVersions(yield* engine.versions.snapshot());
+  }).pipe(Effect.catch((error) => Effect.sync(() => publish({ failure: error.message }))))
+);
+
+const check = Effect.gen(function* () {
+  const engine = yield* EngineClient;
+  publishVersions(yield* engine.versions.refresh());
+  return true;
+}).pipe(
+  Effect.catch((error) =>
+    Effect.sync(() => {
+      toast.error(error.message);
+      return false;
+    })
+  )
+);
+
+const streamUpdate = Effect.fn('Versions.streamUpdate')(function* (
+  program: ProgramId,
+  onOutput: (line: string) => void
+) {
+  const engine = yield* EngineClient;
+  const response = yield* engine.versions.update({
+    payload: { program },
+    responseMode: 'response-only',
+  });
+  const outcome = yield* readLines(response).pipe(
+    Stream.tap((line) =>
+      Effect.sync(() => {
+        if (line.type === 'output') onOutput(line.line);
+      })
+    ),
+    Stream.runFold(
+      (): UpdateOutcome | null => null,
+      (found, line) => (line.type === 'output' ? found : line)
+    )
+  );
+  if (outcome === null) return yield* new UpdateUnfinished({ message: UPDATE_UNFINISHED_MESSAGE });
+  return outcome;
+}, Effect.provide(EngineClient.askingLines));
+
+const runUpdate = Effect.fn('Versions.runUpdate')(function* (program: ProgramId) {
+  const title = describeUpdating(program);
+  const id = toast.loading(title, {
+    description: describeUpdater(selectProgram(view.snapshot, program)?.updater ?? null),
+  });
+  publish({ updating: [...view.updating, program] });
+  return yield* streamUpdate(program, (message) => toast.loading(title, { id, description: message })).pipe(
+    Effect.map((outcome) => {
+      publishVersions(outcome.versions);
+      if (outcome.ok) toast.success(outcome.message, { id });
+      else toast.error(outcome.message, { id });
+      return outcome.ok;
+    }),
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        toast.error(error.message, { id });
+        return false;
+      })
+    ),
+    Effect.ensuring(
+      Effect.sync(() => publish({ updating: view.updating.filter((entry) => entry !== program) }))
+    )
+  );
+});
 
 export function selectVersions() {
   return view;
 }
 
 export function resetVersions() {
-  pending = null;
+  read.reset();
   view = EMPTY;
   signal.publish();
 }
 
 export function refreshVersions() {
-  pending ??= requestJson<VersionsSnapshot>('/api/versions')
-    .then(publishVersions, recordFailure)
-    .then(() => {
-      pending = null;
-    });
-  return pending;
+  return read.run();
 }
 
 export function useVersions(active = true) {
@@ -59,45 +123,11 @@ export function useVersions(active = true) {
   return React.useSyncExternalStore(signal.subscribe, selectVersions);
 }
 
-export async function checkVersions() {
-  try {
-    publishVersions(await requestJson<VersionsSnapshot>('/api/versions/refresh', {}));
-    return true;
-  } catch (error) {
-    toast.error(describeFailure(error));
-    return false;
-  }
+export function checkVersions() {
+  return runApp(check);
 }
 
-async function streamUpdate(program: ProgramId, onOutput: (line: string) => void) {
-  const answer: { outcome: UpdateOutcome | null } = { outcome: null };
-  await requestLines<UpdateStreamLine>('/api/versions/update', { program }, (line) => {
-    if (line.type === 'output') onOutput(line.line);
-    else answer.outcome = line;
-  });
-  if (!answer.outcome) throw new Error('The update ended without saying how it went.');
-  return answer.outcome;
-}
-
-export async function requestUpdate(program: ProgramId) {
-  if (view.updating.includes(program)) return false;
-  const title = describeUpdating(program);
-  const id = toast.loading(title, {
-    description: describeUpdater(selectProgram(view.snapshot, program)?.updater ?? null),
-  });
-  publish({ updating: [...view.updating, program] });
-  try {
-    const outcome = await streamUpdate(program, (message) =>
-      toast.loading(title, { id, description: message })
-    );
-    publishVersions(outcome.versions);
-    if (outcome.ok) toast.success(outcome.message, { id });
-    else toast.error(outcome.message, { id });
-    return outcome.ok;
-  } catch (error) {
-    toast.error(describeFailure(error), { id });
-    return false;
-  } finally {
-    publish({ updating: view.updating.filter((entry) => entry !== program) });
-  }
+export function requestUpdate(program: ProgramId) {
+  if (view.updating.includes(program)) return Promise.resolve(false);
+  return runApp(runUpdate(program));
 }

@@ -9,7 +9,7 @@ import {
 import type { IconName } from '@shinsa/ui/components/icon';
 import { toast } from '@shinsa/ui/components/sonner';
 import { copyText, describeFailure, sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { requestJson } from '@/lib/connection/http.ts';
+import { requestWebhook as requestScheduleWebhook } from '@/lib/connection/schedules.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { formatClock, formatMoment } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
@@ -18,11 +18,6 @@ interface ScheduleStatus {
   label: string;
   tone: Tone;
   at: number | null;
-}
-
-interface WebhookDetails {
-  url: string;
-  hasSecret: boolean;
 }
 
 const TRIGGER_ICON: Record<Schedule['trigger']['kind'], IconName> = {
@@ -118,7 +113,7 @@ export function removeSchedule(schedule: Schedule) {
 }
 
 export function requestWebhook(schedule: Schedule) {
-  return requestJson<WebhookDetails>(`/api/schedules/${encodeURIComponent(schedule.id)}/webhook`);
+  return requestScheduleWebhook(schedule.id);
 }
 
 export function resolveScheduleTaskId(schedule: Schedule) {

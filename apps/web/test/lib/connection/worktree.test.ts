@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { openWorktree } from '@/lib/connection/worktree.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -16,7 +17,7 @@ afterEach(() => {
 });
 
 function serve(response: () => Response) {
-  const fetch = mock(async (_url: string, _init?: RequestInit) => response());
+  const fetch = mock(async (_url: URL, _init?: RequestInit) => response());
   globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
   return fetch;
 }
@@ -25,10 +26,10 @@ describe('openWorktree', () => {
   it('asks Shinsa to open the worktree at a file and line', async () => {
     const fetch = serve(() => Response.json({ ok: true }));
     expect(await openWorktree('t1', 'editor', 'src/a.ts', 12)).toBe(true);
-    const [url, init] = fetch.mock.calls[0] ?? [];
-    expect(url).toBe('/api/tasks/t1/open');
-    expect(init?.method).toBe('POST');
-    expect(JSON.parse(String(init?.body))).toEqual({ target: 'editor', path: 'src/a.ts', line: 12 });
+    const sent = readFetchCall(...(fetch.mock.calls[0] as [URL, RequestInit]));
+    expect(sent.path).toBe('/api/tasks/t1/open');
+    expect(sent.method).toBe('POST');
+    expect(sent.body).toEqual({ target: 'editor', path: 'src/a.ts', line: 12 });
     expect(toasts.error).not.toHaveBeenCalled();
   });
 

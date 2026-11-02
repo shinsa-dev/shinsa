@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { UserCommand } from '@shinsa/core';
-import { requestJson, requestText } from '@/lib/connection/http.ts';
+import { requestEvidenceBody } from '@/lib/connection/evidence.ts';
 import { enterReadOnly, READ_ONLY_REFUSAL, selectReadOnlyRefusal } from '@/lib/connection/read-only.ts';
+import { requestSecretAnswer } from '@/lib/connection/secrets.ts';
 import { connection, sendCommand } from '@/lib/connection/socket.ts';
 
 const PRIORITY: UserCommand = { type: 'task.prioritize', taskId: 't1', priority: 'urgent' };
@@ -28,11 +29,11 @@ describe('a read-only page', () => {
     const fetched = mock(() => Promise.resolve(Response.json({ ok: true })));
     globalThis.fetch = fetched as unknown as typeof fetch;
     const leave = enterReadOnly();
-    await expect(requestJson('/api/tasks/t1/share', {})).rejects.toThrow(READ_ONLY_REFUSAL);
+    await expect(requestSecretAnswer('g1', { decline: true })).rejects.toThrow(READ_ONLY_REFUSAL);
     expect(fetched).not.toHaveBeenCalled();
-    expect(await requestText('/api/tasks/t1/share/preview')).toBe('{"ok":true}');
+    expect(await requestEvidenceBody('/api/evidence/t1/run.log')).toBe('{"ok":true}');
     leave();
-    expect(await requestJson('/api/tasks/t1/share', {})).toEqual({ ok: true });
+    expect(await requestSecretAnswer('g1', { decline: true })).toEqual({ ok: true });
   });
 
   it('stays read-only while any page holds it, and leaving twice changes nothing', () => {

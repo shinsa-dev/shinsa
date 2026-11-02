@@ -1,5 +1,6 @@
 import { type Effect, Layer, ManagedRuntime } from 'effect';
 import { FetchHttpClient, HttpClient } from 'effect/http';
+import { EngineHttp } from './engine-http/service.ts';
 import { EngineClient } from './engine/service.ts';
 import { RemoteClient } from './remote/service.ts';
 import type { AppServices } from './schema.ts';
@@ -16,6 +17,7 @@ export const AppTransport = Layer.mergeAll(
 );
 
 export const AppLayer = Layer.mergeAll(EngineClient.layer, RemoteClient.layer).pipe(
+  Layer.provideMerge(EngineHttp.layer),
   Layer.provideMerge(AppTransport)
 );
 

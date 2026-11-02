@@ -1,8 +1,6 @@
 import {
-  type FileChanged,
   type FileContent,
   type FileWrite,
-  type FileWritten,
   type RepoPaths,
   type RepoTree,
   type SearchLine,
@@ -14,8 +12,8 @@ import {
 } from '@shinsa/core';
 import * as React from 'react';
 import type { FileSave } from '@/lib/code/edits.ts';
+import { requestCodeAnswer, requestCodeSearch, requestFileSave } from '@/lib/connection/code-reads.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
-import { requestJson, requestJsonOrConflict, requestLines } from '@/lib/connection/http.ts';
 
 export type Loaded<T> =
   | { status: 'idle' }
@@ -156,11 +154,16 @@ export function registerCodeSource(taskId: string, source: CodeSource) {
   };
 }
 
-function answerCodeRead<T>(key: string): Promise<T> {
+function readCodeKey(key: string) {
   const [, taskId = '', name = '', search = ''] = CODE_URL.exec(key) ?? [];
-  const source = sources.get(decodeURIComponent(taskId));
-  if (!source) return requestJson<T>(key);
-  return source(name, new URLSearchParams(search)) as Promise<T>;
+  return { taskId: decodeURIComponent(taskId), name, params: new URLSearchParams(search) };
+}
+
+function answerCodeRead<T>(key: string): Promise<T> {
+  const { taskId, name, params } = readCodeKey(key);
+  const source = sources.get(taskId);
+  if (!source) return requestCodeAnswer(taskId, name, Object.fromEntries(params)) as Promise<T>;
+  return source(name, params) as Promise<T>;
 }
 
 function requestCodeRead<T>(url: string, version = ''): Promise<T> {
@@ -362,7 +365,8 @@ export function useRepoSearch(task: Task, ref: string | null, search: CodeSearch
       key,
       view: { loaded: holdLoaded(current.view.loaded, LOADING), searching: true },
     }));
-    requestLines<SearchLine>(key, undefined, (line) => {
+    const { taskId, params } = readCodeKey(key);
+    requestCodeSearch(taskId, Object.fromEntries(params), (line) => {
       if (line.kind === 'failed') {
         failure = line.message;
         return;
@@ -399,8 +403,6 @@ export function resolveRawUrl(taskId: string, ref: string, path: string) {
   return resolveCodeUrl(taskId, 'raw', { ref, path });
 }
 
-export async function requestFileWrite(taskId: string, write: FileWrite): Promise<FileSave> {
-  const answer = await requestJsonOrConflict<FileWritten, FileChanged>(resolveCodeUrl(taskId, 'file'), write);
-  if (answer.conflict) return { kind: 'changed', content: answer.value.content };
-  return { kind: 'saved', changed: answer.value.changed };
+export function requestFileWrite(taskId: string, write: FileWrite): Promise<FileSave> {
+  return requestFileSave(taskId, write);
 }

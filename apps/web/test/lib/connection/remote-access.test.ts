@@ -11,6 +11,7 @@ import {
   useRemoteAccess,
 } from '@/lib/connection/remote-access.ts';
 import { connection } from '@/lib/connection/socket.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 
 let answers: Record<string, () => Response> = {};
@@ -24,9 +25,8 @@ beforeEach(() => {
     input: RequestInfo | URL,
     init?: RequestInit
   ) => {
-    const path = String(input);
-    const method = init?.method ?? 'GET';
-    sent.push({ path, method, body: typeof init?.body === 'string' ? JSON.parse(init.body) : null });
+    const { path, method, body } = readFetchCall(input, init);
+    sent.push({ path, method, body });
     const answer = answers[`${method} ${path}`];
     return answer ? answer() : new Response('offline', { status: 503 });
   }) as typeof fetch);

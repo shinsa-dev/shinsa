@@ -1,54 +1,86 @@
 import {
   resolveTaskProject,
   resolveTaskTerminalPlace,
-  type ServiceDefinition,
-  type ServiceSuggestion,
   type ShinsaState,
   type Task,
-  type TerminalForeground,
-  type TerminalInfo,
   type TerminalPlace,
   type TerminalsSnapshot,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { useSyncExternalStore } from 'react';
 import { requestWithToast } from '@/lib/connection/commands.ts';
-import { requestJson } from '@/lib/connection/http.ts';
 import { connection } from '@/lib/connection/socket.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { decodeAnswer } from '@/lib/runtime/engine/answers.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import type { ServiceInput } from '@/lib/terminal/services.ts';
 import { resolveTerminalPath } from '@/lib/terminal/tabs.ts';
 import { selectTerminalView } from '@/lib/terminal/view.ts';
 import { navigate } from '@/router.ts';
+import {
+  ForegroundAnswer,
+  NO_TERMINAL_PLACE_MESSAGE,
+  NoTerminalPlace,
+  ServiceAddedAnswer,
+  ServicesAddedAnswer,
+  ServiceStoppedAnswer,
+  TerminalOpenedAnswer,
+} from './schema.ts';
+
+type Engine = EngineClient['Service'];
+
+const decodeOpened = decodeAnswer(TerminalOpenedAnswer);
+
+const decodeServiceAdded = decodeAnswer(ServiceAddedAnswer);
+
+const decodeServicesAdded = decodeAnswer(ServicesAddedAnswer);
+
+const decodeStopped = decodeAnswer(ServiceStoppedAnswer);
+
+const decodeForeground = decodeAnswer(ForegroundAnswer);
 
 export function useTerminals() {
   return useSyncExternalStore(connection.subscribeTerminals, connection.selectTerminals);
 }
 
-async function requestTerminals(path: string, body: unknown) {
-  const answer = await requestJson<TerminalsSnapshot>(path, body);
+const replaceTerminals = Effect.fn('Terminals.replace')(function* (
+  call: (engine: Engine) => Effect.Effect<TerminalsSnapshot, Error>
+) {
+  const answer = yield* call(yield* EngineClient);
   connection.replaceTerminals(answer);
   return answer;
+});
+
+function updateTerminals(call: (engine: Engine) => Effect.Effect<TerminalsSnapshot, Error>) {
+  return runApp(replaceTerminals(call));
 }
 
-function terminalPath(id: string, action: string) {
-  return `/api/terminals/${encodeURIComponent(id)}/${action}`;
-}
-
-export async function requestTerminalCreate(projectId: string, place: TerminalPlace, command?: string) {
-  const answer = await requestJson<TerminalsSnapshot & { terminal: TerminalInfo }>('/api/terminals', {
-    projectId,
-    path: place.path,
-    ...(command ? { command } : {}),
+const createTerminal = Effect.fn('Terminals.create')(function* (
+  projectId: string,
+  place: TerminalPlace,
+  command?: string
+) {
+  const engine = yield* EngineClient;
+  const answer = yield* engine.terminals.create({
+    payload: { projectId, path: place.path, ...(command ? { command } : {}) },
   });
-  const { terminal, ...snapshot } = answer;
+  const { terminal, ...snapshot } = yield* decodeOpened(answer);
   connection.replaceTerminals(snapshot);
   return terminal;
+});
+
+export function requestTerminalCreate(projectId: string, place: TerminalPlace, command?: string) {
+  return runApp(createTerminal(projectId, place, command));
 }
 
 export function openTerminal(projectKey: string, projectId: string, place: TerminalPlace, command?: string) {
-  return requestWithToast(async () => {
-    const terminal = await requestTerminalCreate(projectId, place, command);
-    navigate(resolveTerminalPath(projectKey, terminal.id));
-  });
+  return requestWithToast(() =>
+    runApp(
+      Effect.tap(createTerminal(projectId, place, command), (terminal) =>
+        Effect.sync(() => navigate(resolveTerminalPath(projectKey, terminal.id)))
+      )
+    )
+  );
 }
 
 export function selectTaskTerminal(state: ShinsaState | null, task: Task) {
@@ -58,52 +90,67 @@ export function selectTaskTerminal(state: ShinsaState | null, task: Task) {
   return project && place ? { project, place } : null;
 }
 
+const openForTask = Effect.fn('Terminals.openForTask')(function* (task: Task, command?: string) {
+  const terminal = selectTaskTerminal(connection.snapshot().state, task);
+  if (!terminal) return yield* new NoTerminalPlace({ message: NO_TERMINAL_PLACE_MESSAGE });
+  const { project, place } = terminal;
+  const created = yield* createTerminal(project.id, place, command);
+  navigate(resolveTerminalPath(project.key, created.id));
+});
+
 export function openTaskTerminal(task: Task, command?: string) {
-  return requestWithToast(async () => {
-    const terminal = selectTaskTerminal(connection.snapshot().state, task);
-    if (!terminal) throw new Error('This task has no project folder to open a terminal in.');
-    const { project, place } = terminal;
-    const created = await requestTerminalCreate(project.id, place, command);
-    navigate(resolveTerminalPath(project.key, created.id));
-  });
+  return requestWithToast(() => runApp(openForTask(task, command)));
 }
 
 export function renameTerminal(id: string, name: string | null) {
-  return requestWithToast(() => requestTerminals(terminalPath(id, 'rename'), { name }));
+  return requestWithToast(() =>
+    updateTerminals((engine) => engine.terminals.rename({ params: { terminalId: id }, payload: { name } }))
+  );
 }
 
 export function restartTerminal(id: string) {
-  return requestWithToast(() => requestTerminals(terminalPath(id, 'restart'), {}));
+  return requestWithToast(() =>
+    updateTerminals((engine) => engine.terminals.restart({ params: { terminalId: id }, payload: {} }))
+  );
 }
 
 export function closeTerminal(id: string) {
-  return requestWithToast(() => requestTerminals(terminalPath(id, 'close'), {}));
+  return requestWithToast(() =>
+    updateTerminals((engine) => engine.terminals.close({ params: { terminalId: id }, payload: {} }))
+  );
 }
 
 export function reorderTerminals(projectId: string, ids: string[]) {
-  return requestWithToast(() => requestTerminals('/api/terminals/order', { projectId, ids }));
+  return requestWithToast(() =>
+    updateTerminals((engine) => engine.terminals.reorder({ payload: { projectId, ids } }))
+  );
 }
+
+const readForeground = Effect.fn('Terminals.readForeground')(function* (id: string) {
+  const engine = yield* EngineClient;
+  const answer = yield* engine.terminals.foreground({ params: { terminalId: id } });
+  return yield* decodeForeground(answer);
+});
 
 export function requestTerminalForeground(id: string) {
-  return requestJson<TerminalForeground>(`/api/terminals/${encodeURIComponent(id)}/foreground`);
+  return runApp(readForeground(id));
 }
 
-export async function requestServiceSuggestions(projectId: string) {
-  const answer = await requestJson<{ suggestions: ServiceSuggestion[] }>(
-    `/api/services/suggestions?projectId=${encodeURIComponent(projectId)}`
+const listSuggestions = Effect.fn('Services.listSuggestions')(function* (projectId: string, refine: boolean) {
+  const engine = yield* EngineClient;
+  return yield* engine.services.suggestions({ query: { projectId, ...(refine ? { refine: '1' } : {}) } });
+});
+
+export function requestServiceSuggestions(projectId: string) {
+  return runApp(Effect.map(listSuggestions(projectId, false), (answer) => [...answer.suggestions]));
+}
+
+export function requestRefinedServiceSuggestions(projectId: string) {
+  return runApp(
+    Effect.map(listSuggestions(projectId, true), (answer) =>
+      answer.refined ? [...answer.suggestions] : null
+    )
   );
-  return answer.suggestions;
-}
-
-export async function requestRefinedServiceSuggestions(projectId: string) {
-  const answer = await requestJson<{ suggestions: ServiceSuggestion[]; refined: boolean }>(
-    `/api/services/suggestions?projectId=${encodeURIComponent(projectId)}&refine=1`
-  );
-  return answer.refined ? answer.suggestions : null;
-}
-
-function servicePath(id: string, action: string) {
-  return `/api/services/${encodeURIComponent(id)}/${action}`;
 }
 
 function serializeServiceInput(input: ServiceInput) {
@@ -117,62 +164,85 @@ function serializeServiceInput(input: ServiceInput) {
   };
 }
 
-export async function requestServiceAdd(projectId: string, input: ServiceInput) {
-  const { service, ...snapshot } = await requestJson<TerminalsSnapshot & { service: ServiceDefinition }>(
-    '/api/services',
-    { projectId, ...serializeServiceInput(input) }
-  );
+const addService = Effect.fn('Services.add')(function* (projectId: string, input: ServiceInput) {
+  const engine = yield* EngineClient;
+  const answer = yield* engine.services.add({ payload: { projectId, ...serializeServiceInput(input) } });
+  const { service, ...snapshot } = yield* decodeServiceAdded(answer);
   connection.replaceTerminals(snapshot);
   return service;
+});
+
+export function requestServiceAdd(projectId: string, input: ServiceInput) {
+  return runApp(addService(projectId, input));
 }
 
-export async function requestServicesAdd(projectId: string, inputs: ServiceInput[]) {
-  const { added, ...snapshot } = await requestJson<TerminalsSnapshot & { added: ServiceDefinition[] }>(
-    '/api/services/batch',
-    {
-      projectId,
-      services: inputs.map(serializeServiceInput),
-    }
-  );
+const addServices = Effect.fn('Services.addBatch')(function* (projectId: string, inputs: ServiceInput[]) {
+  const engine = yield* EngineClient;
+  const answer = yield* engine.services.addBatch({
+    payload: { projectId, services: inputs.map(serializeServiceInput) },
+  });
+  const { added, ...snapshot } = yield* decodeServicesAdded(answer);
   connection.replaceTerminals(snapshot);
   return added;
+});
+
+export function requestServicesAdd(projectId: string, inputs: ServiceInput[]) {
+  return runApp(addServices(projectId, inputs));
 }
 
 export function requestServiceUpdate(id: string, input: ServiceInput) {
-  return requestTerminals(servicePath(id, 'update'), serializeServiceInput(input));
+  return updateTerminals((engine) =>
+    engine.services.update({ params: { serviceId: id }, payload: serializeServiceInput(input) })
+  );
 }
 
 export function requestServicesRemove(ids: string[]) {
-  return requestTerminals('/api/services/remove', { ids });
+  return updateTerminals((engine) => engine.services.remove({ payload: { ids } }));
 }
 
 function resolveRunBody(taskId: string | null) {
   return taskId ? { taskId } : {};
 }
 
-async function requestServiceRun(id: string, action: 'start' | 'restart', taskId: string | null) {
-  const { terminal, ...snapshot } = await requestJson<TerminalsSnapshot & { terminal: TerminalInfo }>(
-    servicePath(id, action),
-    resolveRunBody(taskId)
-  );
+const runService = Effect.fn('Services.run')(function* (
+  id: string,
+  action: 'start' | 'restart',
+  taskId: string | null
+) {
+  const engine = yield* EngineClient;
+  const answer = yield* engine.services[action]({
+    params: { serviceId: id },
+    payload: resolveRunBody(taskId),
+  });
+  const { terminal, ...snapshot } = yield* decodeOpened(answer);
   connection.replaceTerminals(snapshot);
   return terminal;
-}
+});
+
+const stopRun = Effect.fn('Services.stop')(function* (id: string, taskId: string | null) {
+  const engine = yield* EngineClient;
+  const answer = yield* engine.services.stop({ params: { serviceId: id }, payload: resolveRunBody(taskId) });
+  const snapshot = yield* decodeStopped(answer);
+  connection.replaceTerminals(snapshot);
+  return snapshot;
+});
 
 export function startService(id: string, taskId: string | null = null) {
-  return requestWithToast(() => requestServiceRun(id, 'start', taskId));
+  return requestWithToast(() => runApp(runService(id, 'start', taskId)));
 }
 
 export function restartService(id: string, taskId: string | null = null) {
-  return requestWithToast(() => requestServiceRun(id, 'restart', taskId));
+  return requestWithToast(() => runApp(runService(id, 'restart', taskId)));
 }
 
 export function stopService(id: string, taskId: string | null = null) {
-  return requestWithToast(() => requestTerminals(servicePath(id, 'stop'), resolveRunBody(taskId)));
+  return requestWithToast(() => runApp(stopRun(id, taskId)));
 }
 
 export function startAllServices(projectId: string) {
-  return requestWithToast(() => requestTerminals('/api/services/start-all', { projectId }));
+  return requestWithToast(() =>
+    updateTerminals((engine) => engine.services.startAll({ payload: { projectId } }))
+  );
 }
 
 export function openServiceTerminal(projectKey: string, terminalId: string) {

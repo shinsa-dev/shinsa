@@ -20,6 +20,7 @@ import * as identity from '@/lib/review/identity.ts';
 import { resolveCodePath } from '@/lib/review/places.ts';
 import { navigate } from '@/router.ts';
 import { ReviewTab } from '@/routes/task/review.tsx';
+import { readFetchCall } from '../../support/fetch.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import {
   createEvidence,
@@ -559,8 +560,9 @@ describe('the Review tab', () => {
     const posts: unknown[] = [];
     const served = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) !== '/api/terminals') return served(input, init);
-      posts.push(JSON.parse(String(init?.body)));
+      const { path, body } = readFetchCall(input, init);
+      if (path !== '/api/terminals') return served(input, init);
+      posts.push(body);
       return new Response('no terminal here', { status: 500 });
     }) as typeof fetch;
     renderReview({ ...state, projects: { shop: createProject({ id: 'shop' }) } }, task);
