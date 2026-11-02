@@ -1,4 +1,7 @@
-import { PROTOCOL_LIMITS } from '@shinsa/core';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import type { RunRole } from '@shinsa/core';
+import { Schema } from 'effect';
 
 export interface ToolSpec {
   name: string;
@@ -7,14 +10,28 @@ export interface ToolSpec {
   annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean };
 }
 
-export function limitedText(description: string, maxLength: number) {
-  return { type: 'string', description: `${description} At most ${maxLength} characters.`, maxLength };
+export type ToolHandler = (
+  name: string,
+  input: Record<string, unknown>,
+  signal: AbortSignal,
+  requestId?: RequestId
+) => Promise<string>;
+
+export interface ToolServerOptions {
+  scope?: () => string;
 }
 
-export function textList(description: string, maxItems: number, maxLength: number) {
-  return { type: 'array', description, maxItems, items: { type: 'string', maxLength } };
+export interface ShinsaTools {
+  name: 'shinsa';
+  role: RunRole;
+  server: Server;
+  handle: ToolHandler;
+  createServer: (options?: ToolServerOptions) => Server;
 }
 
-export function limitedPath(description: string) {
-  return { type: 'string', description, maxLength: PROTOCOL_LIMITS.path };
-}
+export type ToolReply = CallToolResult;
+
+export class ToolCallFailed extends Schema.TaggedError<ToolCallFailed, { readonly brand: unique symbol }>()(
+  'ToolCallFailed',
+  { message: Schema.String }
+) {}

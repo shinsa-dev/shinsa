@@ -1,5 +1,5 @@
 import { PROTOCOL_LIMITS, REPLY_OUTCOMES } from '@shinsa/core';
-import { limitedText } from './schema.ts';
+import { limitedText } from './fields.ts';
 
 const L = PROTOCOL_LIMITS;
 

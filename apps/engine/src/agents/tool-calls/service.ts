@@ -1,13 +1,8 @@
-import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
 import {
   assertRunTool,
-  type CommandOf,
   isDelegatedRun,
   isTaskSettled,
-  type Run,
   resolveCurrentRound,
-  type ShinsaCommand,
-  type ShinsaEvent,
   serializeTaskReferences,
   validateEvidenceRemoval,
   validateFixHandOver,
@@ -16,13 +11,9 @@ import {
   validateReview,
   type WatchdogSpec,
 } from '@shinsa/core';
-import { resolveHead } from '../git/index.ts';
-import { upsertProjectFolderRepo } from '../repos/index.ts';
-import type { Engine } from '../runtime/engine.ts';
-import type { ScheduleToolCall } from '../schedules/index.ts';
-import type { EvidenceStore } from '../store/index.ts';
-import type { Workspaces } from '../workspaces/index.ts';
-import { awaitDelegation } from './delegations.ts';
+import { resolveHead } from '../../git/index.ts';
+import { upsertProjectFolderRepo } from '../../repos/index.ts';
+import { awaitDelegation } from '../delegations/delivery.ts';
 import {
   assertHeldSourcesUsed,
   assertProtocol,
@@ -30,54 +21,14 @@ import {
   readString,
   resolveCommitMessage,
   storeEvidence,
-} from './handover.ts';
-import { createManageClient, isSurfaceTool, type ManageAccess, readSurfaceToolCall } from './manage/index.ts';
-import type { ProviderRegistry } from './providers/index.ts';
-import type { Questions } from './questions.ts';
-import { resolveTaskReading } from './reading.ts';
-import { RepositoryWork } from './repository-work.ts';
-import { handleServiceTool, type ServiceToolName, type TaskServiceRunner } from './services.ts';
-import { handleOrchestrationTool } from './tools/orchestration.ts';
-import { handleProcessTool } from './tools/process.ts';
-import type { Transcripts } from './transcripts/index.ts';
-
-export interface ScheduleToolHandler {
-  handleTool: (
-    name: string,
-    input: Record<string, unknown>,
-    call: ScheduleToolCall
-  ) => Promise<string> | null;
-}
-
-interface ToolCallsOptions {
-  engine: Engine;
-  evidence: EvidenceStore;
-  transcripts: Transcripts;
-  providers: ProviderRegistry;
-  questions: Questions;
-  schedules: ScheduleToolHandler | null;
-  minuteMs: number;
-  manage: ManageAccess | null;
-  workspaces: Workspaces;
-  services: TaskServiceRunner | null;
-  listServerNames: (run: Run) => Promise<string[]>;
-}
-
-interface ToolCall {
-  runId: string;
-  attemptId: string;
-  input: Record<string, unknown>;
-  signal: AbortSignal;
-  requestId?: RequestId;
-}
-
-type CallDispatch = (command: ShinsaCommand, id?: string) => Promise<ShinsaEvent[]>;
-
-type CommitHandOver =
-  | Omit<CommandOf<'agent.complete_phase'>, 'treeHash' | 'files'>
-  | Omit<CommandOf<'agent.complete_fix'>, 'treeHash' | 'files'>;
-
-type HandOverTool = 'propose_plan' | 'complete_phase' | 'complete_fix' | 'report_review';
+} from '../handover.ts';
+import { createManageClient, isSurfaceTool, readSurfaceToolCall } from '../manage/index.ts';
+import { resolveTaskReading } from '../reading/task.ts';
+import { RepositoryWork } from '../repository-work/service.ts';
+import { handleServiceTool, type ServiceToolName } from '../services.ts';
+import { handleOrchestrationTool } from '../tools/orchestration/handler.ts';
+import { handleProcessTool } from '../tools/process/handler.ts';
+import type { ToolCallsOptions, ToolCall, CallDispatch, CommitHandOver, HandOverTool } from './schema.ts';
 
 export class ToolCalls {
   readonly #options: ToolCallsOptions;

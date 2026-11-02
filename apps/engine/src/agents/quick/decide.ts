@@ -1,16 +1,6 @@
-export interface ChoiceQuestion {
-  type: 'choice';
-  instructions: string;
-  criteria: Record<string, string>;
-}
+import type { ChoiceQuestion, ChoicesQuestion, DecisionQuestion } from './schema.ts';
 
-export interface ChoicesQuestion {
-  type: 'choices';
-  instructions: string;
-  criteria: Record<string, string>;
-}
-
-export type DecisionQuestion = ChoiceQuestion | ChoicesQuestion;
+export type { ChoiceQuestion, ChoicesQuestion, DecisionQuestion } from './schema.ts';
 
 export function resolveDecisionProperty(question: DecisionQuestion): Record<string, unknown> {
   const options = Object.keys(question.criteria);

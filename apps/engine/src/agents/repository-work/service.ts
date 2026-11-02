@@ -5,14 +5,10 @@ import {
   serializeRepositoryWork,
   type Task,
 } from '@shinsa/core';
-import { listChangedFiles } from '../git/changed-files.ts';
-import { describeError, log } from '../log/index.ts';
-import type { Engine } from '../runtime/engine.ts';
-
-interface Overlap {
-  taskId: string;
-  paths: string[];
-}
+import { listChangedFiles } from '../../git/changed-files.ts';
+import { describeError, log } from '../../log/index.ts';
+import type { Engine } from '../../runtime/engine.ts';
+import { type Overlap } from './schema.ts';
 
 function listOverlaps(files: Map<string, Set<string>>, taskId: string): Overlap[] {
   const own = files.get(taskId) ?? new Set<string>();

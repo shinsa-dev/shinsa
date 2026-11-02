@@ -13,7 +13,7 @@ import {
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
-import type { ActiveRun } from './active.ts';
+import type { ActiveRun } from './active/schema.ts';
 import { assertProtocol } from './handover.ts';
 import { IdleRelease, type IdleReleaseOptions } from './idle.ts';
 import type { AgentSession } from './providers/index.ts';

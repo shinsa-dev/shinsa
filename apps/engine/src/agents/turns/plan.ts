@@ -1,11 +1,9 @@
 import {
   type ChatEntry,
-  type Handoff,
   type HandoffSource,
   needsRoundBrief,
   type Run,
   type RunFork,
-  type RunHandoff,
   type RunHandoffReason,
   resolveHandoff,
   resolveHandoffPrompt,
@@ -15,28 +13,9 @@ import {
   selectSessionCwd,
   splitHouseRules,
 } from '@shinsa/core';
-import { log } from '../log/index.ts';
-import { type AgentProvider, resolveCapabilities } from './providers/index.ts';
-import type { Transcripts } from './transcripts/index.ts';
-
-export interface TurnPlan {
-  resume: string | null;
-  fork: boolean;
-  handoff: Handoff | null;
-  record: RunHandoff | null;
-}
-
-export interface TurnContext {
-  state: ShinsaState;
-  run: Run;
-  provider: AgentProvider;
-  cwd: string;
-  transcripts: Transcripts;
-  labelOf: (providerId: string) => string;
-  recordLost: (sessionId: string) => Promise<void>;
-}
-
-const FRESH: TurnPlan = { resume: null, fork: false, handoff: null, record: null };
+import { log } from '../../log/index.ts';
+import { resolveCapabilities } from '../providers/index.ts';
+import { type TurnPlan, type TurnContext, FRESH, type TurnFoldInput } from './schema.ts';
 
 function resolveSessionTaskId(context: TurnContext, sessionId: string) {
   const fork = context.run.fork;
@@ -167,14 +146,6 @@ function resolveResumedPrompt(context: TurnContext, resume: string, prompt: stri
   if (!rules) return prompt;
   if (!hasHouseRules(context, resume, rules)) return brief;
   return splitHouseRules(prompt)?.instruction ?? prompt;
-}
-
-export interface TurnFoldInput {
-  run: Run;
-  plan: TurnPlan;
-  stepPrompt: boolean;
-  firstAttempt: boolean;
-  folds: boolean;
 }
 
 export function resolveTurnFold({ run, plan, stepPrompt, firstAttempt, folds }: TurnFoldInput) {

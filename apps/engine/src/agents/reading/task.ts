@@ -1,9 +1,6 @@
 import { type ChatEntryOf, type ShinsaState, serializeTaskDetail } from '@shinsa/core';
-import type { Transcripts } from './transcripts/index.ts';
-
-const REPLIES_SHOWN = 3;
-
-const REPLY_LIMIT = 1_500;
+import type { Transcripts } from '../transcripts/index.ts';
+import { REPLIES_SHOWN, REPLY_LIMIT } from './schema.ts';
 
 function listReplies(state: ShinsaState, transcripts: Transcripts, taskId: string) {
   return Object.values(state.runs)

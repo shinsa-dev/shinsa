@@ -1,19 +1,7 @@
-import {
-  type ChangeProposalInput,
-  COMPOSABLE_STEPS,
-  type DeliveringStep,
-  SCHEDULE_LIMITS,
-  SHAPE_LIMITS,
-  type ShinsaEvent,
-  STEP_SCHEMA,
-  validateDelivery,
-  validateReadReport,
-  validateReshape,
-} from '@shinsa/core';
-import { assertProtocol, HANDED_OVER } from '../handover.ts';
-import type { ProcessToolCall } from './process.ts';
-import { REPLY_SPEC } from './reply.ts';
-import { limitedText, type ToolSpec } from './schema.ts';
+import { COMPOSABLE_STEPS, SCHEDULE_LIMITS, SHAPE_LIMITS, STEP_SCHEMA } from '@shinsa/core';
+import { limitedText } from '../fields.ts';
+import { REPLY_SPEC } from '../reply.ts';
+import type { ToolSpec } from '../schema.ts';
 
 const L = SHAPE_LIMITS;
 
@@ -146,49 +134,3 @@ export const SHAPE_TOOL_SPECS = {
     },
   },
 } satisfies Record<string, ToolSpec>;
-
-const DELIVERING_TOOLS = new Map<string, DeliveringStep>([
-  ['answer', 'answer'],
-  ['report_diagnosis', 'investigate'],
-  ['submit_report', 'research'],
-  ['report_outcome', 'operate'],
-]);
-
-const UNCHANGED = 'Those are the steps this task already has. Plan it with `propose_plan`.';
-
-function hasReshaped(events: ShinsaEvent[]) {
-  return events.some((event) => event.type === 'task.reshaped');
-}
-
-function withProposal(proposal: ChangeProposalInput | null) {
-  return proposal ? { proposal } : {};
-}
-
-export async function handleShapeTool(name: string, input: Record<string, unknown>, call: ProcessToolCall) {
-  const { runId, attemptId } = call;
-  const step = DELIVERING_TOOLS.get(name);
-  if (step) {
-    const { body, reply, proposal } = assertProtocol(validateDelivery(step, input));
-    await call.dispatch({
-      type: 'agent.deliver',
-      runId,
-      attemptId,
-      step,
-      body,
-      ...(reply ? { reply } : {}),
-      ...withProposal(proposal),
-    });
-    return HANDED_OVER;
-  }
-  if (name === 'report_read') {
-    const read = assertProtocol(validateReadReport(input));
-    await call.dispatch({ type: 'agent.report_read', runId, attemptId, ...read });
-    return HANDED_OVER;
-  }
-  if (name === 'reshape_task') {
-    const reshape = assertProtocol(validateReshape(input));
-    const events = await call.dispatch({ type: 'agent.reshape', runId, attemptId, ...reshape });
-    return hasReshaped(events) ? HANDED_OVER : UNCHANGED;
-  }
-  return null;
-}

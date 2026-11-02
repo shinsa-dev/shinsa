@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ShinsaCommand, ShinsaEvent } from '@shinsa/core';
-import { handleProcessTool } from '../../../src/agents/tools/process.ts';
+import { handleProcessTool } from '../../../src/agents/tools/process/handler.ts';
 
 function createCall(events: ShinsaEvent[] = []) {
   const sent: ShinsaCommand[] = [];

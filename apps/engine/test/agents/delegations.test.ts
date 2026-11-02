@@ -6,7 +6,11 @@ import {
   type Run,
   type RunDelegation,
 } from '@shinsa/core';
-import { awaitDelegation, resolveDelegatedReply, resolveDelivery } from '../../src/agents/delegations.ts';
+import {
+  awaitDelegation,
+  resolveDelegatedReply,
+  resolveDelivery,
+} from '../../src/agents/delegations/delivery.ts';
 import { createRun, createStubEngine } from '../helpers/state.ts';
 
 function delegation(patch: Partial<RunDelegation> = {}): RunDelegation {

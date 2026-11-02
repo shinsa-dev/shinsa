@@ -46,18 +46,19 @@ import {
   requestVerdict,
 } from './accounts.ts';
 import {
-  type ActiveRun,
   carryUndelivered,
   createActiveRun,
   isSteerable,
   resolveAttemptKey,
   stopActiveRun,
   waitToRetry,
-} from './active.ts';
+} from './active/run.ts';
+import { type ActiveRun } from './active/schema.ts';
 import { type ClockTimers, RunClock } from './clock.ts';
 import { IdleCompaction, type IdleCompactionOptions } from './compaction.ts';
-import { type Delivery, resolveDelegatedReply } from './delegations.ts';
-import { Deliveries } from './deliveries.ts';
+import { resolveDelegatedReply } from './delegations/delivery.ts';
+import { type Delivery } from './delegations/schema.ts';
+import { Deliveries } from './deliveries/service.ts';
 import { SessionExtensionSets } from './extension-sets.ts';
 import type { IdleReleaseOptions } from './idle.ts';
 import { listSurfaceToolSpecs, type ManageAccess } from './manage/index.ts';
@@ -73,7 +74,8 @@ import {
 import { Questions } from './questions.ts';
 import type { TaskServiceRunner } from './services.ts';
 import { TaskScopes } from './supervisor/index.ts';
-import { type ScheduleToolHandler, ToolCalls } from './tool-calls.ts';
+import { type ScheduleToolHandler } from './tool-calls/schema.ts';
+import { ToolCalls } from './tool-calls/service.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
 import {
@@ -83,9 +85,8 @@ import {
   resolveTurnFold,
   resolveTurnPlan,
   resolveTurnPrompt,
-  type TurnContext,
-  type TurnPlan,
-} from './turns.ts';
+} from './turns/plan.ts';
+import { type TurnContext, type TurnPlan } from './turns/schema.ts';
 
 export type NoticeListener = (runId: string, notice: ChatNotice) => void;
 

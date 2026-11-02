@@ -1,15 +1,9 @@
-import { describeError, log } from '../log/index.ts';
-import type { Engine } from '../runtime/engine.ts';
-import { type ActiveRun, isSteerable, resolveAttemptKey } from './active.ts';
-import { type Delivery, resolveDelivery } from './delegations.ts';
-import type { Transcripts } from './transcripts/index.ts';
-
-interface DeliveriesOptions {
-  engine: Engine;
-  transcripts: Transcripts;
-  active: ReadonlyMap<string, ActiveRun>;
-  execute: (runId: string, prompt: string, delivery: Delivery) => Promise<void>;
-}
+import { describeError, log } from '../../log/index.ts';
+import { isSteerable, resolveAttemptKey } from '../active/run.ts';
+import { type ActiveRun } from '../active/schema.ts';
+import { resolveDelivery } from '../delegations/delivery.ts';
+import { type Delivery } from '../delegations/schema.ts';
+import { type DeliveriesOptions } from './schema.ts';
 
 export class Deliveries {
   readonly #options: DeliveriesOptions;

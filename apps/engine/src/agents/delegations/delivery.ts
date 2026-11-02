@@ -12,15 +12,9 @@ import {
   resolveDeliveryPrompt,
   type ShinsaState,
 } from '@shinsa/core';
-import type { Engine } from '../runtime/engine.ts';
-import type { DelegationOutcome } from './tools/orchestration.ts';
-
-export interface Delivery {
-  generation: number;
-  items: string[];
-  runIds: string[];
-  text: string;
-}
+import type { Engine } from '../../runtime/engine.ts';
+import type { DelegationOutcome } from '../tools/orchestration/schema.ts';
+import { type Delivery } from './schema.ts';
 
 function selectChild(state: ShinsaState, parent: Run, runId: string) {
   const child = state.runs[runId];
