@@ -10,6 +10,7 @@ import {
   type LoadedExtensions,
   listLiveRuns,
   type Repo,
+  MINUTE_MS,
   RUN_AGENT_ROLE,
   type Run,
   type RunAccount,
@@ -53,7 +54,7 @@ import {
   stopActiveRun,
   waitToRetry,
 } from './active.ts';
-import { type ClockTimers, MINUTE_MS, RunClock } from './clock.ts';
+import { type ClockTimers, RunClock } from './clock.ts';
 import { IdleCompaction, type IdleCompactionOptions } from './compaction.ts';
 import { type Delivery, resolveDelegatedReply } from './delegations.ts';
 import { Deliveries } from './deliveries.ts';

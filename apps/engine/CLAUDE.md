@@ -148,8 +148,9 @@ src/
 │                        effects.ts (the EffectRunner class edge over them: apply settles quietly once its signal
 │                        aborts, stop interrupts the watch and the background syncs), failures/ (EffectFailed and ShippingFailed,
 │                        the push's step, in schema.ts with the EFFECT_RETRY schedule; resolveEffectFailure and
-│                        resolveShippingFailure in classify.ts; retry.ts steps the schedule), StateClock (clock.ts: the
-│                        base of every timer that fires from state), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
+│                        resolveShippingFailure in classify.ts; retry.ts steps the schedule), StateClock (clock.ts, the
+│                        edge every timer that fires from state extends, over clock/: makeStateClock in service.ts
+│                        keeps one timer fiber in a FiberHandle, ClockTickFailed in schema.ts), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
 │                        next check)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
@@ -159,8 +160,11 @@ src/
 │   │                    tool calls (tool-calls.ts), questions and their waiters (questions.ts), idle release
 │   │                    (idle.ts), delegated reports in and out of a turn (deliveries.ts, delegations.ts), the
 │   │                    account seam: leases and rejections (accounts.ts), idle
-│   │                    compaction (compaction.ts), quiet runs (silence.ts), hand-over checks and evidence
-│   │                    (handover.ts), RunClock (clock.ts), the commands no agent may run (policy.ts: also the
+│   │                    compaction (compaction.ts), quiet runs (silence.ts, the edge over
+│   │                    silence/: makeSilenceWatch, the check a fiber on its interval), hand-over checks and evidence
+│   │                    (handover.ts), RunClock (clock.ts, the edge over clock/:
+│   │                    makeRunClock, a countdown fiber paused by interruption; ClockTimers become an Effect
+│   │                    Clock), the commands no agent may run (policy.ts: also the
 │   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
 │   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
@@ -442,8 +446,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   distinct causes and identical for a repeat, naming everything the decision depends on; the list is
   `docs/engine.md` → Command receipts → Deterministic server ids.
 - **Timers that fire from state extend `StateClock`** (`runtime/clock.ts`; `MonitorClock`, `ScheduleClock`,
-  `UsageResumeClock`). The subclass lists what is due (`listEntries`); the base keeps one timer for the earliest,
-  re-arms on every state change, fires each due entry once at a time, and skips an entry core refused with a
+  `UsageResumeClock`). The subclass lists what is due (`listEntries`); the base keeps one timer fiber for the
+  earliest (`runtime/clock/service.ts`), re-armed on every state change and kept when the earliest due time stays
+  the same, fires each due entry once at a time, and skips an entry core refused with a
   `DomainError`, or answered with no events (`refuse`), until it leaves `listEntries`, so a refused or no-op command
   is never sent again and again.
 - **Effects can be cancelled.** A running effect's fiber is interrupted when a decision cancels it or the server

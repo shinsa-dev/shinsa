@@ -1,116 +1,89 @@
 import { DomainError, type ShinsaState } from '@shinsa/core';
+import { Duration, Effect, Scope } from 'effect';
 import { describeError, log } from '../log/index.ts';
+import {
+  type ClockDefaults,
+  type ClockEntry,
+  ClockTickFailed,
+  MAX_CLOCK_DELAY,
+  type StateClockHandle,
+  type StateClockOptions,
+} from './clock/schema.ts';
+import { makeStateClock } from './clock/service.ts';
+import { edgeRuntime } from './edge.ts';
 import type { Engine } from './engine.ts';
 
-export interface StateClockOptions {
-  now?: () => number;
-  minDelayMs?: number;
-  maxDelayMs?: number;
-}
-
-export interface ClockEntry {
-  id: string;
-  dueAt: number;
-  fire: () => Promise<void>;
-}
-
-export interface ClockDefaults {
-  area: string;
-  failure: string;
-  minDelayMs: number;
-  maxDelayMs?: number;
-}
-
-const MAX_TIMER_MS = 2 ** 31 - 1;
+export type { ClockDefaults, ClockEntry, StateClockOptions } from './clock/schema.ts';
 
 export abstract class StateClock {
   protected readonly engine: Engine;
   protected readonly now: () => number;
-  readonly #defaults: ClockDefaults;
-  readonly #minDelayMs: number;
-  readonly #maxDelayMs: number;
-  #timer: ReturnType<typeof setTimeout> | null = null;
-  #dueAt: number | null = null;
-  #unsubscribe: (() => void) | null = null;
+  readonly #handle: StateClockHandle;
   #firing: Promise<void> | null = null;
-  readonly #refused = new Set<string>();
+  #settled = true;
+  #unsubscribe: (() => void) | null = null;
 
   constructor(engine: Engine, defaults: ClockDefaults, options: StateClockOptions) {
     this.engine = engine;
     this.now = options.now ?? Date.now;
-    this.#defaults = defaults;
-    this.#minDelayMs = options.minDelayMs ?? defaults.minDelayMs;
-    this.#maxDelayMs = Math.min(options.maxDelayMs ?? defaults.maxDelayMs ?? MAX_TIMER_MS, MAX_TIMER_MS);
+    const maxDelayMs = options.maxDelayMs ?? defaults.maxDelayMs;
+    this.#handle = edgeRuntime.runSync(
+      makeStateClock({
+        now: Effect.sync(() => this.now()),
+        minDelay: Duration.millis(options.minDelayMs ?? defaults.minDelayMs),
+        maxDelay:
+          maxDelayMs === undefined
+            ? MAX_CLOCK_DELAY
+            : Duration.min(Duration.millis(maxDelayMs), MAX_CLOCK_DELAY),
+        list: Effect.sync(() =>
+          this.listEntries(this.engine.state).map((entry) => ({
+            id: entry.id,
+            dueAt: entry.dueAt,
+            fire: Effect.tryPromise({
+              try: entry.fire,
+              catch: (error) =>
+                new ClockTickFailed({ message: describeError(error), refused: error instanceof DomainError }),
+            }),
+          }))
+        ),
+        report: (failure) =>
+          Effect.sync(() => log.warn(`[${defaults.area}] ${defaults.failure}`, { error: failure.message })),
+      }).pipe(Scope.provide(edgeRuntime.runSync(Scope.make())))
+    );
   }
 
   protected abstract listEntries(state: ShinsaState): ClockEntry[];
 
   start() {
-    this.#unsubscribe ??= this.engine.subscribe(() => this.#schedule());
-    this.#schedule();
+    if (this.#unsubscribe) return;
+    this.#unsubscribe = this.engine.subscribe(() => {
+      edgeRuntime.runFork(this.#handle.arm);
+    });
+    edgeRuntime.runFork(this.#handle.start);
   }
 
   stop() {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
-    this.#clear();
+    edgeRuntime.runFork(this.#handle.stop);
   }
 
   protected refuse(id: string) {
-    this.#refused.add(id);
+    edgeRuntime.runSync(this.#handle.refuse(id));
   }
 
   fireDue() {
-    this.#firing ??= this.#fireDue().finally(() => {
-      this.#firing = null;
-      this.#schedule();
-    });
+    if (this.#firing && !this.#settled) return this.#firing;
+    this.#settled = false;
+    this.#firing = edgeRuntime.runPromise(
+      this.#handle.fireDue.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            this.#settled = true;
+          })
+        )
+      )
+    );
     return this.#firing;
-  }
-
-  #clear() {
-    if (this.#timer) clearTimeout(this.#timer);
-    this.#timer = null;
-    this.#dueAt = null;
-  }
-
-  #listLive() {
-    const entries = this.listEntries(this.engine.state);
-    const listed = new Set(entries.map((entry) => entry.id));
-    for (const id of this.#refused) if (!listed.has(id)) this.#refused.delete(id);
-    return entries.filter((entry) => !this.#refused.has(entry.id));
-  }
-
-  #schedule() {
-    if (!this.#unsubscribe) return;
-    const entries = this.#listLive();
-    if (entries.length === 0) {
-      this.#clear();
-      return;
-    }
-    const dueAt = Math.min(...entries.map((entry) => entry.dueAt));
-    if (this.#dueAt === dueAt && this.#timer) return;
-    this.#clear();
-    this.#dueAt = dueAt;
-    const delay = Math.min(Math.max(this.#minDelayMs, dueAt - this.now()), this.#maxDelayMs);
-    this.#timer = setTimeout(() => {
-      this.#timer = null;
-      this.#dueAt = null;
-      void this.fireDue();
-    }, delay);
-    this.#timer.unref();
-  }
-
-  async #fireDue() {
-    const now = this.now();
-    for (const entry of this.#listLive()) {
-      if (entry.dueAt > now) continue;
-      try {
-        await entry.fire();
-      } catch (error) {
-        if (error instanceof DomainError) this.#refused.add(entry.id);
-        log.warn(`[${this.#defaults.area}] ${this.#defaults.failure}`, { error: describeError(error) });
-      }
-    }
   }
 }

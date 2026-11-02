@@ -4,13 +4,13 @@ import {
   isTaskSettled,
   listLiveRuns,
   listOpenGates,
+  MINUTE_MS,
   type Run,
   type RunRole,
   resolveIdleCompaction,
   type ShinsaState,
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
-import { MINUTE_MS } from './clock.ts';
 import type { SessionContext } from './providers/index.ts';
 
 export const COMPACTION_NEAR_LIMIT = 0.8;
