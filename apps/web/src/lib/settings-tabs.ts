@@ -24,6 +24,10 @@ interface SettingsTab {
   sections: string[];
 }
 
+export function listConnectionSections(remote: boolean) {
+  return remote ? [MACHINES_SECTION, TEAMS_SECTION] : [REMOTE_ACCESS_SECTION, TEAMS_SECTION, SLACK_SECTION];
+}
+
 const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   general: {
     id: 'general',
@@ -33,9 +37,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
       'Attention',
       'Notifications',
       'Context',
-      ...(isRemoteBuild()
-        ? [MACHINES_SECTION, TEAMS_SECTION]
-        : [REMOTE_ACCESS_SECTION, TEAMS_SECTION, SLACK_SECTION]),
+      ...listConnectionSections(isRemoteBuild()),
       'Setup',
       UPDATES_SECTION,
     ],
