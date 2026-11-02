@@ -2,14 +2,19 @@ import { describe, expect, it } from 'bun:test';
 import {
   canUseTeams,
   createTeamDraft,
+  describeHostedTeam,
+  describeHostedTeamsNotice,
   describePeopleCount,
   describeTeamEntry,
   describeTeamFacts,
   describeTeamsUnavailable,
   hasMachineAccess,
+  listHostedTeams,
   listProjectChoices,
+  listTeamMachineRows,
   listTeamPeople,
   listTeamProjectCommands,
+  NO_HOSTED_TEAM,
   needsTeamLink,
   resolveProjectPick,
   TEAM_PROJECTS_REQUIRED,
@@ -124,5 +129,73 @@ describe('Settings → Teams', () => {
     expect(listTeamPeople(team, 'bo').map((person) => person.user.login)).toEqual(['bob']);
     expect(listTeamPeople(team, 'nobody')).toEqual([]);
     expect(describePeopleCount(team)).toBe('3');
+  });
+
+  it('reads the hosted teams with whether this browser holds each one’s key, and who is looking', async () => {
+    const platform = createTeam();
+    const design = createTeam({ id: 'team2', name: 'Design', owner: KAI, role: 'member' });
+    const read = await listHostedTeams({
+      dashboard: {
+        listTeams: () => Promise.resolve([platform, design]),
+        readSession: () => Promise.resolve({ user: MONA }),
+      },
+      teamKeys: {
+        selectTeamKey: (teamId) =>
+          Promise.resolve(teamId === 'team1' ? { teamId, name: 'Platform', key: 'k', joinedAt: 0 } : null),
+      },
+    });
+    expect(read).toEqual({
+      viewerId: MONA.id,
+      teams: [
+        { team: platform, hasKey: true },
+        { team: design, hasKey: false },
+      ],
+    });
+    const signedOut = await listHostedTeams({
+      dashboard: { listTeams: () => Promise.resolve([]), readSession: () => Promise.resolve({ user: null }) },
+      teamKeys: { selectTeamKey: () => Promise.resolve(null) },
+    });
+    expect(signedOut).toEqual({ viewerId: null, teams: [] });
+  });
+
+  it('describes a hosted team with your role, its people and its machines', () => {
+    const machine = { id: 'm1', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: NOW };
+    const team = createTeam({ machines: [machine], createdAt: NOW - 2 * 86_400_000 });
+    expect(describeHostedTeam(team, NOW)).toEqual(['You own it · 2 people · 1 machine · Made 2d ago']);
+    const joined = createTeam({
+      owner: KAI,
+      role: 'member',
+      members: [],
+      machines: [],
+      createdAt: NOW - 2 * 86_400_000,
+    });
+    expect(describeHostedTeam(joined, NOW)).toEqual([
+      'Owned by ',
+      { user: KAI },
+      ' · 1 person · 0 machines · Made 2d ago',
+    ]);
+  });
+
+  it('lists a team’s machines with their status and owner', () => {
+    const team = createTeam({
+      machines: [
+        { id: 'm1', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: NOW },
+        { id: 'm2', name: 'Laptop', userId: KAI.id, online: false, lastSeenAt: NOW - 2 * 3_600_000 },
+        { id: 'm3', name: 'Spare', userId: 'gone', online: false, lastSeenAt: null },
+      ],
+    });
+    expect(listTeamMachineRows(team, NOW).map(({ status, owner }) => [status, owner?.login ?? null])).toEqual(
+      [
+        ['Online', 'mona'],
+        ['Last seen 2h ago', 'kai'],
+        ['Never connected', null],
+      ]
+    );
+  });
+
+  it('says why the hosted Teams section has no team to show', () => {
+    expect(describeHostedTeamsNotice(null, 'Signed out')).toBe('Signed out');
+    expect(describeHostedTeamsNotice(null, null)).toBe('Reading your teams…');
+    expect(describeHostedTeamsNotice({ viewerId: null, teams: [] }, null)).toBe(NO_HOSTED_TEAM);
   });
 });

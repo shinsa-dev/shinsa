@@ -27,6 +27,7 @@ import {
   resolveTeamTaskState,
   selectTeamTaskHeldAt,
 } from '@/lib/teams/feeds.ts';
+import { TEAM_KEY_MISSING } from '@/lib/teams/settings.ts';
 
 function useHostedKey(teamId: string) {
   const services = React.useContext(RemoteServicesContext);
@@ -78,15 +79,7 @@ function HostedTeamTask({ target }: { target: TeamViewTarget }) {
   const key = useHostedKey(target.teamId);
   if (key === undefined) return <LoadingLine label='Opening the team task' className='m-auto' />;
   if (key === null)
-    return (
-      <EmptyState
-        icon='IconKey1'
-        title='Add the team to this browser'
-        description={
-          'This browser has no key for the team. Open the team’s join link here once to read its tasks.'
-        }
-      />
-    );
+    return <EmptyState icon='IconKey1' title='Add the team to this browser' description={TEAM_KEY_MISSING} />;
   return (
     <TeamTaskView
       target={target}
