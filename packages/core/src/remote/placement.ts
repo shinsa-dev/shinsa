@@ -121,7 +121,10 @@ const PlacementPolicies = Schema.mutable(Schema.Array(Schema.String)).check(
 
 const OpenTasks = Schema.Finite.check(Schema.makeFilter(Number.isInteger), Schema.isGreaterThanOrEqualTo(0));
 
-const TaskCapacity = Schema.Finite.check(Schema.makeFilter(Number.isInteger), Schema.isGreaterThanOrEqualTo(1));
+const TaskCapacity = Schema.Finite.check(
+  Schema.makeFilter(Number.isInteger),
+  Schema.isGreaterThanOrEqualTo(1)
+);
 
 export const PlacementCandidate = Schema.Struct({
   id: Schema.NonEmptyString,

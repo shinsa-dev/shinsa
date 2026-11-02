@@ -100,7 +100,7 @@ export function OptionalOneOf<const L extends string>(choices: readonly [L, ...L
       Schema.NullOr(choice),
       SchemaTransformation.transform<L | null, string>({
         decode: (text) => (text === '' ? null : (text as L)),
-        encode: (choice) => choice ?? '',
+        encode: (picked) => picked ?? '',
       })
     )
   );

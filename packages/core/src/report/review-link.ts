@@ -8,15 +8,28 @@ import type { ManualTestTargetKind, ReportCheck, ReviewFinding, WorkReport } fro
 
 export const REVIEW_PAYLOAD_VERSION = 1;
 
-const REVIEW_EVIDENCE_KINDS = ['screenshot', 'recording', 'preview'] as const satisfies readonly Evidence['kind'][];
+const REVIEW_EVIDENCE_KINDS = [
+  'screenshot',
+  'recording',
+  'preview',
+] as const satisfies readonly Evidence['kind'][];
 
-const FINDING_SEVERITIES = ['blocking', 'should_fix', 'optional'] as const satisfies readonly ReviewFinding['severity'][];
+const FINDING_SEVERITIES = [
+  'blocking',
+  'should_fix',
+  'optional',
+] as const satisfies readonly ReviewFinding['severity'][];
 
 const CHECK_OUTCOMES = ['pass', 'fail', 'skipped'] as const satisfies readonly ReportCheck['outcome'][];
 
 const TEST_TARGETS = ['url', 'file', 'command', 'screen'] as const satisfies readonly ManualTestTargetKind[];
 
-const REVIEW_PAYLOAD_STAGES = ['shipping', 'awaiting_merge', 'merged', 'done'] as const satisfies readonly TaskStage[];
+const REVIEW_PAYLOAD_STAGES = [
+  'shipping',
+  'awaiting_merge',
+  'merged',
+  'done',
+] as const satisfies readonly TaskStage[];
 
 type ReviewEvidenceKind = (typeof REVIEW_EVIDENCE_KINDS)[number];
 

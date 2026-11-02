@@ -1,5 +1,6 @@
 import { Option, Predicate, Schema } from 'effect';
 import { capitalise } from '../chat/text.ts';
+import { Salvaged, SalvagedItems, SalvagedOrNull } from '../domain/salvage.ts';
 import type { Queue, QueuedGate } from '../queue/types.ts';
 import {
   listBriefingEntries,
@@ -8,7 +9,6 @@ import {
   resolveFallbackBriefing,
   resolveFallbackNote,
 } from './fallback.ts';
-import { Salvaged, SalvagedItems, SalvagedOrNull } from '../domain/salvage.ts';
 import { resolveNote } from './note.ts';
 import { BRIEFING_LIMITS, type Briefing, type BriefingItem } from './types.ts';
 
@@ -96,7 +96,13 @@ function parseNext(picks: BriefingPick[], entries: Map<string, QueuedGate>, nowI
     .map((entry) => ({ taskId: entry.task.id, why: resolveBriefingWhy(entry) }));
 }
 
-function parseNote(raw: string | null | undefined, queue: Queue, named: Set<string>, now: number, ids: string[]) {
+function parseNote(
+  raw: string | null | undefined,
+  queue: Queue,
+  named: Set<string>,
+  now: number,
+  ids: string[]
+) {
   if (raw === null) return null;
   const written = cleanSentence(raw ?? null, BRIEFING_LIMITS.note, ids);
   if (written === null) return resolveFallbackNote(queue, named, now);

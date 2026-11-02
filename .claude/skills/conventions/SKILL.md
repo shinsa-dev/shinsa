@@ -82,7 +82,7 @@ export function waitOnTasks(state: ShinsaState, command: CommandOf<'task.wait_on
 3. **Multi-line arrow bodies get a block and an explicit `return`.** One-liners stay expressions.
 4. **Blank lines separate phases in long functions only.** A guard and a return read as one unit.
 5. **No dead parameters.** When an argument stops meaning anything (a `required = true` nobody passes), remove it.
-6. **Narrow types, no `any`.** Untrusted input is `unknown` and narrowed once (`readField` in `briefing/parse.ts`, `Reader` in `report/validate.ts`); a cast is allowed only right after the runtime check that justifies it.
+6. **Narrow types, no `any`.** Untrusted input is `unknown` and decoded once by its Effect Schema (`UserCommand` in `commands/parse.ts`, the hand-over schemas in `report/validate.ts` read by `HandOverReader`); a cast is allowed only right after the runtime check that justifies it.
 
 ## Errors and logs (apps/engine)
 
