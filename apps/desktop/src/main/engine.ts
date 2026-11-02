@@ -4,11 +4,6 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { app } from 'electron';
 import {
-  APP_ID,
-  ENGINE_LOCK,
-  ENGINE_LOG,
-  ENGINE_PLIST,
-  type EngineScreen,
   isCrashing,
   isOnOtherPort,
   isSpawnRefused,
@@ -16,16 +11,22 @@ import {
   listEngineVariables,
   parseLaunchdJob,
   parseRegistration,
-  type Registration,
   resolveDataDir,
   resolveEngineProgram,
   resolveEngineTarget,
   resolveLaunchAgentPath,
-  resolveLogTail,
-  selectBusyPort,
   serializeEngineAgent,
-} from '../lib/engine.ts';
-import type { ServerHealth } from '../lib/health.ts';
+} from '../engine/launchd.ts';
+import {
+  APP_ID,
+  ENGINE_LOCK,
+  ENGINE_LOG,
+  ENGINE_PLIST,
+  type EngineScreen,
+  type Registration,
+} from '../engine/schema.ts';
+import { resolveLogTail, selectBusyPort } from '../engine/screen.ts';
+import type { ServerHealth } from '../server/schema.ts';
 import { requestHealth } from './server.ts';
 
 const START_WAIT_MS = 25_000;

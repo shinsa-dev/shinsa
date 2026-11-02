@@ -1,14 +1,8 @@
 import { join } from 'node:path';
 import { app, Menu, type MenuItemConstructorOptions, nativeImage, Tray } from 'electron';
-import type { ServerHealth } from '../lib/health.ts';
-import {
-  describeTrayStatus,
-  listTrayItems,
-  resolveTrayTitle,
-  type TrayAction,
-  type TrayItem,
-  type TrayQueue,
-} from '../lib/tray.ts';
+import type { ServerHealth } from '../server/schema.ts';
+import { describeTrayStatus, listTrayItems, resolveTrayTitle } from '../tray/menu.ts';
+import type { TrayAction, TrayItem, TrayQueue } from '../tray/schema.ts';
 
 export class StatusTray {
   readonly #tray: Tray;

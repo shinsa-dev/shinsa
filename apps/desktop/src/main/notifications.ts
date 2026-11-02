@@ -1,5 +1,5 @@
 import { Notification } from 'electron';
-import type { DesktopNotice } from '../lib/bridge.ts';
+import type { DesktopNotice } from '../bridge/schema.ts';
 
 const shown = new Map<string, Notification>();
 

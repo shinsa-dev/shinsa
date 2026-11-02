@@ -1,16 +1,14 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, type IpcMainEvent, nativeTheme, screen, shell } from 'electron';
-import { MIN_SIZE, resolveWindowBounds } from '../lib/bounds.ts';
-import { CHANNELS, type DesktopWindowState } from '../lib/bridge.ts';
-import { APP_NAME } from '../lib/dev-bundle.ts';
-import {
-  ENGINE_ACTION_LABEL,
-  type EngineAction,
-  type EngineScreenView,
-  parseEngineAction,
-} from '../lib/engine.ts';
-import { isAppUrl, type Navigation, resolveHistoryStep, resolveNavigation } from '../lib/navigation.ts';
-import { resolveCloseAction } from '../lib/window-close.ts';
+import { APP_NAME } from '../app/schema.ts';
+import { CHANNELS, type DesktopWindowState } from '../bridge/schema.ts';
+import { ENGINE_ACTION_LABEL, type EngineAction, type EngineScreenView } from '../engine/schema.ts';
+import { parseEngineAction } from '../engine/screen.ts';
+import { isAppUrl, resolveHistoryStep, resolveNavigation } from '../navigation/origin.ts';
+import type { Navigation } from '../navigation/schema.ts';
+import { resolveWindowBounds } from '../window/bounds.ts';
+import { resolveCloseAction } from '../window/close.ts';
+import { MIN_SIZE } from '../window/schema.ts';
 import { readPrefs, writePrefs } from './prefs.ts';
 
 type Page = 'none' | 'app' | 'waiting';

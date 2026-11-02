@@ -1,7 +1,8 @@
 import { appendFileSync, renameSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { app } from 'electron';
-import { formatLogLine, type LogLevel, needsLogRotation, UPDATE_LOG } from '../lib/update-log.ts';
+import { formatLogLine, needsLogRotation } from '../updates/log.ts';
+import { type LogLevel, UPDATE_LOG } from '../updates/schema.ts';
 
 export function createUpdateLog() {
   const directory = app.getPath('logs');

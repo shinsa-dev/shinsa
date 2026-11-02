@@ -1,5 +1,5 @@
 import { Menu, type MenuItemConstructorOptions } from 'electron';
-import { APP_NAME } from '../lib/dev-bundle.ts';
+import { APP_NAME } from '../app/schema.ts';
 
 interface MenuActions {
   show: () => void;

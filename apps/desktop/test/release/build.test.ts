@@ -28,12 +28,13 @@ function readConfig(name: string) {
 
 function readIdentity() {
   const script = [
-    "import { APP_ID, ENGINE_LABEL, resolveDataDir } from './src/lib/engine.ts';",
-    "import { APP_NAME } from './src/lib/dev-bundle.ts';",
-    "import { URL_SCHEME } from './src/lib/deep-link.ts';",
-    "import { resolveCommandLink } from './src/lib/command-line.ts';",
-    "import { resolveServerUrl } from './src/lib/server-url.ts';",
-    "import { UPDATE_FEED } from './src/lib/update-channel.ts';",
+    "import { APP_ID, ENGINE_LABEL } from './src/engine/schema.ts';",
+    "import { resolveDataDir } from './src/engine/launchd.ts';",
+    "import { APP_NAME } from './src/app/schema.ts';",
+    "import { URL_SCHEME } from './src/deep-links/schema.ts';",
+    "import { resolveCommandLink } from './src/command-line/install.ts';",
+    "import { resolveServerUrl } from './src/server/url.ts';",
+    "import { UPDATE_FEED } from './src/updates/schema.ts';",
     'console.log(JSON.stringify({ APP_ID, ENGINE_LABEL, APP_NAME, URL_SCHEME,',
     "  command: resolveCommandLink('/u'), data: resolveDataDir({}, '/u'),",
     '  url: resolveServerUrl({ env: {}, packaged: true, configPort: null }), feed: UPDATE_FEED }));',

@@ -1,22 +1,24 @@
 import { join } from 'node:path';
 import { ENGINE_PROTOCOL } from '@shinsa/core';
 import { app, clipboard, ipcMain, session, shell } from 'electron';
-import { resolveBadgeText } from '../lib/badge.ts';
-import { CHANNELS, type DesktopStart } from '../lib/bridge.ts';
-import { findDeepLink, parseDeepLink, URL_SCHEME } from '../lib/deep-link.ts';
-import { APP_NAME, resolveUserDataDir } from '../lib/dev-bundle.ts';
+import { resolveUserDataDir } from '../app/dev-bundle.ts';
+import { APP_NAME } from '../app/schema.ts';
+import { CHANNELS, type DesktopStart } from '../bridge/schema.ts';
+import { findDeepLink, parseDeepLink } from '../deep-links/links.ts';
+import { URL_SCHEME } from '../deep-links/schema.ts';
 import {
   APP_ID,
-  describeEngineScreen,
   type EngineAction,
   type EngineScreen,
   LOGIN_ITEMS_URL,
   PRIVACY_URL,
-} from '../lib/engine.ts';
-import { describeServer, type ServerHealth } from '../lib/health.ts';
-import { isPermissionAllowed } from '../lib/navigation.ts';
-import { parseNotice, resolveNotificationSettingsUrl } from '../lib/notice.ts';
-import { describeAppVersion, parseUpdateChannel } from '../lib/update-channel.ts';
+} from '../engine/schema.ts';
+import { describeEngineScreen } from '../engine/screen.ts';
+import { isPermissionAllowed } from '../navigation/origin.ts';
+import { parseNotice, resolveBadgeText, resolveNotificationSettingsUrl } from '../notifications/notice.ts';
+import type { ServerHealth } from '../server/schema.ts';
+import { describeServer } from '../server/url.ts';
+import { describeAppVersion, parseUpdateChannel } from '../updates/channel.ts';
 import { syncCommandLine } from './command-line.ts';
 import { EngineSupervisor } from './engine.ts';
 import { applyMenu } from './menu.ts';

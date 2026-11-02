@@ -13,7 +13,6 @@ import {
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
-  type CommandLink,
   isOnPath,
   needsProfileEdit,
   parseLoginPath,
@@ -22,17 +21,9 @@ import {
   resolveCommandLink,
   resolveLoginPathArgs,
   resolveProfileEdit,
-  type Shell,
-} from '../lib/command-line.ts';
-import { resolveEngineProgram } from '../lib/engine.ts';
-
-const LOGIN_SHELL_TIMEOUT_MS = 5000;
-
-const SHELLS: { shell: Shell; programs: string[] }[] = [
-  { shell: 'zsh', programs: ['/bin/zsh'] },
-  { shell: 'bash', programs: ['/bin/bash'] },
-  { shell: 'fish', programs: ['/opt/homebrew/bin/fish', '/usr/local/bin/fish'] },
-];
+} from '../command-line/install.ts';
+import { LOGIN_SHELL_TIMEOUT_MS, SHELLS, type CommandLink, type Shell } from '../command-line/schema.ts';
+import { resolveEngineProgram } from '../engine/launchd.ts';
 
 function readCommandLink(path: string): CommandLink {
   try {

@@ -3,11 +3,11 @@ import { get as getHttp } from 'node:http';
 import { get as getHttps } from 'node:https';
 import { homedir } from 'node:os';
 import { app } from 'electron';
-import { parseHealthText, type ServerHealth } from '../lib/health.ts';
-import { parseConfigPort, resolveConfigPath, resolveServerUrl } from '../lib/server-url.ts';
-import { parseTrayQueueText, type TrayQueue } from '../lib/tray.ts';
-
-const HEALTH_TIMEOUT_MS = 1500;
+import { parseHealthText } from '../server/health.ts';
+import { HEALTH_TIMEOUT_MS, type ServerHealth } from '../server/schema.ts';
+import { parseConfigPort, resolveConfigPath, resolveServerUrl } from '../server/url.ts';
+import { parseTrayQueueText } from '../tray/queue.ts';
+import type { TrayQueue } from '../tray/schema.ts';
 
 function readConfigText() {
   try {

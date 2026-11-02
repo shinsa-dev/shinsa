@@ -3,18 +3,19 @@ import { rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { app, dialog, autoUpdater as nativeUpdater } from 'electron';
 import electronUpdater from 'electron-updater';
-import type { UpdateChannel } from '../lib/bridge.ts';
-import { APP_NAME } from '../lib/dev-bundle.ts';
-import { APP_ID } from '../lib/engine.ts';
-import {
-  resolveDowngradeOffer,
-  resolveUpdateChannel,
-  resolveUpdaterOptions,
-  UPDATE_FEED,
-} from '../lib/update-channel.ts';
-import { describeStateChange } from '../lib/update-log.ts';
+import { APP_NAME } from '../app/schema.ts';
+import { APP_ID } from '../engine/schema.ts';
+import { resolveDowngradeOffer, resolveUpdateChannel, resolveUpdaterOptions } from '../updates/channel.ts';
+import { describeStateChange } from '../updates/log.ts';
 import {
   DOWNGRADE_ACCEPT,
+  INSTALL_TIMEOUT_MS,
+  UPDATE_CHECK_MS,
+  UPDATE_FEED,
+  type UpdateChannel,
+  type UpdateState,
+} from '../updates/schema.ts';
+import {
   describeDowngradeDialog,
   describeInstallError,
   describeInstallFailure,
@@ -22,7 +23,6 @@ import {
   describeReadyNotice,
   describeUpdateFailure,
   describeUpdateItem,
-  INSTALL_TIMEOUT_MS,
   isUpdateBusy,
   isUpdateSupported,
   needsDiscard,
@@ -30,9 +30,7 @@ import {
   resolveInstallTimeout,
   resolvePreparedUpdate,
   resolveStagedUpdate,
-  UPDATE_CHECK_MS,
-  type UpdateState,
-} from '../lib/update.ts';
+} from '../updates/state.ts';
 import { showNotice } from './notifications.ts';
 import { readPrefs, writePrefs } from './prefs.ts';
 import { createUpdateLog } from './update-log.ts';
