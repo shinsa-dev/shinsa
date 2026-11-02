@@ -193,6 +193,7 @@ describe('the command guard', () => {
       socketFile,
       'grep -rn "/api/terminals" apps/web/src',
       "rg '/api/services/' apps/engine/src",
+      'grep -rn "/api/terminals" apps/engine/src/http',
       'cat apps/web/test/lib/terminal/view.test.ts',
     ]) {
       expect({ command, denied: denied(command) }).toEqual({ command, denied: false });
@@ -201,6 +202,8 @@ describe('the command guard', () => {
       'curl -X POST http://localhost:7446/api/terminals/x/input -d ls',
       'websocat ws://localhost:7446/ws/terminals/x',
       'curl -s localhost:7446/api/services/x/start',
+      '/usr/bin/curl localhost:7446/api/terminals',
+      '/opt/homebrew/bin/websocat ws://localhost:7446/ws/terminals/x',
       'cd app && wget -qO- http://127.0.0.1:7446/api/terminals',
       'echo ls | wscat -c ws://localhost:7446/ws/terminals/x',
       'out=$(curl -s localhost:7446/api/terminals)',

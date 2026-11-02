@@ -44,7 +44,7 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
     },
     {
       pattern:
-        /(?:^|[\s;&|(`])(?:curl|wget|xh|https?|websocat|wscat)\s[^;&|\n]*?\/(?:api|ws)\/(?:terminals|services)(?![\w-])/,
+        /(?:^|[\s;&|(`/])(?:curl|wget|xh|https?|websocat|wscat)\s[^;&|\n]*?\/(?:api|ws)\/(?:terminals|services)(?![\w-])/,
       reason:
         'Only the human types into their terminals and runs their services. Put the command in a ```bash run block in your question to them, and they can run it in a terminal with one press.',
     },
