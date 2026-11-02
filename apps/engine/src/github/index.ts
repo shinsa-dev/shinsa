@@ -1,9 +1,7 @@
 import type { Repo, Settings, Task } from '@shinsa/core';
-import { Duration } from 'effect';
 import { edgeRuntime } from '../runtime/edge.ts';
 import type { Attachment } from './pulls/schema.ts';
 import { PullRequests } from './pulls/service.ts';
-import { GITHUB_TIMEOUT } from './schema.ts';
 
 export type { Attachment, PullRequestDetails, PullRequestRead } from './pulls/schema.ts';
 export {
@@ -15,8 +13,6 @@ export {
   serializePullRequestTitle,
 } from './pulls/serialize.ts';
 export { resolveRepoSlug } from './slug.ts';
-
-export const GITHUB_TIMEOUT_MS = Duration.toMillis(GITHUB_TIMEOUT);
 
 export function readPullRequest(repo: Repo, task: Task, signal?: AbortSignal) {
   return edgeRuntime.runPromise(PullRequests.use((pulls) => pulls.read(repo, task, signal)));

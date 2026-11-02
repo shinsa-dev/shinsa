@@ -4,6 +4,7 @@ import { AccountsLayer } from '../accounts/layers.ts';
 import { ChecksLayer } from '../checks/layers.ts';
 import { MachineConfigFile } from '../config/machine/service.ts';
 import { ExtensionsLayer } from '../extensions/layers.ts';
+import { FeedbackIssues } from '../feedback/issues/service.ts';
 import { JsonFile } from '../files/service.ts';
 import { GitLayer } from '../git/layers.ts';
 import { GitHubLayer } from '../github/layers.ts';
@@ -27,6 +28,7 @@ export const edgeRuntime = ManagedRuntime.make(
       ChecksLayer,
       TerminalsLayer,
       ExtensionsLayer,
+      FeedbackIssues.layer,
       SecretFiles.layer,
       AccountsLayer,
       VersionsLayer

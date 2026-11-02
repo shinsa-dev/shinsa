@@ -2068,14 +2068,16 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
 - **Opening** (`feedback.file`) is yours alone: core refuses it on your behalf (`human_only`; Who can change Shinsa,
   below), so no agent and no command sent for you opens an issue. It runs the privacy check again on the title and
   body as they are, after your edits, and refuses a leak (`feedback_private`, naming each one). Then the entry is
-  `filing` and the `feedback.file` effect runs `gh issue create --repo shinsa-dev/shinsa` with your GitHub login, the
-  body ending in one line that says whether it came from the feedback button or an agent; the link `gh` prints is
-  `feedback.record_filed`. The effect is process-bound and never retried, so an issue is never posted twice: one a
+  `filing` and the `feedback.file` effect runs `gh issue create --repo shinsa-dev/shinsa` with your GitHub login
+  (`FeedbackIssues` in `feedback/issues/service.ts`, on `GitHubCli` like every other `gh` call), the body ending in
+  one line that says whether it came from the feedback button or an agent; the link `gh` prints is
+  `feedback.record_filed`, and an answer without one fails as `FeedbackAnswerInvalid`. The effect is process-bound and never retried, so an issue is never posted twice: one a
   restart left `filing` is failed on start (`FeedbackEffects.recover`) with a note to check GitHub before opening it
   again, and a `gh` failure shows its message on the entry.
 - **Closed issues.** With the pull request sync (`EffectRunner.syncAll`), at most every 10 minutes
   (`FEEDBACK_SYNC_MS`) and only while an issue is open in the log, `FeedbackEffects.syncIssues` reads your issues on
-  `shinsa-dev/shinsa` in one `gh issue list --author @me --state all` and records each change with
+  `shinsa-dev/shinsa` in one `gh issue list --author @me --state all`, decoded by the `ListedIssue` schema (an entry
+  without a number is skipped, a state or close time that is not text reads as open), and records each change with
   `feedback.record_issue_state` (the issue's `closedAt`, or null when it opened again). A `gh` failure is logged and
   changes nothing.
 - **Agents report** with `report_feedback` (`feedback`; every task-session role, the reviewer included, never a
@@ -5767,7 +5769,8 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   head that is not a commit `CommitInvalid` and a repository without a GitHub remote `NoGitHubRemote`.
   `RepoCiReader` reads whether a base has CI and makes the per-runner cache; `PullRequestDescriber` makes the writer
   that uploads evidence and builds the body, each with its own repository id cache. Every other `gh` call in the
-  engine (the GitHub login a project is named after, in `repos/`) runs through `GitHubCli`.
+  engine (the GitHub login a project is named after, in `repos/`; opening and listing feedback issues, `FeedbackIssues` in
+  `feedback/`) runs through `GitHubCli`.
 - **Repositories and workspaces.** `RepoFolders` scans the home folder, lists the repositories in the chosen folders
   and reads a repository's origin from its `.git/config`; `RepoSetup` is the setup check; `GitHubLogins` caches the
   login once gh answers it and asks again after a failure. `WorktreeWorkspaces` and `MainCheckoutWorkspace` are the
