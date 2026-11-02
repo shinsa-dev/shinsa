@@ -1,11 +1,11 @@
 import {
   type ChatEntry,
-  type ClientMessage,
+  type ParsedClientMessage,
   DEVELOPMENT_VERSION,
   DomainError,
   type GuestActor,
-  isSurface,
   listSummarizedTasks,
+  parseClientMessage,
   type RequestOrigin,
   resolveEngineInfo,
   resolveScopedEngineInfo,
@@ -18,7 +18,6 @@ import {
   type Surface,
   serializeState,
   serializeViewState,
-  type UserCommand,
 } from '@shinsa/core';
 import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
@@ -61,55 +60,7 @@ function send(socket: Socket, message: ServerMessage) {
   deliver(socket, JSON.stringify(message));
 }
 
-const MAX_ID = 200;
-
 const TRANSCRIPT_PAGE = 500;
-
-function isIndex(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-}
-
-function isId(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= MAX_ID;
-}
-
-function parseClientMessage(raw: string | Buffer): ClientMessage | null {
-  let message: unknown;
-  try {
-    message = JSON.parse(String(raw));
-  } catch {
-    return null;
-  }
-  if (!message || typeof message !== 'object') return null;
-  const fields = message as {
-    type?: unknown;
-    id?: unknown;
-    runId?: unknown;
-    command?: unknown;
-    surface?: unknown;
-    from?: unknown;
-    taskId?: unknown;
-  };
-  if (fields.type === 'hello' && isSurface(fields.surface)) return { type: 'hello', surface: fields.surface };
-  if (fields.type === 'state.sync') return { type: 'state.sync' };
-  if (fields.type === 'task.detail' && isId(fields.taskId)) {
-    return { type: 'task.detail', taskId: fields.taskId };
-  }
-  if (fields.type === 'command' && isId(fields.id)) {
-    return { type: 'command', id: fields.id, command: fields.command as UserCommand };
-  }
-  if (fields.type === 'transcript.subscribe' && isId(fields.runId)) {
-    return {
-      type: 'transcript.subscribe',
-      runId: fields.runId,
-      from: isIndex(fields.from) ? fields.from : 0,
-    };
-  }
-  if (fields.type === 'transcript.unsubscribe' && isId(fields.runId)) {
-    return { type: 'transcript.unsubscribe', runId: fields.runId };
-  }
-  return null;
-}
 
 export function createSocketHub(
   engine: Engine,
@@ -236,7 +187,7 @@ export function createSocketHub(
     }
   }
 
-  async function handleMessage(socket: Socket, message: ClientMessage) {
+  async function handleMessage(socket: Socket, message: ParsedClientMessage) {
     switch (message.type) {
       case 'hello':
         if (socket.data.guest) return;
@@ -310,7 +261,7 @@ export function createSocketHub(
       socket.data.transcripts.clear();
     },
     message(socket: Socket, raw: string | Buffer) {
-      const message = parseClientMessage(raw);
+      const message = parseClientMessage(String(raw));
       if (!message) {
         log.warn('[Socket] Ignored a message that is not a Shinsa message');
         return;

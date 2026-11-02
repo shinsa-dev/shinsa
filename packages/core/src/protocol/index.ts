@@ -102,6 +102,8 @@ export {
   type DiffFile,
   isQuietSurface,
   isSurface,
+  type ParsedClientMessage,
+  parseClientMessage,
   type RepoCandidate,
   type ServerMessage,
   SURFACES,

@@ -349,8 +349,7 @@ describe('placement policies', () => {
     expect([long?.name.length, long?.description.length, long?.repositories[0]?.length]).toEqual([
       120, 300, 120,
     ]);
-    const older: Partial<PlacementCandidate> = { ...question.machines[0] };
-    delete older.resources;
+    const { resources: _resources, ...older }: Partial<PlacementCandidate> = { ...question.machines[0] };
     expect(
       parsePlacementQuestion({ ...question, machines: [older, { ...older, id: 'b' }] })?.machines[1]
         ?.resources

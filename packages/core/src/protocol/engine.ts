@@ -1,4 +1,6 @@
+import { Option, Schema } from 'effect';
 import { USER_COMMAND_TYPES, type UserCommand } from '../commands/index.ts';
+import { Salvaged, SalvagedItems } from '../domain/salvage.ts';
 
 export const ENGINE_PROTOCOL = 1;
 
@@ -60,12 +62,14 @@ export const ENGINE_BASELINE_COMMANDS: readonly EngineCommand[] = [
   'memory.remove',
 ];
 
-export interface EngineInfo {
-  version: string;
-  protocol: number;
-  commands: string[];
-  features: string[];
-}
+export const EngineInfo = Schema.Struct({
+  version: Salvaged(Schema.String, () => DEVELOPMENT_VERSION),
+  protocol: Schema.Number.check(Schema.makeFilter(Number.isInteger)),
+  commands: SalvagedItems(Schema.String),
+  features: SalvagedItems(Schema.String),
+});
+
+export type EngineInfo = typeof EngineInfo.Type;
 
 export interface ShinsaBuild {
   version: string;
@@ -165,20 +169,10 @@ export function resolveEngineInfo(version: string): EngineInfo {
   };
 }
 
-function readStrings(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-}
+const decodeEngineInfo = Schema.decodeUnknownOption(EngineInfo);
 
 export function parseEngineInfo(value: unknown): EngineInfo | null {
-  if (!value || typeof value !== 'object') return null;
-  const fields = value as Record<string, unknown>;
-  if (typeof fields.protocol !== 'number' || !Number.isInteger(fields.protocol)) return null;
-  return {
-    version: typeof fields.version === 'string' ? fields.version : DEVELOPMENT_VERSION,
-    protocol: fields.protocol,
-    commands: readStrings(fields.commands),
-    features: readStrings(fields.features),
-  };
+  return Option.getOrNull(decodeEngineInfo(value));
 }
 
 export function resolveEngineCommands(engine: EngineInfo | null): ReadonlySet<string> {

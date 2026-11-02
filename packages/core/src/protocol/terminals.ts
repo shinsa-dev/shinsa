@@ -1,3 +1,4 @@
+import { Option, Schema } from 'effect';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -42,19 +43,6 @@ export interface TerminalForeground {
   program: string | null;
 }
 
-export interface TerminalColors {
-  foreground: string;
-  background: string;
-  cursor: string;
-}
-
-export type TerminalClientFrame =
-  | { type: 'resize'; cols: number; rows: number }
-  | { type: 'colors'; colors: TerminalColors }
-  | { type: 'clear' };
-
-export type TerminalServerFrame = { type: 'reset'; cols: number; rows: number } | { type: 'live' };
-
 export const TERMINAL_LIMITS = {
   terminals: 32,
   name: 60,
@@ -63,7 +51,43 @@ export const TERMINAL_LIMITS = {
   command: 4000,
 } as const;
 
-const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-f]{6}$/i));
+
+export const TerminalColors = Schema.Struct({ foreground: HexColor, background: HexColor, cursor: HexColor });
+
+export type TerminalColors = typeof TerminalColors.Type;
+
+function Dimension(limit: number) {
+  return Schema.Number.check(
+    Schema.makeFilter(Number.isInteger),
+    Schema.isGreaterThan(0),
+    Schema.isLessThanOrEqualTo(limit)
+  );
+}
+
+const TerminalSize = {
+  cols: Dimension(TERMINAL_LIMITS.cols),
+  rows: Dimension(TERMINAL_LIMITS.rows),
+};
+
+export const TerminalClientFrame = Schema.Union([
+  Schema.Struct({ type: Schema.Literal('resize'), ...TerminalSize }),
+  Schema.Struct({ type: Schema.Literal('colors'), colors: TerminalColors }),
+  Schema.Struct({ type: Schema.Literal('clear') }),
+]);
+
+export type TerminalClientFrame = typeof TerminalClientFrame.Type;
+
+export const TerminalServerFrame = Schema.Union([
+  Schema.Struct({ type: Schema.Literal('reset'), ...TerminalSize }),
+  Schema.Struct({ type: Schema.Literal('live') }),
+]);
+
+export type TerminalServerFrame = typeof TerminalServerFrame.Type;
+
+const decodeTerminalClientFrame = Schema.decodeUnknownOption(Schema.fromJsonString(TerminalClientFrame));
+
+const decodeTerminalServerFrame = Schema.decodeUnknownOption(Schema.fromJsonString(TerminalServerFrame));
 
 function resolveBaseName(path: string) {
   return path.replace(/\/+$/, '').split('/').pop() || path;
@@ -101,50 +125,10 @@ export function resolveTerminalLabel(terminal: Pick<TerminalInfo, 'name' | 'titl
   return terminal.name ?? terminal.title ?? resolveBaseName(terminal.cwd);
 }
 
-function isDimension(value: unknown, limit: number): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= limit;
-}
-
-function isColor(value: unknown): value is string {
-  return typeof value === 'string' && HEX_COLOR.test(value);
-}
-
-function parseColors(value: unknown): TerminalColors | null {
-  if (!value || typeof value !== 'object') return null;
-  const { foreground, background, cursor } = value as Record<string, unknown>;
-  if (!(isColor(foreground) && isColor(background) && isColor(cursor))) return null;
-  return { foreground, background, cursor };
-}
-
 export function parseTerminalClientFrame(text: string): TerminalClientFrame | null {
-  let frame: unknown;
-  try {
-    frame = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  if (!frame || typeof frame !== 'object') return null;
-  const fields = frame as Record<string, unknown>;
-  if (
-    fields.type === 'resize' &&
-    isDimension(fields.cols, TERMINAL_LIMITS.cols) &&
-    isDimension(fields.rows, TERMINAL_LIMITS.rows)
-  )
-    return { type: 'resize', cols: fields.cols, rows: fields.rows };
-  if (fields.type === 'clear') return { type: 'clear' };
-  const colors = fields.type === 'colors' ? parseColors(fields.colors) : null;
-  return colors ? { type: 'colors', colors } : null;
+  return Option.getOrNull(decodeTerminalClientFrame(text));
 }
 
 export function parseTerminalServerFrame(text: string): TerminalServerFrame | null {
-  try {
-    const frame = JSON.parse(text) as Record<string, unknown> | null;
-    if (frame?.type === 'live') return { type: 'live' };
-    if (frame?.type !== 'reset') return null;
-    if (!(isDimension(frame.cols, TERMINAL_LIMITS.cols) && isDimension(frame.rows, TERMINAL_LIMITS.rows)))
-      return null;
-    return { type: 'reset', cols: frame.cols, rows: frame.rows };
-  } catch {
-    return null;
-  }
+  return Option.getOrNull(decodeTerminalServerFrame(text));
 }

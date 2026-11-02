@@ -1,7 +1,12 @@
+import { Option, Schema } from 'effect';
 import type { SlackMention } from './contract.ts';
 import { serializeSlackThread } from './thread.ts';
 
-export type SlackEvaluation = 'task' | 'none';
+const SlackDecision = Schema.Struct({ decision: Schema.Literals(['task', 'none']) });
+
+export type SlackEvaluation = (typeof SlackDecision.Type)['decision'];
+
+const decodeSlackDecision = Schema.decodeUnknownOption(SlackDecision);
 
 export const SLACK_EVALUATION_SYSTEM = [
   'Someone mentioned you, Shinsa, in a Slack thread. Shinsa does work as tasks and never chats.',
@@ -28,7 +33,5 @@ export function serializeSlackEvaluationPrompt(mention: SlackMention) {
 }
 
 export function parseSlackEvaluation(value: unknown): SlackEvaluation | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const { decision } = value as { decision?: unknown };
-  return decision === 'task' || decision === 'none' ? decision : null;
+  return Option.getOrNull(Option.map(decodeSlackDecision(value), ({ decision }) => decision));
 }
