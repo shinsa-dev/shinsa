@@ -552,6 +552,45 @@ describe('one Shinsa per data directory', () => {
 });
 
 describe('startShinsa with Claude accounts', () => {
+  test('stopping waits for the account check, so it never reaches a released engine', async () => {
+    const root = createTempDir();
+    const config = createTestConfig(root, { roots: [createTempDir()] });
+    const warn = spyOn(log, 'warn');
+    const shinsa = await startShinsa(config, {
+      models,
+      triage: () => Promise.resolve(null),
+      resolveLogin: () => Promise.resolve(null),
+      accountOptions: {
+        env: { CLAUDE_CONFIG_DIR: join(root, 'claude') },
+        run: () =>
+          Bun.sleep(200).then(() => ({
+            ok: false,
+            code: 1,
+            stdout: '{"loggedIn": false}',
+            stderr: '',
+            timedOut: false,
+          })),
+        readSecret: () => Promise.resolve(null),
+        cswap: new Cswap({
+          run: () => Bun.sleep(200).then(() => Promise.reject(new Error('cswap broke'))),
+          which: () => '/bin/cswap',
+        }),
+        resolveClaude: () => Promise.resolve('claude'),
+      },
+    });
+    try {
+      await shinsa.stop();
+      await Bun.sleep(300);
+      expect(
+        warn.mock.calls.filter(([, fields]) =>
+          String((fields as { error?: string } | undefined)?.error).includes('disposed')
+        )
+      ).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test('serves the accounts and pushes them over the socket, even when checking them failed', async () => {
     const root = createTempDir();
     const config = createTestConfig(root, { roots: [createTempDir()] });
