@@ -1,4 +1,3 @@
-import { mkdirSync } from 'node:fs';
 import {
   type ChatEvent,
   type ChatNotice,
@@ -13,25 +12,15 @@ import {
   MINUTE_MS,
   RUN_AGENT_ROLE,
   type Run,
-  type RunAccount,
   type RunFailure,
-  type RunUsage,
-  resolveAgentModel,
   resolveAgentProvider,
   resolveContinuePrompt,
   resolveTaskProject,
   type ShinsaCommand,
-  type Task,
-  type WeeklyReading,
 } from '@shinsa/core';
-import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
+import type { ServerConfig } from '../config/index.ts';
 import { isSameExtensionSet, type SessionExtensionSource } from '../extensions/index.ts';
-import {
-  createIsolatedWorktree,
-  describeIsolatedChanges,
-  resolveIsolatedPath,
-  stashEdits,
-} from '../git/index.ts';
+import { describeIsolatedChanges, stashEdits } from '../git/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { ProcessTracker } from '../resources/index.ts';
 import type { Engine } from '../runtime/engine.ts';
@@ -51,7 +40,6 @@ import {
   isSteerable,
   resolveAttemptKey,
   stopActiveRun,
-  waitToRetry,
 } from './active/run.ts';
 import { type ActiveRun } from './active/schema.ts';
 import { type ClockTimers, RunClock } from './clock.ts';
@@ -74,6 +62,9 @@ import {
 import { Questions } from './questions.ts';
 import type { TaskServiceRunner } from './services.ts';
 import { TaskScopes } from './supervisor/index.ts';
+import { MAX_RUN_MS, QUIESCE_MS, STOP_MS, type Turn, UNGUARDED, UNREADONLY } from './supervisor/schema.ts';
+import { RunSteps } from './supervisor/steps.ts';
+import { isSharedCheckout, resolveWorkspace } from './supervisor/workspace.ts';
 import { type ScheduleToolHandler } from './tool-calls/schema.ts';
 import { ToolCalls } from './tool-calls/service.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
@@ -111,38 +102,6 @@ export interface SupervisorOptions {
   trackProcess?: ProcessTracker;
 }
 
-interface Workspace {
-  cwd: string;
-  repo: Repo | null;
-  defaultBranch: string;
-}
-
-interface Turn {
-  run: Run;
-  cwd: string;
-  defaultBranch: string;
-  prompt: string;
-  brief: string;
-  stepPrompt: boolean;
-  provider: AgentProvider;
-  active: ActiveRun;
-}
-
-const MAX_RUN_MS = 2 * 60 * 60 * 1000;
-
-const SCRATCH_BRANCH = 'main';
-
-const QUIESCE_MS = 60_000;
-
-const STOP_MS = 15_000;
-
-const OVERLOAD_RETRIES = 3;
-
-const UNGUARDED = 'This agent provider cannot stop the commands Shinsa forbids, so Shinsa will not run it.';
-
-const UNREADONLY =
-  'This agent provider cannot keep a read-only agent from changing files, so Shinsa will not run a read-only task on it.';
-
 async function settleWithin(work: Promise<unknown>, ms: number) {
   const timeout = Promise.withResolvers<'timeout'>();
   const timer = setTimeout(() => timeout.resolve('timeout'), ms);
@@ -163,18 +122,6 @@ function resolveDriveFailure(error: unknown): AgentSessionResult {
     return { outcome: 'failed', summary, failure: createFailure('context_window_full', summary, error.code) };
   }
   return { outcome: 'failed', summary };
-}
-
-function resolveRoleCwd(run: Run, task: Task, repo: Repo) {
-  const role = run.role;
-  if (role === 'answerer' || run.purpose === 'watch' || run.purpose === 'intake') return repo.path;
-  if (role === 'researcher') return task.worktreePath ?? repo.path;
-  return task.worktreePath;
-}
-
-function isSharedCheckout(run: Run, workspace: Workspace) {
-  if (!workspace.repo) return true;
-  return workspace.cwd === workspace.repo.path || run.delegation?.isolation === 'shared';
 }
 
 export class RunSupervisor {
@@ -202,6 +149,7 @@ export class RunSupervisor {
   readonly #trackProcess: ProcessTracker | null;
   readonly #held = new Set<string>();
   readonly #scopes = new TaskScopes();
+  readonly #steps: RunSteps;
   readonly workspaces: Workspaces;
   #shuttingDown = false;
   #holding: (() => void) | null = null;
@@ -229,6 +177,14 @@ export class RunSupervisor {
     this.#extensions = options.extensions ?? null;
     this.#extensionSets = new SessionExtensionSets(transcripts, () => this.#engine.state);
     this.#leasing = new AccountLeasing(options.accounts ?? null, () => this.#engine.state, transcripts);
+    this.#steps = new RunSteps({
+      engine,
+      config,
+      transcripts,
+      providers: this.#providers,
+      leasing: this.#leasing,
+      recordEntry: (runId, entry) => this.#recordEntry(runId, entry),
+    });
     this.#questions = new Questions({
       engine,
       transcripts,
@@ -279,7 +235,7 @@ export class RunSupervisor {
       return;
     }
     const task = state.tasks[run.taskId];
-    const workspace = task ? this.#resolveWorkspace(run, task) : null;
+    const workspace = task ? resolveWorkspace(state, this.#config, run, task) : null;
     if (!task || !workspace) {
       await this.#end(runId, { outcome: 'failed', summary: 'The task has no worktree to run in.' }, null);
       return;
@@ -303,7 +259,7 @@ export class RunSupervisor {
       if (!current || current.endedAt !== null || this.#shuttingDown) return;
       const prompt = override ?? run.prompt ?? '';
       const brief = resolveTurnBrief(this.#engine.state, current, override);
-      const { cwd, defaultBranch } = this.#prepareWorkspace(workspace);
+      const { cwd, defaultBranch } = await this.#steps.prepareWorkspace(workspace);
       const stepPrompt = override === null;
       const turn = { run: current, cwd, defaultBranch, prompt, brief, stepPrompt, provider, active };
       result = await this.#prepareAndDrive(turn, workspace.repo);
@@ -337,32 +293,6 @@ export class RunSupervisor {
     ]);
   }
 
-  #resolveWorkspace(run: Run, task: Task): Workspace | null {
-    if (task.repoId === null) {
-      return {
-        cwd: resolveScratchPath(this.#config.dataDir, task.id),
-        repo: null,
-        defaultBranch: SCRATCH_BRANCH,
-      };
-    }
-    const repo = this.#engine.state.repos[task.repoId];
-    const cwd = repo ? this.#resolveCwd(run, task, repo) : null;
-    return repo && cwd ? { cwd, repo, defaultBranch: repo.defaultBranch } : null;
-  }
-
-  #prepareWorkspace(workspace: Workspace) {
-    if (!workspace.repo) mkdirSync(workspace.cwd, { recursive: true });
-    return workspace;
-  }
-
-  #resolveCwd(run: Run, task: Task, repo: Repo) {
-    if (!isDelegatedRun(run)) return resolveRoleCwd(run, task, repo);
-    if (run.delegation.isolation === 'worktree') {
-      return resolveIsolatedPath(this.#config.worktreesDir, task.id, run.id);
-    }
-    return task.worktreePath ?? repo.path;
-  }
-
   async #prepareAndDrive(turn: Turn, repo: Repo | null): Promise<AgentSessionResult> {
     const { run, provider } = turn;
     if (isReadOnlyRun(run) && !resolveCapabilities(provider).planning.readOnly) {
@@ -373,14 +303,13 @@ export class RunSupervisor {
       };
     }
     if (!isDelegatedRun(run)) return this.#drive(turn);
-    const baseCommit = run.delegation.baseCommit;
-    if (repo && run.delegation.isolation === 'worktree' && baseCommit) {
-      try {
-        await createIsolatedWorktree(repo, this.#config.worktreesDir, run.taskId, run.id, baseCommit);
-      } catch (error) {
-        const summary = `Shinsa could not set up its own checkout: ${describeError(error)}`;
-        return { outcome: 'failed', summary, failure: createFailure('setup_failed', summary, 'isolation') };
-      }
+    const isolation = await this.#steps.prepareIsolation(run, repo);
+    if (isolation !== null) {
+      return {
+        outcome: 'failed',
+        summary: isolation,
+        failure: createFailure('setup_failed', isolation, 'isolation'),
+      };
     }
     return this.#drive(turn);
   }
@@ -444,8 +373,8 @@ export class RunSupervisor {
           plan = await this.#restoreLost(turn, plan, plan.resume);
           continue;
         }
-        if (this.#isOverloadRetry(active, result)) {
-          await this.#waitForOverload(turn, result.failure?.message ?? '');
+        if (await this.#steps.isOverloadRetry(active, result, this.#shuttingDown)) {
+          await this.#steps.waitForOverload(turn, result.failure?.message ?? '');
           if (timedOut)
             return { outcome: 'failed', summary: 'It ran past its time limit without handing over.' };
           if (active.stopping)
@@ -463,33 +392,6 @@ export class RunSupervisor {
     } finally {
       active.clock.stop();
     }
-  }
-
-  #isOverloadRetry(active: ActiveRun, result: AgentSessionResult) {
-    if (result.outcome !== 'failed' || result.failure?.class !== 'overloaded') return false;
-    return active.overloads < OVERLOAD_RETRIES && !active.stopping && !this.#shuttingDown;
-  }
-
-  async #waitForOverload({ run, active, provider }: Turn, detail: string) {
-    active.overloads += 1;
-    const delay = this.#config.overloadRetryMs * 2 ** (active.overloads - 1);
-    log.info('[Runs] The provider is overloaded; trying the same turn again shortly', {
-      runId: run.id,
-      attempt: active.overloads,
-      delayMs: delay,
-    });
-    this.#recordEntry(run.id, {
-      type: 'notice',
-      notice: {
-        kind: 'retrying',
-        provider: provider.id,
-        detail,
-        attempt: active.overloads,
-        attempts: OVERLOAD_RETRIES,
-        retryAt: Date.now() + delay,
-      },
-    });
-    await waitToRetry(active, delay);
   }
 
   async #restoreLost(turn: Turn, plan: TurnPlan, sessionId: string) {
@@ -546,60 +448,6 @@ export class RunSupervisor {
     }
   }
 
-  #leaseAttempt({ provider, run, active }: Turn) {
-    if (!resolveCapabilities(provider).accounts) return null;
-    const renewing = active.renewing;
-    active.renewing = null;
-    return this.#leasing.leaseAttempt(run, [...active.rejected], renewing);
-  }
-
-  #resolveModel({ run, provider }: Turn) {
-    if (provider.id === run.provider) return run.model;
-    return resolveAgentModel(this.#engine.state.settings, RUN_AGENT_ROLE[run.role], provider.id);
-  }
-
-  async #recordAttempt(turn: Turn, plan: TurnPlan) {
-    const { run, active, provider } = turn;
-    const recorded = this.#engine.state.runs[run.id]?.attempts?.length ?? 0;
-    active.attempts = Math.max(recorded, active.attempts) + 1;
-    const attemptId = `${run.id}:${active.attempts}`;
-    active.attemptId = attemptId;
-    active.leaseSpent = false;
-    active.lease = await this.#leaseAttempt(turn);
-    const account: RunAccount | null = active.lease
-      ? { id: active.lease.id, email: active.lease.email }
-      : null;
-    await this.#engine.dispatch(
-      {
-        type: 'run.attempt',
-        runId: run.id,
-        attemptId,
-        provider: provider.id,
-        model: this.#resolveModel(turn),
-        resumed: plan.resume !== null,
-        handoff: plan.record,
-        cwd: turn.cwd,
-        ...(account ? { account } : {}),
-      },
-      { id: `run.attempt:${attemptId}` }
-    );
-    if (plan.record) {
-      const { reason, fromProvider, totalEntries, includedEntries } = plan.record;
-      this.#transcripts.record(run.id, {
-        type: 'notice',
-        notice: {
-          kind: 'handoff',
-          reason,
-          fromProvider: this.#providers.select(fromProvider)?.label ?? fromProvider,
-          toProvider: provider.label,
-          totalEntries,
-          includedEntries,
-        },
-      });
-    }
-    return { attemptId, account };
-  }
-
   async #resolveExtensions(run: Run, pin: LoadedExtensions | null) {
     if (!this.#extensions) return null;
     const state = this.#engine.state;
@@ -633,7 +481,7 @@ export class RunSupervisor {
   async #attempt(turn: Turn, plan: TurnPlan) {
     const { run, active, provider } = turn;
     const firstAttempt = (this.#engine.state.runs[run.id]?.attempts ?? []).length === 0;
-    const { attemptId, account } = await this.#recordAttempt(turn, plan);
+    const { attemptId, account } = await this.#steps.recordAttempt(turn, plan);
     const weeklyBefore = this.#leasing.readWeeklyReading(run.id, active.lease, provider.id, false);
     const pin = plan.resume ? this.#extensionSets.select(plan.resume) : null;
     const extensions = await this.#resolveExtensions(run, pin);
@@ -658,7 +506,7 @@ export class RunSupervisor {
       readOnly: isReadOnlyRun(run),
       cwd: turn.cwd,
       prompt: resolveTurnPrompt(this.#context(turn), plan, turn.prompt, turn.brief, fold),
-      model: this.#resolveModel(turn),
+      model: await this.#steps.resolveModel(turn),
       resume: plan.resume,
       fork: plan.fork,
       defaultBranch: turn.defaultBranch,
@@ -698,7 +546,7 @@ export class RunSupervisor {
     try {
       await this.#steerWaiting(run.id, active, session);
       const result = await scoped.done;
-      await this.#meterAttempt(turn, attemptId, sessionId, result, weeklyBefore);
+      await this.#steps.meterAttempt(turn, attemptId, sessionId, result, weeklyBefore);
       if (!account || !result.failure) return { attemptId, result };
       return { attemptId, result: { ...result, failure: { ...result.failure, account } } };
     } finally {
@@ -706,25 +554,6 @@ export class RunSupervisor {
       await scoped.close();
       for (const release of releases) release();
       await loader?.close();
-    }
-  }
-
-  async #meterAttempt(
-    { run, active, provider }: Turn,
-    attemptId: string,
-    sessionId: string | null,
-    result: AgentSessionResult,
-    weeklyBefore: Promise<WeeklyReading | null>
-  ) {
-    if (result.usage) {
-      const before = await weeklyBefore;
-      const after = await this.#leasing.readWeeklyReading(run.id, active.lease, provider.id, true);
-      const readings = [before, after].filter((reading) => reading !== null);
-      await this.#meter(run.id, sessionId, result.usage, `run.meter:${attemptId}`, readings);
-    }
-    for (const subagent of result.subagentUsage ?? []) {
-      const id = `run.meter:${attemptId}:${subagent.sessionId}`;
-      await this.#meter(run.id, subagent.sessionId, subagent.usage, id);
     }
   }
 
@@ -751,23 +580,6 @@ export class RunSupervisor {
       if (!session.steer(text, 'shinsa')) active.unsteered.push(text);
     }
     for (const delivery of active.held.splice(0)) await this.#deliveries.steer(runId, active, delivery);
-  }
-
-  async #meter(
-    runId: string,
-    sessionId: string | null,
-    usage: RunUsage,
-    id: string,
-    readings: WeeklyReading[] = []
-  ) {
-    try {
-      await this.#engine.dispatch(
-        { type: 'run.meter', runId, sessionId, usage, ...(readings.length > 0 ? { readings } : {}) },
-        { id }
-      );
-    } catch (error) {
-      log.warn('[Runs] Could not record what a run cost', { runId, error: describeError(error) });
-    }
   }
 
   #recordEntry(runId: string, entry: ChatEvent) {
@@ -1000,7 +812,7 @@ export class RunSupervisor {
     const run = state.runs[runId];
     const task = run ? state.tasks[run.taskId] : undefined;
     const provider = run ? this.#providers.select(run.sessionProvider ?? run.provider) : null;
-    const workspace = run && task ? this.#resolveWorkspace(run, task) : null;
+    const workspace = run && task ? resolveWorkspace(state, this.#config, run, task) : null;
     if (!run || !workspace || !provider?.compactSession || !resolveCapabilities(provider).compaction) return;
     const id = `idle-compact:${runId}:${sessionId}`;
     const events = await this.#engine.dispatch({ type: 'run.compact', runId, sessionId }, { id });
@@ -1011,7 +823,7 @@ export class RunSupervisor {
     const session = provider.compactSession({
       role: run.role,
       readOnly: isReadOnlyRun(run),
-      cwd: this.#prepareWorkspace(workspace).cwd,
+      cwd: (await this.#steps.prepareWorkspace(workspace)).cwd,
       model: run.attempts?.at(-1)?.model ?? run.model,
       resume: sessionId,
       defaultBranch: workspace.defaultBranch,
@@ -1030,7 +842,7 @@ export class RunSupervisor {
     signal.addEventListener('abort', cancel, { once: true });
     if (signal.aborted) cancel();
     const result = await session.done;
-    if (result.usage) await this.#meter(runId, sessionId, result.usage, `${id}:run.meter`);
+    if (result.usage) await this.#steps.meter(runId, sessionId, result.usage, `${id}:run.meter`);
   }
 
   #readSessionUsage = (sessionId: string) => this.#engine.state.sessionUsage[sessionId] ?? null;

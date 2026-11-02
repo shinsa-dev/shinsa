@@ -46,18 +46,6 @@ export function carryUndelivered(active: ActiveRun, undelivered: string[] | unde
   }
 }
 
-export function waitToRetry(active: ActiveRun, ms: number) {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  const wake = () => {
-    clearTimeout(timer);
-    active.wake = null;
-    resolve();
-  };
-  const timer = setTimeout(wake, ms);
-  active.wake = wake;
-  return promise;
-}
-
 export function stopActiveRun(active: ActiveRun) {
   active.stopping = true;
   active.wake?.();
