@@ -14,7 +14,6 @@ beforeEach(() => {
 
 afterEach(() => {
   spies.restore();
-  engine.mockRestore();
 });
 
 describe('task action commands', () => {
