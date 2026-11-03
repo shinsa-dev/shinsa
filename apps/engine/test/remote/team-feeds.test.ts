@@ -22,6 +22,7 @@ import { NotFound } from '@shinsa/core/remote/errors';
 import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
 import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
+import { EgressGate } from '../../src/remote/egress/service.ts';
 import { Remote } from '../../src/remote/index.ts';
 import {
   type FeedSocket,
@@ -34,7 +35,7 @@ import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots.ts';
 import { TEAM_VIEWS_DIR, TeamViews } from '../../src/remote/team-views.ts';
 import { TEAM_GONE_REASON, Teams } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
-import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
+import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
 
 const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
@@ -154,7 +155,7 @@ function setUp(options: SetUp = {}) {
     state.tasks['task-1'] = createTask({ repoId: 'repo-1', activity: [] });
     state.tasks['task-2'] = createTask({ id: 'task-2', repoId: 'repo-1', stage: 'merged', activity: [] });
   });
-  const live = { view: { live: true }, files: [] };
+  const live = { view: createShareView({ title: 'Live' }), files: [] };
   const teams = new Teams({
     engine: stub.engine,
     remote: studio,
@@ -635,6 +636,7 @@ describe('keeping a teammate’s last list', () => {
 
   test('logs a teammate’s kept lists it cannot read, and keeps the teammate’s own list', async () => {
     const warn = spyOn(log, 'warn');
+    const ungated = spyOn(EgressGate, 'serializeView').mockImplementation((view) => JSON.stringify(view));
     const { feeds } = setUp({ held: [null as unknown as TeamSnapshot] });
     feeds.start();
     await until('the garbled list is logged', () =>
@@ -642,6 +644,7 @@ describe('keeping a teammate’s last list', () => {
     );
     expect(feeds.snapshot().tasks).toHaveLength(2);
     warn.mockRestore();
+    ungated.mockRestore();
     feeds.stop();
   });
 
@@ -691,9 +694,10 @@ function createFullLive(
 ) {
   return {
     view: {
-      shared: { task: { id: 'task', updatedAt: FULL_VIEW_AT } },
-      files: { diff: { version: 'v1', type: 'text/plain' } },
-      updatedAt: 50,
+      ...createShareView(
+        { id: 'task', updatedAt: FULL_VIEW_AT },
+        { files: { diff: { version: 'v1', type: 'text/plain' } }, updatedAt: 50 }
+      ),
     },
     files: [{ id: 'diff', version: 'v1', type: 'text/plain', read }],
   };
@@ -810,7 +814,11 @@ describe('relaying a teammate’s task to the local app', () => {
     const peer = createPeer();
     feeds.openRelay(peer, TARGET);
     await until('the view arrives', () => peer.messages.length === 1);
-    expect(peer.messages[0]).toEqual({ t: 'view', data: JSON.stringify({ live: true }) });
+    const [sent] = peer.messages;
+    expect(sent?.t).toBe('view');
+    expect(JSON.parse(sent?.t === 'view' ? sent.data : 'null')).toEqual(
+      readSentView(createShareView({ title: 'Live' }))
+    );
     if (stub.state.projects.p1) stub.state.projects.p1.teamIds = [];
     stub.notify();
     await until('the relay ends', () => peer.closed !== null);

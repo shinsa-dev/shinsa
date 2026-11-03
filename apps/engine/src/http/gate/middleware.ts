@@ -1,25 +1,18 @@
-import { LOCAL_ONLY_MESSAGE, SCOPE_MESSAGES } from '@shinsa/core';
 import { EngineGate } from '@shinsa/core/engine-api';
 import {
   BodyTooLarge,
   BrowserOnlyRoute,
   ContentTypeInvalid,
-  GuestRoute,
-  InspectReadOnly,
-  LocalOnly,
-  LocalOnlyRoute,
   RequestBodyLimit,
   RequestFailed,
   RouteFieldFailures,
   RouteNotFound,
   ROUTE_NOT_FOUND_MESSAGE,
-  ScopeRefused,
 } from '@shinsa/core/engine-api/schema';
 import { Context, Effect, Layer, Schema, SchemaIssue } from 'effect';
 import { HttpServerRequest } from 'effect/http';
 import { type HttpApiEndpoint, HttpApiError } from 'effect/http-api';
-import { INSPECT_MESSAGE } from '../../instance/index.ts';
-import { isGuestRoute } from '../../remote/guest-routes.ts';
+import { TunnelGate } from '../../remote/gate/service.ts';
 import { resolveRequestFailure } from '../failures.ts';
 import { describeBodyLimit, resolveBodyRefusal, resolveBodySizeRefusal } from '../guard.ts';
 import {
@@ -30,38 +23,20 @@ import {
   READ_METHODS,
   RequestSource,
 } from '../schema.ts';
-import { HttpServices } from '../services/service.ts';
 import type { GateError } from './schema.ts';
 
 export const EngineGateLive = Layer.effect(
   EngineGate,
   Effect.gen(function* () {
-    const services = yield* HttpServices;
+    const gate = yield* TunnelGate;
     const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
     const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
 
     const assertScope = Effect.fn('EngineGate.assertScope')(function* (endpoint: HttpApiEndpoint.Top) {
       const source = yield* RequestSource;
-      if (source.via !== 'channel') return;
       const request = yield* HttpServerRequest.HttpServerRequest;
-      const access = Context.get(endpoint.annotations, GuestRoute);
       const pathname = new URL(request.originalUrl).pathname;
-      const admitsGuest =
-        access === 'any' ||
-        (access !== 'none' &&
-          source.guest !== null &&
-          isGuestRoute(
-            services.engine.state,
-            source.guest.taskId,
-            request.method,
-            pathname,
-            services.transcripts
-          ));
-      if (source.guest && !admitsGuest) return yield* new ScopeRefused({ message: SCOPE_MESSAGES.task });
-      if (Context.get(endpoint.annotations, LocalOnlyRoute))
-        return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
-      if (services.config.inspect && !READ_METHODS.has(request.method))
-        return yield* new InspectReadOnly({ message: INSPECT_MESSAGE });
+      yield* gate.admitEndpoint(endpoint.annotations, { method: request.method, pathname }, source);
     });
 
     const acceptsNoBody = (endpoint: HttpApiEndpoint.Top) =>

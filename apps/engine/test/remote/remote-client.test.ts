@@ -233,4 +233,27 @@ describe('the client for app.shinsa.dev', () => {
       [SLACK_RELAY_PATHS.react, 'm'],
     ]);
   });
+
+  test('a Slack post leaves with only the fields its schema names', async () => {
+    const { plane, control } = start();
+    answer(plane, SLACK_RELAY_PATHS.post, { ts: '2.1' });
+    const post = {
+      teamId: 'T1',
+      channelId: 'C1',
+      threadTs: '1.1',
+      replaceTs: null,
+      message: { text: 'Hi', blocks: [], worktree: '/wt/task-1' },
+      machineToken: 'm',
+    };
+    await control.requestSlackPost('m', post as never);
+    expect(plane.calls.map((call) => call.body)).toEqual([
+      {
+        teamId: 'T1',
+        channelId: 'C1',
+        threadTs: '1.1',
+        replaceTs: null,
+        message: { text: 'Hi', blocks: [] },
+      },
+    ]);
+  });
 });

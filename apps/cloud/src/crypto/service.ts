@@ -5,7 +5,11 @@ import {
   encodeText,
   InstanceId,
   isSameSecret,
+  type MachineCredentials,
+  PAIRING_SEAL_IV_BYTES,
   parseBase64Url,
+  REMOTE_KEY_ALGORITHM,
+  sealPairingCredentials,
   serializeBase64Url,
   serializeHex,
   TeamId,
@@ -35,6 +39,7 @@ export class CloudCrypto extends Context.Service<
     createCodeChallenge(verifier: Redacted.Redacted<string>): Effect.Effect<string>;
     sealToken(token: Redacted.Redacted<string>): Effect.Effect<string>;
     openToken(sealed: string): Effect.Effect<Redacted.Redacted<string>>;
+    sealCredentials(machineKey: string, credentials: MachineCredentials): Effect.Effect<string>;
     isSlackSignature(timestamp: string, body: string, signature: string): Effect.Effect<boolean>;
     signSlack(timestamp: string, body: string): Effect.Effect<Option.Option<string>>;
   }
@@ -128,6 +133,20 @@ export class CloudCrypto extends Context.Service<
         return Redacted.make(decodeText(new Uint8Array(opened)));
       }, Effect.orDie);
 
+      const sealCredentials = Effect.fn('CloudCrypto.sealCredentials')(function* (
+        machineKey: string,
+        credentials: MachineCredentials
+      ) {
+        const ephemeral = yield* Effect.promise(
+          () =>
+            crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits']) as Promise<CryptoKeyPair>
+        );
+        const iv = createRandomBytes(PAIRING_SEAL_IV_BYTES);
+        return yield* Effect.promise(() =>
+          sealPairingCredentials({ machineKey, ephemeral, iv }, credentials)
+        );
+      });
+
       const signSlack = Effect.fn('CloudCrypto.signSlack')(function* (timestamp: string, body: string) {
         const key = yield* signingKey;
         if (Option.isNone(key)) return Option.none<string>();
@@ -157,6 +176,7 @@ export class CloudCrypto extends Context.Service<
         createCodeChallenge,
         sealToken,
         openToken,
+        sealCredentials,
         isSlackSignature,
         signSlack,
       });

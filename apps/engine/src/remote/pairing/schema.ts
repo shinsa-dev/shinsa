@@ -8,6 +8,11 @@ export const PairPollInterval = Context.Reference<Duration.Input>(
   }
 );
 
+export interface MachineKeyPair {
+  readonly publicKey: string;
+  readonly privateKey: CryptoKey;
+}
+
 export interface PairedMachine {
   readonly credentials: MachineCredentials;
   readonly owner: string;

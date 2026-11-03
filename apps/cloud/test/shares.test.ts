@@ -1,29 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  type PairPollResponse,
-  type PairStartResponse,
-  REMOTE_KEY_ALGORITHM,
-  REMOTE_PATHS,
-  resolvePairApprovePath,
-  resolveShareConnectPath,
-  type ShareConnectResponse,
-  serializePublicKey,
-} from '@shinsa/core';
-import { createHarness, type Harness, readJson } from './harness.ts';
-
-async function pairMachine(harness: Harness, session: string) {
-  const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
-  const publicKey = await serializePublicKey(pair.publicKey);
-  const start = await readJson<PairStartResponse>(
-    await harness.post(REMOTE_PATHS.pairStart, { name: 'Studio', publicKey, version: '1' })
-  );
-  await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
-  const claimed = await readJson<PairPollResponse>(
-    await harness.post(REMOTE_PATHS.pairPoll, { claimCode: start.claimCode, pollSecret: start.pollSecret })
-  );
-  if (claimed.status !== 'claimed') throw new Error('Pairing was not claimed.');
-  return claimed.credentials;
-}
+import { REMOTE_PATHS, resolveShareConnectPath, type ShareConnectResponse } from '@shinsa/core';
+import { createHarness, pairMachine, readJson } from './harness.ts';
 
 describe('a share link', () => {
   test('learns where the machine is without signing in, and nothing else', async () => {

@@ -1,6 +1,8 @@
-import { InstanceId, RemoteRole, type RemoteUser, RemoteUserId } from '@shinsa/core';
+import { InstanceId, MachineFeatures, RemoteRole, type RemoteUser, RemoteUserId } from '@shinsa/core';
 import { Schema } from 'effect';
 import { TokenHash } from '../../crypto/schema.ts';
+
+export const StoredFeatures = Schema.fromJsonString(MachineFeatures);
 
 export const Machine = Schema.Struct({
   id: InstanceId,
@@ -14,6 +16,7 @@ export const Machine = Schema.Struct({
   online: Schema.BooleanFromBit,
   lastSeenAt: Schema.NullOr(Schema.Number),
   signingKey: Schema.NullOr(Schema.String),
+  features: StoredFeatures,
   createdAt: Schema.Number,
 });
 
@@ -28,6 +31,7 @@ export const NewMachine = Schema.Struct({
   dnsRecordId: Schema.String,
   machineTokenHash: TokenHash,
   connectKey: Schema.RedactedFromValue(Schema.String),
+  features: StoredFeatures,
 });
 
 export type NewMachine = typeof NewMachine.Type;
@@ -47,4 +51,10 @@ export interface SharedMachine {
 }
 
 export const MACHINE_COLUMNS =
-  'instances.id, instances.user_id, instances.name, instances.fingerprint, instances.tunnel_id, instances.dns_record_id, instances.connect_key, instances.local_url, instances.online, instances.last_seen_at, instances.signing_key, instances.created_at';
+  'instances.id, instances.user_id, instances.name, instances.fingerprint, instances.tunnel_id, instances.dns_record_id, instances.connect_key, instances.local_url, instances.online, instances.last_seen_at, instances.signing_key, instances.features, instances.created_at';
+
+export interface MachineBeat {
+  readonly localUrl: string;
+  readonly signingKey: string | null;
+  readonly features: ReadonlyArray<string>;
+}

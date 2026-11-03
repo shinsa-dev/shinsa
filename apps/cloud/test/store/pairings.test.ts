@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { ClaimCode, type MachineCredentials } from '@shinsa/core';
+import { ClaimCode, MACHINE_FEATURES } from '@shinsa/core';
 import { Effect, Option } from 'effect';
 import { TestClock } from 'effect/testing';
 import { Pairings } from '../../src/store/pairings/service.ts';
@@ -14,16 +14,11 @@ const PAIRING = {
   name: 'Studio',
   publicKey: 'public-key',
   version: '1',
+  features: [...MACHINE_FEATURES],
   expiresAt: TEST_NOW + 600_000,
 };
 
-const CREDENTIALS: MachineCredentials = {
-  instanceId: 'studio000001',
-  machineToken: 'machine-token',
-  connectKey: 'connect-key',
-  tunnelToken: 'tunnel-token',
-  tunnelHost: 'studio000001.shinsa.dev',
-};
+const SEALED = 'sealed-credentials';
 
 describe('pairings', () => {
   test('a pairing waits with no owner and no credentials, and counts against its address', async () => {
@@ -58,19 +53,19 @@ describe('pairings', () => {
     expect(steps).toEqual([true, false, true]);
   });
 
-  test('a claimed pairing keeps its credentials and owner, and release no longer frees it', async () => {
+  test('a claimed pairing keeps its sealed credentials and owner, and release no longer frees it', async () => {
     const pairing = await runTest(
       Effect.gen(function* () {
         const pairings = yield* Pairings;
         yield* seedUsers(MONA);
         yield* pairings.create(PAIRING, '203.0.113.1');
         yield* pairings.reserve(CODE, MONA.login);
-        yield* pairings.recordClaim(CODE, CREDENTIALS);
+        yield* pairings.recordClaim(CODE, SEALED);
         yield* pairings.release(CODE);
         return yield* pairings.select(CODE);
       })
     );
-    expect(pairing).toEqual(Option.some({ ...PAIRING, credentials: CREDENTIALS, owner: MONA.login }));
+    expect(pairing).toEqual(Option.some({ ...PAIRING, credentials: SEALED, owner: MONA.login }));
   });
 
   test('expired and removed pairings are gone', async () => {

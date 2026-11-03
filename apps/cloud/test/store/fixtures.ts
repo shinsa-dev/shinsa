@@ -1,4 +1,4 @@
-import { InstanceId, type RemoteUser, RemoteUserId } from '@shinsa/core';
+import { InstanceId, MACHINE_FEATURES, type RemoteUser, RemoteUserId } from '@shinsa/core';
 import { Effect, Redacted } from 'effect';
 import { TokenHash } from '../../src/crypto/schema.ts';
 import { Accounts } from '../../src/store/accounts/service.ts';
@@ -37,5 +37,6 @@ export const seedMachine = (id: InstanceId, userId: RemoteUserId, token = 'a') =
       dnsRecordId: `record-${id}`,
       machineTokenHash: hashOf(token),
       connectKey: Redacted.make(`connect-${id}`),
+      features: [...MACHINE_FEATURES],
     })
   );

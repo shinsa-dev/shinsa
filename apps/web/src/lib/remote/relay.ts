@@ -24,9 +24,20 @@ export interface RelayClients {
 
 const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
 
+const RELAYED_ANSWER_HEADERS: [string, string][] = [
+  ['content-security-policy', "sandbox; default-src 'none'"],
+  ['x-content-type-options', 'nosniff'],
+];
+
+function resolveRelayedHeaders(source: [string, string][]) {
+  const headers = new Headers(source);
+  for (const [name, value] of RELAYED_ANSWER_HEADERS) headers.set(name, value);
+  return headers;
+}
+
 export function isRelayedRequest(request: Request, origin: string) {
   const url = new URL(request.url);
-  return url.origin === origin && url.pathname.startsWith(RELAYED_PREFIX);
+  return request.mode !== 'navigate' && url.origin === origin && url.pathname.startsWith(RELAYED_PREFIX);
 }
 
 function respondUnavailable(message: string) {
@@ -58,9 +69,10 @@ export async function relayRequest(request: Request, clientId: string, clients: 
       const answer = event.data;
       switch (answer.type) {
         case 'head': {
+          const headers = resolveRelayedHeaders(answer.headers);
           if (NULL_BODY_STATUSES.has(answer.status)) {
             port1.close();
-            resolve(new Response(null, { status: answer.status, headers: answer.headers }));
+            resolve(new Response(null, { status: answer.status, headers }));
             return;
           }
           const streamed = new ReadableStream<Uint8Array>({
@@ -72,7 +84,7 @@ export async function relayRequest(request: Request, clientId: string, clients: 
               port1.close();
             },
           });
-          resolve(new Response(streamed, { status: answer.status, headers: answer.headers }));
+          resolve(new Response(streamed, { status: answer.status, headers }));
           return;
         }
         case 'chunk':

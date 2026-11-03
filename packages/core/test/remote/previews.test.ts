@@ -180,6 +180,8 @@ describe('a preview access token', () => {
     const connect = await createConnectToken(CONNECT_KEY, {
       instanceId: ADDRESS.instanceId,
       userId: 'u1',
+      channel: 'remote',
+      nonce: 'n'.repeat(22),
       expiresAt: NOW + 1,
     });
     expect(await verifyPreviewAccessToken(CONNECT_KEY, connect, ADDRESS, NOW)).toBeNull();
