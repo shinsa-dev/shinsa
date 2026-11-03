@@ -1059,7 +1059,7 @@ Only these, and they win over anything below:
       own, the user card on hover with the machine it runs on ("On Kai’s MacBook, read-only"), their GitHub profile on
       click. A machine whose owner never signed in shows the team icon and the machine's name.
     - **Offline and refused machines** take no lines of their own, so the page stays the same however many machines
-      a team has. A teammate row from a machine that is offline keeps its kind icon and gets `IconCloudSimpleDisconnected`
+      a team has. A teammate row from a machine that is offline keeps its kind icon and gets `IconCloudOff`
       in `fg-2` after its status (`OfflineMark`), its hint "Their machine is offline" with when its copy was last
       updated. Machines that refuse the list show no rows, so one `IconLock` in `fg-2` after the heading's counts
       (`TeamFeedRefusals`) names them in its hint: "Mac.lan in Platform is not listing its tasks" and the owner
