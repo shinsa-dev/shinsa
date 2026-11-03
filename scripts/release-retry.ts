@@ -2,6 +2,8 @@ export const NOTARY_SUBMIT_DELAYS = [30_000, 60_000] as const;
 
 export const STAPLE_DELAYS = [15_000, 30_000, 60_000, 120_000] as const;
 
+export const R2_REQUEST_DELAYS = [15_000, 30_000, 60_000] as const;
+
 const NOTARY_SECRETS = ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID'] as const;
 
 export interface RetryFailure {

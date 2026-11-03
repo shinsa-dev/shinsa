@@ -4,6 +4,7 @@ import {
   describeRetryFailure,
   NOTARY_SUBMIT_DELAYS,
   parseNotarySubmission,
+  R2_REQUEST_DELAYS,
   type RetryFailure,
   resolveNotaryCredentials,
   retryStep,
@@ -86,9 +87,10 @@ describe('retryStep', () => {
     expect(attempts).toEqual([1]);
   });
 
-  it('gives notarizing three attempts and stapling five', () => {
+  it('gives notarizing three attempts, stapling five and each download request four', () => {
     expect(NOTARY_SUBMIT_DELAYS.length + 1).toBe(3);
     expect(STAPLE_DELAYS.length + 1).toBe(5);
+    expect(R2_REQUEST_DELAYS).toEqual([15_000, 30_000, 60_000]);
   });
 });
 
