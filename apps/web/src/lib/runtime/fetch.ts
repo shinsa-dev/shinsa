@@ -5,7 +5,7 @@ export type RequestFetch = (request: Request) => Promise<Response>;
 
 export function sendThrough(send: RequestFetch) {
   const fetch = Object.assign(
-    (input: RequestInfo | URL, init?: RequestInit) => send(new Request(input, init)),
+    (input: string | URL | Request, init?: RequestInit) => send(new Request(input, init)),
     { preconnect: globalThis.fetch.preconnect }
   );
   return <A, E, R>(effect: Effect.Effect<A, E, R>) =>

@@ -21,7 +21,7 @@ let appRuntime = createAppRuntime(
   Layer.mergeAll(
     Layer.succeed(
       FetchHttpClient.Fetch,
-      Object.assign((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init), {
+      Object.assign((input: string | URL | Request, init?: RequestInit) => globalThis.fetch(input, init), {
         preconnect: globalThis.fetch.preconnect,
       })
     ),
