@@ -407,14 +407,6 @@ class ChangelogGroup extends HttpApiGroup.make('changelog')
 
 class RemoteGroup extends HttpApiGroup.make('remote')
   .add(
-    HttpApiEndpoint.post('pair', '/api/remote/pair', { payload: EmptyBody, success: RemoteAnswer }),
-    HttpApiEndpoint.post('cancelPairing', '/api/remote/pair/cancel', {
-      payload: EmptyBody,
-      success: RemoteAnswer,
-    }),
-    HttpApiEndpoint.post('enable', '/api/remote/enable', { payload: EmptyBody, success: RemoteAnswer }),
-    HttpApiEndpoint.post('disable', '/api/remote/disable', { payload: EmptyBody, success: RemoteAnswer }),
-    HttpApiEndpoint.post('remove', '/api/remote/remove', { payload: EmptyBody, success: RemoteAnswer }),
     HttpApiEndpoint.post('createLink', '/api/remote/link/create', {
       payload: EmptyBody,
       success: RemoteAnswer,
@@ -445,7 +437,29 @@ class RemoteGroup extends HttpApiGroup.make('remote')
       publicKey: { code: 'publicKey_invalid', message: 'Name the device to remove by its key.' },
     })
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
+  .annotateEndpoints(OwnerOnlyRoute, true)
+  .add(
+    HttpApiEndpoint.post('pair', '/api/remote/pair', { payload: EmptyBody, success: RemoteAnswer }).annotate(
+      LocalOnlyRoute,
+      true
+    ),
+    HttpApiEndpoint.post('cancelPairing', '/api/remote/pair/cancel', {
+      payload: EmptyBody,
+      success: RemoteAnswer,
+    }).annotate(LocalOnlyRoute, true),
+    HttpApiEndpoint.post('enable', '/api/remote/enable', {
+      payload: EmptyBody,
+      success: RemoteAnswer,
+    }).annotate(LocalOnlyRoute, true),
+    HttpApiEndpoint.post('disable', '/api/remote/disable', {
+      payload: EmptyBody,
+      success: RemoteAnswer,
+    }).annotate(LocalOnlyRoute, true),
+    HttpApiEndpoint.post('remove', '/api/remote/remove', {
+      payload: EmptyBody,
+      success: RemoteAnswer,
+    }).annotate(LocalOnlyRoute, true)
+  )
   .add(
     HttpApiEndpoint.get('snapshot', '/api/remote', { success: RemoteAnswer }),
     HttpApiEndpoint.post('acceptRequest', '/api/remote/requests/accept', {
@@ -504,15 +518,14 @@ class TeamsGroup extends HttpApiGroup.make('teams')
     HttpApiEndpoint.post('remove', '/api/remote/teams/remove', {
       payload: TeamBody,
       success: RemoteAnswer,
-    }).annotate(RouteFieldFailures, TEAM_FAILURES)
+    }).annotate(RouteFieldFailures, TEAM_FAILURES),
+    HttpApiEndpoint.post('join', '/api/remote/teams/join', {
+      payload: TeamJoinBody,
+      success: TeamJoinAnswer,
+    }).annotate(RouteFieldFailures, { url: { code: 'url_invalid', message: 'Paste the team link.' } })
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
-  .add(
-    HttpApiEndpoint.post('join', '/api/remote/teams/join', { payload: TeamJoinBody, success: TeamJoinAnswer })
-      .annotate(OwnerOnlyRoute, true)
-      .annotate(RouteFieldFailures, { url: { code: 'url_invalid', message: 'Paste the team link.' } }),
-    HttpApiEndpoint.get('tasks', '/api/teams/tasks', { query: TeamTasksQuery, success: TeamTasksAnswer })
-  )
+  .annotateEndpoints(OwnerOnlyRoute, true)
+  .add(HttpApiEndpoint.get('tasks', '/api/teams/tasks', { query: TeamTasksQuery, success: TeamTasksAnswer }))
   .annotateEndpoints(EngineFeatureRoute, 'teams')
   .middleware(EngineGate) {}
 
@@ -524,7 +537,7 @@ class SlackGroup extends HttpApiGroup.make('slack')
   .add(
     HttpApiEndpoint.get('snapshot', '/api/slack', { success: SlackAnswer }),
     HttpApiEndpoint.post('disconnect', '/api/slack/disconnect', { success: SlackAnswer }).annotate(
-      LocalOnlyRoute,
+      OwnerOnlyRoute,
       true
     )
   )

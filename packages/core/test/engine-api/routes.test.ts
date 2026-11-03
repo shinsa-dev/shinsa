@@ -129,8 +129,7 @@ const FEATURE_ROUTES = {
 };
 
 const LOCAL_ONLY = [
-  { pattern: /^\/api\/remote(?:\/(?!requests\/|teams\/join$)|$)/, writesOnly: true },
-  { pattern: /^\/api\/slack(?:\/|$)/, writesOnly: true },
+  { pattern: /^\/api\/remote(?:\/(?:pair|pair\/cancel|enable|disable|remove))?$/, writesOnly: true },
   { pattern: /^\/api\/extensions\/servers\/sign-in$/, writesOnly: true },
   { pattern: /^\/api\/tasks\/[^/]+\/open$/, writesOnly: true },
   { pattern: /^\/api\/onboarding\/install$/, writesOnly: true },
@@ -138,7 +137,22 @@ const LOCAL_ONLY = [
 ];
 
 const OWNER_ONLY = [
+  'POST /api/remote/link/create',
+  'POST /api/remote/link/remove',
+  'POST /api/remote/members/grant',
+  'POST /api/remote/members/remove',
+  'POST /api/remote/devices/remove',
+  'POST /api/remote/teams/create',
   'POST /api/remote/teams/join',
+  'POST /api/remote/teams/link',
+  'POST /api/remote/teams/link/renew',
+  'POST /api/remote/teams/link/remove',
+  'POST /api/remote/teams/requests/accept',
+  'POST /api/remote/teams/requests/decline',
+  'POST /api/remote/teams/members/remove',
+  'POST /api/remote/teams/leave',
+  'POST /api/remote/teams/remove',
+  'POST /api/slack/disconnect',
   'POST /api/engine/restart',
   'POST /api/onboarding/setup',
   'POST /api/onboarding/privacy',
@@ -207,7 +221,7 @@ describe('EngineApi routes', () => {
       expect([route.key, route.guest]).toEqual([route.key, resolveOldGuest(route.method, route.path)]);
   });
 
-  test('settings, accounts, MCPs, secrets, versions and restarting are for the owner, and only an attachment upload takes a larger body', () => {
+  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack and the invite link, members and devices are for the owner, and only an attachment upload takes a larger body', () => {
     const routes = listEngineRoutes();
     expect(sorted(routes.filter((route) => route.ownerOnly).map((route) => route.key))).toEqual(
       sorted(OWNER_ONLY)

@@ -6,12 +6,14 @@ import {
   type RemoteSession,
   type RemoteSnapshot,
   type RemoteUser,
+  resolveEngineInfo,
 } from '@shinsa/core';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MachineAccessRequests, MachinesSettings } from '@/components/settings/machines.tsx';
 import {
   Connection,
   connection,
+  type MachineAccess,
   type MachineChoice,
   replaceConnection,
   type Snapshot,
@@ -27,8 +29,10 @@ import { ClaimPage } from '@/routes/remote/claim.tsx';
 import { EnrollPage } from '@/routes/remote/enroll.tsx';
 import { RemoteRoot } from '@/routes/remote/index.tsx';
 import { PairPage } from '@/routes/remote/pair.tsx';
+import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createMachineResources, createTaskResources } from '../../support/resources.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
+import { KAI as TEAMMATE } from '../../support/teams.ts';
 
 const USER: RemoteSession = { user: { id: '1', login: 'mona', name: null, avatarUrl: null } };
 
@@ -298,6 +302,80 @@ describe('the remote dashboard', () => {
     unmount();
     renderRoot('/claim', { dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }) });
     expect(await screen.findByText('Work on a task handed to you')).toBeTruthy();
+  });
+});
+
+describe('managing a machine you own in Settings → Machines', () => {
+  it('shows its remote access and teams, and sends each change to that machine', async () => {
+    const sent: string[] = [];
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://x');
+      sent.push(`${url.pathname}${url.search}`);
+      return Response.json(remote);
+    }) as typeof fetch);
+    const device = { publicKey: 'dev-1', name: 'Kai iPhone', enrolledAt: 1, lastSeenAt: null, userId: '7' };
+    const remote = createRemoteSnapshot({
+      devices: [device],
+      access: { owner: STUDIO.owner, members: [{ user: TEAMMATE, addedAt: 1 }] },
+    });
+    const state = createShinsaState({});
+    const machines = [{ id: 'k3x9', name: 'Studio', remote }];
+    replaceConnection({
+      ...connection,
+      listMachineAccess: () => machines,
+      selectEngine: () => ({ ...resolveEngineInfo('0.9.0'), features: ['teams'] }),
+    });
+    try {
+      render(
+        <RemoteServicesContext.Provider
+          value={{
+            dashboard: createDashboard(),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
+        >
+          <MachinesSettings state={state} />
+        </RemoteServicesContext.Provider>
+      );
+      expect(await screen.findByText('Remote access on Studio')).toBeTruthy();
+      expect(screen.getByText('Devices that can reach Studio')).toBeTruthy();
+      expect(screen.getByText('People who can reach Studio')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Invite link' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+      expect(await screen.findByRole('button', { name: 'New team' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Revoke device' }));
+      await waitFor(() => expect(sent).toContain('/api/remote/devices/remove?machine=k3x9'));
+    } finally {
+      fetchSpy.mockRestore();
+      replaceConnection(null);
+    }
+  });
+
+  it('falls back to the read-only teams from Shinsa Cloud when you own no machine here', async () => {
+    const machines: MachineAccess[] = [];
+    replaceConnection({ ...connection, listMachineAccess: () => machines });
+    try {
+      render(
+        <RemoteServicesContext.Provider
+          value={{
+            dashboard: createDashboard({
+              listInstances: () => Promise.resolve([{ ...STUDIO, role: 'member' }]),
+            }),
+            devices: createDevices(DEVICE),
+            teamKeys: createTeamKeys(),
+            worker: createWorker(),
+          }}
+        >
+          <MachinesSettings state={createShinsaState({})} />
+        </RemoteServicesContext.Provider>
+      );
+      expect(await screen.findByText(/Make and change a team from a machine you own/)).toBeTruthy();
+      expect(screen.queryByText(/^Remote access on/)).toBeNull();
+    } finally {
+      replaceConnection(null);
+    }
   });
 });
 

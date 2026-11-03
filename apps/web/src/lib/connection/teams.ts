@@ -9,82 +9,92 @@ import { CommandFailed } from './schema.ts';
 
 type TeamEndpoints = EngineClient['Service']['teams'];
 
-const writeProjects = Effect.fn('Teams.writeProjects')(function* (
-  state: ShinsaState,
-  teamId: string,
-  projectIds: readonly string[]
-) {
-  for (const command of listTeamProjectCommands(state, teamId, projectIds))
-    yield* Effect.tryPromise({
-      try: () => sendCommand(command),
-      catch: (error) => new CommandFailed({ message: describeFailure(error) }),
-    });
-});
+type EngineEffect<A> = Effect.Effect<A, Error, EngineClient>;
 
-const create = Effect.fn('Teams.create')(function* (
-  state: ShinsaState,
-  name: string,
-  projectIds: readonly string[]
-) {
-  const engine = yield* EngineClient;
-  const created = yield* engine.teams.create({ payload: { name } });
-  yield* writeProjects(state, created.teamId, projectIds);
-  return created;
-});
+export function createTeamActions(machineId: string | null = null) {
+  function run<A>(effect: EngineEffect<A>) {
+    return runApp(machineId ? effect.pipe(Effect.provide(EngineClient.onMachine(machineId))) : effect);
+  }
 
-const join = Effect.fn('Teams.join')(function* (
-  state: ShinsaState,
-  url: string,
-  projectIds: readonly string[]
-) {
-  const engine = yield* EngineClient;
-  const joined = yield* engine.teams.join({ payload: { url } });
-  const shared = listTeamProjectIds(state, joined.teamId);
-  yield* writeProjects(state, joined.teamId, [...shared, ...projectIds]);
-  return joined;
-});
+  const record = (snapshot: RemoteSnapshot) => {
+    if (!machineId) connection.replaceRemote(snapshot);
+    return snapshot;
+  };
 
-const readLink = Effect.fn('Teams.readLink')(function* (teamId: string) {
-  const engine = yield* EngineClient;
-  return yield* engine.teams.link({ payload: { teamId } });
-});
+  const writeProjects = Effect.fn('Teams.writeProjects')(function* (
+    state: ShinsaState,
+    teamId: string,
+    projectIds: readonly string[]
+  ) {
+    for (const command of listTeamProjectCommands(state, teamId, projectIds))
+      yield* Effect.tryPromise({
+        try: () => sendCommand(command, machineId),
+        catch: (error) => new CommandFailed({ message: describeFailure(error) }),
+      });
+  });
 
-const grantAccess = Effect.fn('Teams.grantAccess')(function* (teamId: string, userId: string) {
-  const engine = yield* EngineClient;
-  const snapshot = yield* engine.remote.grantMember({ payload: { teamId, userId } });
-  connection.replaceRemote(snapshot);
-  return snapshot;
-});
+  const create = Effect.fn('Teams.create')(function* (
+    state: ShinsaState,
+    name: string,
+    projectIds: readonly string[]
+  ) {
+    const engine = yield* EngineClient;
+    const created = yield* engine.teams.create({ payload: { name } });
+    yield* writeProjects(state, created.teamId, projectIds);
+    return created;
+  });
 
-function act(call: (teams: TeamEndpoints) => Effect.Effect<RemoteSnapshot, Error>) {
-  return runApp(
-    Effect.gen(function* () {
-      const engine = yield* EngineClient;
-      const snapshot = yield* call(engine.teams);
-      connection.replaceRemote(snapshot);
-      return snapshot;
-    })
-  );
+  const join = Effect.fn('Teams.join')(function* (
+    state: ShinsaState,
+    url: string,
+    projectIds: readonly string[]
+  ) {
+    const engine = yield* EngineClient;
+    const joined = yield* engine.teams.join({ payload: { url } });
+    const shared = listTeamProjectIds(state, joined.teamId);
+    yield* writeProjects(state, joined.teamId, [...shared, ...projectIds]);
+    return joined;
+  });
+
+  const readLink = Effect.fn('Teams.readLink')(function* (teamId: string) {
+    const engine = yield* EngineClient;
+    return yield* engine.teams.link({ payload: { teamId } });
+  });
+
+  const grantAccess = Effect.fn('Teams.grantAccess')(function* (teamId: string, userId: string) {
+    const engine = yield* EngineClient;
+    return record(yield* engine.remote.grantMember({ payload: { teamId, userId } }));
+  });
+
+  const act = (call: (teams: TeamEndpoints) => Effect.Effect<RemoteSnapshot, Error>) =>
+    run(
+      Effect.gen(function* () {
+        const engine = yield* EngineClient;
+        return record(yield* call(engine.teams));
+      })
+    );
+
+  return {
+    create: (state: ShinsaState, name: string, projectIds: readonly string[]) =>
+      run(create(state, name, projectIds)),
+    join: (state: ShinsaState, url: string, projectIds: readonly string[]) =>
+      run(join(state, url, projectIds)),
+    writeProjects: (state: ShinsaState, teamId: string, projectIds: readonly string[]) =>
+      run(writeProjects(state, teamId, projectIds)),
+    readLink: (teamId: string) => run(readLink(teamId)),
+    removeLink: (teamId: string) => act((teams) => teams.removeLink({ payload: { teamId } })),
+    acceptRequest: (teamId: string, userId: string) =>
+      act((teams) => teams.acceptRequest({ payload: { teamId, userId } })),
+    declineRequest: (teamId: string, userId: string) =>
+      act((teams) => teams.declineRequest({ payload: { teamId, userId } })),
+    removeMember: (teamId: string, userId: string) =>
+      act((teams) => teams.removeMember({ payload: { teamId, userId } })),
+    leave: (teamId: string) => act((teams) => teams.leave({ payload: { teamId } })),
+    remove: (teamId: string) => act((teams) => teams.remove({ payload: { teamId } })),
+    grantAccess: (teamId: string, userId: string) => run(grantAccess(teamId, userId)),
+  };
 }
 
-export const TEAM_ACTIONS = {
-  create: (state: ShinsaState, name: string, projectIds: readonly string[]) =>
-    runApp(create(state, name, projectIds)),
-  join: (state: ShinsaState, url: string, projectIds: readonly string[]) =>
-    runApp(join(state, url, projectIds)),
-  writeProjects: (state: ShinsaState, teamId: string, projectIds: readonly string[]) =>
-    runApp(writeProjects(state, teamId, projectIds)),
-  readLink: (teamId: string) => runApp(readLink(teamId)),
-  removeLink: (teamId: string) => act((teams) => teams.removeLink({ payload: { teamId } })),
-  acceptRequest: (teamId: string, userId: string) =>
-    act((teams) => teams.acceptRequest({ payload: { teamId, userId } })),
-  declineRequest: (teamId: string, userId: string) =>
-    act((teams) => teams.declineRequest({ payload: { teamId, userId } })),
-  removeMember: (teamId: string, userId: string) =>
-    act((teams) => teams.removeMember({ payload: { teamId, userId } })),
-  leave: (teamId: string) => act((teams) => teams.leave({ payload: { teamId } })),
-  remove: (teamId: string) => act((teams) => teams.remove({ payload: { teamId } })),
-  grantAccess: (teamId: string, userId: string) => runApp(grantAccess(teamId, userId)),
-};
+export const TEAM_ACTIONS = createTeamActions();
 
-export type TeamActions = typeof TEAM_ACTIONS;
+export type TeamActions = ReturnType<typeof createTeamActions>;

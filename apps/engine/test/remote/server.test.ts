@@ -666,30 +666,44 @@ describe('the sealed channel over the tunnel', () => {
     expect(await channel.closed).toBe(1008);
   });
 
-  test('lets only the machine’s owner join a team from it, never a member', async () => {
+  test('lets only the machine’s owner manage teams, Slack, the invite link, members and devices from another device', async () => {
     const { remote, port } = await start({ access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] } });
     const machine = await remote.store.resolveMachineKey();
-    const statusFor = async (userId: string) => {
+    const paths = [
+      '/api/remote/teams/join',
+      '/api/remote/teams/create',
+      '/api/remote/teams/leave',
+      '/api/remote/link/create',
+      '/api/remote/members/remove',
+      '/api/remote/devices/remove',
+      '/api/slack/disconnect',
+    ];
+    const statusesFor = async (userId: string) => {
       const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
         userId,
         device: await addDevice(remote, userId),
       });
       expect(await channel.next()).toEqual({ t: 'ready' });
-      await channel.send({
-        t: 'request',
-        id: 'j',
-        method: 'POST',
-        path: '/api/remote/teams/join',
-        headers: [['content-type', 'application/json']],
-      });
-      await channel.send({ t: 'end', id: 'j' });
-      for (;;) {
-        const message = await channel.next();
-        if (message.t === 'response') return message.status;
+      for (const [index, path] of paths.entries()) {
+        const id = String(index);
+        await channel.send({
+          t: 'request',
+          id,
+          method: 'POST',
+          path,
+          headers: [['content-type', 'application/json']],
+        });
+        await channel.send({ t: 'end', id });
       }
+      const statuses = new Map<string, number>();
+      while (statuses.size < paths.length) {
+        const message = await channel.next();
+        if (message.t === 'response') statuses.set(paths[Number(message.id)] ?? '', message.status);
+      }
+      return paths.map((path) => [path, statuses.get(path)]);
     };
-    expect(await statusFor(KAI.id)).toBe(403);
-    expect(await statusFor(OWNER.id)).not.toBe(403);
+    expect(await statusesFor(KAI.id)).toEqual(paths.map((path) => [path, 403]));
+    for (const [path, status] of await statusesFor(OWNER.id)) expect([path, status]).not.toEqual([path, 403]);
   });
 
   test('closes every channel when remote access stops', async () => {
@@ -1153,7 +1167,7 @@ describe('links, access requests and members', () => {
     warn.mockRestore();
   });
 
-  test('approving works from a device that reaches the machine remotely, and links stay at the keyboard', async () => {
+  test('approving and the invite link work from a device that reaches the machine remotely, and pairing stays at the keyboard', async () => {
     const { remote, local, port } = await start();
     await local('/api/remote/link/create', {});
     const machine = await remote.store.resolveMachineKey();
@@ -1179,9 +1193,11 @@ describe('links, access requests and members', () => {
         if (message.t === 'response' && message.id === id) return message.status;
       }
     };
-    expect(await post('a', '/api/remote/link/create', {})).toBe(403);
+    expect(await post('a', '/api/remote/pair', {})).toBe(403);
     expect(await post('b', '/api/remote/requests/accept', { requestId })).toBe(200);
     expect(await (await opening).next()).toEqual({ t: 'ready' });
+    expect(await post('c', '/api/remote/link/remove', {})).toBe(200);
+    expect(readLink(remote)).toBeNull();
   });
 
   test('a device opens only for the account that added it', async () => {

@@ -13,7 +13,7 @@ import { UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { MentionText } from '@/components/people/user-tag.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { acceptMachineRequest, declineMachineRequest } from '@/lib/connection/remote-access.ts';
+import { createMachineAccessActions } from '@/lib/connection/remote-access.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import {
   connection,
@@ -39,15 +39,22 @@ import { describeMachineResources, listResourceGauges, NO_RESOURCE_READING } fro
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
-import { AccessRequestRows } from './remote-access.tsx';
+import { AccessRequestRows, MachineAccessGroup } from './remote-access.tsx';
+import { MachineTeamsSettings } from './teams.tsx';
 
 function resolveViewerId(instances: RemoteInstance[], machineId: string) {
   const instance = instances.find((entry) => entry.id === machineId);
   return instance?.role === 'owner' ? instance.owner.id : null;
 }
 
+function listOwnedMachines(machines: readonly MachineAccess[], instances: RemoteInstance[]) {
+  return machines.filter(
+    (machine) => machine.remote?.paired === true && resolveViewerId(instances, machine.id) !== null
+  );
+}
+
 const REQUESTS_DESCRIPTION =
-  'Devices and people asking to reach your machines. Accepting adds the device, and gives anyone new full control of the machine.';
+  'Devices and people asking to reach machines shared with you. Accepting adds the device, and gives anyone new full control of the machine.';
 
 export function MachineAccessRequests({
   machines,
@@ -56,27 +63,39 @@ export function MachineAccessRequests({
   machines: MachineAccess[];
   instances: RemoteInstance[];
 }) {
-  const waiting = machines.filter((machine) => (machine.remote?.requests.length ?? 0) > 0);
+  const owned = new Set(listOwnedMachines(machines, instances).map((machine) => machine.id));
+  const waiting = machines.filter(
+    (machine) => !owned.has(machine.id) && (machine.remote?.requests.length ?? 0) > 0
+  );
   if (waiting.length === 0) return null;
   return (
     <SettingsGroup title='Access requests' description={REQUESTS_DESCRIPTION}>
-      {waiting.map((machine) => (
-        <AccessRequestRows
-          key={machine.id}
-          title={`Waiting on ${machine.name}`}
-          requests={machine.remote?.requests ?? []}
-          access={machine.remote?.access ?? null}
-          viewerId={resolveViewerId(instances, machine.id)}
-          onAccept={(request) => acceptMachineRequest(machine.id, request.id)}
-          onDecline={(request) => declineMachineRequest(machine.id, request.id)}
-        />
-      ))}
+      {waiting.map((machine) => {
+        const actions = createMachineAccessActions(machine.id);
+        return (
+          <AccessRequestRows
+            key={machine.id}
+            title={`Waiting on ${machine.name}`}
+            requests={machine.remote?.requests ?? []}
+            access={machine.remote?.access ?? null}
+            viewerId={resolveViewerId(instances, machine.id)}
+            onAccept={(request) => actions.acceptRequest(request.id)}
+            onDecline={(request) => actions.declineRequest(request.id)}
+          />
+        );
+      })}
     </SettingsGroup>
   );
 }
 
+function OwnedMachineAccess({ machine }: { machine: MachineAccess }) {
+  const actions = React.useMemo(() => createMachineAccessActions(machine.id), [machine.id]);
+  if (!machine.remote) return null;
+  return <MachineAccessGroup name={machine.name} snapshot={machine.remote} actions={actions} />;
+}
+
 const MACHINES_DESCRIPTION =
-  'Your machines and the ones shared with you. Those added on this device share this dashboard. Add a device from Settings, Remote access on its machine.';
+  'Your machines and the ones shared with you. Those added on this device share this dashboard. Add a device with the invite link under Remote access on a machine you own.';
 
 function saveMachineSettings(machineId: string, patch: Partial<Settings>, done: string) {
   return sendCommandWithToast({ type: 'settings.change', patch }, done, machineId);
@@ -234,13 +253,15 @@ function useMachineRows() {
   return { rows, failure, remove };
 }
 
-export function MachinesSettings() {
+export function MachinesSettings({ state }: { state?: ShinsaState }) {
   const { rows, failure, remove } = useMachineRows();
   const machines = useMachines();
   const access = useMachineAccess();
+  const instances = (rows ?? []).map((row) => row.instance);
+  const owned = listOwnedMachines(access, instances);
   return (
     <>
-      <MachineAccessRequests machines={access} instances={(rows ?? []).map((row) => row.instance)} />
+      <MachineAccessRequests machines={access} instances={instances} />
       <SettingsGroup title={MACHINES_SECTION} description={MACHINES_DESCRIPTION}>
         {failure && (
           <p role='alert' className='px-2 py-1.5 text-xs text-destructive'>
@@ -253,12 +274,16 @@ export function MachinesSettings() {
           <SettingsEmpty>Reading your machines.</SettingsEmpty>
         )}
       </SettingsGroup>
+      {owned.map((machine) => (
+        <OwnedMachineAccess key={machine.id} machine={machine} />
+      ))}
       <PolicySettings
         machines={machines}
         unreachable={(rows ?? [])
           .filter((row) => !row.device || row.device.waiting)
           .map((row) => ({ id: row.instance.id, name: row.instance.name }))}
       />
+      {state && rows && <MachineTeamsSettings state={state} machines={owned} />}
     </>
   );
 }

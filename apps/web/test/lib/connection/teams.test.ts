@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 import * as socket from '@/lib/connection/socket.ts';
-import { TEAM_ACTIONS } from '@/lib/connection/teams.ts';
+import { createTeamActions, TEAM_ACTIONS } from '@/lib/connection/teams.ts';
 import { readFetchCall } from '../../support/fetch.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
@@ -109,5 +109,30 @@ describe('team actions on this machine', () => {
     ]);
     expect(replaced).toHaveBeenCalledTimes(7);
     expect(replaced).toHaveBeenLastCalledWith(snapshot);
+  });
+});
+
+describe('team actions on a machine reached through Shinsa Cloud', () => {
+  it('sends every team change and project command to that machine, and leaves the snapshot to its push', async () => {
+    const actions = createTeamActions('k3x9');
+    answers['/api/remote/teams/create?machine=k3x9'] = { teamId: 'team9', url: TEAM_URL };
+    answers['/api/remote/teams/link?machine=k3x9'] = { url: TEAM_URL };
+    const snapshot = createRemoteSnapshot({ teams: [createTeamEntry()] });
+    answers['/api/remote/teams/leave?machine=k3x9'] = snapshot;
+    answers['/api/remote/members/grant?machine=k3x9'] = snapshot;
+    await actions.create(STATE, 'Platform', ['api']);
+    expect(await actions.readLink('team9')).toEqual({ url: TEAM_URL });
+    expect(await actions.leave('team1')).toEqual(snapshot);
+    expect(await actions.grantAccess('team1', '7')).toEqual(snapshot);
+    expect(sent.map((entry) => entry.path)).toEqual([
+      '/api/remote/teams/create?machine=k3x9',
+      '/api/remote/teams/link?machine=k3x9',
+      '/api/remote/teams/leave?machine=k3x9',
+      '/api/remote/members/grant?machine=k3x9',
+    ]);
+    expect(commandSpy.mock.calls).toEqual([
+      [{ type: 'project.add_to_team', projectId: 'api', teamId: 'team9' }, 'k3x9'],
+    ]);
+    expect(replaced).not.toHaveBeenCalled();
   });
 });
