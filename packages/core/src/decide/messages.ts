@@ -11,6 +11,7 @@ import {
   listQueuedRounds,
   type MessageKind,
   MINUTE_MS,
+  type ReviewComment,
   type Run,
   resolveCurrentRound,
   resolveGuestFirstName,
@@ -20,7 +21,11 @@ import {
   type TaskStage,
 } from '../domain/index.ts';
 import type { EventOf } from '../events/index.ts';
-import { describeReplyInstruction, resolveHumanFixPrompt } from '../prompts/index.ts';
+import {
+  describeReplyInstruction,
+  resolveCommentedMessage,
+  resolveHumanFixPrompt,
+} from '../prompts/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates, listRunningRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
@@ -169,16 +174,24 @@ function restartStep(decider: Decider, task: Task, text: string) {
   }
 }
 
-function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: string) {
+interface Sent {
+  texts: string[];
+  comments: readonly ReviewComment[];
+}
+
+function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: Sent) {
+  const note = sent.texts.join('\n\n');
+  const text = resolveCommentedMessage(note, sent.comments);
+  const comments = sent.comments.length;
   switch (delivery.effect) {
     case 'kept':
       return;
     case 'steer':
-      if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, text, 0);
+      if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, note, comments);
       decider.run({ kind: 'run.steer', runId: delivery.run.id, text: resolveGuestText(decider, text) });
       return;
     case 'wake':
-      if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, text, 0);
+      if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, note, comments);
       queueMessageForWake(decider, delivery.run, resolveGuestText(decider, text));
       return;
     case 'retry':
@@ -192,21 +205,21 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
       decider.run({ kind: 'question.resolve', gateId: delivery.gate.id });
       return;
     case 'follow_up':
-      requestIteration(decider, task.id, text, 0);
+      requestIteration(decider, task.id, note, comments);
       if (acceptsFollowUp(task)) followUpInquiry(decider, task.id, text);
       else answerFollowUp(decider, task.id, text);
       return;
     case 'decline_proposal':
-      requestIteration(decider, task.id, text, 0);
+      requestIteration(decider, task.id, note, comments);
       followUpInquiry(decider, task.id, text);
       return;
     case 'revise_plan':
       decider.withdrawGates(task.id, (gate) => gate.type === 'plan');
-      requestIteration(decider, task.id, text, 0);
+      requestIteration(decider, task.id, note, comments);
       startPlanning(decider, task.id, text);
       return;
     case 'restart_step':
-      requestIteration(decider, task.id, text, 0);
+      requestIteration(decider, task.id, note, comments);
       restartStep(decider, task, text);
       return;
     case 'operation_notes':
@@ -216,14 +229,15 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
     case 'send_back':
     case 'fix':
       decider.withdrawGates(task.id, (gate) => gate.type === 'review' || gate.type === 'merge');
-      requestIteration(decider, task.id, text, 0);
-      startFix(decider, task.id, 'you', resolveHumanFixPrompt(text, []), null);
+      requestIteration(decider, task.id, note, comments);
+      startFix(decider, task.id, 'you', resolveHumanFixPrompt(note, sent.comments), null);
   }
 }
 
 interface MessageSend extends MessageRoute {
   taskId: string;
   texts: string[];
+  comments?: readonly ReviewComment[];
 }
 
 function resolveMessageKind(
@@ -248,20 +262,25 @@ function isOnlyRecorded(kind: MessageKind, delivery: MessageDelivery) {
 function recordMessages(
   decider: Decider,
   taskId: string,
-  texts: string[],
+  sent: Sent,
   fields: Partial<EventOf<'task.messaged'>>
 ) {
-  for (const text of texts) decider.emit({ type: 'task.messaged', taskId, text, ...fields });
+  const texts = sent.texts.length > 0 ? sent.texts : [''];
+  const last = texts.length - 1;
+  texts.forEach((text, index) => {
+    const comments = index === last && sent.comments.length > 0 ? { comments: [...sent.comments] } : {};
+    decider.emit({ type: 'task.messaged', taskId, text, ...fields, ...comments });
+  });
 }
 
 export function recordHeldMessage(decider: Decider, taskId: string, text: string) {
-  recordMessages(decider, taskId, [text], {});
+  recordMessages(decider, taskId, { texts: [text], comments: [] }, {});
 }
 
-function startNewWork(decider: Decider, task: Task, send: MessageSend, texts: string[], request: string) {
+function startNewWork(decider: Decider, task: Task, send: MessageSend, sent: Sent, request: string) {
   if (task.stage === 'answered' && !decider.context.onBehalf) closeResult(decider, task.id);
   const round = resolveNextRoundNumber(task);
-  recordMessages(decider, task.id, texts, { kind: 'new_round', round });
+  recordMessages(decider, task.id, sent, { kind: 'new_round', round });
   queueRound(decider, task.id, {
     request,
     title: send.title ?? null,
@@ -301,19 +320,20 @@ function isHeldForYou(state: ShinsaState, task: Task) {
 function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null) {
   const task = decider.task(send.taskId);
   const texts = send.texts.map((sent) => sent.trim()).filter((sent) => sent.length > 0);
-  const text = texts.join('\n\n');
+  const sent: Sent = { texts, comments: send.comments ?? [] };
+  const text = resolveCommentedMessage(texts.join('\n\n'), sent.comments);
   const delivery = assertMessageAccepted(decider.state, task, text);
   if (isRepeatedMessage(task, text, decider.context.now)) return;
   const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
   const scheduled = scheduleId ? { scheduleId } : {};
   const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
   if (sentForYou && isHeldForYou(decider.state, task)) {
-    recordMessages(decider, task.id, texts, { ...scheduled, kept: true });
+    recordMessages(decider, task.id, sent, { ...scheduled, kept: true });
     return;
   }
   if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
     const suggestionId = decider.context.newId();
-    recordMessages(decider, task.id, texts, { kind, suggestionId });
+    recordMessages(decider, task.id, sent, { kind, suggestionId });
     suggestSplitOff(decider, task.id, suggestionId, text, send.title ?? null, send.why ?? null);
     return;
   }
@@ -321,15 +341,15 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
     isNewWork(kind) &&
     !isHeldByYourDecision(decider.state, task, SHAPE_PIPELINES[send.shape ?? 'change'])
   ) {
-    startNewWork(decider, task, send, texts, text);
+    startNewWork(decider, task, send, sent, text);
     return;
   }
   if (isOnlyRecorded(kind, delivery)) {
-    recordMessages(decider, task.id, texts, { kind });
+    recordMessages(decider, task.id, sent, { kind });
     return;
   }
-  recordMessages(decider, task.id, texts, scheduled);
-  deliverMessage(decider, decider.task(task.id), delivery, text);
+  recordMessages(decider, task.id, sent, scheduled);
+  deliverMessage(decider, decider.task(task.id), delivery, sent);
 }
 
 function resolveGuestText(decider: Decider, text: string) {
@@ -384,7 +404,10 @@ export function keepSuggestion(decider: Decider, command: CommandOf<'suggestion.
 export function redeliverMessage(decider: Decider, command: CommandOf<'message.deliver'>) {
   const task = decider.state.tasks[command.taskId];
   if (!task || isTaskSettled(task) || isWatchHome(task)) return;
-  deliverMessage(decider, task, resolveDelivery(decider.state, task), command.text);
+  deliverMessage(decider, task, resolveDelivery(decider.state, task), {
+    texts: [command.text],
+    comments: [],
+  });
 }
 
 export function receiveMessage(decider: Decider, command: CommandOf<'message.receive'>) {

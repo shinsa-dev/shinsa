@@ -31,7 +31,7 @@ const shinsa = await startShinsa(config, {
   startSession: agents.start,
   resolveLogin: () => Promise.resolve(null),
   models: { listModels: () => Promise.resolve([]) } as ModelSource,
-  discover: () => Promise.resolve({ candidates: [], truncated: false }),
+  discover: () => Promise.resolve({ candidates: [], truncated: false, refused: [] }),
 });
 
 readState = () => shinsa.engine.state;

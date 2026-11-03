@@ -18,7 +18,7 @@ describe('useTaskView', () => {
     expect(result.current.chatRunId).toBeNull();
     expect(result.current.lead).toBeUndefined();
     expect(result.current.reviewing).toBe(false);
-    expect(result.current.draftKey).toBe('none');
+    expect(result.current.choiceKey).toBe('none');
   });
 
   it('reads the tab and run from the URL', () => {
@@ -59,7 +59,8 @@ describe('useTaskView', () => {
     );
     expect(result.current.lead?.id).toBe('g2');
     expect(result.current.reviewing).toBe(true);
-    expect(result.current.draftKey).toBe('g1');
+    expect(result.current.choiceKey).toBe('g1');
+    expect(result.current.draftKey).toBe('task:t1');
   });
 
   it('reviews on a merge gate but not on a plan', () => {

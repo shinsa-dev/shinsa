@@ -105,10 +105,6 @@ describe('listStackChoices', () => {
     engine = spyOnEngine();
   });
 
-  afterEach(() => {
-    engine.mockRestore();
-  });
-
   it('offers nothing on an engine that cannot stack yet', () => {
     engine.mockReturnValue({ ...resolveEngineInfo('1.0.0'), commands: [...ENGINE_BASELINE_COMMANDS] });
     const subject = createTask({ id: 'self', repoId: 'app', stage: 'planning' });

@@ -117,7 +117,8 @@ export async function launchChrome(width: number, height: number) {
     ],
     { stdout: 'ignore', stderr: 'pipe' }
   );
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
     await Bun.sleep(100);
     const target = await listTargets(port).then(
       (targets) => targets.find((entry) => entry.type === 'page'),
@@ -135,5 +136,9 @@ export async function launchChrome(width: number, height: number) {
   }
   chrome.kill();
   const output = (await new Response(chrome.stderr).text()).trim().slice(-2000);
-  throw new Error(output ? `Chromium did not open a page:\n${output}` : 'Chromium did not open a page.');
+  throw new Error(
+    output
+      ? `Chromium did not open a page within 30 seconds:\n${output}`
+      : 'Chromium did not open a page within 30 seconds.'
+  );
 }

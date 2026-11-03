@@ -172,6 +172,7 @@ describe('the onboarding endpoints', () => {
     expect(await (await call('/api/onboarding/roots?refresh=1')).json()).toEqual({
       suggestions: [],
       truncated: false,
+      refused: [],
     });
     expect((await post('/api/onboarding/complete', {})).status).toBe(404);
     const saved = await post('/api/onboarding/setup', { roots: [config.home], mergeMethod: 'merge' });

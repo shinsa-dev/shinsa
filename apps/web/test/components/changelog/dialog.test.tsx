@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { type Changelog, resolveEngineInfo } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -34,6 +34,10 @@ function renderShell() {
     </TooltipProvider>
   );
 }
+
+afterEach(() => {
+  mock.restore();
+});
 
 describe('What’s new', () => {
   it('shows a button after an update that opens what changed since and then goes away', async () => {
