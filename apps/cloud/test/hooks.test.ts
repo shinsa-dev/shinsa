@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {} from '@shinsa/core';
 import { HOOK_BODY_LIMIT_BYTES } from '../src/routes/hooks/schema.ts';
 import { createHarness, type Harness, pairMachine } from './harness.ts';
@@ -67,9 +67,11 @@ describe('webhooks through app.shinsa.dev', () => {
     expect(harness.calls.at(-1)?.body).toBe('');
   });
 
-  test('answers 503 with a retry when the machine is offline', async () => {
+  test('answers 503 with a retry when the machine is offline, and warns why, never as an error', async () => {
     const harness = createHarness();
     const instanceId = await pairInstance(harness);
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const errors = spyOn(console, 'error').mockImplementation(() => undefined);
     answerTunnel(harness, () => new Response('Argo Tunnel error', { status: 530 }));
     const offline = await harness.call(`/hooks/${instanceId}/s/t`, { method: 'POST', body: 'x' });
     expect(offline.status).toBe(503);
@@ -77,6 +79,16 @@ describe('webhooks through app.shinsa.dev', () => {
     harness.handlers.length = 0;
     answerTunnel(harness, () => Promise.reject(new Error('network')));
     expect((await harness.call(`/hooks/${instanceId}/s/t`, { method: 'POST', body: 'x' })).status).toBe(503);
+    expect(warnings.mock.calls).toEqual([
+      ['[Cloud] Machine offline', { surface: 'webhook', instanceId, reason: 'status', status: 530 }],
+      [
+        '[Cloud] Machine offline',
+        { surface: 'webhook', instanceId, reason: 'unreachable', error: expect.stringContaining('network') },
+      ],
+    ]);
+    expect(errors).not.toHaveBeenCalled();
+    warnings.mockRestore();
+    errors.mockRestore();
   });
 
   test('refuses an unknown machine or a body over 1 MB', async () => {
