@@ -8,8 +8,8 @@ import {
   PREVIEW_KEY_HEADER,
   resolvePreviewOrigin,
   serializeBase64Url,
-} from '../packages/core/src/index.ts';
-import { createSandboxCloud } from './sandbox-cloud.ts';
+} from '../../packages/core/src/index.ts';
+import { createSandboxCloud } from './cloud.ts';
 
 setDefaultTimeout(30_000);
 

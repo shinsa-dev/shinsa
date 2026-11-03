@@ -5,10 +5,10 @@ import { SqliteClient } from '@effect/sql-sqlite-bun';
 import { ConfigProvider, Context, Layer } from 'effect';
 import { constVoid } from 'effect/Function';
 import { FetchHttpClient } from 'effect/http';
-import { makeCloudHandler } from '../apps/cloud/src/app.ts';
-import { Assets, WorkerContext } from '../apps/cloud/src/http/worker.ts';
-import { SQL_NAMES } from '../apps/cloud/src/store/shared/schema.ts';
-import { MACHINE_FEATURES } from '../packages/core/src/index.ts';
+import { makeCloudHandler } from '../../apps/cloud/src/app.ts';
+import { Assets, WorkerContext } from '../../apps/cloud/src/http/worker.ts';
+import { SQL_NAMES } from '../../apps/cloud/src/store/shared/schema.ts';
+import { MACHINE_FEATURES } from '../../packages/core/src/index.ts';
 
 export interface SandboxTunnel {
   readonly id: string;
@@ -17,7 +17,7 @@ export interface SandboxTunnel {
   readonly connectKey: string;
 }
 
-const MIGRATIONS = join(import.meta.dirname, '../apps/cloud/migrations');
+const MIGRATIONS = join(import.meta.dirname, '../../apps/cloud/migrations');
 
 const SEEN_UNTIL = Number.MAX_SAFE_INTEGER;
 

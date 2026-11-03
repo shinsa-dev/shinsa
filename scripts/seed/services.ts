@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { TerminalStore } from '../../apps/engine/src/terminals/store.ts';
 import type { Project, Repo, ServiceDefinition } from '../../packages/core/src/index.ts';
 
-export const SANDBOX_SERVICE_COMMAND = `bun ${join(import.meta.dir, '../sandbox-service.ts')}`;
+export const SANDBOX_SERVICE_COMMAND = `bun ${join(import.meta.dir, '../sandbox/service.ts')}`;
 
 const SEED_SERVICES = [
   { projectId: 'project-superwall', repo: 'paywall-next', name: 'web' },
