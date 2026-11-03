@@ -156,7 +156,6 @@ export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {
 }
 
 export {
-  createDiscoverer,
   createLoginResolver,
   discoverRoots,
   listCandidateRepos,

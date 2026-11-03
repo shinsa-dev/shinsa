@@ -1,44 +1,22 @@
-import type {
-  InstanceId,
-  RemoteRole,
-  RemoteTeam,
-  RemoteUserId,
-  TeamId,
-  TeamJoinStatus,
-  TeamMachine,
-} from '@shinsa/core';
+import type { InstanceId, RemoteRole, RemoteTeam, RemoteUserId, TeamId, TeamJoinStatus } from '@shinsa/core';
 import { InviteInvalid, NotFound, OwnerCannotLeave } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
-import { findTeamAccess } from '../auth/access.ts';
+import { findTeamAccess, isTeamOwner, selectTeamRole } from '../auth/access.ts';
+import { NO_SUCH_TEAM } from '../auth/schema.ts';
 import { CloudCrypto } from '../crypto/service.ts';
-import { Accounts } from '../store/accounts/service.ts';
 import type { Team } from '../store/teams/schema.ts';
 import { Teams } from '../store/teams/service.ts';
-import { createConnectAnswer, isMachineOnline } from './machines.ts';
-
-const findTeamOwner = Effect.fn('findTeamOwner')(function* (team: Team) {
-  const accounts = yield* Accounts;
-  const owner = yield* accounts.selectUser(team.userId);
-  if (Option.isNone(owner)) return yield* new NotFound({ message: 'No such team.' });
-  return owner.value;
-});
+import { createConnectAnswer, findOwner, serializeTeamMachine } from './machines.ts';
 
 export const serializeTeam = Effect.fn('serializeTeam')(function* (team: Team, userId: RemoteUserId) {
   const teams = yield* Teams;
   const now = yield* Clock.currentTimeMillis;
-  const role: RemoteRole = team.userId === userId ? 'owner' : 'member';
-  const machines = (yield* teams.listMachines(team.id)).map((machine): TeamMachine => ({
-    id: machine.id,
-    name: machine.name,
-    userId: machine.userId,
-    online: isMachineOnline(machine, now),
-    lastSeenAt: machine.lastSeenAt,
-    ...(machine.signingKey ? { signingKey: machine.signingKey } : {}),
-  }));
+  const role: RemoteRole = isTeamOwner(team, userId) ? 'owner' : 'member';
+  const machines = (yield* teams.listMachines(team.id)).map((machine) => serializeTeamMachine(machine, now));
   return {
     id: team.id,
     name: team.name,
-    owner: yield* findTeamOwner(team),
+    owner: yield* findOwner(team.userId, NO_SUCH_TEAM),
     role,
     members: yield* teams.members.list(team.id),
     requests: role === 'owner' ? yield* teams.requesters.list(team.id) : [],
@@ -69,13 +47,13 @@ export const findInviteTeam = Effect.fn('teams.findInviteTeam')(function* (invit
     return yield* new InviteInvalid({
       message: 'This team link was turned off. Ask the team’s owner for a new one.',
     });
-  return { team: team.value, owner: yield* findTeamOwner(team.value) };
+  return { team: team.value, owner: yield* findOwner(team.value.userId, NO_SUCH_TEAM) };
 });
 
 export const joinTeam = Effect.fn('teams.join')(function* (userId: RemoteUserId, invite: string) {
   const teams = yield* Teams;
   const { team, owner } = yield* findInviteTeam(invite);
-  const member = team.userId === userId || (yield* teams.members.has(team.id, userId));
+  const member = Option.isSome(yield* selectTeamRole(team, userId));
   if (!member) yield* teams.requesters.add(team.id, userId);
   const status: TeamJoinStatus = member ? 'member' : 'requested';
   return { teamId: team.id, name: team.name, owner, status };

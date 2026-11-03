@@ -5,6 +5,7 @@ import { HighlightList } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { type MenuItemIcon, menuIconPosition, renderMenuIcon } from '@shinsa/ui/components/menu-icon';
 import { useControllableOpen } from '@shinsa/ui/hooks/use-controllable-open';
+import { POPUP_SIDE_SLIDE, POPUP_SURFACE, POPUP_ZOOM } from '@shinsa/ui/lib/popup';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
@@ -80,7 +81,10 @@ function DropdownMenuContent({
           data-slot='dropdown-menu-content'
           className={cn(
             // Anchor width is a floor, not a cage: long items grow the popup.
-            'corner-superellipse/1.125 z-50 max-h-(--available-height) min-w-[max(8rem,var(--anchor-width))] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-popup bg-popover whitespace-nowrap text-popover-foreground shadow-md duration-200 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95',
+            POPUP_SURFACE,
+            POPUP_SIDE_SLIDE,
+            POPUP_ZOOM,
+            'z-50 max-h-(--available-height) min-w-[max(8rem,var(--anchor-width))] overflow-x-hidden overflow-y-auto whitespace-nowrap duration-200 outline-none data-closed:overflow-hidden',
             className
           )}
           {...props}
@@ -204,6 +208,25 @@ function DropdownMenuSubContent({
   );
 }
 
+const ITEM_INDICATOR = {
+  checkbox: MenuPrimitive.CheckboxItemIndicator,
+  radio: MenuPrimitive.RadioItemIndicator,
+};
+
+function DropdownMenuItemIndicator({ kind }: { kind: keyof typeof ITEM_INDICATOR }) {
+  const Indicator = ITEM_INDICATOR[kind];
+  return (
+    <span
+      className='pointer-events-none absolute right-2 flex items-center justify-center'
+      data-slot={`dropdown-menu-${kind}-item-indicator`}
+    >
+      <Indicator>
+        <Icon name='IconCheckmark1' className='rotate-[4deg] text-primary-text' />
+      </Indicator>
+    </span>
+  );
+}
+
 function DropdownMenuCheckboxItem({
   className,
   children,
@@ -221,14 +244,7 @@ function DropdownMenuCheckboxItem({
       checked={checked}
       {...props}
     >
-      <span
-        className='pointer-events-none absolute right-2 flex items-center justify-center'
-        data-slot='dropdown-menu-checkbox-item-indicator'
-      >
-        <MenuPrimitive.CheckboxItemIndicator>
-          <Icon name='IconCheckmark1' className='rotate-[4deg] text-primary-text' />
-        </MenuPrimitive.CheckboxItemIndicator>
-      </span>
+      <DropdownMenuItemIndicator kind='checkbox' />
       {children}
     </MenuPrimitive.CheckboxItem>
   );
@@ -253,14 +269,7 @@ function DropdownMenuRadioItem({
       className={cn(ITEM_BASE, 'pr-7', className)}
       {...props}
     >
-      <span
-        className='pointer-events-none absolute right-2 flex items-center justify-center'
-        data-slot='dropdown-menu-radio-item-indicator'
-      >
-        <MenuPrimitive.RadioItemIndicator>
-          <Icon name='IconCheckmark1' className='rotate-[4deg] text-primary-text' />
-        </MenuPrimitive.RadioItemIndicator>
-      </span>
+      <DropdownMenuItemIndicator kind='radio' />
       {children}
     </MenuPrimitive.RadioItem>
   );

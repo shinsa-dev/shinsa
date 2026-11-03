@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { listTargets, ShellPage } from '../perf/shell-cdp.ts';
+import { CdpPage, listTargets } from '../kit/chromium/index.ts';
 
 type Theme = 'light' | 'dark';
 
@@ -97,7 +97,7 @@ async function launchApp(origin: string) {
       stderr: Bun.file(join(WORK, 'app.err.log')),
     }
   );
-  const app: { main: ShellPage | null; pid: number | null } = { main: null, pid: null };
+  const app: { main: CdpPage | null; pid: number | null } = { main: null, pid: null };
   cleanups.push(async () => {
     await app.main?.evaluate(`process.mainModule.require('electron').app.quit()`).catch(() => undefined);
     app.main?.close();
@@ -109,7 +109,7 @@ async function launchApp(origin: string) {
   });
   const main = await waitFor('the app', async () => {
     const target = (await listTargets(mainPort)).find((entry) => entry.type === 'node');
-    return target ? ShellPage.open(target.webSocketDebuggerUrl) : null;
+    return target ? CdpPage.open(target.webSocketDebuggerUrl) : null;
   });
   app.main = main;
   app.pid = await main.evaluate<number>('process.pid');
@@ -117,7 +117,7 @@ async function launchApp(origin: string) {
     const target = (await listTargets(pagePort)).find(
       (entry) => entry.type === 'page' && entry.url.startsWith(origin)
     );
-    return target ? ShellPage.open(target.webSocketDebuggerUrl) : null;
+    return target ? CdpPage.open(target.webSocketDebuggerUrl) : null;
   });
   cleanups.push(async () => {
     await page.evaluate(`localStorage.removeItem('shinsa.theme')`).catch(() => undefined);
@@ -126,7 +126,7 @@ async function launchApp(origin: string) {
   return { main, page, pid: app.pid };
 }
 
-function placeWindow(main: ShellPage, theme: Theme) {
+function placeWindow(main: CdpPage, theme: Theme) {
   return main.evaluate<boolean>(`(() => {
     const { app, BrowserWindow, nativeTheme, screen } = process.mainModule.require('electron');
     nativeTheme.themeSource = '${theme}';
@@ -152,7 +152,7 @@ function placeWindow(main: ShellPage, theme: Theme) {
   })()`);
 }
 
-function isPageSettled(page: ShellPage, theme: Theme) {
+function isPageSettled(page: CdpPage, theme: Theme) {
   return page.evaluate<boolean>(`(async () => {
     await document.fonts.ready;
     document.activeElement?.blur?.();
@@ -192,7 +192,7 @@ function writeImage(raw: string, target: string) {
   );
 }
 
-async function captureTheme(main: ShellPage, page: ShellPage, pid: number, theme: Theme) {
+async function captureTheme(main: CdpPage, page: CdpPage, pid: number, theme: Theme) {
   await placeWindow(main, theme);
   let calm = 0;
   await waitFor(`the ${theme} page to settle`, async () => {

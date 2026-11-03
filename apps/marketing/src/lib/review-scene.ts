@@ -1,6 +1,6 @@
 import type { ReportCheck, ReviewFinding, Task, WorkReport } from '@shinsa/core';
 import { createSampleTask, MINUTE } from '@/routes/ui/samples.ts';
-import { lineOf } from './demo-repo.ts';
+import { lineOf, resolveLineSpan } from './demo-repo.ts';
 import {
   DRAFT_STORE_AFTER,
   DRAFT_TEST_AFTER,
@@ -10,10 +10,6 @@ import {
   STEPS_AFTER,
 } from './onboarding-code.ts';
 import { ONBOARDING_PLAN, PROJECT } from './scene.ts';
-
-function span(content: string, from: string, to: string) {
-  return { start: lineOf(content, from), end: lineOf(content, to) };
-}
 
 export const REVIEW_FINDINGS: ReviewFinding[] = [
   {
@@ -50,7 +46,7 @@ export const REVIEW_REPORT: WorkReport = {
       spots: [
         {
           file: 'src/onboarding/steps.ts',
-          ...span(STEPS_AFTER, 'export function validateStep', 'return problems;'),
+          ...resolveLineSpan(STEPS_AFTER, 'export function validateStep', 'return problems;'),
           attention: 'high',
           title: 'Each step validates on its own',
           explain:
@@ -59,7 +55,7 @@ export const REVIEW_REPORT: WorkReport = {
         },
         {
           file: 'src/routes/onboarding.tsx',
-          ...span(ROUTE_AFTER, 'const owner = useOwner', '</main>'),
+          ...resolveLineSpan(ROUTE_AFTER, 'const owner = useOwner', '</main>'),
           attention: 'normal',
           why: 'The route asks where to resume, then renders that step.',
         },
@@ -72,7 +68,7 @@ export const REVIEW_REPORT: WorkReport = {
       spots: [
         {
           file: 'src/onboarding/draft-store.ts',
-          ...span(DRAFT_STORE_AFTER, 'export async function saveStep', 'return { saved: true'),
+          ...resolveLineSpan(DRAFT_STORE_AFTER, 'export async function saveStep', 'return { saved: true'),
           attention: 'critical',
           title: 'Saving a step',
           explain:
@@ -81,7 +77,7 @@ export const REVIEW_REPORT: WorkReport = {
         },
         {
           file: 'src/onboarding/draft-store.ts',
-          ...span(DRAFT_STORE_AFTER, 'export async function createStore', 'return store.id'),
+          ...resolveLineSpan(DRAFT_STORE_AFTER, 'export async function createStore', 'return store.id'),
           attention: 'critical',
           title: 'Turning the draft into a store',
           explain:
@@ -90,7 +86,7 @@ export const REVIEW_REPORT: WorkReport = {
         },
         {
           file: 'test/onboarding/draft-store.test.ts',
-          ...span(DRAFT_TEST_AFTER, 'a reload resumes', "toBe('payments')"),
+          ...resolveLineSpan(DRAFT_TEST_AFTER, 'a reload resumes', "toBe('payments')"),
           attention: 'normal',
           why: 'Failed before the change, passes now.',
         },
@@ -102,7 +98,11 @@ export const REVIEW_REPORT: WorkReport = {
       spots: [
         {
           file: 'src/onboarding/resume.ts',
-          ...span(RESUME_AFTER, 'export async function resolveResumeStep', "return next?.id ?? 'shipping'"),
+          ...resolveLineSpan(
+            RESUME_AFTER,
+            'export async function resolveResumeStep',
+            "return next?.id ?? 'shipping'"
+          ),
           attention: 'high',
           title: 'Where a returning owner lands',
           explain: 'The first step not in the draft’s finished list. You chose this during the build.',
@@ -110,7 +110,7 @@ export const REVIEW_REPORT: WorkReport = {
         },
         {
           file: 'src/onboarding/progress-dots.tsx',
-          ...span(PROGRESS_DOTS_AFTER, 'export function ProgressDots', '</ol>'),
+          ...resolveLineSpan(PROGRESS_DOTS_AFTER, 'export function ProgressDots', '</ol>'),
           attention: 'normal',
           why: 'Presentational only.',
         },

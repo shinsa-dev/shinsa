@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetTitle } from '@shinsa/ui/components/sheet';
 import { useMediaQuery } from '@shinsa/ui/hooks/use-media-query';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { CommentsBar } from '@/components/code/comments-bar.tsx';
 import { EditorPane } from '@/components/code/editor-pane.tsx';
 import type { EditorHandle, EditorSessionHolder } from '@/components/code/editor/code-editor.tsx';
 import { Explorer, type ExplorerProps } from '@/components/code/explorer.tsx';
@@ -280,6 +281,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
             />
           </div>
         )}
+        <CommentsBar task={task} />
       </div>
       <QuickOpen
         task={task}

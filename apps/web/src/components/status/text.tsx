@@ -1,4 +1,5 @@
 import type { ShinsaState, Task } from '@shinsa/core';
+import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { TONE_FILL, TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { resolveTaskNow } from '@/lib/tasks/now.ts';
@@ -28,11 +29,25 @@ export function TaskMeta({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-export function ToneLabel({ label, tone }: { label: string; tone: Tone }) {
+export function ToneLabel({
+  label,
+  tone,
+  shrinks = false,
+}: {
+  label: string;
+  tone: Tone;
+  shrinks?: boolean;
+}) {
   return (
-    <span className={cn('inline-flex shrink-0 items-center gap-1.5 text-2xs font-medium', TONE_TEXT[tone])}>
-      <span className={cn('size-1.5 rounded-full', TONE_FILL[tone])} />
-      {label}
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 text-2xs font-medium',
+        shrinks ? 'min-w-0' : 'shrink-0',
+        TONE_TEXT[tone]
+      )}
+    >
+      <span className={cn('size-1.5 shrink-0 rounded-full', TONE_FILL[tone])} />
+      {shrinks ? <Truncate>{label}</Truncate> : label}
     </span>
   );
 }

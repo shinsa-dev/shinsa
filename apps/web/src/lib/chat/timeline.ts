@@ -12,7 +12,9 @@ import {
   isHandOverTool,
   isSubagentEvent,
   type LoadedExtensions,
+  type ReviewComment,
   type Run,
+  resolveCommentedMessage,
   type ShinsaToolName,
   splitMessageAttachments,
   type Task,
@@ -32,6 +34,7 @@ export interface HumanMessage {
   status?: MessageStatus;
   reason?: string;
   splitOff?: SplitOffReference;
+  comments?: ReviewComment[];
 }
 
 export interface ToolCall {
@@ -49,7 +52,7 @@ export type TimelineItem =
   | { kind: 'instructions'; key: string; at: number; text: string; first: boolean }
   | ({ kind: 'human'; key: string; at: number; text: string; attachments: ChatAttachment[] } & Pick<
       HumanMessage,
-      'status' | 'reason' | 'splitOff'
+      'status' | 'reason' | 'splitOff' | 'comments'
     >)
   | { kind: 'agent'; key: string; at: number; text: string; phase: 'interim' | 'final' }
   | { kind: 'tools'; key: string; at: number; calls: ToolCall[] }
@@ -115,8 +118,16 @@ function listMessagesOf(task: Task, kinds: readonly string[]): HumanMessage[] {
   return task.activity
     .filter((entry) => entry.actor === 'you' && kinds.includes(entry.kind))
     .flatMap((entry) => {
-      if (!entry.detail) return [];
-      return [{ at: entry.at, text: entry.detail, ...(entry.noted ? { status: 'noted' as const } : {}) }];
+      const comments = entry.comments ?? [];
+      if (!entry.detail && comments.length === 0) return [];
+      return [
+        {
+          at: entry.at,
+          text: entry.detail ?? '',
+          ...(entry.noted ? { status: 'noted' as const } : {}),
+          ...(comments.length > 0 ? { comments } : {}),
+        },
+      ];
     });
 }
 
@@ -169,10 +180,11 @@ export function listHumanMessages(task: Task, sending: HumanMessage[] = []): Hum
     ...listUndelivered(task),
     ...routing,
   ];
-  const unsent = listUnsent(sending, landed).map(({ at, text }) => ({
+  const unsent = listUnsent(sending, landed).map(({ at, text, comments }) => ({
     at,
     text,
     status: 'delivering' as const,
+    ...(comments ? { comments } : {}),
   }));
   return [...landed, ...unsent].sort((left, right) => left.at - right.at);
 }
@@ -402,14 +414,16 @@ export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]):
   const builder: TimelineBuilder = {
     items: [],
     calls: [],
-    echoes: new Set(messages.map((message) => resolveEchoKey(message.text))),
+    echoes: new Set(
+      messages.map((message) => resolveEchoKey(resolveCommentedMessage(message.text, message.comments ?? [])))
+    ),
     seenBrief: false,
     group: null,
   };
   for (const [index, part] of mergeByTime(entries, messages).entries()) {
     if (part.type === 'human') {
       builder.group = null;
-      const { at, text, status, reason, splitOff } = part.message;
+      const { at, text, status, reason, splitOff, comments } = part.message;
       builder.items.push({
         kind: 'human',
         key: `human-${at}-${index}`,
@@ -419,6 +433,7 @@ export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]):
         ...(status ? { status } : {}),
         ...(reason ? { reason } : {}),
         ...(splitOff ? { splitOff } : {}),
+        ...(comments ? { comments } : {}),
       });
     } else if (!isSubagentEvent(part.entry)) {
       applyEntry(builder, part.entry);

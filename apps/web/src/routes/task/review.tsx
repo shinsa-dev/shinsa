@@ -10,7 +10,6 @@ import {
 } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
@@ -26,7 +25,7 @@ import { PointIndex } from '@/components/review/point-index.tsx';
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
-import { Composer } from '@/components/task/composer.tsx';
+import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { prepareCodeDiff } from '@/components/text/code-diff.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
@@ -69,7 +68,7 @@ import {
   useStopLit,
 } from '@/lib/review/selection.ts';
 import { type ChecksView, resolveChecksView } from '@/lib/tasks/checks.ts';
-import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
+import { resolveMessageHint } from '@/lib/tasks/messages.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
 function useReviewDiff(task: Task): Loaded<TaskDiff> {
@@ -618,15 +617,7 @@ const ReviewChapters = React.memo(function ReviewChapterList({
 function ReviewComposer({ state, task }: { state: ShinsaState; task: Task }) {
   const hint = resolveMessageHint(state, task);
   if (!hint) return null;
-  return (
-    <Composer
-      draftKey={task.id}
-      placeholder={hint.placeholder}
-      submitLabel='Send message'
-      onSubmit={(text) => sendTaskMessage(task, hint, text)}
-      dock={<MessageQueue state={state} task={task} />}
-    />
-  );
+  return <TaskComposer state={state} task={task} hint={hint} />;
 }
 
 export function ReviewTab({

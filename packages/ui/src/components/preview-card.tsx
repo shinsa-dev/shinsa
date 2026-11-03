@@ -2,6 +2,7 @@
 
 import { PreviewCard as PreviewCardPrimitive } from '@base-ui/react/preview-card';
 import { appendSample, isHeadingInto, type PointerSample } from '@shinsa/ui/lib/pointer-intent';
+import { POPUP_SURFACE, POPUP_ZOOM } from '@shinsa/ui/lib/popup';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
@@ -197,7 +198,9 @@ function PreviewCardContent({
           data-slot='preview-card-content'
           data-instant={instant ? '' : undefined}
           className={cn(
-            'corner-superellipse/1.125 flex w-72 origin-(--transform-origin) flex-col rounded-popup bg-popover text-xs text-popover-foreground shadow-md outline-hidden data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+            POPUP_SURFACE,
+            POPUP_ZOOM,
+            'flex w-72 flex-col text-xs outline-hidden',
             'data-instant:animate-none! data-instant:duration-0!',
             className
           )}

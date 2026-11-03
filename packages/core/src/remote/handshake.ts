@@ -1,6 +1,8 @@
+import { parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, concatBytes, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { CHANNEL_COMPRESSION, type ChannelCompression } from './frames.ts';
 import { parsePublicKey, serializePublicKey } from './keys.ts';
+import { importHmacKey, signHmac } from './tokens.ts';
 
 export const REMOTE_PROTOCOL_VERSION = 1;
 
@@ -52,19 +54,8 @@ interface ServerSessionInput {
   serverEphemeralPrivateKey: CryptoKey;
 }
 
-function readFields(text: string): Record<string, unknown> | null {
-  try {
-    const value: unknown = JSON.parse(text);
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 export function parseClientHello(text: string): ClientHello | null {
-  const fields = readFields(text);
+  const fields = parseJsonRecord(text);
   if (fields?.type !== 'hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   if (typeof fields.device !== 'string' || typeof fields.ephemeral !== 'string') return null;
   if (fields.enroll !== null && typeof fields.enroll !== 'string') return null;
@@ -88,7 +79,7 @@ export function resolveCompression(hello: ClientHello): ChannelCompression | nul
 }
 
 export function parseServerHello(text: string): ServerHello | null {
-  const fields = readFields(text);
+  const fields = parseJsonRecord(text);
   if (fields?.type === 'welcome' && typeof fields.ephemeral === 'string')
     return {
       type: 'welcome',
@@ -156,12 +147,6 @@ export async function deriveServerSession(input: ServerSessionInput): Promise<Se
   return { send: keys.serverToClient, receive: keys.clientToServer };
 }
 
-function importEnrollSecret(secret: string) {
-  const raw = parseBase64Url(secret);
-  if (!raw || raw.length === 0) return null;
-  return crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
-}
-
 function resolveEnrollMessage(machine: string, device: string, clientEphemeral: string) {
   return encodeText([ENROLL_LABEL, machine, device, clientEphemeral].join('\n'));
 }
@@ -170,10 +155,10 @@ export async function createEnrollProof(
   secret: string,
   keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>
 ) {
-  const key = await importEnrollSecret(secret);
+  const key = await importHmacKey(secret);
   if (!key) throw new Error('The enrollment secret is not valid.');
   const message = resolveEnrollMessage(keys.machine, keys.device, keys.clientEphemeral);
-  return serializeBase64Url(new Uint8Array(await crypto.subtle.sign('HMAC', key, message)));
+  return serializeBase64Url(await signHmac(key, message));
 }
 
 export async function verifyEnrollProof(
@@ -181,7 +166,7 @@ export async function verifyEnrollProof(
   proof: string,
   keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>
 ) {
-  const key = await importEnrollSecret(secret);
+  const key = await importHmacKey(secret);
   const signature = parseBase64Url(proof);
   if (!key || !signature) return false;
   const message = resolveEnrollMessage(keys.machine, keys.device, keys.clientEphemeral);

@@ -95,7 +95,7 @@ function resolveJudgementCall(input: typeof JudgementCallInput.Type): JudgementC
   };
 }
 
-function resolveRisk({ title, risk, file, line, end }: typeof Risk.Type): ReportRisk {
+function resolveReportRisk({ title, risk, file, line, end }: typeof Risk.Type): ReportRisk {
   return { title, risk, file, line, end };
 }
 
@@ -138,7 +138,7 @@ function resolveWalkthrough(walkthrough: typeof Walkthrough.Type): ReportWalkthr
   return {
     approach: walkthrough.approach,
     flow: walkthrough.flow,
-    risks: walkthrough.risks.map(resolveRisk),
+    risks: walkthrough.risks.map(resolveReportRisk),
     testing: resolveTesting(walkthrough.testing),
     ...resolveParts(walkthrough.steps, walkthrough.watchdogs, false),
   };
@@ -151,13 +151,13 @@ function resolveWalkthroughRevision(
   return {
     ...(revision.approach === null ? {} : { approach: revision.approach }),
     ...(revision.flow === null ? {} : { flow: revision.flow }),
-    ...(revision.risks === null ? {} : { risks: revision.risks.map(resolveRisk) }),
+    ...(revision.risks === null ? {} : { risks: revision.risks.map(resolveReportRisk) }),
     ...(revision.testing === null ? {} : { testing: resolveTesting(revision.testing) }),
     ...resolveParts(revision.steps, revision.watchdogs, true),
   };
 }
 
-function resolveCheckChange(change: typeof CheckChangeInput.Type): CheckChangeHandOver {
+function resolveCheckChangeInput(change: typeof CheckChangeInput.Type): CheckChangeHandOver {
   return {
     action: change.action,
     id: change.id,
@@ -210,7 +210,7 @@ export function validatePhaseHandOver(input: Record<string, unknown>): Validatio
     judgementCalls: handOver.judgement_calls.map(resolveJudgementCall),
     reply: resolveReply(handOver.reply),
     walkthrough: resolveWalkthrough(handOver.walkthrough),
-    checkChanges: handOver.check_changes.map(resolveCheckChange),
+    checkChanges: handOver.check_changes.map(resolveCheckChangeInput),
   });
 }
 
@@ -222,7 +222,7 @@ export function validateFixHandOver(input: Record<string, unknown>): Validation<
     reply: resolveReply(handOver.reply),
     walkthrough: resolveWalkthroughRevision(handOver.walkthrough),
     checks: [...new Set(handOver.checks)],
-    checkChanges: handOver.check_changes.map(resolveCheckChange),
+    checkChanges: handOver.check_changes.map(resolveCheckChangeInput),
     evidenceKept: [...new Set(handOver.evidence_kept)],
   });
 }

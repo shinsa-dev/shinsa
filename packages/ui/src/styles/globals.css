@@ -478,6 +478,10 @@
 }
 
 /* ── Theme mapping ───────────────────────────────────────────────────────── */
+@theme static {
+  --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @theme inline {
   --font-sans: "ABC Areal", "ABC Areal Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "ABC Areal Mono", "ABC Areal Mono Fallback", ui-monospace, "SF Mono", Menlo, monospace;
@@ -1291,7 +1295,7 @@
   height: 100%;
   transition:
     opacity 200ms ease,
-    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    transform 200ms var(--ease-emphasized);
 }
 [data-sonner-toast].bk-toast .sonner-loader[data-visible="false"] {
   opacity: 0;
@@ -1329,7 +1333,7 @@
 [data-sonner-toast][data-styled="true"].bk-toast [data-icon] > svg {
   transform: none;
   transform-origin: center;
-  animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: bk-toast-icon-in 240ms var(--ease-emphasized) both;
 }
 
 /* ── Selection — follows the surface ──────────────────────────────────────
@@ -1409,7 +1413,7 @@
 @utility transition-disclosure {
   transition-property: rotate, transform;
   transition-duration: 200ms;
-  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  transition-timing-function: var(--ease-emphasized);
 }
 
 /* ── Shimmering text ──────────────────────────────────────────────────────

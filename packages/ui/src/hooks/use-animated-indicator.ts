@@ -1,6 +1,7 @@
+import { EASE_EMPHASIZED } from '@shinsa/ui/lib/motion';
 import * as React from 'react';
 
-export const INDICATOR_TRANSITION = 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease-out';
+export const INDICATOR_TRANSITION = `transform 200ms ${EASE_EMPHASIZED}, opacity 120ms ease-out`;
 
 const PRESS_INSET = { x: 1, y: 0.5 };
 

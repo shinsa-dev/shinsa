@@ -12,6 +12,7 @@ function createRoots(fromEnvironment: string[] = []) {
     return Promise.resolve({
       candidates: [{ path: join(home, 'Developer'), repoCount: 2, repos: ['a', 'b'] }],
       truncated: false,
+      refused: [],
     });
   };
   const roots = new Roots(fromEnvironment, store, '/home/me', discover);

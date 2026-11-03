@@ -22,7 +22,13 @@ import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { isEditedPath, resolveEditState } from '@/lib/code/edits.ts';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
-import { type CodeNote, type Composer, listFileNotes, listSpotMarks } from '@/lib/code/notes.ts';
+import {
+  type CodeNote,
+  type Composer,
+  listFileNotes,
+  listSpotMarks,
+  resolveEditComposer,
+} from '@/lib/code/notes.ts';
 import {
   FOCUS_FLASH_MS,
   holdPaneContent,
@@ -303,18 +309,22 @@ export function EditorPane({
       <CodeNoteView
         note={note}
         task={task}
+        reviewing={draft.reviewing}
+        onEdit={draft.enabled ? (comment) => setComposer(resolveEditComposer(comment)) : null}
         onRemove={draft.enabled ? draft.removeComment : null}
         onCancel={() => setComposer(null)}
         onSave={(text) => {
           if (note.kind !== 'composer') return;
-          draft.addComment({
-            path,
-            side: note.side,
-            line: note.start,
-            endLine: note.endLine,
-            ref: gitRef,
-            text,
-          });
+          if (note.editing) draft.updateComment(note.editing.id, text);
+          else
+            draft.addComment({
+              path,
+              side: note.side,
+              line: note.start,
+              endLine: note.endLine,
+              ref: gitRef,
+              text,
+            });
           setComposer(null);
         }}
       />

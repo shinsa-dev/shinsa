@@ -1,6 +1,7 @@
 'use client';
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
+import { POPUP_SIDE_SLIDE, POPUP_ZOOM } from '@shinsa/ui/lib/popup';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
@@ -322,7 +323,9 @@ function TooltipPopup({ store }: { store: TooltipStore }) {
               data-instant={view.instant ? '' : undefined}
               style={view.instant ? { animation: 'none' } : undefined}
               className={cn(
-                'corner-superellipse/1.125 z-50 inline-flex min-h-6 w-fit max-w-72 origin-(--transform-origin) items-center gap-1 rounded-control border border-border bg-popover px-2 py-1 text-2xs leading-[1.35] text-fg-4 has-data-[slot=kbd]:py-0.5 has-data-[slot=kbd]:pr-0.5 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:h-4 **:data-[slot=kbd]:rounded-sm **:data-[slot=kbd]:bg-bg-a2 **:data-[slot=kbd]:text-fg-3 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+                'corner-superellipse/1.125 z-50 inline-flex min-h-6 w-fit max-w-72 origin-(--transform-origin) items-center gap-1 rounded-control border border-border bg-popover px-2 py-1 text-2xs leading-[1.35] text-fg-4 has-data-[slot=kbd]:py-0.5 has-data-[slot=kbd]:pr-0.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:h-4 **:data-[slot=kbd]:rounded-sm **:data-[slot=kbd]:bg-bg-a2 **:data-[slot=kbd]:text-fg-3 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95',
+                POPUP_SIDE_SLIDE,
+                POPUP_ZOOM,
                 options.className
               )}
             >

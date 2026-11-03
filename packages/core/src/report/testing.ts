@@ -48,7 +48,7 @@ export function serializeTestFile(file: TestFile) {
   return `${file.path}:${file.line}${file.end === null ? '' : `-${file.end}`}`;
 }
 
-function describeManualStep(step: ManualTestStep, index: number) {
+function describeManualStepLine(step: ManualTestStep, index: number) {
   const target = step.target ? ` [${step.target.kind}: ${step.target.value}]` : '';
   return `${index + 1}. ${step.action}${target} Expected: ${step.expect}`;
 }
@@ -58,6 +58,6 @@ export function listTestingLines(testing: ReportTesting | null | undefined) {
   const manual = testing?.manual ?? [];
   return [
     ...(automated.length > 0 ? ['Covered by tests:', ...automated.map((line) => `- ${line}`)] : []),
-    ...(manual.length > 0 ? ['Try it yourself:', ...manual.map(describeManualStep)] : []),
+    ...(manual.length > 0 ? ['Try it yourself:', ...manual.map(describeManualStepLine)] : []),
   ];
 }

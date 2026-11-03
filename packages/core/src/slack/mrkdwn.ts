@@ -110,7 +110,7 @@ function isInsideLink(text: string) {
   return text.lastIndexOf('<') > text.lastIndexOf('>');
 }
 
-function resolveCut(text: string, size: number) {
+function resolveTextCut(text: string, size: number) {
   const window = text.slice(0, size);
   const breaks = [window.lastIndexOf('\n'), window.lastIndexOf(' ')];
   const at = breaks.find((index) => index > size * 0.6) ?? size;
@@ -126,7 +126,7 @@ function closeFence(text: string) {
 
 export function fitSlackText(text: string, limit: number) {
   if (text.length <= limit) return text;
-  const cut = resolveCut(text, limit - ELLIPSIS.length - FENCE.length - 1);
+  const cut = resolveTextCut(text, limit - ELLIPSIS.length - FENCE.length - 1);
   return `${cut}${ELLIPSIS}${closeFence(cut)}`;
 }
 

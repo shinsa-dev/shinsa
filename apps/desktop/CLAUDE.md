@@ -31,8 +31,9 @@ src/
 │   notifications/  notice.ts (the badge text, the settings pane); Notifications (the Dock badge, banners)
 │   page-channel/   PageRequest, every IPC message the page may send, decoded by schema
 │   prefs/          Prefs: window bounds, the update channel and the kept version in userData/prefs.json
-│   server/         url.ts (which server to load); EngineServer: health and the queue through core's EngineApi
-│                   `server` group client, decoded, 1.5 s each
+│   server/         url.ts (which server to load; resolveConfigHome, the config folder launchd.ts reads too);
+│                   EngineServer: health and the queue through core's EngineApi `server` group client, decoded,
+│                   1.5 s each
 │   tray/           menu.ts (the menu bar item's status line, count and menu); StatusTray
 │   update-log/     log.ts (lines and rotation); UpdateLog, `~/Library/Logs/<app>/updater.log`
 │   updates/        state.ts (states, menu item, notices, the go-back dialog), channel.ts (the channels, their
@@ -80,7 +81,9 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   app always has a macOS notifications row whose Open settings sends `shinsa:notification-settings`, and main opens
   that pane for `APP_ID` (`resolveNotificationSettingsUrl` in `notifications/notice.ts`). When Electron reports a notification
   `failed`, `Notifications` tells the page on `shinsa:notify-failed` and the page shows a toast with the same
-  action. Signed builds only: an unsigned dev build delivers no notifications at all.
+  action. macOS asks only when the first notification arrives, so the page sends one welcome notification on its
+  first load with notifications on (`showNotificationWelcome` in `apps/web/src/lib/notifications/welcome.ts`), while
+  you are looking at the app. Signed builds only: an unsigned dev build delivers no notifications at all.
 - **The icon** follows macOS's 1024px grid: a light 824px squircle (continuous corners of about 185px) inset 100px,
   with room for its shadow, and the Shinsa mark from `packages/ui/src/components/logo.tsx` in near-black at 488px,
   centred, on every channel. Change `scripts/icon.ts`, never the outputs, and run `bun run icon` (needs `rsvg-convert` from

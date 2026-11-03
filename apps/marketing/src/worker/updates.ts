@@ -1,4 +1,11 @@
-import { type ByteRange, type Channel, isVersion, parseRange } from './download.ts';
+import {
+  answerBytes,
+  answerUnsatisfiable,
+  type ByteRange,
+  type Channel,
+  isVersion,
+  parseRange,
+} from './download.ts';
 import { recordFailure } from './log.ts';
 
 interface UpdateObject {
@@ -91,23 +98,11 @@ async function streamUpdateFile(request: Request, file: UpdateFile, bucket: Upda
   const headers = createUpdateHeaders(file, object);
   const header = request.headers.get('range');
   const range = request.method === 'GET' && header !== null ? parseRange(header, object.size) : null;
-  if (range === 'unsatisfiable') {
-    headers.set('Content-Range', `bytes */${object.size}`);
-    return new Response(null, { status: 416, headers });
-  }
-  if (request.method === 'HEAD') {
-    headers.set('Content-Length', String(object.size));
-    return new Response(null, { status: 200, headers });
-  }
+  if (range === 'unsatisfiable') return answerUnsatisfiable(headers, object.size);
+  if (request.method === 'HEAD') return answerBytes(headers, object.size, null, null);
   const read = await bucket.get(file.key, range ? { range } : undefined);
   if (!read) return answerStatus(404);
-  if (!range) {
-    headers.set('Content-Length', String(object.size));
-    return new Response(read.body, { status: 200, headers });
-  }
-  headers.set('Content-Length', String(range.length));
-  headers.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${object.size}`);
-  return new Response(read.body, { status: 206, headers });
+  return answerBytes(headers, object.size, range, read.body);
 }
 
 export async function respondUpdate(request: Request, bucket: UpdateBucket | null) {

@@ -1,3 +1,4 @@
+import { REMOTE_PATHS } from '@shinsa/core';
 import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
 import { Effect } from 'effect';
 import { HttpEffect, HttpServerResponse } from 'effect/http';
@@ -14,6 +15,12 @@ export function respondRedirect(location: string, options: RedirectOptions = {})
   const headers = new Headers({ location, 'cache-control': 'no-store', ...options.headers });
   for (const cookie of options.cookies ?? []) headers.append('set-cookie', cookie);
   return HttpServerResponse.raw(new Response(null, { status: options.status ?? 302, headers }));
+}
+
+export function respondSignInRedirect(origin: string, url: URL) {
+  const signIn = new URL(REMOTE_PATHS.signIn, origin);
+  signIn.searchParams.set('return', `${url.pathname}${url.search}`);
+  return respondRedirect(signIn.href);
 }
 
 export function resolveFailureCode(failure: { readonly _tag: string; readonly message: string }) {

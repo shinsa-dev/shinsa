@@ -2006,7 +2006,11 @@ Only these, and they win over anything below:
       the page that permission): `notifyDesktop` hands the decision to the app, which shows a silent macOS
       notification (the page plays its own sound) whose click shows and focuses the window and opens the task.
       Show a notification defaults to When Shinsa is in the background there, Never in a browser; the browser's
-      permission is never asked. The test notification goes the same way.
+      permission is never asked. The test notification goes the same way. The first time the app's page loads with
+      Show a notification on, it shows one "Notifications are on" notification ("Shinsa tells you here when a task
+      needs you.", `showNotificationWelcome`), so macOS asks for permission while you are looking at Shinsa rather
+      than at the first decision, when you are away; it is never shown again on that install
+      (`shinsa.notifications-welcomed`) and never in a browser.
     - **One surface notifies.** Every page says on connect which surface it is (`desktop` or `browser`; Floaty
       is a browser), and the server tells every page whether the app is connected. While it is, a browser tab or
       Floaty stays quiet (`isPageQuiet`, checked by `AttentionWatcher`): no sound and no notification. The count in
@@ -2268,12 +2272,20 @@ Only these, and they win over anything below:
       one review draft, so a verdict set anywhere shows everywhere). Each spot's lines carry their mark in the spot
       gutter (above) and the selected one the `primary-a1` wash. Every note is rendered by React into an element
       the session keeps per note (`SlotRegistry`), and the editor's block widget only moves that element in and out,
-      so a note scrolled back into view is already drawn at its height and nothing trails the scroll. At a review or
-      merge gate a click on a line number opens a comment box under it (on the selected lines when the click is in a
-      selection); a removed line's number does the same for the removed line, and its comment sits under the removed
-      block. A comment is kept per gate in localStorage, anchored to the commit it was
-      made at, and goes with Request changes. Saved, it is the compact review card with its header bar (34),
-      authored You, its lines as the tag, with Remove at the right of the bar, and folds from the bar. A comment is words only; to change the code, edit it (above). The comment
+      so a note scrolled back into view is already drawn at its height and nothing trails the scroll. Whenever the
+      task takes a message (and at a review or merge gate always), a click on a line number opens a comment box under
+      it (on the selected lines when the click is in a selection); a removed line's number does the same for the
+      removed line, and its comment sits under the removed block. A comment is kept per task in localStorage, anchored
+      to the commit it was made at, so one written before the review is still there at it. At a review or merge gate
+      it goes with Request changes; at any other time with your next message: the Code tab's **Line comments** bar
+      under the editor ("3 comments for the agent", `components/code/comments-bar.tsx`) sends them alone with **Send
+      to the agent**, and every task composer shows "2 line comments go with this message" above its field and sends
+      them with what you write, the field may then stay empty (`useTaskMessage`). The chat shows a sent message's
+      comments under its bubble, as the activity does under a decision (`SentComments`). Outside a review the box's
+      placeholder says it goes with your next message. The bar and the comments outside a review show only on an
+      engine with `message.line_comments`. Saved, it is the compact review card with its header bar (34),
+      authored You, its lines as the tag, with Edit and Remove at the right of the bar (Edit opens the box again on
+      its words, its button Save comment), and folds from the bar. A comment is words only; to change the code, edit it (above). The comment
       box and every note under a line are at most 36rem wide and never wider than the side they sit in less its
       gutter (`100cqw - 6rem`, each editor being its own inline-size container), so a box for a long selection wraps
       inside the visible pane instead of running off it.
@@ -2534,7 +2546,8 @@ Only these, and they win over anything below:
         call, a Read carefully spot, a risk) their short title, never an "Agent" label, since every point is the
         agent's; an author's name only where it tells two authors apart, "You" on your comment (and "Agent review" on
         a finding's label line). Then the tag as a dot and label, the section it belongs to (`text-2xs`
-        `fg-2`, truncated), and the action at the right before the chevron (Remove for a comment). The whole bar folds
+        `fg-2`, truncated), and the action at the right before the chevron (Edit and Remove for a comment). In a narrow
+        card the tag truncates before the action does (`ToneLabel` with `shrinks`), so the action stays in reach. The whole bar folds
         the card to the bar alone ("Collapse judgement call"); a click on the action does not. Every card starts
         open and remembers a fold (`task:<id>:review:card:<point>`, 40), and a card you jump to (J and K, the
         index, `?spot=`) opens again. Under the bar, 12px in: a judgement
@@ -5914,6 +5927,11 @@ Easing: `ease-out` is the strong ease-out `cubic-bezier(0.23, 1, 0.32, 1)`
 and is the default for every transition. `ease-in-out` is
 `cubic-bezier(0.77, 0, 0.175, 1)`; `ease-drawer` is
 `cubic-bezier(0.32, 0.72, 0, 1)` for anything that slides like a drawer.
+`--ease-emphasized` is `cubic-bezier(0.22, 1, 0.36, 1)`, the movement clock's curve (a sliding
+indicator, a turning chevron, a toast); where a CSS variable cannot be read (`element.animate`, a
+transition string) it is `EASE_EMPHASIZED` (`@shinsa/ui/lib/motion`), and a test keeps the two equal.
+The popups' surface and enter motion are one class set, `lib/popup.ts` (`POPUP_SURFACE`,
+`POPUP_SIDE_SLIDE`, `POPUP_ZOOM`).
 Never `ease-in` and never `ease-linear` on UI (a progress bar may be linear).
 
 Rules:

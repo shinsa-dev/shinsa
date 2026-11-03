@@ -16,6 +16,7 @@ import {
 } from '../domain/index.ts';
 import { isPlacementPoliciesValid } from '../remote/placement.ts';
 import { PLACEMENT_POLICY_LIMITS } from '../remote/schema.ts';
+import { findProject, findRepo } from '../state/queries.ts';
 import { releaseBudgetHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
@@ -23,9 +24,7 @@ import { removeProjectMemory } from './memory.ts';
 import { removeProjectSuggestions } from './watch-suggestions.ts';
 
 function assertProject(decider: Decider, projectId: string | null | undefined) {
-  if (projectId && !decider.state.projects[projectId]) {
-    throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}` });
-  }
+  if (projectId) findProject(decider.state, projectId);
 }
 
 function isWholeBetween(value: number, min: number, max: number) {
@@ -156,8 +155,7 @@ function assertHumanOnlyFields(decider: Decider, patch: object, fields: readonly
 }
 
 export function updateRepo(decider: Decider, command: CommandOf<'repo.update'>) {
-  const repo = decider.state.repos[command.repoId];
-  if (!repo) throw new DomainError({ code: 'repo_not_found', message: `No repository ${command.repoId}` });
+  const repo = findRepo(decider.state, command.repoId);
   assertHumanOnlyFields(decider, command.patch, HUMAN_ONLY_REPO_FIELDS, 'the repository’s');
   assertProject(decider, command.patch.projectId);
   const updated = { ...repo, ...command.patch };

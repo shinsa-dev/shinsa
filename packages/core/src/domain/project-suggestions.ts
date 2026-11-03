@@ -1,3 +1,4 @@
+import { capitalise } from '../chat/text.ts';
 import { PROJECT_COLORS, resolveProjectKey, selectFolderProject } from './projects.ts';
 import type { Project } from './types.ts';
 
@@ -59,13 +60,9 @@ function resolveParent(path: string) {
   return path.slice(0, path.lastIndexOf('/'));
 }
 
-function capitalize(text: string) {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 function resolveOwnerName(owner: string) {
   const bare = owner.replace(OWNER_SUFFIX, '') || owner;
-  return bare.split(/[-_]+/).map(capitalize).join(' ');
+  return bare.split(/[-_]+/).map(capitalise).join(' ');
 }
 
 function resolveGroupName(group: Group) {
@@ -74,7 +71,7 @@ function resolveGroupName(group: Group) {
   const folder = group.repos
     .map((repo) => repo.name)
     .find((name) => name.toLowerCase() === word.toLowerCase() && name !== name.toLowerCase());
-  return folder ?? capitalize(word);
+  return folder ?? capitalise(word);
 }
 
 function addRepo(

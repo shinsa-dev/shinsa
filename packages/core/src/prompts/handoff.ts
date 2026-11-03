@@ -144,7 +144,7 @@ function resolveRecentStart(blocks: Block[]) {
   return start;
 }
 
-function resolveCut(blocks: Block[], budget: number) {
+function resolveBlockCut(blocks: Block[], budget: number) {
   let cut = blocks.length;
   for (let chars = 0; cut > 0; cut -= 1) {
     const next = chars + measure(blocks[cut - 1] as Block);
@@ -179,7 +179,7 @@ export function resolveHandoff(request: HandoffRequest): Handoff | null {
     elidedEntries += 1;
     return elide(block);
   });
-  const cut = resolveCut(blocks, budget);
+  const cut = resolveBlockCut(blocks, budget);
   const included = blocks.slice(cut);
   if (!included.some((block) => block.entry.type === 'user' || block.entry.type === 'agent')) {
     throw new DomainError({

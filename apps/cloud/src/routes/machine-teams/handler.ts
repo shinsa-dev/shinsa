@@ -9,7 +9,8 @@ import { CurrentMachine, RemoteApi } from '@shinsa/core/remote/api';
 import { MembersFull, NotFound, Revoked, TeamsFull } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { findOwnTeam } from '../../auth/access.ts';
+import { findOwnTeam, selectTeamRole } from '../../auth/access.ts';
+import { NOT_PAIRED } from '../../auth/schema.ts';
 import { asCurrentUser } from '../../auth/tokens.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
 import { connectTeam, joinTeam, leaveTeam, replaceInvite, serializeTeam } from '../../domain/teams.ts';
@@ -24,7 +25,7 @@ export const MachineTeamsHandlers = HttpApiBuilder.group(
       const accounts = yield* Accounts;
       const { ownerId } = yield* CurrentMachine;
       const owner = yield* accounts.selectUser(ownerId);
-      if (Option.isNone(owner)) return yield* new Revoked({ message: 'This machine is not paired.' });
+      if (Option.isNone(owner)) return yield* new Revoked({ message: NOT_PAIRED });
       return asCurrentUser(owner.value);
     });
 
@@ -36,7 +37,7 @@ export const MachineTeamsHandlers = HttpApiBuilder.group(
 
     const addMember = Effect.fn('machineTeams.addMember')(function* (teamId: TeamId, userId: RemoteUserId) {
       const team = yield* OwnTeam(teamId);
-      const inTeam = team.userId === userId || (yield* teams.members.has(team.id, userId));
+      const inTeam = Option.isSome(yield* selectTeamRole(team, userId));
       const asked = yield* teams.requesters.has(team.id, userId);
       const added = yield* accounts.selectUser(userId);
       if (Option.isNone(added) || !(inTeam || asked))

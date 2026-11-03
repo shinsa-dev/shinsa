@@ -192,6 +192,15 @@ describe('guests of a machine', () => {
     expect(await listInstances(harness, mona)).toEqual([expect.objectContaining({ role: 'owner' })]);
   });
 
+  test('a guest is no member: the machine neither finds them as asking nor makes them one', async () => {
+    const { harness, studio } = await claimTask();
+    const found = await harness.post(REMOTE_PATHS.machineRequester, { userId: KAI.id }, machineAuth(studio));
+    expect(found.status).toBe(404);
+    const added = await harness.post(REMOTE_PATHS.machineMemberAdd, { userId: KAI.id }, machineAuth(studio));
+    expect(await readCode(added)).toBe('not_found');
+    expect((await readHeartbeat(harness, studio)).members).toEqual([]);
+  });
+
   test('refuses a new guest once the machine is full', async () => {
     const { harness, kai, studio, handoff } = await handOff();
     for (let index = 0; index < MAX_INSTANCE_GUESTS; index++) {

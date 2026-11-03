@@ -3,6 +3,7 @@ import { Revoked } from '@shinsa/core/remote/errors';
 import { Effect, Layer, Option, Redacted } from 'effect';
 import { CloudCrypto } from '../../crypto/service.ts';
 import { Machines } from '../../store/machines/service.ts';
+import { NOT_PAIRED } from '../schema.ts';
 
 export const MachineSessionLive = Layer.effect(
   MachineSession,
@@ -12,7 +13,7 @@ export const MachineSessionLive = Layer.effect(
 
     return MachineSession.of({
       bearer: Effect.fn('MachineSession.bearer')(function* (httpEffect, { credential }) {
-        const revoked = new Revoked({ message: 'This machine is not paired.' });
+        const revoked = new Revoked({ message: NOT_PAIRED });
         if (Redacted.value(credential) === '') return yield* revoked;
         const machine = yield* machines.selectByToken(yield* crypto.hashToken(credential));
         if (Option.isNone(machine)) return yield* revoked;

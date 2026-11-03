@@ -99,13 +99,12 @@ describe('useTaskPageCommands', () => {
   });
 
   it('follows your choice to fix and approve when the engine can approve after a fix', () => {
-    const engine = spyOnEngine();
+    spyOnEngine();
     const { result } = renderHook(() => usePage(FINDINGS_STATE), { wrapper: Draft });
     expect(find(result.current.sections, 'task.t1.gate.g1.approve').label).toBe('Fix 1 finding');
     act(() => result.current.draft.chooseThenApprove(true));
     expect(find(result.current.sections, 'task.t1.gate.g1.approve').label).toBe('Fix 1 finding and approve');
     expect(find(result.current.sections, 'task.t1.gate.g1.fix_choice').label).toBe('Fix 1 finding');
-    engine.mockRestore();
   });
 
   it('drops the sections when the page unmounts', () => {
