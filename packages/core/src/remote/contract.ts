@@ -1,4 +1,5 @@
 import { Option, Schema } from 'effect';
+import { URL_SAFE_SEGMENT } from './bytes.ts';
 import { isSigningPublicKey } from './keys.ts';
 
 export const REMOTE_APP_ORIGIN = 'https://app.shinsa.dev';
@@ -429,7 +430,7 @@ export function serializeEnrollFragment(fragment: EnrollFragment) {
 
 export function parseEnrollFragment(fragment: string): EnrollFragment | null {
   const parts = fragment.replace(/^#/, '').split('.');
-  if (parts.length !== 4 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) return null;
+  if (parts.length !== 4 || parts.some((part) => !URL_SAFE_SEGMENT.test(part))) return null;
   const [instanceId, machineKey, secret, invite] = parts as [string, string, string, string];
   return { instanceId, machineKey, secret, invite };
 }

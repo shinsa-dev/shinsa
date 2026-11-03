@@ -1,3 +1,4 @@
+import { describeCount } from '../chat/text.ts';
 import type { CommandOf } from '../commands/index.ts';
 import { DomainError, MINUTE_MS, type Monitor, RUN_STAGES, type Run, type Task } from '../domain/index.ts';
 import { resolveMonitorPrompt } from '../prompts/index.ts';
@@ -51,7 +52,7 @@ export function waitFor(decider: Decider, command: CommandOf<'agent.wait_for'>) 
 }
 
 function describeExhausted(monitor: Monitor, timedOut: boolean) {
-  const checks = `${monitor.attempts} ${monitor.attempts === 1 ? 'check' : 'checks'}`;
+  const checks = describeCount(monitor.attempts, 'check');
   const ending = timedOut
     ? `The wait ran out of time after ${checks}.`
     : `The agent used all ${checks} and still needed to wait.`;

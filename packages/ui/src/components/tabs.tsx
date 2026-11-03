@@ -61,7 +61,7 @@ function TabsList({
         <TabsPrimitive.Indicator
           data-slot='tab-indicator'
           data-motion='move'
-          className='absolute bottom-0 left-0 z-10 h-0.5 w-(--active-tab-width) translate-x-(--active-tab-left) translate-y-px rounded-full bg-primary transition-[width,translate] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none'
+          className='absolute bottom-0 left-0 z-10 h-0.5 w-(--active-tab-width) translate-x-(--active-tab-left) translate-y-px rounded-full bg-primary transition-[width,translate] duration-200 ease-emphasized motion-reduce:transition-none'
         />
       ) : null}
       {variant === 'default' ? (

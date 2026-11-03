@@ -2,6 +2,7 @@ import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import { EASE_EMPHASIZED } from '@shinsa/ui/lib/motion';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Choice } from '@/components/controls/choice.tsx';
@@ -40,8 +41,7 @@ import {
   type ViewerSwap,
 } from '@/lib/image-view.ts';
 
-const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
-const MOTION = { duration: 240, easing: EASE } as const;
+const MOTION = { duration: 240, easing: EASE_EMPHASIZED } as const;
 const FADE_IN = [{ opacity: 0 }, { opacity: 1 }];
 const FADE_OUT = [{ opacity: 1 }, { opacity: 0 }];
 const SWAP_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
@@ -588,7 +588,7 @@ function ImageViewerDialog({
             name={name}
             size={size}
             view={live ? view : layer.view}
-            transition={live && smooth && !closing ? `transform 260ms ${EASE}` : undefined}
+            transition={live && smooth && !closing ? `transform 260ms ${EASE_EMPHASIZED}` : undefined}
             landing={live && closing}
             gestures={
               live ? { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp } : null

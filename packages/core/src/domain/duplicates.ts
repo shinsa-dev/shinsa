@@ -1,3 +1,4 @@
+import { describeTaskName } from '../chat/text.ts';
 import { resolveFirstName } from './people.ts';
 import type { UnreachedTeammate } from './shapes.ts';
 import type { TeammateOriginal, TeammateOwner } from './types.ts';
@@ -10,8 +11,7 @@ interface DuplicateOriginal {
 
 export function quoteDuplicateOriginal(original: DuplicateOriginal) {
   const owner = original.owner ? `${resolveFirstName(original.owner)}’s ` : '';
-  const handle = original.handle ? `${original.handle} ` : '';
-  return `${owner}${handle}“${original.title}”`;
+  return `${owner}${describeTaskName(original)}`;
 }
 
 interface RepositoryOwner {

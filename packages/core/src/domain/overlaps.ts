@@ -1,3 +1,4 @@
+import { describeTaskName } from '../chat/text.ts';
 import type { Task } from './types.ts';
 
 const OVERLAP_PATH_LIMIT = 5;
@@ -24,7 +25,7 @@ function describePaths(paths: readonly string[]) {
 }
 
 function describeOverlapNote(note: OverlapNote) {
-  return `${note.handle ? `${note.handle} ` : ''}“${note.title}” (${describePaths(note.paths)})`;
+  return `${describeTaskName(note)} (${describePaths(note.paths)})`;
 }
 
 export function describeOverlaps(notes: readonly OverlapNote[]) {
