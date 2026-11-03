@@ -9,7 +9,7 @@ import { createAgentEntry } from '../../support/chat.ts';
 import { createTask } from '../../support/state.ts';
 
 const ORIGINAL_SOCKET = globalThis.WebSocket;
-const CODE_TAB_LOADED = { timeout: 5000 };
+const CODE_LOADED = { timeout: 5000 };
 const blobs = new Map<string, Promise<string>>();
 
 afterEach(() => {
@@ -111,7 +111,7 @@ describe('the shared page on app.shinsa.dev', () => {
     expect(screen.queryByRole('button', { name: 'Task actions' })).toBeNull();
     expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
-    expect((await screen.findAllByText(/keys\.ts/, undefined, CODE_TAB_LOADED)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/keys\.ts/, undefined, CODE_LOADED)).length).toBeGreaterThan(0);
   });
 
   it('opens a changed file whole from the streamed code', async () => {
@@ -123,8 +123,8 @@ describe('the shared page on app.shinsa.dev', () => {
     const whole = { files: { 'src/keys.ts': 'const ttl = 24;\nexport const keep = true;\n' } };
     await sendFile(machine, 'code', JSON.stringify(whole));
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
-    fireEvent.click((await screen.findAllByText(/keys\.ts/, undefined, CODE_TAB_LOADED))[0] as HTMLElement);
-    expect((await screen.findAllByText(/const ttl = 24/)).length).toBeGreaterThan(0);
+    fireEvent.click((await screen.findAllByText(/keys\.ts/, undefined, CODE_LOADED))[0] as HTMLElement);
+    expect((await screen.findAllByText(/const ttl = 24/, undefined, CODE_LOADED)).length).toBeGreaterThan(0);
   });
 
   it('a Status link shows a small status card with its written description, and no request, plan, names, tabs or code', async () => {
