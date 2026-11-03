@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TerminalInfo } from '@shinsa/core';
 import { ConfigStore, type ServerConfig } from '../../src/config/index.ts';
@@ -10,6 +10,7 @@ import { Roots } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { runCommand } from '../../src/shell/index.ts';
 import { EventLog } from '../../src/store/index.ts';
+import { WORKTREE_ROOT_MARKER } from '../../src/workspaces/index.ts';
 import { createTempDir, createTestConfig, overrideEnv } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
@@ -135,6 +136,11 @@ describe('Onboarding', () => {
       problem: null,
     });
     expect(new ConfigStore(store.path).config.worktreesDir).toBe(mount);
+    expect(existsSync(join(mount, WORKTREE_ROOT_MARKER))).toBe(true);
+    rmSync(join(mount, WORKTREE_ROOT_MARKER));
+    expect((await onboarding.resolveStatus()).worktrees.problem).toContain(
+      `The worktree folder ${mount} is not the one you chose`
+    );
     rmSync(mount, { recursive: true });
     expect((await onboarding.resolveStatus()).worktrees.problem).toContain(
       `The worktree folder ${mount} does not exist.`

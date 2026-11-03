@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import { assertWorktreeRoot, describeWorktreeRootProblem, WorktreeRoot } from '../../src/workspaces/index.ts';
+import {
+  assertWorktreeRoot,
+  describeWorktreeRootProblem,
+  markWorktreeRoot,
+  WORKTREE_ROOT_MARKER,
+  WorktreeRoot,
+} from '../../src/workspaces/index.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 describe('the worktree folder', () => {
@@ -52,5 +58,25 @@ describe('the worktree folder', () => {
     expect(await Effect.runPromise(assertWorktreeRoot({ path: present, source: 'environment' }))).toBe(
       present
     );
+  });
+
+  test('a folder chosen in Settings must still hold the mark Shinsa left in it', async () => {
+    const mountPoint = createTempDir();
+    const unmounted = await Effect.runPromise(
+      Effect.flip(assertWorktreeRoot({ path: mountPoint, source: 'config' }))
+    );
+    expect(unmounted.message).toBe(
+      `The worktree folder ${mountPoint} is not the one you chose: the drive it is on may not be mounted. Mount it again, or choose the folder again in Settings → Projects.`
+    );
+    expect(Effect.runSync(markWorktreeRoot(mountPoint))).toBe(mountPoint);
+    expect(existsSync(join(mountPoint, WORKTREE_ROOT_MARKER))).toBe(true);
+    expect(await Effect.runPromise(assertWorktreeRoot({ path: mountPoint, source: 'config' }))).toBe(
+      mountPoint
+    );
+    const locked = createTempDir();
+    chmodSync(locked, 0o500);
+    const refused = Effect.runSync(Effect.flip(markWorktreeRoot(locked)));
+    expect(refused.message).toBe(`Shinsa cannot write to the worktree folder ${locked}.`);
+    chmodSync(locked, 0o700);
   });
 });

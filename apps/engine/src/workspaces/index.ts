@@ -8,7 +8,10 @@ import { WorktreeStrategy } from './worktrees.ts';
 
 export {
   assertWorktreeRoot,
+  describeWorktreeRootMarkProblem,
   describeWorktreeRootProblem,
+  markWorktreeRoot,
+  WORKTREE_ROOT_MARKER,
   type ResolvedWorktreeRoot,
   WorktreeRoot,
   WorktreeRootUnavailable,

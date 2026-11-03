@@ -548,7 +548,10 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
   `assertWorktreeRoot` checks that the folder exists, is a folder and can be written to, and fails the setup with
   "The worktree folder <path> does not exist. If it is on a drive you mount, mount it again, or choose another folder
   in Settings → Projects." instead of falling back to the local disk; Settings shows the same problem under the
-  folder. Delegation checkouts are removed wherever git has them registered (`removeIsolated` lists the repository's
+  folder. Saving a folder also leaves a `.shinsa-worktrees` file in it (`markWorktreeRoot`), and a folder from
+  `config.json` without that file is refused too ("is not the one you chose: the drive it is on may not be
+  mounted"): a drive's own mount point, once unmounted, is an empty local folder that would pass every other check.
+  A folder written into `config.json` by hand is saved once more in Settings to get the file. Delegation checkouts are removed wherever git has them registered (`removeIsolated` lists the repository's
   worktrees under `delegations/<task>/` of any root), so changing the folder leaves none behind.
 - **How much space they take.** Settings → Projects → Worktrees shows the space the worktrees of tasks use, the free
   space on the drive of the folder in use, and that a task's worktree is removed as soon as it is merged, marked done

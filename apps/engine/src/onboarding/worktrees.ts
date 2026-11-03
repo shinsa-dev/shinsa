@@ -3,7 +3,11 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { DomainError, type OnboardingStatus, type Task, type WorktreeUsage } from '@shinsa/core';
 import type { ServerConfig } from '../config/index.ts';
 import { edgeRuntime } from '../runtime/edge.ts';
-import { describeWorktreeRootProblem, type WorktreeRoot } from '../workspaces/index.ts';
+import {
+  describeWorktreeRootMarkProblem,
+  describeWorktreeRootProblem,
+  type WorktreeRoot,
+} from '../workspaces/index.ts';
 import { expandHome } from './roots.ts';
 import type { CommandRunner } from './schema.ts';
 
@@ -16,8 +20,12 @@ function refuse(message: string): never {
   throw new DomainError({ code: 'worktrees_invalid', message });
 }
 
-function describeProblem(path: string) {
-  return edgeRuntime.runSync(describeWorktreeRootProblem(path));
+function describeProblem(path: string, chosen = false) {
+  return edgeRuntime.runSync(describeWorktreeRootProblem(path, chosen));
+}
+
+function mark(path: string) {
+  return edgeRuntime.runSync(describeWorktreeRootMarkProblem(path));
 }
 
 export function resolveDefaultWorktreesDir(config: ServerConfig) {
@@ -34,7 +42,8 @@ export function resolveWorktreesStatus(
     configured: resolved.source === 'config' ? resolved.path : null,
     default: resolveDefaultWorktreesDir(config),
     fromEnvironment: resolved.source === 'environment' ? resolved.path : null,
-    problem: resolved.source === 'default' ? null : describeProblem(resolved.path),
+    problem:
+      resolved.source === 'default' ? null : describeProblem(resolved.path, resolved.source === 'config'),
   };
 }
 
@@ -46,7 +55,7 @@ export function resolveChosenWorktreesDir(value: unknown, userHome: string): str
   const path = expandHome(value.trim(), userHome);
   if (!isAbsolute(path)) refuse(`${value.trim()} is not a full path.`);
   const folder = resolve(path);
-  const problem = describeProblem(folder);
+  const problem = describeProblem(folder) ?? mark(folder);
   if (problem) refuse(problem);
   return folder;
 }
