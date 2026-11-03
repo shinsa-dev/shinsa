@@ -1,5 +1,5 @@
 import { listLiveRuns, resolveContinuePrompt } from '@shinsa/core';
-import { Cause, Effect, Fiber, FiberSet, Option } from 'effect';
+import { Cause, Effect, Fiber, FiberSet, Ref } from 'effect';
 import { describeError } from '../../log/index.ts';
 import { isSteerable, stopActiveRun } from '../active/run.ts';
 import type { Delivery } from '../delegations/schema.ts';
@@ -47,9 +47,7 @@ export const cancelRun = Effect.fn('RunSupervisor.cancel')(function* (runId: str
   const active = host.active.get(runId);
   if (!active) return;
   stopActiveRun(active);
-  const closed = yield* settleWithin(host.scopes.closeRun(runId), host.limits.stopMs);
-  if (Option.isSome(closed) || !active.fiber) return;
-  yield* Effect.forkDetach(Fiber.interrupt(active.fiber));
+  yield* settleWithin(host.scopes.closeRun(runId), host.limits.stopMs);
 });
 
 export const steerRun = Effect.fn('RunSupervisor.steer')(function* (
@@ -84,9 +82,10 @@ export const steerRun = Effect.fn('RunSupervisor.steer')(function* (
 
 export const releaseHeld = Effect.fn('RunSupervisor.releaseHeld')(function* () {
   const host = yield* RunHost;
-  host.control.holding = null;
-  const held = [...host.control.held];
-  host.control.held.clear();
+  const held = yield* Ref.modify(host.control, (current) => [
+    [...current.held],
+    { ...current, holding: null, held: new Set<string>() },
+  ]);
   for (const runId of held) {
     yield* startLogged(runId, null, '[Runs] Could not start a run held for the restart');
   }
@@ -94,10 +93,12 @@ export const releaseHeld = Effect.fn('RunSupervisor.releaseHeld')(function* () {
 
 export const shutdownRuns = Effect.fn('RunSupervisor.shutdown')(function* () {
   const host = yield* RunHost;
-  host.control.shuttingDown = true;
+  const held = yield* Ref.modify(host.control, (current) => [
+    [...current.held],
+    { ...current, shuttingDown: true, held: new Set<string>() },
+  ]);
   const compacting = host.compaction.stop();
-  for (const runId of host.control.held) yield* markInterrupted(runId, null);
-  host.control.held.clear();
+  for (const runId of held) yield* markInterrupted(runId, null);
   const live = [...host.active.entries()];
   for (const [runId, active] of live) yield* markInterrupted(runId, active.attemptId);
   for (const [, active] of live) stopActiveRun(active);
@@ -133,4 +134,14 @@ export const recoverRuns = Effect.fn('RunSupervisor.recover')(function* () {
   }
   yield* world.dispatch({ type: 'runs.dispatch' }, { id: `${boot}:runs.dispatch` });
   yield* world.dispatch({ type: 'delegations.recover' }, { id: `${boot}:delegations.recover` });
+});
+
+export const holdNewRuns = Effect.fn('RunSupervisor.holdNewRuns')(function* (onHeld: () => void) {
+  const host = yield* RunHost;
+  yield* Ref.update(host.control, (current) => ({ ...current, holding: onHeld }));
+});
+
+export const isRunHeld = Effect.fn('RunSupervisor.isHeld')(function* (runId: string) {
+  const host = yield* RunHost;
+  return (yield* Ref.get(host.control)).held.has(runId);
 });

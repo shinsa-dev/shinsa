@@ -230,6 +230,7 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
     taskId: run.taskId,
     runId: run.id,
     parentRunId: run.delegation?.parentRunId ?? null,
+    fiber: active.fiber,
   });
   const start = () =>
     startSession({

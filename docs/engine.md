@@ -5911,11 +5911,13 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   Quick calls and every tool call run as effects with typed failures (`QuickAttemptFailed`, `ToolCallFailed`) that
   answer the same text as before. A session's system prompt and tool list are decided when it starts and never
   change (Caching).
-- **The run supervisor.** The run loop is `Effect.fn` steps in `agents/supervisor/` over two services: `RunWorld`
-  (the engine, config, providers, accounts and the rest a step reads) and `RunHost` (the live runs, the task scopes,
-  the run fibers and the run's parts). Each run's turn is a fiber in `RunHost`'s `FiberSet`, recorded on its
-  `ActiveRun`: `run.cancel` closes the run's scope and, when that has not finished within `stopMs`, interrupts the
-  fiber; shutdown marks every live run interrupted, waits at most `stopMs` and closes every task's scope. The wait
+- **The run supervisor.** `RunSupervisor` (`agents/supervisor/service.ts`) is a service whose layer builds two more:
+  `RunWorld` (the engine, config, providers, accounts and the rest a step reads) and `RunHost` (the live runs, the
+  task scopes, the run fibers, a `Ref` holding the held runs and the shutdown flag, and the run's parts). The run loop
+  is `Effect.fn` steps in `agents/supervisor/` over those two. Each run's turn is a fiber recorded on its `ActiveRun`,
+  and its run scope is opened with that fiber: closing the scope from outside gives the fiber `stopMs` to finish, then
+  interrupts it, while the run closing its own scope at the end of its turn goes on to report. `run.cancel` closes the
+  run's scope, its session, every delegation below it and then its fiber; shutdown marks every live run interrupted, waits at most `stopMs` and closes every task's scope. The wait
   between overloaded attempts follows the named `OVERLOAD_RETRY` schedule, and a step's expected failures are tagged
   errors (`WorkspaceUnavailable`, `IsolationFailed`, `LeaseFailed`, `RunDispatchFailed`…). `RunSupervisor` in
   `agents/supervisor.ts` is the edge, with the same methods as before, for the callers outside `agents/`.

@@ -6,7 +6,7 @@ import {
   type Repo,
   type RunFailure,
 } from '@shinsa/core';
-import { Cause, Effect, FiberSet } from 'effect';
+import { Cause, Effect, FiberSet, Ref } from 'effect';
 import { describeIsolatedChanges } from '../../git/index.ts';
 import { describeError } from '../../log/index.ts';
 import { type RejectionVerdict, requestVerdict } from '../accounts.ts';
@@ -170,7 +170,7 @@ const resolveDriveStep = Effect.fn('RunSupervisor.resolveDriveStep')(function* (
     const next: DriveStep = { plan: yield* restoreLost(turn, plan, lost), restored: true };
     return next;
   }
-  if (yield* isOverloadRetry(active, result, host.control.shuttingDown)) {
+  if (yield* isOverloadRetry(active, result, (yield* Ref.get(host.control)).shuttingDown)) {
     const stopped = yield* retryOverload(turn, result, watch);
     const next: DriveStep = stopped ? { done: stopped } : { plan, restored };
     return next;

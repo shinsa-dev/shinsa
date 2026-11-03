@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect, Exit, Scope } from 'effect';
-import { makeTaskScopes } from '../../../src/agents/supervisor/service.ts';
+import { Duration, Effect, Exit, Fiber, Scope } from 'effect';
+import { makeTaskScopes } from '../../../src/agents/supervisor/scopes.ts';
 
 function track(closed: string[], scope: Scope.Closeable, name: string) {
   return Scope.addFinalizer(
@@ -147,5 +147,40 @@ describe('a task scope', () => {
     );
     await Effect.runPromise(Scope.close(root, Exit.void));
     expect([...closed].sort()).toEqual(['run-1', 'run-2']);
+  });
+
+  test('closing a run’s scope gives its fiber the grace to finish, then interrupts it', async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const scopes = yield* makeTaskScopes(Duration.millis(20));
+          const quick = yield* Effect.forkChild(Effect.sleep(Duration.millis(5)));
+          const stuck = yield* Effect.forkChild(Effect.never);
+          yield* scopes.open({ ...request('task-1', 'quick'), fiber: quick });
+          yield* scopes.open({ ...request('task-1', 'stuck'), fiber: stuck });
+          yield* scopes.closeRun('quick');
+          expect(Exit.isSuccess(yield* Fiber.await(quick))).toBe(true);
+          yield* scopes.closeRun('stuck');
+          expect(Exit.hasInterrupts(yield* Fiber.await(stuck))).toBe(true);
+        })
+      )
+    );
+  });
+
+  test('a run that closes its own scope is not interrupted by it', async () => {
+    const after = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const scopes = yield* makeTaskScopes(Duration.millis(20));
+          const own = Effect.gen(function* () {
+            yield* scopes.open({ ...request('task-1', 'run-1'), fiber: yield* Effect.fiber });
+            yield* scopes.close('run-1');
+            return 'settled';
+          });
+          return yield* Fiber.join(yield* Effect.forkChild(own));
+        })
+      )
+    );
+    expect(after).toBe('settled');
   });
 });

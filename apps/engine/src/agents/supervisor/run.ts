@@ -6,7 +6,7 @@ import {
   resolveAgentProvider,
   type ShinsaCommand,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Ref } from 'effect';
 import { stashEdits } from '../../git/index.ts';
 import { describeError } from '../../log/index.ts';
 import { createActiveRun, resolveAttemptKey } from '../active/run.ts';
@@ -95,7 +95,7 @@ const settleRun = Effect.fn('RunSupervisor.settle')(function* (
   result: AgentSessionResult
 ) {
   const host = yield* RunHost;
-  if (host.control.shuttingDown) return yield* reportUndelivered(runId, active, result);
+  if ((yield* Ref.get(host.control)).shuttingDown) return yield* reportUndelivered(runId, active, result);
   const returned = [...active.unsteered, ...(result.undelivered ?? [])];
   const undelivered = yield* Effect.promise(() => host.deliveries.release(runId, active, returned));
   if (active.released) return;
@@ -122,7 +122,7 @@ const runTurn = Effect.fn('RunSupervisor.runTurn')(function* (
   if (!active.delegated) yield* quiesceTask(run.taskId, run.id);
   const state = yield* world.state;
   const current = state.runs[run.id];
-  if (!current || current.endedAt !== null || host.control.shuttingDown) return null;
+  if (!current || current.endedAt !== null || (yield* Ref.get(host.control)).shuttingDown) return null;
   const { cwd, defaultBranch } = yield* prepareWorkspace(workspace);
   const turn: Turn = {
     run: current,
@@ -150,12 +150,14 @@ export const executeRun = Effect.fn('RunSupervisor.execute')(function* (
   const state = yield* world.state;
   const run = state.runs[runId];
   if (!run || run.endedAt !== null || host.active.has(runId)) return;
-  if (host.control.shuttingDown) return yield* markInterrupted(runId, null);
-  const holding = host.control.holding;
-  if (holding && override === null && delivery === null) {
-    if (host.control.held.has(runId)) return;
-    host.control.held.add(runId);
-    holding();
+  const control = yield* Ref.get(host.control);
+  if (control.shuttingDown) return yield* markInterrupted(runId, null);
+  if (control.holding && override === null && delivery === null) {
+    const holding = yield* Ref.modify(host.control, (current) => {
+      if (current.held.has(runId)) return [null, current] as const;
+      return [current.holding, { ...current, held: new Set(current.held).add(runId) }] as const;
+    });
+    holding?.();
     return;
   }
   const task = state.tasks[run.taskId];

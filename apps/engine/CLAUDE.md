@@ -158,8 +158,9 @@ src/
 │                        edge every timer that fires from state extends, over clock/: makeStateClock in service.ts
 │                        keeps one timer fiber in a FiberHandle, ClockTickFailed in schema.ts), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
 │                        next check)
-├── agents/              RunSupervisor (supervisor.ts: the edge over supervisor/, the same methods as before, each
-│   │                    running a step through its own ManagedRuntime of RunWorld and RunHost; supervisor/: the run
+├── agents/              RunSupervisor (supervisor.ts: the edge over supervisor/'s RunSupervisor service, the same
+│   │                    methods as before, through one ManagedRuntime of it; supervisor/: service.ts (the
+│   │                    RunSupervisor service: its layer builds RunWorld and RunHost and every step), the run
 │   │                    loop as Effect.fn steps: run.ts (executeRun: a run's turn, its fiber registered on its
 │   │                    ActiveRun), drive.ts (attempts until one ends the turn), session.ts (one attempt's session,
 │   │                    its stop and the turn's context), attempts.ts (model, account lease, run.attempt),
@@ -168,14 +169,16 @@ src/
 │   │                    data/scratch/<task> for a task with no repository, resolveScratchPath in config/paths.ts,
 │   │                    removed by the scratch.remove effect once the task settles; isolated checkouts),
 │   │                    stop.ts (quiesce, the stopMs bound, marking a run interrupted), control.ts (each run a
-│   │                    fiber in RunHost's FiberSet; cancel, steer, held runs, shutdown and restart recovery),
+│   │                    fiber its run scope settles or interrupts; cancel, steer, held runs in a Ref, shutdown
+│   │                    and restart recovery),
 │   │                    compact.ts; world/ (RunWorld: the engine, config and services a step reads) and host/
-│   │                    (RunHost: the live runs, scopes, fibers and parts), their shapes and tagged errors in
-│   │                    schema.ts; service.ts:
+│   │                    (RunHost: the live runs, scopes, fibers, the control Ref and parts), their shapes and
+│   │                    tagged errors in schema.ts; scopes.ts:
 │   │                    makeTaskScopes: a scope per task, a run's scope under its task's or, for a delegation, under
 │   │                    the scope of the run that delegated it, and an attempt's scope holding its session under
 │   │                    its run's; a run's scope outlives its attempt while a delegation under it runs, `run.cancel`
-│   │                    closes it (its delegations with it) and shutdown closes every task's; TaskScopes in
+│   │                    closes it (its delegations with it, and its fiber once stopMs has passed) and shutdown
+│   │                    closes every task's; TaskScopes in
 │   │                    index.ts is its edge), the
 │   │                    live state of a run (active/: run.ts, its shape in schema.ts), resume or
 │   │                    hand over per turn, the house rules only to a session without them and the round's
@@ -676,11 +679,13 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   Claude session kills its `claude` and every process it started `EXIT_GRACE` (10 s) after its turn ends the prompt
   queue, and its `cancel()` gives `interrupt()` `INTERRUPT_TIMEOUT` (5 s) (`agents/providers/claude/session/schema.ts`,
   `process.ts`, `killProcessTree` in `shell/`).
-- **A run is a fiber.** `RunSupervisor.execute` forks the run's turn into `RunHost`'s `FiberSet` and records the fiber
-  on its `ActiveRun`. `run.cancel` closes the run's scope, which cancels its session and every delegation below it, and
-  interrupts the fiber when the scope has not closed within `stopMs`; shutdown marks every live run interrupted, waits
+- **A run is a fiber in its run scope.** The `RunSupervisor` service (`agents/supervisor/service.ts`) forks the run's
+  turn and records the fiber on its `ActiveRun`; the run's scope, opened with that fiber, gives it `stopMs` to finish
+  when someone else closes the scope and then interrupts it. `run.cancel` closes the run's scope, which cancels its
+  session and every delegation below it, then the fiber; shutdown marks every live run interrupted, waits
   at most `stopMs` and closes every task's scope. A new step of the run loop is an `Effect.fn` in `agents/supervisor/`
-  over `RunWorld` and `RunHost`, never a method on the class edge.
+  over `RunWorld` and `RunHost`, never a method on the class edge, and held runs and the shutdown flag live in
+  `RunHost`'s control `Ref`.
 - **Workspaces go through their strategy.** Making, committing in, pushing and removing a task's checkout goes through
   `Workspaces.resolve(task)` (`workspaces/`), never through `git/` directly, and every place shares the one
   `Workspaces` the supervisor owns (`runs.workspaces`).
