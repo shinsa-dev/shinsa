@@ -158,9 +158,20 @@ src/
 │                        edge every timer that fires from state extends, over clock/: makeStateClock in service.ts
 │                        keeps one timer fiber in a FiberHandle, ClockTickFailed in schema.ts), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
 │                        next check)
-├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
-│   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
-│   │                    config/paths.ts, removed by the scratch.remove effect once the task settles; supervisor/:
+├── agents/              RunSupervisor (supervisor.ts: the edge over supervisor/, the same methods as before, each
+│   │                    running a step through its own ManagedRuntime of RunWorld and RunHost; supervisor/: the run
+│   │                    loop as Effect.fn steps: run.ts (executeRun: a run's turn, its fiber registered on its
+│   │                    ActiveRun), drive.ts (attempts until one ends the turn), session.ts (one attempt's session,
+│   │                    its stop and the turn's context), attempts.ts (model, account lease, run.attempt),
+│   │                    meter.ts, overload.ts (the wait between overloaded attempts on the named OVERLOAD_RETRY
+│   │                    schedule), workspace.ts (where each run works: the worktree, the repository, or
+│   │                    data/scratch/<task> for a task with no repository, resolveScratchPath in config/paths.ts,
+│   │                    removed by the scratch.remove effect once the task settles; isolated checkouts),
+│   │                    stop.ts (quiesce, the stopMs bound, marking a run interrupted), control.ts (each run a
+│   │                    fiber in RunHost's FiberSet; cancel, steer, held runs, shutdown and restart recovery),
+│   │                    compact.ts; world/ (RunWorld: the engine, config and services a step reads) and host/
+│   │                    (RunHost: the live runs, scopes, fibers and parts), their shapes and tagged errors in
+│   │                    schema.ts; service.ts:
 │   │                    makeTaskScopes: a scope per task, a run's scope under its task's or, for a delegation, under
 │   │                    the scope of the run that delegated it, and an attempt's scope holding its session under
 │   │                    its run's; a run's scope outlives its attempt while a delegation under it runs, `run.cancel`
@@ -197,12 +208,17 @@ src/
 │   │                    session/ (acquireAgentSession: a session as a scoped resource, closing its scope cancels
 │   │                    it and waits for it to end), instructions.ts (what every session is told about Shinsa
 │   │                    and its skills), versions.ts (reading and comparing a program's version)
-│   │   └── claude/      The Claude Agent SDK provider: the session (session.ts: prompt ids, steering), result
+│   │   └── claude/      The Claude Agent SDK provider: the session (session/: makeClaudeSession in service.ts, a
+│   │                    scoped resource reading the SDK's query() as a Stream, prompts through an Effect Queue,
+│   │                    the folded-turn, context, exit-grace and interrupt timers as fibers, its release
+│   │                    interrupting the query and killing the process tree; the SDK options in options.ts, prompt
+│   │                    ids and steering in prompts.ts, its shapes, timings and tagged errors in schema.ts;
+│   │                    session.ts's startClaudeSession is its edge), result
 │   │                    classification (classify.ts), the user's `claude` (executable.ts), the SDK runtime (sdk.ts),
 │   │                    session files (artifacts.ts), the PreToolUse guard (guard.ts), the recorder (recorder.ts: the
 │   │                    chat mapping in map.ts, notices), usage and the cache lifetime (usage.ts, context.ts),
 │   │                    session import (import.ts), one-shot and structured completion (complete.ts), the model
-│   │                    catalog (models.ts), the prompt queue the SDK reads from (async-queue.ts), the MCP servers
+│   │                    catalog (models.ts), the MCP servers
 │   │                    and skills a run loads (extensions.ts), the route to the API per compaction setting: eunoe
 │   │                    or direct, and the fallback notice (route.ts)
 │   │   └── codex/       The `codex app-server` provider: the JSON-RPC client (client/: makeCodexClient, the
@@ -647,7 +663,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `danger-full-access` and `untrusted` to build. A resumed turn in another directory than the session's last one
   (a round after a merge, an answer in the repository) is told where it works now (`resolveMovedNote`, from
   `run.attempt`'s `cwd`).
-- **Where a run works follows its role** (`#resolveCwd` in `agents/supervisor.ts`): the answerer, a watchdog check
+- **Where a run works follows its role** (`resolveWorkspace` in `agents/supervisor/workspace.ts`): the answerer, a watchdog check
   and a read of a data source (purposes `watch` and `intake`) in the repository itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
   task's worktree. Edits a read-only run leaves (the agent's while it plans included) are set aside, never in the
   repository itself: that is the human's own checkout. Setup verification asks for a default branch only when the
@@ -657,8 +673,14 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the
   runs of its task that registered before it (60 s, then they are cancelled, and a run still not settled `stopMs`, 15 s,
   later is dropped with a warning). Checks and pushes wait for all of them. No wait on a session is unbounded: a
-  Claude session kills its `claude` and every process it started 10 s after its turn closes the prompt queue, and its
-  `cancel()` gives `interrupt()` 5 s (`agents/providers/claude/process.ts`, `killProcessTree` in `shell/`).
+  Claude session kills its `claude` and every process it started `EXIT_GRACE` (10 s) after its turn ends the prompt
+  queue, and its `cancel()` gives `interrupt()` `INTERRUPT_TIMEOUT` (5 s) (`agents/providers/claude/session/schema.ts`,
+  `process.ts`, `killProcessTree` in `shell/`).
+- **A run is a fiber.** `RunSupervisor.execute` forks the run's turn into `RunHost`'s `FiberSet` and records the fiber
+  on its `ActiveRun`. `run.cancel` closes the run's scope, which cancels its session and every delegation below it, and
+  interrupts the fiber when the scope has not closed within `stopMs`; shutdown marks every live run interrupted, waits
+  at most `stopMs` and closes every task's scope. A new step of the run loop is an `Effect.fn` in `agents/supervisor/`
+  over `RunWorld` and `RunHost`, never a method on the class edge.
 - **Workspaces go through their strategy.** Making, committing in, pushing and removing a task's checkout goes through
   `Workspaces.resolve(task)` (`workspaces/`), never through `git/` directly, and every place shares the one
   `Workspaces` the supervisor owns (`runs.workspaces`).

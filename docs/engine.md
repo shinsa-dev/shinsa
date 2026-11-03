@@ -4244,7 +4244,7 @@ keeps beside its events (`store/event-log.ts`).
   clocks name theirs after what they fire (`monitor:<id>:<attempt>`, `schedule:<id>:<dueAt>` and
   `schedule:<id>:<dueAt>:fail` for a fire that failed, `usage-resume:…`). The files two open tasks both change go
   under `overlaps:<task>:<hash of the overlaps>` (Other work in the repository).
-  - A run (`agents/supervisor.ts`): its attempt ids are `<run>:<n>`, and the attempt's commands are
+  - A run (`agents/supervisor/attempts.ts`): its attempt ids are `<run>:<n>`, and the attempt's commands are
     `run.attempt:<attempt>`, `run.link:<attempt>:<session>`, `run.meter:<attempt>` (and `run.meter:<attempt>:<session>`
     for each agent a Codex agent started) and `run.end:<attempt>`
     (`run.end:<run>` when it ended before any attempt); `run.record_lost_session:<run>:<session>`; the messages it never
@@ -4642,7 +4642,7 @@ names: a provider adapter maps into it, and the web renders only it. Each entry 
 | `agent` | `phase`, `text` | The agent's words. `interim` between tool calls, `final` for the turn's closing reply |
 | `tool_call` | `callId`, `tool` | A normalized call, below |
 | `tool_result` | `callId`, `status` (`ok` or `error`), `output`, `images` | Linked to its call by `callId`; images are `/api/evidence/…` URLs |
-| `status` | `status`, `outcome` | `started`, `waiting` (on your answer), `working`, `ended` (with the run outcome). Written by the run supervisor (`agents/supervisor.ts`), so every provider gets them |
+| `status` | `status`, `outcome` | `started`, `waiting` (on your answer), `working`, `ended` (with the run outcome). Written by the run supervisor (`agents/supervisor/`), so every provider gets them |
 | `error` | `text` | The session failed |
 | `notice` | `notice` (keyed by `kind`) | Something about the run rather than the conversation: `interrupted`, `compaction` (`trigger`: `auto`, `manual` or `fold`, `preTokens`, the `summary` once the agent writes it, and `by: 'eunoe'` when eunoe compacted or folded on the wire), `proxy` (`proxy: 'eunoe'`, `status: 'unavailable'`, `detail`: eunoe could not be reached, so the run went direct), `fast_mode` (`status`: `unavailable` or `cooldown`, `reason`: fast mode was asked for and is not running), `extensions` (what the run loaded and what the optimizer left out; MCP servers, plugins and skills, below), `context` (`usedTokens`, `maxTokens`, `totalProcessedTokens`), `account` (`email`, `organization`, `plan`), `rate_limit` (`status`, `limit`, `resetsAt`, `utilization`), `account_switched` (`email`, `previous`, `reason`: `usage_limit`, `signed_out`, `headroom` or `bound`; written by the supervisor when an attempt runs on another account than the task's last one), `delegation` (`event`: `started` or `reported`, `runIds`; written when the step delegates a task and when reports reach it) and `handoff` (`reason`, `fromProvider`, `toProvider`, entry counts) |
 
@@ -5030,7 +5030,7 @@ what it costs at the start of every run, so you can turn off what you do not use
 
 ## The agent loop
 
-How one run executes, from the supervisor (`agents/supervisor.ts`, `agents/turns/plan.ts`) down to the Claude adapter
+How one run executes, from the supervisor (`agents/supervisor/`, `agents/turns/plan.ts`) down to the Claude adapter
 (`agents/providers/claude/`). Harness plan WS1 names the T3 Code and Kanna sources.
 
 **Attempts and conditional writes.** Every execution of a run is an attempt with its own id, `<run>:<n>` numbered
@@ -5911,6 +5911,19 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   Quick calls and every tool call run as effects with typed failures (`QuickAttemptFailed`, `ToolCallFailed`) that
   answer the same text as before. A session's system prompt and tool list are decided when it starts and never
   change (Caching).
+- **The run supervisor.** The run loop is `Effect.fn` steps in `agents/supervisor/` over two services: `RunWorld`
+  (the engine, config, providers, accounts and the rest a step reads) and `RunHost` (the live runs, the task scopes,
+  the run fibers and the run's parts). Each run's turn is a fiber in `RunHost`'s `FiberSet`, recorded on its
+  `ActiveRun`: `run.cancel` closes the run's scope and, when that has not finished within `stopMs`, interrupts the
+  fiber; shutdown marks every live run interrupted, waits at most `stopMs` and closes every task's scope. The wait
+  between overloaded attempts follows the named `OVERLOAD_RETRY` schedule, and a step's expected failures are tagged
+  errors (`WorkspaceUnavailable`, `IsolationFailed`, `LeaseFailed`, `RunDispatchFailed`…). `RunSupervisor` in
+  `agents/supervisor.ts` is the edge, with the same methods as before, for the callers outside `agents/`.
+- **The Claude session.** `makeClaudeSession` (`agents/providers/claude/session/`) is a scoped resource: it reads the
+  SDK's `query()` as a `Stream`, takes prompts and steers from an Effect `Queue`, and runs the folded-turn
+  (`FOLDED_TURN`, 60 s), context-read (`CONTEXT_TIMEOUT`, 5 s), exit-grace (`EXIT_GRACE`, 10 s) and interrupt
+  (`INTERRUPT_TIMEOUT`, 5 s) timers as fibers. Releasing it interrupts the query and kills `claude`'s process tree.
+  `startClaudeSession` is its edge, the `AgentSession` the supervisor holds.
 - **One runtime per engine.** `startShinsa` builds one `ManagedRuntime` over the `Serve` layer. Each start step adds
   its release as a finalizer: the lock, the log, the runtimes of `Engine` and `EffectRunner`, the HTTP server, Eunoe's
   forwarder, the work. `stop()` disposes the runtime, which runs them in reverse: the work (live runs first, then the

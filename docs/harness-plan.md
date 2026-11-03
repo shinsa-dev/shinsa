@@ -161,14 +161,14 @@ The last column says where the build differs from the plan on purpose, in one li
 
 | Item | Status | Where it lives | Built differently, on purpose |
 | --- | --- | --- | --- |
-| 1 Classification | Built | engine `agents/providers/claude/classify.ts` (`resolveClaudeVerdict`), `session.ts` | |
-| 2 Resume fallback | Built | engine `providers/claude/artifacts.ts`, `agents/turns/plan.ts` (`resolveTurnPlan`), `supervisor.ts` (one restore per execution, on any attempt, after a rotation too); core `prompts/handoff.ts` (`resolveHandoff`), `decide/runs.ts` (`recordSessionLost`) | |
-| 3 Restart continuation | Built | engine `supervisor.ts` (`interruptForShutdown`, `recover`); core `decide/runs.ts` (`continueRun`), `prompts/session.ts` | A crash is continued once as the step's nudge, on the recovery budget; a second crash without progress opens the failure gate (`crash_loop`) |
-| 4 Steering | Built | engine `providers/claude/session.ts` (`PromptLedger`), `supervisor.ts` | A message in the stop window is delivered as the next run, which waits for the stopping one (up to 60 s) |
+| 1 Classification | Built | engine `agents/providers/claude/classify.ts` (`resolveClaudeVerdict`), `session/service.ts` | |
+| 2 Resume fallback | Built | engine `providers/claude/artifacts.ts`, `agents/turns/plan.ts` (`resolveTurnPlan`), `agents/supervisor/drive.ts` (one restore per execution, on any attempt, after a rotation too); core `prompts/handoff.ts` (`resolveHandoff`), `decide/runs.ts` (`recordSessionLost`) | |
+| 3 Restart continuation | Built | engine `agents/supervisor/control.ts` (`shutdownRuns`, `recoverRuns`); core `decide/runs.ts` (`continueRun`), `prompts/session.ts` | A crash is continued once as the step's nudge, on the recovery budget; a second crash without progress opens the failure gate (`crash_loop`) |
+| 4 Steering | Built | engine `providers/claude/session/` (`PromptLedger`), `agents/supervisor/control.ts` | A message in the stop window is delivered as the next run, which waits for the stopping one (up to 60 s) |
 | 5 Executable discovery | Built | engine `providers/claude/executable.ts` | `CLAUDE_EXECUTABLE` is trusted without a version check, since a wrapper may not answer `--version` |
-| 6 Transcript normaliser | Built | engine `providers/claude/recorder.ts`, `session.ts`; web `lib/chat/timeline.ts`, `notices.ts`, `context.ts` (handoff and compaction rows, the context meter) | |
+| 6 Transcript normaliser | Built | engine `providers/claude/recorder.ts`, `session/service.ts`; web `lib/chat/timeline.ts`, `notices.ts`, `context.ts` (handoff and compaction rows, the context meter) | |
 | 7 Quick calls | Built | engine `agents/quick/index.ts` (`createQuickCalls`: every registered provider, the default first), `quick/decide.ts` (typed `choice` and `choices` questions, used by triage's size and dependencies, the briefing's picks), `triage/`, `briefing/`, `onboarding/` | |
-| 8 Attempts | Built | core `decide/runs.ts` (`isStaleAttempt`); engine `supervisor.ts` | |
+| 8 Attempts | Built | core `decide/runs.ts` (`isStaleAttempt`); engine `agents/supervisor/attempts.ts` | |
 | 9 Providers | Built | engine `agents/providers/types.ts` (`ProviderCapabilities`: every flag has a reader), `providers/index.ts` (`ProviderRegistry`), `agents/turns/plan.ts` (handoff on a switch); core `agent-models/index.ts` (`resolveAgentProvider`, a provider per role) | A switch takes effect at the run's next execution, never inside a live turn |
 | 10 Codex | Built | engine `agents/providers/codex/` (`client.ts` the JSON-RPC client, `session.ts`, `classify.ts`, `map.ts`, `mcp.ts` the HTTP MCP endpoint, `complete.ts`, `models.ts`, `login.ts`, `executable.ts`), `providers/instructions.ts`, `providers/versions.ts`; web `components/settings/agents.tsx` (provider and model per role), `settings/providers.tsx` (the Codex section); test `helpers/bin/codex` (a scripted fake app server), `e2e/codex.test.ts` | A resume Codex refuses is `session_lost` and restored through Shinsa's handoff, not Kanna's silent `thread/start`; writing roles run `untrusted` so the command policy can decline, where Kanna runs `never`; `thread/fork` is used only to fork a task (Forking a task in `docs/engine.md`), never a run; one Codex login, no rotation |
 | 11 Provider parity | Built | engine `codex/pricing.ts` and `meter.ts` (cost), `codex/usage.ts` (usage like CodexBar, fast mode credits), `codex/session.ts` and `map.ts` (the agents Codex starts, compaction), `accounts/index.ts` (provider usage, waits, Sign in gate, `readFastMode`), `accounts/usage.ts` (`resolveClaudeFastMode`), `agents/supervisor.ts` and `quick/index.ts` (fast mode only with credits); core `accounts/fast-mode.ts`, `domain/settings.ts` (`hasNativeCompaction`); web `components/accounts/usage-menu.tsx` (Agent usage), `settings/providers.tsx`, `settings/agents.tsx` (Unavailable: needs usage credits), `overview/sign-in-card.tsx` | Shinsa never refreshes Codex's token (CodexBar defers to the CLI too) and falls back to the app server's `account/rateLimits/read` where CodexBar would run the CLI in a PTY; one Codex login, no rotation |
@@ -179,7 +179,7 @@ The last column says where the build differs from the plan on purpose, in one li
 | --- | --- | --- | --- |
 | 1 Accounts | Built | engine `accounts/store.ts`, `login.ts`, `paths.ts` (`resolveAccountEnv`), `index.ts` | Your own Claude Code login stays in `~/.claude` (`configDir: null`), so its single-use refresh token never forks |
 | 2 Binding | Built | core `decide/accounts.ts` (`bindAccount`), `decide/tasks.ts` (`task.retry` with `account`), `decide/decider.ts` (`bindNextRun`, `run.account`), `state/runs.ts`; engine `agents/accounts.ts`, `accounts/rotation.ts`; web `components/accounts/account-items.tsx` (`RunAccount`: the run label's account and Run this step again on), `lib/command/accounts.ts` | |
-| 3 Picking and rotating | Built | core `accounts/pick.ts` (`pickAccount`), `accounts/usage.ts`; engine `accounts/rotation.ts` (spent marks in `data/account-marks.json`), `agents/supervisor.ts` (other live runs on a spent account move at their next turn) | The budget is 3 accounts per execution instead of 3 per 2 minutes, since an execution is the unit that retries |
+| 3 Picking and rotating | Built | core `accounts/pick.ts` (`pickAccount`), `accounts/usage.ts`; engine `accounts/rotation.ts` (spent marks in `data/account-marks.json`), `agents/supervisor/attempts.ts` (other live runs on a spent account move at their next turn) | The budget is 3 accounts per execution instead of 3 per 2 minutes, since an execution is the unit that retries |
 | 4 Auto-resume | Built | core `decide/accounts.ts` (`waitForUsageReset`, `resumeUsageWait`); engine `accounts/resume.ts` (`UsageResumeClock`) | |
 | 5 Usage limits | Built | engine `accounts/usage.ts` (one id per window: `weekly:<model>` from every source), `limits.ts`; web `components/accounts/`, `components/settings/usage.tsx` | |
 | 6 Login needed | Built | engine `providers/claude/classify.ts` (login detection); core `decide/accounts.ts` (`requestSignIn`, `recordSignedIn`) | Without a leased account an auth failure is an ordinary failure gate: there is no account to sign in to |
@@ -192,11 +192,11 @@ The last column says where the build differs from the plan on purpose, in one li
 | 2 Review escalation | Built | core `decide/fixes.ts` (`reactToFindings`, escalation), `state/reviews.ts` | |
 | 3 Liveness | Built | core `decide/liveness.ts`, `queue/stalls.ts` (`traceStalledLeaf`) | |
 | 4 Monitors | Built | core `decide/monitors.ts` (a wait out of check-ins or time opens the failure gate, `cause: monitor`); engine `runtime/monitors.ts` (`MonitorClock`), `agents/tools/process/handler.ts` | A fire resumes the waiting run's session instead of a fresh one, so the agent keeps what it knew |
-| 5 Cost | Built | core `costs/index.ts`, `decide/costs.ts` (`holdForBudget`); engine `supervisor.ts` (`run.meter`); web task facts | Two per-task caps, a share of the weekly usage window (`taskUsageLimit`) and dollars (`taskBudgetUsd`), both off by default and checked when a step starts: a run is never stopped mid-turn |
+| 5 Cost | Built | core `costs/index.ts`, `decide/costs.ts` (`holdForBudget`); engine `agents/supervisor/meter.ts` (`run.meter`); web task facts | Two per-task caps, a share of the weekly usage window (`taskUsageLimit`) and dollars (`taskBudgetUsd`), both off by default and checked when a step starts: a run is never stopped mid-turn |
 | 6 Silent runs | Built | engine `agents/silence.ts`; core `decide/silence.ts`, `queue/silence.ts`; web `components/overview/silence-note.tsx` | |
 | 7 Fingerprints | Built | core `decide/fingerprints.ts` | |
 | 8 Questions and verdicts | Built | core `decide/gates.ts`, `decide/messages.ts` (`gate.superseded`); engine `agents/questions.ts`; web `components/overview/question-choices.tsx`, `finding-verdicts.tsx` | |
-| 9 Ask mode | Built | core `decide/shapes.ts` (`recordDelivery` with step `answer`, the answer shape); engine `supervisor.ts` (runs in the repository) | |
+| 9 Ask mode | Built | core `decide/shapes.ts` (`recordDelivery` with step `answer`, the answer shape); engine `agents/supervisor/workspace.ts` (runs in the repository) | |
 | 10 Suggested tasks | Built | core `decide/suggestions.ts`; web `components/overview/suggestions-panel.tsx` (When to start, the agent's pick first), `lib/tasks/suggestions.ts`, `lib/command/process.ts` | |
 | 11 Setup verification | Built | core `decide/config.ts`; engine `repos/setup.ts` | |
 
@@ -223,7 +223,7 @@ The last column says where the build differs from the plan on purpose, in one li
 | 2 Delivery | Built | core `decide/delegations.ts` (`planDelivery`, cohorts); engine `agents/deliveries/service.ts`, `agents/delegations/delivery.ts` | Priority means delegated reports go ahead of your queued messages in one wake; there is no priority field |
 | 3 Questions, ceiling, isolation | Built | core `decide/delegations.ts` (`routeQuestion`, the ceiling); engine `git/isolation.ts` | |
 | 4 Limits, batching, adoption, cascades, couriers | Built | core `decide/delegations.ts`, `decide/couriers.ts`, `decide/decider.ts` | |
-| 5 Restart recovery | Built | core `decide/delegations.ts` (`recoverDeliveries`); engine `supervisor.ts` (`recover`) | |
+| 5 Restart recovery | Built | core `decide/delegations.ts` (`recoverDeliveries`); engine `agents/supervisor/control.ts` (`recoverRuns`) | |
 
 ### WS7 Triggers, idle sessions and notifications
 
