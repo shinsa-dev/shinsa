@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Activity, ChatEntry, TaskSuggestion } from '@shinsa/core';
+import { type Activity, type ChatEntry, resolveCommentedMessage, type TaskSuggestion } from '@shinsa/core';
 import {
   listFollowUpMessages,
   listHumanMessages,
@@ -69,6 +69,25 @@ describe('listHumanMessages', () => {
       ],
     });
     expect(listFollowUpMessages(task)).toEqual([{ at: 2, text: 'hey!' }]);
+  });
+
+  it('keeps the line comments sent with a message, and a message that is only comments', () => {
+    const comment = { path: 'a.ts', side: 'new' as const, line: 2, endLine: null, text: 'Rename.' };
+    const task = createTask({
+      id: 't',
+      activity: [
+        activity({ at: 1, detail: 'Look at these', comments: [comment] }),
+        activity({ at: 2, detail: null, comments: [comment] }),
+        activity({ at: 3, detail: null, comments: [] }),
+      ],
+    });
+    expect(listHumanMessages(task)).toEqual([
+      { at: 1, text: 'Look at these', comments: [comment] },
+      { at: 2, text: '', comments: [comment] },
+    ]);
+    expect(listHumanMessages(createTask({ id: 'u' }), [{ at: 5, text: '', comments: [comment] }])).toEqual([
+      { at: 5, text: '', status: 'delivering', comments: [comment] },
+    ]);
   });
 
   it('is empty for a task with no activity', () => {
@@ -347,6 +366,15 @@ describe('resolveTimeline', () => {
       [{ at: 15, text: 'Also the footer' }]
     );
     expect(only(items, 'human').map((item) => item.at)).toEqual([15]);
+  });
+
+  it('hides the echo of a message sent with line comments, and keeps its comments on the message', () => {
+    const comment = { path: 'a.ts', side: 'new' as const, line: 2, endLine: null, text: 'Rename.' };
+    const items = resolveTimeline(
+      [createUserEntry(resolveCommentedMessage('Look', [comment]), 20)],
+      [{ at: 15, text: 'Look', comments: [comment] }]
+    );
+    expect(only(items, 'human')).toMatchObject([{ at: 15, text: 'Look', comments: [comment] }]);
   });
 
   it('matches an echo by its text without the attachments block, and never doubles the files', () => {

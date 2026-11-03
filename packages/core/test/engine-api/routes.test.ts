@@ -125,6 +125,7 @@ const FEATURE_ROUTES = {
     'GET /api/teams/tasks',
   ],
   'review.approve_after_fix': [],
+  'message.line_comments': [],
   changelog: ['GET /api/changelog'],
 };
 

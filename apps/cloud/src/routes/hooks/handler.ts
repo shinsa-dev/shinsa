@@ -2,7 +2,7 @@ import { REMOTE_ENGINE_HOOK_PREFIX } from '@shinsa/core';
 import { BodyTooLarge, NotFound } from '@shinsa/core/remote/errors';
 import { Effect, Layer, Option } from 'effect';
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from 'effect/http';
-import { resolveForwardHeaders, TUNNEL_OFFLINE_STATUSES } from '../../http/forward.ts';
+import { requestOnlineMachine, resolveForwardHeaders } from '../../http/forward.ts';
 import { CurrentUrl } from '../../http/request.ts';
 import { respondText } from '../../http/responses.ts';
 import { Tunnels } from '../../integrations/tunnels/service.ts';
@@ -31,14 +31,16 @@ export const HookRoutes = Layer.unwrap(
       if (body && body.byteLength > HOOK_BODY_LIMIT_BYTES)
         return yield* new BodyTooLarge({ message: 'The webhook body is over 1 MB.' });
       const { scheduleId, token } = params.value;
-      const answer = yield* Effect.option(
+      const answer = yield* requestOnlineMachine(
+        'webhook',
+        machine.value.id,
         tunnels.request(machine.value.id, `${REMOTE_ENGINE_HOOK_PREFIX}${scheduleId}/${token}${url.search}`, {
           method: request.method,
           headers: resolveForwardHeaders(new Headers(request.headers), FORWARDED_AWAY),
           ...(body ? { body } : {}),
         })
       );
-      if (Option.isNone(answer) || TUNNEL_OFFLINE_STATUSES.has(answer.value.status)) return respondOffline();
+      if (Option.isNone(answer)) return respondOffline();
       return HttpServerResponse.raw(
         new Response(answer.value.body, {
           status: answer.value.status,

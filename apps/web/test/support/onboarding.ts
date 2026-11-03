@@ -45,6 +45,7 @@ export function createSuggestions(paths: [string, number][]): RootSuggestions {
   return {
     suggestions: paths.map(([path, repoCount]) => ({ path, repoCount, repos: [], chosen: false })),
     truncated: false,
+    refused: [],
   };
 }
 

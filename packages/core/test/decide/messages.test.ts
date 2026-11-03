@@ -28,6 +28,7 @@ import {
   REPLY,
   reachReviewGate,
   reachShipping,
+  readInstruction,
   readyWorktree,
   registerRepo,
   resolveReply,
@@ -178,6 +179,35 @@ describe('messages before work starts', () => {
     shipAndMerge(harness, first);
     readyWorktree(harness, second);
     expect(harness.activeRun(second).prompt).toContain('The human added since:\n- Use the blue variant.');
+  });
+
+  test('line comments sent before planning starts reach the planner, with or without words', () => {
+    const harness = createHarness();
+    const first = createTask(harness);
+    const second = createTask(harness, { request: 'Second', waitsOn: [first] });
+    const comment = { path: 'src/a.ts', side: 'new' as const, line: 4, endLine: 6, text: 'Split this.' };
+    harness.send({
+      type: 'task.message',
+      taskId: second,
+      text: 'Use the blue variant.',
+      comments: [comment],
+    });
+    harness.advance(10 * 60_000);
+    harness.send({
+      type: 'task.message',
+      taskId: second,
+      text: '',
+      comments: [{ ...comment, line: 9, endLine: null }],
+    });
+    shipAndMerge(harness, first);
+    readyWorktree(harness, second);
+    const prompt = harness.activeRun(second).prompt ?? '';
+    expect(prompt).toContain(
+      'The human added since:\n- Use the blue variant.\n\nLine comments:\n- src/a.ts, lines 4-6: Split this.'
+    );
+    expect(prompt).toContain(
+      '- The human left line comments on the code.\n\nLine comments:\n- src/a.ts, line 9: Split this.'
+    );
   });
 });
 
@@ -846,5 +876,76 @@ describe('sending a queued round now', () => {
     expect(() => harness.send({ type: 'round.send', taskId, number: 4 })).toThrow(
       'This task has no round 4.'
     );
+  });
+});
+
+describe('a message with line comments', () => {
+  const rename = {
+    path: 'src/a.ts',
+    side: 'new' as const,
+    line: 2,
+    endLine: 3,
+    text: 'Make these one constant.',
+  };
+  const removed = { path: 'src/b.ts', side: 'old' as const, line: 9, endLine: null, text: 'Keep this.' };
+
+  test('a working agent is steered with the words and each comment’s file and lines, and the chat keeps them', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.message', taskId, text: 'Two things.', comments: [rename, removed] });
+    expect(harness.lastEffect('run.steer').text).toBe(
+      'Two things.\n\nLine comments:\n- src/a.ts, lines 2-3: Make these one constant.\n- src/b.ts, removed line 9: Keep this.'
+    );
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
+      kind: 'message',
+      detail: 'Two things.',
+      comments: [rename, removed],
+    });
+    expect(harness.task(taskId).iterations?.at(-1)?.requests.at(-1)).toMatchObject({
+      text: 'Two things.',
+      comments: 2,
+    });
+  });
+
+  test('comments alone are a message, and empty words with no comments are still refused', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.message', taskId, text: ' ', comments: [removed] });
+    expect(harness.lastEffect('run.steer').text).toBe(
+      'The human left line comments on the code.\n\nLine comments:\n- src/b.ts, removed line 9: Keep this.'
+    );
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({ detail: '', comments: [removed] });
+    expect(() => harness.send({ type: 'task.message', taskId, text: ' ', comments: [] })).toThrow(
+      'Write a message first.'
+    );
+  });
+
+  test('a message with comments at the review gate starts a fix that lists them', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    harness.send({ type: 'task.message', taskId, text: '', comments: [rename] });
+    const prompt = readInstruction(harness.activeRun(taskId));
+    expect(prompt).toStartWith('The human looked at the work and left line comments.');
+    expect(prompt).toContain('- src/a.ts, lines 2-3: Make these one constant.');
+  });
+
+  test('comments with new work go into the round’s request', () => {
+    const harness = createHarness();
+    const taskId = runOperation(harness);
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Also rename it.',
+      kind: 'new_round',
+      comments: [rename],
+    });
+    expect(resolveCurrentRound(harness.task(taskId)).request).toBe(
+      'Also rename it.\n\nLine comments:\n- src/a.ts, lines 2-3: Make these one constant.'
+    );
+    const asked = harness
+      .task(taskId)
+      .activity.find((entry) => entry.actor === 'you' && entry.kind === 'round');
+    expect(asked).toMatchObject({ detail: 'Also rename it.', comments: [rename] });
   });
 });

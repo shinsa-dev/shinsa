@@ -80,7 +80,9 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   app always has a macOS notifications row whose Open settings sends `shinsa:notification-settings`, and main opens
   that pane for `APP_ID` (`resolveNotificationSettingsUrl` in `notifications/notice.ts`). When Electron reports a notification
   `failed`, `Notifications` tells the page on `shinsa:notify-failed` and the page shows a toast with the same
-  action. Signed builds only: an unsigned dev build delivers no notifications at all.
+  action. macOS asks only when the first notification arrives, so the page sends one welcome notification on its
+  first load with notifications on (`showNotificationWelcome` in `apps/web/src/lib/notifications/welcome.ts`), while
+  you are looking at the app. Signed builds only: an unsigned dev build delivers no notifications at all.
 - **The icon** follows macOS's 1024px grid: a light 824px squircle (continuous corners of about 185px) inset 100px,
   with room for its shadow, and the Shinsa mark from `packages/ui/src/components/logo.tsx` in near-black at 488px,
   centred, on every channel. Change `scripts/icon.ts`, never the outputs, and run `bun run icon` (needs `rsvg-convert` from

@@ -8,20 +8,24 @@ import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import type { CodeNote } from '@/lib/code/notes.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 import { notPersisted, resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
-import { describeCommentLines, type LineComment } from '@/lib/review/draft.ts';
+import { describeCommentLines, describeCommentPlaceholder, type LineComment } from '@/lib/review/draft.ts';
 import { toCommentItem } from '@/lib/review/report.ts';
 
 const NOTE_WIDTH = 'max-w-[min(36rem,calc(100cqw-6rem))]';
 
 const NOTE = `${INSET} flex ${NOTE_WIDTH} flex-col gap-1.5 px-3 py-2 font-sans text-xs`;
 
+const NOTE_ACTION = 'cursor-pointer text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4';
+
 function CommentNote({
   task,
   comment,
+  onEdit,
   onRemove,
 }: {
   task: Task | null;
   comment: LineComment;
+  onEdit: (() => void) | null;
   onRemove: (() => void) | null;
 }) {
   return (
@@ -35,14 +39,19 @@ function CommentNote({
       compact
       className={NOTE_WIDTH}
       action={
-        onRemove && (
-          <button
-            type='button'
-            className='cursor-pointer text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
-            onClick={onRemove}
-          >
-            Remove
-          </button>
+        (onEdit || onRemove) && (
+          <span className='flex items-center gap-2.5'>
+            {onEdit && (
+              <button type='button' className={NOTE_ACTION} onClick={onEdit}>
+                Edit
+              </button>
+            )}
+            {onRemove && (
+              <button type='button' className={NOTE_ACTION} onClick={onRemove}>
+                Remove
+              </button>
+            )}
+          </span>
         )
       }
     />
@@ -51,14 +60,18 @@ function CommentNote({
 
 function CommentComposer({
   label,
+  initial,
+  placeholder,
   onSave,
   onCancel,
 }: {
   label: string;
+  initial: string | null;
+  placeholder: string;
   onSave: (text: string) => void;
   onCancel: () => void;
 }) {
-  const [text, setText] = React.useState('');
+  const [text, setText] = React.useState(initial ?? '');
   return (
     <div className={cn(NOTE, 'bg-background')}>
       <span className='text-2xs text-fg-2'>{label}</span>
@@ -74,12 +87,12 @@ function CommentComposer({
           event.preventDefault();
           onSave(text.trim());
         }}
-        placeholder='What should change here? It goes to the agent with your review.'
+        placeholder={placeholder}
         className='corner-superellipse/1.125 field-sizing-content min-h-14 w-full resize-none rounded-control bg-bg-2 px-2.5 py-1.5 text-xs text-fg-4 outline-none placeholder:text-fg-2'
       />
       <div className='flex items-center gap-1.5'>
         <Button size='xs' disabled={!text.trim()} onClick={() => onSave(text.trim())}>
-          Add comment
+          {initial === null ? 'Add comment' : 'Save comment'}
         </Button>
         <Button variant='secondary' size='xs' onClick={onCancel}>
           Cancel
@@ -92,12 +105,16 @@ function CommentComposer({
 export function CodeNoteView({
   note,
   task = null,
+  reviewing = true,
+  onEdit = null,
   onRemove,
   onSave,
   onCancel,
 }: {
   note: CodeNote;
   task?: Task | null;
+  reviewing?: boolean;
+  onEdit?: ((comment: LineComment) => void) | null;
   onRemove: ((id: string) => void) | null;
   onSave: (text: string) => void;
   onCancel: () => void;
@@ -118,6 +135,7 @@ export function CodeNoteView({
       <CommentNote
         task={task}
         comment={note.comment}
+        onEdit={onEdit ? () => onEdit(note.comment) : null}
         onRemove={onRemove ? () => onRemove(note.comment.id) : null}
       />
     );
@@ -125,6 +143,8 @@ export function CodeNoteView({
   return (
     <CommentComposer
       label={`Comment · ${describeCommentLines({ side: note.side, line: note.start, endLine: note.endLine })}`}
+      initial={note.editing?.text ?? null}
+      placeholder={describeCommentPlaceholder(reviewing)}
       onSave={onSave}
       onCancel={onCancel}
     />

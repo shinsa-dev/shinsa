@@ -1830,7 +1830,9 @@ checks it ran.
   words, each with its path, lines and words. A comment is words only: to change the code yourself, edit it in the
   Code tab (Where agents work → Your edits). Fix N findings at an escalated review sends the drafted comments with the verdicts the same way. The
   comments are stored on `gate.answered` and on the decision's activity entry, so the task's activity lists each
-  with its place. Comments with any other decision or at any other gate are refused.
+  with its place. Comments with any other decision or at any other gate are refused. Outside a review the same
+  comments go with a message (`task.message` with `comments`): core appends them to the message as a Line comments
+  block on whichever path it takes (steer, wake, fix, new round, kept at a gate), and `task.messaged` keeps them.
 - Fix N findings and approve, from the Fix button's chevron, is the same `revise` with `thenApprove: true`
   (refused at any other gate or with any other decision, `then_approve_invalid`, `then_approve_conflict`). The
   `gate.answered` fold sets `task.approveAfterFix`; the fix then runs as any other: checks, the agent review and its
@@ -2850,7 +2852,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   <engine URL>` as a scoped process with the tunnel token in `TUNNEL_TOKEN`, never in its arguments (a process list
   shows arguments), and counts it up once it prints `Registered tunnel connection`; one that has not within
   `ConnectTimeout` (30 s, an `Effect.timeout`) is stopped and fails as `TunnelConnectFailed`, and closing its scope
-  stops the process.
+  stops the process. Both failures end with the last line `cloudflared` printed (it keeps the last 2,000 characters
+  of its output, `OUTPUT_TAIL_CHARS`), so a run of failed connects in the log says why: a DNS error, a blocked QUIC
+  path, a refused token.
 - **The supervisor** (`TunnelSupervisor`, `remote/tunnel/`, Kanna's timings): connect, heartbeat with the engine's URL
   and version, ping `https://<tunnel host>/health` (`TunnelHealth`) on `PING_SCHEDULE`, every 30 seconds, and
   heartbeat every fourth ping; three failed pings in a row, or `cloudflared` exiting, restart it on `RESTART_SCHEDULE`:
@@ -3091,8 +3095,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
-  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, and `changelog` for `GET /api/changelog`, today;
-  Settings → Teams, the review's Fix and approve choice and What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
+  `comments`, and `changelog` for `GET /api/changelog`, today; Settings → Teams, the review's Fix and approve choice and
+  What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -6340,9 +6345,12 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   restarts your engine; the wake before a command that needs the engine checks the same before `kickstart`.
   `shinsa logs` prints the end of `data/engine.log`, each JSON line as its UTC time, level, message and fields
   (`--json` as written). `shinsa status` and `shinsa version` read `/api/health` without starting anything.
-- **Folders macOS keeps private.** Shinsa asks for no permission unless a folder you choose needs one. The engine is a
-  background process, so it cannot answer macOS's consent prompts well: discovery in the bundle skips `~/Desktop`,
-  `~/Documents` and `~/Downloads` (`createDiscoverer`), so no prompt fires unasked, and a folder chosen at setup that
+- **Folders macOS keeps private.** Discovery scans the whole home folder, `~/Desktop`, `~/Documents` and
+  `~/Downloads` included, the same in the app and in a checkout, and only before you have chosen folders (setup
+  and Settings asking for suggestions, or triage with no folder chosen), so a consent prompt macOS shows comes
+  from setup you opened. A folder macOS refuses to list (`EPERM` or `EACCES`) is
+  not read as empty: discovery returns it in `refused`, and the Folders step offers it unpicked as "macOS keeps this
+  folder private". A folder chosen at setup that
   the engine may not read is not an error but access to ask for: `resolveChosenRoots` throws `PrivateFoldersError`
   (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
   offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
@@ -6434,13 +6442,16 @@ same-site Origin, `application/json` bodies; a refusal there is 403 or 415). Err
 ```
 
 **`GET /api/onboarding/roots`** (`?refresh=1` to scan again; results are kept for ten minutes): the folders that hold
-git repositories, most first. Discovery walks the home folder four levels deep and at most 20,000 folders, never
-into hidden folders, `node_modules`, `Library`, caches, build output or media folders, and never into a repository.
+git repositories, most first. Discovery walks the whole home folder eight levels deep, stopping at 150,000 folders
+or after 20 seconds (`MAX_DEPTH`, `MAX_DIRS`, `DISCOVERY_BUDGET`), never into hidden folders, `node_modules`,
+`Library`, `Applications`, caches, package bundles (`.app`, `.photoslibrary`, `.xcodeproj` and the rest of
+`BUNDLE_SUFFIXES`) or a repository it found.
 
 ```ts
 {
   suggestions: { path: string; repoCount: number; repos: string[] /* up to 8 names */; chosen: boolean }[];
-  truncated: boolean; // the folder limit was reached
+  truncated: boolean; // the folder or time limit was reached
+  refused: string[];  // folders macOS would not let the engine list, to ask access for
 }
 ```
 

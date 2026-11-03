@@ -30,7 +30,7 @@ const BLOCKING = [{ severity: 'blocking' as const, file: 'src/a.ts', line: 3, me
 function renderActions(findings: Task['findings'], engine?: EngineInfo) {
   const { task, gate, state } = reviewing(findings);
   pushState(state);
-  if (engine) engines.push(spyOnEngine(engine));
+  if (engine) spyOnEngine(engine);
   return render(
     <TooltipProvider>
       <ReviewDraftProvider enabled draftKey={task.id}>
@@ -47,15 +47,12 @@ async function pickFixChoice(name: string) {
   await waitForGone(() => screen.queryByRole('menu'));
 }
 
-const engines: ReturnType<typeof spyOnEngine>[] = [];
-
 beforeEach(() => {
   startFakeServer();
   toast.dismiss();
 });
 
 afterEach(() => {
-  for (const engine of engines.splice(0)) engine.mockRestore();
   stopFakeServer();
 });
 

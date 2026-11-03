@@ -36,7 +36,9 @@ async function setup(answers: unknown[] = []) {
     notes: await createRepo(projects, 'notes', 'jane/notes'),
     scratch: await createRepo(projects, 'scratch', null),
   };
-  const roots = new Roots([], store, root, () => Promise.resolve({ candidates: [], truncated: false }));
+  const roots = new Roots([], store, root, () =>
+    Promise.resolve({ candidates: [], truncated: false, refused: [] })
+  );
   const onboarding = new Onboarding({
     engine,
     config,
