@@ -12,10 +12,12 @@ import {
 import { Icon } from '@shinsa/ui/components/icon';
 import { Kbd } from '@shinsa/ui/components/kbd';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { SelectedMark } from '@/components/status/check-mark.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
+import { resolveDepthIndent } from '@/components/tasks/row.tsx';
 import { useCommandHotkey, useCommandKey } from '@/hooks/use-command-key.ts';
 import { useChangelogAvailable } from '@/lib/changelog.ts';
 import { listAccountSections } from '@/lib/command/accounts.ts';
@@ -150,6 +152,11 @@ function ChoiceRows({
       onSelect={() => onPick(command, option.value)}
     >
       <OptionDot option={option} />
+      {!flat && (option.depth ?? 0) > 0 && (
+        <span className={cn('flex shrink-0', resolveDepthIndent(option.depth ?? 0))}>
+          <Icon name='IconArrowCornerDownRight' className='text-fg-2' />
+        </span>
+      )}
       <Truncate className='min-w-0'>{option.label}</Truncate>
       {option.disabled ? (
         <CommandHint className='min-w-12 shrink-[4]'>{option.disabled}</CommandHint>

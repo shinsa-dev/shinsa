@@ -107,7 +107,7 @@ function resolveProjectId(project: string) {
 function resolveStartFields(start: NewTaskStart, after: string[]) {
   if (start === 'now') return { waitsOn: [] };
   if (start === 'after') return { waitsOn: after };
-  if (start === 'stack') return after[0] ? { stacksOn: [after[0]] } : {};
+  if (start === 'stack') return after.length > 0 ? { stacksOn: after } : {};
   if (start === 'backlog') return { backlog: true };
   return {};
 }
@@ -175,8 +175,11 @@ export function describeAfterLabel(chosen: Pick<Task, 'title'>[]) {
   return `After ${first.title} and ${chosen.length - 1} more`;
 }
 
-export function describeStackLabel(parent: Pick<Task, 'title'> | undefined) {
-  return parent ? `Stacked on ${parent.title}` : 'Stack on another task…';
+export function describeStackLabel(parents: Pick<Task, 'title'>[]) {
+  const [first] = parents;
+  if (!first) return 'Stack on another task…';
+  if (parents.length === 1) return `Stacked on ${first.title}`;
+  return `Stacked on ${first.title} and ${parents.length - 1} more`;
 }
 
 export function listNewTaskStarts(
@@ -207,7 +210,7 @@ export function listNewTaskStarts(
     },
     {
       value: 'stack',
-      label: describeStackLabel(stackable.find((task) => after.includes(task.id))),
+      label: describeStackLabel(after.flatMap((id) => stackable.find((task) => task.id === id) ?? [])),
       icon: 'IconLayersThree',
       hint: 'When it is ready to merge, as one bundle',
       ...(stackable.length === 0 ? { disabled: 'No open task with a pull request to stack on' } : {}),
@@ -235,7 +238,8 @@ export function resolveStartChoice(
 }
 
 export function toggleStackTask(after: string[], taskId: string): Pick<NewTaskChoices, 'start' | 'after'> {
-  return after.includes(taskId) ? { start: 'auto', after: [] } : { start: 'stack', after: [taskId] };
+  const next = after.includes(taskId) ? after.filter((id) => id !== taskId) : [...after, taskId];
+  return { start: next.length > 0 ? 'stack' : 'auto', after: next };
 }
 
 export function toggleAfterTask(after: string[], taskId: string): Pick<NewTaskChoices, 'start' | 'after'> {

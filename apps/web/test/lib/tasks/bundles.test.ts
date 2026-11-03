@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { canChangeStack, ENGINE_BASELINE_COMMANDS, resolveEngineInfo } from '@shinsa/core';
 import {
   describeBundleNote,
+  describeBundleParents,
   describeBundleProgress,
   describeBundleWait,
   isMergingWithBundle,
@@ -51,16 +52,43 @@ describe('the members of a bundle', () => {
     const { root, middle, top } = createBundle();
     const state = createShinsaState({ tasks: [root, middle, top], repos: [createRepo({ id: 'app' })] });
     const rows = listBundleRows(state, middle);
-    expect(rows.map((row) => [row.task.id, row.state, row.current])).toEqual([
-      ['root', 'ready', false],
-      ['middle', 'working', true],
-      ['top', 'waiting', false],
+    expect(rows.map((row) => [row.task.id, row.state, row.current, row.depth])).toEqual([
+      ['root', 'ready', false, 0],
+      ['middle', 'working', true, 1],
+      ['top', 'waiting', false, 2],
     ]);
     expect(describeBundleProgress(rows)).toBe('1 of 3 ready');
     expect(describeBundleNote(state, rows)).toBe(
-      'Number 1 targets main and each one after it builds on the one before. Once every task is ready and the whole bundle merges into main without conflicts, approving “Add the schema” merges them all, from the last back to number 1.'
+      'Each task builds on the tasks above it, and the ones that build on nothing target main. Once every task is ready and the whole bundle merges into main without conflicts, approving “Add the schema” merges them all, from the bottom up.'
     );
     expect(selectBundleRoot(state, top)?.id).toBe('root');
+  });
+
+  it('draws a diamond as a tree: each task under its deepest parent, a task with several parents naming them', () => {
+    const at = (hours: number) => Date.UTC(2026, 10, 3, hours);
+    const a = createTask({ id: 'a', title: 'A', repoId: 'app', createdAt: at(1) });
+    const b = createTask({ id: 'b', title: 'B', repoId: 'app', stacksOn: ['a'], createdAt: at(2) });
+    const c = createTask({ id: 'c', title: 'C', repoId: 'app', stacksOn: ['a'], createdAt: at(3) });
+    const d = createTask({ id: 'd', title: 'D', repoId: 'app', stacksOn: ['a'], createdAt: at(4) });
+    const f = createTask({ id: 'f', title: 'F', repoId: 'app', stacksOn: ['b', 'c', 'd'], createdAt: at(5) });
+    const e = createTask({ id: 'e', title: 'E', repoId: 'app', stacksOn: ['f'], createdAt: at(6) });
+    const g = createTask({ id: 'g', title: 'G', repoId: 'app', createdAt: at(7) });
+    const h = createTask({ id: 'h', title: 'H', repoId: 'app', stacksOn: ['g', 'e'], createdAt: at(8) });
+    const state = createShinsaState({ tasks: [h, e, f, d, c, b, a, g] });
+    const rows = listBundleRows(state, f);
+    expect(rows.map((row) => [row.task.id, row.depth, row.parents.map((parent) => parent.id)])).toEqual([
+      ['a', 0, []],
+      ['b', 1, []],
+      ['c', 1, []],
+      ['d', 1, []],
+      ['f', 2, ['b', 'c', 'd']],
+      ['e', 3, []],
+      ['h', 4, ['g', 'e']],
+      ['g', 0, []],
+    ]);
+    expect(describeBundleParents(rows[4]?.parents ?? [])).toBe('Builds on “B”, “C” and “D”');
+    expect(describeBundleParents(rows[6]?.parents ?? [])).toBe('Builds on “G” and “E”');
+    expect(selectBundleRoot(state, h)?.id).toBe('a');
   });
 
   it('has no rows for a task outside any bundle', () => {
@@ -138,6 +166,21 @@ describe('listStackChoices', () => {
     ).toEqual(['no-repo', 'on-taken', 'open', 'taken']);
   });
 
+  it('offers only tasks in the repository named, for a new task stacking on a task there already', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'here', repoId: 'app' }),
+        createTask({ id: 'there', repoId: 'other' }),
+        createTask({ id: 'anywhere' }),
+      ],
+    });
+    expect(
+      listStackChoices(state, null, 'app')
+        .map((task) => task.id)
+        .sort()
+    ).toEqual(['anywhere', 'here']);
+  });
+
   it('lists the task it already stacks on first, and offers a new task every open one', () => {
     const subject = createTask({ id: 'self', stage: 'triage', stacksOn: ['parent'] });
     const parent = createTask({ id: 'parent' });
@@ -180,6 +223,20 @@ describe('stack commands', () => {
     expect(spies.sent).toHaveBeenCalledWith(
       { type: 'task.stack_on_tasks', taskId: 't', stacksOn: [] },
       'Taken out of the bundle.'
+    );
+  });
+
+  it('adds a second task to stack on, and picking one of several takes only that one out', async () => {
+    const api = createTask({ id: 'q', title: 'Add the API' });
+    await toggleStack(createTask({ id: 't', stacksOn: ['p'] }), api);
+    expect(spies.sent).toHaveBeenLastCalledWith(
+      { type: 'task.stack_on_tasks', taskId: 't', stacksOn: ['p', 'q'] },
+      'Stacked on “Add the API”.'
+    );
+    await toggleStack(createTask({ id: 't', stacksOn: ['p', 'q'] }), parent);
+    expect(spies.sent).toHaveBeenLastCalledWith(
+      { type: 'task.stack_on_tasks', taskId: 't', stacksOn: ['q'] },
+      'No longer stacked on “Add the schema”.'
     );
   });
 

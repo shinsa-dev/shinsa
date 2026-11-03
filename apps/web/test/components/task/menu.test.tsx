@@ -78,7 +78,7 @@ describe('Stack on another task in the task menu', () => {
     });
   }
 
-  it('stacks the task on the one you tick', async () => {
+  it('adds the task you tick to the ones it stacks on', async () => {
     const task = createTask({ id: 't', stage: 'planning', stacksOn: ['p'] });
     const parent = createTask({ id: 'p', title: 'Add the schema' });
     const other = createTask({ id: 'o', title: 'Add the API' });
@@ -93,7 +93,7 @@ describe('Stack on another task in the task menu', () => {
     await openSubmenu('Stack on another task');
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Add the API' }));
     await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'task.stack_on_tasks', taskId: 't', stacksOn: ['o'] }])
+      expect(listSentCommands()).toEqual([{ type: 'task.stack_on_tasks', taskId: 't', stacksOn: ['p', 'o'] }])
     );
   });
 

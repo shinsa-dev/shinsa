@@ -48,6 +48,10 @@ export const FILED_COLUMNS =
 
 const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13'];
 
+export function resolveDepthIndent(depth: number) {
+  return DEPTH_INDENT[Math.min(depth, DEPTH_INDENT.length - 1)];
+}
+
 function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
   const commands = useEngineCommands(task.id);
   return (
@@ -131,7 +135,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
   columns?: string;
 }) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  const level = Math.min(depth, 3);
+  const level = Math.min(depth, DEPTH_INDENT.length - 1);
   return (
     <LazyMenu kind='context' content={<TaskMenuItems state={state} task={task} />}>
       <LazyMenuTrigger
@@ -153,7 +157,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
           />
         }
       >
-        <span className={cn('flex min-w-0 items-center gap-1.5', DEPTH_INDENT[level])}>
+        <span className={cn('flex min-w-0 items-center gap-1.5', resolveDepthIndent(depth))}>
           {depth > 0 && <ChainArrow state={state} task={task} />}
           <Hint label={`${PRIORITY_LABEL[task.priority]} priority`}>
             <span className='grid size-4 shrink-0 place-items-center'>

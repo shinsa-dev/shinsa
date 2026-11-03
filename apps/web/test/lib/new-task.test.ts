@@ -189,11 +189,12 @@ describe('the composer’s choices', () => {
     });
   });
 
-  it('stack on one task at a time, and keep it only while it can still be stacked on', () => {
+  it('stack on several tasks, the first one picked first, and keep them only while they can still be stacked on', () => {
     const open = [createTask({ id: 'a' }), createTask({ id: 'b' })];
     const stackable = [createTask({ id: 'a' })];
     expect(toggleStackTask([], 'a')).toEqual({ start: 'stack', after: ['a'] });
-    expect(toggleStackTask(['b'], 'a')).toEqual({ start: 'stack', after: ['a'] });
+    expect(toggleStackTask(['b'], 'a')).toEqual({ start: 'stack', after: ['b', 'a'] });
+    expect(toggleStackTask(['a', 'b'], 'a')).toEqual({ start: 'stack', after: ['b'] });
     expect(toggleStackTask(['a'], 'a')).toEqual({ start: 'auto', after: [] });
     expect(resolveStartChoice({ start: 'stack', after: ['a'] }, open, stackable)).toEqual({
       start: 'stack',
@@ -203,7 +204,11 @@ describe('the composer’s choices', () => {
       start: 'auto',
       after: [],
     });
-    expect(describeStackLabel(undefined)).toBe('Stack on another task…');
+    expect(describeStackLabel([])).toBe('Stack on another task…');
+    expect(describeStackLabel([{ title: 'Add the schema' }])).toBe('Stacked on Add the schema');
+    expect(describeStackLabel([{ title: 'Add the schema' }, { title: 'Add the API' }])).toBe(
+      'Stacked on Add the schema and 1 more'
+    );
     expect(describeNewTask('stack').submit).toBe('Add');
     expect(createNewTaskCommand('Add the screen', { ...AUTO_CHOICES, start: 'stack', after: ['a'] })).toEqual(
       {
@@ -212,6 +217,9 @@ describe('the composer’s choices', () => {
         repoId: null,
         stacksOn: ['a'],
       }
+    );
+    expect(createNewTaskCommand('Join them', { ...AUTO_CHOICES, start: 'stack', after: ['a', 'b'] })).toEqual(
+      { type: 'task.create', request: 'Join them', repoId: null, stacksOn: ['a', 'b'] }
     );
     expect(createNewTaskCommand('Add it', { ...AUTO_CHOICES, start: 'stack', after: [] })).toEqual({
       type: 'task.create',

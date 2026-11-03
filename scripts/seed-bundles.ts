@@ -1,10 +1,16 @@
 import type { Repo, ShinsaEventInput } from '../packages/core/src/index.ts';
 import type { SeedTask } from './seed-kit.ts';
 
-function stack(taskId: string, stacksOn: string, base: string | null): ShinsaEventInput[] {
+function stack(
+  taskId: string,
+  stacksOn: string | string[],
+  bases: string | string[] | null
+): ShinsaEventInput[] {
+  const parents = typeof stacksOn === 'string' ? [stacksOn] : stacksOn;
+  const branches = typeof bases === 'string' ? [bases] : bases;
   return [
-    { type: 'task.stack_changed', taskId, stacksOn: [stacksOn], by: 'you' },
-    ...(base ? [{ type: 'task.stack_based' as const, taskId, bases: [base] }] : []),
+    { type: 'task.stack_changed', taskId, stacksOn: parents, by: 'you' },
+    ...(branches ? [{ type: 'task.stack_based' as const, taskId, bases: branches }] : []),
   ];
 }
 
@@ -89,6 +95,92 @@ export function listBundleTasks({ paywall }: { paywall: Repo }): SeedTask[] {
       branch: 'feat/paywall-view-chart',
       ageHours: 1.5,
       extra: stack('task-bundle-chart', 'task-bundle-events', null),
+    },
+    {
+      id: 'task-diamond-models',
+      request: 'Add the subscription models the billing rework builds on: plans, prices and entitlements.',
+      title: 'Add the subscription models',
+      repo: paywall,
+      size: 'small',
+      stage: 'shipping',
+      reason: 'ready, merges with its bundle',
+      branch: 'feat/billing-models',
+      ageHours: 12,
+      summary: 'Plans, prices and entitlements as tables, with their migration.',
+      pullRequest: { number: 4620, checks: 'passing' },
+      extra: [ready('task-diamond-models', '1a2b3c4')],
+    },
+    {
+      id: 'task-diamond-stripe',
+      request: 'Sync the subscription models from Stripe on every webhook.',
+      title: 'Sync plans from Stripe',
+      repo: paywall,
+      size: 'small',
+      stage: 'shipping',
+      reason: 'ready, merges with its bundle',
+      branch: 'feat/billing-stripe-sync',
+      ageHours: 11,
+      pullRequest: { number: 4621, checks: 'passing' },
+      extra: [
+        ...stack('task-diamond-stripe', 'task-diamond-models', 'feat/billing-models'),
+        ready('task-diamond-stripe', '2b3c4d5'),
+      ],
+    },
+    {
+      id: 'task-diamond-apple',
+      request: 'Sync the subscription models from App Store Server Notifications.',
+      title: 'Sync plans from the App Store',
+      repo: paywall,
+      size: 'small',
+      stage: 'building',
+      reason: 'building phase 2 of 3',
+      branch: 'feat/billing-apple-sync',
+      ageHours: 10.5,
+      extra: stack('task-diamond-apple', 'task-diamond-models', 'feat/billing-models'),
+    },
+    {
+      id: 'task-diamond-google',
+      request: 'Sync the subscription models from Google Play real-time notifications.',
+      title: 'Sync plans from Google Play',
+      repo: paywall,
+      size: 'small',
+      stage: 'shipping',
+      reason: 'ready, merges with its bundle',
+      branch: 'feat/billing-google-sync',
+      ageHours: 10,
+      pullRequest: { number: 4623, checks: 'passing' },
+      extra: [
+        ...stack('task-diamond-google', 'task-diamond-models', 'feat/billing-models'),
+        ready('task-diamond-google', '4d5e6f7'),
+      ],
+    },
+    {
+      id: 'task-diamond-entitlements',
+      request: 'Resolve a customer’s entitlements from every store in one place.',
+      title: 'Resolve entitlements across stores',
+      repo: paywall,
+      size: 'small',
+      stage: 'waiting_on_tasks',
+      reason: 'waiting for “Sync plans from the App Store” to be ready to merge',
+      branch: 'feat/billing-entitlements',
+      ageHours: 9,
+      extra: stack(
+        'task-diamond-entitlements',
+        ['task-diamond-stripe', 'task-diamond-apple', 'task-diamond-google'],
+        null
+      ),
+    },
+    {
+      id: 'task-diamond-paywall',
+      request: 'Gate paywall content on the resolved entitlements.',
+      title: 'Gate paywalls on entitlements',
+      repo: paywall,
+      size: 'small',
+      stage: 'waiting_on_tasks',
+      reason: 'waiting for “Resolve entitlements across stores” to be ready to merge',
+      branch: 'feat/billing-paywall-gate',
+      ageHours: 8,
+      extra: stack('task-diamond-paywall', 'task-diamond-entitlements', null),
     },
   ];
 }

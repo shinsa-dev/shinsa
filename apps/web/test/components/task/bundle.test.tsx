@@ -34,7 +34,7 @@ const top = createTask({
 const state = createShinsaState({ tasks: [root, top], repos: [createRepo({ id: 'app' })] });
 
 describe('the Bundle item in the task toolbar', () => {
-  it('counts the ready tasks and lists every task bottom first with its state and pull request', async () => {
+  it('counts the ready tasks and lists every task as a tree from the root, with its state and pull request', async () => {
     render(
       <TooltipProvider>
         <BundleFact state={state} task={top} />
@@ -50,15 +50,36 @@ describe('the Bundle item in the task toolbar', () => {
     expect(await screen.findByText('Bundle · 1 of 2 ready')).toBeTruthy();
     const items = within(screen.getByRole('list', { name: 'Tasks in the bundle' })).getAllByRole('listitem');
     expect(items.map((item) => item.textContent)).toEqual([
-      '1Add the schemaReady41',
-      '2Add the screenThis taskWorking',
+      'Add the schemaReady41',
+      'Add the screenThis taskWorking',
     ]);
+    expect(items[0]?.querySelector('a')?.previousElementSibling).toBeNull();
+    expect(items[1]?.querySelector('a')?.previousElementSibling?.getAttribute('data-slot')).toBe('icon');
     expect(
       within(items[0] as HTMLElement)
         .getByRole('link', { name: 'Add the schema' })
         .getAttribute('href')
     ).toBe('/tasks/SW-1');
-    expect(screen.getByText(/merges them all, from the last back to number 1/)).toBeTruthy();
+    expect(screen.getByText(/merges them all, from the bottom up/)).toBeTruthy();
+  });
+
+  it('names every task a task builds on when it builds on several', async () => {
+    const side = createTask({ id: 'side', title: 'Add the cache', repoId: 'app', stage: 'building' });
+    const join = createTask({ id: 'join', title: 'Join them', repoId: 'app', stacksOn: ['root', 'side'] });
+    render(
+      <TooltipProvider>
+        <BundleFact state={createShinsaState({ tasks: [root, side, join] })} task={join} />
+      </TooltipProvider>
+    );
+    const trigger = screen.getByRole('button', { name: 'Bundle 1/3' });
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    const list = await screen.findByRole('list', { name: 'Tasks in the bundle' });
+    expect(within(list).getByText('Builds on “Add the schema” and “Add the cache”')).toBeTruthy();
   });
 
   it('shows nothing for a task outside any bundle', () => {

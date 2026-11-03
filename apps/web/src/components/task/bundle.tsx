@@ -2,30 +2,31 @@ import type { ShinsaState, Task } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
-import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { InAppLink } from '@/components/links/link.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { InfoHeader, InfoPopover, InfoSection } from '@/components/overlays/info-popover.tsx';
 import { ToneLabel } from '@/components/status/text.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { PullRequestBadge } from '@/components/tasks/pull-request-badge.tsx';
+import { resolveDepthIndent } from '@/components/tasks/row.tsx';
 import {
   BUNDLE_ICON,
   BUNDLE_MEMBER,
   type BundleRow,
   describeBundleCount,
   describeBundleNote,
+  describeBundleParents,
   describeBundleProgress,
   listBundleRows,
 } from '@/lib/tasks/bundles.ts';
 import { resolveTaskPath } from '@/router.ts';
 
-function BundleMember({ row, index }: { row: BundleRow; index: number }) {
+function BundleMember({ row }: { row: BundleRow }) {
   const status = BUNDLE_MEMBER[row.state];
   return (
     <li className='flex min-w-0 items-center gap-2 px-3 py-1.5 text-xs'>
-      <StepNumber index={index} />
-      <span className='flex min-w-0 flex-1 items-center gap-1.5'>
+      <span className={cn('flex min-w-0 flex-1 items-center gap-1.5', resolveDepthIndent(row.depth))}>
+        {row.depth > 0 && <Icon size='sm' name='IconArrowCornerDownRight' className='shrink-0 text-fg-2' />}
         <InAppLink
           path={resolveTaskPath(row.task)}
           className='min-w-0 font-medium text-fg-4 no-underline outline-none hover:underline active:underline'
@@ -33,6 +34,13 @@ function BundleMember({ row, index }: { row: BundleRow; index: number }) {
           <Truncate>{row.task.title}</Truncate>
         </InAppLink>
         {row.current && <span className='shrink-0 text-fg-2'>This task</span>}
+        {row.parents.length > 0 && (
+          <Hint label={describeBundleParents(row.parents)}>
+            <span className='min-w-12 shrink-[4] truncate text-fg-2'>
+              {describeBundleParents(row.parents)}
+            </span>
+          </Hint>
+        )}
       </span>
       <ToneLabel label={status.label} tone={status.tone} />
       <span className='flex min-w-14 shrink-0 justify-end'>
@@ -62,11 +70,11 @@ export function BundleFact({ state, task }: { state: ShinsaState; task: Task }) 
         description={describeBundleNote(state, rows)}
       />
       <InfoSection>
-        <ol aria-label='Tasks in the bundle' className='flex flex-col'>
-          {rows.map((row, index) => (
-            <BundleMember key={row.task.id} row={row} index={index} />
+        <ul aria-label='Tasks in the bundle' className='flex flex-col'>
+          {rows.map((row) => (
+            <BundleMember key={row.task.id} row={row} />
           ))}
-        </ol>
+        </ul>
       </InfoSection>
     </InfoPopover>
   );

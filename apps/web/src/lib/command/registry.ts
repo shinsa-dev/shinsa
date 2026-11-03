@@ -8,6 +8,7 @@ export interface ChoiceOption {
   dot?: string;
   keywords?: string[];
   disabled?: string;
+  depth?: number;
 }
 
 interface CommandBase {
