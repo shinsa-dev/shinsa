@@ -1,7 +1,7 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import { listDependencyNames, listWorkspacePatterns, readPackageManifest } from '../files/manifest.ts';
-import { isInside } from '../files/paths.ts';
+import { isFolder, isInside } from '../files/paths.ts';
 import { PACKAGE_MANIFEST } from '../files/schema.ts';
 import type { FailedTestCase, FailedTestGroup, FailedTests, TestRunner } from './schema.ts';
 
@@ -64,10 +64,6 @@ function listPatterns(root: string) {
   if (!existsSync(pnpm)) return patterns;
   const lines = readFileSync(pnpm, 'utf8').split('\n');
   return [...patterns, ...lines.flatMap((line) => /^\s*-\s*['"]?([^'"#\s]+)['"]?/.exec(line)?.[1] ?? [])];
-}
-
-function isFolder(path: string) {
-  return existsSync(path) && statSync(path).isDirectory();
 }
 
 function listWorkspaceDirs(root: string) {

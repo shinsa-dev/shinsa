@@ -17,7 +17,8 @@ import {
 } from '@shinsa/core';
 import { isInside } from '../files/paths.ts';
 import type { ServiceInput, ServiceRun } from '../terminals/index.ts';
-import { readServiceInput, resolveServiceRunIn } from '../terminals/routes.ts';
+import { readServiceInput } from '../terminals/input.ts';
+import { resolveServiceRunIn } from '../terminals/places.ts';
 import { readString } from './handover.ts';
 
 export const SERVICE_OUTPUT_LINES = 60;

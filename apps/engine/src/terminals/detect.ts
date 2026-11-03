@@ -1,8 +1,8 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { SERVICE_PORT_VARIABLE, type ServiceSource, type ServiceSuggestion } from '@shinsa/core';
 import { listWorkspacePatterns, parseDenoTasks, parsePackageManifest } from '../files/manifest.ts';
-import { isInside } from '../files/paths.ts';
+import { isFolder, isInside } from '../files/paths.ts';
 import { PACKAGE_MANIFEST } from '../files/schema.ts';
 
 export { parseDenoTasks } from '../files/manifest.ts';
@@ -46,14 +46,6 @@ function readText(path: string) {
     return readFileSync(path, 'utf8');
   } catch {
     return null;
-  }
-}
-
-function isFolder(path: string) {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
   }
 }
 

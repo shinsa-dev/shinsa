@@ -3,11 +3,12 @@ import { EngineApi } from '@shinsa/core/engine-api';
 import { RequestFailed, RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
 import { Effect, Predicate } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { readOptionalText, readText, resolveTerminalStart } from '../../../terminals/routes.ts';
+import { PATH_LIMIT } from '../../../files/schema.ts';
+import { readOptionalText, readText } from '../../../terminals/input.ts';
+import { resolveTerminalStart } from '../../../terminals/places.ts';
 import { requestPromise, requestSync } from '../../failures.ts';
 import { PROJECT_GONE, PROJECT_ID_LIMIT } from '../../schema.ts';
 import { HttpServices } from '../../services/service.ts';
-import { PATH_LIMIT } from './schema.ts';
 
 export const TerminalsHandlers = HttpApiBuilder.group(
   EngineApi,

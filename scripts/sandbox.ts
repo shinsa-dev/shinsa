@@ -28,7 +28,7 @@ import { Roots } from '../apps/engine/src/repos/index.ts';
 import { Engine } from '../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../apps/engine/src/store/index.ts';
 import { Terminals } from '../apps/engine/src/terminals/index.ts';
-import { resolveServiceRunIn } from '../apps/engine/src/terminals/routes.ts';
+import { resolveServiceRunIn } from '../apps/engine/src/terminals/places.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,

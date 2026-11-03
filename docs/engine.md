@@ -2614,7 +2614,7 @@ running when the window closes or the app quits, and a page that comes back find
   terminal's foreground process group when it is not the shell itself, else `null` (`readForegroundProgram` in
   `pty.ts`: `ps -o tpgid=` of the shell gives the group that owns the PTY, the way Terminal.app decides whether to ask,
   and `ps -o comm=` names it). The page asks it before closing a running shell and closes an idle one at once; a
-  running service always counts as busy and answers its own name. `test/terminals/routes.test.ts` checks it against a
+  running service always counts as busy and answers its own name. `test/http/routes/services.test.ts` checks it against a
   real shell running `sleep`.
 - **Your terminals are yours.** No agent tool reaches a terminal, but for its own task's service runs (Services →
   Agents run their own task's services, below); every write route needs a browser's Origin
@@ -2644,7 +2644,7 @@ beside your run (Runs for a task, below).
 
 - **What one is.** `ServiceDefinition` (core's `protocol/services.ts`): an id, its project, a name (40 characters, one
   per name in a project), the folder it runs in (one of the project's repositories or folders, or a folder inside one;
-  never a task worktree, which goes away: a task gets its own run instead; `resolveServicePlace` in `routes.ts`), the command (4,000 characters) and
+  never a task worktree, which goes away: a task gets its own run instead; `resolveServicePlace` in `terminals/places.ts`), the command (4,000 characters) and
   variables added to your environment (50 at most, names a shell can export), an optional preview URL (`previewUrl`,
   http or https, 2,000 characters, with `{port}` where the run's port goes: `http://localhost:{port}/tasks/SW-17`;
   `isServicePreviewUrl` refuses one without it, which would send every run's Open to one server) and the variable that carries the port (`portVariable`, `PORT` unless it names another,
@@ -2676,7 +2676,7 @@ beside your run (Runs for a task, below).
   your run), belongs to another project, or whose repository does not hold the service's folder (a project folder
   outside every repository). `listTaskServices` lists what a task can run, `listServiceTaskRuns` every task's run of
   one service. Start, stop and restart take an optional `{ taskId }` in their body (`resolveServiceRunIn` in
-  `routes.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
+  `terminals/places.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
   run's tab and removing one closes them all.
 - **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,

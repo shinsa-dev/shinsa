@@ -477,7 +477,7 @@ src/
 │                        SetupDraft in schema.ts, a file it cannot read or did not write starting setup again), the
 │                        accounts it lists (accounts.ts); schema.ts also holds the revision of the suggested projects,
 │                        the prerequisite shapes and PREREQUISITE_TIMEOUT
-├── projects/            routes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
+├── projects/            changes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
 │                        folders, registered or not) and createProjectChanges, which http/routes/projects and
 │                        the management client share; folders.ts
 │                        (resolving a folder you add)
@@ -518,8 +518,10 @@ src/
 │                        detect.ts (the services found in a project's folders: workspace scripts, Deno, bin/dev and
 │                        Procfile lines, each Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the
 │                        quick call that names them, adds a port flag and a preview URL, cached per project; its answer
-│                        decoded in answer.ts), routes.ts (what http/routes/terminals and services read from a body, and the
-│                        /ws/terminals/<id> socket, createTerminalSockets), index.ts (Terminals: the list, create, rename,
+│                        decoded in answer.ts), input.ts (what http/routes/terminals and services read from a body),
+│                        places.ts (where a terminal opens and a service runs: resolveTerminalStart,
+│                        resolveServicePlace, resolveServiceRunIn, the suggestions a project does not have yet),
+│                        sockets.ts (the /ws/terminals/<id> socket, createTerminalSockets), index.ts (Terminals: the list, create, rename,
 │                        reorder, restart, run, close, stop, and the services: add, update, remove, start, stop,
 │                        restart, a run per task, closing a task's runs, resume after a restart), schema.ts,
 │                        layers.ts (TerminalsLayer)

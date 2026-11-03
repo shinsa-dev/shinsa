@@ -18,7 +18,7 @@ import { resolveServerUrl, startServer } from '../http/index.ts';
 import { BUNDLE, createServiceRestarter, INSTALL_PATH, type ServerInstance } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { Onboarding } from '../onboarding/index.ts';
-import { createProjectChanges } from '../projects/routes.ts';
+import { createProjectChanges } from '../projects/changes.ts';
 import { Handoffs } from '../remote/handoffs.ts';
 import {
   RemoteControl,

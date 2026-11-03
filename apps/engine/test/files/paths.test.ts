@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { realpathSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { isInside, resolveInside } from '../../src/files/paths.ts';
+import { isFolder, isInside, resolveInside } from '../../src/files/paths.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
 describe('resolveInside', () => {
@@ -37,5 +37,15 @@ describe('isInside', () => {
     expect(isInside('/work/repo', '/work/repository')).toBe(false);
     expect(isInside('/work/repo', '/work')).toBe(false);
     expect(isInside('/work/repo/', '/work/repo-old/a')).toBe(false);
+  });
+});
+
+describe('isFolder', () => {
+  test('holds a folder, never a file or a path that is not there', () => {
+    const root = createTempDir();
+    writeFiles(root, { 'a.txt': 'a' });
+    expect(isFolder(root)).toBe(true);
+    expect(isFolder(join(root, 'a.txt'))).toBe(false);
+    expect(isFolder(join(root, 'missing'))).toBe(false);
   });
 });
