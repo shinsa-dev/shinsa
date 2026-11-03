@@ -66,3 +66,20 @@ export function selectFolderProject(projects: Iterable<Project>, path: string) {
   }
   return best;
 }
+
+export function selectProjectByReference<T extends Pick<Project, 'id' | 'key' | 'name'>>(
+  projects: Iterable<T>,
+  reference: string
+) {
+  const lower = reference.trim().toLowerCase();
+  for (const project of projects) {
+    if (
+      project.id === reference ||
+      project.key.toLowerCase() === lower ||
+      project.name.toLowerCase() === lower
+    ) {
+      return project;
+    }
+  }
+  return null;
+}

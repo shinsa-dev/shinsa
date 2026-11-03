@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createLoginResolver,
+  createProjectRepository,
+  createRepository,
   listCandidateRepos,
   listLocalRepos,
   resolveContainingRepo,
@@ -142,12 +144,98 @@ describe('upsertProjectFolderRepo', () => {
     await engine.dispatch({ type: 'task.create', request: 'Add agent login', repoId: app.id });
     const task = Object.values(engine.state.tasks)[0];
     if (!task) throw new Error('no task');
-    const docs = await upsertProjectFolderRepo(engine, task, 'docs');
+    const docs = await upsertProjectFolderRepo(engine, projectId, 'docs');
     expect(docs).toMatchObject({ name: 'docs', projectId, path: realpathSync(join(folder, 'docs')) });
-    expect(await upsertProjectFolderRepo(engine, task, 'skills')).toBeNull();
-    expect(
-      await upsertProjectFolderRepo(engine, { ...task, projectId: null, repoId: null }, 'docs')
-    ).toBeNull();
+    expect(await upsertProjectFolderRepo(engine, projectId, 'skills')).toBeNull();
+    expect(await upsertProjectFolderRepo(engine, null, 'docs')).toBeNull();
+  });
+});
+
+async function createProject(engine: Engine, folders: string[] = []) {
+  await engine.dispatch({ type: 'project.write', project: { name: 'Islands', color: 'green', folders } });
+  return Object.keys(engine.state.projects)[0] ?? '';
+}
+
+describe('createProjectRepository', () => {
+  test('creates the folder in the project folder, starts it on the default branch and registers it there', async () => {
+    const folder = createTempDir();
+    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const projectId = await createProject(engine, [folder]);
+    const repo = await createProjectRepository(engine, projectId, 'native-islands');
+    const path = realpathSync(join(folder, 'native-islands'));
+    expect(repo).toMatchObject({
+      name: 'native-islands',
+      path,
+      projectId,
+      defaultBranch: 'main',
+      remote: null,
+    });
+    expect((await git(path, 'log', '--format=%s', 'main')).trim()).toBe('chore: start the repository');
+  });
+
+  test('starts on the branch git is set to begin with', async () => {
+    const folder = createTempDir();
+    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const projectId = await createProject(engine, [folder]);
+    const restore = overrideEnv({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'init.defaultBranch',
+      GIT_CONFIG_VALUE_0: 'trunk',
+    });
+    try {
+      expect(await createProjectRepository(engine, projectId, 'app')).toMatchObject({
+        defaultBranch: 'trunk',
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  test('a project without a folder creates it beside its repositories, and one with neither is refused', async () => {
+    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const projectId = await createProject(engine);
+    await expect(createProjectRepository(engine, projectId, 'app')).rejects.toThrow(
+      'The project has no folder to create "app" in. Add one with `projects_add_folder`, then try again.'
+    );
+    const { path, root } = await createGitRepo({ remote: false });
+    await upsertRepo(engine, path, () => Promise.resolve(null), projectId);
+    const repo = await createProjectRepository(engine, projectId, 'site');
+    expect(repo.path).toBe(realpathSync(join(root, 'site')));
+  });
+
+  test('refuses a name that is not a plain folder name, a folder with files in it, and a folder git cannot start', async () => {
+    const folder = createTempDir();
+    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const projectId = await createProject(engine, [folder]);
+    for (const name of ['../escape', '.hidden', 'app.git', 'a b']) {
+      await expect(createProjectRepository(engine, projectId, name)).rejects.toThrow(
+        `"${name}" is not a folder name Shinsa will create`
+      );
+    }
+    mkdirSync(join(folder, 'taken'));
+    writeFileSync(join(folder, 'taken', 'notes.md'), '');
+    await expect(createProjectRepository(engine, projectId, 'taken')).rejects.toThrow(
+      `${join(folder, 'taken')} already exists and is not empty.`
+    );
+    const restore = overrideEnv({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'init.defaultBranch',
+      GIT_CONFIG_VALUE_0: '-x',
+    });
+    try {
+      await expect(createProjectRepository(engine, projectId, 'odd')).rejects.toThrow(
+        'git could not start a repository with a first commit on “-x” there.'
+      );
+    } finally {
+      restore();
+    }
+    const sealed = createTempDir();
+    chmodSync(sealed, 0o555);
+    try {
+      await expect(createRepository(engine, sealed, 'app', projectId)).rejects.toThrow('EACCES');
+    } finally {
+      chmodSync(sealed, 0o755);
+    }
   });
 });
 

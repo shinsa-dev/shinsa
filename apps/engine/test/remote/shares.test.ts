@@ -285,7 +285,9 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
         });
       },
       close: (code, reason) => {
-        viewer.closed = { code, reason };
+        queue = queue.then(() => {
+          viewer.closed = { code, reason };
+        });
       },
     },
     shareId

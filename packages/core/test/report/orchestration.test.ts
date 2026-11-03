@@ -105,6 +105,8 @@ describe('the other orchestration tools', () => {
         request: 'Do it.',
         requestKey: null,
         repository: 'admin',
+        newRepository: false,
+        project: null,
         forkFrom: null,
         thisTaskWaits: true,
         afterThis: false,
@@ -118,6 +120,8 @@ describe('the other orchestration tools', () => {
         request: 'Fix it in Safari.',
         requestKey: null,
         repository: null,
+        newRepository: false,
+        project: null,
         forkFrom: 'LOC-3',
         thisTaskWaits: false,
         afterThis: false,
@@ -133,6 +137,14 @@ describe('the other orchestration tools', () => {
       ok: true,
       value: { stackOnThis: true, afterThis: false },
     });
+    expect(
+      validateCourierTask({
+        request: 'Start it.',
+        repository: 'islands',
+        new_repository: true,
+        project: 'ISL',
+      })
+    ).toMatchObject({ ok: true, value: { repository: 'islands', newRepository: true, project: 'ISL' } });
     expect(validateCourierTask({ request: 'Later.', backlog: true })).toMatchObject({
       ok: true,
       value: { backlog: true },

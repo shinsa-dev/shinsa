@@ -1,4 +1,4 @@
-import { DomainError, type Focus, type Gate, type RunAccount } from '@shinsa/core';
+import { DomainError, type Focus, type Gate, type RunAccount, selectProjectByReference } from '@shinsa/core';
 import type { ProjectView } from '@shinsa/core/engine-api/schema';
 import type { resolveTaskView } from '../http/task-views.ts';
 import type { SurfaceClient } from './client.ts';
@@ -102,15 +102,7 @@ export async function findRepoId(client: SurfaceClient, ref: string) {
 }
 
 export function selectProject(projects: readonly ProjectView[], ref: string) {
-  const lower = ref.trim().toLowerCase();
-  return (
-    projects.find(
-      (candidate) =>
-        candidate.id === ref ||
-        candidate.key.toLowerCase() === lower ||
-        candidate.name.toLowerCase() === lower
-    ) ?? null
-  );
+  return selectProjectByReference(projects, ref);
 }
 
 export async function findProject(client: SurfaceClient, ref: string) {

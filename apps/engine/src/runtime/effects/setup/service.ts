@@ -8,8 +8,15 @@ import {
   type Task,
 } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
-import { listCandidateRepos, upsertRepo, verifySetup } from '../../../repos/index.ts';
-import { resolveRepoProject } from '../../../triage/index.ts';
+import {
+  createRepository,
+  listCandidateRepos,
+  prepareSetup,
+  resolveTaskRepoTarget,
+  upsertRepo,
+  verifySetup,
+} from '../../../repos/index.ts';
+import { resolveRepoProject, type TriageResult } from '../../../triage/index.ts';
 import { describeWorkspaceProblem } from '../../../workspaces/index.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
 import { createEffectFailed } from '../../failures/classify.ts';
@@ -49,6 +56,47 @@ export class TaskSetup extends Context.Service<
         );
       });
 
+      const createTriagedRepo = Effect.fn('TaskSetup.createTriagedRepo')(function* (
+        task: Task,
+        name: string,
+        attempt: EffectAttempt
+      ) {
+        const roots = yield* world.bridge(() => world.roots.listRoots());
+        const target = resolveTaskRepoTarget(yield* world.state, task, name, roots);
+        if (!target) {
+          yield* Effect.logWarning(
+            '[Triage] Triage named a new repository, but there is no folder to create it in'
+          ).pipe(Effect.annotateLogs({ taskId: task.id, name }));
+          return null;
+        }
+        return yield* world
+          .bridge(() =>
+            createRepository(world.engine, target.parent, name, target.projectId, {
+              resolveLogin: world.resolveLogin,
+              from: { id: `${attempt.key}:repo.register` },
+            })
+          )
+          .pipe(
+            Effect.catch((failure) =>
+              Effect.logWarning('[Triage] Could not create the new repository triage named').pipe(
+                Effect.annotateLogs({ taskId: task.id, name, error: failure.message }),
+                Effect.as(null)
+              )
+            )
+          );
+      });
+
+      const resolveTriagedRepo = Effect.fn('TaskSetup.resolveTriagedRepo')(function* (
+        task: Task,
+        triaged: TriageResult,
+        attempt: EffectAttempt
+      ) {
+        if (triaged.repoPath === null && triaged.newRepo) {
+          return yield* createTriagedRepo(task, triaged.newRepo, attempt);
+        }
+        return yield* registerRepo(task, triaged.repoPath, attempt);
+      });
+
       const triage = Effect.fn('TaskSetup.triage')(function* (taskId: string, attempt: EffectAttempt) {
         const state = yield* world.state;
         const task = state.tasks[taskId];
@@ -56,7 +104,7 @@ export class TaskSetup extends Context.Service<
         const candidates = yield* listCandidates(task);
         const triaged = yield* world.bridge(() => world.triage(state, task, candidates));
         if (!triaged) return yield* createEffectFailed(NO_TRIAGE);
-        const repo = yield* registerRepo(task, triaged.repoPath, attempt);
+        const repo = yield* resolveTriagedRepo(task, triaged, attempt);
         yield* world.dispatch(
           {
             type: 'task.triage',
@@ -84,6 +132,9 @@ export class TaskSetup extends Context.Service<
         bind: boolean
       ) {
         const pipeline = resolveTaskPipeline(task);
+        const started = needsWorktree(pipeline)
+          ? yield* world.bridge((signal) => prepareSetup(repo, signal))
+          : null;
         const problems = yield* world.bridge((signal) =>
           verifySetup(repo, { defaultBranch: needsWorktree(pipeline) }, signal)
         );
@@ -95,7 +146,13 @@ export class TaskSetup extends Context.Service<
           if (workspace) problems.push(workspace);
         }
         yield* world.dispatch(
-          { type: 'config.record', taskId: task.id, problems, ...(bind ? { repoId: repo.id } : {}) },
+          {
+            type: 'config.record',
+            taskId: task.id,
+            problems,
+            ...(bind ? { repoId: repo.id } : {}),
+            ...(started ? { started } : {}),
+          },
           { id: `${attempt.key}:config.record` }
         );
       });

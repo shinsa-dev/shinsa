@@ -10,7 +10,6 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
-  type Task,
 } from '@shinsa/core';
 import type { ToolSpec } from '../schema.ts';
 
@@ -139,6 +138,17 @@ export const ORCHESTRATION_TOOL_SPECS = {
           maxLength: DELEGATION_LIMITS.name,
           description: 'The repository it belongs in, by name. Defaults to this one.',
         },
+        new_repository: {
+          type: 'boolean',
+          description:
+            'With repository: when no repository by that name exists yet, create it as a new folder in the project’s folder, start it with an empty first commit and register it. An existing one is used as it is.',
+        },
+        project: {
+          type: 'string',
+          maxLength: DELEGATION_LIMITS.name,
+          description:
+            'The project it belongs in, by key, name or id, when not this task’s. Without repository, triage picks a repository in that project.',
+        },
         fork_from: {
           type: 'string',
           maxLength: DELEGATION_LIMITS.name,
@@ -206,7 +216,8 @@ export interface OrchestrationCall {
   state: () => ShinsaState;
   dispatch: (command: ShinsaCommand, id?: string) => Promise<ShinsaEvent[]>;
   resolveBaseCommit: () => Promise<string>;
-  registerRepo: (task: Task, name: string) => Promise<Repo | null>;
+  registerRepo: (projectId: string | null, name: string) => Promise<Repo | null>;
+  createRepo: (projectId: string, name: string) => Promise<Repo>;
   hasProvider: (id: string) => boolean;
   awaitDelegation: (childRunId: string, timeoutMs: number, signal: AbortSignal) => Promise<DelegationOutcome>;
   recordStarted: (childRunId: string) => void;
