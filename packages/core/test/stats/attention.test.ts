@@ -186,6 +186,16 @@ describe('your input per round', () => {
     expect(attention.agentTimePerInput).toEqual({ median: (10 * H) / 3, count: 3 });
   });
 
+  test('counts a secret request as a question and a failure retry as not hands-off', () => {
+    const secret = task('d', { timing: timing({ inputs: [gate(2 * H, 'secret', 'reply')] }) });
+    const retried = task('e', { timing: timing({ inputs: [gate(2 * H, 'failure', 'approve')] }) });
+    expect(resolveAttention(source(secret, retried), {}, windowOf(1))).toMatchObject({
+      rounds: 2,
+      handsOffShare: 0,
+      questionShare: 0.5,
+    });
+  });
+
   test('reads none without finished rounds', () => {
     const going = task('a', { rounds: [round({ status: 'active', endedAt: null })] });
     expect(resolveAttention(source(going), {}, windowOf(1))).toMatchObject({
@@ -199,10 +209,12 @@ describe('your input per round', () => {
     });
   });
 
-  test('a round is hands-off only when every input approved a gate other than a question', () => {
+  test('a round is hands-off only when every input approved a plan, review or merge', () => {
     expect(isHandsOff([])).toBe(true);
     expect(isHandsOff([gate(1, 'merge', 'approve')])).toBe(true);
     expect(isHandsOff([gate(1, 'question', 'approve')])).toBe(false);
+    expect(isHandsOff([gate(1, 'failure', 'approve')])).toBe(false);
+    expect(isHandsOff([gate(1, 'sign_in', 'approve')])).toBe(false);
     expect(isHandsOff([gate(1, 'plan', 'revise')])).toBe(false);
     expect(isHandsOff([message(1)])).toBe(false);
     expect(resolveFirstReview([message(1), gate(2, 'plan', 'revise')])).toBeNull();

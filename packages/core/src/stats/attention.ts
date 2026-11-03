@@ -1,3 +1,4 @@
+import { isAgentQuestion, isDecisionGate } from '../domain/gates.ts';
 import { resolveTaskRounds, type Round } from '../domain/rounds.ts';
 import type { Task, TimingSpan, YourInput } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -114,12 +115,12 @@ export function listRoundInputs({ task, span }: FinishedRound): YourInput[] {
 
 export function isHandsOff(inputs: readonly YourInput[]) {
   return inputs.every(
-    (input) => input.kind === 'gate' && input.gate !== 'question' && input.decision === 'approve'
+    (input) => input.kind === 'gate' && isDecisionGate({ type: input.gate }) && input.decision === 'approve'
   );
 }
 
 function hasQuestion(inputs: readonly YourInput[]) {
-  return inputs.some((input) => input.kind === 'gate' && input.gate === 'question');
+  return inputs.some((input) => input.kind === 'gate' && isAgentQuestion({ type: input.gate }));
 }
 
 function countMessages(inputs: readonly YourInput[]) {

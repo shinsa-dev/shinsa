@@ -2,7 +2,7 @@ import type { StatsDay } from '@shinsa/core';
 import { ChartTooltipRow, ChartTooltipTitle } from '@shinsa/ui/components/chart-tooltip';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { formatTokenCount } from '@/lib/format/money.ts';
+import { formatCompactCount } from '@/lib/format/money.ts';
 import { listAxisIndexes } from '@/lib/stats/chart.ts';
 import { formatShortDay } from '@/lib/stats/days.ts';
 import { listTokenBars, listTokenPoints, TOKEN_KINDS, type TokenKind } from '@/lib/stats/usage.ts';
@@ -40,7 +40,7 @@ export function UsageChart({ days }: { days: StatsDay[] }) {
         count={bars.length}
         max={max}
         values={bars.map((bar) => bar.tokens)}
-        formatTick={formatTokenCount}
+        formatTick={formatCompactCount}
         labels={labels}
         readout={(index) => {
           const bar = bars[index];
@@ -48,13 +48,13 @@ export function UsageChart({ days }: { days: StatsDay[] }) {
           return (
             <>
               <ChartTooltipTitle>{bar.label}</ChartTooltipTitle>
-              <ChartTooltipRow label='Total' value={formatTokenCount(bar.tokens)} />
+              <ChartTooltipRow label='Total' value={formatCompactCount(bar.tokens)} />
               {[...bar.segments].reverse().map((segment) => (
                 <ChartTooltipRow
                   key={segment.kind}
                   swatch={KIND_FILL[segment.kind]}
                   label={TOKEN_KINDS.find((entry) => entry.kind === segment.kind)?.label}
-                  value={formatTokenCount(segment.tokens)}
+                  value={formatCompactCount(segment.tokens)}
                 />
               ))}
             </>

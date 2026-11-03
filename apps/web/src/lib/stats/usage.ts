@@ -12,7 +12,7 @@ import {
 } from '@shinsa/core';
 import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { formatNumber, formatPercent } from '@/lib/format/count.ts';
-import { formatCompactUsd, formatTokenCount } from '@/lib/format/money.ts';
+import { formatCompactUsd, formatCompactCount } from '@/lib/format/money.ts';
 import { resolveChartMax } from './chart.ts';
 import { formatShortDay } from './days.ts';
 import type { ShippingTile } from './shipping.ts';
@@ -81,8 +81,8 @@ export function listUsageTiles(stats: Stats): ShippingTile[] {
     {
       key: 'tokens',
       label: 'Tokens',
-      value: formatTokenCount(usage.tokens),
-      detail: `${formatTokenCount(usage.inputTokens)} in, ${formatTokenCount(usage.outputTokens)} out`,
+      value: formatCompactCount(usage.tokens),
+      detail: `${formatCompactCount(usage.inputTokens)} in, ${formatCompactCount(usage.outputTokens)} out`,
     },
     {
       key: 'cost',
@@ -94,12 +94,12 @@ export function listUsageTiles(stats: Stats): ShippingTile[] {
       key: 'cache',
       label: 'Cache hit rate',
       value: formatPercent(stats.cacheHitRate),
-      detail: `${formatTokenCount(usage.cacheReadTokens)} read from cache`,
+      detail: `${formatCompactCount(usage.cacheReadTokens)} read from cache`,
     },
     {
       key: 'per-pull-request',
       label: 'Tokens per pull request',
-      value: pullRequests === 0 ? 'None' : formatTokenCount(Math.round(usage.tokens / pullRequests)),
+      value: pullRequests === 0 ? 'None' : formatCompactCount(Math.round(usage.tokens / pullRequests)),
       detail: pullRequests === 0 ? 'No pull requests merged' : `Over ${formatNumber(pullRequests)} merged`,
     },
   ];
@@ -141,7 +141,7 @@ function listRows<Key extends string>(
   return lines.map((line) => ({
     key: line.key,
     label: label(line.key),
-    tokens: formatTokenCount(line.usage.tokens),
+    tokens: formatCompactCount(line.usage.tokens),
     share: total.tokens === 0 ? 0 : line.usage.tokens / total.tokens,
   }));
 }
@@ -173,7 +173,7 @@ export function listTaskRows(tasks: TaskTokens[]): TaskRow[] {
   return tasks.slice(0, TOP_TASKS).map((task) => ({
     taskId: task.taskId,
     title: task.title,
-    tokens: formatTokenCount(task.usage.tokens),
+    tokens: formatCompactCount(task.usage.tokens),
     cacheHit: formatPercent(task.cacheHitRate),
     cost: formatCompactUsd(task.usage.knownUsd),
   }));
