@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type ContextOptimizer,
   type ExtensionScope,
   type ExtensionsSnapshot,
@@ -15,7 +16,6 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
-import { formatCount } from '@/lib/format/count.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { listProjects, resolveProjectMark, selectProject } from '@/lib/projects.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
@@ -137,7 +137,7 @@ export function resolveServerStatus(server: McpServerSummary): ServerStatusView 
   if (!server.enabled) return null;
   if (status.state === 'connected') {
     return {
-      label: `Connected · ${formatCount(status.tools.length, 'tool', 'tools')}`,
+      label: `Connected · ${describeCount(status.tools.length, 'tool', 'tools')}`,
       tone: 'green',
       detail: null,
     };
@@ -304,11 +304,11 @@ function isSkillLoaded(skill: SkillSummary, plugins: PluginSummary[]) {
 
 export function describePluginContents(plugin: PluginSummary) {
   const parts = [
-    plugin.skills > 0 ? formatCount(plugin.skills, 'skill', 'skills') : null,
-    plugin.agents > 0 ? formatCount(plugin.agents, 'agent', 'agents') : null,
-    plugin.commands > 0 ? formatCount(plugin.commands, 'command', 'commands') : null,
+    plugin.skills > 0 ? describeCount(plugin.skills, 'skill', 'skills') : null,
+    plugin.agents > 0 ? describeCount(plugin.agents, 'agent', 'agents') : null,
+    plugin.commands > 0 ? describeCount(plugin.commands, 'command', 'commands') : null,
     plugin.hooks ? 'hooks' : null,
-    plugin.servers > 0 ? formatCount(plugin.servers, 'MCP', 'MCPs') : null,
+    plugin.servers > 0 ? describeCount(plugin.servers, 'MCP', 'MCPs') : null,
   ].filter((part) => part !== null);
   return parts.length > 0 ? parts.join(', ') : 'Nothing for agents to load';
 }
@@ -673,7 +673,7 @@ export function resolveUnusedDays(lastUsedAt: number | null, snapshot: Extension
 export function describeLastUsed(days: number | null) {
   if (days === null) return null;
   if (days === 0) return 'Used today';
-  return `Not used in ${formatCount(days, 'day', 'days')}`;
+  return `Not used in ${describeCount(days, 'day', 'days')}`;
 }
 
 export function listServerNotes(
@@ -765,8 +765,8 @@ export function listRecommendations(snapshot: ExtensionsSnapshot, now: number): 
       : [
           {
             id: 'skills',
-            name: formatCount(skills.length, 'skill', 'skills'),
-            detail: `Not used in ${formatCount(window, 'day', 'days')} · ${formatTokenEstimate(skillTokens)}`,
+            name: describeCount(skills.length, 'skill', 'skills'),
+            detail: `Not used in ${describeCount(window, 'day', 'days')} · ${formatTokenEstimate(skillTokens)}`,
             tokens: skillTokens,
             server: null,
           },
@@ -778,7 +778,7 @@ const OPTIMIZER_DAY_CHOICES = [7, 14, 30, 60, 90];
 
 export function listOptimizerDayItems(current: number) {
   const days = [...new Set([...OPTIMIZER_DAY_CHOICES, current])].sort((a, b) => a - b);
-  return days.map((value) => ({ value: String(value), label: formatCount(value, 'day', 'days') }));
+  return days.map((value) => ({ value: String(value), label: describeCount(value, 'day', 'days') }));
 }
 
 export function describeOptimizerChanged(optimizer: ContextOptimizer, patch: Partial<ContextOptimizer>) {
@@ -789,7 +789,7 @@ export function describeOptimizerChanged(optimizer: ContextOptimizer, patch: Par
   if (patch.skills !== undefined) {
     return patch.skills ? 'Unused skills left out too.' : 'Agents load every skill.';
   }
-  return `Unused means not used for ${formatCount(patch.days ?? optimizer.days, 'day', 'days')}.`;
+  return `Unused means not used for ${describeCount(patch.days ?? optimizer.days, 'day', 'days')}.`;
 }
 
 function isMatch(query: string, texts: (string | null)[]) {

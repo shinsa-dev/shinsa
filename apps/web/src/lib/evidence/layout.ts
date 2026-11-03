@@ -1,4 +1,6 @@
 import {
+  capitalise,
+  describeList,
   type EarlierEvidenceItem,
   type Evidence,
   type EvidenceItem,
@@ -107,10 +109,6 @@ function describeEarlierStatus(item: EarlierEvidenceItem) {
   return item.removed ? `Removed: ${item.removed.reason}` : 'Replaced by a later version';
 }
 
-function upperFirst(text: string) {
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
-}
-
 function resolveKindName(kind: EvidenceItemKind, count: number) {
   const [one, many] = KIND_NAME[kind];
   return count === 1 ? one : many;
@@ -131,12 +129,7 @@ export function describeEvidencePart(evidence: Evidence) {
 }
 
 export function describeEvidenceKind(kind: EvidenceItemKind, count = 1) {
-  return upperFirst(resolveKindName(kind, count));
-}
-
-function joinList(items: readonly string[]) {
-  if (items.length < 2) return items.join('');
-  return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+  return capitalise(resolveKindName(kind, count));
 }
 
 interface CheckPieces {
@@ -179,7 +172,7 @@ export function describeEvidenceSummary(evidence: readonly Evidence[]) {
     const count = counts.get(kind);
     return count ? [`${count} ${resolveKindName(kind, count)}`] : [];
   });
-  return upperFirst(joinList(phrases));
+  return capitalise(describeList(phrases));
 }
 
 export function describeEvidenceCaption(entry: Pick<EvidenceEntry, 'title' | 'facts'>) {

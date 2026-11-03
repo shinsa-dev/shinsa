@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type AgentReply,
   type ChatToolArgs,
   QUESTION_WITHDRAWN,
@@ -9,7 +10,6 @@ import {
 } from '@shinsa/core';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { listPlanEvidenceKinds, type PlanParameters } from '@/lib/overview/plan-parameters.ts';
 
 function isWithdrawn(call: ToolCall) {
@@ -29,7 +29,7 @@ export function resolveAskAnswer(call: ToolCall) {
 
 export function resolveSpotsMeta(args: ChatToolArgs) {
   const spots = readList(args, 'spots').length;
-  return spots > 0 ? `${formatCount(spots, 'spot', 'spots')} to review` : null;
+  return spots > 0 ? `${describeCount(spots, 'spot', 'spots')} to review` : null;
 }
 
 function readLine(args: ChatToolArgs, key: string) {

@@ -3,7 +3,7 @@ import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { INSET } from '@/components/layout/surface/card.ts';
-import { ReviewNote } from '@/components/review/note.tsx';
+import { NOTE_ACTION, RemoveNoteButton, ReviewNote } from '@/components/review/note.tsx';
 import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import type { CodeNote } from '@/lib/code/notes.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
@@ -14,8 +14,6 @@ import { toCommentItem } from '@/lib/review/report.ts';
 const NOTE_WIDTH = 'max-w-[min(36rem,calc(100cqw-6rem))]';
 
 const NOTE = `${INSET} flex ${NOTE_WIDTH} flex-col gap-1.5 px-3 py-2 font-sans text-xs`;
-
-const NOTE_ACTION = 'cursor-pointer text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4';
 
 function CommentNote({
   task,
@@ -46,11 +44,7 @@ function CommentNote({
                 Edit
               </button>
             )}
-            {onRemove && (
-              <button type='button' className={NOTE_ACTION} onClick={onRemove}>
-                Remove
-              </button>
-            )}
+            {onRemove && <RemoveNoteButton onRemove={onRemove} />}
           </span>
         )
       }

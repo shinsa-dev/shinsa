@@ -1,8 +1,15 @@
-import type { ChatEntry, FixFocus, Run, RunPurpose, Task, WireRun } from '@shinsa/core';
+import {
+  describeCount,
+  type ChatEntry,
+  type FixFocus,
+  type Run,
+  type RunPurpose,
+  type Task,
+  type WireRun,
+} from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { resolveLastHandover } from '@/lib/chat/timeline.ts';
 import { readList } from '@/lib/chat/tool-describe.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { listSeverityCounts, readReportedFindings } from '@/lib/review/findings.ts';
 
 export interface RoleMark {
@@ -33,7 +40,7 @@ function resolvePlanHeadline(done: boolean, task: Task, entries: ChatEntry[]) {
   if (!done) return 'Planning the work';
   const proposed = readList(resolveLastHandover(entries, 'propose_plan'), 'phases').length;
   const phases = proposed || (task.plan?.document?.phases.length ?? 0);
-  return phases > 0 ? `Planned ${formatCount(phases, 'phase', 'phases')}` : 'Planned the work';
+  return phases > 0 ? `Planned ${describeCount(phases, 'phase', 'phases')}` : 'Planned the work';
 }
 
 function resolveBuildHeadline(done: boolean, run: WireRun, task: Task) {
@@ -50,7 +57,7 @@ function resolveReviewerHeadline(done: boolean, entries: ChatEntry[]) {
   if (!report) return 'Reviewed the change';
   const findings = readReportedFindings(report);
   if (findings.length === 0) return 'Reviewed the change, no findings';
-  const count = formatCount(findings.length, 'finding', 'findings');
+  const count = describeCount(findings.length, 'finding', 'findings');
   return `Reviewed the change, ${count} (${listSeverityCounts(findings).join(', ')})`;
 }
 

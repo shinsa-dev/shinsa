@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type Coverage,
   type CoverageFile,
   type CoverageFormat,
@@ -16,7 +17,6 @@ import {
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import type { CoverageDetectionMap } from '@/lib/connection/coverage.ts';
-import { formatCount } from '@/lib/format/count.ts';
 
 export const COVERAGE_TITLE = 'Test coverage';
 
@@ -162,7 +162,9 @@ export function describeCoverageSummary(coverage: Coverage | null | undefined) {
   const summary = describeCoverage(coverage);
   if (!summary) return null;
   const files = countUncoveredFiles(coverage);
-  return files > 0 ? `${summary} · ${formatCount(files, 'file has', 'files have')} uncovered lines` : summary;
+  return files > 0
+    ? `${summary} · ${describeCount(files, 'file has', 'files have')} uncovered lines`
+    : summary;
 }
 
 export function describeCoverageFact(coverage: Coverage | null | undefined) {
@@ -173,7 +175,7 @@ export function describeCoverageFact(coverage: Coverage | null | undefined) {
 }
 
 export function describeFileCoverage(file: Pick<CoverageFile, 'covered' | 'executable'>) {
-  return `${file.covered} of ${formatCount(file.executable, 'line', 'lines')}`;
+  return `${file.covered} of ${describeCount(file.executable, 'line', 'lines')}`;
 }
 
 export function isFileCovered(file: Pick<CoverageFile, 'covered' | 'executable'>) {
@@ -181,7 +183,7 @@ export function isFileCovered(file: Pick<CoverageFile, 'covered' | 'executable'>
 }
 
 export function describeFilesToggle(coverage: Pick<MeasuredCoverage, 'files'>, open: boolean) {
-  const files = formatCount(coverage.files.length, 'file', 'files');
+  const files = describeCount(coverage.files.length, 'file', 'files');
   return open ? `Hide ${files}` : `Show ${files}`;
 }
 

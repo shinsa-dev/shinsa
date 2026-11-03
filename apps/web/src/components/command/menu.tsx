@@ -61,7 +61,8 @@ import { listVersionSections } from '@/lib/command/versions.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useExtensions } from '@/lib/connection/extensions.ts';
-import { useConnection, useEngineCommands, useRemoteSnapshot } from '@/lib/connection/socket.ts';
+import { useShinsaState } from '@/lib/connection/selectors.ts';
+import { useEngineCommands, useRemoteSnapshot } from '@/lib/connection/socket.ts';
 import { useTerminals } from '@/lib/connection/terminals.ts';
 import { useVersions } from '@/lib/connection/versions.ts';
 import { listFocusTeams } from '@/lib/focus.ts';
@@ -403,7 +404,7 @@ function usePrefetchSelected(state: ShinsaState | null, selected: string) {
 }
 
 export function CommandMenu() {
-  const { state } = useConnection();
+  const state = useShinsaState();
   const open = useCommandMenuOpen();
   const route = useRoute();
   const focusTeams = listFocusTeams(useRemoteSnapshot());

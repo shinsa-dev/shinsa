@@ -3,6 +3,7 @@ import { EmptyState } from '@shinsa/ui/components/empty-state';
 import * as React from 'react';
 import { CodeLoading } from '@/components/code/code-loading.tsx';
 import { claimPrefetch, prefetchTaskCode } from '@/lib/code/prefetch.ts';
+import { scheduleIdle } from '@/lib/idle.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
 
 const IDLE_TIMEOUT_MS = 2000;
@@ -63,11 +64,6 @@ export function usePrefetchCode(task: Task | null, tabs: readonly TaskTab[], tab
       run();
       return;
     }
-    if (typeof requestIdleCallback === 'function') {
-      const handle = requestIdleCallback(run, { timeout: IDLE_TIMEOUT_MS });
-      return () => cancelIdleCallback(handle);
-    }
-    const timer = setTimeout(run, IDLE_TIMEOUT_MS);
-    return () => clearTimeout(timer);
+    return scheduleIdle(run, IDLE_TIMEOUT_MS);
   }, [hasCode, taskId, tab]);
 }

@@ -1,9 +1,8 @@
-import { Button } from '@shinsa/ui/components/button';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
-import { Hint } from '@/components/overlays/hint.tsx';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 import { SEARCH_OPTIONS, type SearchOption, type SearchOptions } from '@/lib/code/search.ts';
 
 const PRESSED =
@@ -21,17 +20,14 @@ function SearchToggle({
   onToggle: () => void;
 }) {
   return (
-    <Hint label={label}>
-      <Button
-        variant='secondary'
-        size='icon-xs'
-        icon={icon}
-        aria-label={label}
-        aria-pressed={pressed}
-        onClick={onToggle}
-        className={cn(pressed && PRESSED)}
-      />
-    </Hint>
+    <HintButton
+      label={label}
+      size='icon-xs'
+      icon={icon}
+      aria-pressed={pressed}
+      onClick={onToggle}
+      className={cn(pressed && PRESSED)}
+    />
   );
 }
 

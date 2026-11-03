@@ -1,4 +1,4 @@
-import type { Run } from '@shinsa/core';
+import { describeCount, type Run } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { ExpandRow } from '@/components/chat/chat-line.tsx';
 import { ToolGroup } from '@/components/chat/tool-group.tsx';
@@ -7,7 +7,6 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import type { WorkItem } from '@/lib/chat/timeline.ts';
 import { formatBrief } from '@/lib/chat/turns.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 
 export function ErrorLine({ text, count = 1 }: { text: string; count?: number }) {
@@ -18,7 +17,7 @@ export function ErrorLine({ text, count = 1 }: { text: string; count?: number })
       </IconSlot>
       <span className='min-w-0 selectable break-words whitespace-pre-wrap'>{text}</span>
       {count > 1 && (
-        <span className='shrink-0 text-fg-2 tabular-nums'>{formatCount(count, 'time', 'times')}</span>
+        <span className='shrink-0 text-fg-2 tabular-nums'>{describeCount(count, 'time', 'times')}</span>
       )}
     </div>
   );

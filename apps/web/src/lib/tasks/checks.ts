@@ -1,6 +1,8 @@
 import {
+  describeCount,
   type CheckSource,
   type CiRun,
+  describeList,
   type Evidence,
   listTaskChecks,
   type PullRequestCheckStatus,
@@ -10,7 +12,6 @@ import {
   type TaskCheck,
 } from '@shinsa/core';
 import type { EvidenceCheck } from '@/lib/evidence/layout.ts';
-import { formatCount } from '@/lib/format/count.ts';
 
 export type CheckState =
   | 'passed'
@@ -107,11 +108,6 @@ function countPlanPhases(task: Task) {
   return task.plan?.document?.phases.length ?? 0;
 }
 
-function joinNumbers(numbers: readonly number[]) {
-  if (numbers.length < 2) return numbers.join('');
-  return `${numbers.slice(0, -1).join(', ')} and ${numbers.at(-1)}`;
-}
-
 export function describeCheckPhases(phases: readonly number[]) {
   const sorted = [...new Set(phases)].sort((a, b) => a - b);
   const first = sorted[0];
@@ -119,7 +115,7 @@ export function describeCheckPhases(phases: readonly number[]) {
   if (first === undefined || last === undefined) return null;
   if (sorted.length === 1) return `phase ${first}`;
   const contiguous = last - first === sorted.length - 1;
-  return contiguous ? `phases ${first} to ${last}` : `phases ${joinNumbers(sorted)}`;
+  return contiguous ? `phases ${first} to ${last}` : `phases ${describeList(sorted.map(String))}`;
 }
 
 function describeCheckMeta(check: TaskCheck, planPhases: number) {
@@ -218,7 +214,7 @@ function describeStageSummary(rows: readonly CheckRow[], status: CheckStageStatu
   const count = (states: ReadonlySet<CheckState>) => rows.filter((row) => states.has(row.state)).length;
   switch (status) {
     case 'running':
-      return `Running ${formatCount(rows.filter((row) => row.state === 'running').length, 'check', 'checks')}`;
+      return `Running ${describeCount(rows.filter((row) => row.state === 'running').length, 'check', 'checks')}`;
     case 'failed':
       return total === 1 ? 'Failed' : `${count(FAILED_STATES)} of ${total} failed`;
     case 'passed':
@@ -299,20 +295,20 @@ function describeBuildingSummary(stage: CheckStage) {
       return stage.summary;
     case 'partial': {
       const done = stage.rows.filter((row) => DONE_STATES.has(row.state)).length;
-      return `${formatCount(done, 'check', 'checks')} passed, ${total - done} not run yet`;
+      return `${describeCount(done, 'check', 'checks')} passed, ${total - done} not run yet`;
     }
     case 'failed':
     case 'passed':
       return describeRowResults(stage.rows.filter((row) => row.state !== 'not_run'));
     case 'idle':
-      return `${formatCount(total, 'check', 'checks')}, not run yet`;
+      return `${describeCount(total, 'check', 'checks')}, not run yet`;
   }
 }
 
 function describePassCount(passed: number, total: number) {
   if (total === 1) return passed === 1 ? 'The check passed' : 'The check failed';
   if (passed === total) return `All ${total} checks passed`;
-  return `${passed} of ${formatCount(total, 'check', 'checks')} passed`;
+  return `${passed} of ${describeCount(total, 'check', 'checks')} passed`;
 }
 
 export function isChecksOpenByDefault(view: ChecksView) {

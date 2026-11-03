@@ -2,7 +2,7 @@ import type { Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
-import { useCopyText } from '@/components/controls/copy-button.tsx';
+import { CopyLinkButton } from '@/components/controls/copy-button.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { MentionText } from '@/components/people/user-tag.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
@@ -30,15 +30,6 @@ import {
 
 const BANNER = cn(CARD, 'flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 py-1.5 ps-3 pe-1.5 text-xs');
 
-function CopyLinkButton({ url, label = 'Copy link' }: { url: string; label?: string }) {
-  const { copied, copy } = useCopyText(url);
-  return (
-    <Button variant='secondary' size='sm' onClick={copy}>
-      {copied ? 'Copied' : label}
-    </Button>
-  );
-}
-
 export function SharingBanner({ task }: { task: Task }) {
   const share = selectLiveShare(task, useNow());
   if (!share) return null;
@@ -58,7 +49,7 @@ export function SharingBanner({ task }: { task: Task }) {
         <Button variant='bare' size='sm' onClick={() => openShareDialog(task.id, 'share')}>
           {SHARE_MANAGE_TITLE}
         </Button>
-        {share.url && <CopyLinkButton url={share.url} />}
+        {share.url && <CopyLinkButton size='sm' url={share.url} />}
         <Button variant='secondary' size='sm' onClick={() => openUnshareConfirm(task.id)}>
           {UNSHARE_TITLE}
         </Button>
@@ -79,7 +70,7 @@ export function HandoffBanner({ task }: { task: Task }) {
         <MentionText mention={note} />
       </span>
       <div className='ms-auto flex shrink-0 items-center gap-2'>
-        {view.kind === 'ready' && <CopyLinkButton url={view.url} label={HANDOFF_COPY} />}
+        {view.kind === 'ready' && <CopyLinkButton size='sm' url={view.url} label={HANDOFF_COPY} />}
         {view.kind === 'claimed' ? (
           <Button variant='secondary' size='sm' onClick={() => openHandoffRemoveConfirm(task.id)}>
             {HANDOFF_REMOVE}

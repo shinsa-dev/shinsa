@@ -8,6 +8,7 @@ import {
   type Task,
   type TaskStage,
 } from '@shinsa/core';
+import { isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import type { QueueSection } from '@/lib/queue.ts';
 import { isResolvingConflicts } from '@/lib/tasks/status.ts';
@@ -83,7 +84,7 @@ export function resolveGreeting(now: number) {
 }
 
 export function resolveRunningVerb(task: Task) {
-  if (task.usageWait?.status === 'armed') return 'waiting for the usage limit on';
+  if (isUsageWaitArmed(task)) return 'waiting for the usage limit on';
   if (task.monitor?.status === 'armed') return 'waiting to check in again on';
   if (isResolvingConflicts(task)) return 'resolving conflicts on';
   return RUNNING_VERB[task.stage] ?? 'working on';

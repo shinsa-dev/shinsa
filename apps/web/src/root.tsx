@@ -19,7 +19,8 @@ import { useAttention } from '@/hooks/use-attention.ts';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { useCommandMenuOpen, writeCommandMenuOpen } from '@/lib/command/registry.ts';
 import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
-import { connection, useConnection } from '@/lib/connection/socket.ts';
+import { useShinsaState } from '@/lib/connection/selectors.ts';
+import { connection } from '@/lib/connection/socket.ts';
 import { ERROR_COPY, recordCommandMenuError, resolveResetKey } from '@/lib/errors.ts';
 import {
   isHubRoute,
@@ -132,7 +133,7 @@ function Loading() {
 }
 
 function Workspace({ route }: { route: PageRoute }) {
-  const { state } = useConnection();
+  const state = useShinsaState();
   const layout = useLayoutPreference();
   const search = useSearchString();
   React.useEffect(() => connection.start(), []);
