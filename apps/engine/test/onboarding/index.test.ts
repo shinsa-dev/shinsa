@@ -57,6 +57,7 @@ describe('Onboarding', () => {
     expect(await onboarding.listSuggestions(false)).toEqual({
       suggestions: [{ path: developer, repoCount: 1, repos: ['app'], chosen: false }],
       truncated: false,
+      refused: [],
     });
   });
 

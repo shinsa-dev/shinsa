@@ -457,8 +457,9 @@ src/
 │                        and service processes), schema.ts (the shapes and each interval as a Duration)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
-│                        (syncRepoRemote, upsertRepo) (index.ts); folders/ (RepoFolders: scanning the home folder
-│                        for the folders that hold repositories, the repositories in the chosen folders, a
+│                        (syncRepoRemote, upsertRepo) (index.ts); folders/ (RepoFolders: scanning the whole home
+│                        folder, Documents included, for the folders that hold repositories and the ones macOS
+│                        refuses, the repositories in the chosen folders, a
 │                        repository's origin from .git/config without running git), setup/ (RepoSetup: setup
 │                        verification before a task's first agent), login/ (GitHubLogins: the GitHub login through
 │                        GitHubCli, kept once gh answers it), roots.ts (chosen folders, SHINSA_ROOTS, or discovery

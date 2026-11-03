@@ -6219,9 +6219,12 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   restarts your engine; the wake before a command that needs the engine checks the same before `kickstart`.
   `shinsa logs` prints the end of `data/engine.log`, each JSON line as its UTC time, level, message and fields
   (`--json` as written). `shinsa status` and `shinsa version` read `/api/health` without starting anything.
-- **Folders macOS keeps private.** Shinsa asks for no permission unless a folder you choose needs one. The engine is a
-  background process, so it cannot answer macOS's consent prompts well: discovery in the bundle skips `~/Desktop`,
-  `~/Documents` and `~/Downloads` (`createDiscoverer`), so no prompt fires unasked, and a folder chosen at setup that
+- **Folders macOS keeps private.** Discovery scans the whole home folder, `~/Desktop`, `~/Documents` and
+  `~/Downloads` included, the same in the app and in a checkout, and only before you have chosen folders (setup
+  and Settings asking for suggestions, or triage with no folder chosen), so a consent prompt macOS shows comes
+  from setup you opened. A folder macOS refuses to list (`EPERM` or `EACCES`) is
+  not read as empty: discovery returns it in `refused`, and the Folders step offers it unpicked as "macOS keeps this
+  folder private". A folder chosen at setup that
   the engine may not read is not an error but access to ask for: `resolveChosenRoots` throws `PrivateFoldersError`
   (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
   offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
@@ -6313,13 +6316,16 @@ same-site Origin, `application/json` bodies; a refusal there is 403 or 415). Err
 ```
 
 **`GET /api/onboarding/roots`** (`?refresh=1` to scan again; results are kept for ten minutes): the folders that hold
-git repositories, most first. Discovery walks the home folder four levels deep and at most 20,000 folders, never
-into hidden folders, `node_modules`, `Library`, caches, build output or media folders, and never into a repository.
+git repositories, most first. Discovery walks the whole home folder eight levels deep, stopping at 150,000 folders
+or after 20 seconds (`MAX_DEPTH`, `MAX_DIRS`, `DISCOVERY_BUDGET`), never into hidden folders, `node_modules`,
+`Library`, `Applications`, caches, package bundles (`.app`, `.photoslibrary`, `.xcodeproj` and the rest of
+`BUNDLE_SUFFIXES`) or a repository it found.
 
 ```ts
 {
   suggestions: { path: string; repoCount: number; repos: string[] /* up to 8 names */; chosen: boolean }[];
-  truncated: boolean; // the folder limit was reached
+  truncated: boolean; // the folder or time limit was reached
+  refused: string[];  // folders macOS would not let the engine list, to ask access for
 }
 ```
 

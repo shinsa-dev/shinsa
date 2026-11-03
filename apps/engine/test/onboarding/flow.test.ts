@@ -42,6 +42,7 @@ interface Setup {
   accounts?: ClaudeAccount[];
   run?: CommandRunner;
   suggestions?: boolean;
+  refused?: boolean;
   inspect?: boolean;
   models?: AgentModel[];
 }
@@ -52,9 +53,11 @@ function setup(options: Setup = {}) {
   const engine = new Engine(new EventLog(config.databasePath));
   const developer = join(root, 'Developer');
   const work = join(root, 'work');
+  const documents = join(root, 'Documents');
   mkdirSync(join(developer, 'app', '.git'), { recursive: true });
   writeFileSync(join(developer, 'app', 'bun.lock'), '');
   mkdirSync(work, { recursive: true });
+  mkdirSync(documents, { recursive: true });
   const accounts = [...(options.accounts ?? [ME])];
   function open() {
     const store = new ConfigStore(config.configPath);
@@ -68,7 +71,7 @@ function setup(options: Setup = {}) {
                 { path: work, repoCount: 1, repos: ['site'] },
               ],
         truncated: false,
-        refused: [],
+        refused: options.refused ? [documents] : [],
       })
     );
     const onboarding = new Onboarding({
@@ -85,7 +88,7 @@ function setup(options: Setup = {}) {
     return { onboarding, store };
   }
   const first = open();
-  return { root, config, engine, developer, work, accounts, open, ...first };
+  return { root, config, engine, developer, work, documents, accounts, open, ...first };
 }
 
 function answer(onboarding: Onboarding, stepId: OnboardingStepId, ...values: string[]) {
@@ -256,6 +259,25 @@ describe('the setup steps', () => {
       expect(store.config.roots).toEqual([developer, work]);
     } finally {
       chmodSync(work, 0o755);
+    }
+  });
+
+  test('a folder the scan could not read is offered unpicked, and picking it asks for access', async () => {
+    const { onboarding, store, developer, work, documents } = setup({ refused: true });
+    const flow = await onboarding.setup.resolve();
+    expect(flow.step?.options.map((option) => [option.value, option.detail, option.chosen])).toEqual([
+      [developer, '3 repositories', true],
+      [work, '1 repository', false],
+      [documents, 'macOS keeps this folder private', false],
+    ]);
+    chmodSync(documents, 0o000);
+    try {
+      const blocked = await answer(onboarding, 'roots', developer, documents);
+      expect(blocked.step).toMatchObject({ id: 'roots', problem: null, access: [documents] });
+      expect(listChosen(blocked)).toEqual([developer, documents]);
+      expect(store.config.roots).toEqual([]);
+    } finally {
+      chmodSync(documents, 0o755);
     }
   });
 

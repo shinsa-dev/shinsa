@@ -114,7 +114,7 @@ function startEngine(dataDir: string) {
   const bootMs = performance.now() - started;
   const store = new ConfigStore(config.configPath);
   const roots = new Roots(config.roots, store, config.userHome, () =>
-    Promise.resolve({ candidates: [], truncated: false })
+    Promise.resolve({ candidates: [], truncated: false, refused: [] })
   );
   const remote = new Remote({
     path: join(dataDir, REMOTE_FILE),
