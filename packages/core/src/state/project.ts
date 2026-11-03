@@ -29,6 +29,7 @@ import {
   type TaskDuplicate,
   type TaskShape,
   type TaskStage,
+  type UntoldMessage,
   type WatchSuggestion,
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
@@ -569,6 +570,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       text: NEW_WORK_TEXT[event.kind],
       detail: event.text,
       ...(event.suggestionId ? { suggestionId: event.suggestionId } : {}),
+      ...(event.comments ? { comments: event.comments } : {}),
     });
     return;
   }
@@ -580,6 +582,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       : describeMessage(event),
     detail: event.text,
     ...(event.kind === 'acknowledge' ? { noted: true } : {}),
+    ...(event.comments ? { comments: event.comments } : {}),
   });
   if (event.kept) keepMessage(state, event);
 }
@@ -588,9 +591,13 @@ function keepMessage(state: ShinsaState, event: EventOf<'task.messaged'>) {
   const task = state.tasks[event.taskId];
   if (!task) return;
   const sender = event.scheduleId ? 'schedule' : 'agent';
-  updateTask(state, event.taskId, event.at, {
-    untoldMessages: [...(task.untoldMessages ?? []), { at: event.at, text: event.text, sender }],
-  });
+  const kept: UntoldMessage = {
+    at: event.at,
+    text: event.text,
+    sender,
+    ...(event.comments ? { comments: event.comments } : {}),
+  };
+  updateTask(state, event.taskId, event.at, { untoldMessages: [...(task.untoldMessages ?? []), kept] });
 }
 
 function applyEdited(state: ShinsaState, event: EventOf<'task.edited'>) {

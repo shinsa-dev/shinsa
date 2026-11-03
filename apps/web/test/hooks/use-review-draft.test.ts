@@ -18,6 +18,8 @@ describe('useReviewDraft', () => {
   it('hands out the draft of the review around it', () => {
     const draft: ReviewDraft = {
       enabled: true,
+      reviewing: true,
+      withMessages: true,
       comments: [
         {
           id: '1',
@@ -30,6 +32,7 @@ describe('useReviewDraft', () => {
         },
       ],
       addComment: () => undefined,
+      updateComment: () => undefined,
       removeComment: () => undefined,
       clearComments: () => undefined,
       verdicts: {},

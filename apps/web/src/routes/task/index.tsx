@@ -13,8 +13,9 @@ import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { applyNowTarget, type TaskView, useTaskView } from '@/hooks/use-task-view.ts';
 import { selectWatchOfHome } from '@/lib/automations.ts';
 import { removeCarriedCaret } from '@/lib/chat/task-drafts.ts';
-import { useTaskDetail } from '@/lib/connection/socket.ts';
+import { useEngineFeature, useTaskDetail } from '@/lib/connection/socket.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
+import { resolveLineComments } from '@/lib/tasks/messages.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
 import { replaceRoute, resolveAutomationPath, resolveCanonicalTaskPath } from '@/router.ts';
 import { ChatTab } from './chat.tsx';
@@ -178,6 +179,7 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
   usePrefetchTaskPage(state, task?.id ?? null);
   useCarryEndsWithPage(task?.id ?? null);
   useTaskDetail(task?.id ?? null);
+  const supported = useEngineFeature('message.line_comments', task?.id ?? null);
   if (!task) {
     return <EmptyState icon='IconInboxEmpty' title='No such task' description='It may have been removed.' />;
   }
@@ -190,7 +192,12 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
     );
   }
   return (
-    <ReviewDraftProvider enabled={view.reviewing} draftKey={view.draftKey}>
+    <ReviewDraftProvider
+      {...resolveLineComments(state, task, { reviewing: view.reviewing, supported })}
+      reviewing={view.reviewing}
+      draftKey={view.draftKey}
+      choiceKey={view.choiceKey}
+    >
       <TaskCommandRunner state={state} task={task}>
         <TaskFrame state={state} task={task} view={view} />
       </TaskCommandRunner>

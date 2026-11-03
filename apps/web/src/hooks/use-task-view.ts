@@ -38,7 +38,8 @@ export function useTaskView(state: ShinsaState, taskId: string) {
     codeModes,
     chatRunId,
     reviewing: decision?.type === 'review' || decision?.type === 'merge',
-    draftKey: decision?.id ?? 'none',
+    draftKey: `task:${taskId}`,
+    choiceKey: decision?.id ?? 'none',
     applyTab,
     applyCodeMode: (mode: CodeMode) =>
       updateSearchParams({ tab: 'code', run: null, ...resolveModePatch(mode, codeModes) }),

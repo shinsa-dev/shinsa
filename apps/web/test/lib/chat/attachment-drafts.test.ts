@@ -79,5 +79,7 @@ describe('drafts', () => {
     expect(canSendDraft('  ', [], false)).toBe(false);
     expect(canSendDraft('Fix it', [READY, UPLOADING], false)).toBe(false);
     expect(canSendDraft('Fix it', [], true)).toBe(false);
+    expect(canSendDraft('  ', [], false, 2)).toBe(true);
+    expect(canSendDraft('  ', [UPLOADING], false, 2)).toBe(false);
   });
 });
