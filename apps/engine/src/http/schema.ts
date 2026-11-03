@@ -1,4 +1,4 @@
-import type { AgentProviderInfo, GuestActor } from '@shinsa/core';
+import type { AgentProviderInfo, Changelog, GuestActor } from '@shinsa/core';
 import {
   BodyTooLarge,
   ConnectRefused,
@@ -86,6 +86,7 @@ export interface HttpContext {
   transcripts: Transcripts;
   extensions?: Extensions;
   versions?: Versions;
+  changelog?: Changelog;
   roots?: RootSource;
   resolveLogin?: LoginResolver;
   classify?: Classifier;

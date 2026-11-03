@@ -4,7 +4,13 @@ import { DEVELOPMENT_VERSION, EngineInfo } from './schema.ts';
 
 export const ENGINE_PROTOCOL = 1;
 
-export const ENGINE_FEATURES = ['task.share', 'feedback', 'teams', 'review.approve_after_fix'] as const;
+export const ENGINE_FEATURES = [
+  'task.share',
+  'feedback',
+  'teams',
+  'review.approve_after_fix',
+  'changelog',
+] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];
 

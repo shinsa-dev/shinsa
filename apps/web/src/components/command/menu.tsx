@@ -17,6 +17,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { SelectedMark } from '@/components/status/check-mark.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import { useCommandHotkey, useCommandKey } from '@/hooks/use-command-key.ts';
+import { useChangelogAvailable } from '@/lib/changelog.ts';
 import { listAccountSections } from '@/lib/command/accounts.ts';
 import { listExtensionSections } from '@/lib/command/extensions.ts';
 import { listGlobalSections } from '@/lib/command/global.ts';
@@ -413,6 +414,7 @@ export function CommandMenu() {
   const accounts = useAccounts();
   const extensions = useExtensions(open);
   const versions = useVersions(open);
+  const changelogAvailable = useChangelogAvailable();
   const terminals = useTerminals();
   const [query, setQuery] = React.useState('');
   const [stack, setStack] = React.useState<Visit[]>([]);
@@ -535,7 +537,7 @@ export function CommandMenu() {
     ...listScheduleSections(state),
     ...(open ? listServiceSections(state, terminals, Date.now()) : []),
     ...listExtensionSections(extensions.snapshot),
-    ...listVersionSections(versions.snapshot, versions.updating),
+    ...listVersionSections(versions.snapshot, versions.updating, changelogAvailable),
   ].sort((a, b) => a.rank - b.rank);
   const allTasks = listMenuTasks(state);
 

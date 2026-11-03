@@ -27,6 +27,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | focus | The one project or team whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
 | team | People who watch each other's work: a project in a team shows every task in it to every member, live and read-only, without its chat | `RemoteTeam`, `Project.teamIds` | team |
 | teammate | Another member of a team you are in, whose team tasks you see read-only | `TeamTask.owner` | teammate |
+| changelog entry | One change's line in the changelog: a `.changes/<slug>.md` file with its `kind` (`added`, `improved`, `fixed`, `internal`) and one or two sentences; the release it belongs to comes from the tags (`docs/release.md` → The changelog) | `ChangeEntry`, `ChangeKind` | New, Improved, Fixed, Behind the scenes |
+| changelog | Every release's entries, newest first, unreleased on top, as the engine serves it at `GET /api/changelog` | `Changelog`, `ChangelogRelease` | What's new, Changelog |
 | run | One agent working one step of a task (or a delegation of it), from start to end | `Run` | a run, "the agent" |
 | attempt | One execution of a run; a resume, a retry on another account or a restart is a new attempt | `RunAttempt`, `attemptId` (`<run>:<n>`) | not shown |
 | session | The provider's own conversation a run executes in; several runs and attempts can share one | `Run.sessionId` | not shown |
@@ -1307,7 +1309,7 @@ offers nothing an engine cannot do (`docs/engine.md` → Remote access, What eac
 | `version` | The engine's build, `0.0.0` in development (`DEVELOPMENT_VERSION`) |
 | `protocol` | `ENGINE_PROTOCOL`, raised only when an older page and this engine cannot talk at all (a changed state shape) |
 | `commands` | Every user command type it parses, `USER_COMMAND_TYPES` itself, so a new command is announced the moment it exists |
-| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share` and `feedback` today) that are not a command, such as a route or a setting an older engine ignores |
+| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix` and `changelog` today) that are not a command, such as a route or a setting an older engine ignores |
 
 `ENGINE_BASELINE_COMMANDS` is frozen: the commands every engine has had since before the `engine` message, which a page
 sends to any engine, one that never announced included (`resolveEngineCommands(null)`). A command added since is
@@ -1564,6 +1566,25 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` (`header`, `section` with text or fields, `context`, `actions` of buttons) within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section, 150 a header, 75 a button, 10 fields) |
 | `SlackAnswer` (`answers.ts`, `parseSlackAnswer`) | `interactionId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `gateId`, `choice` (the index into the gate's choices; a button's value is `{ gateId, choice }`, `serializeSlackAnswerValue`) |
 | `SlackSnapshot` (the engine's `GET /api/slack`) | `remote`, `connectUrl`, `links`, `problem` |
+
+## The changelog
+
+Core's `changelog` folder (`schema.ts`, `changelog.ts`) holds the shapes the release scripts, the engine and the web app
+share; the rules for writing an entry and the release it belongs to are `docs/release.md` → The changelog, and how the
+app shows it `docs/engine.md` → What's new.
+
+| Shape | Holds |
+| --- | --- |
+| `ChangeEntry` | `slug` (the file name without `.md`, at most `CHANGE_SLUG_LIMIT`, 80), `kind` (`ChangeKind`) and `text` (at most `CHANGE_TEXT_LIMIT`, 280) |
+| `ReleasedChange` | An entry with the `version` and `date` (`YYYY-MM-DD`) of the release it belongs to, both `null` while unreleased |
+| `ChangelogRelease` | A `version` (`null` for unreleased), its `date` and its `changes`, in `CHANGE_KINDS` order |
+| `Changelog` | `releases`, newest first: what `GET /api/changelog` answers, behind the `changelog` engine feature |
+
+`parseChangeEntry(slug, source)` reads one file and returns `{ ok, entry }` or every problem as a sentence
+(`CHANGE_MESSAGES`); `resolveChangelog` groups `ReleasedChange`s into a `Changelog`; `resolvePublicChangelog` drops
+`internal` entries and the releases left empty; `listUnseenReleases(changelog, seen)` gives the releases newer than
+a version; `serializeReleaseNotes` writes a release's sections under `CHANGE_KIND_TITLE` (New, Improved, Fixed,
+Behind the scenes).
 
 ## Where it lives
 

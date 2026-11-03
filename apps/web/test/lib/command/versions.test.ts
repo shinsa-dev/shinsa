@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
+import { waitFor } from '@testing-library/react';
+import { selectChangelogView } from '@/lib/changelog.ts';
 import type { Command } from '@/lib/command/registry.ts';
 import { listVersionSections } from '@/lib/command/versions.ts';
 import * as versions from '@/lib/connection/versions.ts';
+import { answerFetch } from '../../support/fetch-fake.ts';
 import { createProgram, createVersions } from '../../support/versions.ts';
 
 let update: Mock<typeof versions.requestUpdate>;
@@ -26,7 +29,7 @@ function run(command: Command | undefined) {
 
 describe('the Versions commands', () => {
   it('offers Update Claude Code before the versions are read', () => {
-    const commands = listCommands(null, []);
+    const commands = listCommands(null, [], false);
     expect(commands.map((command) => [command.label, command.hint, command.disabled])).toEqual([
       ['Update Claude Code', undefined, undefined],
     ]);
@@ -37,16 +40,20 @@ describe('the Versions commands', () => {
   it('names what each update would do, and holds one that is running', () => {
     const snapshot = createVersions();
     expect(
-      listCommands(snapshot, ['codex']).map((command) => [command.label, command.hint, command.disabled])
+      listCommands(snapshot, ['codex'], false).map((command) => [
+        command.label,
+        command.hint,
+        command.disabled,
+      ])
     ).toEqual([
       ['Update Claude Code', '2.1.287 → 2.1.310', undefined],
       ['Update Codex', 'Updating…', 'Updating…'],
     ]);
-    expect(listCommands(snapshot, []).map((command) => command.hint)).toEqual([
+    expect(listCommands(snapshot, [], false).map((command) => command.hint)).toEqual([
       '2.1.287 → 2.1.310',
       'Up to date',
     ]);
-    run(listCommands(snapshot, [])[1]);
+    run(listCommands(snapshot, [], false)[1]);
     expect(update).toHaveBeenCalledWith('codex');
   });
 
@@ -57,6 +64,15 @@ describe('the Versions commands', () => {
         createProgram({ id: 'codex', label: 'Codex', status: 'unknown', override: '/wrap' }),
       ],
     });
-    expect(listCommands(snapshot, [])).toEqual([]);
+    expect(listCommands(snapshot, [], false)).toEqual([]);
+  });
+
+  it('opens the whole changelog first, when the engine serves one', async () => {
+    const requests = answerFetch(() => Response.json({ releases: [] }));
+    const commands = listCommands(null, [], true);
+    expect(commands.map((command) => command.label)).toEqual(['What’s new in Shinsa', 'Update Claude Code']);
+    run(commands[0]);
+    expect(selectChangelogView()).toMatchObject({ open: true, since: null });
+    await waitFor(() => expect(requests.map((request) => request.path)).toEqual(['/api/changelog']));
   });
 });

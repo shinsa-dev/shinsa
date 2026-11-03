@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveBuildChangelog } from '../../../scripts/changelog-history.ts';
 import { resolveBuildFolder, resolveBuildTarget } from '../src/instance/targets.ts';
 import { resolveStateVersion } from '../src/store/snapshot/version.ts';
 
@@ -43,6 +44,8 @@ const sdkPackage = JSON.parse(
 const stateVersion = resolveStateVersion();
 if (!stateVersion) throw new Error('Could not read the state version from @shinsa/core');
 
+const changelog = await resolveBuildChangelog(resolve(engineDir, '../..'), version);
+
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(join(outDir, 'bin'), { recursive: true });
 
@@ -52,6 +55,7 @@ await compile(join(engineDir, 'scripts/engine-main.ts'), 'shinsa', {
   'process.env.SHINSA_BUILD_STATE_VERSION': JSON.stringify(stateVersion),
   'process.env.SHINSA_BUILD_SDK_VERSION': JSON.stringify(sdkPackage.version),
   'process.env.SHINSA_BUILD_SDK_CLAUDE_VERSION': JSON.stringify(sdkPackage.claudeCodeVersion),
+  'process.env.SHINSA_BUILD_CHANGELOG': JSON.stringify(JSON.stringify(changelog)),
 });
 
 cpSync(resolve(engineDir, 'plugin'), join(outDir, 'plugin'), { recursive: true });

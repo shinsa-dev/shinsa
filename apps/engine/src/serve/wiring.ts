@@ -9,12 +9,13 @@ import {
 } from '../agents/index.ts';
 import { createQuickCalls } from '../agents/quick/index.ts';
 import { Briefings } from '../briefing/index.ts';
+import { resolveEngineChangelog } from '../changelog/index.ts';
 import { ConfigStore, type ServerConfig } from '../config/index.ts';
 import { EunoeServer } from '../eunoe/index.ts';
 import { Extensions } from '../extensions/index.ts';
 import { createFeedbackDrafter } from '../feedback/draft.ts';
 import { resolveServerUrl, startServer } from '../http/index.ts';
-import { BUNDLE, createServiceRestarter, type ServerInstance } from '../instance/index.ts';
+import { BUNDLE, createServiceRestarter, INSTALL_PATH, type ServerInstance } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { Onboarding } from '../onboarding/index.ts';
 import { createProjectChanges } from '../projects/routes.ts';
@@ -257,6 +258,10 @@ export function startHttp(
     schedules: services.schedules,
     extensions: services.extensions,
     versions: services.versions,
+    changelog: resolveEngineChangelog({
+      built: process.env.SHINSA_BUILD_CHANGELOG,
+      root: BUNDLE ? null : INSTALL_PATH,
+    }),
     roots,
     resolveLogin: services.resolveLogin,
     classify: services.classify,
