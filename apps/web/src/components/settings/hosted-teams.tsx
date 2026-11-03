@@ -5,10 +5,13 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { MentionText } from '@/components/people/user-tag.tsx';
 import { useNow } from '@/hooks/use-now.ts';
+import { useTeamPresence } from '@/hooks/use-team-presence.ts';
+import { useTeamFeed } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
+import { describePresence } from '@/lib/teams/presence.ts';
 import {
   describeHostedTeam,
   describeHostedTeamsNotice,
@@ -28,7 +31,8 @@ import { UserRow } from './user-row.tsx';
 
 function TeamMachines({ team }: { team: RemoteTeam }) {
   const now = useNow();
-  const rows = listTeamMachineRows(team, now);
+  const feed = useTeamFeed();
+  const rows = listTeamMachineRows(team, now, feed);
   return (
     <FoldingBlock
       persistId={createDisclosureId('settings', 'teams', team.id, 'machines')}
@@ -37,12 +41,12 @@ function TeamMachines({ team }: { team: RemoteTeam }) {
       startsOpen
     >
       {rows.length === 0 && <SettingsEmpty>No machine in this team is on yet.</SettingsEmpty>}
-      {rows.map(({ machine, status, owner }) => (
+      {rows.map(({ machine, online, status, owner }) => (
         <div key={machine.id} className={SETTING_ROW}>
           <div className='flex min-w-0 flex-1 flex-col'>
             <div className='flex min-w-0 items-center gap-1.5 text-xs leading-4'>
               <Truncate className='font-medium text-fg-4'>{machine.name}</Truncate>
-              <span className={cn('shrink-0', machine.online ? TONE_TEXT.green : 'text-fg-2')}>{status}</span>
+              <span className={cn('shrink-0', online ? TONE_TEXT.green : 'text-fg-2')}>{status}</span>
             </div>
             {owner && (
               <Truncate className='text-2xs leading-4 text-fg-2'>
@@ -58,20 +62,27 @@ function TeamMachines({ team }: { team: RemoteTeam }) {
 
 function TeamPeople({ team, viewerId }: { team: RemoteTeam; viewerId: string | null }) {
   const now = useNow();
+  const presence = useTeamPresence(team.id);
   return (
     <FoldingBlock
       persistId={createDisclosureId('settings', 'teams', team.id, 'people')}
       title='People'
       detail={describePeopleCount(team)}
     >
-      {listTeamPeople(team, '').map(({ user, member }) => (
-        <UserRow
-          key={user.id}
-          user={user}
-          detail={member ? describeMemberSince(member, now) : 'Owner'}
-          self={user.id === viewerId}
-        />
-      ))}
+      {listTeamPeople(team, '').map(({ user, member }) => {
+        const self = user.id === viewerId;
+        const seen = self ? null : (presence.get(user.id) ?? null);
+        const base = member ? describeMemberSince(member, now) : 'Owner';
+        return (
+          <UserRow
+            key={user.id}
+            user={user}
+            detail={seen ? `${describePresence(seen, now)} · ${base}` : base}
+            self={self}
+            presence={seen}
+          />
+        );
+      })}
     </FoldingBlock>
   );
 }

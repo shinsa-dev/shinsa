@@ -8,6 +8,7 @@ import {
   FULL_TEAM_PERMISSIONS,
   isTeamPerson,
   mergeTeamPresence,
+  resolveTeamPresence,
   resolveMemberPermissions,
   resolveTeamPermissions,
   createTeamHello,
@@ -246,6 +247,44 @@ describe('resolveMemberPermissions', () => {
     expect(isTeamPerson(team, 'mona')).toBe(true);
     expect(isTeamPerson(team, 'kai')).toBe(true);
     expect(isTeamPerson(team, 'octo')).toBe(false);
+  });
+});
+
+describe('resolveTeamPresence', () => {
+  const machine = { name: 'Studio', reason: null } as const;
+
+  test('reads each live machine’s report, counts the owner of a machine that dropped as offline, and keeps to one team', () => {
+    const feed = {
+      tasks: [],
+      machines: [
+        {
+          ...machine,
+          teamId: 't1',
+          instanceId: 'a',
+          userId: 'mona',
+          status: 'live' as const,
+          presence: [
+            { userId: 'mona', status: 'online' as const, seenAt: 500 },
+            { userId: 'kai', status: 'away' as const, seenAt: 400 },
+          ],
+        },
+        {
+          ...machine,
+          teamId: 't1',
+          instanceId: 'b',
+          userId: 'kai',
+          status: 'offline' as const,
+          updatedAt: 450,
+        },
+        { ...machine, teamId: 't1', instanceId: 'c', userId: 'tess', status: 'live' as const },
+        { ...machine, teamId: 't2', instanceId: 'd', userId: 'bob', status: 'refused' as const },
+      ],
+    };
+    expect([...resolveTeamPresence(feed, 't1').values()]).toEqual([
+      { userId: 'mona', status: 'online', seenAt: 500 },
+      { userId: 'kai', status: 'away', seenAt: 450 },
+    ]);
+    expect(resolveTeamPresence(feed).get('bob')).toEqual({ userId: 'bob', status: 'offline', seenAt: null });
   });
 });
 

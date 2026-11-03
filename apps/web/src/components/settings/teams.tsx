@@ -5,6 +5,7 @@ import {
   type RemoteTeamEntry,
   type RemoteUser,
   type ShinsaState,
+  type TeamPresence,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
@@ -25,8 +26,10 @@ import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { MentionText } from '@/components/people/user-tag.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { NewTeamDialog } from '@/components/teams/new-team-dialog.tsx';
+import { MemberRightsDialog, TeamPermissionsBlock } from '@/components/teams/permissions.tsx';
 import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
 import { useNow } from '@/hooks/use-now.ts';
+import { useTeamPresence } from '@/hooks/use-team-presence.ts';
 import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { type MachineAccess, useEngineFeature, useMachines } from '@/lib/connection/socket.ts';
@@ -36,6 +39,8 @@ import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
+import { hasOwnRights } from '@/lib/teams/permissions.ts';
+import { describePresence } from '@/lib/teams/presence.ts';
 import {
   canUseTeams,
   describePeopleCount,
@@ -75,6 +80,7 @@ type TeamsDialog =
   | { kind: 'leave'; entry: RemoteTeamEntry }
   | { kind: 'delete'; entry: RemoteTeamEntry }
   | { kind: 'member'; team: RemoteTeam; user: RemoteUser }
+  | { kind: 'rights'; teamId: string; user: RemoteUser }
   | { kind: 'grant'; team: RemoteTeam; user: RemoteUser; machine: string };
 
 function TeamLinkDialog({
@@ -289,16 +295,28 @@ function TeammateActions({
   team,
   user,
   snapshot,
+  rights,
   onDialog,
 }: {
   team: RemoteTeam;
   user: RemoteUser;
   snapshot: RemoteSnapshot;
+  rights: boolean;
   onDialog: (dialog: TeamsDialog) => void;
 }) {
   const granted = hasMachineAccess(snapshot, user.id);
+  const member = user.id !== team.owner.id;
   return (
     <>
+      {rights && member && team.role === 'owner' && (
+        <Button
+          variant='secondary'
+          size='sm'
+          onClick={() => onDialog({ kind: 'rights', teamId: team.id, user })}
+        >
+          Rights
+        </Button>
+      )}
       {!granted && snapshot.enabled && (
         <Button
           variant='secondary'
@@ -318,20 +336,33 @@ function TeammateActions({
   );
 }
 
-function describePerson(base: string, snapshot: RemoteSnapshot, user: RemoteUser) {
-  return hasMachineAccess(snapshot, user.id) ? `${base} · Can reach ${snapshot.machineName}` : base;
+function describePerson(
+  base: string,
+  snapshot: RemoteSnapshot,
+  team: RemoteTeam,
+  user: RemoteUser,
+  presence: TeamPresence | null,
+  now: number
+) {
+  const parts = [presence ? describePresence(presence, now) : null, base];
+  if (hasOwnRights(team, user.id)) parts.push('Own rights');
+  if (hasMachineAccess(snapshot, user.id)) parts.push(`Can reach ${snapshot.machineName}`);
+  return parts.filter((part) => part !== null).join(' · ');
 }
 
 function TeamPeople({
   team,
   snapshot,
+  rights,
   onDialog,
 }: {
   team: RemoteTeam;
   snapshot: RemoteSnapshot;
+  rights: boolean;
   onDialog: (dialog: TeamsDialog) => void;
 }) {
   const now = useNow();
+  const presence = useTeamPresence(team.id);
   const [query, setQuery] = React.useState('');
   const viewer = snapshot.access?.owner.id ?? null;
   const people = listTeamPeople(team, query);
@@ -360,9 +391,24 @@ function TeamPeople({
       {people.map(({ user, member }) => {
         const self = user.id === viewer;
         const base = member ? describeMemberSince(member, now) : 'Owner';
+        const seen = self ? null : (presence.get(user.id) ?? null);
         return (
-          <UserRow key={user.id} user={user} detail={describePerson(base, snapshot, user)} self={self}>
-            {!self && <TeammateActions team={team} user={user} snapshot={snapshot} onDialog={onDialog} />}
+          <UserRow
+            key={user.id}
+            user={user}
+            detail={describePerson(base, snapshot, team, user, seen, now)}
+            self={self}
+            presence={seen}
+          >
+            {!self && (
+              <TeammateActions
+                team={team}
+                user={user}
+                snapshot={snapshot}
+                rights={rights}
+                onDialog={onDialog}
+              />
+            )}
           </UserRow>
         );
       })}
@@ -418,6 +464,7 @@ function TeamCard({
   entry,
   projects,
   actions,
+  rights,
   onDialog,
 }: {
   state: ShinsaState;
@@ -425,6 +472,7 @@ function TeamCard({
   entry: RemoteTeamEntry;
   projects: readonly ProjectChoice[];
   actions: TeamActions;
+  rights: boolean;
   onDialog: (dialog: TeamsDialog) => void;
 }) {
   const { team } = entry;
@@ -443,7 +491,8 @@ function TeamCard({
       </SettingRow>
       {needsTeamLink(entry) && <TeamLinkRow state={state} entry={entry} actions={actions} />}
       {team && <TeamRequests team={team} actions={actions} />}
-      {team && <TeamPeople team={team} snapshot={snapshot} onDialog={onDialog} />}
+      {team && rights && <TeamPermissionsBlock team={team} onUpdate={actions.updatePermissions} />}
+      {team && <TeamPeople team={team} snapshot={snapshot} rights={rights} onDialog={onDialog} />}
     </SettingsCard>
   );
 }
@@ -451,11 +500,13 @@ function TeamCard({
 function TeamsDialogs({
   dialog,
   state,
+  snapshot,
   actions,
   onDialog,
 }: {
   dialog: ReturnType<typeof useDialogState<TeamsDialog>>;
   state: ShinsaState;
+  snapshot: RemoteSnapshot | null;
   actions: TeamActions;
   onDialog: (next: TeamsDialog) => void;
 }) {
@@ -496,6 +547,18 @@ function TeamsDialogs({
           actions={actions}
         />
       );
+    case 'rights': {
+      const team = snapshot?.teams.find((entry) => entry.id === value.teamId)?.team;
+      if (!team) return null;
+      return (
+        <MemberRightsDialog
+          control={control}
+          team={team}
+          user={value.user}
+          onUpdate={actions.updatePermissions}
+        />
+      );
+    }
     case 'leave':
       return (
         <ConfirmDialog
@@ -552,12 +615,14 @@ export function TeamsGroup({
   failure,
   title = TEAMS_SECTION,
   actions = TEAM_ACTIONS,
+  rights = false,
 }: {
   state: ShinsaState;
   snapshot: RemoteSnapshot | null;
   failure: string | null;
   title?: string;
   actions?: TeamActions;
+  rights?: boolean;
 }) {
   const dialog = useDialogState<TeamsDialog>();
   const usable = canUseTeams(snapshot);
@@ -601,12 +666,19 @@ export function TeamsGroup({
                 entry={entry}
                 projects={projects}
                 actions={actions}
+                rights={rights}
                 onDialog={dialog.show}
               />
             ))}
         </div>
       )}
-      <TeamsDialogs dialog={dialog} state={state} actions={actions} onDialog={dialog.show} />
+      <TeamsDialogs
+        dialog={dialog}
+        state={state}
+        snapshot={snapshot}
+        actions={actions}
+        onDialog={dialog.show}
+      />
     </SettingsSection>
   );
 }
@@ -614,8 +686,9 @@ export function TeamsGroup({
 export function TeamsSettings({ state }: { state: ShinsaState }) {
   const { snapshot, failure } = useRemoteAccess();
   const supported = useEngineFeature('teams');
+  const rights = useEngineFeature('team-access');
   if (!supported) return null;
-  return <TeamsGroup state={state} snapshot={snapshot} failure={failure} />;
+  return <TeamsGroup state={state} snapshot={snapshot} failure={failure} rights={rights} />;
 }
 
 function MachineTeams({
@@ -628,6 +701,7 @@ function MachineTeams({
   title: string;
 }) {
   const supported = useEngineFeature('teams', machine.id);
+  const rights = useEngineFeature('team-access', machine.id);
   const choice = useMachines().find((candidate) => candidate.id === machine.id);
   const projectIds = Object.keys(choice?.state.projects ?? {});
   const projectKey = projectIds.join(' ');
@@ -635,7 +709,14 @@ function MachineTeams({
   const actions = React.useMemo(() => createTeamActions(machine.id), [machine.id]);
   if (!supported) return null;
   return (
-    <TeamsGroup state={scoped} snapshot={machine.remote} failure={null} title={title} actions={actions} />
+    <TeamsGroup
+      state={scoped}
+      snapshot={machine.remote}
+      failure={null}
+      title={title}
+      actions={actions}
+      rights={rights}
+    />
   );
 }
 

@@ -11,7 +11,9 @@ import {
   parseTeamJoinUrl,
   type RemoteMember,
   type RemoteTeam,
+  type RemoteUserId,
   type Task,
+  type TeamPermissionsChange,
   resolveTeamJoinUrl,
   serializeBase64Url,
   serializePublicKey,
@@ -80,6 +82,11 @@ const TEAM_LINK_OFF = new DomainError({
 const OWNER_ONLY = new DomainError({ code: 'not_owner', message: 'Only the team’s owner can do this.' });
 
 const TEAM_GONE = new DomainError({ code: 'team_not_found', message: 'This machine is not in that team.' });
+
+const MEMBER_NOT_FOUND = new DomainError({
+  code: 'member_not_found',
+  message: 'No one with that account is in this team.',
+});
 
 function createRandom(bytes: number) {
   return new Uint8Array(randomBytes(bytes));
@@ -295,13 +302,22 @@ export class Teams implements TeamLinks {
 
   async removeMember(teamId: string, userId: string) {
     const team = this.#findOwnTeam(teamId);
-    if (!team.members.some((member) => member.user.id === userId))
-      throw new DomainError({
-        code: 'member_not_found',
-        message: 'No one with that account is in this team.',
-      });
+    if (!team.members.some((member) => member.user.id === userId)) throw MEMBER_NOT_FOUND;
     await this.#action((control, token) => control.requestTeamMemberRemoval(token, teamId, userId));
     this.#replaceTeam({ ...team, members: withoutUser(team.members, userId) });
+  }
+
+  async updatePermissions(teamId: string, userId: string | null, permissions: TeamPermissionsChange) {
+    const team = this.#findOwnTeam(teamId);
+    if (userId !== null && !team.members.some((member) => member.user.id === userId)) throw MEMBER_NOT_FOUND;
+    const request = userId === null ? { permissions } : { userId: userId as RemoteUserId, permissions };
+    const answer = await this.#action(
+      (control, token) => control.requestTeamPermissions(token, teamId, request),
+      {
+        NotFound: userId === null ? TEAM_GONE : MEMBER_NOT_FOUND,
+      }
+    );
+    this.#replaceTeam(answer);
   }
 
   async leave(teamId: string) {

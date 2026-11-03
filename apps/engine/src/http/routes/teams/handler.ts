@@ -56,6 +56,11 @@ export const TeamsHandlers = HttpApiBuilder.group(
       .handle('removeMember', ({ payload }) =>
         change((found) => found.removeMember(payload.teamId, payload.userId))
       )
+      .handle('permissions', ({ payload }) =>
+        change((found) =>
+          found.updatePermissions(payload.teamId, payload.userId ?? null, payload.permissions)
+        )
+      )
       .handle('leave', ({ payload }) => change((found) => found.leave(payload.teamId)))
       .handle('remove', ({ payload }) => change((found) => found.remove(payload.teamId)))
       .handle('tasks', ({ query }) =>

@@ -1,4 +1,11 @@
-import { DomainError, type RemoteTeamEntry, type RemoteUser } from '@shinsa/core';
+import {
+  DomainError,
+  type RemoteTeamEntry,
+  type RemoteUser,
+  TEAM_PERMISSION_NAMES,
+  type TeamPermission,
+  type TeamPermissionsChange,
+} from '@shinsa/core';
 import type { EngineCalls } from '../cli/client/schema.ts';
 import type { RemoteSnapshot } from '../remote/index.ts';
 import type { SurfaceClient } from './client.ts';
@@ -116,6 +123,32 @@ function defineMemberAction(
   });
 }
 
+const PERMISSION_CHOICES = ['on', 'off', 'default'] as const;
+
+const PERMISSION_DESCRIPTIONS: Record<TeamPermission, string> = {
+  act: 'Answer gates and run actions on the team’s tasks: on, off or default.',
+  takeOver: 'Take a task over and steer it: on, off or default.',
+  share: 'Make share links for the team’s tasks: on, off or default.',
+  services: 'Open a team task’s running services: on, off or default.',
+  message: 'Message the agents of tasks they did not take over: on, off or default.',
+};
+
+const PERMISSION_VALUES: Record<string, boolean | null> = { on: true, off: false, default: null };
+
+function readPermissionsChange(values: Record<string, unknown>) {
+  const change: { -readonly [Name in TeamPermission]?: boolean | null } = {};
+  for (const name of TEAM_PERMISSION_NAMES) {
+    const value = PERMISSION_VALUES[readValue(values, name)];
+    if (value !== undefined) change[name] = value;
+  }
+  if (Object.keys(change).length === 0)
+    throw new DomainError({
+      code: 'arguments_invalid',
+      message: 'Name at least one right to change, such as `--message on`.',
+    });
+  return change satisfies TeamPermissionsChange;
+}
+
 function describeLink(url: string) {
   return `Share this link with your teammates. Whoever opens it signs in with GitHub and asks to join, which you accept or decline:\n${url}`;
 }
@@ -221,6 +254,38 @@ export const TEAM_SPECS: SurfaceSpec[] = [
     'teammates',
     'They can reach this machine now. Take it back with `shinsa remote remove-member`.'
   ),
+  defineAction({
+    path: ['teams', 'permissions'],
+    summary:
+      'Change what teammates may do on each other’s machines, for the whole team you own or, with --login, one member.',
+    humanOnly: true,
+    fields: [
+      TEAM_FIELD,
+      {
+        ...LOGIN_FIELD,
+        required: false,
+        description: 'One member’s GitHub login. Leave out to change the team’s.',
+      },
+      ...TEAM_PERMISSION_NAMES.map((name) => ({
+        name,
+        kind: 'choice' as const,
+        choices: PERMISSION_CHOICES,
+        description: PERMISSION_DESCRIPTIONS[name],
+      })),
+    ],
+    act: async (client, values) => {
+      const teamId = await findTeamId(client, readValue(values, 'team'));
+      const permissions = readPermissionsChange(values);
+      const login = readValue(values, 'login');
+      if (!login) {
+        const data = await client.api.teams.permissions({ payload: { teamId, permissions } });
+        return { data, text: 'The team’s rights are changed.' };
+      }
+      const user = await findTeamUser(client, teamId, login, 'members');
+      const data = await client.api.teams.permissions({ payload: { teamId, userId: user.id, permissions } });
+      return { data, text: 'Their rights are changed.' };
+    },
+  }),
   defineTeamAction(
     'leave',
     'Leave a team. Your projects stop showing their tasks to it.',

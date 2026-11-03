@@ -119,6 +119,7 @@ describe('the teams commands', () => {
       '/api/remote/teams/remove': reply,
       '/api/remote/teams/link/remove': reply,
       '/api/remote/members/grant': reply,
+      '/api/remote/teams/permissions': reply,
     });
     expect((await runSpec(fake, ['teams', 'accept', 'Platform', '--login', '@bob'])).text).toContain(
       'in the team now'
@@ -131,6 +132,16 @@ describe('the teams commands', () => {
     expect((await runSpec(fake, ['teams', 'grant', 'Platform', '--login', 'kai'])).text).toContain(
       'can reach this machine now'
     );
+    expect(
+      (await runSpec(fake, ['teams', 'permissions', 'Platform', '--message', 'on', '--share', 'off'])).text
+    ).toBe('The team’s rights are changed.');
+    expect(
+      (await runSpec(fake, ['teams', 'permissions', 'Platform', '--login', 'kai', '--act', 'default'])).text
+    ).toBe('Their rights are changed.');
+    await expect(runSpec(fake, ['teams', 'permissions', 'Platform'])).rejects.toThrow(
+      'Name at least one right to change'
+    );
+    expect(findSpec(['teams', 'permissions']).humanOnly).toBe(true);
     expect(fake.posts.map((post) => [post.path, post.body])).toEqual([
       ['/api/remote/teams/requests/accept', { teamId: 'team1', userId: '9' }],
       ['/api/remote/teams/requests/decline', { teamId: 'team1', userId: '9' }],
@@ -139,6 +150,8 @@ describe('the teams commands', () => {
       ['/api/remote/teams/remove', { teamId: 'team1' }],
       ['/api/remote/teams/link/remove', { teamId: 'team1' }],
       ['/api/remote/members/grant', { teamId: 'team1', userId: '7' }],
+      ['/api/remote/teams/permissions', { teamId: 'team1', permissions: { share: false, message: true } }],
+      ['/api/remote/teams/permissions', { teamId: 'team1', userId: '7', permissions: { act: null } }],
     ]);
   });
 

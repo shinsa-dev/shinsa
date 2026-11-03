@@ -165,6 +165,12 @@ function setUp(options: SetUp = {}) {
     shares: { resolveLive: () => Promise.resolve((options.live ?? live) as never) },
     transcripts: { subscribe: () => () => undefined },
     held: { listHeld: () => options.held ?? [], subscribeHeld: () => () => true },
+    presence: {
+      listTeam: () => [{ userId: MONA.id, status: 'online', seenAt: 50 }],
+      openViewer: () => undefined,
+      closeViewer: () => undefined,
+      subscribe: () => () => true,
+    },
     now: () => 50,
   });
   const laptop = createRemote(
@@ -313,9 +319,13 @@ describe('watching teammates’ machines', () => {
     const { feeds, sockets, waits } = setUp();
     feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    expect(feeds.snapshot().machines[0]?.presence).toEqual([
+      { userId: MONA.id, status: 'online', seenAt: 50 },
+    ]);
     sockets[0]?.drop();
     await until('the drop is seen', () => waits.length === 1);
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'offline', TEAM_FEED_OFFLINE]]);
+    expect(feeds.snapshot().machines[0]?.presence).toBeUndefined();
     expect(feeds.snapshot().tasks).toHaveLength(2);
     waits.shift()?.();
     await until('it is live again', () => feeds.snapshot().machines[0]?.status === 'live');

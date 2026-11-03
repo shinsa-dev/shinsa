@@ -1,4 +1,9 @@
-import { listTeamProjectIds, type RemoteSnapshot, type ShinsaState } from '@shinsa/core';
+import {
+  listTeamProjectIds,
+  type RemoteSnapshot,
+  type ShinsaState,
+  type TeamPermissionsChange,
+} from '@shinsa/core';
 import { Effect } from 'effect';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { connection, sendCommand } from '@/lib/connection/socket.ts';
@@ -91,6 +96,12 @@ export function createTeamActions(machineId: string | null = null) {
       act((teams) => teams.removeMember({ payload: { teamId, userId } })),
     leave: (teamId: string) => act((teams) => teams.leave({ payload: { teamId } })),
     remove: (teamId: string) => act((teams) => teams.remove({ payload: { teamId } })),
+    updatePermissions: (teamId: string, userId: string | null, permissions: TeamPermissionsChange) =>
+      act((teams) =>
+        teams.permissions({
+          payload: userId === null ? { teamId, permissions } : { teamId, userId, permissions },
+        })
+      ),
     grantAccess: (teamId: string, userId: string) => run(grantAccess(teamId, userId)),
   };
 }

@@ -587,6 +587,44 @@ describe('the members of a team', () => {
     await expect(teams.removeMember('team1', BOB.id)).rejects.toMatchObject({ code: 'member_not_found' });
   });
 
+  test('the owner changes the team’s rights or one member’s, and the snapshot follows at once', async () => {
+    const { teams, plane, remote } = setUp();
+    const path = resolveMachineTeamPath('team1', 'permissions');
+    const narrowed = createTeam({
+      permissions: { ...DEFAULT_TEAM_PERMISSIONS, share: false },
+      overrides: [{ userId: KAI.id, permissions: { message: true } }],
+    });
+    plane.answers.set(path, () => Response.json(narrowed));
+    await teams.updatePermissions('team1', null, { share: false });
+    await teams.updatePermissions('team1', KAI.id, { message: true });
+    expect(plane.calls.filter((call) => call.path === path).map((call) => call.body)).toEqual([
+      { permissions: { share: false } },
+      { userId: KAI.id, permissions: { message: true } },
+    ]);
+    const team = remote.snapshot().teams[0]?.team;
+    expect(team?.permissions.share).toBe(false);
+    expect(team?.overrides).toEqual([{ userId: KAI.id, permissions: { message: true } }]);
+  });
+
+  test('refuses rights for someone not in the team, a team it does not own, and says why the cloud refused', async () => {
+    const { teams, plane } = setUp();
+    await expect(teams.updatePermissions('team1', BOB.id, { act: false })).rejects.toMatchObject({
+      code: 'member_not_found',
+    });
+    const path = resolveMachineTeamPath('team1', 'permissions');
+    plane.answers.set(path, () => refuse(NotFound));
+    await expect(teams.updatePermissions('team1', KAI.id, { act: false })).rejects.toMatchObject({
+      code: 'member_not_found',
+    });
+    await expect(teams.updatePermissions('team1', null, { act: false })).rejects.toMatchObject({
+      code: 'team_not_found',
+    });
+    const member = setUp({ file: { teams: [createTeam({ role: 'member' })] } });
+    await expect(member.teams.updatePermissions('team1', null, { act: false })).rejects.toMatchObject({
+      code: 'not_owner',
+    });
+  });
+
   test('leaving forgets the key and takes the team off every project, even when the cloud forgot it first', async () => {
     const { teams, plane, remote, stub } = setUp({ file: { teams: [createTeam({ role: 'member' })] } });
     plane.answers.set(resolveMachineTeamPath('team1', 'leave'), () => refuse(NotFound));

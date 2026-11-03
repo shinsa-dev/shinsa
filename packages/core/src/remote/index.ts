@@ -302,6 +302,7 @@ export {
   isTeamKey,
   isTeamSnapshotExpired,
   mergeTeamPresence,
+  resolveTeamPresence,
   NO_TEAM_FEED,
   parseTeamHello,
   parseTeamJoinFragment,

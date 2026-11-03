@@ -169,6 +169,7 @@ export interface TeamFeedMachine {
   status: TeamFeedStatus;
   reason: string | null;
   updatedAt?: number;
+  presence?: TeamPresence[];
 }
 
 export interface TeamFeedTask extends TeamTask {
@@ -182,6 +183,17 @@ export interface TeamFeedSnapshot {
 }
 
 export const NO_TEAM_FEED: TeamFeedSnapshot = { machines: [], tasks: [] };
+
+export function resolveTeamPresence(feed: TeamFeedSnapshot, teamId: string | null = null) {
+  const machines = feed.machines.filter((machine) => teamId === null || machine.teamId === teamId);
+  return mergeTeamPresence(
+    machines.map((machine) =>
+      machine.status === 'live'
+        ? (machine.presence ?? [])
+        : [{ userId: machine.userId, status: 'offline' as const, seenAt: machine.updatedAt ?? null }]
+    )
+  );
+}
 
 export interface TeamViewTarget {
   teamId: string;

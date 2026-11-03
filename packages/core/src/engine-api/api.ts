@@ -99,6 +99,7 @@ import {
   TeamJoinBody,
   TeamLinkAnswer,
   TeamMemberBody,
+  TeamPermissionsBody,
   TeamTasksAnswer,
   TeamTasksQuery,
   TerminalsAnswer,
@@ -537,6 +538,15 @@ class TeamsGroup extends HttpApiGroup.make('teams')
   .annotateEndpoints(OwnerOnlyRoute, true)
   .add(HttpApiEndpoint.get('tasks', '/api/teams/tasks', { query: TeamTasksQuery, success: TeamTasksAnswer }))
   .annotateEndpoints(EngineFeatureRoute, 'teams')
+  .add(
+    HttpApiEndpoint.post('permissions', '/api/remote/teams/permissions', {
+      payload: TeamPermissionsBody,
+      success: RemoteAnswer,
+    })
+      .annotate(RouteFieldFailures, TEAM_FAILURES)
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-access')
+  )
   .middleware(EngineGate) {}
 
 class PlacementGroup extends HttpApiGroup.make('placement')

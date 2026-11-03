@@ -32,7 +32,7 @@ import type { ServiceSuggestion } from '../protocol/services.ts';
 import type { TerminalsSnapshot } from '../protocol/terminals.ts';
 import type { UpdateOutcome, VersionsSnapshot } from '../protocol/versions.ts';
 import type { QueueSummary } from '../queue/types.ts';
-import type { TeamJoinStatus } from '../remote/contract.ts';
+import { TeamPermissionsChange, type TeamJoinStatus } from '../remote/contract.ts';
 import type { PlacementAnswer } from '../remote/placement.ts';
 import type { RemoteSnapshot } from '../remote/status.ts';
 import type { TeamFeedSnapshot } from '../remote/teams.ts';
@@ -363,6 +363,12 @@ export const TeamJoinBody = Schema.Struct({ url: FilledText });
 export const TeamBody = Schema.Struct({ teamId: FilledText });
 
 export const TeamMemberBody = Schema.Struct({ teamId: FilledText, userId: FilledText });
+
+export const TeamPermissionsBody = Schema.Struct({
+  teamId: FilledText,
+  userId: Schema.optionalKey(FilledText),
+  permissions: TeamPermissionsChange,
+});
 
 export const ProjectPathBody = Schema.Struct({ path: LoosePath });
 

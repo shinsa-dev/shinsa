@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { REMOTE_APP_ORIGIN, REMOTE_PATHS, resolveMachineTeamPath, SLACK_RELAY_PATHS } from '@shinsa/core';
+import {
+  DEFAULT_TEAM_PERMISSIONS,
+  REMOTE_APP_ORIGIN,
+  REMOTE_PATHS,
+  resolveMachineTeamPath,
+  SLACK_RELAY_PATHS,
+} from '@shinsa/core';
 import { BodyInvalid, MembersFull, Revoked } from '@shinsa/core/remote/errors';
 import { Effect, Fiber, Layer, Redacted } from 'effect';
 import { FetchHttpClient } from 'effect/http';
@@ -21,10 +27,12 @@ const TEAM = {
   id: 'team1',
   name: 'Growth',
   owner: USER,
-  role: 'owner',
+  role: 'owner' as const,
   members: [],
   requests: [],
   machines: [],
+  permissions: DEFAULT_TEAM_PERMISSIONS,
+  overrides: [],
   createdAt: 1,
 };
 
@@ -129,6 +137,7 @@ describe('the client for app.shinsa.dev', () => {
     answer(plane, resolveMachineTeamPath('team1', 'invite'), { invite: 'i2' });
     answer(plane, resolveMachineTeamPath('team1', 'members/add'), MEMBER);
     answer(plane, resolveMachineTeamPath('team1', 'connect'), { url: 'wss://x', expiresAt: 1 });
+    answer(plane, resolveMachineTeamPath('team1', 'permissions'), TEAM);
     await control.requestTeamCreation('m', 'Growth');
     await control.requestTeamJoin('m', 'i');
     expect(await control.requestTeamInvite('m', 'team1')).toEqual({ invite: 'i2' });
@@ -139,6 +148,9 @@ describe('the client for app.shinsa.dev', () => {
     await control.requestTeamLeave('m', 'team1');
     await control.requestTeamRemoval('m', 'team1');
     expect(await control.requestTeamConnect('m', 'team1', 'k3x9')).toEqual({ url: 'wss://x', expiresAt: 1 });
+    expect(await control.requestTeamPermissions('m', 'team1', { permissions: { message: true } })).toEqual(
+      TEAM
+    );
     expect(plane.calls.map((call) => [call.path, call.body])).toEqual([
       [REMOTE_PATHS.machineTeams, { name: 'Growth' }],
       [REMOTE_PATHS.machineTeamJoin, { invite: 'i' }],
@@ -150,6 +162,7 @@ describe('the client for app.shinsa.dev', () => {
       [resolveMachineTeamPath('team1', 'leave'), null],
       [resolveMachineTeamPath('team1', 'remove'), null],
       [resolveMachineTeamPath('team1', 'connect'), { instanceId: 'k3x9' }],
+      [resolveMachineTeamPath('team1', 'permissions'), { permissions: { message: true } }],
     ]);
   });
 

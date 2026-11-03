@@ -130,6 +130,7 @@ const FEATURE_ROUTES = {
   'remote.terminals': [],
   attention: [],
   'worktree-root': ['POST /api/onboarding/worktrees', 'GET /api/onboarding/worktrees/usage'],
+  'team-access': ['POST /api/remote/teams/permissions'],
 };
 
 const LOCAL_ONLY = [
@@ -155,6 +156,7 @@ const OWNER_ONLY = [
   'POST /api/remote/teams/members/remove',
   'POST /api/remote/teams/leave',
   'POST /api/remote/teams/remove',
+  'POST /api/remote/teams/permissions',
   'POST /api/slack/disconnect',
   'POST /api/engine/restart',
   'POST /api/onboarding/setup',

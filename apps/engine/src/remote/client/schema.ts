@@ -23,6 +23,8 @@ import {
   type TeamId,
   type TeamInviteResponse,
   type TeamJoinResponse,
+  type TeamPermissionsRequest,
+  type RemoteTeam,
 } from '@shinsa/core';
 import type {
   BodyInvalid,
@@ -134,6 +136,11 @@ export interface TeamCalls {
   leave(token: Token, teamId: TeamId): MachineCall<void, NotFound | OwnerCannotLeave>;
   remove(token: Token, teamId: TeamId): MachineCall<void, OwnerFailure>;
   connect(token: Token, teamId: TeamId, instanceId: InstanceId): MachineCall<ConnectResponse, NotFound>;
+  permissions(
+    token: Token,
+    teamId: TeamId,
+    request: TeamPermissionsRequest
+  ): MachineCall<RemoteTeam, OwnerFailure>;
 }
 
 export interface SlackRelayCalls {

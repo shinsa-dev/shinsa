@@ -194,6 +194,36 @@ describe('Settings → Teams', () => {
     );
   });
 
+  it('turns a machine offline the moment its live channel drops, and online as soon as it answers', () => {
+    const team = createTeam({
+      machines: [
+        { id: 'm1', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: NOW - 3_600_000 },
+        { id: 'm2', name: 'Laptop', userId: KAI.id, online: false, lastSeenAt: null },
+        { id: 'm3', name: 'Spare', userId: KAI.id, online: true, lastSeenAt: NOW },
+      ],
+    });
+    const machine = { teamId: team.id, name: '', reason: null } as const;
+    const feed = {
+      tasks: [],
+      machines: [
+        {
+          ...machine,
+          instanceId: 'm1',
+          userId: MONA.id,
+          status: 'offline' as const,
+          updatedAt: NOW - 60_000,
+        },
+        { ...machine, instanceId: 'm2', userId: KAI.id, status: 'live' as const },
+        { ...machine, instanceId: 'm3', userId: KAI.id, status: 'connecting' as const },
+      ],
+    };
+    expect(listTeamMachineRows(team, NOW, feed).map(({ online, status }) => [online, status])).toEqual([
+      [false, 'Last seen 1m ago'],
+      [true, 'Online'],
+      [true, 'Online'],
+    ]);
+  });
+
   it('says why the hosted Teams section has no team to show', () => {
     expect(describeHostedTeamsNotice(null, 'Signed out')).toBe('Signed out');
     expect(describeHostedTeamsNotice(null, null)).toBe('Reading your teams…');

@@ -294,7 +294,8 @@ export class HostedTeamFeeds implements TeamFeedSource {
   }
 
   #mark(feed: HostedFeed, status: TeamFeedMachine['status'], reason: string | null) {
-    feed.machine = { ...feed.machine, status, reason };
+    const { presence: _, ...machine } = feed.machine;
+    feed.machine = { ...machine, status, reason };
   }
 
   #receive(feed: HostedFeed, message: ShareMessage) {
@@ -304,6 +305,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
     feed.updatedAt = view.updatedAt ?? this.#now();
     feed.attempt = 0;
     this.#mark(feed, 'live', null);
+    feed.machine = view.presence?.length ? { ...feed.machine, presence: view.presence } : feed.machine;
     this.#publish();
     void this.#adoptHeld(feed.target.teamId, view.held ?? []);
   }

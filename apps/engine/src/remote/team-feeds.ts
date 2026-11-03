@@ -20,6 +20,7 @@ import {
   type TeamListView,
   type TeamMachine,
   type TeamSnapshot,
+  type TeamPresence,
   type TeamTask,
   type TeamView,
   type TeamViewTarget,
@@ -96,6 +97,7 @@ interface Feed {
   status: TeamFeedStatus;
   reason: string | null;
   tasks: TeamTask[];
+  presence: TeamPresence[];
   updatedAt: number | null;
   snapshot: TeamSnapshot | null;
   attempt: number;
@@ -279,6 +281,7 @@ export class TeamFeeds {
       status: 'connecting',
       reason: null,
       tasks: held?.tasks ?? [],
+      presence: [],
       updatedAt: held?.updatedAt ?? null,
       snapshot: held?.snapshot ?? null,
       attempt: 0,
@@ -326,6 +329,7 @@ export class TeamFeeds {
         if (message.t !== 'view' || !this.#isCurrent(feed)) return;
         const list = JSON.parse(message.data) as TeamListView;
         feed.tasks = list.tasks;
+        feed.presence = list.presence ?? [];
         feed.updatedAt = list.updatedAt;
         feed.snapshot = list.snapshot ?? null;
         feed.attempt = 0;
@@ -342,6 +346,7 @@ export class TeamFeeds {
       onEnd: (end) => {
         feed.stop = null;
         if (!this.#isCurrent(feed)) return;
+        feed.presence = [];
         if (end.gone) this.#forget(feed);
         this.#mark(feed, end.gone ? 'refused' : 'offline', end.reason);
         this.#publish();
@@ -533,6 +538,7 @@ export class TeamFeeds {
       status: feed.status,
       reason: feed.reason,
       ...(feed.updatedAt === null || this.#isExpired(feed) ? {} : { updatedAt: feed.updatedAt }),
+      ...(feed.presence.length > 0 ? { presence: feed.presence } : {}),
     }));
     const tasks: TeamFeedTask[] = feeds.flatMap((feed) =>
       this.#isExpired(feed)

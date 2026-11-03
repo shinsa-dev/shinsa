@@ -43,7 +43,7 @@ export function createSampleTeams(now: number) {
     requests: [{ user: BOB, addedAt: now - 4 * 60_000 }],
     machines: [],
     permissions: DEFAULT_TEAM_PERMISSIONS,
-    overrides: [],
+    overrides: [{ userId: KAI.id, permissions: { message: true } }],
     createdAt: now - 72 * HOUR_MS,
   };
   const paywalls: RemoteTeam = {
@@ -87,6 +87,19 @@ export function createSampleTeams(now: number) {
   };
   return {
     state,
+    presence: [
+      { user: LEE, base: 'Owner', presence: { userId: LEE.id, status: 'online' as const, seenAt: now } },
+      {
+        user: KAI,
+        base: 'Joined 6h ago',
+        presence: { userId: KAI.id, status: 'away' as const, seenAt: now - 12 * 60_000 },
+      },
+      {
+        user: BOB,
+        base: 'Joined 3d ago',
+        presence: { userId: BOB.id, status: 'offline' as const, seenAt: now - 5 * HOUR_MS },
+      },
+    ],
     scenes: [
       {
         label:
@@ -137,6 +150,7 @@ export function createSampleTeamActions(): TeamActions {
     leave: refuse,
     remove: refuse,
     grantAccess: refuse,
+    updatePermissions: refuse,
   };
 }
 

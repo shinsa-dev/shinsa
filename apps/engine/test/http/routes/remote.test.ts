@@ -61,6 +61,7 @@ function createTeams() {
     removeMember: record('removeMember', Promise.resolve()),
     leave: record('leave', Promise.resolve()),
     remove: record('remove', Promise.resolve()),
+    updatePermissions: record('updatePermissions', Promise.resolve()),
   };
   return { calls, teams: teams as unknown as Teams };
 }
@@ -174,6 +175,9 @@ describe('teams over HTTP', () => {
       expect(await (await post(`/api/remote/teams/${path}`, { teamId: 't', userId: 'u' })).json()).toEqual(
         SNAPSHOT
       );
+    const narrow = { teamId: 't', permissions: { share: false } };
+    expect(await (await post('/api/remote/teams/permissions', narrow)).json()).toEqual(SNAPSHOT);
+    await post('/api/remote/teams/permissions', { ...narrow, userId: 'u', permissions: { message: null } });
     expect(calls).toEqual([
       ['create', 'Core'],
       ['join', 'https://x'],
@@ -184,6 +188,8 @@ describe('teams over HTTP', () => {
       ['acceptRequest', 't', 'u'],
       ['declineRequest', 't', 'u'],
       ['removeMember', 't', 'u'],
+      ['updatePermissions', 't', null, { share: false }],
+      ['updatePermissions', 't', 'u', { message: null }],
     ]);
   });
 
