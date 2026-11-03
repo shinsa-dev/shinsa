@@ -28,6 +28,14 @@ export interface RootSuggestion {
   chosen: boolean;
 }
 
+export interface WorktreeUsage {
+  folder: string;
+  worktrees: number;
+  bytes: number | null;
+  freeBytes: number | null;
+  measuredAt: number;
+}
+
 export interface RootSuggestions {
   suggestions: RootSuggestion[];
   truncated: boolean;

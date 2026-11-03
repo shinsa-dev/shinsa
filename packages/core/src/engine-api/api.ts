@@ -108,6 +108,7 @@ import {
   WebhookAnswer,
   WildcardParams,
   WorktreeMissing,
+  WorktreeUsageAnswer,
 } from './schema.ts';
 
 export class EngineGate extends HttpApiMiddleware.Service<EngineGate>()('shinsa/core/engine-api/EngineGate', {
@@ -272,6 +273,9 @@ class OnboardingGroup extends HttpApiGroup.make('onboarding')
     })
       .annotate(LocalOnlyRoute, true)
       .annotate(EngineFeatureRoute, 'worktree-root'),
+    HttpApiEndpoint.get('worktreeUsage', '/api/onboarding/worktrees/usage', {
+      success: WorktreeUsageAnswer,
+    }).annotate(EngineFeatureRoute, 'worktree-root'),
     HttpApiEndpoint.get('prerequisites', '/api/onboarding/prerequisites', { success: ObjectAnswer }),
     HttpApiEndpoint.post('privacy', '/api/onboarding/privacy', { success: ObjectAnswer }).annotate(
       LocalOnlyRoute,

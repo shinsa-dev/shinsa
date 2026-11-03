@@ -550,6 +550,10 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
   in Settings → Projects." instead of falling back to the local disk; Settings shows the same problem under the
   folder. Delegation checkouts are removed wherever git has them registered (`removeIsolated` lists the repository's
   worktrees under `delegations/<task>/` of any root), so changing the folder leaves none behind.
+- **How much space they take.** Settings → Projects → Worktrees shows the space the worktrees of tasks use, the free
+  space on the drive of the folder in use, and that a task's worktree is removed as soon as it is merged, marked done
+  or cancelled (`settleTask`, below). It asks `GET /api/onboarding/worktrees/usage` each time the page opens and
+  after the folder changes; nothing measures in the background.
 - **A new worktree comes with its dependencies.** `prepareWorktree` runs the install its lockfile names
   (`resolveInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
   agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
@@ -6488,6 +6492,12 @@ existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `ro
 with `~/` and must be a full path to an existing folder Shinsa can write to; anything else is `worktrees_invalid`
 with the reason, and `worktrees_from_environment` while `SHINSA_WORKTREES_DIR` sets the folder. On this machine only (`LocalOnlyRoute`), and
 announced as the `worktree-root` engine feature, which Settings → Projects → Worktrees asks for.
+
+**`GET /api/onboarding/worktrees/usage`**: `WorktreeUsage { folder, worktrees, bytes, freeBytes, measuredAt }`, the
+space the worktrees take (`measureWorktreeUsage`, `onboarding/worktrees.ts`). `worktrees` counts the tasks whose
+worktree still exists, wherever it is (a main-checkout task is left out); `bytes` is one `du -sk` over those worktrees
+and the folder's `delegations/`, `null` when it takes longer than 20 seconds (`USAGE_TIMEOUT_MS`), as it can on a
+mounted bucket; `freeBytes` is `statfs` of the folder, `null` when it is gone. Part of the `worktree-root` feature.
 
 **`POST /api/onboarding/privacy`** with `{}`: opens System Settings → Privacy & Security → Full Disk Access on this
 machine; answers `{ ok }`, whether `open` ran.

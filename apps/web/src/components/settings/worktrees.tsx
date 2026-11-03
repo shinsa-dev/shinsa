@@ -6,10 +6,16 @@ import { toast } from '@shinsa/ui/components/sonner';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
-import { updateWorktreesDir, useOnboardingStatus } from '@/lib/connection/onboarding.ts';
+import { updateWorktreesDir, useOnboardingStatus, useWorktreeUsage } from '@/lib/connection/onboarding.ts';
 import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { describeWorktreesSaved, resolveWorktreeFolder } from '@/lib/onboarding.ts';
+import {
+  describeFreeSpace,
+  describeWorktreesSaved,
+  describeWorktreeUsage,
+  resolveWorktreeFolder,
+  WORKTREE_CLEANUP_NOTE,
+} from '@/lib/onboarding.ts';
 import { WORKTREES_TITLE } from '@/lib/settings.ts';
 import { PathRow, SETTING_ROW, SettingsGroup } from './group.tsx';
 
@@ -109,6 +115,21 @@ function FolderAction({
   return <span className='shrink-0 text-2xs text-fg-2'>Default</span>;
 }
 
+function StorageRow({ folder }: { folder: string }) {
+  const usage = useWorktreeUsage(folder);
+  const free = describeFreeSpace(usage);
+  return (
+    <div className={cn(SETTING_ROW, 'items-start gap-2 py-2 text-xs')}>
+      <Icon size='sm' name='IconStorage' className='mt-0.5 shrink-0 text-fg-2' />
+      <div className='flex min-w-0 flex-1 flex-col gap-px'>
+        <span className='text-fg-4'>{describeWorktreeUsage(usage)}</span>
+        <span className='text-2xs text-fg-2'>{WORKTREE_CLEANUP_NOTE}</span>
+      </div>
+      {free && <span className='shrink-0 text-2xs text-fg-2 tabular-nums'>{free}</span>}
+    </div>
+  );
+}
+
 export function WorktreeSettings() {
   const status = useOnboardingStatus();
   const supported = useEngineFeature('worktree-root');
@@ -129,6 +150,7 @@ export function WorktreeSettings() {
           <span className='min-w-0 flex-1'>{folder.problem}</span>
         </div>
       )}
+      <StorageRow folder={status.worktrees.effective} />
       {folder.origin !== 'environment' && <ChooseFolder failure={failure} onFailure={setFailure} />}
     </SettingsGroup>
   );

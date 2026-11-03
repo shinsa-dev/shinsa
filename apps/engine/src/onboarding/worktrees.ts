@@ -1,11 +1,16 @@
+import { existsSync, statfsSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
-import { DomainError, type OnboardingStatus } from '@shinsa/core';
+import { DomainError, type OnboardingStatus, type Task, type WorktreeUsage } from '@shinsa/core';
 import type { ServerConfig } from '../config/index.ts';
 import { edgeRuntime } from '../runtime/edge.ts';
 import { describeWorktreeRootProblem, type WorktreeRoot } from '../workspaces/index.ts';
 import { expandHome } from './roots.ts';
+import type { CommandRunner } from './schema.ts';
 
 const WORKTREES_FOLDER = 'worktrees';
+const DELEGATIONS_FOLDER = 'delegations';
+const KILOBYTE = 1024;
+export const USAGE_TIMEOUT_MS = 20_000;
 
 function refuse(message: string): never {
   throw new DomainError({ code: 'worktrees_invalid', message });
@@ -44,4 +49,55 @@ export function resolveChosenWorktreesDir(value: unknown, userHome: string): str
   const problem = describeProblem(folder);
   if (problem) refuse(problem);
   return folder;
+}
+
+export function listTaskWorktrees(tasks: Record<string, Task>) {
+  const paths = new Set<string>();
+  for (const task of Object.values(tasks)) {
+    if (task.worktreePath && task.workspace !== 'main_checkout') paths.add(task.worktreePath);
+  }
+  return [...paths];
+}
+
+function readFreeBytes(path: string) {
+  try {
+    const stats = statfsSync(path);
+    return stats.bavail * stats.bsize;
+  } catch {
+    return null;
+  }
+}
+
+function sumKilobytes(stdout: string) {
+  let total = 0;
+  for (const line of stdout.split('\n')) {
+    const size = Number.parseInt(line, 10);
+    if (Number.isFinite(size)) total += size;
+  }
+  return total * KILOBYTE;
+}
+
+async function measureBytes(paths: string[], run: CommandRunner, cwd: string) {
+  if (paths.length === 0) return 0;
+  const result = await run(['du', '-sk', '--', ...paths], cwd, { timeoutMs: USAGE_TIMEOUT_MS });
+  if (result.timedOut || !result.stdout.trim()) return null;
+  return sumKilobytes(result.stdout);
+}
+
+export async function measureWorktreeUsage(
+  folder: string,
+  tasks: Record<string, Task>,
+  run: CommandRunner,
+  now: number
+): Promise<WorktreeUsage> {
+  const worktrees = listTaskWorktrees(tasks).filter((path) => existsSync(path));
+  const delegations = join(folder, DELEGATIONS_FOLDER);
+  const measured = existsSync(delegations) ? [...worktrees, delegations] : worktrees;
+  return {
+    folder,
+    worktrees: worktrees.length,
+    bytes: await measureBytes(measured, run, existsSync(folder) ? folder : '/'),
+    freeBytes: readFreeBytes(folder),
+    measuredAt: now,
+  };
 }

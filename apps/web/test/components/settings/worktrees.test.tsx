@@ -41,11 +41,25 @@ function saveWorktrees(body: unknown) {
   return createWorktreesStatus({ effective: path, configured: path });
 }
 
+const GIGABYTE = 1024 * 1024 * 1024;
+
+const USAGE = {
+  folder: '/h/data/worktrees',
+  worktrees: 3,
+  bytes: 2.5 * GIGABYTE,
+  freeBytes: 120 * GIGABYTE,
+  measuredAt: 1,
+};
+
 const REFUSED = { status: 400, answer: { error: { code: 'worktrees_invalid', message: MISSING_MESSAGE } } };
 
 async function renderWorktrees(
   status: OnboardingStatus,
-  { supported = true, saved = { answer: saveWorktrees } }: { supported?: boolean; saved?: FakeAnswer } = {}
+  {
+    supported = true,
+    saved = { answer: saveWorktrees },
+    usage = { answer: USAGE },
+  }: { supported?: boolean; saved?: FakeAnswer; usage?: FakeAnswer } = {}
 ) {
   const engine = resolveEngineInfo('1.0.0');
   spyOnEngine(
@@ -56,6 +70,7 @@ async function renderWorktrees(
   fake = startFakeOnboarding({
     'GET /api/onboarding': { answer: status },
     'POST /api/onboarding/worktrees': saved,
+    'GET /api/onboarding/worktrees/usage': usage,
   });
   await act(() => refreshOnboardingStatus());
   return render(
@@ -126,5 +141,35 @@ describe('the Worktrees settings', () => {
   it('shows nothing on an engine that cannot change the folder', async () => {
     const { container } = await renderWorktrees(createOnboardingStatus(), { supported: false });
     expect(container.textContent).toBe('');
+  });
+
+  it('shows how much space the worktrees take, the free space, and when they are removed', async () => {
+    await renderWorktrees(createOnboardingStatus());
+    expect(await screen.findByText('2.5 GB used by the worktrees of 3 tasks.')).toBeTruthy();
+    expect(screen.getByText('120.0 GB free on this drive')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'A task’s worktree is removed as soon as the task is merged, marked done or cancelled.'
+      )
+    ).toBeTruthy();
+  });
+
+  it('says when the worktrees could not be measured', async () => {
+    await renderWorktrees(createOnboardingStatus(), {
+      usage: { status: 500, answer: { error: { code: 'x', message: 'x' } } },
+    });
+    expect(await screen.findByText('Shinsa could not measure the worktrees.')).toBeTruthy();
+    expect(screen.queryByText(/free on this drive/)).toBeNull();
+  });
+
+  it('measures again after the folder changes', async () => {
+    await renderWorktrees(createOnboardingStatus());
+    await screen.findByText('2.5 GB used by the worktrees of 3 tasks.');
+    await chooseFolder(MOUNT);
+    await screen.findByText('2.5 GB used by the worktrees of 3 tasks.');
+    const measured = (fake?.requests ?? []).filter(
+      (request) => request.path === '/api/onboarding/worktrees/usage'
+    );
+    expect(measured.length).toBe(2);
   });
 });

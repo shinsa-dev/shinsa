@@ -5,10 +5,13 @@ import type { TerminalInfo } from '@shinsa/core';
 import { ConfigStore, type ServerConfig } from '../../src/config/index.ts';
 import { type CommandRunner, type InstallTerminals, Onboarding } from '../../src/onboarding/index.ts';
 import { PRIVACY_SETTINGS_URL, PrivateFoldersError, resolveChosenRoots } from '../../src/onboarding/roots.ts';
+import { measureWorktreeUsage } from '../../src/onboarding/worktrees.ts';
 import { Roots } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
+import { runCommand } from '../../src/shell/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { createTempDir, createTestConfig, overrideEnv } from '../helpers/index.ts';
+import { createTask } from '../helpers/state.ts';
 
 function setup(
   run?: CommandRunner,
@@ -310,5 +313,61 @@ describe('Onboarding', () => {
     expect(await onboarding.openPrivacySettings()).toEqual({ ok: true });
     expect(calls).toEqual([['open', PRIVACY_SETTINGS_URL]]);
     expect(PRIVACY_SETTINGS_URL).toContain('Privacy_AllFiles');
+  });
+});
+
+describe('worktree usage', () => {
+  function writeWorktree(path: string, bytes: number) {
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, 'file.bin'), Buffer.alloc(bytes, 1));
+    return path;
+  }
+
+  test('adds up the open worktrees and the delegation checkouts, and skips the main checkout', async () => {
+    const folder = createTempDir();
+    const first = writeWorktree(join(folder, 'app', 'feat-a'), 64 * 1024);
+    const elsewhere = writeWorktree(join(createTempDir(), 'old-root', 'feat-b'), 32 * 1024);
+    writeWorktree(join(folder, 'delegations', 'task-1', 'run-1'), 16 * 1024);
+    const main = writeWorktree(join(createTempDir(), 'main'), 512 * 1024);
+    const tasks = {
+      a: createTask({ id: 'a', worktreePath: first }),
+      b: createTask({ id: 'b', worktreePath: elsewhere }),
+      gone: createTask({ id: 'gone', worktreePath: join(folder, 'removed') }),
+      main: createTask({ id: 'main', worktreePath: main, workspace: 'main_checkout' }),
+      none: createTask({ id: 'none', worktreePath: null }),
+    };
+    const usage = await measureWorktreeUsage(folder, tasks, runCommand, 42);
+    expect(usage).toMatchObject({ folder, worktrees: 2, measuredAt: 42 });
+    expect(usage.bytes).toBeGreaterThanOrEqual(112 * 1024);
+    expect(usage.bytes).toBeLessThan(512 * 1024);
+    expect(usage.freeBytes).toBeGreaterThan(0);
+  });
+
+  test('measures nothing without worktrees, and has no free space for a folder that is gone', async () => {
+    const run: CommandRunner = () => Promise.reject(new Error('du should not run'));
+    const usage = await measureWorktreeUsage('/no/such/mount', {}, run, 1);
+    expect(usage).toEqual({
+      folder: '/no/such/mount',
+      worktrees: 0,
+      bytes: 0,
+      freeBytes: null,
+      measuredAt: 1,
+    });
+  });
+
+  test('leaves the size unknown when du runs out of time', async () => {
+    const folder = createTempDir();
+    const path = writeWorktree(join(folder, 'app', 'feat-a'), 1024);
+    const run: CommandRunner = () =>
+      Promise.resolve({ ok: false, code: -1, stdout: '', stderr: '', timedOut: true });
+    const usage = await measureWorktreeUsage(folder, { a: createTask({ worktreePath: path }) }, run, 1);
+    expect(usage.bytes).toBeNull();
+    expect(usage.worktrees).toBe(1);
+  });
+
+  test('Onboarding measures the folder in use', async () => {
+    const { onboarding, config } = setup();
+    const usage = await onboarding.resolveWorktreeUsage();
+    expect(usage).toMatchObject({ folder: config.worktreesDir, worktrees: 0, bytes: 0 });
   });
 });

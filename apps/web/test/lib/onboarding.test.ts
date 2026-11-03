@@ -27,7 +27,9 @@ import {
   resolveStepState,
   resolveSubmitValues,
   resolveToggledRoots,
+  describeFreeSpace,
   describeWorktreesSaved,
+  describeWorktreeUsage,
   resolveWorktreeFolder,
 } from '@/lib/onboarding.ts';
 import { createAccount, createProviderLogin } from '../support/accounts.ts';
@@ -276,6 +278,29 @@ describe('describeWorktreesSaved', () => {
     expect(describeWorktreesSaved(createOnboardingStatus())).toBe('New worktrees go to the default folder.');
     const chosen = createWorktreesStatus({ effective: '/Volumes/r2', configured: '/Volumes/r2' });
     expect(describeWorktreesSaved(chosen)).toBe('New worktrees go to /Volumes/r2.');
+  });
+});
+
+describe('describeWorktreeUsage', () => {
+  const usage = { folder: '/w', worktrees: 1, bytes: 2048, freeBytes: 1024 * 1024, measuredAt: 1 };
+
+  it('says how much the worktrees take, or why it does not know', () => {
+    expect(describeWorktreeUsage(null)).toBe('Measuring the worktrees…');
+    expect(describeWorktreeUsage('failed')).toBe('Shinsa could not measure the worktrees.');
+    expect(describeWorktreeUsage({ ...usage, worktrees: 0, bytes: 0 })).toBe(
+      'No task has a worktree right now.'
+    );
+    expect(describeWorktreeUsage(usage)).toBe('2 KB used by the worktrees of 1 task.');
+    expect(describeWorktreeUsage({ ...usage, bytes: null })).toBe(
+      'Worktrees of 1 task; their size took too long to measure.'
+    );
+  });
+
+  it('gives the free space only when it is known', () => {
+    expect(describeFreeSpace(usage)).toBe('1.0 MB free on this drive');
+    expect(describeFreeSpace({ ...usage, freeBytes: null })).toBeNull();
+    expect(describeFreeSpace('failed')).toBeNull();
+    expect(describeFreeSpace(null)).toBeNull();
   });
 });
 

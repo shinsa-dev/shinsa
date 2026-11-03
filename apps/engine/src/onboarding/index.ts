@@ -43,7 +43,7 @@ import type { ProjectRevision } from './schema.ts';
 import { createSetupSimulation } from './simulate.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 import { resolveHelpRequest, resolveWelcomeBody } from './welcome.ts';
-import { resolveChosenWorktreesDir, resolveWorktreesStatus } from './worktrees.ts';
+import { measureWorktreeUsage, resolveChosenWorktreesDir, resolveWorktreesStatus } from './worktrees.ts';
 
 export type { AccountSource, ClaudeAccount } from './accounts.ts';
 export { createSummaryAccountSource } from './accounts.ts';
@@ -201,6 +201,15 @@ export class Onboarding {
     }
     store.update({ worktreesDir: resolveChosenWorktreesDir(fields.path, config.userHome) });
     return await this.resolveStatus();
+  }
+
+  resolveWorktreeUsage() {
+    return measureWorktreeUsage(
+      this.#worktreeRoot.path,
+      this.#context.engine.state.tasks,
+      this.#run,
+      Date.now()
+    );
   }
 
   async complete() {

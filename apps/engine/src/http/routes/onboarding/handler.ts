@@ -15,6 +15,7 @@ export const OnboardingHandlers = HttpApiBuilder.group(
       .handle('roots', ({ query }) => requestPromise(() => onboarding.listSuggestions(query.refresh === '1')))
       .handle('setup', ({ payload }) => requestPromise(() => onboarding.applySetup(payload)))
       .handle('worktrees', ({ payload }) => requestPromise(() => onboarding.applyWorktreesDir(payload)))
+      .handle('worktreeUsage', () => requestPromise(() => onboarding.resolveWorktreeUsage()))
       .handle('prerequisites', () => requestPromise(() => onboarding.resolvePrerequisites()))
       .handle('privacy', () => requestPromise(() => onboarding.openPrivacySettings()))
       .handle('install', ({ payload }) => requestPromise(() => onboarding.openInstall(payload)))

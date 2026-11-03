@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { type AgentModel, ENGINE_PROTOCOL, KNOWN_AGENT_PROVIDERS, type OnboardingFlow } from '@shinsa/core';
+import {
+  type AgentModel,
+  ENGINE_PROTOCOL,
+  KNOWN_AGENT_PROVIDERS,
+  type OnboardingFlow,
+  type WorktreeUsage,
+} from '@shinsa/core';
 import type { ModelSource } from '../../../src/agents/index.ts';
 import type { ServerConfig } from '../../../src/config/index.ts';
 import { createWorktree } from '../../../src/git/index.ts';
@@ -182,6 +188,13 @@ describe('the onboarding endpoints', () => {
     expect(await reset.json()).toMatchObject({
       worktrees: { effective: config.worktreesDir, configured: null, default: config.worktreesDir },
     });
+  });
+
+  test('measure the space the worktrees take in the folder in use', async () => {
+    const { call, config } = await start();
+    const usage = (await (await call('/api/onboarding/worktrees/usage')).json()) as WorktreeUsage;
+    expect(usage).toMatchObject({ folder: config.worktreesDir, worktrees: 0, bytes: 0 });
+    expect(usage.freeBytes).toBeGreaterThan(0);
   });
 
   test('report the status, suggest folders, save the setup, check the tools, and finish only through the steps', async () => {
