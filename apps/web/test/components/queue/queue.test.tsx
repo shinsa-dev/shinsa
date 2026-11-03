@@ -293,10 +293,10 @@ describe('a row’s summary line', () => {
         description: null,
       }),
     ]);
-    expect(row(/Build the export/).textContent).toBe('Build the exportBuilding');
+    expect(row(/Build the export/).textContent).toBe('Build the exportBuilding 1/2');
   });
 
-  it('names the current step until the agent has done anything', () => {
+  it('counts the phases beside the stage until the agent has done anything', () => {
     renderQueue({
       variant: 'wide',
       state: createShinsaState({
@@ -304,10 +304,13 @@ describe('a row’s summary line', () => {
         runs: [createRun({ id: 'run-quiet', taskId: 'build', purpose: 'build' })],
       }),
     });
-    expect(row(/Build the export/).textContent).toContain('Build 1/2');
+    expect(row(/Build the export/).textContent).toContain('Building 1/2');
+    const count = within(row(/Build the export/)).getByText('1/2');
+    expect(count.className).toContain('text-fg-2');
+    expect(count.previousElementSibling?.textContent).toBe('Building');
   });
 
-  it('names the current step’s count when no agent runs, and nothing when it has none', () => {
+  it('counts the phases beside the stage when no agent runs, and nothing when there is one', () => {
     renderQueue({
       variant: 'wide',
       state: createShinsaState({
@@ -317,7 +320,7 @@ describe('a row’s summary line', () => {
         ],
       }),
     });
-    expect(row(/Build the export/).textContent).toContain('Build 1/2');
+    expect(row(/Build the export/).textContent).toContain('Building 1/2');
     expect(row(/Fresh task/).textContent).toStartWith('Fresh taskBuilding');
     expect(row(/Fresh task/).textContent).not.toContain('Build ');
     expect(
@@ -327,7 +330,7 @@ describe('a row’s summary line', () => {
     ).toBe('Step 2 of 2: Build');
   });
 
-  it('names the step instead of the agent’s action while it waits on you', () => {
+  it('shows neither the agent’s action nor the count while it waits on you', () => {
     renderQueue({
       variant: 'wide',
       state: createShinsaState({
@@ -338,7 +341,7 @@ describe('a row’s summary line', () => {
     });
     pushTranscript('run-ask', [createAgentEntry('Which export format?', 'interim')]);
     expect(row(/Build the export/).textContent).not.toContain('Which export format?');
-    expect(row(/Build the export/).textContent).toContain('Build 1/2');
+    expect(row(/Build the export/).textContent).not.toContain('1/2');
   });
 
   it('shows a later round at work apart from the steps an earlier round left for you', () => {
