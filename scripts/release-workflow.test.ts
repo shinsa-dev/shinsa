@@ -100,6 +100,11 @@ describe('the engine archives', () => {
     expect(publish.step.run).toContain('shinsa-darwin-arm64.tar.gz shinsa-darwin-arm64.tar.gz.sha256');
   });
 
+  it('publishes the changelog’s notes file above GitHub’s generated notes', () => {
+    expect(publish.step.env?.NOTES_FILE).toBe(expression('steps.version.outputs.notes_file'));
+    expect(publish.step.run).toContain('--generate-notes --notes-file "$NOTES_FILE"');
+  });
+
   it('hands the version on to the Linux job', () => {
     expect(workflow.jobs.mac.outputs?.version).toBe(expression('steps.version.outputs.version'));
   });

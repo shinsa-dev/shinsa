@@ -34,6 +34,7 @@ export const CANARY_IGNORED_PATHS = [
   '**/CLAUDE.md',
   '.claude/**',
   '.github/assets/**',
+  '.changes/**',
 ] as const;
 
 const IGNORED_GLOBS = CANARY_IGNORED_PATHS.map((pattern) => new Bun.Glob(pattern));
@@ -98,6 +99,11 @@ export function resolveReleasePlan({
   const version = channel === 'stable' ? base : `${base}-beta.${countPrereleases(tags, base, 'beta') + 1}`;
   const notesStartTag = channel === 'stable' && lastStable ? `v${lastStable}` : null;
   return { channel, version, tag: `v${version}`, prerelease: channel === 'beta', lastStable, notesStartTag };
+}
+
+export function resolveChangesSinceTag(plan: ReleasePlan) {
+  if (plan.notesStartTag) return plan.notesStartTag;
+  return plan.lastStable ? `v${plan.lastStable}` : null;
 }
 
 export function describeReleaseChannel(plan: ReleasePlan) {

@@ -7,6 +7,7 @@ import {
   isAppChange,
   parseReleaseOptions,
   resolveCanaryDecision,
+  resolveChangesSinceTag,
   resolveReleasePlan,
   selectLastCanaryTag,
 } from './release-version.ts';
@@ -190,6 +191,18 @@ describe('resolveReleasePlan for a canary', () => {
   });
 });
 
+describe('resolveChangesSinceTag', () => {
+  const beta = { channel: 'beta', version: '1.3.0-beta.2', tag: 'v1.3.0-beta.2', prerelease: true } as const;
+
+  it('lists the changelog entries since the generated notes start, else since the last stable release', () => {
+    expect(resolveChangesSinceTag({ ...beta, lastStable: '1.2.0', notesStartTag: 'v1.3.0-beta.1' })).toBe(
+      'v1.3.0-beta.1'
+    );
+    expect(resolveChangesSinceTag({ ...beta, lastStable: '1.2.0', notesStartTag: null })).toBe('v1.2.0');
+    expect(resolveChangesSinceTag({ ...beta, lastStable: null, notesStartTag: null })).toBeNull();
+  });
+});
+
 describe('describeReleaseChannel', () => {
   it('says who updates to the release', () => {
     expect(
@@ -232,7 +245,7 @@ describe('describeReleaseChannel', () => {
 });
 
 describe('which commits of main get a canary', () => {
-  it('skips changes to docs, the site, Markdown at the root, CLAUDE.md files, agent notes and README assets', () => {
+  it('skips changes to docs, the site, Markdown at the root, CLAUDE.md files, agent notes, README assets and changelog entries', () => {
     for (const path of [
       'docs/release.md',
       'apps/marketing/src/worker/download.ts',
@@ -241,6 +254,7 @@ describe('which commits of main get a canary', () => {
       'apps/engine/CLAUDE.md',
       '.claude/skills/copy/SKILL.md',
       '.github/assets/shinsa-light.png',
+      '.changes/whats-new-changelog.md',
     ])
       expect(isAppChange(path)).toBe(false);
     for (const path of [
