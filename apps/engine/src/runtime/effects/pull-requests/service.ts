@@ -1,10 +1,11 @@
 import {
-  listBundleAbove,
-  listBundleBelow,
+  isBundleFollower,
+  listBundleFollowers,
   type PullRequest,
   type Repo,
   type RepoCi,
   resolveRoundBase,
+  resolveRoundBases,
   type Task,
 } from '@shinsa/core';
 import {
@@ -59,16 +60,19 @@ export class PullRequestSync extends Context.Service<
         root: Task
       ) {
         const state = yield* world.state;
-        const above = listBundleAbove(state, root);
-        if (listBundleBelow(state, root).length > 0 || above.length === 0 || !root.branch) return [];
+        const above = listBundleFollowers(state, root);
+        if (isBundleFollower(state, root) || above.length === 0 || !root.branch) return [];
         if (!above.every((member) => member.bundleReady && member.branch)) return [];
         const branches: BundleBranch[] = [
-          { taskId: root.id, branch: root.branch, base: repo.defaultBranch },
-          ...above.map((member) => ({
-            taskId: member.id,
-            branch: member.branch ?? '',
-            base: resolveRoundBase(member) ?? repo.defaultBranch,
-          })),
+          { taskId: root.id, branch: root.branch, bases: [repo.defaultBranch] },
+          ...above.map((member) => {
+            const bases = resolveRoundBases(member);
+            return {
+              taskId: member.id,
+              branch: member.branch ?? '',
+              bases: bases.length > 0 ? bases : [repo.defaultBranch],
+            };
+          }),
         ];
         return branches;
       });

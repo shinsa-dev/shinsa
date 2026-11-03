@@ -157,6 +157,7 @@ export {
   resolveCurrentRound,
   resolveNextRoundNumber,
   resolveRoundBase,
+  resolveRoundBases,
   resolveRoundStamp,
   resolveRoundTitle,
   resolveSettledStatus,

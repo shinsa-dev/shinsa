@@ -11,6 +11,7 @@ import {
   resolveCurrentRound,
   resolveMessageEffect,
   resolveRoundBase,
+  resolveRoundBases,
   resolveRoundProgress,
   resolveTaskRounds,
   SHAPE_PIPELINES,
@@ -207,6 +208,7 @@ describe('a task is a conversation of rounds', () => {
       shipping: 'stacked',
     });
     expect(resolveRoundBase(task)).toBe(`fix/${taskId}`);
+    expect(resolveRoundBases({ ...task, stackBases: ['fix/other', 'fix/more'] })).toEqual([`fix/${taskId}`]);
     readyRound(harness, taskId);
     expect(harness.activeRun(taskId).prompt).toContain(`stacked on branch fix/${taskId}`);
     reachMergeGate(harness, taskId, 43);

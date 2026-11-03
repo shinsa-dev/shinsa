@@ -444,7 +444,29 @@ describe('create_task and split_task', () => {
       call
     );
     const created = Object.values(core.state.tasks).find((task) => task.createdBy?.taskId === taskId);
-    expect(created).toMatchObject({ stacksOn: taskId, waitsOn: [] });
+    expect(created).toMatchObject({ stacksOn: [taskId], waitsOn: [] });
+  });
+
+  test('create_task with stack_on stacks the new task on other tasks too', async () => {
+    const { core, run, taskId } = await building();
+    const repoId = core.state.tasks[taskId]?.repoId ?? null;
+    await core.dispatch({ type: 'task.create', request: 'Add the second endpoint', repoId });
+    const other = Object.values(core.state.tasks).find((task) => task.id !== taskId);
+    const { call } = createCall(core, run.id);
+    await handleOrchestrationTool(
+      'create_task',
+      { request: 'Join both endpoints.', stack_on_this: true, stack_on: [other?.id ?? ''] },
+      call
+    );
+    const created = Object.values(core.state.tasks).find((task) => task.createdBy?.taskId === taskId);
+    expect(created).toMatchObject({ stacksOn: [taskId, other?.id] });
+    await expect(
+      handleOrchestrationTool(
+        'create_task',
+        { request: 'Join.', stack_on: ['LOC-404'], client_request_id: 'again' },
+        createCall(core, run.id).call
+      )
+    ).rejects.toThrow('There is no task "LOC-404" to stack on.');
   });
 
   test('create_task refuses a repository Shinsa does not know, naming the ones it does', async () => {

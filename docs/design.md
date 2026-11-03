@@ -797,7 +797,11 @@ Only these, and they win over anything below:
       substring; hints and keywords count at 0.7). Groups are ordered by their best match, since
       cmdk's own group sort does not work. Choices flatten into their options ("urgent", "dark",
       "cards"), every task matches by title, repository, branch and status, and the queue's
-      decisions match across tasks ("merge" finds Merge #4531 on whichever task it is). At the
+      decisions match across tasks ("merge" finds Merge #4531 on whichever task it is). Typing
+      searches every task, not only the newest 300 shown with an empty query, against an index of
+      each task's words built once per state (`resolveTaskIndex`, `lib/command/menu.ts`), and only
+      the best 20 task matches render (100 on Jump to a task, 20 per group of commands), so cmdk
+      never scores hundreds of rows a key. A closed menu works out nothing. At the
       bottom, always: "Create task: …" (starts it straight away) and "Edit it before starting"
       (Home's composer, filled in).
     - Rows: 24px. Icons are plain, never on a tile; a task's is its status icon in the status
@@ -1013,7 +1017,7 @@ Only these, and they win over anything below:
     approve, Needs your answer, Answered, Paused, In progress, Backlog, Done and Cancelled
     (both collapsed). There is no section for waiting: a task waiting on another task is filed in the section of the
     task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
-    a task stacked on another, so a bundle reads from its root, each task above nested under the one below. Each
+    a task stacked on others, so a bundle reads from its lead, each task nested under the tasks it stacks on. Each
     section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest

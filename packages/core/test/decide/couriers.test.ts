@@ -32,6 +32,7 @@ function courier(
     thisWaits?: boolean;
     afterThis?: boolean;
     stackOnThis?: boolean;
+    stackOn?: string[];
     backlog?: boolean;
     forkOf?: string;
   } = {}
@@ -47,6 +48,7 @@ function courier(
     thisWaits: options.thisWaits ?? false,
     afterThis: options.afterThis ?? false,
     ...(options.stackOnThis ? { stackOnThis: true } : {}),
+    ...(options.stackOn ? { stackOn: options.stackOn } : {}),
     ...(options.forkOf ? { forkOf: options.forkOf } : {}),
     ...(options.backlog ? { backlog: true } : {}),
   });
@@ -221,12 +223,22 @@ describe('a courier task', () => {
     const { harness, taskId } = building();
     const runId = harness.activeRun(taskId).id;
     const [task] = courier(harness, runId, { stackOnThis: true });
-    expect(task).toMatchObject({ stacksOn: taskId, waitsOn: [] });
+    expect(task).toMatchObject({ stacksOn: [taskId], waitsOn: [] });
     for (const order of [{ afterThis: true }, { thisWaits: true }]) {
       expect(() => courier(harness, runId, { key: 'other', stackOnThis: true, ...order })).toThrow(
         'Set stack_on_this alone'
       );
     }
+  });
+
+  test('can stack on this task and others at once, this task first', () => {
+    const { harness, taskId } = building();
+    const other = createTask(harness, { request: 'Add the second endpoint.' });
+    const runId = harness.activeRun(taskId).id;
+    const [task] = courier(harness, runId, { stackOnThis: true, stackOn: [other] });
+    expect(task).toMatchObject({ stacksOn: [taskId, other], waitsOn: [] });
+    const [elsewhere] = courier(harness, runId, { key: 'only-other', stackOn: [other] });
+    expect(elsewhere).toMatchObject({ stacksOn: [other] });
   });
 });
 

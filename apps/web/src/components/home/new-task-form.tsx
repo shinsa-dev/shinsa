@@ -20,6 +20,7 @@ import { AttachButton, AttachmentChips, useFileDrop } from '@/components/chat/at
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { COMPOSER_FIELD, COMPOSER_FOOTER } from '@/components/layout/surface/card.ts';
 import { ProjectOption } from '@/components/status/project-dot.tsx';
+import { DepthMark, resolveDepthIndent } from '@/components/tasks/row.tsx';
 import { useAttachments } from '@/hooks/use-attachments.ts';
 import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
@@ -59,7 +60,7 @@ import {
   useNewTaskRequest,
 } from '@/lib/new-task.ts';
 import { listStackChoices } from '@/lib/tasks/bundles.ts';
-import { listOpenTaskChoices } from '@/lib/tasks/groups.ts';
+import { listOpenTaskChoices, orderChains } from '@/lib/tasks/groups.ts';
 import { resolveTaskMenuIcon } from '@/lib/tasks/status.ts';
 
 const PRIORITY_ITEMS = listNewTaskPriorities();
@@ -96,6 +97,11 @@ function ProjectField({
   );
 }
 
+function resolveStackRepo(state: ShinsaState, chosen: NewTaskChoices) {
+  if (chosen.start !== 'stack') return null;
+  return chosen.after.flatMap((id) => state.tasks[id]?.repoId ?? [])[0] ?? null;
+}
+
 function resolveForm(state: ShinsaState | null, chosen: NewTaskChoices, machines: MachineChoice[]) {
   const picked = state ? resolveProjectChoice(state, chosen.project) : 'auto';
   const shown = state ? resolveShownProject(state, picked) : NO_PROJECT;
@@ -104,7 +110,7 @@ function resolveForm(state: ShinsaState | null, chosen: NewTaskChoices, machines
   const project = fits || picked === 'auto' ? picked : NO_PROJECT;
   const shownProject = fits ? shown : NO_PROJECT;
   const open = state ? listOpenTaskChoices(state, null) : [];
-  const stackable = state ? listStackChoices(state, null) : [];
+  const stackable = state ? listStackChoices(state, null, resolveStackRepo(state, chosen)) : [];
   const choices: NewTaskChoices = { ...chosen, project, ...resolveStartChoice(chosen, open, stackable) };
   return { choices, shownProject, open, stackable, placement };
 }
@@ -125,13 +131,19 @@ function AfterTaskList({
       <CommandInput placeholder='Search open tasks' aria-label='Search open tasks' />
       <CommandList>
         <CommandEmpty>No open task matches.</CommandEmpty>
-        {open.map((task) => (
+        {orderChains(state, open).map(({ task, depth }) => (
           <CommandItem
             key={task.id}
             value={`${task.handle ?? ''} ${task.title} ${task.id}`}
             icon={resolveTaskMenuIcon(state, task)}
             onSelect={() => onToggle(task.id)}
           >
+            {depth > 0 && (
+              <span className={cn('flex shrink-0', resolveDepthIndent(depth))}>
+                <Icon name='IconArrowCornerDownRight' className='text-fg-2' />
+              </span>
+            )}
+            <DepthMark depth={depth} />
             <Truncate className='min-w-0 flex-1'>{task.title}</Truncate>
             {task.handle && <CommandHint className='shrink-0'>{task.handle}</CommandHint>}
             <Icon
@@ -189,7 +201,6 @@ function StartField({
                   return;
                 }
                 onChoose(toggleStackTask(choices.start === 'stack' ? choices.after : [], taskId));
-                setPicking(null);
               }}
             />
           </PopoverContent>

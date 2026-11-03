@@ -599,29 +599,40 @@ describe('waiting on other tasks', () => {
     ] as never);
   });
 
-  it('stacks the task on another as a bundle and takes it out again', () => {
+  it('stacks the task on one more task as a bundle and takes it out again', () => {
     const { state, task } = setup(
-      createTask({ id: 't1', stage: 'planning', stacksOn: 't2' }),
+      createTask({ id: 't1', stage: 'planning', stacksOn: ['t2'] }),
       [],
-      [createTask({ id: 't2', title: 'Add the API' }), createTask({ id: 't3', title: 'Write the schema' })]
+      [
+        createTask({ id: 't2', title: 'Add the API' }),
+        createTask({ id: 't3', handle: 'SW-3', title: 'Write the schema', stacksOn: ['t2'] }),
+      ]
     );
     const all = sections(state, task);
     const stack = find(all, 'task.t1.stack.on');
     if (stack.kind !== 'choice') throw new Error('Expected a choice');
     expect(stack).toMatchObject({ label: 'Stack on another task…', hint: 'Add the API', value: ['t2'] });
-    expect(stack.options.map((option) => option.value).sort()).toEqual(['t2', 't3']);
+    expect(stack.options.map((option) => [option.value, option.depth])).toEqual([
+      ['t2', 0],
+      ['t3', 1],
+    ]);
+    expect(stack.options.map((option) => option.hint)).toEqual([undefined, 'SW-3']);
+    expect(stack.options[1]?.keywords).toContain('SW-3');
     pick(stack, 't3');
     pick(stack, 'gone');
     run(find(all, 'task.t1.stack.off'));
     expect(spies.sent.mock.calls).toEqual([
-      [{ type: 'task.stack_on', taskId: 't1', stacksOn: 't3' }, 'Stacked on “Write the schema”.'],
-      [{ type: 'task.stack_on', taskId: 't1', stacksOn: null }, 'Taken out of the bundle.'],
+      [
+        { type: 'task.stack_on_tasks', taskId: 't1', stacksOn: ['t2', 't3'] },
+        'Stacked on “Write the schema”.',
+      ],
+      [{ type: 'task.stack_on_tasks', taskId: 't1', stacksOn: [] }, 'Taken out of the bundle.'],
     ] as never);
   });
 
   it('offers no stacking once the task builds', () => {
     const { state, task } = setup(
-      createTask({ id: 't1', stage: 'building', stacksOn: 'gone' }),
+      createTask({ id: 't1', stage: 'building', stacksOn: ['gone'] }),
       [],
       [createTask({ id: 't2' })]
     );

@@ -165,12 +165,17 @@ describe('the bundle on the merge gate', () => {
       id: 'middle',
       title: 'Add the API',
       stage: 'shipping',
-      stacksOn: 'root',
+      stacksOn: ['root'],
       bundleReady: { commit: 'a' },
       pullRequest: createPullRequest({ number: 41 }),
     });
-    const above = createTask({ id: 'above', title: 'Add the screen', stage: 'shipping', stacksOn: 'middle' });
-    const merged = createTask({ id: 'merged', stage: 'merged', stacksOn: 'above' });
+    const above = createTask({
+      id: 'above',
+      title: 'Add the screen',
+      stage: 'shipping',
+      stacksOn: ['middle'],
+    });
+    const merged = createTask({ id: 'merged', stage: 'merged', stacksOn: ['above'] });
     const waits = listMergeWaits(createShinsaState({ tasks: [root, middle, above, merged] }), root);
     expect(waits).toEqual([
       {
@@ -204,7 +209,7 @@ describe('the bundle on the merge gate', () => {
       id: 'middle',
       title: 'Add the API',
       stage: 'shipping',
-      stacksOn: 'root',
+      stacksOn: ['root'],
       bundleReady: { commit: 'a' },
     });
     const held = listMergeWaits(createShinsaState({ tasks: [root, stepped, above] }), root)[0];

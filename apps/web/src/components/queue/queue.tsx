@@ -1,4 +1,4 @@
-import { resolveQueue, type ShinsaState, type Task } from '@shinsa/core';
+import { resolveBundle, resolveQueue, type ShinsaState, type Task } from '@shinsa/core';
 import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -24,7 +24,6 @@ import {
   resolveSectionId,
 } from '@/lib/queue.ts';
 import { hasShareMark } from '@/lib/share/dialog.ts';
-import { listBundleRows } from '@/lib/tasks/bundles.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 type Variant = 'wide' | 'compact';
@@ -33,7 +32,7 @@ const FIRST_ROWS = 24;
 
 function renderMarks(state: ShinsaState, task: Task) {
   const shared = hasShareMark(task);
-  const bundled = listBundleRows(state, task).length > 0;
+  const bundled = resolveBundle(state, task).length > 0;
   if (!shared && !bundled) return undefined;
   return (
     <>

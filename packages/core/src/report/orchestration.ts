@@ -39,6 +39,7 @@ export interface CourierRequest {
   thisTaskWaits: boolean;
   afterThis: boolean;
   stackOnThis: boolean;
+  stackOn: string[];
   backlog: boolean;
 }
 
@@ -95,6 +96,7 @@ export function validateCourierTask(input: Record<string, unknown>): Validation<
     thisTaskWaits: task.this_task_waits,
     afterThis: task.after_this,
     stackOnThis: task.stack_on_this,
+    stackOn: task.stack_on,
     backlog: task.backlog,
   });
 }

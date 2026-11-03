@@ -47,7 +47,27 @@ export const TASK_LIST_ROW =
 export const FILED_COLUMNS =
   'grid-cols-[minmax(0,1fr)_9.5rem_4rem_3rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
 
-const DEPTH_INDENT = ['', '', 'ps-4', 'ps-8'];
+const DEPTH_INDENT = ['', '', 'ps-4', 'ps-8', 'ps-12', 'ps-16', 'ps-20'];
+
+const DEEPEST_INDENT = DEPTH_INDENT.length - 1;
+
+export function resolveDepthIndent(depth: number) {
+  return DEPTH_INDENT[Math.min(depth, DEEPEST_INDENT)];
+}
+
+export function describeChainDepth(depth: number) {
+  return depth > DEEPEST_INDENT ? `${depth} steps down the chain` : null;
+}
+
+export function DepthMark({ depth }: { depth: number }) {
+  const label = describeChainDepth(depth);
+  if (!label) return null;
+  return (
+    <Hint label={label}>
+      <span className='shrink-0 text-2xs text-fg-2 tabular-nums'>{depth}</span>
+    </Hint>
+  );
+}
 
 function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
   const commands = useEngineCommands(task.id);
@@ -118,7 +138,7 @@ export function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
 export function RowStatus({ state, task }: { state: ShinsaState; task: Task }) {
   if (isHeldByTasks(state, task)) {
     const waitsOn = listWaitsOn(state, task);
-    const stacked = waitsOn.length === 1 && waitsOn[0]?.id === task.stacksOn;
+    const stacked = waitsOn.length > 0 && waitsOn.every((parent) => task.stacksOn?.includes(parent.id));
     return <WaitsOnLinks waitsOn={waitsOn} stacked={stacked} />;
   }
   return <StatusText state={state} task={task} className='truncate text-xs' />;
@@ -136,7 +156,6 @@ export const TaskListRow = React.memo(function TaskListRowItem({
   columns?: string;
 }) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  const level = Math.min(depth, 3);
   return (
     <LazyMenu kind='context' content={<TaskMenuItems state={state} task={task} />}>
       <LazyMenuTrigger
@@ -145,7 +164,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
           <div
             role='button'
             tabIndex={0}
-            data-depth={level}
+            data-depth={depth}
             onClick={(event) => {
               if (event.currentTarget.contains(event.target as Node)) navigate(resolveTaskPath(task));
             }}
@@ -158,8 +177,9 @@ export const TaskListRow = React.memo(function TaskListRowItem({
           />
         }
       >
-        <span className={cn('flex min-w-0 items-center gap-1.5', DEPTH_INDENT[level])}>
+        <span className={cn('flex min-w-0 items-center gap-1.5', resolveDepthIndent(depth))}>
           {depth > 0 && <ChainArrow state={state} task={task} />}
+          <DepthMark depth={depth} />
           <Hint label={`${PRIORITY_LABEL[task.priority]} priority`}>
             <span className='grid size-4 shrink-0 place-items-center'>
               <PriorityIcon priority={task.priority} />

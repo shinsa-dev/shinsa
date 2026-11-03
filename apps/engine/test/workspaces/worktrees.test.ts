@@ -84,8 +84,42 @@ describe('worktrees', () => {
       createTask({ id: 'below', branch: below.branch, worktreePath: below.path }),
       'feat: below'
     );
-    await strategy.prepare(repo, { ...task, stackBase: below.branch });
+    await strategy.prepare(repo, { ...task, stackBases: [below.branch] });
     expect(existsSync(join(checkout.path, 'below.txt'))).toBe(true);
+  });
+
+  test('a task stacked on several starts from the first and merges the others in, skipping one that conflicts', async () => {
+    const made = await createGitRepo();
+    const strategy = new WorktreeStrategy(new WorktreeRoot({ defaultDir: createTempDir() }));
+    const parents: string[] = [];
+    for (const [id, files] of [
+      ['b', { 'b.txt': 'b\n', 'shared.txt': 'b\n' }],
+      ['c', { 'c.txt': 'c\n' }],
+      ['d', { 'shared.txt': 'd\n' }],
+    ] as const) {
+      const parent = await strategy.prepare(
+        made.repo,
+        createTask({ id, branch: `feat/${id}`, worktreePath: null })
+      );
+      writeFiles(parent.path, files);
+      await strategy.commit(
+        made.repo,
+        createTask({ id, branch: parent.branch, worktreePath: parent.path }),
+        `feat: ${id}`
+      );
+      parents.push(parent.branch);
+    }
+    const stacked = createTask({ id: 'f', branch: 'feat/f', worktreePath: null, stackBases: parents });
+    const checkout = await strategy.prepare(made.repo, stacked);
+    expect(existsSync(join(checkout.path, 'b.txt'))).toBe(true);
+    expect(existsSync(join(checkout.path, 'c.txt'))).toBe(true);
+    expect(await git(checkout.path, 'show', 'HEAD:shared.txt')).toBe('b');
+    expect(await git(checkout.path, 'log', '-1', '--format=%s')).toBe("Merge branch 'feat/c' into feat/f");
+    expect(await git(checkout.path, 'status', '--porcelain')).toBe('');
+    writeFiles(checkout.path, { 'stray.txt': 'x' });
+    await strategy.prepare(made.repo, { ...stacked, worktreePath: checkout.path });
+    expect(existsSync(join(checkout.path, 'stray.txt'))).toBe(false);
+    expect(existsSync(join(checkout.path, 'c.txt'))).toBe(true);
   });
 
   test('a finished task’s worktree is removed; a task without a branch cannot have one', async () => {

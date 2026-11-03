@@ -286,9 +286,25 @@ describe('tasks that wait on another task, nested under it', () => {
         waiting('c', 'Step C', ['b']),
         waiting('d', 'Step D', ['c']),
         waiting('e', 'Step E', ['d']),
+        waiting('f', 'Step F', ['e']),
+        waiting('g', 'Step G', ['f']),
+        waiting('h', 'Step H', ['g']),
       ])
     );
-    expect(waitingRows().map(depthOf)).toEqual([1, 2, 3, 3, 3]);
+    const shown = waitingRows();
+    expect(shown.map(depthOf)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    const indents = shown.map((row) => row.querySelector('span')?.className.match(/ps-\d+/)?.[0] ?? '');
+    expect(indents).toEqual(['', 'ps-4', 'ps-8', 'ps-12', 'ps-16', 'ps-20', 'ps-20', 'ps-20']);
+    expect(shown.map((row) => within(row).queryByText(String(depthOf(row))) !== null)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+    ]);
   });
 
   it('puts fan-out siblings side by side under their parent', () => {

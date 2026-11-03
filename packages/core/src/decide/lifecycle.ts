@@ -24,7 +24,7 @@ import { assembleReport } from '../report/assemble.ts';
 import { serializeReportMarkdown } from '../report/markdown.ts';
 import { listPendingDependencies, resolveBundle } from '../state/queries.ts';
 import { type Decider, describeWaiting } from './decider.ts';
-import { syncStackBase } from './dependencies.ts';
+import { syncStackBases } from './dependencies.ts';
 import { approveReviewAhead } from './gates.ts';
 import { proceedAfterSetup } from './shapes.ts';
 import { holdForCheckout } from './workspaces.ts';
@@ -73,10 +73,10 @@ export function startWork(decider: Decider, taskId: string) {
   if (pending.length > 0) {
     decider.cancelRuns(taskId);
     decider.clearWaits(taskId);
-    decider.stage(taskId, 'waiting_on_tasks', describeWaiting(decider.state, decider.task(taskId), pending));
+    decider.stage(taskId, 'waiting_on_tasks', describeWaiting(decider.task(taskId), pending));
     return;
   }
-  syncStackBase(decider, taskId);
+  syncStackBases(decider, taskId);
   if (holdForCheckout(decider, taskId)) return;
   if (!needsSetup(decider.task(taskId))) {
     proceedAfterSetup(decider, taskId);

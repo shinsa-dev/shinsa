@@ -220,7 +220,7 @@ export function createTask(
     repoId?: string;
     priority?: 'urgent' | 'high' | 'normal' | 'low';
     waitsOn?: string[];
-    stacksOn?: string;
+    stacksOn?: string[];
     triageWaitsOn?: string | string[];
     planFirst?: boolean;
     backlog?: boolean;

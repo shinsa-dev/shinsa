@@ -71,6 +71,12 @@ export class Checkout extends Context.Service<
       baseBranch: string | null,
       signal?: AbortSignal
     ): Effect.Effect<void, GitFailed | RefNameInvalid>;
+    mergeBranches(
+      path: string,
+      branch: string,
+      others: readonly string[],
+      signal?: AbortSignal
+    ): Effect.Effect<string[], GitFailed | RefNameInvalid>;
     remove(repo: Repo, path: string): Effect.Effect<void>;
     createIsolated(
       repo: Repo,
@@ -333,6 +339,31 @@ export class Checkout extends Context.Service<
         yield* prepare(path, signal);
       });
 
+      const mergeBranches = Effect.fn('Checkout.mergeBranches')(function* (
+        path: string,
+        branch: string,
+        others: readonly string[],
+        signal?: AbortSignal
+      ) {
+        const merged: string[] = [];
+        for (const other of others) {
+          const name = yield* decodeRefName(other);
+          const message = `Merge branch '${name}' into ${branch}`;
+          const result = yield* git.attempt(['merge', '--quiet', '--no-edit', '-m', message, name], path, {
+            signal,
+          });
+          if (result.ok) {
+            merged.push(name);
+            continue;
+          }
+          const merging = yield* git.attempt(['rev-parse', '--quiet', '--verify', 'MERGE_HEAD'], path, {
+            signal,
+          });
+          if (merging.ok) yield* git.run(['merge', '--abort'], path, { signal });
+        }
+        return merged;
+      });
+
       const remove = Effect.fn('Checkout.remove')(function* (repo: Repo, path: string) {
         if (yield* Effect.sync(() => existsSync(path))) {
           yield* git.attempt(['worktree', 'remove', '--force', path], repo.path);
@@ -424,6 +455,7 @@ export class Checkout extends Context.Service<
         resolveFreeBranch,
         create,
         refresh,
+        mergeBranches,
         remove,
         createIsolated,
         describeIsolated,

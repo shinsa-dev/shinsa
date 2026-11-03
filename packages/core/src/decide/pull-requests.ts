@@ -474,7 +474,7 @@ export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.r
     decider.fail(
       task.id,
       `The bundle conflicts with ${conflict.base}`,
-      `“${conflicting}” conflicts with ${conflict.base} once the bundle merges, and every branch in the bundle already has the one below it. Resolve the conflict in that task or on GitHub, then retry.`
+      `“${conflicting}” conflicts with ${conflict.base} once the bundle merges, and every branch in the bundle already has the branches it stacks on. Resolve the conflict in that task or on GitHub, then retry.`
     );
     return;
   }
