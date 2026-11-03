@@ -36,6 +36,12 @@ export function parseBase64Url(text: string): Bytes | null {
   return bytes;
 }
 
+export const URL_SAFE_SEGMENT = /^[A-Za-z0-9_-]+$/;
+
+export function hasBytes(text: string, length: number) {
+  return URL_SAFE_SEGMENT.test(text) && parseBase64Url(text)?.length === length;
+}
+
 const BASE32_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';
 
 export function serializeBase32(bytes: Bytes) {

@@ -1,3 +1,4 @@
+import { resolveComparableText } from '../chat/text.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -12,15 +13,11 @@ import { createTask } from './tasks.ts';
 
 const MAX_OPEN_SUGGESTIONS = 10;
 
-function normalize(title: string) {
-  return title.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
 function listKnownTitles(decider: Decider, task: Task) {
-  const own = (task.suggestions ?? []).map((suggestion) => normalize(suggestion.title));
+  const own = (task.suggestions ?? []).map((suggestion) => resolveComparableText(suggestion.title));
   const open = Object.values(decider.state.tasks)
     .filter((candidate) => !isTaskSettled(candidate))
-    .map((candidate) => normalize(candidate.title));
+    .map((candidate) => resolveComparableText(candidate.title));
   return new Set([...own, ...open]);
 }
 
@@ -62,7 +59,7 @@ export function suggestTasks(decider: Decider, command: CommandOf<'agent.suggest
   const { run, task } = findCurrentRun(decider, command.runId, 'suggest_tasks');
   const known = listKnownTitles(decider, task);
   const fresh = command.suggestions.filter((suggestion) => {
-    const title = normalize(suggestion.title);
+    const title = resolveComparableText(suggestion.title);
     if (known.has(title)) return false;
     known.add(title);
     return true;

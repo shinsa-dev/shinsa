@@ -1,30 +1,25 @@
+import { isRecord, parseJsonRecord } from '../domain/records.ts';
+import { DAY_MS } from '../domain/time.ts';
 import type { TeamTask } from '../share/teams.ts';
-import { encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
+import { encodeText, hasBytes, parseBase64Url, serializeBase64Url, URL_SAFE_SEGMENT } from './bytes.ts';
 import { REMOTE_APP_ORIGIN, REMOTE_CONNECT_PARAM, REMOTE_PATHS, type TeamAction } from './contract.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parseSigningPublicKey, serializePublicKey } from './keys.ts';
-import {
-  deriveChannelSessionKey,
-  readChannelFields,
-  signChannelProof,
-  verifyChannelProof,
-} from './share-channel.ts';
+import { deriveChannelSessionKey, signChannelProof, verifyChannelProof } from './share-channel.ts';
 
-const HELLO_LABEL = 'shinsa-team-hello-v1';
+const TEAM_HELLO_LABEL = 'shinsa-team-hello-v1';
 
-const WELCOME_LABEL = 'shinsa-team-welcome-v1';
+const TEAM_WELCOME_LABEL = 'shinsa-team-welcome-v1';
 
-const SESSION_LABEL = 'shinsa-team-v1 server-to-client';
+const TEAM_SESSION_LABEL = 'shinsa-team-v1 server-to-client';
 
 const SNAPSHOT_LABEL = 'shinsa-team-snapshot-v1';
 
 const SNAPSHOT_SIGNATURE = { name: 'ECDSA', hash: 'SHA-256' } as const;
 
-const SEGMENT = /^[A-Za-z0-9_-]+$/;
-
 export const TEAM_KEY_BYTES = 32;
 
-export const TEAM_SNAPSHOT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const TEAM_SNAPSHOT_TTL_MS = 30 * DAY_MS;
 
 export const TEAM_CHANNEL_PATH = '/team';
 
@@ -108,7 +103,7 @@ export interface TeamViewTarget {
 }
 
 export function isTeamKey(key: string) {
-  return SEGMENT.test(key) && parseBase64Url(key)?.length === TEAM_KEY_BYTES;
+  return hasBytes(key, TEAM_KEY_BYTES);
 }
 
 export function serializeTeamJoinFragment(fragment: TeamJoinFragment) {
@@ -117,7 +112,7 @@ export function serializeTeamJoinFragment(fragment: TeamJoinFragment) {
 
 export function parseTeamJoinFragment(fragment: string): TeamJoinFragment | null {
   const parts = fragment.replace(/^#/, '').split('.');
-  if (parts.length !== 3 || parts.some((part) => !SEGMENT.test(part))) return null;
+  if (parts.length !== 3 || parts.some((part) => !URL_SAFE_SEGMENT.test(part))) return null;
   const [teamId, invite, key] = parts as [string, string, string];
   return isTeamKey(key) ? { teamId, invite, key } : null;
 }
@@ -166,7 +161,7 @@ export function parseTeamViewTarget(url: URL): TeamViewTarget | null {
   const instanceId = url.searchParams.get('machine');
   const taskId = url.searchParams.get('task');
   if (!(teamId && instanceId && taskId)) return null;
-  if (![teamId, instanceId, taskId].every((part) => SEGMENT.test(part))) return null;
+  if (![teamId, instanceId, taskId].every((part) => URL_SAFE_SEGMENT.test(part))) return null;
   return { teamId, instanceId, taskId };
 }
 
@@ -175,20 +170,25 @@ function serializeTeamView(view: TeamView) {
 }
 
 function readTeamView(value: unknown): TeamView | null {
-  if (value === null || typeof value !== 'object') return null;
-  const fields = value as Record<string, unknown>;
-  if (fields.kind === 'list') return { kind: 'list' };
-  if (fields.kind === 'task' && typeof fields.taskId === 'string' && SEGMENT.test(fields.taskId))
-    return { kind: 'task', taskId: fields.taskId };
+  if (!isRecord(value)) return null;
+  if (value.kind === 'list') return { kind: 'list' };
+  if (value.kind === 'task' && typeof value.taskId === 'string' && URL_SAFE_SEGMENT.test(value.taskId))
+    return { kind: 'task', taskId: value.taskId };
   return null;
 }
 
 function listHelloParts(team: string, view: TeamView, ephemeral: string) {
-  return [HELLO_LABEL, team, serializeTeamView(view), ephemeral];
+  return [TEAM_HELLO_LABEL, team, serializeTeamView(view), ephemeral];
 }
 
-function listWelcomeParts(keys: TeamKeys) {
-  return [WELCOME_LABEL, keys.team, serializeTeamView(keys.view), keys.clientEphemeral, keys.serverEphemeral];
+function listTeamWelcomeParts(keys: TeamKeys) {
+  return [
+    TEAM_WELCOME_LABEL,
+    keys.team,
+    serializeTeamView(keys.view),
+    keys.clientEphemeral,
+    keys.serverEphemeral,
+  ];
 }
 
 export async function createTeamHello(
@@ -209,7 +209,7 @@ export async function createTeamHello(
 }
 
 export function parseTeamHello(text: string): TeamHello | null {
-  const fields = readChannelFields(text);
+  const fields = parseJsonRecord(text);
   if (fields?.type !== 'team-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   const view = readTeamView(fields.view);
   const { team, ephemeral, proof } = fields;
@@ -226,12 +226,12 @@ export async function createTeamWelcome(key: string, keys: TeamKeys) {
   return {
     type: 'welcome' as const,
     ephemeral: keys.serverEphemeral,
-    proof: await signChannelProof(key, listWelcomeParts(keys)),
+    proof: await signChannelProof(key, listTeamWelcomeParts(keys)),
   };
 }
 
 export function verifyTeamWelcome(key: string, keys: TeamKeys, proof: string) {
-  return verifyChannelProof(key, proof, listWelcomeParts(keys));
+  return verifyChannelProof(key, proof, listTeamWelcomeParts(keys));
 }
 
 export function deriveTeamSessionKey(
@@ -241,7 +241,7 @@ export function deriveTeamSessionKey(
   peerEphemeral: string
 ) {
   const parts = [keys.team, serializeTeamView(keys.view), keys.clientEphemeral, keys.serverEphemeral];
-  return deriveChannelSessionKey(SESSION_LABEL, key, parts, privateKey, peerEphemeral);
+  return deriveChannelSessionKey(TEAM_SESSION_LABEL, key, parts, privateKey, peerEphemeral);
 }
 
 function listSnapshotBytes(body: string) {
@@ -259,13 +259,13 @@ export function isTeamSnapshotExpired(updatedAt: number, now: number) {
 }
 
 export function readTeamSnapshot(value: unknown): TeamSnapshot | null {
-  if (value === null || typeof value !== 'object') return null;
-  const { body, signature } = value as Record<string, unknown>;
+  if (!isRecord(value)) return null;
+  const { body, signature } = value;
   return typeof body === 'string' && typeof signature === 'string' ? { body, signature } : null;
 }
 
 function readSnapshotBody(text: string): TeamSnapshotBody | null {
-  const fields = readChannelFields(text);
+  const fields = parseJsonRecord(text);
   if (!fields) return null;
   const { teamId, instanceId, tasks, updatedAt } = fields;
   if (!(typeof teamId === 'string' && typeof instanceId === 'string' && typeof updatedAt === 'number'))
@@ -274,7 +274,7 @@ function readSnapshotBody(text: string): TeamSnapshotBody | null {
 }
 
 export function selectTeamSnapshotSigner(snapshot: TeamSnapshot) {
-  const instanceId = readChannelFields(snapshot.body)?.instanceId;
+  const instanceId = parseJsonRecord(snapshot.body)?.instanceId;
   return typeof instanceId === 'string' ? instanceId : null;
 }
 

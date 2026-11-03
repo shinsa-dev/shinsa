@@ -1,4 +1,5 @@
 import { RUN_AGENT_ROLE, resolveAgentModel, resolveAgentProvider } from '../agent-models/index.ts';
+import { quoteTitle } from '../chat/text.ts';
 import {
   describeHumanEdits,
   type Gate,
@@ -100,13 +101,14 @@ interface OpenGateOptions {
 const CASCADE_SUMMARY = 'Stopped because the agent that delegated it finished its step.';
 
 export function quoteTitles(tasks: Task[]) {
-  return tasks.map((task) => `“${task.title}”`).join(', ');
+  return tasks.map((task) => quoteTitle(task.title)).join(', ');
 }
 
 export function describeWaiting(state: ShinsaState, task: Task, pending: Task[]) {
   const parent = task.stacksOn ? state.tasks[task.stacksOn] : undefined;
   const others = pending.filter((dependency) => dependency !== parent);
-  const ready = parent && pending.includes(parent) ? `“${parent.title}” to be ready to merge` : null;
+  const ready =
+    parent && pending.includes(parent) ? `${quoteTitle(parent.title)} to be ready to merge` : null;
   const finish = others.length > 0 ? `${quoteTitles(others)} to finish` : null;
   return `waiting for ${[finish, ready].filter(Boolean).join(' and ')}`;
 }

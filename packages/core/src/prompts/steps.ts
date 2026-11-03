@@ -9,7 +9,7 @@ import {
   VERIFICATION_RULES,
 } from '../domain/index.ts';
 
-function describeActor(actor: StepActor) {
+function describeStepActor(actor: StepActor) {
   if (actor.by === 'agent') return `the ${actor.role}`;
   return actor.by === 'you' ? 'the human' : 'Shinsa';
 }
@@ -17,7 +17,7 @@ function describeActor(actor: StepActor) {
 export function describeStepCatalog() {
   return COMPOSABLE_STEPS.map((step) => {
     const definition = STEP_SCHEMA[step];
-    return `- \`${step}\` (${describeActor(definition.actor)}): ${definition.exit}`;
+    return `- \`${step}\` (${describeStepActor(definition.actor)}): ${definition.exit}`;
   }).join('\n');
 }
 

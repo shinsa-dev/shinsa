@@ -1,5 +1,6 @@
 import type { CommandOf } from '../commands/index.ts';
 import { DomainError, type Project } from '../domain/index.ts';
+import { findProject } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 
 function assertHumanTeams(decider: Decider) {
@@ -11,12 +12,6 @@ function assertHumanTeams(decider: Decider) {
   });
 }
 
-function findTeamProject(decider: Decider, projectId: string) {
-  const project = decider.state.projects[projectId];
-  if (!project) throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}` });
-  return project;
-}
-
 function writeTeamIds(decider: Decider, project: Project, teamIds: string[]) {
   const { teamIds: _previous, ...rest } = project;
   decider.emit({ type: 'project.written', project: teamIds.length > 0 ? { ...rest, teamIds } : rest });
@@ -24,7 +19,7 @@ function writeTeamIds(decider: Decider, project: Project, teamIds: string[]) {
 
 export function addProjectToTeam(decider: Decider, command: CommandOf<'project.add_to_team'>) {
   assertHumanTeams(decider);
-  const project = findTeamProject(decider, command.projectId);
+  const project = findProject(decider.state, command.projectId);
   const teamIds = project.teamIds ?? [];
   if (teamIds.includes(command.teamId)) return;
   writeTeamIds(decider, project, [...teamIds, command.teamId]);
@@ -32,7 +27,7 @@ export function addProjectToTeam(decider: Decider, command: CommandOf<'project.a
 
 export function removeProjectFromTeam(decider: Decider, command: CommandOf<'project.remove_from_team'>) {
   assertHumanTeams(decider);
-  const project = findTeamProject(decider, command.projectId);
+  const project = findProject(decider.state, command.projectId);
   const teamIds = project.teamIds ?? [];
   if (!teamIds.includes(command.teamId)) return;
   writeTeamIds(

@@ -107,7 +107,7 @@ function describeResult(result: DeliveredResult, budget: { left: number }) {
   return `${header}:\n\n${text}`;
 }
 
-function describeEscalation(parent: Run) {
+function describeEscalationPath(parent: Run) {
   if (!hasTool(parent, 'ask')) return 'You cannot ask the human, so decide it from what you know.';
   if (parent.delegation)
     return 'If you cannot decide it, ask the agent that delegated this to you with `ask` first.';
@@ -120,7 +120,7 @@ function describeQuestion(question: DeliveredQuestion, parent: Run) {
     question.question,
     question.context ?? '',
     question.choices.length > 0 ? `Options: ${question.choices.join(' / ')}` : '',
-    `Answer it with \`delegation_answer\`. ${describeEscalation(parent)}`,
+    `Answer it with \`delegation_answer\`. ${describeEscalationPath(parent)}`,
   ]
     .filter((line) => line.length > 0)
     .join('\n');

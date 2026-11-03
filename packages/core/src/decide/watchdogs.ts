@@ -22,6 +22,7 @@ import { assembleReport } from '../report/assemble.ts';
 import { PROTOCOL_LIMITS } from '../report/schema.ts';
 import type { WatchdogSource, WatchdogSpec } from '../report/types.ts';
 import { listChangedIds } from '../state/draft.ts';
+import { findProject, findRepo } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { settleTask } from './lifecycle.ts';
 import { isReadBusy, listSourceFiledTasks, type ReadReport } from './reads.ts';
@@ -101,8 +102,7 @@ function createWatchdog(decider: Decider, spec: WatchdogSpec, round: number): Wa
 }
 
 function writeSource(decider: Decider, projectId: string, source: WatchSource) {
-  const project = decider.state.projects[projectId];
-  if (!project) throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}` });
+  const project = findProject(decider.state, projectId);
   const sources = project.watchSources ?? [];
   const known = sources.find((candidate) => candidate.server === source.server);
   if (!known && sources.length >= WATCHDOG_LIMITS.projectSources) {
@@ -450,10 +450,7 @@ export function connectWatchdog(decider: Decider, command: CommandOf<'watchdog.c
 }
 
 export function writeWatchSource(decider: Decider, command: CommandOf<'watch_source.write'>) {
-  for (const repoId of command.repoIds) {
-    if (!decider.state.repos[repoId])
-      throw new DomainError({ code: 'repo_not_found', message: `No repository ${repoId}` });
-  }
+  for (const repoId of command.repoIds) findRepo(decider.state, repoId);
   const known = decider.state.projects[command.projectId]?.watchSources?.find(
     (source) => source.server === command.server
   );
@@ -467,9 +464,7 @@ export function writeWatchSource(decider: Decider, command: CommandOf<'watch_sou
 }
 
 export function removeWatchSource(decider: Decider, command: CommandOf<'watch_source.remove'>) {
-  const project = decider.state.projects[command.projectId];
-  if (!project)
-    throw new DomainError({ code: 'project_not_found', message: `No project ${command.projectId}` });
+  const project = findProject(decider.state, command.projectId);
   if (!(project.watchSources ?? []).some((source) => source.server === command.server)) return;
   removeSourceSuggestions(decider, project.id, command.server);
   decider.emit({ type: 'watch_source.removed', projectId: project.id, server: command.server });

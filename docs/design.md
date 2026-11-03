@@ -5927,6 +5927,11 @@ Easing: `ease-out` is the strong ease-out `cubic-bezier(0.23, 1, 0.32, 1)`
 and is the default for every transition. `ease-in-out` is
 `cubic-bezier(0.77, 0, 0.175, 1)`; `ease-drawer` is
 `cubic-bezier(0.32, 0.72, 0, 1)` for anything that slides like a drawer.
+`--ease-emphasized` is `cubic-bezier(0.22, 1, 0.36, 1)`, the movement clock's curve (a sliding
+indicator, a turning chevron, a toast); where a CSS variable cannot be read (`element.animate`, a
+transition string) it is `EASE_EMPHASIZED` (`@shinsa/ui/lib/motion`), and a test keeps the two equal.
+The popups' surface and enter motion are one class set, `lib/popup.ts` (`POPUP_SURFACE`,
+`POPUP_SIDE_SLIDE`, `POPUP_ZOOM`).
 Never `ease-in` and never `ease-linear` on UI (a progress bar may be linear).
 
 Rules:

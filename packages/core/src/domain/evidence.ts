@@ -59,7 +59,7 @@ export function isCurrentEvidence(evidence: Evidence) {
   return !evidence.replacedBy && evidence.removedAt === undefined;
 }
 
-function resolveStageKey(evidence: Evidence) {
+function resolveEvidenceStageKey(evidence: Evidence) {
   return ['stage', evidence.round ?? 1, resolveEvidenceKey(evidence)].join('\u0000');
 }
 
@@ -75,14 +75,15 @@ function isStaged(evidence: Evidence) {
 function resolveItemKey(evidence: Evidence, joined: ReadonlyMap<string, string>) {
   if (evidence.itemId) return `item\u0000${evidence.itemId}`;
   if (!isStaged(evidence)) return `piece\u0000${evidence.id}`;
-  const stageKey = resolveStageKey(evidence);
+  const stageKey = resolveEvidenceStageKey(evidence);
   return joined.get(stageKey) ?? stageKey;
 }
 
 function groupEvidenceItems(evidence: readonly Evidence[]): EvidenceItem[] {
   const joined = new Map<string, string>();
   for (const piece of evidence) {
-    if (piece.itemId && isStaged(piece)) joined.set(resolveStageKey(piece), `item\u0000${piece.itemId}`);
+    if (piece.itemId && isStaged(piece))
+      joined.set(resolveEvidenceStageKey(piece), `item\u0000${piece.itemId}`);
   }
   const groups = new Map<string, { at: number; pieces: Evidence[] }>();
   for (let at = evidence.length - 1; at >= 0; at--) {

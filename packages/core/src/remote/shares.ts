@@ -1,5 +1,13 @@
 import type { SharedTask } from '../share/index.ts';
-import { concatBytes, decodeText, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
+import {
+  concatBytes,
+  decodeText,
+  encodeText,
+  hasBytes,
+  parseBase64Url,
+  serializeBase64Url,
+  URL_SAFE_SEGMENT,
+} from './bytes.ts';
 import { REMOTE_PATHS } from './contract.ts';
 
 export const SHARE_DIFF_FILE = 'diff';
@@ -45,13 +53,7 @@ export interface ShareLiveView {
   updatedAt: number;
 }
 
-const SEGMENT = /^[A-Za-z0-9_-]+$/;
-
 const SHARE_PAGE = new RegExp(`^${REMOTE_PATHS.sharePage}/([A-Za-z0-9_-]+)$`);
-
-function hasBytes(text: string, length: number) {
-  return parseBase64Url(text)?.length === length;
-}
 
 export function serializeShareUrl(origin: string, link: ShareLink) {
   return `${origin}${resolveSharePagePath(link.instanceId, link.shareId)}#${link.key}`;
@@ -67,7 +69,7 @@ function parseShareToken(token: string) {
   if (!bytes || bytes.length <= SHARE_ID_BYTES) return null;
   try {
     const instanceId = decodeText(bytes.slice(SHARE_ID_BYTES));
-    if (!SEGMENT.test(instanceId)) return null;
+    if (!URL_SAFE_SEGMENT.test(instanceId)) return null;
     return { instanceId, shareId: serializeBase64Url(bytes.slice(0, SHARE_ID_BYTES)) };
   } catch {
     return null;
@@ -97,7 +99,7 @@ export function parseShareUrl(url: string | null): ShareLink | null {
 }
 
 export function isShareId(value: string) {
-  return SEGMENT.test(value) && hasBytes(value, SHARE_ID_BYTES);
+  return hasBytes(value, SHARE_ID_BYTES);
 }
 
 export function resolveShareConnectPath(instanceId: string) {

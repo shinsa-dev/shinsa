@@ -1,5 +1,6 @@
 import { Predicate, Result, Schema, type SchemaAST, SchemaIssue, SchemaTransformation } from 'effect';
 import { listIssueMessages, resolveIssuePath } from '../domain/issues.ts';
+import { isRecord } from '../domain/records.ts';
 
 export type Validation<T> = { ok: true; value: T } | { ok: false; errors: string[] };
 
@@ -166,10 +167,6 @@ function resolveDecoder(ast: SchemaAST.AST) {
   return decoder;
 }
 
-function isFields(value: unknown): value is { readonly [key: string]: unknown } {
-  return Predicate.isObject(value) && !Array.isArray(value);
-}
-
 function listFilters(checks: SchemaAST.Checks | undefined): SchemaAST.Filter<unknown>[] {
   return (checks ?? []).flatMap((check) =>
     check._tag === 'FilterGroup' ? listFilters(check.checks) : [check]
@@ -215,8 +212,8 @@ export class HandOverReader {
   }
 
   private readRecord(ast: SchemaAST.Objects, value: unknown, path: HandOverPath) {
-    const fields = isFields(value) ? value : {};
-    if (!isFields(value)) {
+    const fields = isRecord(value) ? value : {};
+    if (!isRecord(value)) {
       this.errors.push(NOT_OBJECT.replaceAll('{path}', resolveIssuePath(path)));
       if (ast.annotations?.halts === true) return null;
     }
