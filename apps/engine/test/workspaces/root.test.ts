@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Effect } from 'effect';
 import {
   assertWorktreeRoot,
+  describeWorktreeRootMarkProblem,
   describeWorktreeRootProblem,
   markWorktreeRoot,
   WORKTREE_ROOT_MARKER,
@@ -77,6 +78,10 @@ describe('the worktree folder', () => {
     chmodSync(locked, 0o500);
     const refused = Effect.runSync(Effect.flip(markWorktreeRoot(locked)));
     expect(refused.message).toBe(`Shinsa cannot write to the worktree folder ${locked}.`);
+    expect(Effect.runSync(describeWorktreeRootMarkProblem(locked))).toBe(
+      `Shinsa cannot write to the worktree folder ${locked}.`
+    );
     chmodSync(locked, 0o700);
+    expect(Effect.runSync(describeWorktreeRootMarkProblem(locked))).toBeNull();
   });
 });
