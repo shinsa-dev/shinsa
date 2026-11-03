@@ -199,6 +199,16 @@ describe('instances', () => {
     expect((await heartbeat(harness, studio)).status).toBe(401);
   });
 
+  test('answers not_found for a connect to a machine that no longer exists', async () => {
+    const harness = createHarness();
+    const session = await harness.signIn();
+    const studio = await pairMachine(harness, session);
+    await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, { session });
+    const connect = await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session });
+    expect(connect.status).toBe(404);
+    expect(await readJson(connect)).toEqual({ error: { code: 'not_found', message: 'No such machine.' } });
+  });
+
   test('a machine can remove itself', async () => {
     const harness = createHarness();
     const session = await harness.signIn();

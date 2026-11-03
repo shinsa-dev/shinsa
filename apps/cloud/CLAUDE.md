@@ -32,8 +32,9 @@ src/
 ├── layers.ts        CloudServices: every service below as one Layer, needing only the SQL client and the
 │                    configuration provider (the Worker gives D1 and its bindings, the tests SQLite and TEST_ENV)
 ├── config/          CloudConfig (service.ts): every variable read once with Effect's Config (CLOUD_CONFIG in
-│                    schema.ts), the secrets Redacted, the defaults in one place; an unreadable MAX_INSTANCES stops
-│                    the Worker instead of falling back
+│                    schema.ts), the secrets Redacted, the defaults in one place, the OAuth callback URLs GitHub and
+│                    Slack must see the same on authorize and exchange derived once from APP_ORIGIN; an unreadable
+│                    MAX_INSTANCES stops the Worker instead of falling back
 ├── crypto/          CloudCrypto (service.ts): random tokens (Redacted), claim codes and the instance and team ids,
 │                    PKCE challenges, the bot tokens sealed with AES-GCM under SLACK_TOKEN_KEY (imported once),
 │                    a pairing's credentials sealed to the machine's key (sealCredentials: the ephemeral key and IV
@@ -48,7 +49,8 @@ src/
 │                    refused from its Content-Length before it is read, and a body
 │                    or path id its schema refuses as body_invalid or not_found; every failure of 500 or more
 │                    logged); the edge's own modules: cookies.ts (the one cookie format: Path=/, Max-Age,
-│                    HttpOnly, Secure, SameSite=Lax), responses.ts (redirects with their cookies, a failure as JSON,
+│                    HttpOnly, Secure, SameSite=Lax), responses.ts (redirects with their cookies, the one
+│                    redirect to sign in and back, respondSignInRedirect, a failure as JSON,
 │                    text, a header on an API answer), request.ts (the request's URL and a cookie), forward.ts (what
 │                    never reaches a machine: hop-by-hop, Cloudflare's and proxies' headers; the tunnel statuses that
 │                    mean offline), worker.ts (WorkerContext and deferWork, Assets, WorkerLogger: Workers Logs'
@@ -56,12 +58,15 @@ src/
 ├── auth/            page-session/ (PageSession: the bearer, or the session cookie with the same-origin check on a
 │                    POST and never when a bearer was sent), machine-session/ (MachineSession: the machine token),
 │                    tokens.ts (the session's steps: selectSessionToken, selectRequestUser for the routes that work
-│                    signed out too, assertPageRequest, createSession), access.ts (findMachineAccess: owner, member
-│                    or guest, else not_found; findOwnMachine; findTeamAccess and findOwnTeam), schema.ts (the access
-│                    grants, BEARER, SESSION_TTL, SIGN_IN_EXPIRED)
-├── domain/          The Worker's own steps several routes share: machines.ts (isMachineOnline, a RemoteInstance,
-│                    a connect token's answer for the /remote or /team channel, a machine's owner, members and
-│                    guests, removeMachine: its tunnel, then its row), teams.ts (a RemoteTeam with its machines and,
+│                    signed out too, assertPageRequest, createSession), access.ts (the one access check:
+│                    selectMachineRole, owner, member or guest; selectTeamRole, owner or member; findMachineAccess
+│                    and findTeamAccess on them, else not_found; findOwnMachine and findOwnTeam), schema.ts (the
+│                    access grants, TeamRole, BEARER, SESSION_TTL, OAUTH_STATE_BYTES and the messages several
+│                    files answer: NO_SUCH_MACHINE, NO_SUCH_TEAM, NOT_PAIRED, SIGN_IN_EXPIRED)
+├── domain/          The Worker's own steps several routes share: machines.ts (isMachineOnline, a machine row as a
+│                    RemoteInstance or a TeamMachine, a connect token's answer for the /remote or /team channel,
+│                    findOwner: a machine's or a team's owner, a machine's members and guests, removeMachine: its
+│                    tunnel, then its row), teams.ts (a RemoteTeam with its machines and,
 │                    for its owner, the requests; a user's teams; an invite replaced, a team found by its invite,
 │                    joining, leaving and a team connect token), schema.ts (ONLINE_WINDOW, CONNECT_NONCE_BYTES)
 ├── routes/          One folder per group of the API and per set of plain routes, each a handler.ts and, when it has

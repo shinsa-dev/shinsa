@@ -1,20 +1,15 @@
-import {
-  InstanceId,
-  isSameSecret,
-  REMOTE_PATHS,
-  resolveSlackLinkedPath,
-  SLACK_RELAY_PATHS,
-} from '@shinsa/core';
+import { InstanceId, isSameSecret, resolveSlackLinkedPath, SLACK_RELAY_PATHS } from '@shinsa/core';
 import { SignedOut, SlackDenied, SlackExpired } from '@shinsa/core/remote/errors';
 import { Cause, Effect, Layer, Option, Redacted, Schema } from 'effect';
 import { HttpRouter, HttpServerRequest } from 'effect/http';
 import { findOwnMachine } from '../../auth/access.ts';
+import { OAUTH_STATE_BYTES } from '../../auth/schema.ts';
 import { selectRequestUser } from '../../auth/tokens.ts';
 import { CloudConfig } from '../../config/service.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
 import { serializeCookie, serializeExpiredCookie } from '../../http/cookies.ts';
 import { CurrentUrl, readCookie } from '../../http/request.ts';
-import { resolveFailureCode, respondRedirect } from '../../http/responses.ts';
+import { resolveFailureCode, respondRedirect, respondSignInRedirect } from '../../http/responses.ts';
 import { SLACK_BOT_SCOPES, SlackCallFailed } from '../../integrations/slack/schema.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
 import { selectWorkspaceToken } from '../../slack/workspace.ts';
@@ -51,7 +46,7 @@ export const SlackLinkRoutes = Layer.unwrap(
       options: { readonly nonce: boolean }
     ) {
       const crypto = yield* CloudCrypto;
-      const state = Redacted.value(yield* crypto.createToken(24));
+      const state = Redacted.value(yield* crypto.createToken(OAUTH_STATE_BYTES));
       authorize.searchParams.set('state', state);
       if (options.nonce) authorize.searchParams.set('nonce', state);
       return respondRedirect(authorize.toString(), {
@@ -79,17 +74,14 @@ export const SlackLinkRoutes = Layer.unwrap(
       const url = yield* CurrentUrl;
       const config = yield* CloudConfig;
       const user = yield* selectRequestUser;
-      if (Option.isNone(user))
-        return respondRedirect(
-          `${REMOTE_PATHS.signIn}?return=${encodeURIComponent(`${url.pathname}${url.search}`)}`
-        );
+      if (Option.isNone(user)) return respondSignInRedirect(config.origin, url);
       const machine = yield* selectConnectMachine(user.value.id, url.searchParams.get('instance'));
       if (Option.isNone(machine)) return respondLinked({ error: 'no_machine' });
       const authorize = new URL(SLACK_CONNECT_AUTHORIZE);
       authorize.searchParams.set('response_type', 'code');
       authorize.searchParams.set('scope', SLACK_USER_SCOPES.join(' '));
       authorize.searchParams.set('client_id', config.slackClientId);
-      authorize.searchParams.set('redirect_uri', `${config.origin}${SLACK_RELAY_PATHS.connectCallback}`);
+      authorize.searchParams.set('redirect_uri', config.slackConnectCallbackUrl);
       return yield* respondAuthorize(authorize, machine.value, { nonce: true });
     });
 
@@ -120,7 +112,7 @@ export const SlackLinkRoutes = Layer.unwrap(
               client_id: config.slackClientId,
               client_secret: Redacted.value(config.slackClientSecret),
               code,
-              redirect_uri: `${config.origin}${SLACK_RELAY_PATHS.connectCallback}`,
+              redirect_uri: config.slackConnectCallbackUrl,
             },
           },
         },
@@ -168,7 +160,7 @@ export const SlackLinkRoutes = Layer.unwrap(
       authorize.searchParams.set('client_id', config.slackClientId);
       authorize.searchParams.set('scope', SLACK_BOT_SCOPES.join(','));
       authorize.searchParams.set('team', identity.teamId);
-      authorize.searchParams.set('redirect_uri', `${config.origin}${SLACK_RELAY_PATHS.installCallback}`);
+      authorize.searchParams.set('redirect_uri', config.slackInstallCallbackUrl);
       return yield* respondAuthorize(authorize, machine, { nonce: false });
     });
 
@@ -197,7 +189,7 @@ export const SlackLinkRoutes = Layer.unwrap(
               client_id: config.slackClientId,
               client_secret: Redacted.value(config.slackClientSecret),
               code,
-              redirect_uri: `${config.origin}${SLACK_RELAY_PATHS.installCallback}`,
+              redirect_uri: config.slackInstallCallbackUrl,
             },
           },
         },

@@ -14,7 +14,7 @@ import { findMachineAccess } from '../../auth/access.ts';
 import { selectRequestUser } from '../../auth/tokens.ts';
 import { CloudConfig } from '../../config/service.ts';
 import { CurrentUrl } from '../../http/request.ts';
-import { respondRedirect } from '../../http/responses.ts';
+import { respondRedirect, respondSignInRedirect } from '../../http/responses.ts';
 
 export const PreviewOpenRoutes = Layer.unwrap(
   Effect.sync(() => {
@@ -41,11 +41,7 @@ export const PreviewOpenRoutes = Layer.unwrap(
       const config = yield* CloudConfig;
       const { target, address, instanceId } = yield* readPreviewTarget(url, config.previewOrigin);
       const user = yield* selectRequestUser;
-      if (Option.isNone(user)) {
-        const signIn = new URL(REMOTE_PATHS.signIn, config.origin);
-        signIn.searchParams.set('return', `${url.pathname}${url.search}`);
-        return respondRedirect(signIn.href);
-      }
+      if (Option.isNone(user)) return respondSignInRedirect(config.origin, url);
       const { machine } = yield* findMachineAccess(user.value.id, instanceId);
       const now = yield* Clock.currentTimeMillis;
       const token = yield* Effect.promise(() =>

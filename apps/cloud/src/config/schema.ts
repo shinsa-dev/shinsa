@@ -1,10 +1,19 @@
-import { PREVIEW_ORIGIN, REMOTE_APP_ORIGIN } from '@shinsa/core';
+import { PREVIEW_ORIGIN, REMOTE_APP_ORIGIN, REMOTE_PATHS, SLACK_RELAY_PATHS } from '@shinsa/core';
 import { Config, Redacted } from 'effect';
 
 const DEFAULT_MAX_INSTANCES = 50;
 
+const ORIGIN = Config.String('APP_ORIGIN').pipe(Config.withDefault(REMOTE_APP_ORIGIN));
+
 export const CLOUD_CONFIG = Config.all({
-  origin: Config.String('APP_ORIGIN').pipe(Config.withDefault(REMOTE_APP_ORIGIN)),
+  origin: ORIGIN,
+  signInCallbackUrl: ORIGIN.pipe(Config.map((origin) => `${origin}${REMOTE_PATHS.signInCallback}`)),
+  slackConnectCallbackUrl: ORIGIN.pipe(
+    Config.map((origin) => `${origin}${SLACK_RELAY_PATHS.connectCallback}`)
+  ),
+  slackInstallCallbackUrl: ORIGIN.pipe(
+    Config.map((origin) => `${origin}${SLACK_RELAY_PATHS.installCallback}`)
+  ),
   githubClientId: Config.String('GITHUB_CLIENT_ID').pipe(Config.withDefault('')),
   githubClientSecret: Config.Redacted('GITHUB_CLIENT_SECRET').pipe(Config.withDefault(Redacted.make(''))),
   cloudflareAccountId: Config.String('CLOUDFLARE_ACCOUNT_ID').pipe(Config.withDefault('')),
