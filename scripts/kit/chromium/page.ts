@@ -1,4 +1,4 @@
-import type { Evaluated, Message, Pending } from './schema.ts';
+import { type Evaluated, HOVER_MS, type Key, type Message, type Pending, type Point } from './schema.ts';
 
 export class CdpPage {
   #socket: WebSocket;
@@ -61,6 +61,24 @@ export class CdpPage {
         reply.exceptionDetails.exception?.description ?? reply.exceptionDetails.text ?? 'evaluate failed'
       );
     return reply.result.value;
+  }
+
+  async pressKey(key: Key) {
+    const base = {
+      key: key.key,
+      code: key.code,
+      windowsVirtualKeyCode: key.keyCode,
+      modifiers: key.modifiers ?? 0,
+    };
+    await this.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
+    await this.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+  }
+
+  async clickPoint(point: Point, hoverMs = HOVER_MS) {
+    await this.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+    await Bun.sleep(hoverMs);
+    for (const type of ['mousePressed', 'mouseReleased'])
+      await this.send('Input.dispatchMouseEvent', { type, ...point, button: 'left', clickCount: 1 });
   }
 
   close() {

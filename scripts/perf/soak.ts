@@ -116,13 +116,6 @@ const SOAK_PROBE = String.raw`(() => {
     });
 })()`;
 
-async function click(page: CdpPage, point: { x: number; y: number }) {
-  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
-  await Bun.sleep(120);
-  for (const type of ['mousePressed', 'mouseReleased'])
-    await page.send('Input.dispatchMouseEvent', { type, ...point, button: 'left', clickCount: 1 });
-}
-
 async function readMetrics(page: CdpPage) {
   const { metrics } = await page.send<{ metrics: { name: string; value: number }[] }>(
     'Performance.getMetrics'
@@ -170,7 +163,7 @@ async function measureTransition(page: CdpPage, handle: string, from: string, to
   await page.evaluate(`__soak.done = () => __soak.selectedTab('${to}')`);
   const frames = page.evaluate<Frames>('__soak.frames(1200)');
   await Bun.sleep(50);
-  await click(page, point);
+  await page.clickPoint(point);
   return frames;
 }
 

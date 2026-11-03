@@ -6205,7 +6205,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of
   Shinsa's own Review tab for SMP-2, and test output for five tasks, each attached shortly before its run ended. The
   pages are rendered by `bun scripts/seed-media/generate.ts [origin]` (`shots.ts` lists every file and what it shows,
-  `shots.test.ts` checks each checked-in file is listed): it drives Chromium over CDP (`scripts/perf/shell-cdp.ts`)
+  `shots.test.ts` checks each checked-in file is listed): it drives Chromium over CDP (`scripts/kit/chromium/`)
   through the fixture pages in `scripts/seed-media/fixtures/` (the settings page, the tab row), records the tab row
   with a screencast that ffmpeg encodes to WebM, and takes the SMP-2 shots from a running seeded copy at `origin`
   (skipped without one; `SEED_MEDIA_ONLY` picks files by name). It also writes the `/ui` showcase's evidence samples

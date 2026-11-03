@@ -25,9 +25,13 @@ export const selectMachineRole = Effect.fn('selectMachineRole')(function* (
   return Option.none<RemoteRole>();
 });
 
+export function isTeamOwner(team: Team, userId: RemoteUserId) {
+  return team.userId === userId;
+}
+
 export const selectTeamRole = Effect.fn('selectTeamRole')(function* (team: Team, userId: RemoteUserId) {
   const teams = yield* Teams;
-  if (team.userId === userId) return Option.some<TeamRole>('owner');
+  if (isTeamOwner(team, userId)) return Option.some<TeamRole>('owner');
   if (yield* teams.members.has(team.id, userId)) return Option.some<TeamRole>('member');
   return Option.none<TeamRole>();
 });

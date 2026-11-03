@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { type CdpPage, openChromium, waitForExpression } from '../kit/chromium/index.ts';
+import { type CdpPage, type Key, openChromium, waitForExpression } from '../kit/chromium/index.ts';
 import { SHELL_PROBE } from './shell-probe.ts';
 import { type StepSample, serializeStepTable, summarizeSteps } from './shell-stats.ts';
 
@@ -8,7 +8,7 @@ interface Step {
   open?: { target: string; done: string };
   pushes?: string;
   target?: string;
-  key?: { key: string; code: string; keyCode: number; modifiers: number };
+  key?: Key;
   done: string;
 }
 
@@ -134,35 +134,12 @@ async function waitFor(target: CdpPage, expression: string) {
   if (!(await waitForExpression(target, expression))) throw new Error(`Timed out waiting for ${expression}`);
 }
 
-async function press(target: CdpPage, key: NonNullable<Step['key']>) {
-  const base = { key: key.key, code: key.code, windowsVirtualKeyCode: key.keyCode, modifiers: key.modifiers };
-  await target.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
-  await target.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
-}
-
-async function click(target: CdpPage, point: { x: number; y: number }) {
-  await target.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
-  await Bun.sleep(HOVER_MS);
-  await target.send('Input.dispatchMouseEvent', {
-    type: 'mousePressed',
-    ...point,
-    button: 'left',
-    clickCount: 1,
-  });
-  await target.send('Input.dispatchMouseEvent', {
-    type: 'mouseReleased',
-    ...point,
-    button: 'left',
-    clickCount: 1,
-  });
-}
-
 async function openFirst(target: CdpPage, open: NonNullable<Step['open']>) {
   const point = await target.evaluate<{ x: number; y: number } | null>(
     `__shell.center(${JSON.stringify(open.target)})`
   );
   if (!point) return;
-  await click(target, point);
+  await target.clickPoint(point, HOVER_MS);
   await waitFor(target, open.done);
   await Bun.sleep(OPEN_SETTLE_MS);
 }
@@ -175,16 +152,16 @@ async function runStep(target: CdpPage, step: Step): Promise<Measured | null> {
     );
     if (!point) return null;
     await target.evaluate(`__shell.arm(${JSON.stringify(step.done)}, 'click')`);
-    await click(target, point);
+    await target.clickPoint(point, HOVER_MS);
   } else if (step.key) {
     await target.evaluate(`__shell.arm(${JSON.stringify(step.done)}, 'keydown')`);
-    await press(target, step.key);
+    await target.pressKey(step.key);
   }
   return target.evaluate<Measured | null>('__shell.step');
 }
 
 async function closeMenu(target: CdpPage) {
-  await press(target, { key: 'Escape', code: 'Escape', keyCode: 27, modifiers: 0 });
+  await target.pressKey({ key: 'Escape', code: 'Escape', keyCode: 27, modifiers: 0 });
   await waitFor(target, `!document.querySelector('[cmdk-input]')`);
 }
 

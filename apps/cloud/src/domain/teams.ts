@@ -1,7 +1,7 @@
 import type { InstanceId, RemoteRole, RemoteTeam, RemoteUserId, TeamId, TeamJoinStatus } from '@shinsa/core';
 import { InviteInvalid, NotFound, OwnerCannotLeave } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
-import { findTeamAccess, selectTeamRole } from '../auth/access.ts';
+import { findTeamAccess, isTeamOwner, selectTeamRole } from '../auth/access.ts';
 import { NO_SUCH_TEAM } from '../auth/schema.ts';
 import { CloudCrypto } from '../crypto/service.ts';
 import type { Team } from '../store/teams/schema.ts';
@@ -11,7 +11,7 @@ import { createConnectAnswer, findOwner, serializeTeamMachine } from './machines
 export const serializeTeam = Effect.fn('serializeTeam')(function* (team: Team, userId: RemoteUserId) {
   const teams = yield* Teams;
   const now = yield* Clock.currentTimeMillis;
-  const role: RemoteRole = team.userId === userId ? 'owner' : 'member';
+  const role: RemoteRole = isTeamOwner(team, userId) ? 'owner' : 'member';
   const machines = (yield* teams.listMachines(team.id)).map((machine) => serializeTeamMachine(machine, now));
   return {
     id: team.id,

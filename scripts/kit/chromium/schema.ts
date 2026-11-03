@@ -43,3 +43,17 @@ export interface Browser {
   page: CdpPage;
   close: () => void;
 }
+
+export interface Key {
+  key: string;
+  code: string;
+  keyCode: number;
+  modifiers?: number;
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export const HOVER_MS = 120;

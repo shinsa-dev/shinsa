@@ -8,7 +8,6 @@ const WIDTHS = (Bun.env.LOADING_WALK_WIDTHS ?? '1440,900').split(',').map(Number
 const TASKS = Number(Bun.env.LOADING_WALK_TASKS ?? 2);
 const OUT = Bun.env.LOADING_WALK_OUT ?? null;
 const WARM_UP = Bun.env.LOADING_WALK_WARM_UP === '1';
-const HOVER_MS = 120;
 const SETTLE_MS = 700;
 const META = 4;
 const SHIFT = 8;
@@ -18,28 +17,10 @@ const HOME_DONE = `location.pathname === '/' && !!document.querySelector('main t
 
 const cold = new Set<string>();
 
-interface Key {
-  key: string;
-  code: string;
-  keyCode: number;
-  modifiers?: number;
-}
-
 async function waitFor(page: CdpPage, expression: string, timeoutMs = 10_000) {
   if (await waitForExpression(page, expression, timeoutMs)) return true;
   console.warn(`Timed out waiting for ${expression}`);
   return false;
-}
-
-async function press(page: CdpPage, key: Key) {
-  const base = {
-    key: key.key,
-    code: key.code,
-    windowsVirtualKeyCode: key.keyCode,
-    modifiers: key.modifiers ?? 0,
-  };
-  await page.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
-  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
 }
 
 async function typeText(page: CdpPage, text: string) {
@@ -54,10 +35,7 @@ async function click(page: CdpPage, target: string) {
     `__loading.center(${JSON.stringify(target)})`
   );
   if (!point) return false;
-  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
-  await Bun.sleep(HOVER_MS);
-  for (const kind of ['mousePressed', 'mouseReleased'])
-    await page.send('Input.dispatchMouseEvent', { type: kind, ...point, button: 'left', clickCount: 1 });
+  await page.clickPoint(point);
   return true;
 }
 
@@ -85,7 +63,7 @@ async function pickRef(page: CdpPage, prefix: string, label: string) {
       page,
       `__loading.visible('[role=option]').find((option) => __loading.textOf(option).startsWith(${JSON.stringify(label)}))`
     );
-    if (!picked) await press(page, { key: 'Escape', code: 'Escape', keyCode: 27 });
+    if (!picked) await page.pressKey({ key: 'Escape', code: 'Escape', keyCode: 27 });
     return picked;
   });
 }
@@ -111,18 +89,18 @@ async function walkCode(page: CdpPage, prefix: string) {
     );
   await step(page, `${prefix}Code: Changes`, () => click(page, `__loading.tab('Changes')`));
   await step(page, `${prefix}Code: ⌘P`, async () => {
-    await press(page, { key: 'p', code: 'KeyP', keyCode: 80, modifiers: META });
+    await page.pressKey({ key: 'p', code: 'KeyP', keyCode: 80, modifiers: META });
     return waitFor(page, `!!document.querySelector('[aria-label="Go to file"]')`);
   });
   await step(page, `${prefix}Code: ⌘P query`, () => typeText(page, 'index'));
   const coldPick = `${prefix}Code: open a file from ⌘P (cold)`;
   cold.add(coldPick);
-  await step(page, coldPick, () => press(page, { key: 'Enter', code: 'Enter', keyCode: 13 }));
+  await step(page, coldPick, () => page.pressKey({ key: 'Enter', code: 'Enter', keyCode: 13 }));
   if (await page.evaluate<boolean>(`!!document.querySelector('[aria-label="Go to file"]')`))
-    await press(page, { key: 'Escape', code: 'Escape', keyCode: 27 });
+    await page.pressKey({ key: 'Escape', code: 'Escape', keyCode: 27 });
   for (const label of ['Base', 'Working copy', 'Head of the branch']) await pickRef(page, prefix, label);
   await step(page, `${prefix}Code: search`, async () => {
-    await press(page, { key: 'f', code: 'KeyF', keyCode: 70, modifiers: META | SHIFT });
+    await page.pressKey({ key: 'f', code: 'KeyF', keyCode: 70, modifiers: META | SHIFT });
     return waitFor(page, `document.activeElement?.placeholder === 'Search in files'`);
   });
   const coldSearch = `${prefix}Code: search (cold)`;
@@ -149,11 +127,11 @@ async function walkTask(page: CdpPage, prefix: string, handle: string) {
   await step(page, `${prefix}All tasks → task`, async () => {
     const row = `__loading.rendered('main [role=button]').find((row) => [...row.querySelectorAll('span')].some((part) => __loading.textOf(part) === ${JSON.stringify(handle)}))`;
     if (await click(page, row)) return waitFor(page, `location.pathname.startsWith('/tasks/')`);
-    await press(page, { key: 'k', code: 'KeyK', keyCode: 75, modifiers: META });
+    await page.pressKey({ key: 'k', code: 'KeyK', keyCode: 75, modifiers: META });
     await waitFor(page, `!!document.querySelector('[cmdk-input]')`);
     await typeText(page, handle);
     await Bun.sleep(300);
-    await press(page, { key: 'Enter', code: 'Enter', keyCode: 13 });
+    await page.pressKey({ key: 'Enter', code: 'Enter', keyCode: 13 });
     return waitFor(page, `location.pathname.startsWith('/tasks/')`);
   });
   for (const tab of ['Overview', 'Review', 'Code', 'Chat']) {
