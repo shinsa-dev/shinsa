@@ -600,12 +600,17 @@ export interface NeedsYouSpan extends TimingSpan {
   answered: boolean;
 }
 
+export type YourInput =
+  | { at: number; kind: 'message' }
+  | { at: number; kind: 'gate'; gate: GateType; decision: GateDecision };
+
 export interface TaskTiming {
   paused: TimingSpan[];
   pausedSince: number | null;
   needsYou: NeedsYouSpan[];
   needsYouSince: number | null;
   openGates: string[];
+  inputs: YourInput[];
 }
 
 export type BacklogCause = 'you' | 'started' | 'inquiry';

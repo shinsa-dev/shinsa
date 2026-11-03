@@ -55,6 +55,7 @@ describe('task timing', () => {
       needsYou: [],
       needsYouSince: null,
       openGates: [],
+      inputs: [],
     });
   });
 
@@ -164,6 +165,40 @@ describe('task timing', () => {
     harness.send({ type: 'task.unsnooze', taskId });
     harness.replay({ type: 'gate.opened', gate: gate(taskId, 'g1') });
     expect(replayEventLog(harness.events).state.tasks[taskId]?.timing).toEqual(harness.task(taskId).timing);
+  });
+});
+
+describe('your inputs', () => {
+  test('records each gate you answer with its type and decision, and each message you send', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { planFirst: true });
+    proposePlan(harness, taskId);
+    approve(harness, taskId);
+    const approved = harness.now;
+    harness.replay({ type: 'task.messaged', taskId, text: 'Use the blue one', kind: 'feedback' });
+    const messaged = harness.now;
+    harness.replay({ type: 'task.messaged', taskId, text: 'Thanks', kind: 'acknowledge' });
+    expect(timingOf(harness, taskId).inputs).toEqual([
+      { at: approved, kind: 'gate', gate: 'plan', decision: 'approve' },
+      { at: messaged, kind: 'message' },
+      { at: harness.now, kind: 'message' },
+    ]);
+  });
+
+  test('leaves out reviews approved ahead, scheduled, kept and new-work messages, and anything sent for you', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.replay({ type: 'gate.opened', gate: gate(taskId, 'g1') });
+    harness.replay({ type: 'gate.answered', gateId: 'g1', decision: 'approve', response: null, ahead: true });
+    harness.replay({ type: 'gate.answered', gateId: 'missing', decision: 'approve', response: null });
+    harness.replay({ type: 'task.messaged', taskId, text: 'Daily', scheduleId: 'schedule-1' });
+    harness.replay({ type: 'task.messaged', taskId, text: 'Kept', kept: true });
+    harness.replay({ type: 'task.messaged', taskId, text: 'Next', kind: 'new_round' });
+    harness.replay({ type: 'task.messaged', taskId, text: 'Elsewhere', kind: 'separate_task' });
+    harness.replay({ type: 'task.messaged', taskId, text: 'From a task', onBehalf: true, byTask: 'other' });
+    harness.replay({ type: 'task.messaged', taskId, text: 'From a guest', byGuest: 'guest-1' });
+    harness.replay({ type: 'task.messaged', taskId: 'missing', text: 'Lost' });
+    expect(timingOf(harness, taskId).inputs).toEqual([]);
   });
 });
 

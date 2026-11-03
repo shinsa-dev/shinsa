@@ -24,6 +24,7 @@ function windowOf(count: number, now = count * DAY): TurnaroundWindow {
   return {
     days: Array.from({ length: count }, (_, index) => `d${index}`),
     dayOf: (at) => `d${Math.floor(at / DAY)}`,
+    from: 0,
     hourOf,
     now,
   };
@@ -35,7 +36,15 @@ const BASE = (() => {
 })();
 
 function timing(overrides: Partial<TaskTiming> = {}): TaskTiming {
-  return { paused: [], pausedSince: null, needsYou: [], needsYouSince: null, openGates: [], ...overrides };
+  return {
+    paused: [],
+    pausedSince: null,
+    needsYou: [],
+    needsYouSince: null,
+    openGates: [],
+    inputs: [],
+    ...overrides,
+  };
 }
 
 function round(overrides: Partial<Round> = {}): Round {

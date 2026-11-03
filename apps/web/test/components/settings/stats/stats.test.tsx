@@ -95,7 +95,7 @@ describe('statistics', () => {
       id: 't1',
       stage: 'merged',
       rounds: [merged],
-      timing: { paused: [], pausedSince: null, needsYou: [], needsYouSince: null, openGates: [] },
+      timing: { paused: [], pausedSince: null, needsYou: [], needsYouSince: null, openGates: [], inputs: [] },
     });
     const view = render(
       <TooltipProvider>

@@ -84,5 +84,7 @@ describe('stats days', () => {
     expect(window.now).toBe(tuesday);
     expect(window.hourOf(tuesday)).toBe(71);
     expect(window.days).toHaveLength(7);
+    expect(window.from).toBe(new Date(2026, 9, 28).getTime());
+    expect(resolveTurnaroundWindow({ days: [], dayOf: resolveDayKey }, tuesday).from).toBe(tuesday);
   });
 });
