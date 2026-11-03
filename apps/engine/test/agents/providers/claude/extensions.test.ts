@@ -1,16 +1,16 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { AsyncQueue } from '../../../../src/agents/providers/claude/async-queue.ts';
 import { resolveClaudeExtensions } from '../../../../src/agents/providers/claude/extensions.ts';
 import { startClaudeSession } from '../../../../src/agents/providers/claude/session.ts';
 import type { AgentSessionInput } from '../../../../src/agents/providers/index.ts';
+import { createMessageFeed } from '../../../helpers/feed.ts';
+import { captureLogs } from '../../../helpers/logs.ts';
 
 type ChatEntryEvent = Parameters<AgentSessionInput['onEntry']>[0];
 
 import { createShinsaTools } from '../../../../src/agents/tools/index.ts';
 import type { McpDefinition } from '../../../../src/extensions/definitions.ts';
 import type { SessionExtensions } from '../../../../src/extensions/index.ts';
-import { log } from '../../../../src/log/index.ts';
 import { until } from '../../../helpers/index.ts';
 import { createFakeQuery, createFakeRuntime, sdkMessage } from '../../../helpers/query.ts';
 
@@ -162,7 +162,7 @@ function startScripted(
   input: AgentSessionInput,
   setMcpServers?: (servers: Record<string, unknown>) => Promise<unknown>
 ) {
-  const messages = new AsyncQueue<SDKMessage>();
+  const messages = createMessageFeed<SDKMessage>();
   const prompts: SDKUserMessage[] = [];
   const fake = createFakeQuery(
     (params) => {
@@ -231,27 +231,26 @@ describe('a Claude session with MCP servers and skills', () => {
   });
 
   test('a server that does not connect is logged and the agent still starts', async () => {
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const run = startScripted(createInput(EXTENSIONS), () =>
       Promise.resolve({ added: [], removed: [], errors: { docs: 'refused' } })
     );
     await until('the brief reaches the agent', () => run.prompts.length === 1);
-    expect(warn).toHaveBeenCalledWith('[Claude] An MCP server did not connect', {
-      server: 'docs',
-      error: 'refused',
-    });
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Claude] An MCP server did not connect')).toEqual([
+      { server: 'docs', error: 'refused' },
+    ]);
     await run.session.done;
   });
 
   test('a CLI that cannot take the servers still gets the brief', async () => {
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const run = startScripted(createInput(EXTENSIONS), () => Promise.reject(new Error('unsupported')));
     await until('the brief reaches the agent', () => run.prompts.length === 1);
-    expect(warn).toHaveBeenCalledWith('[Claude] Could not hand the MCP servers to the session', {
-      error: 'unsupported',
-    });
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Claude] Could not hand the MCP servers to the session')).toEqual([
+      { error: 'unsupported' },
+    ]);
     await run.session.done;
   });
 
@@ -268,7 +267,7 @@ describe('a Claude session with MCP servers and skills', () => {
 
 describe('loading a server into a running Claude session', () => {
   test('adds it to the servers the session already has, reports each one’s error, and drops one that failed or was given up on', async () => {
-    const messages = new AsyncQueue<SDKMessage>();
+    const messages = createMessageFeed<SDKMessage>();
     const release = Promise.withResolvers<void>();
     const handed: Record<string, unknown>[] = [];
     const fake = createFakeQuery(

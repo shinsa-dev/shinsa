@@ -8,6 +8,7 @@ export function createActiveRun(
   return {
     taskId,
     done,
+    fiber: null,
     session: null,
     clock: null,
     attemptId: null,
@@ -44,18 +45,6 @@ export function carryUndelivered(active: ActiveRun, undelivered: string[] | unde
     if (active.steered.has(text)) active.resteered.push(text);
     else active.queued.push(text);
   }
-}
-
-export function waitToRetry(active: ActiveRun, ms: number) {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  const wake = () => {
-    clearTimeout(timer);
-    active.wake = null;
-    resolve();
-  };
-  const timer = setTimeout(wake, ms);
-  active.wake = wake;
-  return promise;
 }
 
 export function stopActiveRun(active: ActiveRun) {
