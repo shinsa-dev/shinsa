@@ -127,6 +127,7 @@ const FEATURE_ROUTES = {
   'review.approve_after_fix': [],
   'message.line_comments': [],
   changelog: ['GET /api/changelog'],
+  'worktree-root': ['POST /api/onboarding/worktrees'],
 };
 
 const OLD_LOCAL_ONLY = [

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TerminalInfo } from '@shinsa/core';
-import { ConfigStore } from '../../src/config/index.ts';
+import { ConfigStore, type ServerConfig } from '../../src/config/index.ts';
 import { type CommandRunner, type InstallTerminals, Onboarding } from '../../src/onboarding/index.ts';
 import { PRIVACY_SETTINGS_URL, PrivateFoldersError, resolveChosenRoots } from '../../src/onboarding/roots.ts';
 import { Roots } from '../../src/repos/index.ts';
@@ -10,9 +10,14 @@ import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { createTempDir, createTestConfig, overrideEnv } from '../helpers/index.ts';
 
-function setup(run?: CommandRunner, terminals?: InstallTerminals, simulateMissing: string[] = []) {
+function setup(
+  run?: CommandRunner,
+  terminals?: InstallTerminals,
+  simulateMissing: string[] = [],
+  overrides: Partial<ServerConfig> = {}
+) {
   const root = createTempDir();
-  const config = createTestConfig(root, { roots: [], simulateMissing });
+  const config = createTestConfig(root, { roots: [], simulateMissing, ...overrides });
   const engine = new Engine(new EventLog(config.databasePath));
   const store = new ConfigStore(config.configPath);
   const developer = join(root, 'Developer');
@@ -47,6 +52,13 @@ describe('Onboarding', () => {
       completedAt: null,
       roots: { source: 'discovered', configured: [], fromEnvironment: [], effective: [developer] },
       defaults: { model: 'opus', mergeMethod: 'squash' },
+      worktrees: {
+        effective: config.worktreesDir,
+        configured: null,
+        default: config.worktreesDir,
+        fromEnvironment: null,
+        problem: null,
+      },
       paths: {
         home: config.home,
         configPath: config.configPath,
@@ -105,6 +117,69 @@ describe('Onboarding', () => {
     }
     expect(store.config.roots).toEqual([]);
     expect((await onboarding.applySetup({ roots: [root], defaultModel: null })).defaults.model).toBeNull();
+  });
+
+  test('saves the worktree folder to config.json, and goes back to the default with null', async () => {
+    const { onboarding, store, config, root } = setup();
+    const mount = join(root, 'Bucket');
+    mkdirSync(mount);
+    const status = await onboarding.applyWorktreesDir({ path: '~/Bucket/' });
+    expect(status.worktrees).toEqual({
+      effective: mount,
+      configured: mount,
+      default: config.worktreesDir,
+      fromEnvironment: null,
+      problem: null,
+    });
+    expect(new ConfigStore(store.path).config.worktreesDir).toBe(mount);
+    rmSync(mount, { recursive: true });
+    expect((await onboarding.resolveStatus()).worktrees.problem).toContain(
+      `The worktree folder ${mount} does not exist.`
+    );
+    const reset = await onboarding.applyWorktreesDir({ path: null });
+    expect(reset.worktrees).toMatchObject({
+      effective: config.worktreesDir,
+      configured: null,
+      problem: null,
+    });
+    expect(store.config.worktreesDir).toBeNull();
+  });
+
+  test('refuses a worktree folder it cannot use, and keeps the one it had', async () => {
+    const { onboarding, store, root } = setup();
+    const file = join(root, 'notes.txt');
+    writeFileSync(file, 'x');
+    const locked = join(root, 'Locked');
+    mkdirSync(locked);
+    chmodSync(locked, 0o500);
+    for (const [body, message] of [
+      [{}, 'Send “path” as the full path of a folder, or null to use the default.'],
+      [{ path: 3 }, 'Send “path” as the full path of a folder, or null to use the default.'],
+      [{ path: '  ' }, 'Send “path” as the full path of a folder, or null to use the default.'],
+      [{ path: 'relative/wt' }, 'relative/wt is not a full path.'],
+      [{ path: '/no/such/mount' }, 'The worktree folder /no/such/mount does not exist.'],
+      [{ path: file }, `The worktree folder ${file} is not a folder.`],
+      [{ path: locked }, `Shinsa cannot write to the worktree folder ${locked}.`],
+    ] as const) {
+      await expect(onboarding.applyWorktreesDir(body)).rejects.toThrow(message);
+    }
+    chmodSync(locked, 0o700);
+    expect(store.config.worktreesDir).toBeNull();
+  });
+
+  test('shows a worktree folder the environment sets, and refuses to change it', async () => {
+    const { onboarding, store, root } = setup(undefined, undefined, [], {
+      worktreesDir: join(createTempDir(), 'env-wt'),
+      worktreesDirFromEnvironment: true,
+    });
+    const status = await onboarding.resolveStatus();
+    expect(status.worktrees.fromEnvironment).toBe(status.worktrees.effective);
+    expect(status.worktrees.configured).toBeNull();
+    expect(status.worktrees.problem).toBeNull();
+    await expect(onboarding.applyWorktreesDir({ path: root })).rejects.toThrow(
+      'SHINSA_WORKTREES_DIR chooses the worktree folder on this machine, so it cannot be changed here.'
+    );
+    expect(store.config.worktreesDir).toBeNull();
   });
 
   test('checks the prerequisites with the injected runner', async () => {

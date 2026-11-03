@@ -11,6 +11,13 @@ export interface OnboardingStatus {
     effective: string[];
   };
   defaults: { model: string | null; mergeMethod: Settings['mergeMethod'] };
+  worktrees: {
+    effective: string;
+    configured: string | null;
+    default: string;
+    fromEnvironment: string | null;
+    problem: string | null;
+  };
   paths: { home: string; configPath: string; dataDir: string; userHome: string };
 }
 

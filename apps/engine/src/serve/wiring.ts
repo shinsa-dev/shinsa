@@ -255,6 +255,7 @@ export function startHttp(
       run: options.runPrerequisite,
       accounts: options.accounts ?? createOnboardingAccounts(accounts),
       terminals: services.terminals,
+      worktreeRoot: services.runs.workspaces.root,
     }),
     accounts,
     schedules: services.schedules,

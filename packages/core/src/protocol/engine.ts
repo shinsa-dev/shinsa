@@ -11,6 +11,7 @@ export const ENGINE_FEATURES = [
   'review.approve_after_fix',
   'message.line_comments',
   'changelog',
+  'worktree-root',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

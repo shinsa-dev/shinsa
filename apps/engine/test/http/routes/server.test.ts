@@ -163,6 +163,27 @@ describe('the engine restart endpoint', () => {
 });
 
 describe('the onboarding endpoints', () => {
+  test('save the worktree folder, refuse one that is missing, and go back to the default', async () => {
+    const { call, post, config } = await start();
+    const mount = createTempDir('shinsa-bucket-');
+    const saved = await post('/api/onboarding/worktrees', { path: mount });
+    expect(await saved.json()).toMatchObject({ worktrees: { effective: mount, configured: mount } });
+    const missing = await post('/api/onboarding/worktrees', { path: '/no/such/mount' });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toEqual({
+      error: {
+        code: 'worktrees_invalid',
+        message:
+          'The worktree folder /no/such/mount does not exist. If it is on a drive you mount, mount it again, or choose another folder in Settings → Projects.',
+      },
+    });
+    expect(await (await call('/api/onboarding')).json()).toMatchObject({ worktrees: { configured: mount } });
+    const reset = await post('/api/onboarding/worktrees', { path: null });
+    expect(await reset.json()).toMatchObject({
+      worktrees: { effective: config.worktreesDir, configured: null, default: config.worktreesDir },
+    });
+  });
+
   test('report the status, suggest folders, save the setup, check the tools, and finish only through the steps', async () => {
     const { call, post, config, engine } = await start({ config: { roots: [] } });
     expect(await (await call('/api/onboarding')).json()).toMatchObject({

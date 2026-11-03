@@ -266,6 +266,12 @@ class OnboardingGroup extends HttpApiGroup.make('onboarding')
       payload: AnyBody,
       success: OnboardingAnswer,
     }).annotate(LocalOnlyRoute, true),
+    HttpApiEndpoint.post('worktrees', '/api/onboarding/worktrees', {
+      payload: AnyBody,
+      success: OnboardingAnswer,
+    })
+      .annotate(LocalOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'worktree-root'),
     HttpApiEndpoint.get('prerequisites', '/api/onboarding/prerequisites', { success: ObjectAnswer }),
     HttpApiEndpoint.post('privacy', '/api/onboarding/privacy', { success: ObjectAnswer }).annotate(
       LocalOnlyRoute,
