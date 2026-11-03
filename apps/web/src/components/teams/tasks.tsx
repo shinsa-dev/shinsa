@@ -102,7 +102,7 @@ export function OfflineBadge({ heldAt }: { heldAt: number }) {
   );
 }
 
-export const TEAM_MACHINE_OFFLINE_LABEL = 'Their machine is offline';
+const TEAM_MACHINE_OFFLINE_LABEL = 'Their machine is offline';
 
 function OfflineMark({ heldAt }: { heldAt: number }) {
   const updated = formatSince('Updated', heldAt);
