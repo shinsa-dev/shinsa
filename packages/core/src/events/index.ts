@@ -153,6 +153,7 @@ type EventBody =
       round?: number;
       suggestionId?: string;
       kept?: true;
+      comments?: ReviewComment[];
     }
   | {
       type: 'iteration.requested';

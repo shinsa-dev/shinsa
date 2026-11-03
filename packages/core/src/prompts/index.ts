@@ -1,6 +1,7 @@
 export {
   resolveChecksFixPrompt,
   resolveCodeFence,
+  resolveCommentedMessage,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
   resolvePushHookFixPrompt,

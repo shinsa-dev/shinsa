@@ -82,6 +82,13 @@ function describeLineComments(comments: readonly ReviewComment[]) {
   return ['', 'Line comments:', ...comments.map(describeLineComment)];
 }
 
+export function resolveCommentedMessage(message: string, comments: readonly ReviewComment[]) {
+  if (comments.length === 0) return message;
+  return [message || 'The human left line comments on the code.', ...describeLineComments(comments)].join(
+    '\n'
+  );
+}
+
 export function resolveHumanFixPrompt(message: string | null, comments: readonly ReviewComment[]) {
   const note = message?.trim() ?? '';
   const opening =

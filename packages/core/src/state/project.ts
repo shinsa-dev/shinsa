@@ -548,6 +548,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       text: NEW_WORK_TEXT[event.kind],
       detail: event.text,
       ...(event.suggestionId ? { suggestionId: event.suggestionId } : {}),
+      ...(event.comments ? { comments: event.comments } : {}),
     });
     return;
   }
@@ -559,6 +560,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       : describeMessage(event),
     detail: event.text,
     ...(event.kind === 'acknowledge' ? { noted: true } : {}),
+    ...(event.comments ? { comments: event.comments } : {}),
   });
   if (event.kept) keepMessage(state, event);
 }
