@@ -132,6 +132,7 @@ export {
   parseTaskHandle,
   resolveProjectKey,
   selectFolderProject,
+  selectProjectByReference,
 } from './projects.ts';
 export type * from './pull-requests.ts';
 export {

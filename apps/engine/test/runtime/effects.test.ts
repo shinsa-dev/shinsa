@@ -656,6 +656,94 @@ describe('triage', () => {
     await engine.settle();
   });
 
+  async function triageNewRepo(options: { roots?: string[]; folders?: string[]; newRepo?: string } = {}) {
+    const config = createTestConfig(createTempDir(), { roots: options.roots ?? [] });
+    const eventLog = new EventLog(config.databasePath);
+    const engine = new Engine(eventLog);
+    let projectId: string | null = null;
+    if (options.folders) {
+      await engine.dispatch({
+        type: 'project.write',
+        project: { name: 'Islands', color: 'green', folders: options.folders },
+      });
+      projectId = Object.keys(engine.state.projects)[0] ?? null;
+    }
+    await engine.dispatch({ type: 'task.create', request: 'Start native-islands', repoId: null, projectId });
+    const [task] = Object.values(engine.state.tasks);
+    const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
+      shares: NO_SHARES,
+      previews: NO_PREVIEWS,
+      handoffs: NO_HANDOFFS,
+      resolveLogin: () => Promise.resolve(null),
+      triage: (state, current, local) =>
+        resolveTriage(state, current, local, <T>() =>
+          Promise.resolve({
+            title: 'Start native-islands',
+            repo: 'none',
+            new_repo: options.newRepo ?? 'native-islands',
+            size: 'large',
+            branch: 'feat/start',
+          } as T)
+        ),
+    });
+    const context = createContext();
+    await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, context);
+    const triaged = engine.state.tasks[task?.id ?? ''];
+    const close = async () => {
+      await runner.stop();
+      engine.stop();
+      await engine.settle();
+    };
+    return { engine, eventLog, context, triaged, projectId, close };
+  }
+
+  test('a new repository triage names is created in the project’s folder, started, registered there and bound', async () => {
+    const folder = createTempDir();
+    const { engine, eventLog, context, triaged, projectId, close } = await triageNewRepo({
+      folders: [folder],
+    });
+    const path = join(folder, 'native-islands');
+    const repo = Object.values(engine.state.repos).find((candidate) => candidate.name === 'native-islands');
+    expect(repo).toMatchObject({ projectId, defaultBranch: expect.any(String) });
+    expect(repo?.path.endsWith('/native-islands')).toBe(true);
+    expect(triaged).toMatchObject({ repoId: repo?.id, projectId });
+    expect(eventLog.selectReceipt(`${context.key}:repo.register`)).toMatchObject({ status: 'accepted' });
+    expect(await git(path, 'rev-list', '--count', 'HEAD')).toBe('1');
+    await close();
+  });
+
+  test('a task in no project gets its new repository in the first folder Shinsa looks in, under the Local project', async () => {
+    const root = createTempDir();
+    const { engine, triaged, close } = await triageNewRepo({ roots: [root, createTempDir()] });
+    const repo = Object.values(engine.state.repos)[0];
+    expect(existsSync(join(root, 'native-islands', '.git'))).toBe(true);
+    expect(repo?.name).toBe('native-islands');
+    expect(engine.state.projects[repo?.projectId ?? '']?.name).toBe('Local');
+    expect(triaged?.repoId).toBe(repo?.id);
+    await close();
+  });
+
+  test('with no folder to create it in, or a folder already taken, the task is triaged without a repository', async () => {
+    const logs = captureLogs();
+    const nowhere = await triageNewRepo();
+    expect(nowhere.triaged?.repoId).toBeNull();
+    expect(
+      logs.fieldsOf('[Triage] Triage named a new repository, but there is no folder to create it in')
+    ).toEqual([{ taskId: nowhere.triaged?.id, name: 'native-islands' }]);
+    await nowhere.close();
+    const root = createTempDir();
+    writeFiles(join(root, 'native-islands'), { 'notes.txt': 'mine' });
+    const taken = await triageNewRepo({ roots: [root] });
+    expect(taken.triaged?.repoId).toBeNull();
+    expect(taken.engine.state.repos).toEqual({});
+    expect(logs.fieldsOf('[Triage] Could not create the new repository triage named')).toEqual([
+      { taskId: taken.triaged?.id, name: 'native-islands', error: expect.stringContaining('not empty') },
+    ]);
+    expect(readFileSync(join(root, 'native-islands', 'notes.txt'), 'utf8')).toBe('mine');
+    logs.restore();
+    await taken.close();
+  });
+
   test('the kind of task and its priority are sent with why triage chose them', async () => {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });
@@ -725,6 +813,30 @@ describe('the setup check', () => {
     const started = setup(withTask({ stage: 'building' }, broken));
     await started.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
     expect(started.dispatched).toEqual([]);
+  });
+
+  test('a repository with no commits is started before the check, and only when the work needs a worktree', async () => {
+    const root = createTempDir();
+    const empty = { ...(await createGitRepo({ remote: false })).repo, path: root };
+    const question = setup(withTask({ stage: 'triage', pipeline: ['answer'] }, empty));
+    await question.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
+    expect(question.dispatched).toEqual([
+      {
+        type: 'config.record',
+        taskId: 'task-1',
+        problems: [{ kind: 'repository', detail: `${root} is not a git repository.` }],
+      },
+    ]);
+    const change = setup(withTask({ stage: 'triage' }, empty));
+    await change.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
+    expect(change.dispatched).toEqual([
+      {
+        type: 'config.record',
+        taskId: 'task-1',
+        problems: [],
+        started: { branch: 'main', initialized: true, pushed: false },
+      },
+    ]);
   });
 
   test('a task with no repository finds one when its work needs it, and binds it with what its check found', async () => {

@@ -380,6 +380,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     expect(schema?.required).toEqual([
       'title',
       'repo',
+      'new_repo',
       'size',
       'branch',
       'shape',
@@ -500,6 +501,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     expect(Object.keys(calls[0]?.schema?.properties ?? {})).toEqual([
       'title',
       'repo',
+      'new_repo',
       'size',
       'branch',
       'duplicate_of',
@@ -734,6 +736,80 @@ describe('triage may choose no repository', () => {
     const origin = newTask({ origin: '/code/kanna/src' });
     expect((await resolveTriage(stateWith(), origin, KANNA, ask)).repoPath).toBeNull();
     expect(calls[1]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['kanna', 'none'] });
+  });
+});
+
+describe('triage may start a new repository', () => {
+  function recordNew(repo: string, newRepo: unknown) {
+    const calls: { system: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
+      calls.push({ system, schema });
+      return Promise.resolve({
+        title: 'Start the app',
+        repo,
+        new_repo: newRepo,
+        size: 'large',
+        branch: 'feat/start',
+      } as T);
+    };
+    return { calls, ask };
+  }
+
+  const request = 'Start a new app called native-islands';
+
+  test('a request for a repository that is not listed names it as new, with no repository bound yet', async () => {
+    const { calls, ask } = recordNew('none', 'native-islands');
+    const triage = await resolveTriage(stateWith(), newTask({ request }), LOCAL, ask);
+    expect(triage).toMatchObject({ repoPath: null, newRepo: 'native-islands' });
+    expect(calls[0]?.schema?.properties.new_repo).toEqual({
+      type: 'string',
+      maxLength: 100,
+      pattern: '^$|^[A-Za-z0-9][A-Za-z0-9._-]*$',
+    });
+    expect(calls[0]?.schema?.required).toContain('new_repo');
+    expect(calls[0]?.system).toContain('new_repo: "" unless the request asks to start a new repository');
+  });
+
+  test('a new name that is already listed binds that repository instead', async () => {
+    const triage = await resolveTriage(
+      stateWith(),
+      newTask({ request }),
+      LOCAL,
+      recordNew('none', 'api').ask
+    );
+    expect(triage.repoPath).toBe('/code/api');
+    expect(triage.newRepo).toBeUndefined();
+  });
+
+  test('an empty, unsafe or malformed name starts nothing', async () => {
+    for (const name of ['', '../escape', '.hidden', 'nested/app', 'app.git', 7, undefined]) {
+      const triage = await resolveTriage(
+        stateWith(),
+        newTask({ request }),
+        LOCAL,
+        recordNew('none', name).ask
+      );
+      expect(triage).toMatchObject({ repoPath: null });
+      expect(triage.newRepo).toBeUndefined();
+    }
+  });
+
+  test('a listed repository it picked wins over a new name, and a pinned task is never offered one', async () => {
+    const named = await resolveTriage(
+      stateWith(),
+      newTask({ request }),
+      LOCAL,
+      recordNew('web', 'native-islands').ask
+    );
+    expect(named).toMatchObject({ repoPath: '/code/web' });
+    expect(named.newRepo).toBeUndefined();
+    const pinned = stateWith((draft) => {
+      draft.repos.r = createRepo({ id: 'r', path: '/code/web', name: 'web' });
+    });
+    const { calls, ask } = recordNew('web', 'native-islands');
+    const triage = await resolveTriage(pinned, newTask({ request, repoId: 'r' }), LOCAL, ask);
+    expect(triage.newRepo).toBeUndefined();
+    expect(calls[0]?.schema?.properties.new_repo).toBeUndefined();
   });
 });
 

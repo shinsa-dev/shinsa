@@ -192,6 +192,12 @@ export interface ConfigProblem {
   detail: string;
 }
 
+export interface RepoStart {
+  branch: string;
+  initialized: boolean;
+  pushed: boolean;
+}
+
 export type EvidenceKind = 'screenshot' | 'recording' | 'test' | 'check' | 'note' | 'preview';
 
 export type EvidenceTheme = 'light' | 'dark';

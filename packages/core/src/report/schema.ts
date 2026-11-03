@@ -865,6 +865,8 @@ export const CourierTaskInput = HandOverRecord({
   request: Required(PROTOCOL_LIMITS.suggestionRequest),
   client_request_id: RequestKey,
   repository: OptionalText(DELEGATION_LIMITS.name),
+  new_repository: Flag,
+  project: OptionalText(DELEGATION_LIMITS.name),
   fork_from: OptionalText(DELEGATION_LIMITS.name),
   this_task_waits: Flag,
   after_this: Flag,

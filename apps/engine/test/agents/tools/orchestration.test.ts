@@ -94,6 +94,7 @@ interface Options {
   runId?: string;
   requestKey?: string;
   registerRepo?: OrchestrationCall['registerRepo'];
+  createRepo?: OrchestrationCall['createRepo'];
 }
 
 function createCall(core: ReturnType<typeof createCore>, runId: string, options: Options = {}) {
@@ -117,6 +118,7 @@ function createCall(core: ReturnType<typeof createCore>, runId: string, options:
       return Promise.resolve('abc1234');
     },
     registerRepo: options.registerRepo ?? (() => Promise.resolve(null)),
+    createRepo: options.createRepo ?? (() => Promise.reject(new Error('No repository is created here.'))),
     hasProvider: (id) => id === 'claude',
     awaitDelegation: (_child, timeoutMs) => {
       waits.push(timeoutMs);
@@ -454,7 +456,7 @@ describe('create_task and split_task', () => {
         createCall(core, run.id).call
       )
     ).rejects.toThrow(
-      'There is no repository "web" in Shinsa or in the project\'s folders. Known: app, admin.'
+      'There is no repository "web" in Shinsa or in the project\'s folders. Known: app, admin. Set new_repository to create it.'
     );
     const empty = createCall(core, run.id, { state: () => ({ ...core.state, repos: {} }) }).call;
     await expect(
@@ -465,8 +467,8 @@ describe('create_task and split_task', () => {
   test('create_task registers a repository it names from the project folders, and files the task there', async () => {
     const { core, run, taskId } = await building();
     const named: string[] = [];
-    const registerRepo: OrchestrationCall['registerRepo'] = async (task, name) => {
-      named.push(`${task.id}:${name}`);
+    const registerRepo: OrchestrationCall['registerRepo'] = async (projectId, name) => {
+      named.push(`${projectId}:${name}`);
       await core.dispatch({
         type: 'repo.register',
         repo: { name, path: `/code/${name}`, defaultBranch: 'main', remote: null, checkCommands: [] },
@@ -482,10 +484,112 @@ describe('create_task and split_task', () => {
     );
     const docs = Object.values(core.state.repos).find((repo) => repo.name === 'docs');
     const created = Object.values(core.state.tasks).find((task) => task.createdBy?.taskId === taskId);
-    expect(named).toEqual([`${taskId}:docs`]);
+    expect(named).toEqual(['null:docs']);
     expect(created).toMatchObject({ repoId: docs?.id, waitsOn: [taskId] });
     await handleOrchestrationTool('create_task', { request: 'More docs.', repository: 'docs' }, call);
     expect(named).toHaveLength(1);
+  });
+
+  async function inProject() {
+    const building_ = await building();
+    const { core } = building_;
+    await core.dispatch({ type: 'project.write', project: { name: 'Shinsa', color: 'blue', key: 'LOC' } });
+    await core.dispatch({ type: 'project.write', project: { name: 'Islands', color: 'green', key: 'ISL' } });
+    const project = (name: string) =>
+      Object.values(core.state.projects).find((candidate) => candidate.name === name)?.id ?? '';
+    for (const repo of Object.values(core.state.repos)) {
+      await core.dispatch({ type: 'repo.update', repoId: repo.id, patch: { projectId: project('Shinsa') } });
+    }
+    return { ...building_, shinsa: project('Shinsa'), islands: project('Islands') };
+  }
+
+  function createRepoIn(
+    core: ReturnType<typeof createCore>,
+    made: string[]
+  ): OrchestrationCall['createRepo'] {
+    return async (projectId, name) => {
+      made.push(`${projectId}:${name}`);
+      await core.dispatch({
+        type: 'repo.register',
+        repo: { name, path: `/new/${name}`, defaultBranch: 'main', remote: null, checkCommands: [] },
+        projectName: null,
+        projectId,
+      });
+      const repo = Object.values(core.state.repos).find((candidate) => candidate.path === `/new/${name}`);
+      if (!repo) throw new Error('not registered');
+      return repo;
+    };
+  }
+
+  test('create_task with new_repository creates the repository in the project and files the task there', async () => {
+    const { core, run, taskId, shinsa } = await inProject();
+    const made: string[] = [];
+    const { call } = createCall(core, run.id, { createRepo: createRepoIn(core, made) });
+    const input = { request: 'Start the islands app.', repository: 'islands', new_repository: true };
+    await handleOrchestrationTool('create_task', input, call);
+    const islands = Object.values(core.state.repos).find((repo) => repo.name === 'islands');
+    const created = Object.values(core.state.tasks).find((task) => task.createdBy?.taskId === taskId);
+    expect(made).toEqual([`${shinsa}:islands`]);
+    expect(created).toMatchObject({ repoId: islands?.id, projectId: shinsa });
+    await handleOrchestrationTool('create_task', { ...input, client_request_id: 'again' }, call);
+    expect(made).toHaveLength(1);
+  });
+
+  test('create_task with project files the task in that project, creating the repository there when asked', async () => {
+    const { core, run, taskId, islands } = await inProject();
+    const made: string[] = [];
+    const { call } = createCall(core, run.id, { createRepo: createRepoIn(core, made) });
+    await handleOrchestrationTool(
+      'create_task',
+      { request: 'Plan the islands app.', project: 'isl', client_request_id: 'plan' },
+      call
+    );
+    await handleOrchestrationTool(
+      'create_task',
+      {
+        request: 'Start it.',
+        project: 'Islands',
+        repository: 'app',
+        new_repository: true,
+        client_request_id: 'app',
+      },
+      call
+    );
+    const created = Object.values(core.state.tasks).filter((task) => task.createdBy?.taskId === taskId);
+    const app = Object.values(core.state.repos).find(
+      (repo) => repo.name === 'app' && repo.projectId === islands
+    );
+    expect(made).toEqual([`${islands}:app`]);
+    expect(created.map((task) => ({ repoId: task.repoId, projectId: task.projectId }))).toEqual([
+      { repoId: null, projectId: islands },
+      { repoId: app?.id ?? '', projectId: islands },
+    ]);
+  });
+
+  test('create_task refuses a project it does not know, and a new repository with no name or no project', async () => {
+    const { core, run } = await building();
+    const { call } = createCall(core, run.id);
+    await expect(
+      handleOrchestrationTool('create_task', { request: 'Do it.', project: 'Nowhere' }, call)
+    ).rejects.toThrow('There is no project "Nowhere". Known: none.');
+    await expect(
+      handleOrchestrationTool('create_task', { request: 'Do it.', new_repository: true }, call)
+    ).rejects.toThrow('Set repository to the name of the repository to create.');
+    await expect(
+      handleOrchestrationTool(
+        'create_task',
+        { request: 'Do it.', repository: 'web', new_repository: true },
+        call
+      )
+    ).rejects.toThrow('This task belongs to no project, so there is no folder to create the repository in.');
+    const named = await inProject();
+    await expect(
+      handleOrchestrationTool(
+        'create_task',
+        { request: 'Do it.', project: 'Nowhere' },
+        createCall(named.core, named.run.id).call
+      )
+    ).rejects.toThrow('Known: Shinsa (LOC), Islands (ISL).');
   });
 
   test('a run whose task is gone is told to end its turn', async () => {

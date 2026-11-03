@@ -12,6 +12,7 @@ import type {
   PipelineStep,
   PullRequest,
   Repo,
+  RepoStart,
   RunAccount,
   RunFailure,
   RunHandoff,
@@ -273,7 +274,13 @@ type SystemCommand =
       readings?: WeeklyReading[];
     }
   | { type: 'run.silence'; runId: string; since: number | null }
-  | { type: 'config.record'; taskId: string; problems: ConfigProblem[]; repoId?: string }
+  | {
+      type: 'config.record';
+      taskId: string;
+      problems: ConfigProblem[];
+      repoId?: string;
+      started?: RepoStart;
+    }
   | { type: 'pull_request.record_push'; taskId: string; sha: string }
   | { type: 'pull_request.record_step'; taskId: string; step: ShippingStep }
   | {

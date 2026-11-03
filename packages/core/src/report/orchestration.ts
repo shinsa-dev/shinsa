@@ -33,6 +33,8 @@ export interface CourierRequest {
   request: string;
   requestKey: string | null;
   repository: string | null;
+  newRepository: boolean;
+  project: string | null;
   forkFrom: string | null;
   thisTaskWaits: boolean;
   afterThis: boolean;
@@ -87,6 +89,8 @@ export function validateCourierTask(input: Record<string, unknown>): Validation<
     request: task.request,
     requestKey: task.client_request_id,
     repository: task.repository,
+    newRepository: task.new_repository,
+    project: task.project,
     forkFrom: task.fork_from,
     thisTaskWaits: task.this_task_waits,
     afterThis: task.after_this,

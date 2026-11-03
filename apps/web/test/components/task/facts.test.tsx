@@ -612,7 +612,7 @@ describe('a task handed off', () => {
 describe('who filed the task', () => {
   const filer = createTask({ id: 'filer', handle: 'LOC-122', title: 'Retry the export' });
 
-  it('links the task whose agent filed it, says so on hover, and shows no separate Forked from', async () => {
+  it('shows a task its agent filed as a fork of itself once, as Forked from, and says it filed it on hover', async () => {
     const task = createTask({
       id: 't',
       handle: 'LOC-127',
@@ -620,11 +620,13 @@ describe('who filed the task', () => {
       createdBy: { kind: 'courier', taskId: 'filer', runId: 'r', requestKey: 'k' },
     });
     const view = renderFacts(task, [filer]);
-    const link = screen.getByRole('button', { name: 'Filed by LOC-122 Retry the export' });
-    expect(await findTooltipText(link)).toBe('The agent of LOC-122 filed this task.');
-    expect(view.getAllByRole('button').map((button) => button.textContent)).not.toContain(
-      'Forked from Retry the export'
+    const link = screen.getByRole('button', { name: 'Forked from LOC-122 Retry the export' });
+    expect(await findTooltipText(link)).toBe(
+      'The agent of LOC-122 filed this task and forked it from its own conversation.'
     );
+    const labels = view.getAllByRole('button').map((button) => button.textContent ?? '');
+    expect(labels.filter((label) => label.includes('Retry the export'))).toHaveLength(1);
+    expect(labels.some((label) => label.startsWith('Filed by'))).toBe(false);
     fireEvent.click(link);
     expect(window.location.pathname).toBe('/tasks/LOC-122');
   });
