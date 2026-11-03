@@ -58,6 +58,9 @@ describe('reading projects', () => {
     expect(listProjects(state).map((project) => project.name)).toEqual(['Basket', 'Superwall']);
     expect(listProjectRepoRows(state, 'p1').map((repo) => repo.id)).toEqual(['api', 'web']);
     expect(listLooseRepos(state).map((repo) => repo.id)).toEqual(['loose', 'orphan']);
+    expect(listLooseRepos({ ...state, teammateRepos: { loose: true } }).map((repo) => repo.id)).toEqual([
+      'orphan',
+    ]);
   });
 
   it('selects a project by id and a task’s project through its repository', () => {

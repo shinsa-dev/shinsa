@@ -60,6 +60,7 @@ const ROUTES = [
   'POST /__remote/machine/teams/:teamId/invite/remove',
   'POST /__remote/machine/teams/:teamId/members/add',
   'POST /__remote/machine/teams/:teamId/members/remove',
+  'POST /__remote/machine/teams/:teamId/permissions',
   'POST /__remote/machine/teams/:teamId/requests/decline',
   'POST /__remote/machine/teams/:teamId/leave',
   'POST /__remote/machine/teams/:teamId/remove',

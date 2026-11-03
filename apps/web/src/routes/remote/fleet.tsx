@@ -1,4 +1,4 @@
-import { describeList } from '@shinsa/core';
+import { describeList, type RemoteUser } from '@shinsa/core';
 import * as React from 'react';
 import { replaceConnection } from '@/lib/connection/socket.ts';
 import { serveNotificationOpens } from '@/lib/notifications/worker.ts';
@@ -123,10 +123,12 @@ function FleetReady({
 
 export function FleetApp({
   services,
+  viewer,
   shell,
   children,
 }: {
   services: RemoteServices;
+  viewer: RemoteUser;
   shell: (content: React.ReactNode) => React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -160,7 +162,12 @@ export function FleetApp({
           setState(
             waiting.length > 0
               ? { kind: 'waiting', machines: waiting }
-              : { kind: 'empty', machines: rows.map((row) => row.instance.name) }
+              : {
+                  kind: 'empty',
+                  machines: rows.flatMap((row) =>
+                    row.instance.role === 'teammate' ? [] : [row.instance.name]
+                  ),
+                }
           );
           return;
         }
@@ -168,6 +175,7 @@ export function FleetApp({
         const members = added.map(({ instance, device }) =>
           createFleetMember(instance, device, {
             dashboard: services.dashboard,
+            viewerId: viewer.id,
             onRemoved: (instanceId) => {
               void services.devices.removeDevice(instanceId);
               fleet?.removeMachine(instanceId);
@@ -192,7 +200,9 @@ export function FleetApp({
         fleet = new Fleet(
           members,
           rows.flatMap((row) =>
-            row.device && !row.device.waiting ? [] : [{ id: row.instance.id, name: row.instance.name }]
+            (row.device && !row.device.waiting) || row.instance.role === 'teammate'
+              ? []
+              : [{ id: row.instance.id, name: row.instance.name }]
           ),
           hostedTeams
         );
@@ -219,7 +229,7 @@ export function FleetApp({
       live = false;
       for (const step of release.splice(0).reverse()) step();
     };
-  }, [services]);
+  }, [services, viewer]);
   switch (state.kind) {
     case 'starting':
       return shell(<RemoteLoading label='Connecting to your machines' />);

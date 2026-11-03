@@ -25,9 +25,11 @@ function resolveDeviceAccess(device: EnrolledDevice | null) {
   return device.waiting ? 'Waiting for an answer' : 'In this dashboard';
 }
 
-function describeSharer(instance: RemoteInstance) {
-  return instance.role === 'guest' ? 'A task handed to you by' : 'Shared by';
-}
+const SHARER: Record<Exclude<RemoteInstance['role'], 'owner'>, string> = {
+  member: 'Shared by',
+  guest: 'A task handed to you by',
+  teammate: 'In a team with',
+};
 
 export function describeMachine(
   instance: RemoteInstance,
@@ -41,7 +43,7 @@ export function describeMachine(
   const access: Mention =
     instance.role === 'owner'
       ? [added]
-      : [`${describeSharer(instance)} `, { user: instance.owner }, ` · ${added}`];
+      : [`${SHARER[instance.role]} `, { user: instance.owner }, ` · ${added}`];
   return {
     instance,
     device,
@@ -79,6 +81,7 @@ export async function listMachineRows(
 
 export interface FleetMemberOptions {
   dashboard: Pick<DashboardClient, 'requestConnect'>;
+  viewerId: string;
   onRefused: (instanceId: string, error: ChannelError) => void;
   onRemoved?: (instanceId: string) => void;
   createConnection?: (transport: SocketTransport) => Connection;
@@ -106,6 +109,9 @@ export function createFleetMember(
     current: device.onMachine === true,
     online: instance.online,
     ...(instance.role === 'guest' ? { guest: true as const, handedBy: instance.owner } : {}),
+    ...(instance.role === 'teammate'
+      ? { teammate: { owner: instance.owner, viewerId: options.viewerId } }
+      : {}),
     connection,
     fetch: (request) => link.fetch(request),
     ...(instance.role === 'owner'

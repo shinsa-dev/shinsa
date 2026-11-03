@@ -99,6 +99,8 @@ export interface ShinsaState {
   away: Record<string, TimingSpan>;
   focusHistory: Record<string, FocusSpan>;
   onBehalfActions: OnBehalfAction[];
+  teammateTasks?: Readonly<Record<string, true>>;
+  teammateRepos?: Readonly<Record<string, true>>;
 }
 
 const UNTITLED_LENGTH = 80;

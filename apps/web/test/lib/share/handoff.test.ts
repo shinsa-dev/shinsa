@@ -7,8 +7,13 @@ import {
   describeHandoffBanner,
   describeHandoffClaim,
   describeHandoffMark,
+  describeHandToTeammate,
   HANDOFF_ICON,
+  HANDOFF_LINK,
   handOffTask,
+  handToTeammate,
+  listHandoffTargetItems,
+  listHandoffTeammates,
   isTaskHandedOff,
   openHandoffRemoveConfirm,
   removeHandoff,
@@ -17,7 +22,9 @@ import {
   useHandoffRemoveConfirm,
 } from '@/lib/share/handoff.ts';
 import { spyOnCommands } from '../../support/commands.ts';
-import { createTask } from '../../support/state.ts';
+import { createRemoteSnapshot } from '../../support/remote-access.ts';
+import { createProject, createShinsaState, createTask } from '../../support/state.ts';
+import * as teams from '../../support/teams.ts';
 
 const KAI = { id: 'u2', login: 'kai', name: 'Kai Lane', avatarUrl: null };
 
@@ -92,10 +99,32 @@ describe('handing a task off', () => {
     expect(isTaskHandedOff(claimed)).toBe(true);
     expect(describeHandoffMark(claimed, null)).toBe('Handed to Kai');
     expect(describeHandoffMark(ready, null)).toBe('Hand-off link not opened yet');
-    expect(describeHandoffMark(claimed, LEE)).toBe('Handed to you by Lee');
+    expect(describeHandoffMark(claimed, { handedBy: LEE })).toBe('Handed to you by Lee');
     expect(resolveHandoffFact(ready, null)).toBeNull();
     expect(resolveHandoffFact(claimed, null)).toMatchObject({ verb: 'Handed to', user: KAI });
-    expect(resolveHandoffFact(claimed, LEE)).toMatchObject({ verb: 'Handed to you by', user: LEE });
+    expect(resolveHandoffFact(claimed, { handedBy: LEE })).toMatchObject({
+      verb: 'Handed to you by',
+      user: LEE,
+    });
+  });
+
+  it('names a teammate task’s owner, and says when you took it over or a teammate holds it', () => {
+    const MONA = { id: 'u5', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+    const viewer = { teammate: { owner: MONA, viewerId: KAI.id } };
+    const open = createTask({ id: 't1' });
+    const taken = createTask({
+      id: 't1',
+      handoff: { ...HANDED, guest: KAI, claimedAt: 9, teamId: 'team-1' },
+    });
+    expect(resolveHandoffFact(open, viewer)).toMatchObject({ verb: 'Owned by', user: MONA });
+    expect(resolveHandoffFact(taken, viewer)).toMatchObject({ verb: 'Taken over from', user: MONA });
+    expect(describeHandoffMark(taken, viewer)).toBe('You took this over from Mona');
+    expect(describeHandoffMark(taken, { teammate: { owner: MONA, viewerId: 'u9' } })).toBe('Handed to Kai');
+    expect(resolveHandoffFact(taken, null)).toMatchObject({
+      verb: 'Handed to',
+      user: KAI,
+      hint: 'A teammate works on it from Shinsa Cloud',
+    });
   });
 
   it('sends the hand-off and its removal, naming who loses the task', async () => {
@@ -119,5 +148,57 @@ describe('handing a task off', () => {
     expect(result.current).toBe('t');
     act(() => closeHandoffRemoveConfirm());
     expect(result.current).toBeNull();
+  });
+});
+
+describe('handing a task to a teammate', () => {
+  const RIO = { id: '12', login: 'rio', name: 'Rio Diaz', avatarUrl: null };
+  const state = createShinsaState({
+    projects: [
+      createProject({ id: 'shared', teamIds: ['team1', 'team2'] }),
+      createProject({ id: 'private' }),
+    ],
+  });
+  const remote = createRemoteSnapshot({
+    access: { owner: teams.MONA, members: [] },
+    teams: [
+      teams.createTeamEntry(),
+      teams.createTeamEntry({
+        team: teams.createTeam({
+          id: 'team2',
+          owner: RIO,
+          members: [
+            { user: teams.KAI, addedAt: 1 },
+            { user: teams.MONA, addedAt: 1 },
+          ],
+        }),
+      }),
+      teams.createTeamEntry({ id: 'team3', team: null }),
+    ],
+  });
+
+  it('lists everyone else in the teams that see the task’s project, once each, by first name', () => {
+    const task = createTask({ id: 't', projectId: 'shared' });
+    const teammates = listHandoffTeammates(state, task, remote);
+    expect(teammates.map((teammate) => [teammate.user.login, teammate.teamId])).toEqual([
+      ['kai', 'team1'],
+      ['rio', 'team2'],
+    ]);
+    expect(listHandoffTeammates(state, createTask({ id: 't', projectId: 'private' }), remote)).toEqual([]);
+    expect(listHandoffTeammates(state, task, null)).toEqual([]);
+    expect(listHandoffTargetItems(teammates)).toEqual([
+      { value: HANDOFF_LINK, label: 'Anyone with the link' },
+      { value: '7', label: 'Kai' },
+      { value: '12', label: 'Rio' },
+    ]);
+    expect(describeHandToTeammate(RIO)).toBe('Hand to Rio');
+  });
+
+  it('sends the teammate with the team that sees the task', async () => {
+    const spies = spyOnCommands();
+    await handToTeammate(createTask({ id: 't' }), { teamId: 'team2', user: RIO });
+    expect(spies.sent.mock.calls).toEqual([
+      [{ type: 'task.hand_to_teammate', taskId: 't', teamId: 'team2', teammate: RIO }, 'Handed to Rio.'],
+    ]);
   });
 });

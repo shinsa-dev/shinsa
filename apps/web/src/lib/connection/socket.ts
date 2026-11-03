@@ -68,17 +68,24 @@ type Scheduler = (flush: () => void) => void;
 
 type Incoming = { patch: StatePatch } | { detail: TaskDetail };
 
+export interface TeammateMachine {
+  owner: RemoteUser;
+  viewerId: string;
+}
+
 export interface MachineView {
   id: string;
   name: string;
   current: boolean;
   guest?: true;
   handedBy?: RemoteUser;
+  teammate?: TeammateMachine;
 }
 
 export interface MachineChoice extends PlacementMachine {
   current: boolean;
   guest?: true;
+  teammate?: TeammateMachine;
   resources?: MachineResources | null;
 }
 
@@ -659,7 +666,7 @@ function useListedMachines() {
 
 export function useMachines() {
   const listed = useListedMachines();
-  return useMemo(() => listed.filter((machine) => !machine.guest), [listed]);
+  return useMemo(() => listed.filter((machine) => !(machine.guest || machine.teammate)), [listed]);
 }
 
 export function useGuestMachines() {

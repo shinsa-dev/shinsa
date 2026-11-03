@@ -1,11 +1,12 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { serializeShareMessage } from '@shinsa/core';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { connection } from '@/lib/connection/socket.ts';
 import { TeamTaskPage } from '@/routes/team-task.tsx';
 import { createSharedTask } from '../lib/share/fixtures.ts';
 import { createTeamFeedTask, FakeTeamSocket } from '../lib/teams/machine.ts';
-import { pushTeams, startFakeServer, stopFakeServer } from '../support/server.ts';
-import { createTask } from '../support/state.ts';
+import { pushState, pushTeams, startFakeServer, stopFakeServer } from '../support/server.ts';
+import { createShinsaState, createTask } from '../support/state.ts';
 
 const ORIGINAL_SOCKET = globalThis.WebSocket;
 
@@ -103,5 +104,31 @@ describe('a teammate’s task while their machine is offline', () => {
     expect(screen.getByRole('link', { name: 'kai’s' }).getAttribute('href')).toBe('https://github.com/kai');
     expect(screen.getByText('Add the billing page')).toBeDefined();
     expect(screen.getByText('Offline')).toBeDefined();
+  });
+});
+
+describe('a teammate’s task on a machine the dashboard reaches', () => {
+  afterEach(() => {
+    stopFakeServer();
+    mock.restore();
+  });
+
+  it('opens the full task page in its place', async () => {
+    startFakeServer();
+    const owner = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    spyOn(connection, 'selectMachine').mockReturnValue({
+      id: 'p7m2',
+      name: 'Studio',
+      current: false,
+      teammate: { owner, viewerId: '1' },
+    });
+    act(() =>
+      pushState(
+        createShinsaState({ tasks: [createTask({ id: 'kai-task', handle: 'LOC-9', title: 'Billing' })] })
+      )
+    );
+    render(<TeamTaskPage target={TARGET} />);
+    await waitFor(() => expect(location.pathname).toBe('/tasks/LOC-9'));
+    expect(screen.getByText('Opening the team task')).toBeDefined();
   });
 });

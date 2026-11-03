@@ -140,7 +140,7 @@ function MachineFact({ task }: { task: Task }) {
 
 function HandoffFact({ task }: { task: Task }) {
   const machine = useMachine(task.id);
-  const fact = resolveHandoffFact(task, machine?.handedBy ?? null);
+  const fact = resolveHandoffFact(task, machine);
   if (!fact) return null;
   return (
     <span className={cn(FACT, 'max-w-80')}>

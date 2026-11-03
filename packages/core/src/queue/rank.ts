@@ -70,6 +70,7 @@ export function resolveFocusTeam(state: ShinsaState, now: number) {
 }
 
 export function isInFocus(state: ShinsaState, task: Task, now: number) {
+  if (state.teammateTasks?.[task.id]) return false;
   const teamId = resolveFocusTeam(state, now);
   if (teamId !== null) return isTeamTask(state, task, teamId);
   const projectId = resolveFocusProject(state, now);

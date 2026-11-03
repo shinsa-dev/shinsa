@@ -16,12 +16,14 @@ import {
   TEAM_TASK_LIST_COLUMNS,
 } from '@/components/tasks/row.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
+import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import { useMachines, useRemoteSnapshot, useTeamFeed } from '@/lib/connection/socket.ts';
 import { type FocusTeam, listFocusTeams } from '@/lib/focus.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import type { TeamEntry } from '@/lib/tasks/groups.ts';
 import {
+  listHeldTaskIds,
   listHeldTeamMachines,
   listTeamFeedRefusals,
   listTeamFeedTasks,
@@ -42,18 +44,18 @@ export function useTeamTasks(): TeamTasks {
   const teams = React.useMemo(() => listFocusTeams(remote), [remote]);
   const feed = useTeamFeed();
   const machines = useMachines();
+  const listed = useShinsaSelector(listHeldTaskIds);
   const entries = React.useMemo(() => {
     if (teams.length === 0) return [];
     const held = listHeldTeamMachines(feed);
     const teamIds = new Set(teams.map((team) => team.id));
-    return listTeamFeedTasks(feed, teamIds, new Set(machines.map((machine) => machine.id))).map(
-      (entry): TeamEntry => ({
-        entry,
-        state: resolveTeamTaskState(entry),
-        heldAt: selectTeamTaskHeldAt(held, entry),
-      })
-    );
-  }, [feed, teams, machines]);
+    const reachable = new Set(machines.map((machine) => machine.id));
+    return listTeamFeedTasks(feed, teamIds, reachable, listed ?? undefined).map((entry): TeamEntry => ({
+      entry,
+      state: resolveTeamTaskState(entry),
+      heldAt: selectTeamTaskHeldAt(held, entry),
+    }));
+  }, [feed, teams, machines, listed]);
   return { teams, entries };
 }
 

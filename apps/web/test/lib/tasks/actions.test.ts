@@ -40,6 +40,28 @@ describe('listTaskActions', () => {
     expect(TASK_ACTION_COMMAND.unshare).toBe('task.unshare');
   });
 
+  it('offers a teammate Take over, Give it back once they hold it, and neither to the owner', () => {
+    const kai = { id: 'u3', login: 'kai', name: 'Kai Tan', avatarUrl: null };
+    const teammate = { owner: { id: 'u2', login: 'mona', name: null, avatarUrl: null }, viewerId: kai.id };
+    const open = createTask({ id: 'open' });
+    const held = createTask({
+      id: 'held',
+      handoff: { at: 1, url: null, guest: kai, claimedAt: 1, teamId: 'team-1' },
+    });
+    const othersHold = createTask({
+      id: 'other',
+      handoff: { at: 1, url: null, guest: { ...kai, id: 'u9' }, claimedAt: 1, teamId: 'team-1' },
+    });
+    expect(listTaskActions(open, ALL_COMMANDS, NOW, teammate)[0]).toEqual(['takeOver']);
+    expect(listTaskActions(held, ALL_COMMANDS, NOW, teammate)[0]).toEqual(['giveBack']);
+    expect(listTaskActions(othersHold, ALL_COMMANDS, NOW, teammate).flat()).not.toContain('takeOver');
+    expect(
+      listTaskActions(createTask({ id: 'done', stage: 'merged' }), ALL_COMMANDS, NOW, teammate).flat()
+    ).not.toContain('takeOver');
+    expect(listTaskActions(open, ALL_COMMANDS).flat()).not.toContain('takeOver');
+    expect(listTaskActions(open, new Set(), NOW, teammate).flat()).not.toContain('takeOver');
+  });
+
   it('groups links, worktree actions and lifecycle actions', () => {
     expect(listTaskActions(FULL, ALL_COMMANDS)).toEqual([
       ['pullRequest', 'branch'],
@@ -178,6 +200,15 @@ describe('runTaskAction', () => {
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.snooze', taskId: 'full' }, 'Snoozed.'],
       [{ type: 'task.unsnooze', taskId: 'full' }, 'Unsnoozed.'],
+    ]);
+  });
+
+  it('takes a teammate’s task over and gives it back, with a toast for each', () => {
+    runTaskAction(FULL, 'takeOver');
+    runTaskAction(FULL, 'giveBack');
+    expect(spies.sent.mock.calls).toEqual([
+      [{ type: 'task.take_over', taskId: 'full' }, 'You took this task over.'],
+      [{ type: 'task.give_back', taskId: 'full' }, 'You gave this task back.'],
     ]);
   });
 

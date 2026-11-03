@@ -221,6 +221,7 @@ export function resolveExtensionPlaces(state: ShinsaState): ExtensionPlaces {
       color: project.color,
     })),
     repos: Object.values(state.repos)
+      .filter((repo) => !state.teammateRepos?.[repo.id])
       .map((repo) => ({
         path: repo.path,
         name: repo.name,

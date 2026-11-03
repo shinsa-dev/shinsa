@@ -212,9 +212,11 @@ function MachineItem({
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>
         {machine && <MachineCapacity machine={machine} />}
-        <Button variant='secondary' size='sm' loading={removing} onClick={onRemove}>
-          {row.instance.role === 'owner' ? 'Remove' : 'Leave'}
-        </Button>
+        {row.instance.role !== 'teammate' && (
+          <Button variant='secondary' size='sm' loading={removing} onClick={onRemove}>
+            {row.instance.role === 'owner' ? 'Remove' : 'Leave'}
+          </Button>
+        )}
       </div>
     </div>
   );

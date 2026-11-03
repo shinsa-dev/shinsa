@@ -1,5 +1,6 @@
 import {
   type EngineCommand,
+  isHeldBy,
   isTaskSettled,
   resolveBacklogRefusal,
   type Task,
@@ -7,6 +8,7 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
+import type { TeammateMachine } from '@/lib/connection/socket.ts';
 import { openTaskTerminal } from '@/lib/connection/terminals.ts';
 import { openWorktree } from '@/lib/connection/worktree.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
@@ -23,6 +25,8 @@ import { navigate, resolveTaskPath } from '@/router.ts';
 
 export type TaskActionKey =
   | 'open'
+  | 'takeOver'
+  | 'giveBack'
   | 'pullRequest'
   | 'branch'
   | 'editor'
@@ -43,6 +47,8 @@ export type TaskActionKey =
 
 export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName }> = {
   open: { label: 'Open task', icon: 'IconArrowUpRight' },
+  takeOver: { label: 'Take over', icon: 'IconHandshake' },
+  giveBack: { label: 'Give it back', icon: 'IconArrowUndoUp' },
   pullRequest: { label: 'Open the pull request on GitHub', icon: 'IconGithub' },
   branch: { label: 'Copy branch name', icon: 'IconBranch' },
   editor: { label: 'Open in editor', icon: 'IconCodeLines' },
@@ -64,6 +70,8 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
 
 export const TASK_ACTION_COMMAND: Record<TaskActionKey, EngineCommand | null> = {
   open: null,
+  takeOver: 'task.take_over',
+  giveBack: 'task.give_back',
   pullRequest: null,
   branch: null,
   editor: null,
@@ -88,10 +96,17 @@ function isActionSpoken(key: TaskActionKey, commands: ReadonlySet<string>) {
   return command === null || commands.has(command);
 }
 
+function listTeammateActions(task: Task, teammate: TeammateMachine | null): TaskActionKey[] {
+  if (!teammate) return [];
+  if (isHeldBy(task, { id: teammate.viewerId })) return ['giveBack'];
+  return isTaskSettled(task) || task.handoff?.guest ? [] : ['takeOver'];
+}
+
 export function listTaskActions(
   task: Task,
   commands: ReadonlySet<string>,
-  now = Date.now()
+  now = Date.now(),
+  teammate: TeammateMachine | null = null
 ): TaskActionKey[][] {
   const links: TaskActionKey[] = [];
   if (task.pullRequest) links.push('pullRequest');
@@ -102,7 +117,14 @@ export function listTaskActions(
     : ['restart', 'complete', 'duplicate', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
   const share = listShareActions(task, now);
-  return [links, worktree, [...fork, ...share], listLaterActions(task), lifecycle]
+  return [
+    listTeammateActions(task, teammate),
+    links,
+    worktree,
+    [...fork, ...share],
+    listLaterActions(task),
+    lifecycle,
+  ]
     .map((group) => group.filter((key) => isActionSpoken(key, commands)))
     .filter((group) => group.length > 0);
 }
@@ -128,6 +150,12 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
   switch (key) {
     case 'open':
       navigate(resolveTaskPath(task));
+      return;
+    case 'takeOver':
+      void sendCommandWithToast({ type: 'task.take_over', taskId: task.id }, 'You took this task over.');
+      return;
+    case 'giveBack':
+      void sendCommandWithToast({ type: 'task.give_back', taskId: task.id }, 'You gave this task back.');
       return;
     case 'pullRequest':
       if (task.pullRequest) window.open(task.pullRequest.url, '_blank', 'noopener');

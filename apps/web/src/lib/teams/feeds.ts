@@ -14,10 +14,13 @@ import {
   type TeamSnapshot,
   type TeamTask,
   type TeamViewTarget,
+  type Task,
   verifyTeamSnapshot,
 } from '@shinsa/core';
+import type { MachineView } from '@/lib/connection/socket.ts';
 import { resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { resolveTaskPath } from '@/router.ts';
 import { openTeamChannel } from './channel.ts';
 import type { StoredTeamKey } from './join.ts';
 import {
@@ -91,16 +94,26 @@ export function mergeTeamFeeds(feeds: readonly TeamFeedSnapshot[]): TeamFeedSnap
   return { machines: [...machines.values()], tasks: [...tasks.values()] };
 }
 
+export function listHeldTaskIds(state: Pick<ShinsaState, 'tasks' | 'teammateTasks'> | null) {
+  if (!state?.teammateTasks) return NO_HELD_TASKS;
+  return new Set(Object.keys(state.tasks).filter((id) => !state.teammateTasks?.[id]));
+}
+
+const NO_HELD_TASKS: ReadonlySet<string> = new Set();
+
 export function listTeamFeedTasks(
   feed: TeamFeedSnapshot,
   teamIds: ReadonlySet<string>,
-  reachable: ReadonlySet<string>
+  reachable: ReadonlySet<string>,
+  listed: ReadonlySet<string> = NO_HELD_TASKS
 ): TeamFeedTask[] {
   const seen = new Set<string>();
   return feed.tasks
     .filter((task) => {
       const key = `${task.instanceId}:${task.task.id}`;
-      if (!teamIds.has(task.teamId) || reachable.has(task.instanceId) || seen.has(key)) return false;
+      if (!teamIds.has(task.teamId) || reachable.has(task.instanceId) || listed.has(task.task.id))
+        return false;
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     })
@@ -124,6 +137,15 @@ export function resolveTeamTaskState(entry: TeamFeedTask): ShinsaState {
 
 export function resolveTeamTaskPath(target: TeamViewTarget) {
   return `/teams/${[target.teamId, target.instanceId, target.taskId].map(encodeURIComponent).join('/')}`;
+}
+
+export function resolveFleetTeamTaskPath(
+  target: TeamViewTarget,
+  task: Task | null,
+  machine: Pick<MachineView, 'id' | 'teammate'> | null
+) {
+  if (!(task && machine?.teammate && machine.id === target.instanceId)) return null;
+  return resolveTaskPath(task);
 }
 
 export function resolveTeamTaskTarget(task: TeamFeedTask): TeamViewTarget {

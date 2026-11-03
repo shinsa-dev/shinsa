@@ -15,8 +15,10 @@ import {
   HostedTeamFeeds,
   listHeldTeamMachines,
   listTeamFeedRefusals,
+  listHeldTaskIds,
   listTeamFeedTasks,
   mergeTeamFeeds,
+  resolveFleetTeamTaskPath,
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
@@ -122,6 +124,15 @@ describe('teammates’ task lists', () => {
     expect(listed.map((entry) => entry.task.id)).toEqual(['recent', 'old', 'done']);
     const both = listTeamFeedTasks(feed, new Set(['team1', 'team2']), new Set());
     expect(both.map((entry) => entry.task.id)).toEqual(['other', 'mine', 'recent', 'old', 'done']);
+    const taken = listTeamFeedTasks(feed, new Set(['team1']), new Set(), new Set(['recent']));
+    expect(taken.map((entry) => entry.task.id)).toEqual(['mine', 'old', 'done']);
+  });
+
+  it('knows which teammate tasks are already among yours, as the ones you took over', () => {
+    const tasks = { yours: createTask({ id: 'yours' }), theirs: createTask({ id: 'theirs' }) };
+    expect([...listHeldTaskIds({ tasks, teammateTasks: { theirs: true } })]).toEqual(['yours']);
+    expect(listHeldTaskIds({ tasks }).size).toBe(0);
+    expect(listHeldTaskIds(null).size).toBe(0);
   });
 
   it('lists a task once when two teams both share it', () => {
@@ -138,6 +149,16 @@ describe('teammates’ task lists', () => {
     const entry = createTeamFeedTask();
     expect(resolveTeamTaskTarget(entry)).toEqual({ teamId: 'team1', instanceId: 'p7m2', taskId: 'kai-task' });
     expect(resolveTeamTaskPath({ teamId: 'a b', instanceId: 'm', taskId: 't' })).toBe('/teams/a%20b/m/t');
+    const task = createTask({ id: 'kai-task', handle: 'LOC-4' });
+    const teammate = { owner: { id: 'u1', login: 'kai', name: null, avatarUrl: null }, viewerId: 'u2' };
+    expect(resolveFleetTeamTaskPath(resolveTeamTaskTarget(entry), task, { id: 'p7m2', teammate })).toBe(
+      '/tasks/LOC-4'
+    );
+    expect(
+      resolveFleetTeamTaskPath(resolveTeamTaskTarget(entry), task, { id: 'other', teammate })
+    ).toBeNull();
+    expect(resolveFleetTeamTaskPath(resolveTeamTaskTarget(entry), task, { id: 'p7m2' })).toBeNull();
+    expect(resolveFleetTeamTaskPath(resolveTeamTaskTarget(entry), null, null)).toBeNull();
     expect(describeTeamTaskOwner(entry)).toBe('kai');
     expect(describeTeamTaskOwner({ ...entry, ownerProfile: { name: 'Kai Tanaka', avatarUrl: null } })).toBe(
       'Kai'

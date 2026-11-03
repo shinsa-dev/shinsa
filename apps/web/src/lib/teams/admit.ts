@@ -89,9 +89,11 @@ async function admitMachine(row: MachineRow, teams: readonly RemoteTeam[], optio
   return null;
 }
 
+const ADMITTED_ROLES: ReadonlySet<MachineRow['instance']['role']> = new Set(['member', 'teammate']);
+
 export async function admitTeamMachines(rows: MachineRow[], options: TeamAdmitOptions) {
   const candidates = rows.filter(
-    (row) => row.instance.role === 'member' && !row.device && row.instance.online
+    (row) => ADMITTED_ROLES.has(row.instance.role) && !row.device && row.instance.online
   );
   if (candidates.length === 0) return rows;
   let teams: readonly RemoteTeam[];

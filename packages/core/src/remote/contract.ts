@@ -212,7 +212,7 @@ export const RemoteAccess = Schema.Struct({ owner: RemoteUser, members: Schema.A
 
 export type RemoteAccess = typeof RemoteAccess.Type;
 
-export const RemoteRole = Schema.Literals(['owner', 'member', 'guest']);
+export const RemoteRole = Schema.Literals(['owner', 'member', 'guest', 'teammate']);
 
 export type RemoteRole = typeof RemoteRole.Type;
 

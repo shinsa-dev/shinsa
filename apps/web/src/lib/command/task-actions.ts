@@ -14,6 +14,8 @@ import {
 import { resolveMessageHint } from '@/lib/tasks/messages.ts';
 
 const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
+  takeOver: ['teammate', 'handoff', 'mine', 'steer'],
+  giveBack: ['teammate', 'handoff', 'return', 'owner'],
   pullRequest: ['pr', 'github', 'browser'],
   branch: ['git', 'clipboard', 'checkout'],
   editor: ['worktree', 'vscode', 'cursor', 'zed'],
@@ -127,7 +129,12 @@ function createActionCommand(task: Task, key: Exclude<TaskActionKey, 'open'>): C
 }
 
 export function listTaskActionCommands(state: ShinsaState, task: Task): Command[] {
-  const actions = listTaskActions(task, selectEngineCommands(connection.selectEngine(task.id)))
+  const actions = listTaskActions(
+    task,
+    selectEngineCommands(connection.selectEngine(task.id)),
+    Date.now(),
+    connection.selectMachine(task.id)?.teammate ?? null
+  )
     .flat()
     .flatMap((key) => (key === 'open' ? [] : [createActionCommand(task, key)]));
   return [createPriorityCommand(task), ...listMessageCommands(state, task), ...actions];
