@@ -20,10 +20,11 @@ const USER_TAG =
 const USER_AVATAR = {
   row: 'size-6.5',
   cell: 'size-4.5',
+  menu: 'size-4',
   inline: 'relative -top-px ms-0.5 me-1 inline-grid size-3.5 align-middle',
 } as const;
 
-const USER_INITIAL = { row: undefined, cell: 'scale-90', inline: 'scale-75' } as const;
+const USER_INITIAL = { row: undefined, cell: 'scale-90', menu: 'scale-90', inline: 'scale-75' } as const;
 
 export function UserAvatar({ user, size }: { user: UserProfile; size: keyof typeof USER_AVATAR }) {
   const className = cn('shrink-0 rounded-full bg-bg-a2', USER_AVATAR[size]);
@@ -66,34 +67,38 @@ export function UserIdentity({
   );
 }
 
-function UserCard({ user }: { user: UserProfile }) {
+function UserCard({ user, note }: { user: UserProfile; note?: string }) {
   return (
-    <UserIdentity
-      user={user}
-      className='px-3 py-2.5'
-      detail={
-        <a
-          href={resolveGitHubProfileUrl(user)}
-          target='_blank'
-          rel='noreferrer'
-          onClick={(event) => event.stopPropagation()}
-          className='inline-flex cursor-pointer items-center gap-1 text-primary-text no-underline outline-none hover:opacity-80 active:opacity-80'
-        >
-          View on GitHub
-          <Icon size='sm' name='IconArrowUpRight' />
-        </a>
-      }
-    />
+    <div className='flex flex-col gap-1.5 px-3 py-2.5'>
+      <UserIdentity
+        user={user}
+        detail={
+          <a
+            href={resolveGitHubProfileUrl(user)}
+            target='_blank'
+            rel='noreferrer'
+            onClick={(event) => event.stopPropagation()}
+            className='inline-flex cursor-pointer items-center gap-1 text-primary-text no-underline outline-none hover:opacity-80 active:opacity-80'
+          >
+            View on GitHub
+            <Icon size='sm' name='IconArrowUpRight' />
+          </a>
+        }
+      />
+      {note && <span className='ps-8.5 text-2xs text-fg-2'>{note}</span>}
+    </div>
   );
 }
 
 export function UserTag({
   user,
   label = resolveFirstName(user),
+  note,
   className,
 }: {
   user: UserProfile;
   label?: string;
+  note?: string;
   className?: string;
 }) {
   return (
@@ -110,7 +115,7 @@ export function UserTag({
       }
       trigger={<GlyphLabel glyph={<UserAvatar user={user} size='inline' />} text={label} />}
     >
-      <UserCard user={user} />
+      <UserCard user={user} note={note} />
     </InfoPopover>
   );
 }

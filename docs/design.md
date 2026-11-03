@@ -1026,7 +1026,10 @@ Only these, and they win over anything below:
     cancelled" when one was). A nested
     row's corner arrow sits under its parent's priority mark (16px per level) and is a 20px
     button: `bg-bg-a2` and `fg-4` on hover and pressed alike, the same while its menu is open,
-    "Waits on" and the parents in its tooltip; it opens the Waits on menu. Every row starts with
+    "Waits on" and the parents in its tooltip; it opens the Waits on menu. A task stacked on another is a bundle, not
+    a wait, and reads as one: its mark is `BUNDLE_ICON` (`IconLayersThree`), a link to the task below with "Stacked on",
+    that task and "Merges with its bundle" in its tooltip, its status column says "Stacked on SW-32" while the task
+    below is still open, and once ready it says "Merges with its bundle" (`BUNDLE_READY_STATUS`). Every row starts with
     its priority mark, and its status column with its kind's icon in the status's tone (`SHAPE_ICON`, named
     for screen readers) whose tooltip lists the steps the task takes ("Investigation: find the
     repository, investigate, then your OK to change.", composed steps included, `describeTaskSteps` in `lib/tasks/shapes.ts`,
@@ -1041,15 +1044,19 @@ Only these, and they win over anything below:
       `icon` size with the input's fill, so it matches the search field beside it; "Filter, 2 on" for a screen reader)
       and opens a submenu per field with a checkbox and a count per value; a field shows only when it has two values
       or is filtered, and its counts are over the rows in focus, not the filtered ones, so they hold still as you
-      tick. Each filtered field is a chip in the row just above the table (8px from it, closer than the 24px to the
-      heading): its icon and label, "is" or "is any of", the chosen values (their icons, two names then "+N"), which
-      open the same checkboxes to change it in place, and a cross that clears it. A plus after the chips adds a field
-      not filtered yet, and Clear all follows once two are on. ⌘K offers "Filter by …" for each field, several values at once, "Any …" and Clear filters, with the same
+      tick. The button sits 6px from the search field. Each filtered field is a chip in the row just above the table (8px from it, closer than the 24px to the
+      heading): its icon and label, "is" or "is any of", the chosen values (their icons, or a person's avatar, two
+      names then "+N"), which open the same checkboxes to change it in place, and a cross that clears it. A plus after
+      the chips adds a field not filtered yet and closes once a value is picked, and Clear all follows once two are on;
+      both are secondary buttons, no fill until hovered. The Owner field shows each person's avatar (a `FilterOption`'s
+      `media`). ⌘K offers "Filter by …" for each field, several values at once, "Any …" and Clear filters, with the same
       icons.
     - **Width and columns.** The page keeps `PAGE_COLUMN`'s width with any focus, teammates' tasks included. Columns
-      sit `gap-3` apart: title, repository 7rem, owner 2.25rem when any row is a teammate's, status 10rem, pull
-      request 4rem, age 3rem in its compact form ("5m", "2d"). The owner is an avatar (`YourOwnerMark`,
-      `TeammateOwnerMark` in `components/tasks/owner.tsx`) whose tooltip names them.
+      sit `gap-3` apart: title, repository 7rem (6.5rem beside an owner), owner 5rem when any row is a teammate's,
+      status 9.5rem, pull request 4rem, age 3rem in its compact form ("5m", "2d"). The owner is a `UserTag`
+      (`YourOwnerMark`, `TeammateOwnerMark` in `components/tasks/owner.tsx`): the avatar and first name, "You" for your
+      own, the user card on hover with the machine it runs on ("On Kai’s MacBook, read-only"), their GitHub profile on
+      click. A machine whose owner never signed in shows the team icon and the machine's name.
     - **Team feed notices** (`TeamFeedNotices`). Above the list, one `text-xs` `fg-3` line per teammate machine in
       focus that is offline (`IconCloudSimpleDisconnected`) or refuses the list (`IconLock`): the machine in `fg-4`,
       its team, and the owner engine's reason ("That machine does not list you in this team yet…"), with when its copy was

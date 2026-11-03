@@ -1,14 +1,36 @@
 import { FilterBar, FilterChip, FilterClear, FilterMenu } from '@shinsa/ui/components/filter-bar';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { UserAvatar } from '@/components/people/user-tag.tsx';
 import { applyFilterValues, clearTaskFilters, toggleTaskFilter } from '@/lib/command/tasks.ts';
-import type { TaskFilterField, TaskFilterKey, TaskFilters } from '@/lib/tasks/filters.ts';
+import { useRemoteSnapshot } from '@/lib/connection/socket.ts';
+import {
+  type TaskFilterField,
+  type TaskFilterKey,
+  type TaskFilters,
+  YOUR_TASKS_OWNER,
+} from '@/lib/tasks/filters.ts';
 
 interface TaskFilterProps {
   fields: readonly TaskFilterField[];
   filters: TaskFilters;
 }
 
-export function TaskFilterMenu({ fields, filters }: TaskFilterProps) {
+function useOwnerAvatars(fields: readonly TaskFilterField[]) {
+  const you = useRemoteSnapshot()?.access?.owner;
+  return fields.map((field) => {
+    if (field.key !== 'owner') return field;
+    return {
+      ...field,
+      options: field.options.map((option) => {
+        const user = option.value === YOUR_TASKS_OWNER ? you : option.user;
+        return user ? { ...option, media: <UserAvatar user={user} size='menu' /> } : option;
+      }),
+    };
+  });
+}
+
+export function TaskFilterMenu({ fields: plain, filters }: TaskFilterProps) {
+  const fields = useOwnerAvatars(plain);
   return (
     <FilterMenu
       fields={fields}
@@ -20,7 +42,8 @@ export function TaskFilterMenu({ fields, filters }: TaskFilterProps) {
   );
 }
 
-export function TaskFilterChips({ fields, filters }: TaskFilterProps) {
+export function TaskFilterChips({ fields: plain, filters }: TaskFilterProps) {
+  const fields = useOwnerAvatars(plain);
   const chosen = fields.filter((field) => filters[field.key].length > 0);
   if (chosen.length === 0) return null;
   const unused = fields.filter((field) => filters[field.key].length === 0);

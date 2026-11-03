@@ -47,15 +47,17 @@ export function TasksPage({ state }: { state: ShinsaState }) {
           description={describeTaskCounts(rows.map((row) => row.task))}
           className='flex-1'
         />
-        <Input
-          type='search'
-          value={filters.search}
-          onChange={(event) => applySearch(event.target.value)}
-          placeholder='Search tasks'
-          aria-label='Search tasks'
-          className='w-52 max-md:w-32'
-        />
-        <TaskFilterMenu fields={fields} filters={filters} />
+        <div className='flex items-center gap-1.5'>
+          <Input
+            type='search'
+            value={filters.search}
+            onChange={(event) => applySearch(event.target.value)}
+            placeholder='Search tasks'
+            aria-label='Search tasks'
+            className='w-52 max-md:w-32'
+          />
+          <TaskFilterMenu fields={fields} filters={filters} />
+        </div>
       </div>
       <TeamFeedNotices state={state} />
       <div className='flex min-h-0 flex-col gap-2'>

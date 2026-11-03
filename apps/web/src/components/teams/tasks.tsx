@@ -133,7 +133,7 @@ export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }:
         {repo && <RepoMark state={state} repo={repo} />}
         <Truncate>{repo?.name ?? 'No repository'}</Truncate>
       </span>
-      <span className='flex max-md:hidden'>
+      <span className='flex min-w-0 max-md:hidden'>
         <TeammateOwnerMark entry={entry} />
       </span>
       <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>

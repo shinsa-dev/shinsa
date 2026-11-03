@@ -88,6 +88,35 @@ describe('FilterMenu', () => {
     expect(screen.getByRole('button', { name: 'Clear all' })).toBeTruthy();
   });
 
+  it('closes the plus menu once a value is picked, and keeps the filter menu open', async () => {
+    const onToggle = mock();
+    render(
+      <FilterBar>
+        <FilterMenu variant='add' fields={[STATUS]} selected={{ status: [] }} onToggle={onToggle} />
+        <FilterMenu fields={[STATUS]} selected={{ status: [] }} onToggle={onToggle} />
+      </FilterBar>
+    );
+    async function pick(trigger: string) {
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: trigger }));
+        await flush();
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Status' }));
+        await flush();
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Review 2' }));
+        await flush();
+      });
+    }
+    await pick('Add a filter');
+    expect(onToggle).toHaveBeenCalledWith('status', 'review');
+    expect(screen.queryByRole('menu')).toBeNull();
+    await pick('Filter');
+    expect(screen.getAllByRole('menu').length).toBeGreaterThan(0);
+  });
+
   it('cannot open with nothing to filter', () => {
     render(<FilterMenu fields={[]} selected={{}} onToggle={mock()} />);
     expect((screen.getByRole('button', { name: 'Filter' }) as HTMLButtonElement).disabled).toBe(true);

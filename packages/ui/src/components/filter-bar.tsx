@@ -32,7 +32,19 @@ import type * as React from 'react';
  * selection lives (the URL, state) and the same fields can feed ⌘K.
  */
 
-export type FilterOption = { value: string; label: string; icon?: MenuItemIcon; count?: number };
+export type FilterOption = {
+  value: string;
+  label: string;
+  icon?: MenuItemIcon;
+  /** Drawn in place of the icon, for a value an icon cannot show (a person's avatar). */
+  media?: React.ReactNode;
+  count?: number;
+};
+
+function renderOptionMark(option: FilterOption | undefined) {
+  if (!option) return null;
+  return option.media ?? renderMenuIcon(option.icon, 'inline-start');
+}
 
 export type FilterField<K extends string = string> = {
   key: K;
@@ -51,18 +63,21 @@ function FilterOptionItems<K extends string>({
   field,
   values,
   onToggle,
+  closeOnClick = false,
 }: {
   field: FilterField<K>;
   values: readonly string[];
   onToggle: Toggle<K>;
+  closeOnClick?: boolean;
 }) {
   return field.options.map((option) => (
     <DropdownMenuCheckboxItem
       key={option.value}
+      closeOnClick={closeOnClick}
       checked={values.includes(option.value)}
       onCheckedChange={() => onToggle(field.key, option.value)}
     >
-      {renderMenuIcon(option.icon, 'inline-start')}
+      {renderOptionMark(option)}
       <Truncate>{option.label}</Truncate>
       {option.count !== undefined && (
         <span className='ms-auto ps-3 text-fg-2 tabular-nums'>{option.count}</span>
@@ -89,7 +104,7 @@ function FilterMenu<K extends string>({
   selected: FilterSelection<K>;
   onToggle: Toggle<K>;
   onClear?: () => void;
-  /** `button` is the icon button beside a search field; `add` is the small plus at the end of a FilterBar. */
+  /** `button` is the icon button beside a search field; `add` is the small plus at the end of a FilterBar, which closes once a value is picked. */
   variant?: 'button' | 'add';
   label?: string;
   /** Wraps the trigger, for a tooltip that needs the trigger element itself. */
@@ -133,7 +148,12 @@ function FilterMenu<K extends string>({
                 )}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className={MENU_LIST}>
-                <FilterOptionItems field={field} values={values} onToggle={onToggle} />
+                <FilterOptionItems
+                  field={field}
+                  values={values}
+                  onToggle={onToggle}
+                  closeOnClick={variant === 'add'}
+                />
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           );
@@ -182,9 +202,9 @@ function FilterChip<K extends string>({
   onRemove: () => void;
   className?: string;
 }) {
-  const icons = values
-    .map((value) => field.options.find((option) => option.value === value)?.icon)
-    .filter((icon) => icon !== undefined)
+  const marks = values
+    .map((value) => field.options.find((option) => option.value === value))
+    .filter((option) => option?.media !== undefined || option?.icon !== undefined)
     .slice(0, 3);
   return (
     <div
@@ -207,11 +227,11 @@ function FilterChip<K extends string>({
               aria-label={`Change the ${field.label.toLowerCase()} filter`}
               className={cn(CHIP_BUTTON, 'min-w-0 text-fg-4')}
             >
-              {icons.length > 0 && (
+              {marks.length > 0 && (
                 <span className='flex shrink-0 items-center -space-x-1'>
-                  {icons.map((icon, index) => (
-                    <span key={index} className='flex'>
-                      {renderMenuIcon(icon, 'inline-start')}
+                  {marks.map((option) => (
+                    <span key={option?.value} className='flex'>
+                      {renderOptionMark(option)}
                     </span>
                   ))}
                 </span>
@@ -241,7 +261,7 @@ function FilterClear({
   ...props
 }: Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'>) {
   return (
-    <Button variant='bare' size='xs' {...props}>
+    <Button variant='secondary' size='xs' {...props}>
       {children}
     </Button>
   );

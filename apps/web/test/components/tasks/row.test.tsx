@@ -161,6 +161,37 @@ describe('the chain arrow', () => {
   });
 });
 
+describe('a task stacked on another', () => {
+  const root = createTask({
+    id: 'root',
+    handle: 'SW-32',
+    title: 'Add the saved cart schema',
+    stage: 'shipping',
+  });
+  const stacked = createTask({
+    id: 'stacked',
+    title: 'Serve saved carts over the API',
+    stage: 'waiting_on_tasks',
+    stacksOn: 'root',
+  });
+  const state = createShinsaState({ tasks: [root, stacked] });
+
+  it('marks its bundle instead of a wait, and links the task below', async () => {
+    renderRow(stacked, 1, state);
+    expect(screen.queryByRole('button', { name: 'Waits on' })).toBeNull();
+    const mark = screen.getByRole('link', { name: 'Stacked on SW-32' });
+    expect(await findTooltipText(mark)).toContain('Merges with its bundle');
+    fireEvent.click(mark);
+    await waitFor(() => expect(location.pathname).toBe('/tasks/SW-32'));
+  });
+
+  it('says Stacked on in its status while the task below is open', () => {
+    renderRow(stacked, 1, state);
+    expect(row().textContent).toContain('Stacked on SW-32');
+    expect(row().textContent).not.toContain('Waits on');
+  });
+});
+
 describe('the repository column', () => {
   it('says No repository for a task that works without one', () => {
     renderRow(createTask({ id: 'research', title: 'Compare the search engines', stage: 'researching' }));

@@ -74,10 +74,26 @@ describe('teammates’ tasks', () => {
     expect(working.textContent).toContain('My own task');
     expect(working.textContent).toContain('Add the billing page');
     expect(working.textContent).toContain('paywalls');
-    expect(within(working).getByRole('img', { name: 'kai' })).toBeDefined();
-    expect(within(working).getByRole('img', { name: 'You' })).toBeDefined();
+    expect(within(working).getByRole('link', { name: 'kai' }).getAttribute('href')).toBe(
+      'https://github.com/kai'
+    );
+    expect(within(working).getByText('You')).toBeDefined();
     fireEvent.click(screen.getByText('Add the billing page'));
     expect(location.pathname).toBe('/teams/team1/p7m2/kai-task');
+  });
+
+  it('shows each owner with their avatar in the Owner filter', async () => {
+    renderTasks();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+      await Bun.sleep(0);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Owner' }));
+      await Bun.sleep(0);
+    });
+    const kai = screen.getByRole('menuitemcheckbox', { name: /kai/ });
+    expect(kai.querySelector('[aria-hidden]')?.textContent).toBe('K');
   });
 
   it('puts a finished one under Done, and follows the search and the status filter like your own', () => {

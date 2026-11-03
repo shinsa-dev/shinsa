@@ -17,6 +17,7 @@ import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { type FocusTeam, UNNAMED_TEAM } from '@/lib/focus.ts';
 import { PRIORITY_ICON, PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { resolveSharedProfile, type UserProfile } from '@/lib/remote/users.ts';
 import { resolveTaskGroup, TASK_GROUPS, type TaskGroupKey, type TeamEntry } from '@/lib/tasks/groups.ts';
 import { SHAPE_ICON, SHAPE_LABEL } from '@/lib/tasks/shapes.ts';
 import { describeTeamTaskOwner } from '@/lib/teams/feeds.ts';
@@ -187,6 +188,7 @@ interface TaskFilterOption {
   label: string;
   icon?: MenuItemIcon;
   count: number;
+  user?: UserProfile;
 }
 
 export interface TaskFilterField {
@@ -240,6 +242,11 @@ function describeOwner(rows: readonly TaskRow[], owner: string) {
   return entry ? describeTeamTaskOwner(entry) : owner;
 }
 
+function selectOwnerProfile(rows: readonly TaskRow[], owner: string) {
+  const entry = rows.find((row) => row.owner === owner)?.team?.entry;
+  return entry?.owner ? { user: resolveSharedProfile(entry.owner, entry.ownerProfile) } : {};
+}
+
 function describeValue(
   key: TaskFilterKey,
   value: string,
@@ -284,7 +291,12 @@ function listFieldOptions(
     ...(key === 'team' ? teams.map((team) => team.id) : []),
   ]);
   return [...values]
-    .map((value) => ({ value, label: describeValue(key, value, rows, teams), count: counts.get(value) ?? 0 }))
+    .map((value) => ({
+      value,
+      label: describeValue(key, value, rows, teams),
+      count: counts.get(value) ?? 0,
+      ...(key === 'owner' ? selectOwnerProfile(rows, value) : {}),
+    }))
     .sort((a, b) => rankOption(key, a) - rankOption(key, b) || a.label.localeCompare(b.label));
 }
 
