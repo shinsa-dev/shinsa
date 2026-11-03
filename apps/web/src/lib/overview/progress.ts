@@ -2,12 +2,12 @@ import {
   capitalise,
   type DisplayPhase,
   type DisplayPhaseStatus,
-  type FixReason,
   type ShapeState,
   type Task,
   type TaskProgress,
 } from '@shinsa/core';
 import type { Tone } from '@/lib/format/tone.ts';
+import { isResolvingConflicts } from '@/lib/tasks/status.ts';
 
 export type StepStatus = 'done' | 'current' | 'waiting' | 'pending' | 'skipped' | 'cancelled';
 
@@ -53,10 +53,8 @@ export const STEP_STATUS_TONE: Record<StepStatus, Tone> = {
   cancelled: 'neutral',
 };
 
-const CONFLICT_FIXES: ReadonlySet<FixReason | null> = new Set(['conflict', 'update']);
-
 export function resolveStageNote(task: Pick<Task, 'stage' | 'fixFor' | 'stageReason'>) {
-  if (task.stage !== 'fixing' || !CONFLICT_FIXES.has(task.fixFor) || !task.stageReason) return null;
+  if (!isResolvingConflicts(task) || !task.stageReason) return null;
   return capitalise(task.stageReason);
 }
 

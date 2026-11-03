@@ -1,3 +1,4 @@
+import { MINUTE_MS } from '../domain/time.ts';
 import { encodeText, isSameSecret, serializeHex } from '../remote/bytes.ts';
 
 export const SLACK_FORWARD_HEADERS = {
@@ -5,7 +6,7 @@ export const SLACK_FORWARD_HEADERS = {
   timestamp: 'x-shinsa-slack-timestamp',
 } as const;
 
-export const SLACK_FORWARD_WINDOW_MS = 5 * 60_000;
+export const SLACK_FORWARD_WINDOW_MS = 5 * MINUTE_MS;
 
 const SIGNATURE_VERSION = 'v1';
 

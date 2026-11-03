@@ -2,9 +2,14 @@ import { describe, expect, it } from 'bun:test';
 import {
   createLineComment,
   describeCommentLines,
+  describeCommentCount,
   describeCommentPlace,
+  describeCommentPlaceholder,
+  describeCommentsWithMessage,
   type LineComment,
+  listMessageComments,
   readStoredComments,
+  replaceCommentText,
   serializeComments,
   writeStoredComments,
 } from '@/lib/review/draft.ts';
@@ -74,5 +79,36 @@ describe('the stored draft', () => {
     expect(readStoredComments('gate-4')).toEqual([]);
     writeStoredComments('gate-1', []);
     expect(localStorage.getItem('shinsa.review-draft.gate-1')).toBeNull();
+  });
+});
+
+describe('replaceCommentText', () => {
+  it('rewrites only the comment edited, keeping its place', () => {
+    const first = comment({ id: '1', path: 'a.ts', line: 1, endLine: 3, text: 'Old.' });
+    const second = comment({ id: '2', path: 'b.ts', line: 5, text: 'Keep.' });
+    expect(replaceCommentText([first, second], '1', 'New.')).toEqual([{ ...first, text: 'New.' }, second]);
+  });
+});
+
+describe('listMessageComments', () => {
+  it('sends the comments with a message only when the engine takes them there', () => {
+    const comments = [comment({ id: '1', path: 'a.ts', line: 1, text: 'x' })];
+    expect(listMessageComments({ withMessages: true, comments })).toBe(comments);
+    expect(listMessageComments({ withMessages: false, comments })).toEqual([]);
+  });
+});
+
+describe('the comment words', () => {
+  it('counts the comments for the agent and says where a new one goes', () => {
+    expect(describeCommentCount(1)).toBe('1 comment for the agent');
+    expect(describeCommentCount(3)).toBe('3 comments for the agent');
+    expect(describeCommentsWithMessage(1)).toBe('1 line comment goes with this message');
+    expect(describeCommentsWithMessage(2)).toBe('2 line comments go with this message');
+    expect(describeCommentPlaceholder(true)).toBe(
+      'What should change here? It goes to the agent with your review.'
+    );
+    expect(describeCommentPlaceholder(false)).toBe(
+      'What should change here? It goes to the agent with your next message.'
+    );
   });
 });

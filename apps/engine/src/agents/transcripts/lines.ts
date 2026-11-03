@@ -1,4 +1,5 @@
 import { CHAT_PROTOCOL_VERSION, type ChatEntry, isChatEntry } from '@shinsa/core';
+import { NEWLINE } from '../../files/schema.ts';
 import { UNREADABLE_LINE } from './schema.ts';
 
 function createUnreadableEntry(id: string): ChatEntry {
@@ -17,7 +18,7 @@ export function parseLines(bytes: Buffer, offset: number): ChatEntry[] {
   const entries: ChatEntry[] = [];
   let start = 0;
   while (start < bytes.length) {
-    const newline = bytes.indexOf(0x0a, start);
+    const newline = bytes.indexOf(NEWLINE, start);
     const end = newline < 0 ? bytes.length : newline;
     const line = bytes.toString('utf8', start, end);
     if (line.trim().length > 0) {

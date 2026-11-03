@@ -168,6 +168,26 @@ export function parseRange(header: string, size: number): ByteRange | 'unsatisfi
   return { offset, length: end - offset + 1 };
 }
 
+export function answerUnsatisfiable(headers: Headers, size: number) {
+  headers.set('Content-Range', `bytes */${size}`);
+  return new Response(null, { status: 416, headers });
+}
+
+export function answerBytes(
+  headers: Headers,
+  size: number,
+  range: ByteRange | null,
+  body: ReadableStream | null
+) {
+  if (!range) {
+    headers.set('Content-Length', String(size));
+    return new Response(body, { status: 200, headers });
+  }
+  headers.set('Content-Length', String(range.length));
+  headers.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${size}`);
+  return new Response(body, { status: 206, headers });
+}
+
 function listEntityTags(header: string) {
   return header.split(',').map((tag) => tag.trim());
 }
@@ -236,24 +256,14 @@ async function streamPointer(request: Request, pointer: DownloadPointer, bucket:
   const precondition = resolvePrecondition(request.headers, validators);
   if (precondition) return new Response(null, { status: precondition, headers });
   const range = resolveRequestedRange(request, pointer, validators);
-  if (range === 'unsatisfiable') {
-    headers.set('Content-Range', `bytes */${pointer.size}`);
-    return new Response(null, { status: 416, headers });
-  }
+  if (range === 'unsatisfiable') return answerUnsatisfiable(headers, pointer.size);
   if (request.method === 'HEAD') {
     if (!(await bucket.head(pointer.key))) return null;
-    headers.set('Content-Length', String(pointer.size));
-    return new Response(null, { status: 200, headers });
+    return answerBytes(headers, pointer.size, null, null);
   }
   const object = await bucket.get(pointer.key, range ? { range } : undefined);
   if (!object) return null;
-  if (!range) {
-    headers.set('Content-Length', String(pointer.size));
-    return new Response(object.body, { status: 200, headers });
-  }
-  headers.set('Content-Length', String(range.length));
-  headers.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${pointer.size}`);
-  return new Response(object.body, { status: 206, headers });
+  return answerBytes(headers, pointer.size, range, object.body);
 }
 
 async function streamFromBucket(request: Request, channel: Channel, world: DownloadWorld) {
@@ -269,6 +279,10 @@ async function streamFromBucket(request: Request, channel: Channel, world: Downl
 
 export function listFeedVersions(feed: string) {
   return Array.from(feed.matchAll(FEED_TAG_PATTERN), (match) => match[1]).filter(isVersion);
+}
+
+function listServedVersions(tags: string[], channel: Channel) {
+  return tags.filter((tag) => SERVED_CHANNELS[channel].includes(resolveReleaseChannel(tag)));
 }
 
 function selectNewest(tags: string[]) {
@@ -299,13 +313,13 @@ async function resolveFallbackUrl(channel: Channel, world: DownloadWorld) {
   const tags = (await resolveFeedVersions(world)) ?? [];
   const released = tags.some((tag) => resolveReleaseChannel(tag) === 'stable');
   if (channel === 'stable' && (released || tags.length === 0)) return LATEST_STABLE_URL;
-  const served = tags.filter((tag) => SERVED_CHANNELS[channel].includes(resolveReleaseChannel(tag)));
+  const served = listServedVersions(tags, channel);
   if (served.length === 0) return channel === 'stable' ? LATEST_STABLE_URL : RELEASES_PAGE;
   return `${REPOSITORY_URL}/releases/download/${selectNewest(served)}/${DMG_NAME}`;
 }
 
 export function selectChannelVersion(tags: string[], channel: Channel) {
-  const served = tags.filter((tag) => SERVED_CHANNELS[channel].includes(resolveReleaseChannel(tag)));
+  const served = listServedVersions(tags, channel);
   const stable = served.filter((tag) => resolveReleaseChannel(tag) === 'stable');
   const candidates = channel === 'stable' && stable.length > 0 ? stable : served;
   if (candidates.length === 0) return null;

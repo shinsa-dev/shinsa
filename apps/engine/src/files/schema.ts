@@ -17,6 +17,12 @@ export const JSON_FILE_MODE = 0o600;
 
 export const JSON_INDENT = 2;
 
+export const PATH_LIMIT = 4096;
+
+export const NEWLINE = 0x0a;
+
+export type JsonFileRead<A> = { readonly value: A | null; readonly problem: string | null };
+
 const TextEntries = Schema.Record(
   Schema.String,
   Schema.String.pipe(Schema.catchDecoding(() => Effect.succeedNone))

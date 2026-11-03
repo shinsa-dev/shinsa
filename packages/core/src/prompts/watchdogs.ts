@@ -1,3 +1,4 @@
+import { describeCount } from '../chat/text.ts';
 import {
   type Task,
   WATCHDOG_DEFAULTS,
@@ -12,7 +13,7 @@ import { resolveReadPrompt } from './reads.ts';
 
 function describeHours(ms: number) {
   const hours = Math.max(1, Math.round(ms / HOUR_MS));
-  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  return describeCount(hours, 'hour');
 }
 
 function describeLastChecks(watchdog: Watchdog) {

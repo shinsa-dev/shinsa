@@ -1,7 +1,9 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { SERVICE_PORT_VARIABLE, type ServiceSource, type ServiceSuggestion } from '@shinsa/core';
 import { listWorkspacePatterns, parseDenoTasks, parsePackageManifest } from '../files/manifest.ts';
+import { isFolder, isInside } from '../files/paths.ts';
+import { PACKAGE_MANIFEST } from '../files/schema.ts';
 
 export { parseDenoTasks } from '../files/manifest.ts';
 
@@ -44,14 +46,6 @@ function readText(path: string) {
     return readFileSync(path, 'utf8');
   } catch {
     return null;
-  }
-}
-
-function isFolder(path: string) {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
   }
 }
 
@@ -185,12 +179,12 @@ function listDeclaredWorkspaces(root: string, file: PackageFile) {
 }
 
 function listPackageSuggestions(root: string): ServiceSuggestion[] {
-  const file = parsePackageFile(readText(join(root, 'package.json')));
+  const file = parsePackageFile(readText(join(root, PACKAGE_MANIFEST)));
   if (!file) return [];
   const manager = resolvePackageManager(root, file);
   const suggestions: ServiceSuggestion[] = [];
   for (const folder of expandWorkspaces(root, listDeclaredWorkspaces(root, file))) {
-    const workspace = parsePackageFile(readText(join(folder, 'package.json')));
+    const workspace = parsePackageFile(readText(join(folder, PACKAGE_MANIFEST)));
     const script = workspace ? resolveRunScript(workspace) : null;
     if (!script) continue;
     suggestions.push(
@@ -219,7 +213,7 @@ function listPackageSuggestions(root: string): ServiceSuggestion[] {
 }
 
 function listDenoSuggestions(root: string): ServiceSuggestion[] {
-  if (existsSync(join(root, 'package.json'))) return [];
+  if (existsSync(join(root, PACKAGE_MANIFEST))) return [];
   const file = DENO_FILES.find((name) => existsSync(join(root, name)));
   if (!file) return [];
   const tasks = parseDenoTasks(readText(join(root, file)));
@@ -287,7 +281,7 @@ function resolveUniqueNames(suggestions: ServiceSuggestion[], roots: string[]) {
   for (const each of suggestions) counts.set(each.name, (counts.get(each.name) ?? 0) + 1);
   return suggestions.map((each) => {
     if ((counts.get(each.name) ?? 0) < 2) return each;
-    const root = roots.find((path) => each.cwd === path || each.cwd.startsWith(`${path}/`)) ?? each.cwd;
+    const root = roots.find((path) => isInside(path, each.cwd)) ?? each.cwd;
     const where = relative(root, each.cwd);
     return { ...each, name: where || `${basename(root)}-${each.name}` };
   });

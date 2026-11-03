@@ -3,7 +3,7 @@ import * as React from 'react';
 import { prepareCodeDiff } from '@/components/text/code-diff.tsx';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { listPrefetchRuns, prefetchTranscript } from '@/lib/chat/prefetch.ts';
-import { prefetchSnippets, scheduleIdle } from '@/lib/code/prefetch.ts';
+import { prefetchSnippets, schedulePrefetch } from '@/lib/code/prefetch.ts';
 import { refreshExtensions } from '@/lib/connection/extensions.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { refreshVersions } from '@/lib/connection/versions.ts';
@@ -74,7 +74,7 @@ function useIdlePrefetch(state: ShinsaState) {
   const key = listIdleTasks(settled, Date.now()).join(' ');
   React.useEffect(
     () =>
-      scheduleIdle(() => {
+      schedulePrefetch(() => {
         for (const taskId of key.split(' ')) if (taskId) prefetchTaskCode(latest.current, taskId, '');
       }),
     [key]
@@ -86,7 +86,7 @@ export function usePrefetchTaskPage(state: ShinsaState, taskId: string | null) {
   latest.current = state;
   React.useEffect(() => {
     if (!taskId) return;
-    return scheduleIdle(() => prefetchTask(latest.current, taskId, window.location.search));
+    return schedulePrefetch(() => prefetchTask(latest.current, taskId, window.location.search));
   }, [taskId]);
 }
 

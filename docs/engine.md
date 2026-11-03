@@ -1858,7 +1858,9 @@ checks it ran.
   words, each with its path, lines and words. A comment is words only: to change the code yourself, edit it in the
   Code tab (Where agents work → Your edits). Fix N findings at an escalated review sends the drafted comments with the verdicts the same way. The
   comments are stored on `gate.answered` and on the decision's activity entry, so the task's activity lists each
-  with its place. Comments with any other decision or at any other gate are refused.
+  with its place. Comments with any other decision or at any other gate are refused. Outside a review the same
+  comments go with a message (`task.message` with `comments`): core appends them to the message as a Line comments
+  block on whichever path it takes (steer, wake, fix, new round, kept at a gate), and `task.messaged` keeps them.
 - Fix N findings and approve, from the Fix button's chevron, is the same `revise` with `thenApprove: true`
   (refused at any other gate or with any other decision, `then_approve_invalid`, `then_approve_conflict`). The
   `gate.answered` fold sets `task.approveAfterFix`; the fix then runs as any other: checks, the agent review and its
@@ -2642,7 +2644,7 @@ running when the window closes or the app quits, and a page that comes back find
   terminal's foreground process group when it is not the shell itself, else `null` (`readForegroundProgram` in
   `pty.ts`: `ps -o tpgid=` of the shell gives the group that owns the PTY, the way Terminal.app decides whether to ask,
   and `ps -o comm=` names it). The page asks it before closing a running shell and closes an idle one at once; a
-  running service always counts as busy and answers its own name. `test/terminals/routes.test.ts` checks it against a
+  running service always counts as busy and answers its own name. `test/http/routes/services.test.ts` checks it against a
   real shell running `sleep`.
 - **Your terminals are yours.** No agent tool reaches a terminal, but for its own task's service runs (Services →
   Agents run their own task's services, below); every write route needs a browser's Origin
@@ -2672,7 +2674,7 @@ beside your run (Runs for a task, below).
 
 - **What one is.** `ServiceDefinition` (core's `protocol/services.ts`): an id, its project, a name (40 characters, one
   per name in a project), the folder it runs in (one of the project's repositories or folders, or a folder inside one;
-  never a task worktree, which goes away: a task gets its own run instead; `resolveServicePlace` in `routes.ts`), the command (4,000 characters) and
+  never a task worktree, which goes away: a task gets its own run instead; `resolveServicePlace` in `terminals/places.ts`), the command (4,000 characters) and
   variables added to your environment (50 at most, names a shell can export), an optional preview URL (`previewUrl`,
   http or https, 2,000 characters, with `{port}` where the run's port goes: `http://localhost:{port}/tasks/SW-17`;
   `isServicePreviewUrl` refuses one without it, which would send every run's Open to one server) and the variable that carries the port (`portVariable`, `PORT` unless it names another,
@@ -2704,7 +2706,7 @@ beside your run (Runs for a task, below).
   your run), belongs to another project, or whose repository does not hold the service's folder (a project folder
   outside every repository). `listTaskServices` lists what a task can run, `listServiceTaskRuns` every task's run of
   one service. Start, stop and restart take an optional `{ taskId }` in their body (`resolveServiceRunIn` in
-  `routes.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
+  `terminals/places.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
   run's tab and removing one closes them all.
 - **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,
@@ -2878,7 +2880,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   <engine URL>` as a scoped process with the tunnel token in `TUNNEL_TOKEN`, never in its arguments (a process list
   shows arguments), and counts it up once it prints `Registered tunnel connection`; one that has not within
   `ConnectTimeout` (30 s, an `Effect.timeout`) is stopped and fails as `TunnelConnectFailed`, and closing its scope
-  stops the process.
+  stops the process. Both failures end with the last line `cloudflared` printed (it keeps the last 2,000 characters
+  of its output, `OUTPUT_TAIL_CHARS`), so a run of failed connects in the log says why: a DNS error, a blocked QUIC
+  path, a refused token.
 - **The supervisor** (`TunnelSupervisor`, `remote/tunnel/`, Kanna's timings): connect, heartbeat with the engine's URL
   and version, ping `https://<tunnel host>/health` (`TunnelHealth`) on `PING_SCHEDULE`, every 30 seconds, and
   heartbeat every fourth ping; three failed pings in a row, or `cloudflared` exiting, restart it on `RESTART_SCHEDULE`:
@@ -3119,8 +3123,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
-  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, and `changelog` for `GET /api/changelog`, today;
-  Settings → Teams, the review's Fix and approve choice and What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
+  `comments`, and `changelog` for `GET /api/changelog`, today; Settings → Teams, the review's Fix and approve choice and
+  What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -3828,8 +3833,8 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
-- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox.ts`) shares the seeded `web` service of one of
-  Studio's tasks (`scripts/sandbox-service.ts`, a small dev server with live updates) on
+- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox/`) shares the seeded `web` service of one of
+  Studio's tasks (`scripts/sandbox/service.ts`, a small dev server with live updates) on
   `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
   own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
   preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
@@ -6226,15 +6231,15 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
   that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
-  (`scripts/seed-services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
-  running `scripts/sandbox-service.ts` in the project's seeded repository with a preview URL; the command names the
-  script by its path in the checkout that seeded it. The evidence (`scripts/seed-evidence.ts`) is real files in
+  (`scripts/seed/services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
+  running `scripts/sandbox/service.ts` in the project's seeded repository with a preview URL; the command names the
+  script by its path in the checkout that seeded it. The evidence (`scripts/seed/evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of
   Shinsa's own Review tab for SMP-2, and test output for five tasks, each attached shortly before its run ended. The
   pages are rendered by `bun scripts/seed-media/generate.ts [origin]` (`shots.ts` lists every file and what it shows,
-  `shots.test.ts` checks each checked-in file is listed): it drives Chromium over CDP (`scripts/perf/shell-cdp.ts`)
+  `shots.test.ts` checks each checked-in file is listed): it drives Chromium over CDP (`scripts/kit/chromium/`)
   through the fixture pages in `scripts/seed-media/fixtures/` (the settings page, the tab row), records the tab row
   with a screencast that ffmpeg encodes to WebM, and takes the SMP-2 shots from a running seeded copy at `origin`
   (skipped without one; `SEED_MEDIA_ONLY` picks files by name). It also writes the `/ui` showcase's evidence samples
@@ -6242,8 +6247,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   Code session `.jsonl`, replaces one task's transcript with that real session.
 - **The sample repository.** For the code views the seed also builds `repos/shinsa-sample` offline from Shinsa's own
   tree at a pinned commit, `3590252` (`SOURCE_COMMIT`; `git archive`, about 1,250 files, imported as eight commits
-  with `git fast-import`), and files it under a Sample project (`scripts/seed-code.ts`, helpers in `seed-code-kit.ts`, transcripts in
-  `seed-code-transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
+  with `git fast-import`), and files it under a Sample project (`scripts/seed/code/sample.ts`, helpers in `code/kit.ts`, transcripts in
+  `code/transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
   commit and one uncommitted edit, twelve changed files (a rename with edits, a deletion, two additions, a PNG,
   `bun.lock` and a 5,000-line fixture), a report of 40 points (18 spots, the key ones explained, one in a file outside the diff; 10 judgement calls with
   their alternatives, two disputed by the reviewer; 7 risks) with the Agent's walkthrough, findings of both
@@ -6369,9 +6374,12 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   restarts your engine; the wake before a command that needs the engine checks the same before `kickstart`.
   `shinsa logs` prints the end of `data/engine.log`, each JSON line as its UTC time, level, message and fields
   (`--json` as written). `shinsa status` and `shinsa version` read `/api/health` without starting anything.
-- **Folders macOS keeps private.** Shinsa asks for no permission unless a folder you choose needs one. The engine is a
-  background process, so it cannot answer macOS's consent prompts well: discovery in the bundle skips `~/Desktop`,
-  `~/Documents` and `~/Downloads` (`createDiscoverer`), so no prompt fires unasked, and a folder chosen at setup that
+- **Folders macOS keeps private.** Discovery scans the whole home folder, `~/Desktop`, `~/Documents` and
+  `~/Downloads` included, the same in the app and in a checkout, and only before you have chosen folders (setup
+  and Settings asking for suggestions, or triage with no folder chosen), so a consent prompt macOS shows comes
+  from setup you opened. A folder macOS refuses to list (`EPERM` or `EACCES`) is
+  not read as empty: discovery returns it in `refused`, and the Folders step offers it unpicked as "macOS keeps this
+  folder private". A folder chosen at setup that
   the engine may not read is not an error but access to ask for: `resolveChosenRoots` throws `PrivateFoldersError`
   (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
   offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
@@ -6463,13 +6471,16 @@ same-site Origin, `application/json` bodies; a refusal there is 403 or 415). Err
 ```
 
 **`GET /api/onboarding/roots`** (`?refresh=1` to scan again; results are kept for ten minutes): the folders that hold
-git repositories, most first. Discovery walks the home folder four levels deep and at most 20,000 folders, never
-into hidden folders, `node_modules`, `Library`, caches, build output or media folders, and never into a repository.
+git repositories, most first. Discovery walks the whole home folder eight levels deep, stopping at 150,000 folders
+or after 20 seconds (`MAX_DEPTH`, `MAX_DIRS`, `DISCOVERY_BUDGET`), never into hidden folders, `node_modules`,
+`Library`, `Applications`, caches, package bundles (`.app`, `.photoslibrary`, `.xcodeproj` and the rest of
+`BUNDLE_SUFFIXES`) or a repository it found.
 
 ```ts
 {
   suggestions: { path: string; repoCount: number; repos: string[] /* up to 8 names */; chosen: boolean }[];
-  truncated: boolean; // the folder limit was reached
+  truncated: boolean; // the folder or time limit was reached
+  refused: string[];  // folders macOS would not let the engine list, to ask access for
 }
 ```
 
@@ -6840,7 +6851,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   keys, cancellation (a running effect aborted, its late result ignored), damaged effect and event
   rows, and command receipts (a repeat answered, a reused id refused, a refusal remembered, receipts across a restart
   and pruned after a week). `test/store/service.test.ts` runs the store's Effect services themselves through `runTest`
-  (`apps/engine/test/harness.ts`) on SQLite in memory, as `test/config`, `test/shell` and `test/instance/lock-service.test.ts`
+  (`apps/engine/test/harness.ts`) on SQLite in memory, as `test/config`, `test/shell` and `test/instance/lock/service.test.ts`
   do for the configuration, the shell and the lock. `test/runtime/snapshots.test.ts` and `test/store/snapshot.test.ts` cover snapshots: a boot
   that replays only the events after one, one of another version, of a log changed under it or with a damaged payload
   replaced by a full replay, problems kept across one, none written read-only or without a version, a write once

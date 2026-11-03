@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type ChatToolArgs,
   capitalise,
   type Run,
@@ -38,7 +39,6 @@ import {
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { selectPlanRevision } from '@/lib/overview/plan-version.ts';
 import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeReportedFindings, readReportedFindings } from '@/lib/review/findings.ts';
@@ -91,7 +91,7 @@ function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; a
     <Card
       icon='IconMap'
       title={revision && revision.version > 1 ? 'Revised the plan' : 'Proposed the plan'}
-      meta={phases.length > 0 ? formatCount(phases.length, 'phase', 'phases') : null}
+      meta={phases.length > 0 ? describeCount(phases.length, 'phase', 'phases') : null}
     >
       <ReplyFirst args={args}>
         {goal && <Markdown text={goal} />}
@@ -281,7 +281,7 @@ function SuggestionsCard({ args }: { args: ChatToolArgs }) {
   return (
     <Card
       icon='IconLightbulbGlow'
-      title={`Suggested ${formatCount(tasks.length, 'task', 'tasks')}`}
+      title={`Suggested ${describeCount(tasks.length, 'task', 'tasks')}`}
       meta='In Overview'
     >
       <ul className='flex flex-col gap-2'>

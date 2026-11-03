@@ -8,7 +8,8 @@ on:
       - apps/engine/**
       - packages/**
       - scripts/perf/**
-      - scripts/seed*
+      - scripts/seed.ts
+      - scripts/seed/**
       - scripts/seed-media/**
       - package.json
       - bun.lock
@@ -26,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      SHELL_PERF_CHROME: /usr/bin/google-chrome
+      SHINSA_PERF_CHROME: /usr/bin/google-chrome
       LOADING_ORIGIN: http://127.0.0.1:5720
       LOADING_WALK_WIDTHS: ${{ github.event_name == 'pull_request' && '1440' || '1440,900' }}
     steps:

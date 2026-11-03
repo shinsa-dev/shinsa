@@ -1,3 +1,4 @@
+import { describeCount } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -6,7 +7,6 @@ import { TokenText } from '@/components/text/code-fence.tsx';
 import { splitLines } from '@/lib/chat/tool-output.ts';
 import { type CodeCorner, resolveCodeCorner } from '@/lib/code/block.ts';
 import { type Token, useLanguageTokens } from '@/lib/code/highlight.ts';
-import { formatCount } from '@/lib/format/count.ts';
 
 export interface CodeLine {
   text: string;
@@ -80,7 +80,7 @@ export function CodeLines({
       </div>
       {shown.length < lines.length && (
         <ShowMoreButton
-          label={`Show ${formatCount(lines.length - shown.length, 'more line', 'more lines')}`}
+          label={`Show ${describeCount(lines.length - shown.length, 'more line', 'more lines')}`}
           onClick={() => setExpanded(true)}
         />
       )}

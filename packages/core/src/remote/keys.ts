@@ -1,4 +1,4 @@
-import { type Bytes, parseBase64Url, serializeBase64Url, serializeHex } from './bytes.ts';
+import { type Bytes, hasBytes, parseBase64Url, serializeBase64Url, serializeHex } from './bytes.ts';
 
 export const REMOTE_KEY_ALGORITHM = { name: 'ECDH', namedCurve: 'P-256' } as const;
 
@@ -39,7 +39,7 @@ export async function parsePrivateKey(text: string) {
 }
 
 export function isSigningPublicKey(text: string) {
-  return /^[A-Za-z0-9_-]+$/.test(text) && parseBase64Url(text)?.length === RAW_PUBLIC_KEY_BYTES;
+  return hasBytes(text, RAW_PUBLIC_KEY_BYTES);
 }
 
 export async function parseSigningPublicKey(text: string) {

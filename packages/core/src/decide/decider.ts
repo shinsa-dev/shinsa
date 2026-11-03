@@ -1,4 +1,5 @@
 import { RUN_AGENT_ROLE, resolveAgentModel, resolveAgentProvider } from '../agent-models/index.ts';
+import { quoteTitle } from '../chat/text.ts';
 import {
   describeHumanEdits,
   type Gate,
@@ -100,7 +101,7 @@ interface OpenGateOptions {
 const CASCADE_SUMMARY = 'Stopped because the agent that delegated it finished its step.';
 
 export function quoteTitles(tasks: Task[]) {
-  return tasks.map((task) => `“${task.title}”`).join(', ');
+  return tasks.map((task) => quoteTitle(task.title)).join(', ');
 }
 
 export function describeWaiting(task: Task, pending: Task[]) {

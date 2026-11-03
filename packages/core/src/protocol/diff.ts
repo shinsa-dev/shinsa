@@ -17,7 +17,7 @@ const LOW_RISK: RegExp[] = [
   /\.snap$/,
 ];
 
-function resolveRisk(path: string): Pick<DiffFile, 'risk' | 'riskReason'> {
+function resolveDiffRisk(path: string): Pick<DiffFile, 'risk' | 'riskReason'> {
   for (const [pattern, reason] of HIGH_RISK) {
     if (pattern.test(path)) return { risk: 'high', riskReason: reason };
   }
@@ -25,7 +25,7 @@ function resolveRisk(path: string): Pick<DiffFile, 'risk' | 'riskReason'> {
   return { risk: 'normal', riskReason: null };
 }
 
-function resolveStatus(header: string): DiffFile['status'] {
+function resolveDiffStatus(header: string): DiffFile['status'] {
   if (/^new file mode/m.test(header)) return 'added';
   if (/^deleted file mode/m.test(header)) return 'removed';
   if (/^rename from/m.test(header)) return 'renamed';
@@ -48,13 +48,13 @@ function countChanges(chunk: string) {
   return { additions, deletions };
 }
 
-function parseFile(chunk: string): DiffFile | null {
+function parseDiffFile(chunk: string): DiffFile | null {
   const pathMatch = /^diff --git a\/(.+?) b\/(.+)$/m.exec(chunk);
   if (!pathMatch) return null;
   const previous = pathMatch[1] ?? '';
   const path = pathMatch[2] ?? previous;
   const { additions, deletions } = countChanges(chunk);
-  const status = resolveStatus(chunk);
+  const status = resolveDiffStatus(chunk);
   return {
     path,
     previousPath: status === 'renamed' ? previous : null,
@@ -63,7 +63,7 @@ function parseFile(chunk: string): DiffFile | null {
     deletions,
     binary: /^Binary files .* differ$/m.test(chunk) || /^GIT binary patch$/m.test(chunk),
     patch: chunk,
-    ...resolveRisk(path),
+    ...resolveDiffRisk(path),
   };
 }
 
@@ -82,7 +82,7 @@ export function parseUnifiedDiff(text: string): DiffFile[] {
   return sortDiffFiles(
     text
       .split(/^(?=diff --git )/m)
-      .map((chunk) => parseFile(chunk))
+      .map((chunk) => parseDiffFile(chunk))
       .filter((file): file is DiffFile => file !== null)
   );
 }
@@ -141,7 +141,7 @@ export function parseDiffSummary(text: string): DiffFile[] {
       binary: counts[index]?.binary ?? false,
       patch: '',
       patchOmitted: true,
-      ...resolveRisk(record.path),
+      ...resolveDiffRisk(record.path),
     }))
   );
 }

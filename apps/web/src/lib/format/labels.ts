@@ -1,4 +1,4 @@
-import { TASK_PRIORITIES, type TaskPriority, type TaskStage } from '@shinsa/core';
+import { type GateType, TASK_PRIORITIES, type TaskPriority, type TaskStage } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
 
@@ -63,6 +63,23 @@ export const STAGE_ICON: Partial<Record<TaskStage, IconName>> = {
   researching: 'IconBook',
   operating: 'IconConsole',
   watching: 'IconRadar',
+};
+
+const QUESTION_GATE = { label: 'Needs your answer', icon: 'IconBubbleQuestion', tone: 'blue' } as const;
+
+export const GATE: Record<GateType, { label: string; icon: IconName; tone: Tone }> = {
+  plan: { label: 'Plan to approve', icon: 'IconFileText', tone: 'purple' },
+  review: { label: 'Changes to review', icon: 'IconEyeOpen', tone: 'amber' },
+  merge: { label: 'Ready to merge', icon: 'IconMerged', tone: 'green' },
+  question: QUESTION_GATE,
+  secret: QUESTION_GATE,
+  proposal: { label: 'Change to approve', icon: 'IconFileEdit', tone: 'purple' },
+  operation: { label: 'Operation to confirm', icon: 'IconConsole', tone: 'purple' },
+  failure: { label: 'Paused', icon: 'IconPause', tone: 'orange' },
+  configuration: { label: 'Setup incomplete', icon: 'IconToolbox', tone: 'orange' },
+  sign_in: { label: 'Sign in needed', icon: 'IconUserKey', tone: 'orange' },
+  post_merge: { label: 'Post-merge', icon: 'IconChecklist', tone: 'amber' },
+  result: { label: 'Answered', icon: 'IconBubbleCheck', tone: 'blue' },
 };
 
 export const AGENT_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([

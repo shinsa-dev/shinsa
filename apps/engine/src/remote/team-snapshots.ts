@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { readTeamSnapshot, type TeamSnapshot, type TeamTask } from '@shinsa/core';
-import { writeJsonFile } from '../config/file.ts';
+import { readJsonFile, writeJsonFile } from '../files/index.ts';
 import { describeError, log } from '../log/index.ts';
+import { TeamSnapshotsFile } from './schema.ts';
 
 export const TEAM_SNAPSHOTS_FILE = 'team-snapshots.json';
 
@@ -19,34 +20,17 @@ export function resolveKeyDigest(key: string) {
   return createHash('sha256').update(key).digest('hex');
 }
 
-function readHeldList(value: unknown): HeldTeamList[] {
-  if (value === null || typeof value !== 'object') return [];
-  const { teamId, instanceId, keyDigest, tasks, updatedAt, snapshot } = value as Record<string, unknown>;
-  if (!(typeof teamId === 'string' && typeof instanceId === 'string' && typeof keyDigest === 'string'))
-    return [];
-  if (!(Array.isArray(tasks) && typeof updatedAt === 'number')) return [];
-  return [
-    {
-      teamId,
-      instanceId,
-      keyDigest,
-      tasks: tasks as TeamTask[],
-      updatedAt,
-      snapshot: readTeamSnapshot(snapshot),
-    },
-  ];
-}
-
 export function readTeamSnapshotsFile(path: string): HeldTeamList[] {
-  if (!existsSync(path)) return [];
-  try {
-    const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
-    const lists = (value as { lists?: unknown } | null)?.lists;
-    return Array.isArray(lists) ? lists.flatMap(readHeldList) : [];
-  } catch (error) {
-    log.warn('[Teams] Could not read the kept team snapshots', { path, error: describeError(error) });
+  const { value, problem } = readJsonFile(path, TeamSnapshotsFile);
+  if (problem !== null) {
+    log.warn('[Teams] Could not read the kept team snapshots', { path, error: problem });
     return [];
   }
+  return (value?.lists ?? []).map(({ tasks, snapshot, ...list }) => ({
+    ...list,
+    tasks: tasks as TeamTask[],
+    snapshot: readTeamSnapshot(snapshot),
+  }));
 }
 
 function resolveListKey(teamId: string, instanceId: string) {

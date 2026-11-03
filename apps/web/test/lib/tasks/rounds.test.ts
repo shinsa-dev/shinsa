@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { listQueuedRounds } from '@shinsa/core';
 import {
   changeRoundShipping,
   describeRoundStatus,
@@ -7,7 +8,6 @@ import {
   listEarlierRounds,
   listRoundSections,
   listShippingItems,
-  listWaitingRounds,
   resolveHandleText,
   resolveRoundCount,
   resolveRoundDivider,
@@ -100,7 +100,7 @@ describe('rounds on screen', () => {
       [3, []],
     ]);
     expect(listEarlierRounds(task).map((round) => round.number)).toEqual([1]);
-    expect(listWaitingRounds(task).map((round) => round.number)).toEqual([3]);
+    expect(listQueuedRounds(task).map((round) => round.number)).toEqual([3]);
   });
 
   it('takes the current round’s pull request from the task and an ended one’s from what it kept', () => {

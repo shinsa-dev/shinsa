@@ -24,12 +24,12 @@ import { DepthMark, resolveDepthIndent } from '@/components/tasks/row.tsx';
 import { useAttachments } from '@/hooks/use-attachments.ts';
 import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
+import { useShinsaState } from '@/lib/connection/selectors.ts';
 import {
   connection,
   type MachineChoice,
   NO_UNREACHABLE_MACHINES,
   type UnreachableMachine,
-  useConnection,
   useMachines,
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
@@ -266,7 +266,7 @@ export function NewTaskFields({
 }
 
 export function NewTaskForm() {
-  const { state } = useConnection();
+  const state = useShinsaState();
   const machines = useMachines();
   const unreachable = useUnreachableMachines();
   const [request, setRequest] = React.useState('');

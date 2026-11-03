@@ -1,4 +1,4 @@
-import { describeList } from '../chat/text.ts';
+import { describeList, quoteTitle } from '../chat/text.ts';
 import { type CommandOf, isUserCommand, type ShinsaCommand, type UserCommand } from '../commands/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
@@ -53,7 +53,7 @@ type Descriptions = { [T in Exclude<OnBehalfCommand['type'], 'task.create'>]: De
 
 function quoteTask(state: ShinsaState, taskId: string | null) {
   const title = taskId ? state.tasks[taskId]?.title : undefined;
-  return title ? `“${title}”` : 'a task';
+  return title ? quoteTitle(title) : 'a task';
 }
 
 function quoteRunTask(state: ShinsaState, runId: string) {
@@ -62,7 +62,7 @@ function quoteRunTask(state: ShinsaState, runId: string) {
 
 function quoteSchedule(state: ShinsaState, scheduleId: string) {
   const name = state.schedules[scheduleId]?.name;
-  return name ? `“${name}”` : 'a schedule';
+  return name ? quoteTitle(name) : 'a schedule';
 }
 
 const DESCRIPTIONS: Descriptions = {

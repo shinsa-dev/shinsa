@@ -3,8 +3,9 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { FileCard } from '@/components/chat/file-card.tsx';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
 import { SplitOffCard } from '@/components/chat/split-off-card.tsx';
-import { ATTACHMENT_CORNER } from '@/components/layout/surface/card.ts';
+import { ATTACHMENT_CORNER, INSET } from '@/components/layout/surface/card.ts';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
+import { SentComments } from '@/components/review/sent-comments.tsx';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
 import { type SettlingPhase, useSettling } from '@/hooks/use-settling.ts';
 import { canOpenAttachment, canPlayAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
@@ -123,17 +124,18 @@ export function UserMessage({
   status,
   reason,
   splitOff,
+  comments = [],
 }: {
   persistId: DisclosurePersistId;
   text: string;
   attachments?: ChatAttachment[];
-} & Pick<HumanMessage, 'status' | 'reason' | 'splitOff'>) {
+} & Pick<HumanMessage, 'status' | 'reason' | 'splitOff' | 'comments'>) {
   const { open: expanded, toggle } = useDisclosure(persistId, false);
   const delivery = useSettling(isDelivering({ status }));
   const split = splitMessageAttachments(text);
   const body = split.text;
   const shown = [...attachments, ...split.attachments];
-  if (!body && shown.length === 0) return null;
+  if (!body && shown.length === 0 && comments.length === 0) return null;
   const long = body.split('\n').length > CLAMP_LINES || body.length > CLAMP_CHARACTERS;
   return (
     <div data-message data-delivery={delivery ?? undefined} className='flex min-w-0 flex-col items-end gap-2'>
@@ -147,6 +149,9 @@ export function UserMessage({
           </div>
           <DeliveryEdge phase={delivery} />
         </div>
+      )}
+      {comments.length > 0 && (
+        <SentComments comments={comments} className={cn(INSET, 'max-w-4/5 min-w-0 px-3 py-2')} />
       )}
       {long && (
         <button

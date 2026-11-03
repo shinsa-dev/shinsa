@@ -1,14 +1,18 @@
+import { parseJsonRecord } from '../domain/records.ts';
+import { HOUR_MS, MINUTE_MS } from '../domain/time.ts';
 import {
   type Bytes,
   concatBytes,
   decodeText,
   encodeText,
+  hasBytes,
   parseBase32,
   parseBase64Url,
   serializeBase32,
   serializeBase64Url,
+  URL_SAFE_SEGMENT,
 } from './bytes.ts';
-import { importConnectKey } from './connect-token.ts';
+import { createSignedToken, importHmacKey, signHmac, verifySignedToken } from './tokens.ts';
 
 export const PREVIEW_ORIGIN = 'https://shinsa.page';
 
@@ -28,17 +32,15 @@ export const PREVIEW_ACCESS_PARAM = 'access';
 
 export const PREVIEW_ACCESS_HEADER = 'x-shinsa-preview-access';
 
-export const PREVIEW_OPEN_TTL_MS = 60_000;
+export const PREVIEW_OPEN_TTL_MS = MINUTE_MS;
 
-export const PREVIEW_ACCESS_TTL_MS = 12 * 60 * 60_000;
+export const PREVIEW_ACCESS_TTL_MS = 12 * HOUR_MS;
 
-const ACCESS_CONTEXT = 'shinsa-preview-access\n';
+const ACCESS_CONTEXT = encodeText('shinsa-preview-access\n');
 
 const PRIVATE_ID_CONTEXT = 'shinsa-private-preview\n';
 
 const LABEL_LIMIT = 63;
-
-const SEGMENT = /^[A-Za-z0-9_-]+$/;
 
 export interface PreviewAddress {
   instanceId: string;
@@ -57,10 +59,6 @@ export interface PreviewAccessClaim extends PreviewAddress {
 export interface PrivatePreviewRun {
   serviceId: string;
   taskId: string | null;
-}
-
-function hasBytes(text: string, length: number) {
-  return SEGMENT.test(text) && parseBase64Url(text)?.length === length;
 }
 
 export function isPreviewId(value: string) {
@@ -82,7 +80,7 @@ export function parsePreviewLabel(label: string): PreviewAddress | null {
   if (!bytes || bytes.length <= PREVIEW_ID_BYTES) return null;
   try {
     const instanceId = decodeText(bytes.slice(PREVIEW_ID_BYTES));
-    if (!SEGMENT.test(instanceId)) return null;
+    if (!URL_SAFE_SEGMENT.test(instanceId)) return null;
     return { instanceId, previewId: serializeBase64Url(bytes.slice(0, PREVIEW_ID_BYTES)) };
   } catch {
     return null;
@@ -134,10 +132,10 @@ export function parsePreviewTunnelPath(pathname: string) {
 }
 
 export async function resolvePrivatePreviewId(connectKey: string, run: PrivatePreviewRun) {
-  const key = await importConnectKey(connectKey);
+  const key = await importHmacKey(connectKey);
   if (!key) throw new Error('The connect key is not valid.');
   const message = encodeText(`${PRIVATE_ID_CONTEXT}${run.serviceId}\n${run.taskId ?? ''}`);
-  const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, message));
+  const digest = await signHmac(key, message);
   return serializeBase64Url(digest.slice(0, PREVIEW_ID_BYTES));
 }
 
@@ -152,8 +150,8 @@ export function resolvePrivatePreviewUrl(
 
 function readAccessClaim(payload: Bytes): PreviewAccessClaim | null {
   try {
-    const fields = JSON.parse(decodeText(payload)) as Record<string, unknown>;
-    if (typeof fields.i !== 'string' || typeof fields.p !== 'string') return null;
+    const fields = parseJsonRecord(decodeText(payload));
+    if (typeof fields?.i !== 'string' || typeof fields.p !== 'string') return null;
     if (typeof fields.u !== 'string' || typeof fields.e !== 'number') return null;
     return { instanceId: fields.i, previewId: fields.p, userId: fields.u, expiresAt: fields.e };
   } catch {
@@ -162,14 +160,12 @@ function readAccessClaim(payload: Bytes): PreviewAccessClaim | null {
 }
 
 export async function createPreviewAccessToken(connectKey: string, claim: PreviewAccessClaim) {
-  const key = await importConnectKey(connectKey);
+  const key = await importHmacKey(connectKey);
   if (!key) throw new Error('The connect key is not valid.');
   const payload = encodeText(
     JSON.stringify({ i: claim.instanceId, p: claim.previewId, u: claim.userId, e: claim.expiresAt })
   );
-  const signed = concatBytes(encodeText(ACCESS_CONTEXT), payload);
-  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, signed));
-  return `${serializeBase64Url(payload)}.${serializeBase64Url(signature)}`;
+  return createSignedToken(key, ACCESS_CONTEXT, payload);
 }
 
 export async function verifyPreviewAccessToken(
@@ -179,14 +175,8 @@ export async function verifyPreviewAccessToken(
   now: number,
   ttlMs = PREVIEW_ACCESS_TTL_MS
 ): Promise<PreviewAccessClaim | null> {
-  const [encoded, encodedSignature, extra] = token.split('.');
-  if (encoded === undefined || encodedSignature === undefined || extra !== undefined) return null;
-  const payload = parseBase64Url(encoded);
-  const signature = parseBase64Url(encodedSignature);
-  const key = await importConnectKey(connectKey);
-  if (!payload || !signature || !key) return null;
-  const signed = concatBytes(encodeText(ACCESS_CONTEXT), payload);
-  if (!(await crypto.subtle.verify('HMAC', key, signature, signed))) return null;
+  const payload = await verifySignedToken(connectKey, ACCESS_CONTEXT, token);
+  if (!payload) return null;
   const claim = readAccessClaim(payload);
   if (!claim || claim.instanceId !== address.instanceId || claim.previewId !== address.previewId) return null;
   if (claim.expiresAt <= now || claim.expiresAt > now + ttlMs) return null;

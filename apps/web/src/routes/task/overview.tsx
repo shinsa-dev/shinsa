@@ -1,8 +1,7 @@
-import { type Gate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
+import { describeCount, type Gate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { EvidencePointer } from '@/components/evidence/evidence-pointer.tsx';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
@@ -18,19 +17,18 @@ import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { WatchdogsPanel } from '@/components/overview/watchdogs-panel.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
-import { Composer } from '@/components/task/composer.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
+import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useOnHide } from '@/hooks/use-on-hide.ts';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
 import { selectShownReply } from '@/lib/overview/exchanges.ts';
 import { type NowTarget, resolveNowKind, resolveResultPlace } from '@/lib/overview/now.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
 import { MERGE_STEP_TITLE } from '@/lib/review/merge-steps.ts';
 import { describePointCount, listReviewChapters, listReviewPoints } from '@/lib/review/report.ts';
-import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
+import { resolveMessageHint } from '@/lib/tasks/messages.ts';
 import { isCodeTask } from '@/lib/tasks/shapes.ts';
 import { hasReview } from '@/lib/tasks/tabs.ts';
 
@@ -143,7 +141,7 @@ function ActivityPanel({
           className='self-start'
           onClick={() => setLimit(limit + ACTIVITY_PAGE)}
         >
-          {`Show ${formatCount(Math.min(older, ACTIVITY_PAGE), 'older entry', 'older entries')}`}
+          {`Show ${describeCount(Math.min(older, ACTIVITY_PAGE), 'older entry', 'older entries')}`}
         </Button>
       )}
     </Panel>
@@ -193,15 +191,7 @@ export function OverviewTab({
           <ActivityPanel state={state} task={task} onOpenRun={(runId) => onOpen('agent', runId)} />
         </div>
       </PageScroll>
-      {hint && (
-        <Composer
-          draftKey={task.id}
-          placeholder={hint.placeholder}
-          submitLabel='Send message'
-          onSubmit={(text) => sendTaskMessage(task, hint, text)}
-          dock={<MessageQueue state={state} task={task} />}
-        />
-      )}
+      {hint && <TaskComposer state={state} task={task} hint={hint} />}
     </div>
   );
 }

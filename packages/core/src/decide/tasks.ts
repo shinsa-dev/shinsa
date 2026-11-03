@@ -19,6 +19,7 @@ import {
 } from '../domain/index.ts';
 import { resolveFocusProject } from '../queue/rank.ts';
 import { resolveNextHandle } from '../state/project.ts';
+import { findProject, findRepo } from '../state/queries.ts';
 import {
   isDependencyOf,
   isTriaged,
@@ -42,16 +43,12 @@ import { isShapeLocked, resolveNextStep, startStep } from './shapes.ts';
 import { assertNoWatchdogsLeft, stopAllWatchdogs } from './watchdogs.ts';
 
 function assertRepo(decider: Decider, repoId: string | null) {
-  if (repoId !== null && !decider.state.repos[repoId]) {
-    throw new DomainError({ code: 'repo_not_found', message: `No repository ${repoId}` });
-  }
+  if (repoId !== null) findRepo(decider.state, repoId);
 }
 
 function resolveCreatedProject(decider: Decider, command: CommandOf<'task.create'>) {
   if (command.projectId !== undefined) {
-    if (command.projectId !== null && !decider.state.projects[command.projectId]) {
-      throw new DomainError({ code: 'project_not_found', message: `No project ${command.projectId}` });
-    }
+    if (command.projectId !== null) findProject(decider.state, command.projectId);
     return command.projectId;
   }
   const repoProject = command.repoId ? decider.state.repos[command.repoId]?.projectId : null;

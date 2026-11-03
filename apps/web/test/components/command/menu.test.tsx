@@ -458,8 +458,11 @@ describe('on a task page', () => {
     const view = useTaskView(state, 'login');
     const draft: ReviewDraft = {
       enabled: true,
+      reviewing: true,
+      withMessages: true,
       comments,
       addComment: () => {},
+      updateComment: () => {},
       removeComment: () => {},
       clearComments: () => {},
       verdicts: {},

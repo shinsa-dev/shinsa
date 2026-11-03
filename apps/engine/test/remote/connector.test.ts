@@ -66,7 +66,19 @@ describe('the cloudflared connector', () => {
     const error = await Effect.runPromise(
       Effect.flip(open('t', 'http://127.0.0.1:1')).pipe(Effect.scoped, provideFake(fake.path, '50 millis'))
     );
-    expect(error.message).toContain('did not connect');
+    expect(error.message).toBe('cloudflared did not connect within 30 seconds.');
+  });
+
+  test('names the last line cloudflared printed when it does not connect in time', async () => {
+    const fake = writeFake(
+      'echo "INF Starting tunnel" >&2; echo "ERR Failed to dial a quic connection error=timeout" >&2; exec sleep 30'
+    );
+    const error = await Effect.runPromise(
+      Effect.flip(open('t', 'http://127.0.0.1:1')).pipe(Effect.scoped, provideFake(fake.path, '500 millis'))
+    );
+    expect(error.message).toBe(
+      'cloudflared did not connect within 30 seconds. It last printed: ERR Failed to dial a quic connection error=timeout'
+    );
   });
 
   test('says when cloudflared cannot be started', async () => {

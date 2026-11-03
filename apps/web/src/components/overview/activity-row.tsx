@@ -1,8 +1,9 @@
-import type { Activity, ReviewComment, ShinsaState, Task } from '@shinsa/core';
+import type { Activity, ShinsaState, Task } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import type * as React from 'react';
 import { InAppLink } from '@/components/links/link.tsx';
 import { MentionText } from '@/components/people/user-tag.tsx';
+import { SentComments } from '@/components/review/sent-comments.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -15,7 +16,6 @@ import {
   resolveActivityText,
 } from '@/lib/overview/activity.ts';
 import type { Mention } from '@/lib/remote/users.ts';
-import { describeCommentPlace } from '@/lib/review/draft.ts';
 import type { Glyph } from '@/lib/tasks/status.ts';
 import { resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
@@ -36,19 +36,6 @@ function ActorLabel({ state, actor }: { state: ShinsaState; actor: ActivityActor
 }
 
 const ENTRY_TEXT = 'font-medium text-fg-3';
-
-function SentComments({ comments }: { comments: ReviewComment[] }) {
-  return (
-    <ul className='flex flex-col gap-1 pt-0.5'>
-      {comments.map((comment) => (
-        <li key={`${describeCommentPlace(comment)}:${comment.text}`} className='flex flex-col gap-px text-xs'>
-          <span className='font-mono text-2xs text-fg-2'>{describeCommentPlace(comment)}</span>
-          <span className='text-fg-4'>{comment.text}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export function ActivityEntry({
   glyph,

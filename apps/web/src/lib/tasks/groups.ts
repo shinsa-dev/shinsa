@@ -1,6 +1,7 @@
 import {
   compareTasks,
   type Gate,
+  type GateType,
   isAgentQuestion,
   isDependencyOf,
   isHeldInBacklog,
@@ -16,6 +17,7 @@ import {
   type TeamFeedTask,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { GATE } from '@/lib/format/labels.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { isMergingWithBundle, selectBundleRoot } from '@/lib/tasks/bundles.ts';
 
@@ -55,21 +57,20 @@ export interface ChainEntry {
   team?: TeamEntry;
 }
 
+function createGateGroup(key: TaskGroupKey, type: GateType): TaskGroup {
+  const { label, icon, tone } = GATE[type];
+  return { key, title: label, icon, tone, defaultOpen: true };
+}
+
 export const TASK_GROUPS: TaskGroup[] = [
-  { key: 'merge', title: 'Ready to merge', icon: 'IconMerged', tone: 'green', defaultOpen: true },
-  { key: 'review', title: 'Changes to review', icon: 'IconEyeOpen', tone: 'amber', defaultOpen: true },
-  { key: 'plan', title: 'Plan to approve', icon: 'IconFileText', tone: 'purple', defaultOpen: true },
-  { key: 'change', title: 'Change to approve', icon: 'IconFileEdit', tone: 'purple', defaultOpen: true },
-  {
-    key: 'operation',
-    title: 'Operation to confirm',
-    icon: 'IconConsole',
-    tone: 'purple',
-    defaultOpen: true,
-  },
-  { key: 'answer', title: 'Needs your answer', icon: 'IconBubbleQuestion', tone: 'blue', defaultOpen: true },
-  { key: 'answered', title: 'Answered', icon: 'IconBubbleCheck', tone: 'blue', defaultOpen: true },
-  { key: 'paused', title: 'Paused', icon: 'IconPause', tone: 'orange', defaultOpen: true },
+  createGateGroup('merge', 'merge'),
+  createGateGroup('review', 'review'),
+  createGateGroup('plan', 'plan'),
+  createGateGroup('change', 'proposal'),
+  createGateGroup('operation', 'operation'),
+  createGateGroup('answer', 'question'),
+  createGateGroup('answered', 'result'),
+  createGateGroup('paused', 'failure'),
   { key: 'working', title: 'In progress', icon: 'IconRobot', tone: 'blue', defaultOpen: true },
   { key: 'snoozed', title: 'Snoozed', icon: 'IconClockSnooze', tone: 'neutral', defaultOpen: false },
   { key: 'backlog', title: 'Backlog', icon: 'IconArchive', tone: 'neutral', defaultOpen: true },

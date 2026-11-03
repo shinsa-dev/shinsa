@@ -104,7 +104,7 @@ src/
 │                        (CommandRequest, CommandResult, CommandNotFound, COMMAND_TIMEOUT, QUIET_ENV, the exit
 │                        codes), processes.ts (stopping a group or a process, the ps table's descendants), errno.ts
 │                        (selectErrnoCode: a system error's code, read by the SystemError schema; the lock uses it too),
-│                        index.ts
+│                        layers.ts (ShellLayer: Shell on BunServices), index.ts
 │                        (the edge: runCommand, runCommandOrThrow, killProcessGroup, killProcessTree, the same
 │                        results as before, CommandNotFound answered as exit code 127); login.ts
 │                        reads the login shell's environment once (`-lic`, then `-lc` when that prints nothing, plus
@@ -206,7 +206,8 @@ src/
 │   │                    the server's router on your behalf with byTask, so a message is classified; adding a
 │   │                    repository or folder to a project runs in process through the project changes);
 │   │                    ManageAccess ({ baseUrl, projects, route }) is what serve.ts hands the supervisor as `manage`
-│   ├── providers/       types.ts (AgentProvider, capabilities, AgentSession), registry/ (Providers: the registry as
+│   ├── providers/       types.ts (AgentProvider, capabilities, AgentSession), schema.ts (the quick-call
+│   │                    timeouts and text limits both providers share), registry/ (Providers: the registry as
 │   │                    a service, resolve failing with NoAgentProvider; index.ts's ProviderRegistry is its edge),
 │   │                    session/ (acquireAgentSession: a session as a scoped resource, closing its scope cancels
 │   │                    it and waits for it to end), instructions.ts (what every session is told about Shinsa
@@ -278,8 +279,10 @@ src/
 │                        its answer decoded by WatchAnswer in answer.ts), the Schedules service (index.ts; its routes
 │                        are http/routes/secrets and webhooks), schema.ts (the shapes, WebhookOutcome, the
 │                        limits and RATE_WINDOW)
-├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
-│                        credentials, the enrolled devices, who has access; the only place the keys live),
+├── remote/              Remote access (docs/engine.md → Remote access): schema.ts (the socket close codes and the
+│                        schemas remote.json, team snapshots and team views are read through), store.ts (remote.json:
+│                        the machine's key, the credentials, the enrolled devices, who has access; the only place the
+│                        keys live),
 │                        client/ (RemoteClient in service.ts: every call to app.shinsa.dev derived from core's
 │                        RemoteApi through HttpApiClient (pairing, machine, machineTeams, slackRelay), the
 │                        Redacted machine token through the MachineSession client middleware, each call under
@@ -372,14 +375,20 @@ src/
 ├── files/               service.ts (JsonFile: read(path, schema), a missing file Option.none and broken text or a
 │                        breaking value the typed JsonFileUnreadable; keepAside, the `<name>.unreadable-<time>` copy;
 │                        write, atomic through `<name>.writing-<pid>` and mode 600), schema.ts, index.ts (the edge:
-│                        writeJsonFile, keepJsonFileAside; config/file.ts re-exports writeJsonFile), manifest.ts (the
-│                        one reader of a checkout's package.json and deno.json, through the lenient PackageManifest
-│                        schema: a field that breaks its shape is dropped, the rest kept)
+│                        writeJsonFile, keepJsonFileAside, readJsonFile: a file's value through its schema and the
+│                        problem when it has one, for modules not moved to Effect), manifest.ts (the
+│                        one reader of a checkout's package.json and deno.json, and the Claude SDK's, through the
+│                        lenient PackageManifest schema: a field that breaks its shape is dropped, the rest kept),
+│                        lenient-list.ts (createLenientList: a list keeping the entries that decode), paths.ts
+│                        (the one containment check: isInside, isFolder, resolveInside, resolveWritableInside,
+│                        assertRepoPath; every module asking whether a path stays in a folder calls it)
 ├── git/                 service.ts (Git: attempt answers a CommandResult, run fails with GitFailed and retries a held
 │                        index.lock on LOCK_RETRY, read answers a command's raw bytes with its byte or line cap, a
 │                        5 s timeout, each chunk as it comes and the request's abort, literal pathspecs), schema.ts
 │                        (GitFailed, RefName and RefNameInvalid, GitRead, LOCK_RETRY), ref-name.ts (decodeRefName),
-│                        layers.ts (GitLayer: the services below on Git), and one folder per service with its
+│                        layers.ts (GitLayer: the services below on Git; GitCommands: Git alone on ShellLayer, for
+│                        an HTTP handler that runs one command), commit.ts (selectHead: a checkout's HEAD or null),
+│                        and one folder per service with its
 │                        schema.ts: checkout/ (Checkout: commits, a merge's MERGE_HEAD, stashes, worktrees made,
 │                        refreshed and removed, a free branch name, the start point, delegations' detached
 │                        checkouts, installing dependencies; MergeUnresolved, CommitInvalid; paths.ts), remote/
@@ -461,8 +470,9 @@ src/
 │                        and service processes), schema.ts (the shapes and each interval as a Duration)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
-│                        (syncRepoRemote, upsertRepo) (index.ts); folders/ (RepoFolders: scanning the home folder
-│                        for the folders that hold repositories, the repositories in the chosen folders, a
+│                        (syncRepoRemote, upsertRepo) (index.ts); folders/ (RepoFolders: scanning the whole home
+│                        folder, Documents included, for the folders that hold repositories and the ones macOS
+│                        refuses, the repositories in the chosen folders, a
 │                        repository's origin from .git/config without running git), setup/ (RepoSetup: setup
 │                        verification before a task's first agent), login/ (GitHubLogins: the GitHub login through
 │                        GitHubCli, kept once gh answers it), roots.ts (chosen folders, SHINSA_ROOTS, or discovery
@@ -477,7 +487,7 @@ src/
 │                        SetupDraft in schema.ts, a file it cannot read or did not write starting setup again), the
 │                        accounts it lists (accounts.ts); schema.ts also holds the revision of the suggested projects,
 │                        the prerequisite shapes and PREREQUISITE_TIMEOUT
-├── projects/            routes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
+├── projects/            changes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
 │                        folders, registered or not) and createProjectChanges, which http/routes/projects and
 │                        the management client share; folders.ts
 │                        (resolving a folder you add)
@@ -518,8 +528,10 @@ src/
 │                        detect.ts (the services found in a project's folders: workspace scripts, Deno, bin/dev and
 │                        Procfile lines, each Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the
 │                        quick call that names them, adds a port flag and a preview URL, cached per project; its answer
-│                        decoded in answer.ts), routes.ts (what http/routes/terminals and services read from a body, and the
-│                        /ws/terminals/<id> socket, createTerminalSockets), index.ts (Terminals: the list, create, rename,
+│                        decoded in answer.ts), input.ts (what http/routes/terminals and services read from a body),
+│                        places.ts (where a terminal opens and a service runs: resolveTerminalStart,
+│                        resolveServicePlace, resolveServiceRunIn, the suggestions a project does not have yet),
+│                        sockets.ts (the /ws/terminals/<id> socket, createTerminalSockets), index.ts (Terminals: the list, create, rename,
 │                        reorder, restart, run, close, stop, and the services: add, update, remove, start, stop,
 │                        restart, a run per task, closing a task's runs, resume after a restart), schema.ts,
 │                        layers.ts (TerminalsLayer)
@@ -541,8 +553,7 @@ src/
                          DomainError as RequestFailed with its code), commands.ts (dispatchUserCommand through
                          parseUserCommand), features.ts (ENGINE_FEATURE_ROUTES from EngineApi's annotations),
                          task-lookup.ts, task-views.ts, files.ts (byte ranges and attachment headers),
-                         socket.ts (the page socket hub), static.ts, paths.ts (resolveInside,
-                         resolveWritableInside, assertRepoPath)
+                         socket.ts (the page socket hub), static.ts; path containment is files/paths.ts
 ```
 
 `test/` has one folder per source folder and a test file per module with behaviour of its own; a few modules are
@@ -812,6 +823,6 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Effect services are tested through `runTest`** (`test/harness.ts`): it provides `JsonLogger`, `Shell` on
   `BunServices` and `StoreLayer(':memory:')`, so a service test runs the real service on SQLite in memory and real
   processes in a `createTempDir` folder (`test/config/service.test.ts`, `test/shell/service.test.ts`,
-  `test/store/service.test.ts`, `test/instance/lock-service.test.ts`). A scoped layer a test builds is closed by the
+  `test/store/service.test.ts`, `test/instance/lock/service.test.ts`). A scoped layer a test builds is closed by the
   test (`Effect.scoped`), so no lock, process or file outlives it.
 - `bun run test` fails below 100% line and function coverage (`bunfig.toml`).

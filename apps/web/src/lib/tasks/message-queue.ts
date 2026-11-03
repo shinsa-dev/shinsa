@@ -1,10 +1,10 @@
 import {
   type Round,
   type RoundRelease,
+  listQueuedRounds,
   type Run,
   resolveCurrentRound,
   resolveRoundRelease,
-  resolveTaskRounds,
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
@@ -16,9 +16,7 @@ export interface QueuedMessage {
 }
 
 export function listQueuedMessages(task: Task): QueuedMessage[] {
-  return resolveTaskRounds(task)
-    .filter((round) => round.status === 'waiting')
-    .map((round) => ({ number: round.number, text: round.request }));
+  return listQueuedRounds(task).map((round) => ({ number: round.number, text: round.request }));
 }
 
 const RELEASE_WORDS: Record<RoundRelease, (round: number) => string> = {
@@ -31,13 +29,13 @@ const RELEASE_WORDS: Record<RoundRelease, (round: number) => string> = {
 
 export function describeRoundRelease(state: ShinsaState, task: Task, round: Round) {
   const current = resolveCurrentRound(task).number;
-  const next = resolveTaskRounds(task).find((candidate) => candidate.status === 'waiting');
+  const [next] = listQueuedRounds(task);
   if (round.number !== next?.number) return `once round ${round.number - 1} is finished`;
   return RELEASE_WORDS[resolveRoundRelease(state, task, round.pipeline)](current);
 }
 
 export function describeQueue(state: ShinsaState, task: Task) {
-  const waiting = resolveTaskRounds(task).filter((round) => round.status === 'waiting');
+  const waiting = listQueuedRounds(task);
   const [next] = waiting;
   if (!next) return '';
   const when = describeRoundRelease(state, task, next);

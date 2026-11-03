@@ -2,18 +2,23 @@ import type { Dirent } from 'node:fs';
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { Clock, Context, Effect, Layer, Option } from 'effect';
+import { Clock, Context, Duration, Effect, Layer, Option } from 'effect';
 import { normalizeRemote } from '../../git/remote/output.ts';
 import { Remote } from '../../git/remote/service.ts';
+import { selectErrnoCode } from '../../shell/errno.ts';
 import {
+  BUNDLE_SUFFIXES,
+  DISCOVERY_BUDGET,
   type Discovery,
   type DiscoveryOptions,
+  type DiscoveryScan,
+  FolderUnreadable,
   type LocalRepo,
   MAX_DEPTH,
   MAX_DIRS,
   MAX_LOCAL_REPOS,
   ORIGIN_SECTION,
-  PRIVATE_HOME_DIRS,
+  REFUSED_CODES,
   SAMPLE_REPOS,
   SECTION,
   SKIPPED_DIRS,
@@ -34,21 +39,24 @@ export class RepoFolders extends Context.Service<
     Effect.gen(function* () {
       const remote = yield* Remote;
 
-      const isSkipped = (name: string) => name.startsWith('.') || SKIPPED_DIRS.has(name);
+      const isSkipped = (name: string) =>
+        name.startsWith('.') ||
+        SKIPPED_DIRS.has(name) ||
+        BUNDLE_SUFFIXES.some((suffix) => name.endsWith(suffix));
 
-      const listChildren = (dir: string, entries: Dirent[], skipPrivate: boolean) =>
+      const listChildren = (dir: string, entries: Dirent[]) =>
         entries
           .filter((entry) => entry.isDirectory() && !isSkipped(entry.name))
-          .filter((entry) => !(skipPrivate && PRIVATE_HOME_DIRS.has(entry.name)))
           .map((entry) => join(dir, entry.name));
 
       const isRepo = (entries: Dirent[]) =>
         entries.some((entry) => entry.name === '.git' && (entry.isDirectory() || entry.isFile()));
 
       const readEntries = (path: string) =>
-        Effect.tryPromise(() => readdir(path, { withFileTypes: true })).pipe(
-          Effect.orElseSucceed((): Dirent[] => [])
-        );
+        Effect.tryPromise({
+          try: () => readdir(path, { withFileTypes: true }),
+          catch: (error) => new FolderUnreadable({ path, code: selectErrnoCode(error) }),
+        });
 
       const attempt = <A>(read: () => A) =>
         Effect.try(read).pipe(Effect.option, Effect.map(Option.getOrNull));
@@ -88,43 +96,62 @@ export class RepoFolders extends Context.Service<
           return { path: realpathSync(path), name, touchedAt: stats.mtimeMs };
         });
 
-      const discover = Effect.fn('RepoFolders.discover')(function* (
-        home: string,
-        options: DiscoveryOptions = {}
-      ) {
-        const maxDepth = options.maxDepth ?? MAX_DEPTH;
-        const maxDirs = options.maxDirs ?? MAX_DIRS;
-        const parents = new Map<string, string[]>();
-        let queue = [home];
-        let visited = 0;
-        let truncated = false;
-        for (let depth = 0; depth <= maxDepth && queue.length > 0; depth += 1) {
-          const next: string[] = [];
-          for (const dir of queue) {
-            if (visited >= maxDirs) {
-              truncated = true;
-              break;
-            }
-            visited += 1;
-            const entries = yield* readEntries(dir);
-            if (dir !== home && isRepo(entries)) {
-              const parent = dirname(dir);
-              parents.set(parent, [...(parents.get(parent) ?? []), basename(dir)]);
-              continue;
-            }
-            if (depth === maxDepth) continue;
-            next.push(...listChildren(dir, entries, dir === home && Boolean(options.skipPrivate)));
-          }
-          queue = next;
+      const recordEntries = (scan: DiscoveryScan, dir: string, entries: Dirent[], descend: boolean) => {
+        if (dir !== scan.home && isRepo(entries)) {
+          const parent = dirname(dir);
+          scan.parents.set(parent, [...(scan.parents.get(parent) ?? []), basename(dir)]);
+          return [];
         }
-        const candidates = [...parents.entries()]
+        return descend ? listChildren(dir, entries) : [];
+      };
+
+      const visit = (scan: DiscoveryScan, dir: string, descend: boolean) =>
+        readEntries(dir).pipe(
+          Effect.map((entries) => recordEntries(scan, dir, entries, descend)),
+          Effect.catchTag('FolderUnreadable', (failure) =>
+            Effect.sync(() => {
+              if (REFUSED_CODES.has(failure.code ?? '')) scan.refused.push(dir);
+              return [];
+            })
+          )
+        );
+
+      const rankCandidates = (parents: DiscoveryScan['parents']) =>
+        [...parents.entries()]
           .map(([path, repos]) => ({
             path,
             repoCount: repos.length,
             repos: repos.sort((a, b) => a.localeCompare(b)).slice(0, SAMPLE_REPOS),
           }))
           .sort((a, b) => b.repoCount - a.repoCount || a.path.localeCompare(b.path));
-        return { candidates, truncated } satisfies Discovery;
+
+      const discover = Effect.fn('RepoFolders.discover')(function* (
+        home: string,
+        options: DiscoveryOptions = {}
+      ) {
+        const maxDepth = options.maxDepth ?? MAX_DEPTH;
+        const maxDirs = options.maxDirs ?? MAX_DIRS;
+        const deadline =
+          (yield* Clock.currentTimeMillis) + Duration.toMillis(options.budget ?? DISCOVERY_BUDGET);
+        const scan: DiscoveryScan = { home, parents: new Map(), refused: [] };
+        let queue = [home];
+        let visited = 0;
+        let truncated = false;
+        for (let depth = 0; depth <= maxDepth && queue.length > 0 && !truncated; depth += 1) {
+          const next: string[] = [];
+          for (const dir of queue) {
+            truncated = visited >= maxDirs || (yield* Clock.currentTimeMillis) >= deadline;
+            if (truncated) break;
+            visited += 1;
+            next.push(...(yield* visit(scan, dir, depth < maxDepth)));
+          }
+          queue = next;
+        }
+        return {
+          candidates: rankCandidates(scan.parents),
+          truncated,
+          refused: scan.refused.sort((a, b) => a.localeCompare(b)),
+        } satisfies Discovery;
       });
 
       const listLocal = Effect.fn('RepoFolders.listLocal')(function* (

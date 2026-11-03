@@ -1,25 +1,17 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { runGit } from '../kit/git/index.ts';
 
 const SEED = Bun.argv[2] ?? '/tmp/shinsa-code-perf';
 const PAYWALL = Bun.argv[3] ?? '';
 const REPOS = join(SEED, 'repos');
 const WORKTREES = join(SEED, 'data/worktrees');
-const ENV = {
-  ...Bun.env,
-  GIT_CONFIG_GLOBAL: '/dev/null',
-  GIT_CONFIG_NOSYSTEM: '1',
+const AUTHOR = {
   GIT_AUTHOR_NAME: 'Seed',
   GIT_AUTHOR_EMAIL: 'seed@example.com',
   GIT_COMMITTER_NAME: 'Seed',
   GIT_COMMITTER_EMAIL: 'seed@example.com',
 };
-
-function git(cwd: string, ...args: string[]) {
-  const result = Bun.spawnSync(['git', ...args], { cwd, env: ENV });
-  if (result.exitCode !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr.toString()}`);
-  return result.stdout.toString().trim();
-}
 
 function write(root: string, path: string, content: string | Uint8Array) {
   const file = join(root, path);
@@ -33,14 +25,18 @@ function seedPaywall(source: string) {
     rmSync(dir, { recursive: true, force: true });
   for (const dir of ['task-mcp-rounds', 'task-tab-scroll'])
     rmSync(join(WORKTREES, dir), { recursive: true, force: true });
-  Bun.spawnSync(['git', 'clone', '-q', '--local', '--no-hardlinks', source, repo], { env: ENV });
-  const top = git(repo, 'rev-parse', 'HEAD');
-  git(repo, 'remote', 'remove', 'origin');
-  git(repo, 'checkout', '-q', '-B', 'main', `${top}~400`);
-  git(repo, 'branch', '-f', 'feat/embedded-chat-mcp', top);
-  git(repo, 'branch', '-f', 'fix/code-first-duplicate', `${top}~350`);
-  git(repo, 'worktree', 'add', '-q', join(WORKTREES, 'task-embedded-chat'), 'feat/embedded-chat-mcp');
-  git(repo, 'worktree', 'add', '-q', join(WORKTREES, 'task-duplicate'), 'fix/code-first-duplicate');
+  runGit(['clone', '-q', '--local', '--no-hardlinks', source, repo], process.cwd(), { env: AUTHOR });
+  const top = runGit(['rev-parse', 'HEAD'], repo, { env: AUTHOR });
+  runGit(['remote', 'remove', 'origin'], repo, { env: AUTHOR });
+  runGit(['checkout', '-q', '-B', 'main', `${top}~400`], repo, { env: AUTHOR });
+  runGit(['branch', '-f', 'feat/embedded-chat-mcp', top], repo, { env: AUTHOR });
+  runGit(['branch', '-f', 'fix/code-first-duplicate', `${top}~350`], repo, { env: AUTHOR });
+  runGit(['worktree', 'add', '-q', join(WORKTREES, 'task-embedded-chat'), 'feat/embedded-chat-mcp'], repo, {
+    env: AUTHOR,
+  });
+  runGit(['worktree', 'add', '-q', join(WORKTREES, 'task-duplicate'), 'fix/code-first-duplicate'], repo, {
+    env: AUTHOR,
+  });
 }
 
 function seedSynthetic() {
@@ -48,7 +44,7 @@ function seedSynthetic() {
   for (const dir of [repo, join(WORKTREES, 'task-sample-review'), join(WORKTREES, 'task-sample-theme')])
     rmSync(dir, { recursive: true, force: true });
   mkdirSync(repo, { recursive: true });
-  git(repo, 'init', '-q', '-b', 'main');
+  runGit(['init', '-q', '-b', 'main'], repo, { env: AUTHOR });
   for (let pkg = 0; pkg < 100; pkg += 1) {
     for (let dir = 0; dir < 100; dir += 1) {
       const base = `pkg-${String(pkg).padStart(3, '0')}/dir-${String(dir).padStart(2, '0')}`;
@@ -65,9 +61,9 @@ function seedSynthetic() {
     'big/lines.ts',
     Array.from({ length: 50_000 }, (_, line) => `export const line${line} = ${line};\n`).join('')
   );
-  git(repo, 'add', '-A');
-  git(repo, 'commit', '-q', '-m', 'chore: the base');
-  git(repo, 'checkout', '-q', '-b', 'refactor/review-spots');
+  runGit(['add', '-A'], repo, { env: AUTHOR });
+  runGit(['commit', '-q', '-m', 'chore: the base'], repo, { env: AUTHOR });
+  runGit(['checkout', '-q', '-b', 'refactor/review-spots'], repo, { env: AUTHOR });
   for (let pkg = 0; pkg < 20; pkg += 1) {
     for (let dir = 0; dir < 100; dir += 1) {
       const path = `pkg-${String(pkg).padStart(3, '0')}/dir-${String(dir).padStart(2, '0')}/file-0.ts`;
@@ -80,12 +76,16 @@ function seedSynthetic() {
     Array.from({ length: 50_000 }, (_, line) => `export const added${line} = '${'x'.repeat(20)}';\n`).join('')
   );
   write(repo, 'big/blob.bin', crypto.getRandomValues(new Uint8Array(65_536)));
-  git(repo, 'add', '-A');
-  git(repo, 'commit', '-q', '-m', 'refactor: change many files');
-  git(repo, 'checkout', '-q', 'main');
-  git(repo, 'worktree', 'add', '-q', join(WORKTREES, 'task-sample-review'), 'refactor/review-spots');
-  git(repo, 'branch', '-f', 'feat/code-view-dark-theme', 'main');
-  git(repo, 'worktree', 'add', '-q', join(WORKTREES, 'task-sample-theme'), 'feat/code-view-dark-theme');
+  runGit(['add', '-A'], repo, { env: AUTHOR });
+  runGit(['commit', '-q', '-m', 'refactor: change many files'], repo, { env: AUTHOR });
+  runGit(['checkout', '-q', 'main'], repo, { env: AUTHOR });
+  runGit(['worktree', 'add', '-q', join(WORKTREES, 'task-sample-review'), 'refactor/review-spots'], repo, {
+    env: AUTHOR,
+  });
+  runGit(['branch', '-f', 'feat/code-view-dark-theme', 'main'], repo, { env: AUTHOR });
+  runGit(['worktree', 'add', '-q', join(WORKTREES, 'task-sample-theme'), 'feat/code-view-dark-theme'], repo, {
+    env: AUTHOR,
+  });
 }
 
 if (PAYWALL) seedPaywall(PAYWALL);

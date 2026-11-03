@@ -10,6 +10,7 @@ import {
 } from '../domain/index.ts';
 import { resolveAgentPrompt } from '../prompts/index.ts';
 import { resolveIntakePrompt } from '../prompts/intake.ts';
+import { findProject } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { settleTask } from './lifecycle.ts';
 import { listSourceFiledTasks, type ReadReport } from './reads.ts';
@@ -21,9 +22,7 @@ export function selectProjectSource(decider: Decider, source: ScheduleSource) {
 }
 
 export function findProjectSource(decider: Decider, source: ScheduleSource) {
-  const project = decider.state.projects[source.projectId];
-  if (!project)
-    throw new DomainError({ code: 'project_not_found', message: `No project ${source.projectId}.` });
+  const project = findProject(decider.state, source.projectId);
   const found = selectProjectSource(decider, source);
   if (found) return found;
   const known = (project.watchSources ?? []).map((candidate) => `\`${candidate.server}\``);

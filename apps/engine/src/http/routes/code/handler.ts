@@ -15,6 +15,7 @@ import { CodeUnavailable, FileMissing, RequestFailed } from '@shinsa/core/engine
 import { Effect, Queue, Stream } from 'effect';
 import { type HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
+import { assertRepoPath, resolveInside } from '../../../files/paths.ts';
 import { CatFilePool } from '../../../git/blobs.ts';
 import { resolveCommitDiff, resolveWorkingDiff } from '../../../git/diff.ts';
 import {
@@ -33,7 +34,6 @@ import {
 import { ObjectCache } from '../../../git/objects.ts';
 import { resolveTaskCheckout, resolveTaskRefs } from '../../../git/task-refs.ts';
 import { requestPromise, requestSync } from '../../failures.ts';
-import { assertRepoPath, resolveInside } from '../../paths.ts';
 import { REQUEST_FAILED } from '../../schema.ts';
 import { HttpServices } from '../../services/service.ts';
 import {

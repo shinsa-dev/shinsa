@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { COMMENT_COLOR, COMMENT_TAGS, type CommentSpan, scanCommentLine } from '@/lib/code/comment-tags.ts';
 import { CODE_THEME, resolveFenceGrammar, resolveGrammar } from '@/lib/code/grammar.ts';
+import { scheduleIdle } from '@/lib/idle.ts';
 
 export { CODE_THEME };
 
@@ -127,15 +128,6 @@ export function resetHighlights() {
   resolved.clear();
 }
 
-function scheduleIdle(work: () => void) {
-  if (typeof requestIdleCallback === 'function') {
-    const handle = requestIdleCallback(work, { timeout: IDLE_TIMEOUT_MS });
-    return () => cancelIdleCallback(handle);
-  }
-  const timer = setTimeout(work);
-  return () => clearTimeout(timer);
-}
-
 export function useTokens(code: string | null, path: string) {
   return useLanguageTokens(code, resolveLanguage(path));
 }
@@ -146,11 +138,15 @@ export function useLanguageTokens(code: string | null, language: string | null) 
     if (code === null || !language || code.length > MAX_HIGHLIGHTED_CHARACTERS) return;
     if (resolved.has(resolveKey(code, language))) return;
     let alive = true;
-    const cancel = scheduleIdle(() => {
-      void requestTokens(code, language).then((tokens) => {
-        if (alive) setHighlighted({ code, language, tokens });
-      });
-    });
+    const cancel = scheduleIdle(
+      () => {
+        void requestTokens(code, language).then((tokens) => {
+          if (alive) setHighlighted({ code, language, tokens });
+        });
+      },
+      IDLE_TIMEOUT_MS,
+      0
+    );
     return () => {
       alive = false;
       cancel();

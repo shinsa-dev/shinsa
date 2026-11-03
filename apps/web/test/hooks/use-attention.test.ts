@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { renderHook } from '@testing-library/react';
 import { useAttention } from '@/hooks/use-attention.ts';
 import { NOTIFY_BLOCKED } from '@/lib/notifications/settings.ts';
+import { WELCOME_NOTICE } from '@/lib/notifications/welcome.ts';
 import { writeNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { spyOnToasts } from '../support/commands.ts';
 import { installDesktop } from '../support/desktop.ts';
@@ -99,7 +100,7 @@ describe('useAttention', () => {
     expect([meta('floaty:status'), meta('floaty:badge')]).toEqual(['waiting', '1']);
   });
 
-  it('in the desktop app, keeps notifying while it is the connected app', () => {
+  it('in the desktop app, welcomes you once on the first load, then keeps notifying while it is the connected app', () => {
     const notifications = installNotifications('granted');
     const desktop = installDesktop();
     restores.push(notifications.restore, desktop.restore, stopFakeServer);
@@ -111,7 +112,7 @@ describe('useAttention', () => {
       initialProps: { state: withGates() },
     });
     rerender({ state: withGates(question('g-1')) });
-    expect(desktop.notices.map((notice) => notice.tag)).toEqual(['g-1']);
+    expect(desktop.notices.map((notice) => notice.tag)).toEqual(['shinsa-welcome', 'g-1']);
     expect(desktop.badges.at(-1)).toBe(1);
     expect(document.title).toBe('[1] Shinsa');
   });
@@ -130,6 +131,7 @@ describe('useAttention', () => {
     rerender({ current: state([question('g-1')]) });
     expect(notifications.shown).toEqual([]);
     expect(desktop.notices).toEqual([
+      WELCOME_NOTICE,
       { title: 'Paint it', body: 'Question g-1', tag: 'g-1', path: '/tasks/SW-142' },
     ]);
     expect(desktop.badges.at(-1)).toBe(1);

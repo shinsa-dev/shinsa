@@ -1,7 +1,7 @@
 import type { FileContent } from '@shinsa/core';
 import type { CodeNote, CodeSpotMark } from '@/lib/code/notes.ts';
 import type { Loaded } from '@/lib/connection/code.ts';
-import { formatBytes } from '@/lib/format/count.ts';
+import { formatBytes, formatNumber } from '@/lib/format/count.ts';
 
 export interface PairSource {
   key: string;
@@ -99,6 +99,6 @@ export function resolveTextGuard(path: string, texts: readonly (string | null)[]
   if (size > TEXT_GUARD.bytes) return `${path} is ${formatBytes(size)}, too large to show as text.`;
   const line = Math.max(...texts.map((text) => (text ? measureLongestLine(text) : 0)));
   if (line > TEXT_GUARD.lineLength)
-    return `${path} has a line of ${line.toLocaleString('en-US')} characters, too long to show as text.`;
+    return `${path} has a line of ${formatNumber(line)} characters, too long to show as text.`;
   return null;
 }

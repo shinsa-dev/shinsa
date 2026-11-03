@@ -69,7 +69,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | fork | A task whose Agent starts from a copy of another task's conversation | `Task.forkOf`, `Run.fork` | Fork into a new task, Forked from, Forked into |
 | point | Anything the Review tab marks for you to read: a spot, a judgement call, a risk or a finding | `ReviewItem` (web, `lib/review/report.ts`) | point, "Every point" |
 | ref | The commit the Code tab reads at: the head of the branch, the base, a commit between them, or the working copy (`working`) while the worktree exists | `TaskRefs`, `WORKING_REF` | "Head of the branch", "Working copy", "Base" |
-| line comment | A comment you leave on a line or range of the new or the removed side, sent with Request changes | `ReviewComment` (`gate.answer`'s `comments`), `LineComment` in the web's draft (`lib/review/draft.ts`, adds its id and commit) | Your comments |
+| line comment | A comment you leave on a line or range of the new or the removed side, sent with Request changes or with a message | `ReviewComment` (`gate.answer`'s and `task.message`'s `comments`), `LineComment` in the web's draft (`lib/review/draft.ts`, adds its id and commit) | Your comments |
 | your edits | A file you change in the Code tab: saved to the task's working copy as you type, committed with the round's next commit, and named to the agent's next turn | `FileWrite`, `Task.editedPaths`, `Task.untoldEdits`, `task.record_edit`, `task.edited` | "Edited ‹path›", "Saving…" |
 | proposal | An inquiry's request to turn the task into a change or an operation, decided at your OK | `ChangeProposal`, gate type `proposal` | "Your OK", "What it would change" |
 | result | What an answer, an investigation, research or an operation hands over (the answer, the diagnosis, the report, the outcome) | `TaskResult` | Answer, Diagnosis, Report, Outcome |
@@ -273,7 +273,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `approveAfterFix?` | boolean | you asked for changes with Fix N findings and approve (`gate.answered` with `thenApprove`): the next review gate that opens without an escalation is approved at once (`ahead`); written by every review answer, false in a new round |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
-| `untoldMessages?` | `UntoldMessage[]` (`at`, `text`, `sender`: `agent` \| `schedule`) | messages sent for you while a gate was open (`task.messaged` with `kept`), not yet told; the next run of the task's session is told them (`task.messages_told`) |
+| `untoldMessages?` | `UntoldMessage[]` (`at`, `text`, `sender`: `agent` \| `schedule`, `comments?`) | messages sent for you while a gate was open (`task.messaged` with `kept`), not yet told; the next run of the task's session is told them (`task.messages_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
 | `treeHash?` | string \| null | the tree of the last commit Shinsa made |
 
@@ -801,7 +801,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | Command | Does | Command line | Who |
 | --- | --- | --- | --- |
 | `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, stacks on: `stacksOn`, a list, mode, account, the task it forks: `forkOf`) | `tasks create` | you; task agents file tasks with `create_task` |
-| `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task | `tasks message [--as]` | agent |
+| `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task; `comments` carries line comments (Line comments, below) | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
 | `round.remove` | removes a round waiting to start; the waiting rounds after it move up one number; a round that started is refused (`round_started`) | `rounds remove` | agent |
@@ -873,7 +873,7 @@ webhook-secret`, `accounts sign-in`, `sign-in-code`, `import` and `remove`, `mcp
 
 #### Line comments
 
-`gate.answer`'s optional `comments` is a list of `ReviewComment` (`domain/types.ts`), at most 100:
+`gate.answer`'s and `task.message`'s optional `comments` are a list of `ReviewComment` (`domain/types.ts`), at most 100:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -889,6 +889,14 @@ comment carries no code: to change the code yourself you edit it (`docs/engine.m
 A `revise` with verdicts (Fix N findings at a review with findings) carries them too. The comments are kept on the
 `gate.answered` event (`comments`, left out when there are none) and on its decision's `Activity` entry
 (`Activity.comments`), so the task's activity lists them under the decision.
+
+A `task.message` with `comments` may have an empty `text`; without comments an empty one is still refused
+(`message_required`). Core appends them to the words the agent receives as a Line comments block
+(`resolveCommentedMessage`, the same lines the fix prompt lists), on every path the message takes: steering a running
+agent, waking a resting one, a fix (`resolveHumanFixPrompt` with the comments), a new round's request or a message kept
+while a gate is open. `task.messaged` keeps
+them (`comments`, left out when there are none) and so does the message's `Activity` entry, so the chat shows them
+under the message. A page offers comments outside a review only on an engine with `message.line_comments`.
 
 ### Agent commands
 
@@ -1035,7 +1043,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.bundle_conflict` | its bundle conflicts with the default branch once it merges (`conflict`), or no longer does (`null`) |
 | `task.snooze_changed` | you (or an agent for you) snoozed or unsnoozed it (`snoozed`) |
 | `task.backlog_changed` | it entered or left the backlog (`backlog`; `cause`: `you`, `started` when you approved its plan, `inquiry` when triage made it an inquiry) |
-| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off, `kept` when it was sent for you while a gate was open (adds it to `untoldMessages`) |
+| `task.messaged` | you (or a schedule, or an agent for you) sent a message; `kind` and `round` when it was new work, `suggestionId` when it became a split-off, `kept` when it was sent for you while a gate was open (adds it to `untoldMessages`), `comments` when it carried line comments |
 | `task.messages_told` | a new run of the task's session was told the messages in `untoldMessages`; clears it |
 | `task.message_received`, `task.message_routed`, `task.message_dropped` | a message of yours entered the inbox, left it to be delivered, or left it undelivered (`reason`) |
 | `round.queued` | a new round waits to start (number, title, request, why, shipping, steps) |
@@ -1309,7 +1317,7 @@ offers nothing an engine cannot do (`docs/engine.md` → Remote access, What eac
 | `version` | The engine's build, `0.0.0` in development (`DEVELOPMENT_VERSION`) |
 | `protocol` | `ENGINE_PROTOCOL`, raised only when an older page and this engine cannot talk at all (a changed state shape) |
 | `commands` | Every user command type it parses, `USER_COMMAND_TYPES` itself, so a new command is announced the moment it exists |
-| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix` and `changelog` today) that are not a command, such as a route or a setting an older engine ignores |
+| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix`, `message.line_comments` and `changelog` today) that are not a command, such as a route or a setting an older engine ignores |
 
 `ENGINE_BASELINE_COMMANDS` is frozen: the commands every engine has had since before the `engine` message, which a page
 sends to any engine, one that never announced included (`resolveEngineCommands(null)`). A command added since is
@@ -1614,6 +1622,7 @@ Behind the scenes).
 | Decisions | `packages/core/src/decide/` (`messages.ts` for `resolveMessageEffect`) |
 | State folds | `packages/core/src/state/` |
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
+| Shared helpers: sentences and quoted titles, record checks, the hash, URL-safe ids, signed tokens | `packages/core/src/chat/text.ts`, `domain/records.ts`, `domain/hash.ts`, `remote/bytes.ts`, `remote/tokens.ts` |
 | Socket messages, surfaces, what an engine speaks | `packages/core/src/protocol/messages.ts`, `protocol/engine.ts`; `apps/engine/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
 | Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/engine/src/terminals/`, `apps/web/src/lib/terminal/` |
 | Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `ServiceView.url`, `resolveServiceUrl`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |

@@ -317,6 +317,18 @@ export function isTriaged(task: Task) {
   return task.size !== null;
 }
 
+export function findProject(state: Pick<ShinsaState, 'projects'>, projectId: string) {
+  const project = state.projects[projectId];
+  if (!project) throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}.` });
+  return project;
+}
+
+export function findRepo(state: Pick<ShinsaState, 'repos'>, repoId: string) {
+  const repo = state.repos[repoId];
+  if (!repo) throw new DomainError({ code: 'repo_not_found', message: `No repository ${repoId}.` });
+  return repo;
+}
+
 export function findRun(state: ShinsaState, runId: string) {
   const run = state.runs[runId];
   if (!run) throw new DomainError({ code: 'run_not_found', message: `No run ${runId}` });

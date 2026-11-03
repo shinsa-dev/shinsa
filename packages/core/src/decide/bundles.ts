@@ -116,7 +116,7 @@ export function startBundleMerge(decider: Decider, taskId: string): BundlePullRe
   return bundle;
 }
 
-function isAtRest(decider: Decider, task: Task) {
+function isShippingAtRest(decider: Decider, task: Task) {
   return (
     task.stage === 'shipping' &&
     !task.pushPending &&
@@ -127,7 +127,7 @@ function isAtRest(decider: Decider, task: Task) {
 
 export function startBundleUpdate(decider: Decider, conflict: BundleConflict) {
   const behind = conflict.behindTaskId ? decider.state.tasks[conflict.behindTaskId] : null;
-  if (!behind || !isAtRest(decider, behind)) return null;
+  if (!behind || !isShippingAtRest(decider, behind)) return null;
   clearBundleReady(decider, behind.id);
   decider.stage(behind.id, 'shipping', `updating the branch onto ${conflict.base}`);
   return behind.id;

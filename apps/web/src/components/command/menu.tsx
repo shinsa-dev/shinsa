@@ -66,7 +66,8 @@ import { listVersionSections } from '@/lib/command/versions.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useExtensions } from '@/lib/connection/extensions.ts';
-import { useConnection, useEngineCommands, useRemoteSnapshot } from '@/lib/connection/socket.ts';
+import { useShinsaState } from '@/lib/connection/selectors.ts';
+import { useEngineCommands, useRemoteSnapshot } from '@/lib/connection/socket.ts';
 import { useTerminals } from '@/lib/connection/terminals.ts';
 import { useVersions } from '@/lib/connection/versions.ts';
 import { listFocusTeams } from '@/lib/focus.ts';
@@ -421,7 +422,7 @@ interface MenuFocus {
 }
 
 function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefObject<MenuFocus> }) {
-  const { state } = useConnection();
+  const state = useShinsaState();
   const route = useRoute();
   const remote = useRemoteSnapshot();
   const focusTeams = React.useMemo(() => listFocusTeams(remote), [remote]);
@@ -649,7 +650,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
 }
 
 export function CommandMenu() {
-  const { state } = useConnection();
+  const state = useShinsaState();
   const open = useCommandMenuOpen();
   const focus = React.useRef<MenuFocus>({ restore: true });
   const openedFrom = React.useRef<HTMLElement | null>(null);

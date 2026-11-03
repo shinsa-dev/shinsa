@@ -12,8 +12,8 @@ import { FileLink } from '@/components/links/file.tsx';
 import { PrLink } from '@/components/links/pull-request.tsx';
 import { RepoChip } from '@/components/links/repo.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
-import { useShinsaSelector } from '@/lib/connection/selectors.ts';
-import { useConnection } from '@/lib/connection/socket.ts';
+import { useShinsaSelector, useShinsaState } from '@/lib/connection/selectors.ts';
+
 import { createScopedCache } from '@/lib/format/cache.ts';
 import {
   describeReference,
@@ -27,7 +27,7 @@ import {
 import { resolveRouteTaskId, useRoute, useRouteTaskId } from '@/router.ts';
 
 function useReferenceScope() {
-  const { state } = useConnection();
+  const state = useShinsaState();
   return useRouteTaskId(state);
 }
 
@@ -101,7 +101,7 @@ function ReferenceLink({
 }
 
 export function ReferenceAnchor({ href, children }: { href: string; children?: React.ReactNode }) {
-  const { state } = useConnection();
+  const state = useShinsaState();
   const scope = useReferenceScope();
   const reference = parseReference(href);
   if (!reference || !state) return <>{children}</>;
@@ -109,7 +109,7 @@ export function ReferenceAnchor({ href, children }: { href: string; children?: R
 }
 
 export function ReferenceLabel({ href, children }: { href: string; children?: React.ReactNode }) {
-  const { state } = useConnection();
+  const state = useShinsaState();
   const reference = parseReference(href);
   if (!reference) return <>{children}</>;
   const task = reference.kind === 'task' ? state?.tasks[reference.id] : undefined;

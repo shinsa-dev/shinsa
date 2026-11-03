@@ -632,6 +632,7 @@ describe('a mention from someone', () => {
     expect(offline.forwards).toHaveLength(0);
 
     const { harness, slack, tunnel } = await setUp();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
     tunnel.answer = () => new Response('', { status: 530 });
     await sendEvent(harness, mentionEnvelope());
     tunnel.answer = () => {
@@ -642,6 +643,22 @@ describe('a mention from someone', () => {
     await sendEvent(harness, mentionEnvelope());
     expect(slack.callsTo('chat.postMessage')).toHaveLength(2);
     expect(failures).toHaveBeenCalledWith('[Cloud] A machine refused a Slack mention', expect.anything());
+    expect(warnings.mock.calls).toEqual([
+      [
+        '[Cloud] Machine offline',
+        expect.objectContaining({ surface: 'slack', reason: 'status', status: 530 }),
+      ],
+      [
+        '[Cloud] Machine offline',
+        expect.objectContaining({
+          surface: 'slack',
+          reason: 'unreachable',
+          error: expect.stringContaining('connection refused'),
+        }),
+      ],
+    ]);
+    expect(failures).toHaveBeenCalledTimes(1);
+    warnings.mockRestore();
   });
 
   test('that fails part way is logged, and Slack still gets its answer at once', async () => {

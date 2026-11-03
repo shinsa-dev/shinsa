@@ -176,7 +176,7 @@ export const DETAILS_QUERY = `query($owner:String!,$name:String!,$number:Int!){v
 export const PULL_REQUEST_FIELDS =
   'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup,additions,deletions,changedFiles';
 
-export const NO_PULL_REQUEST = /no pull requests found/i;
+export const NO_PULL_REQUEST_FOUND = /no pull requests found/i;
 
 export const ATTACHMENT_UPLOAD_URL = 'https://uploads.github.com/user-attachments/assets';
 

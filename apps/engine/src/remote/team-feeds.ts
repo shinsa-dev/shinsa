@@ -30,6 +30,7 @@ import { describeError, log } from '../log/index.ts';
 import type { ChannelPeer } from './channel.ts';
 import { selectRemoteFailureTag } from './client/index.ts';
 import type { Remote } from './index.ts';
+import { NORMAL_CLOSE, POLICY_VIOLATION } from './schema.ts';
 import { createChannelEphemeral } from './share-channel.ts';
 import { resolveKeyDigest, TEAM_SNAPSHOTS_FILE, TeamSnapshots } from './team-snapshots.ts';
 import { TEAM_VIEWS_DIR, TeamViewRecorder, TeamViews } from './team-views.ts';
@@ -47,10 +48,6 @@ const TEAM_REFUSED_RETRY_MS = [60_000, 120_000, 300_000];
 const TEAM_VIEW_REFRESH_MS = 30_000;
 
 const TEAM_VIEW_FETCH_TIMEOUT_MS = 30_000;
-
-const POLICY_VIOLATION = 1008;
-
-const NORMAL_CLOSE = 1000;
 
 export interface FeedSocket {
   binaryType: string;

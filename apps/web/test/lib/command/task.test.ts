@@ -10,16 +10,14 @@ import { spyOnEngine } from '../../support/engine.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
-let engine: ReturnType<typeof spyOnEngine>;
 
 beforeEach(() => {
   spies = spyOnCommands();
-  engine = spyOnEngine();
+  spyOnEngine();
 });
 
 afterEach(() => {
   spies.restore();
-  engine.mockRestore();
 });
 
 const PULL_REQUEST = {

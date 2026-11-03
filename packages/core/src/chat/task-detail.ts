@@ -50,11 +50,11 @@ function describeHeader(state: ShinsaState, task: Task) {
     ]
       .filter(Boolean)
       .join(' · '),
-    describeShare(task),
+    describeShareState(task),
   ].filter(Boolean);
 }
 
-function describeShare(task: Task) {
+function describeShareState(task: Task) {
   const share = task.share;
   if (!share) return '';
   if (share.failure) return `Shared by link, but it could not be published: ${share.failure}`;
@@ -63,7 +63,7 @@ function describeShare(task: Task) {
     : 'Shared by link, waiting for app.shinsa.dev to make the link';
 }
 
-function describePlan(task: Task) {
+function describePlanLines(task: Task) {
   const document = task.plan?.document;
   if (!task.plan || !document) return [];
   const approved = task.plan.approvedAt ? ', approved' : '';
@@ -114,7 +114,7 @@ function describeWatchdogs(task: Task) {
   ];
 }
 
-function describeChecks(state: ShinsaState, task: Task) {
+function describeTaskCheckLines(state: ShinsaState, task: Task) {
   const repo = task.repoId ? (state.repos[task.repoId] ?? null) : null;
   const built = describeTaskChecks(task, repo);
   const runs = task.pullRequest?.checkRuns ?? [];
@@ -146,7 +146,7 @@ function describeRequest(task: Task) {
   return `${label}: ${cut(resolveRequest(task), REQUEST_LIMIT)}`;
 }
 
-function describeActor(state: ShinsaState, task: Task, entry: Activity) {
+function describeActivityActor(state: ShinsaState, task: Task, entry: Activity) {
   if (entry.byGuest) return resolveGuestFirstName(task, entry.byGuest);
   if (!entry.onBehalf) return ACTOR_WORDS[entry.actor];
   const from = entry.byTask ? state.tasks[entry.byTask] : undefined;
@@ -154,7 +154,7 @@ function describeActor(state: ShinsaState, task: Task, entry: Activity) {
 }
 
 function describeActivity(state: ShinsaState, task: Task, entry: Activity) {
-  const who = describeActor(state, task, entry);
+  const who = describeActivityActor(state, task, entry);
   return `- ${new Date(entry.at).toISOString()} ${who}: ${entry.text}`;
 }
 
@@ -166,11 +166,11 @@ export function serializeTaskDetail(state: ShinsaState, taskId: string) {
   return [
     ...describeHeader(state, task),
     describeRequest(task),
-    ...describePlan(task),
+    ...describePlanLines(task),
     ...(task.summary ? [`Summary: ${task.summary}`] : []),
     ...(task.result ? [`Result (${task.result.step}): ${cut(task.result.body, REQUEST_LIMIT)}`] : []),
     ...describeTesting(task),
-    ...describeChecks(state, task),
+    ...describeTaskCheckLines(state, task),
     ...describeTestCoverage(task),
     ...describeMergeSteps(task),
     ...describeWatchdogs(task),

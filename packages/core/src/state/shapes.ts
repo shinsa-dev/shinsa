@@ -106,7 +106,7 @@ function applyReshaped(state: ShinsaState, event: EventOf<'task.reshaped'>) {
   });
 }
 
-function applyDelivered(state: ShinsaState, event: EventOf<'task.delivered'>) {
+function applyTaskDelivered(state: ShinsaState, event: EventOf<'task.delivered'>) {
   updateTask(state, event.taskId, event.at, {
     result: { step: event.step, body: event.body, runId: event.runId, at: event.at },
   });
@@ -163,7 +163,7 @@ export function applyShapeEvent(state: ShinsaState, event: ShapeEvent) {
       applyReshaped(state, event);
       return;
     case 'task.delivered':
-      applyDelivered(state, event);
+      applyTaskDelivered(state, event);
       return;
     case 'task.change_proposed':
       applyChangeProposed(state, event);

@@ -8,9 +8,11 @@ export interface MachineAccessGrant {
   readonly role: RemoteRole;
 }
 
+export type TeamRole = Exclude<RemoteRole, 'guest'>;
+
 export interface TeamAccessGrant {
   readonly team: Team;
-  readonly role: Exclude<RemoteRole, 'guest'>;
+  readonly role: TeamRole;
 }
 
 export const BEARER = 'Bearer ';
@@ -18,5 +20,13 @@ export const BEARER = 'Bearer ';
 export const SAFE_METHODS = new Set(['GET', 'HEAD']);
 
 export const SESSION_TTL = Duration.days(30);
+
+export const NO_SUCH_MACHINE = 'No such machine.';
+
+export const NO_SUCH_TEAM = 'No such team.';
+
+export const NOT_PAIRED = 'This machine is not paired.';
+
+export const OAUTH_STATE_BYTES = 24;
 
 export const SIGN_IN_EXPIRED = 'The sign-in expired or came from somewhere else. Try again.';

@@ -6,8 +6,10 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { navigate } from '@/router.ts';
 import { CodeTab } from '@/routes/task/code.tsx';
+import { spyOnCommands } from '../../support/commands.ts';
 import { findTooltipText } from '../../support/hover.ts';
-import { createTask } from '../../support/state.ts';
+import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import { createShinsaState, createTask } from '../../support/state.ts';
 import { waitForGone } from '../../support/wait.ts';
 
 const HEAD = 'a'.repeat(40);
@@ -250,6 +252,51 @@ describe('notes in the code', () => {
     expect(await screen.findByText('Name this line.')).toBeDefined();
     fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
     await waitForGone(() => screen.queryByText('Name this line.'));
+  });
+
+  it('comments outside a review, edits the comment and sends it to the agent with its place', async () => {
+    startFakeServer();
+    const commands = spyOnCommands();
+    const task = nextTask({ stage: 'building' });
+    pushState(createShinsaState({ tasks: [task] }));
+    navigate(`/tasks/${task.id}?tab=code`);
+    render(
+      <TooltipProvider>
+        <ReviewDraftProvider enabled reviewing={false} withMessages draftKey={`task:${task.id}`}>
+          <CodeTab task={task} modes={['changes', 'files']} />
+        </ReviewDraftProvider>
+      </TooltipProvider>
+    );
+    await findLine('two');
+    const numbers = [...document.querySelectorAll('.cm-lineNumbers .cm-gutterElement')];
+    fireEvent.mouseDown(numbers.find((element) => element.textContent === '2') as HTMLElement, { button: 0 });
+    const field = await screen.findByRole('textbox', { name: 'Comment' });
+    expect(field.getAttribute('placeholder')).toBe(
+      'What should change here? It goes to the agent with your next message.'
+    );
+    fireEvent.change(field, { target: { value: 'Name this line.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add comment' }));
+    expect(await screen.findByText('Name this line.')).toBeDefined();
+    expect(screen.getByText('1 comment for the agent')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const editing = await screen.findByRole('textbox', { name: 'Comment' });
+    expect((editing as HTMLTextAreaElement).value).toBe('Name this line.');
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    fireEvent.change(editing, { target: { value: 'Call it count.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save comment' }));
+    expect(await screen.findByText('Call it count.')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send to the agent' }));
+    await waitForGone(() => screen.queryByText('Call it count.'));
+    expect(commands.sent.mock.calls[0]?.[0]).toEqual({
+      type: 'task.message',
+      taskId: task.id,
+      text: '',
+      comments: [{ path: 'docs/alpha.txt', side: 'old', line: 1, endLine: null, text: 'Call it count.' }],
+    });
+    expect(screen.queryByText('1 comment for the agent')).toBeNull();
+    stopFakeServer();
   });
 });
 

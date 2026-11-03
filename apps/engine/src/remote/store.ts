@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs';
 import type { AccessRequest, RemoteDevice, RemoteTeamEntry, SharedPerson } from '@shinsa/core';
 import {
   isTeamKey,
@@ -14,8 +13,9 @@ import {
   serializePrivateKey,
   serializePublicKey,
 } from '@shinsa/core';
-import { writeJsonFile } from '../config/index.ts';
-import { describeError, log } from '../log/index.ts';
+import { readJsonFile, writeJsonFile } from '../files/index.ts';
+import { log } from '../log/index.ts';
+import { RemoteFileFields } from './schema.ts';
 
 export const REMOTE_FILE = 'remote.json';
 
@@ -282,15 +282,12 @@ function createRemoteFile(): RemoteFile {
 }
 
 export function readRemoteFile(path: string): RemoteFile {
-  if (!existsSync(path)) return createRemoteFile();
-  let fields: unknown;
-  try {
-    fields = JSON.parse(readFileSync(path, 'utf8'));
-  } catch (error) {
-    log.warn('[Remote] remote.json could not be read; remote access is off', { error: describeError(error) });
+  const { value: fields, problem } = readJsonFile(path, RemoteFileFields);
+  if (problem !== null) {
+    log.warn('[Remote] remote.json could not be read; remote access is off', { error: problem });
     return createRemoteFile();
   }
-  if (!isFields(fields)) return createRemoteFile();
+  if (!fields) return createRemoteFile();
   const credentials = readCredentials(fields.credentials);
   return {
     version: 1,
