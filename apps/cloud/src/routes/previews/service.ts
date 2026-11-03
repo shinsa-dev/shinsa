@@ -21,7 +21,7 @@ import { HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { CloudConfig } from '../../config/service.ts';
 import { isMachineOnline } from '../../domain/machines.ts';
 import { serializeCookie } from '../../http/cookies.ts';
-import { resolveForwardHeaders, TUNNEL_OFFLINE_STATUSES } from '../../http/forward.ts';
+import { isTunnelOffline, recordMachineOffline, resolveForwardHeaders } from '../../http/forward.ts';
 import { readCookie } from '../../http/request.ts';
 import { NOINDEX, respondRedirect, respondText } from '../../http/responses.ts';
 import { Tunnels } from '../../integrations/tunnels/service.ts';
@@ -122,20 +122,14 @@ export class PreviewHost extends Context.Service<
             body: BODILESS_METHODS.has(request.method) ? null : request.body,
           })
           .pipe(
-            Effect.tapError((error) =>
-              Effect.logError('[Preview] Could not reach the tunnel').pipe(
-                Effect.annotateLogs({ instanceId: machine.id, error: error.message })
-              )
-            ),
+            Effect.tapError((error) => recordMachineOffline('preview', machine.id, { error: error.message })),
             Effect.option
           );
         if (Option.isNone(answer)) return respondPage('offline', 503);
         const proxied = answer.value;
         if (proxied.status === 101) return HttpServerResponse.raw(proxied);
-        if (TUNNEL_OFFLINE_STATUSES.has(proxied.status) && !proxied.headers.has(PREVIEW_PAGE_HEADER)) {
-          yield* Effect.logError('[Preview] The tunnel did not answer').pipe(
-            Effect.annotateLogs({ instanceId: machine.id, status: proxied.status })
-          );
+        if (isTunnelOffline(proxied) && !proxied.headers.has(PREVIEW_PAGE_HEADER)) {
+          yield* recordMachineOffline('preview', machine.id, { status: proxied.status });
           return respondPage('offline', 503);
         }
         return HttpServerResponse.raw(

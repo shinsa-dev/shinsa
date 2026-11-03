@@ -22,7 +22,7 @@ import { Cause, Clock, Effect, Layer, Option, type Redacted, Schema } from 'effe
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from 'effect/http';
 import { CloudConfig } from '../../config/service.ts';
 import { isMachineOnline } from '../../domain/machines.ts';
-import { TUNNEL_OFFLINE_STATUSES } from '../../http/forward.ts';
+import { requestOnlineMachine } from '../../http/forward.ts';
 import { deferWork } from '../../http/worker.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
 import { readSignedBody } from '../../slack/signed-body.ts';
@@ -210,8 +210,12 @@ export const SlackEventRoutes = Layer.unwrap(
       mention: SlackMention,
       machine: Machine
     ) {
-      const answer = yield* Effect.option(requestSignedMachine(machine, SLACK_ENGINE_EVENTS_PATH, mention));
-      if (Option.isNone(answer) || TUNNEL_OFFLINE_STATUSES.has(answer.value.status)) return false;
+      const answer = yield* requestOnlineMachine(
+        'slack',
+        machine.id,
+        requestSignedMachine(machine, SLACK_ENGINE_EVENTS_PATH, mention)
+      );
+      if (Option.isNone(answer)) return false;
       if (!answer.value.ok)
         yield* Effect.logError('[Cloud] A machine refused a Slack mention').pipe(
           Effect.annotateLogs({ instanceId: machine.id, status: answer.value.status })

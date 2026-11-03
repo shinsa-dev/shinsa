@@ -85,7 +85,7 @@ function applyUnshared(state: ShinsaState, event: EventOf<'task.unshared'>) {
   record(state, event.taskId, event.at, { kind: 'stage', ...SHARE_ENDED[event.reason] });
 }
 
-function applyRecorded(state: ShinsaState, event: EventOf<'share.recorded'>) {
+function applyShareRecorded(state: ShinsaState, event: EventOf<'share.recorded'>) {
   const share = state.tasks[event.taskId]?.share;
   if (!share) return;
   updateTask(state, event.taskId, event.at, { share: { ...share, url: event.url, failure: null } });
@@ -112,7 +112,7 @@ export function applyShareEvent(state: ShinsaState, event: ShareEvent) {
       applyUnshared(state, event);
       return;
     case 'share.recorded':
-      applyRecorded(state, event);
+      applyShareRecorded(state, event);
       return;
     case 'share.failed':
       applyFailed(state, event);

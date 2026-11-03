@@ -3,6 +3,7 @@ import {
   describeMessageStatus,
   describeSplitOffState,
   isDelivering,
+  resolveLineComments,
   resolveMessageHint,
   sendTaskMessage,
 } from '@/lib/tasks/messages.ts';
@@ -63,7 +64,64 @@ describe('resolveMessageHint', () => {
   });
 });
 
+describe('resolveLineComments', () => {
+  it('opens line comments at a review, and at any stage that takes messages once the engine carries them', () => {
+    const working = createTask({ id: 't', stage: 'building' });
+    const workingState = createShinsaState({ tasks: [working] });
+    expect(resolveLineComments(workingState, working, { reviewing: false, supported: true })).toEqual({
+      enabled: true,
+      withMessages: true,
+    });
+    expect(resolveLineComments(workingState, working, { reviewing: false, supported: false })).toEqual({
+      enabled: false,
+      withMessages: false,
+    });
+    expect(resolveLineComments(workingState, working, { reviewing: true, supported: false })).toEqual({
+      enabled: true,
+      withMessages: false,
+    });
+    const closed = createTask({ id: 't', stage: 'done', closedAt: 1 });
+    expect(
+      resolveLineComments(createShinsaState({ tasks: [closed] }), closed, {
+        reviewing: false,
+        supported: true,
+      })
+    ).toEqual({ enabled: false, withMessages: true });
+  });
+});
+
 describe('sendTaskMessage', () => {
+  it('sends the line comments with the message, without what is kept only in the browser', async () => {
+    const commands = spyOnCommands();
+    const task = createTask({ id: 't', stage: 'building' });
+    const hint = resolveMessageHint(createShinsaState({ tasks: [task] }), task);
+    if (!hint) throw new Error('The task takes no message.');
+    const comment = {
+      id: 'c1',
+      path: 'a.ts',
+      side: 'new' as const,
+      line: 2,
+      endLine: 4,
+      ref: 'abc',
+      text: 'Merge.',
+    };
+    const sending = sendTaskMessage(task, hint, '', [comment]);
+    expect(listOutboxMessages('t')).toMatchObject([
+      { text: '', comments: [{ path: 'a.ts', side: 'new', line: 2, endLine: 4, text: 'Merge.' }] },
+    ]);
+    await sending;
+    expect(commands.sent).toHaveBeenCalledWith(
+      {
+        type: 'task.message',
+        taskId: 't',
+        text: '',
+        comments: [{ path: 'a.ts', side: 'new', line: 2, endLine: 4, text: 'Merge.' }],
+      },
+      hint.sent
+    );
+    commands.restore();
+  });
+
   it('sends the message to the task and toasts what it does there', async () => {
     const commands = spyOnCommands();
     const task = createTask({ id: 't', stage: 'awaiting_review' });

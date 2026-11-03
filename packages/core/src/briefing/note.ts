@@ -1,7 +1,7 @@
 import type { Queue } from '../queue/types.ts';
 import { resolveFallbackNote } from './fallback.ts';
 
-const QUOTED = /[“"]([^”"]+)[”"]/g;
+const QUOTED_TITLE = /[“"]([^”"]+)[”"]/g;
 
 const MIN_QUOTED_MENTION = 12;
 
@@ -18,7 +18,7 @@ function mentionsTask(note: string, title: string) {
   const name = normaliseMention(title);
   if (!name) return false;
   if (text.includes(name)) return true;
-  return [...note.matchAll(QUOTED)]
+  return [...note.matchAll(QUOTED_TITLE)]
     .map((match) => normaliseMention(match[1] ?? ''))
     .some((quoted) => quoted.length >= MIN_QUOTED_MENTION && name.includes(quoted));
 }

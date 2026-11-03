@@ -90,14 +90,14 @@ function resolveTaskRef(task: Task, taskUrl: string): SlackTaskRef {
   };
 }
 
-function serializeLink(label: string, url: string) {
+function serializeTrustedLink(label: string, url: string) {
   return `<${url}|${escapeSlackText(label).replaceAll('|', '/')}>`;
 }
 
 function serializeFooter(ref: SlackTaskRef) {
   return createSlackContext([
-    serializeLink(ref.label, ref.url),
-    ...(ref.pullRequest ? [serializeLink(`PR #${ref.pullRequest.number}`, ref.pullRequest.url)] : []),
+    serializeTrustedLink(ref.label, ref.url),
+    ...(ref.pullRequest ? [serializeTrustedLink(`PR #${ref.pullRequest.number}`, ref.pullRequest.url)] : []),
   ]);
 }
 
@@ -245,7 +245,7 @@ function serializeSlackPlanView(ref: SlackTaskRef, view: SlackPlanView): SlackMe
 
 function serializeSlackReviewView(ref: SlackTaskRef, view: SlackReviewView): SlackMessage {
   const pullRequest = ref.pullRequest
-    ? serializeLink(`PR #${ref.pullRequest.number}`, ref.pullRequest.url)
+    ? serializeTrustedLink(`PR #${ref.pullRequest.number}`, ref.pullRequest.url)
     : 'Opens once you approve';
   return createSlackMessage(`${ref.label} is ready for your review.`, [
     createSlackHeader('Ready for your review'),
@@ -268,7 +268,7 @@ function serializeSlackProposalView(ref: SlackTaskRef, request: string): SlackMe
   ]);
 }
 
-function describeChecks(task: Task) {
+function describeCheckSummary(task: Task) {
   const checks = assembleReport(task).checks;
   if (checks.length === 0) return null;
   const failed = checks.filter((check) => check.outcome === 'fail').length;
@@ -302,7 +302,7 @@ export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): Sla
     case 'review':
       return serializeSlackReviewView(ref, {
         summary: resolveLead(task.summary?.trim() || assembleReport(task).headline),
-        checks: describeChecks(task),
+        checks: describeCheckSummary(task),
       });
     case 'proposal':
       return serializeSlackProposalView(ref, task.proposal?.request ?? '');

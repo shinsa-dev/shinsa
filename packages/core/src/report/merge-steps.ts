@@ -1,3 +1,4 @@
+import { hashText } from '../domain/hash.ts';
 import { resolveCurrentRound, resolveTaskRounds } from '../domain/rounds.ts';
 import type { PhaseReport, Task } from '../domain/types.ts';
 import type { ChecklistItem } from './checklist.ts';
@@ -36,18 +37,9 @@ export function resolveLatestWalkthrough(reports: readonly PhaseReport[]) {
     .reduce<ReportWalkthrough | null>((latest, report) => report.walkthrough ?? latest, null);
 }
 
-function hashText(text: string) {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < text.length; index++) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return hash.toString(36);
-}
-
 export function resolveMergeStepKey(step: MergeStep) {
   const content = [step.kind, step.title, step.detail, step.command ?? ''].join('\u0000');
-  return `${step.when}:${hashText(content)}`;
+  return `${step.when}:${hashText(content).toString(36)}`;
 }
 
 function toMergeStep(step: MergeStep): MergeStep {

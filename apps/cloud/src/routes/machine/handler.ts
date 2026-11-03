@@ -10,6 +10,8 @@ import { CurrentMachine, RemoteApi } from '@shinsa/core/remote/api';
 import { GuestsFull, MembersFull, NotFound, Revoked } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
+import { selectMachineRole } from '../../auth/access.ts';
+import { NOT_PAIRED } from '../../auth/schema.ts';
 import type { TokenHash } from '../../crypto/schema.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
 import { listMachinePeople, removeMachine } from '../../domain/machines.ts';
@@ -29,16 +31,21 @@ export const MachineHandlers = HttpApiBuilder.group(
       const machines = yield* Machines;
       const { instanceId } = yield* CurrentMachine;
       const machine = yield* machines.select(instanceId);
-      if (Option.isNone(machine)) return yield* new Revoked({ message: 'This machine is not paired.' });
+      if (Option.isNone(machine)) return yield* new Revoked({ message: NOT_PAIRED });
       return machine.value;
+    });
+
+    const reachesMachine = Effect.fn('reachesMachine')(function* (userId: RemoteUserId) {
+      const { instanceId, ownerId } = yield* CurrentMachine;
+      const role = yield* selectMachineRole(instanceId, ownerId, userId);
+      return Option.isSome(role) && role.value !== 'guest';
     });
 
     const hasAsked = Effect.fn('hasAsked')(function* (userId: RemoteUserId) {
       const { instanceId, ownerId } = yield* CurrentMachine;
       const access = yield* MachineAccess;
       const teams = yield* Teams;
-      if (ownerId === userId) return true;
-      if (yield* access.members.has(instanceId, userId)) return true;
+      if (yield* reachesMachine(userId)) return true;
       if (yield* access.requesters.has(instanceId, userId)) return true;
       return yield* teams.shareTeam(ownerId, userId);
     });
@@ -72,11 +79,10 @@ export const MachineHandlers = HttpApiBuilder.group(
       userId: RemoteUserId,
       slot: { readonly membership: Membership<InstanceId>; readonly limit: number; readonly full: Full }
     ) {
-      const { instanceId, ownerId } = yield* CurrentMachine;
+      const { instanceId } = yield* CurrentMachine;
       const user = yield* findAskingUser(userId, slot.membership === access.guests);
       const now = yield* Clock.currentTimeMillis;
-      const reaches = ownerId === userId || (yield* access.members.has(instanceId, userId));
-      if (!reaches && !(yield* slot.membership.has(instanceId, userId))) {
+      if (!(yield* reachesMachine(userId)) && !(yield* slot.membership.has(instanceId, userId))) {
         if ((yield* slot.membership.count(instanceId)) >= slot.limit) return yield* Effect.fail(slot.full);
         yield* slot.membership.add(instanceId, userId);
       }

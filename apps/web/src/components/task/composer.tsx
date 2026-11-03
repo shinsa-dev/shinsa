@@ -19,6 +19,7 @@ import {
   updateTaskDraft,
 } from '@/lib/chat/task-drafts.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
+import { describeCommentsWithMessage } from '@/lib/review/draft.ts';
 
 function isTabSwitch(target: EventTarget | null) {
   return target instanceof Element && target.closest('[data-task-tabs] [role="tab"]') !== null;
@@ -40,6 +41,7 @@ export function Composer({
   onSubmit,
   aside,
   dock,
+  comments = 0,
 }: {
   draftKey: string;
   placeholder: string;
@@ -47,6 +49,7 @@ export function Composer({
   onSubmit: (text: string) => Promise<boolean>;
   aside?: React.ReactNode;
   dock?: React.ReactNode;
+  comments?: number;
 }) {
   const text = React.useSyncExternalStore(subscribeTaskDrafts, () => resolveTaskDraft(draftKey).text);
   const [busy, setBusy] = React.useState(false);
@@ -54,7 +57,7 @@ export function Composer({
   useCarriedFocus(draftKey, field);
   const attachments = useAttachments(draftKey);
   const { dragging, dropProps, onPaste } = useFileDrop(attachments);
-  const ready = canSendDraft(text, attachments.drafts, busy);
+  const ready = canSendDraft(text, attachments.drafts, busy, comments);
 
   async function submit() {
     if (!ready) return;
@@ -98,6 +101,12 @@ export function Composer({
           <div className={COMPOSER_FOOTER}>
             <AttachButton attachments={attachments} />
             {aside}
+            {comments > 0 && (
+              <span className='flex min-w-0 items-center gap-1 truncate text-2xs text-fg-2'>
+                <Icon size='sm' name='IconBubbleText' />
+                {describeCommentsWithMessage(comments)}
+              </span>
+            )}
             <span className='flex-1' />
             <Hint label={submitLabel}>
               <Button

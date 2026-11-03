@@ -133,6 +133,9 @@ describe('a review point that is not a finding', () => {
     );
     expect(readBar('Uncapped wait').textContent).not.toContain('Agent');
     expect(readBar('You').textContent).toContain('Line 3');
+    const tag = screen.getByText('Line 3').closest('.inline-flex') as HTMLElement;
+    expect(tag.className).toContain('min-w-0');
+    expect(tag.className).not.toContain('shrink-0');
     expect(readHeadRow('Off by one.').textContent).not.toContain('Agent review');
   });
 

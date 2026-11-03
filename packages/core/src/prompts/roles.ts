@@ -91,12 +91,12 @@ function describeOperationNote(task: Task) {
   ].join('\n');
 }
 
-function hasOpenPullRequest(task: Task) {
+function hasPullRequestToShipOnto(task: Task) {
   return task.pullRequest?.state === 'open' || selectShippingTarget(task, resolveCurrentRound(task)) !== null;
 }
 
 function describeShapeChoice(task: Task) {
-  if (hasOpenPullRequest(task)) {
+  if (hasPullRequestToShipOnto(task)) {
     return "- An earlier round of this task has an open pull request, so this round ships through it: keep `build`, `pull_request` and `merge` in the steps, and do not wait for the human's OK before planning. It cannot become a question, an investigation or research.";
   }
   return '- `shape` when the request needs no change at all: `answer` (a question answered from the code), `investigate` (find the cause of a problem and report it) or `research` (compare options or research a topic and write a report).';
@@ -377,7 +377,7 @@ function describeCoverageForReview(task: Task) {
 const REVIEW_AGAIN =
   'You reviewed earlier work on this task in this conversation. Judge this review on its own: check that your earlier blocking findings are fixed, read the new commits as closely as the first time, and never pass something because you passed it before.';
 
-function describeEvidenceItem({ key, kind, title, parts }: EvidenceItem) {
+function describeEvidenceFacts({ key, kind, title, parts }: EvidenceItem) {
   const [first] = parts;
   const names =
     kind === 'comparison' ? parts.map((part) => part.label ?? part.stage).join(' and ') : first?.stage;
@@ -390,7 +390,7 @@ export function describeEvidenceForFix(evidence: readonly Evidence[]) {
   if (items.length === 0) return '';
   return [
     'The evidence you attached this round, which the human sees in the review:',
-    ...items.map(describeEvidenceItem),
+    ...items.map(describeEvidenceFacts),
     'If your fix changes what one shows, replace it before you hand over (attach a new one with the same `key`). Shinsa refuses `complete_fix` while an item whose files your fix changed is not replaced, removed with `remove_evidence`, or named in `evidence_kept`.',
   ].join('\n');
 }
@@ -402,7 +402,7 @@ function describeEvidenceForReview(evidence: readonly Evidence[]) {
   }
   return [
     'The evidence the agent attached this round (the human sees it in the review):',
-    ...items.map(describeEvidenceItem),
+    ...items.map(describeEvidenceFacts),
     'Check it shows what the change claims. Where a user-visible claim has none, or you doubt one, capture your own as the evidence skill describes and attach it with `attach_evidence`: the human sees it as independent evidence from the review.',
   ].join('\n');
 }

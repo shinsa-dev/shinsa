@@ -15,7 +15,7 @@ type WatchSuggestionEvent = Extract<
   }
 >;
 
-function applyRecorded(state: ShinsaState, event: EventOf<'watch_suggestion.recorded'>) {
+function applySuggestionRecorded(state: ShinsaState, event: EventOf<'watch_suggestion.recorded'>) {
   const { suggestion } = event;
   writeEntry(state, 'watchSuggestions', suggestion.id, suggestion);
   if (suggestion.origin.kind !== 'agent' || !suggestion.origin.taskId) return;
@@ -28,7 +28,12 @@ function applyRecorded(state: ShinsaState, event: EventOf<'watch_suggestion.reco
   });
 }
 
-function decide(state: ShinsaState, suggestionId: string, patch: Partial<WatchSuggestion>, at: number) {
+function writeSuggestionDecision(
+  state: ShinsaState,
+  suggestionId: string,
+  patch: Partial<WatchSuggestion>,
+  at: number
+) {
   const suggestion = state.watchSuggestions[suggestionId];
   if (!suggestion) return;
   writeEntry(state, 'watchSuggestions', suggestionId, { ...suggestion, ...patch, decidedAt: at });
@@ -37,13 +42,18 @@ function decide(state: ShinsaState, suggestionId: string, patch: Partial<WatchSu
 export function applyWatchSuggestionEvent(state: ShinsaState, event: WatchSuggestionEvent) {
   switch (event.type) {
     case 'watch_suggestion.recorded':
-      applyRecorded(state, event);
+      applySuggestionRecorded(state, event);
       return;
     case 'watch_suggestion.accepted':
-      decide(state, event.suggestionId, { status: 'accepted', scheduleId: event.scheduleId }, event.at);
+      writeSuggestionDecision(
+        state,
+        event.suggestionId,
+        { status: 'accepted', scheduleId: event.scheduleId },
+        event.at
+      );
       return;
     case 'watch_suggestion.dismissed':
-      decide(state, event.suggestionId, { status: 'dismissed' }, event.at);
+      writeSuggestionDecision(state, event.suggestionId, { status: 'dismissed' }, event.at);
       return;
     case 'watch_suggestion.removed':
       removeEntry(state, 'watchSuggestions', event.suggestionId);

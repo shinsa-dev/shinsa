@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { launchChrome, listTargets, ShellPage } from './shell-cdp.ts';
+import { type CdpPage, type Key, openChromium, waitForExpression } from '../kit/chromium/index.ts';
 import { SHELL_PROBE } from './shell-probe.ts';
 import { type StepSample, serializeStepTable, summarizeSteps } from './shell-stats.ts';
 
@@ -8,7 +8,7 @@ interface Step {
   open?: { target: string; done: string };
   pushes?: string;
   target?: string;
-  key?: { key: string; code: string; keyCode: number; modifiers: number };
+  key?: Key;
   done: string;
 }
 
@@ -130,63 +130,21 @@ const NAVIGATION_STEPS: Step[] = [
 
 const STEPS = Bun.env.SHELL_PERF_STEPS === 'terminal' ? TERMINAL_STEPS : NAVIGATION_STEPS;
 
-async function attach(port: string) {
-  const target = (await listTargets(port)).find(
-    (entry) => entry.type === 'page' && entry.url.startsWith(ORIGIN)
-  );
-  if (!target) throw new Error(`No page on ${ORIGIN} at port ${port}.`);
-  const page = await ShellPage.open(target.webSocketDebuggerUrl);
-  return { page, close: () => page.close() };
+async function waitFor(target: CdpPage, expression: string) {
+  if (!(await waitForExpression(target, expression))) throw new Error(`Timed out waiting for ${expression}`);
 }
 
-async function waitFor(target: ShellPage, expression: string, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (
-      await target.evaluate<boolean>(
-        `(() => { try { return !!(${expression}); } catch { return false; } })()`
-      )
-    )
-      return;
-    await Bun.sleep(50);
-  }
-  throw new Error(`Timed out waiting for ${expression}`);
-}
-
-async function press(target: ShellPage, key: NonNullable<Step['key']>) {
-  const base = { key: key.key, code: key.code, windowsVirtualKeyCode: key.keyCode, modifiers: key.modifiers };
-  await target.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
-  await target.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
-}
-
-async function click(target: ShellPage, point: { x: number; y: number }) {
-  await target.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
-  await Bun.sleep(HOVER_MS);
-  await target.send('Input.dispatchMouseEvent', {
-    type: 'mousePressed',
-    ...point,
-    button: 'left',
-    clickCount: 1,
-  });
-  await target.send('Input.dispatchMouseEvent', {
-    type: 'mouseReleased',
-    ...point,
-    button: 'left',
-    clickCount: 1,
-  });
-}
-
-async function openFirst(target: ShellPage, open: NonNullable<Step['open']>) {
+async function openFirst(target: CdpPage, open: NonNullable<Step['open']>) {
   const point = await target.evaluate<{ x: number; y: number } | null>(
     `__shell.center(${JSON.stringify(open.target)})`
   );
   if (!point) return;
-  await click(target, point);
+  await target.clickPoint(point, HOVER_MS);
   await waitFor(target, open.done);
   await Bun.sleep(OPEN_SETTLE_MS);
 }
 
-async function runStep(target: ShellPage, step: Step): Promise<Measured | null> {
+async function runStep(target: CdpPage, step: Step): Promise<Measured | null> {
   if (step.open) await openFirst(target, step.open);
   if (step.target) {
     const point = await target.evaluate<{ x: number; y: number } | null>(
@@ -194,32 +152,27 @@ async function runStep(target: ShellPage, step: Step): Promise<Measured | null> 
     );
     if (!point) return null;
     await target.evaluate(`__shell.arm(${JSON.stringify(step.done)}, 'click')`);
-    await click(target, point);
+    await target.clickPoint(point, HOVER_MS);
   } else if (step.key) {
     await target.evaluate(`__shell.arm(${JSON.stringify(step.done)}, 'keydown')`);
-    await press(target, step.key);
+    await target.pressKey(step.key);
   }
   return target.evaluate<Measured | null>('__shell.step');
 }
 
-async function closeMenu(target: ShellPage) {
-  await press(target, { key: 'Escape', code: 'Escape', keyCode: 27, modifiers: 0 });
+async function closeMenu(target: CdpPage) {
+  await target.pressKey({ key: 'Escape', code: 'Escape', keyCode: 27, modifiers: 0 });
   await waitFor(target, `!document.querySelector('[cmdk-input]')`);
 }
 
-async function closeOpenMenu(target: ShellPage) {
+async function closeOpenMenu(target: CdpPage) {
   await target.evaluate(
     `document.querySelector('[role=menu][data-open]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
   );
   await waitFor(target, `!document.querySelector('[role=menu][data-open]')`);
 }
 
-function openBrowser() {
-  if (ATTACH) return attach(ATTACH);
-  return launchChrome(1440, 1000);
-}
-
-const browser = await openBrowser();
+const browser = await openChromium(ATTACH, ORIGIN);
 const { page } = browser;
 await page.send('Page.enable');
 if (Bun.env.SHELL_PERF_CPU)

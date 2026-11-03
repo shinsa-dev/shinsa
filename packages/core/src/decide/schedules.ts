@@ -17,7 +17,7 @@ import {
   type Task,
 } from '../domain/index.ts';
 import { isTimeZone, parseTimeOfDay, resolveFirstRun, resolveNextRun } from '../schedules/time.ts';
-import { listActiveRuns } from '../state/queries.ts';
+import { findRepo, listActiveRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
 import {
@@ -326,7 +326,7 @@ function resolveRestart(existing: Schedule | null, body: ScheduleBody, now: numb
   return resolveNextRun(body.trigger, now, body.timeZone);
 }
 
-function createDraft(
+function createScheduleRecord(
   decider: Decider,
   body: ScheduleBody,
   createdBy: ScheduleCreator
@@ -368,7 +368,7 @@ function emitWritten(
   const restart = isRestart(existing, body);
   const draft = existing
     ? { ...existing, ...body, updatedAt: now, stopped: restart ? null : existing.stopped }
-    : createDraft(decider, body, createdBy);
+    : createScheduleRecord(decider, body, createdBy);
   const nextRunAt = restart ? resolveRestart(existing, body, now) : (existing?.nextRunAt ?? null);
   const schedule: Schedule = { ...draft, nextRunAt };
   assertRunnable(schedule);
@@ -417,9 +417,7 @@ export function writeSchedule(decider: Decider, command: CommandOf<'agent.set_sc
 
 function resolveUserTarget(decider: Decider, target: ScheduleTarget): ScheduleTarget {
   if (target.kind === 'new_task') {
-    if (target.repoId !== null && !decider.state.repos[target.repoId]) {
-      throw new DomainError({ code: 'repo_not_found', message: `No repository ${target.repoId}.` });
-    }
+    if (target.repoId !== null) findRepo(decider.state, target.repoId);
     return target;
   }
   const task = decider.state.tasks[target.taskId];

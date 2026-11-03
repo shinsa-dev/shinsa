@@ -1,13 +1,13 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
   type ConfigProblem,
-  DomainError,
   type Gate,
   type GateDecision,
   needsRepository,
   resolveTaskPipeline,
   type Task,
 } from '../domain/index.ts';
+import { findRepo } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
 import { settleTask, startWork, VERIFYING_SETUP } from './lifecycle.ts';
@@ -60,8 +60,7 @@ function resolveProblems(task: Task, problems: ConfigProblem[]) {
 
 function bindRepo(decider: Decider, task: Task, repoId: string) {
   if (task.repoId !== null) return;
-  const repo = decider.repoOf({ repoId });
-  if (!repo) throw new DomainError({ code: 'repo_not_found', message: `No repository ${repoId}` });
+  const repo = findRepo(decider.state, repoId);
   decider.emit({
     type: 'task.repo_bound',
     taskId: task.id,

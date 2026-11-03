@@ -22,6 +22,8 @@ function writeConsole(level: LogLevel.LogLevel, message: unknown, detail: Record
   // oxlint-disable-next-line eslint/no-console -- Workers Logs keeps what a Worker writes to the console, its only log
   if (LogLevel.isGreaterThanOrEqualTo(level, 'Error')) return console.error(text, fields);
   // oxlint-disable-next-line eslint/no-console -- Workers Logs keeps what a Worker writes to the console, its only log
+  if (LogLevel.isGreaterThanOrEqualTo(level, 'Warn')) return console.warn(text, fields);
+  // oxlint-disable-next-line eslint/no-console -- Workers Logs keeps what a Worker writes to the console, its only log
   return console.log(text, fields);
 }
 

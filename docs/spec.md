@@ -569,7 +569,9 @@ Built and verified end to end against a scratch repository:
 - **Code-first review.** A task page has three tabs: Overview, Code and Chat. Code's review view is a
   split: the walkthrough on the left (sections, or every spot ranked by attention, then agent findings,
   judgement calls, checks), the code on the right with the whole file as context, the spot spotlit,
-  findings inline, line comments, Previous spot and Next spot to step. Its changes view is a file tree
+  findings inline, line comments, Previous spot and Next spot to step. Since 2026-11-03 you comment on a line or a
+  selected range at any stage where the task takes a message, edit or remove the comment, and send the comments to
+  the agent from the Code tab's Line comments bar or with any message (`task.message` with `comments`). Its changes view is a file tree
   and the full diff. Since 2026-10-24 Code is a workbench (Review, Changes, Files and Search, tabs, ⌘P quick open,
   find, go to line, a ref picker) on CodeMirror, reading every file from git at a pinned commit, so a merged task
   keeps its code; since 2026-10-25 you edit it directly (Direct editing in the Code tab, below; `docs/design.md`, 32;

@@ -1,5 +1,6 @@
 'use client';
 
+import { EASE_EMPHASIZED } from '@shinsa/ui/lib/motion';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
@@ -18,7 +19,7 @@ function SizeAnimator({
   className?: string;
   duration?: number;
 }) {
-  const transition = `height ${duration}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+  const transition = `height ${duration}ms ${EASE_EMPHASIZED}`;
   const outerRef = React.useRef<HTMLDivElement>(null);
   const innerRef = React.useRef<HTMLDivElement>(null);
 
