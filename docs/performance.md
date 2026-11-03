@@ -519,6 +519,27 @@ Every step is within a frame of the click at full speed, a tab switch within one
   frame as the switch, which is why the project steps at 4× read a few ms more than before, when the script had to
   close the menu itself after measuring.
 
+### ⌘K task search (2026-11-03)
+
+Measured in Chromium on a copy of a real event log (242 tasks, production build), typing with 150 ms between keys;
+each value is the Event Timing duration of one `input` event, handling plus the next paint (8 ms granularity, so
+16 ms is one frame).
+
+| Search | Before | After |
+| --- | --- | --- |
+| Root, "login redirect" | 340–536 ms a key | 16–32 ms a key |
+| Root, "review" (500+ skill commands match) | not measured | 16–32 ms |
+| Jump to a task, "stack" | not measured | 16–24 ms |
+
+- **Where it went.** A CPU profile of five keys spent 3.7 s in `listLiveRuns`, reached from `resolveTaskStatus` →
+  `isWaitingForDelegations`: each task row's status scanned every run in the log, and ⌘K did that for 300 tasks
+  several times a key. The runs waiting on delegations are now indexed once per state
+  (`resolveDelegationWaits`, `lib/tasks/status.ts`).
+- **What else changed.** The menu works out nothing while closed, its sections and decisions are memoized per state,
+  tasks are scored against an index built once per state (`resolveTaskIndex`), and only the best 20 task matches
+  render (100 on Jump to a task), so cmdk never scores and re-sorts hundreds of rows in the DOM. Typing now searches
+  every task, not only the newest 300.
+
 ### What is left
 
 - **Revealing Review still renders about 620 components** and Code about 650: what is left is the tabs' own effects

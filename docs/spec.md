@@ -1197,10 +1197,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 ### Bundles (2026-11-01)
 
-- **A stack of pull requests, as tasks.** A task can stack on another (Stack on another task… in the composer's When
-  to start, the Waits on menu, `•••`, ⌘K, `shinsa tasks stack-on`, `create_task`'s `stack_on_this`): it waits until
-  that task is ready to merge, not merged, then branches off its branch, and its pull request targets that branch, so
-  GitHub shows the stack. A bundle is one line in one repository (`docs/engine.md` → Bundles).
+- **A stack of pull requests, as tasks.** A task can stack on other tasks (Stack on another task… in the composer's
+  When to start, the Waits on menu, `•••`, ⌘K, `shinsa tasks stack-on`, `create_task`'s `stack_on_this` and
+  `stack_on`): it waits until each is ready to merge, not merged, then branches off the first one's branch with the
+  others merged in, and its pull request targets the first, so GitHub shows the stack. A bundle is a graph in one
+  repository: tasks fan out from one and back in to one, as freely as waits (`docs/engine.md` → Bundles).
 - **Why not just wait.** The only difference from a dependency is that the bundle merges together. That buys three
   things: the next task starts sooner; a flaw a later task finds in the root is fixed in the root's still-open pull
   request instead of a follow-up on top of a merged one (the stacked task's agent messages the task below); and each
