@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { AttentionPlace, ScopedActor, RequestOrigin } from '@shinsa/core';
 import { ATTENTION_IDLE_MS, AttentionTracker } from '../../src/http/attention.ts';
+import type { OwnerPresence } from '../../src/remote/presence.ts';
 
 interface Page {
   name: string;
@@ -136,5 +137,28 @@ describe('the attention tracker', () => {
     tracker.report(createPage('app', 'local'), true);
     expect(told).toEqual(['app:here']);
     tracker.stop();
+  });
+});
+
+describe('the owner’s presence', () => {
+  test('is here while one of your pages was used in the last five minutes, then away since you last used one', () => {
+    const reported: OwnerPresence[] = [];
+    const time = createClock();
+    const tracker = new AttentionTracker<Page>(
+      () => undefined,
+      time.clock,
+      (owner) => reported.push(owner)
+    );
+    const app = createPage('app', 'local');
+    const teammate = createPage('kai', 'remote');
+    tracker.report(teammate, true);
+    expect(reported.at(-1)).toEqual({ active: false, seenAt: null });
+    tracker.report(app, true);
+    expect(reported.at(-1)).toEqual({ active: true, seenAt: 1_000 });
+    time.advance(ATTENTION_IDLE_MS);
+    expect(reported.at(-1)).toEqual({ active: false, seenAt: 1_000 });
+    tracker.report(app, true);
+    tracker.remove(app);
+    expect(reported.at(-1)).toEqual({ active: false, seenAt: 1_000 + ATTENTION_IDLE_MS });
   });
 });

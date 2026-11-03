@@ -113,6 +113,16 @@ export interface TeamSnapshot {
   signature: string;
 }
 
+export const TEAM_PRESENCE_STATUSES = ['online', 'away', 'offline'] as const;
+
+export type TeamPresenceStatus = (typeof TEAM_PRESENCE_STATUSES)[number];
+
+export interface TeamPresence {
+  userId: string;
+  status: TeamPresenceStatus;
+  seenAt: number | null;
+}
+
 export interface TeamListView {
   tasks: TeamTask[];
   machineKey: string;
@@ -120,6 +130,33 @@ export interface TeamListView {
   updatedAt: number;
   snapshot?: TeamSnapshot;
   held?: TeamSnapshot[];
+  presence?: TeamPresence[];
+}
+
+function resolvePresenceRank(status: TeamPresenceStatus) {
+  return TEAM_PRESENCE_STATUSES.length - TEAM_PRESENCE_STATUSES.indexOf(status);
+}
+
+function resolveLaterSeen(left: number | null, right: number | null) {
+  if (left === null) return right;
+  return right === null ? left : Math.max(left, right);
+}
+
+export function mergeTeamPresence(reports: readonly (readonly TeamPresence[])[]) {
+  const merged = new Map<string, TeamPresence>();
+  for (const entry of reports.flat()) {
+    const known = merged.get(entry.userId);
+    const status =
+      known && resolvePresenceRank(known.status) > resolvePresenceRank(entry.status)
+        ? known.status
+        : entry.status;
+    merged.set(entry.userId, {
+      userId: entry.userId,
+      status,
+      seenAt: resolveLaterSeen(known?.seenAt ?? null, entry.seenAt),
+    });
+  }
+  return merged;
 }
 
 export type TeamFeedStatus = 'connecting' | 'live' | 'offline' | 'refused';

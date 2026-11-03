@@ -1838,6 +1838,43 @@ describe('a teammate on this machine', () => {
     expect(await requestStatus(channel, 'h1', `/api/tasks/${taskId}`)).toBe(403);
   });
 
+  test('takes a task over in one step, messages its agent while holding it, and gives it back', async () => {
+    const { channel, engine, taskId } = await startTeammate();
+    expect(await sendCommand(channel, 'c1', { type: 'task.message', taskId, text: 'Hello' })).toBe(
+      'handoff_scope'
+    );
+    expect(await sendCommand(channel, 'c2', { type: 'task.take_over', taskId })).toBeNull();
+    expect(engine.state.tasks[taskId]?.handoff).toMatchObject({ teamId: TEAM.id, guest: { id: KAI.id } });
+    expect(await sendCommand(channel, 'c3', { type: 'task.message', taskId, text: 'Hello' })).toBeNull();
+    expect(await sendCommand(channel, 'c4', { type: 'task.give_back', taskId })).toBeNull();
+    expect(engine.state.tasks[taskId]?.handoff ?? null).toBeNull();
+    expect(await sendCommand(channel, 'c5', { type: 'task.message', taskId, text: 'Again' })).toBe(
+      'handoff_scope'
+    );
+  });
+
+  test('the owner hands a task straight to them, and they share it when the team lets them', async () => {
+    const { channel, engine, taskId } = await startTeammate();
+    await engine.dispatch({ type: 'task.hand_to_teammate', taskId, teamId: TEAM.id, teammate: KAI });
+    expect(engine.state.tasks[taskId]?.handoff).toMatchObject({ url: null, guest: { id: KAI.id } });
+    expect(await sendCommand(channel, 'c1', { type: 'task.message', taskId, text: 'On it' })).toBeNull();
+    expect(await sendCommand(channel, 'c2', { type: 'task.share', taskId })).toBeNull();
+    expect(engine.state.tasks[taskId]?.share).toBeDefined();
+  });
+
+  test('a team that keeps sharing and taking over to its owner refuses both', async () => {
+    const { channel, opened, taskId } = await startTeammate({
+      ...DEFAULT_TEAM_PERMISSIONS,
+      takeOver: false,
+      share: false,
+    });
+    const { commands } = readEngineInfo(opened);
+    expect(commands).not.toContain('task.take_over');
+    expect(commands).not.toContain('task.share');
+    expect(await sendCommand(channel, 'c1', { type: 'task.take_over', taskId })).toBe('handoff_scope');
+    expect(await sendCommand(channel, 'c2', { type: 'task.share', taskId })).toBe('handoff_scope');
+  });
+
   test('removing them from the team closes their channel at once', async () => {
     const { channel, remote } = await startTeammate();
     remote.store.recordTeams([{ ...TEAM, members: [] }]);

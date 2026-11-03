@@ -238,6 +238,10 @@ const ShareView = Schema.Struct({
   updatedAt: Data,
 });
 
+const TeamHolder = Schema.Struct({ login: Data, name: Data, avatarUrl: Data });
+
+const TeamPresence = Schema.Struct({ userId: Data, status: Data, seenAt: Data });
+
 const TeamTask = Schema.Struct({
   task: SharedTaskRecord,
   gates: Schema.Array(SharedGate),
@@ -246,6 +250,7 @@ const TeamTask = Schema.Struct({
   owner: Data,
   ownerProfile: Schema.optionalKey(Schema.NullOr(SharedPerson)),
   machine: Data,
+  heldBy: Schema.optionalKey(Schema.NullOr(TeamHolder)),
 });
 
 const TeamSnapshot = Schema.Struct({ body: Data, signature: Data });
@@ -257,6 +262,7 @@ const TeamListView = Schema.Struct({
   updatedAt: Data,
   snapshot: Schema.optionalKey(TeamSnapshot),
   held: Schema.optionalKey(Schema.Array(TeamSnapshot)),
+  presence: Schema.optionalKey(Schema.Array(TeamPresence)),
 });
 
 export const EgressView = Schema.fromJsonString(Schema.Union([ShareView, TeamListView]));

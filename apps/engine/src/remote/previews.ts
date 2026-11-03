@@ -12,6 +12,7 @@ import {
   resolvePrivatePreviewId,
   resolvePrivatePreviewUrl,
   resolveServiceUrl,
+  isTeamTask,
   type ServiceDefinition,
   selectServiceTerminal,
   serializeBase64Url,
@@ -279,13 +280,18 @@ export class Previews implements PreviewEffects, PreviewLinks {
 
   #isStillOpen(socket: LiveSocket) {
     if (socket.userId === null) return this.#resolveShare(socket.previewId) !== null;
-    return this.#selectPrivateRun(socket.previewId) !== null && this.#isAllowed(socket.userId);
+    const run = this.#selectPrivateRun(socket.previewId);
+    return run !== null && this.#isAllowed(socket.userId, run);
   }
 
-  #isAllowed(userId: string) {
-    const { access } = this.#remote.store.file;
-    if (!access) return false;
-    return access.owner.id === userId || access.members.some((member) => member.user.id === userId);
+  #isAllowed(userId: string, run: PrivateRun) {
+    if (this.#remote.hasAccess(userId)) return true;
+    const { state } = this.#engine;
+    const task = run.taskId ? state.tasks[run.taskId] : undefined;
+    if (!task) return false;
+    return this.#remote
+      .listTeamScopes(userId)
+      .some((scope) => scope.permissions.services && isTeamTask(state, task, scope.teamId));
   }
 
   #selectConnectKey() {
@@ -357,9 +363,9 @@ export class Previews implements PreviewEffects, PreviewLinks {
     const connectKey = this.#selectConnectKey();
     if (!(token && instanceId && connectKey)) return null;
     const claim = await verifyPreviewAccessToken(connectKey, token, { instanceId, previewId }, this.#now());
-    if (!(claim && this.#isAllowed(claim.userId))) return null;
+    if (!claim) return null;
     const run = await this.#findPrivateRun(previewId);
-    return run ? { ...run, userId: claim.userId } : null;
+    return run && this.#isAllowed(claim.userId, run) ? { ...run, userId: claim.userId } : null;
   }
 
   #resolveTarget(request: Request, previewId: string): Promise<PreviewTarget | null> {

@@ -24,6 +24,7 @@ import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Remote } from '../remote/index.ts';
+import type { Presence } from '../remote/presence.ts';
 import type { TeamFeeds } from '../remote/team-feeds.ts';
 import type { ResourceMonitor } from '../resources/index.ts';
 import { edgeRuntime } from '../runtime/edge.ts';
@@ -78,7 +79,8 @@ export function createSocketHub(
   teamFeeds?: Pick<TeamFeeds, 'subscribe' | 'snapshot'>,
   version = DEVELOPMENT_VERSION,
   resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>,
-  clock?: AttentionClock
+  clock?: AttentionClock,
+  presence?: Pick<Presence, 'recordOwner'>
 ) {
   const sockets = new Set<Socket>();
   const views = new WeakMap<SocketData, ReadonlySet<string>>();
@@ -87,7 +89,8 @@ export function createSocketHub(
   let unsubscribeResources: (() => void) | null = null;
   const attention = new AttentionTracker<Socket>(
     (socket, where) => send(socket, { type: 'attention', where }),
-    clock
+    clock,
+    presence ? (owner) => presence.recordOwner(owner) : null
   );
 
   function broadcast(message: ServerMessage) {

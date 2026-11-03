@@ -1,4 +1,5 @@
 import type { AttentionPlace, ScopedActor, RequestOrigin } from '@shinsa/core';
+import type { OwnerPresence } from '../remote/presence.ts';
 
 export const ATTENTION_IDLE_MS = 5 * 60 * 1000;
 
@@ -29,17 +30,27 @@ export class AttentionTracker<Member extends AttentionMember> {
   readonly #clock: AttentionClock;
   readonly #activeAt = new Map<Member, number>();
   readonly #told = new Map<Member, AttentionPlace | null>();
+  readonly #onPresence: ((owner: OwnerPresence) => void) | null;
   #cancelExpiry: (() => void) | null = null;
+  #seenAt: number | null = null;
 
-  constructor(tell: (member: Member, where: AttentionPlace) => void, clock = SYSTEM_CLOCK) {
+  constructor(
+    tell: (member: Member, where: AttentionPlace) => void,
+    clock = SYSTEM_CLOCK,
+    onPresence: ((owner: OwnerPresence) => void) | null = null
+  ) {
     this.#tell = tell;
     this.#clock = clock;
+    this.#onPresence = onPresence;
   }
 
   report(member: Member, active: boolean) {
     if (member.data.guest) return;
     if (!this.#told.has(member)) this.#told.set(member, null);
-    if (active && isOwnersOwn(member)) this.#activeAt.set(member, this.#clock.now());
+    if (active && isOwnersOwn(member)) {
+      this.#seenAt = this.#clock.now();
+      this.#activeAt.set(member, this.#seenAt);
+    }
     this.#sync();
   }
 
@@ -77,6 +88,7 @@ export class AttentionTracker<Member extends AttentionMember> {
     this.#cancelExpiry = holder
       ? this.#clock.schedule(expiresAt - this.#clock.now(), () => this.#sync())
       : null;
+    this.#onPresence?.({ active: holder !== null, seenAt: this.#seenAt });
   }
 }
 

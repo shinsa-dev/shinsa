@@ -11,6 +11,7 @@ import {
   parseTeamJoinUrl,
   type RemoteMember,
   type RemoteTeam,
+  type Task,
   resolveTeamJoinUrl,
   serializeBase64Url,
   serializePublicKey,
@@ -29,6 +30,7 @@ import type { ChannelPeer } from './channel.ts';
 import { type RemoteControl, selectRemoteFailureTag } from './client/index.ts';
 import { EgressGate } from './egress/service.ts';
 import type { Remote } from './index.ts';
+import type { Presence } from './presence.ts';
 import { createChannelEphemeral, type HelloAnswer, type LiveShare, ShareChannel } from './share-channel.ts';
 import type { Shares, ShareTranscripts } from './shares.ts';
 import { resolveOwnerProfile } from './store.ts';
@@ -63,6 +65,7 @@ export interface TeamsOptions {
   shares: Pick<Shares, 'resolveLive'>;
   transcripts: Pick<ShareTranscripts, 'subscribe'>;
   held?: Pick<TeamFeeds, 'listHeld' | 'subscribeHeld'>;
+  presence?: Pick<Presence, 'listTeam' | 'openViewer' | 'closeViewer' | 'subscribe'>;
   now?: () => number;
   random?: (bytes: number) => Uint8Array<ArrayBuffer>;
 }
@@ -91,21 +94,26 @@ export class Teams implements TeamLinks {
   readonly #remote: Remote;
   readonly #shares: TeamsOptions['shares'];
   readonly #held: TeamsOptions['held'];
+  readonly #presence: TeamsOptions['presence'];
   readonly #now: () => number;
   readonly #random: (bytes: number) => Uint8Array<ArrayBuffer>;
   readonly #channels = new Map<ShareChannel<TeamSubject>, () => void>();
+  readonly #viewers = new Map<ShareChannel<TeamSubject>, string>();
+  readonly #releasing = new Set<string>();
 
   constructor(options: TeamsOptions) {
     this.#engine = options.engine;
     this.#remote = options.remote;
     this.#shares = options.shares;
     this.#held = options.held;
+    this.#presence = options.presence;
     this.#now = options.now ?? Date.now;
     this.#random = options.random ?? createRandom;
     options.remote.subscribe(() => this.#syncChannels());
     options.engine.subscribe(() => this.#syncChannels());
     options.transcripts.subscribe((runId) => this.#pushTranscript(runId));
     options.held?.subscribeHeld(() => this.#pushLists());
+    options.presence?.subscribe(() => this.#pushLists());
   }
 
   #pushLists() {
@@ -331,11 +339,17 @@ export class Teams implements TeamLinks {
   openChannel(peer: ChannelPeer, userId: string) {
     const channel = new ShareChannel<TeamSubject>(peer, {
       name: 'team view',
-      authorize: (hello) => this.#authorize(hello, userId),
+      authorize: async (hello) => {
+        const answer = await this.#authorize(hello, userId);
+        if (answer && 'subject' in answer) this.#openViewer(channel, userId);
+        return answer;
+      },
       resolveLive: (subject) => this.#resolveLive(subject),
     });
     const release = this.#remote.access.acquire(() => {
-      if (this.#channels.delete(channel)) this.#endChannel(channel, TEAM_REMOTE_CHANGED);
+      if (!this.#channels.delete(channel)) return;
+      this.#closeViewer(channel);
+      this.#endChannel(channel, TEAM_REMOTE_CHANGED);
     });
     this.#channels.set(channel, release);
     return channel;
@@ -349,7 +363,21 @@ export class Teams implements TeamLinks {
   #releaseChannel(channel: ShareChannel<TeamSubject>) {
     const release = this.#channels.get(channel);
     this.#channels.delete(channel);
+    this.#closeViewer(channel);
     release?.();
+  }
+
+  #openViewer(channel: ShareChannel<TeamSubject>, userId: string) {
+    if (this.#viewers.has(channel)) return;
+    this.#viewers.set(channel, userId);
+    this.#presence?.openViewer(userId);
+  }
+
+  #closeViewer(channel: ShareChannel<TeamSubject>) {
+    const userId = this.#viewers.get(channel);
+    if (userId === undefined) return;
+    this.#viewers.delete(channel);
+    this.#presence?.closeViewer(userId);
   }
 
   #endChannel(channel: ShareChannel<TeamSubject>, reason: string) {
@@ -404,6 +432,10 @@ export class Teams implements TeamLinks {
     const updatedAt = this.#now();
     const snapshot = await this.#signList(subject.teamId, tasks, updatedAt);
     const held = this.#held?.listHeld(subject.teamId) ?? [];
+    const team = this.#store.selectTeam(subject.teamId);
+    const presence = team
+      ? (this.#presence?.listTeam(team, this.#store.file.access?.owner.id ?? null) ?? [])
+      : [];
     const view: TeamListView = {
       tasks,
       machineKey: publicKey,
@@ -411,6 +443,7 @@ export class Teams implements TeamLinks {
       updatedAt,
       ...(snapshot ? { snapshot } : {}),
       ...(held.length > 0 ? { held } : {}),
+      ...(presence.length > 0 ? { presence } : {}),
     };
     return { view, files: [] };
   }
@@ -422,7 +455,34 @@ export class Teams implements TeamLinks {
     return signTeamSnapshot(privateKey, { teamId, instanceId, tasks, updatedAt });
   }
 
+  #isHoldKept(task: Task) {
+    const holder = task.handoff?.teamId ? task.handoff.guest : null;
+    if (!(holder && task.handoff?.teamId)) return true;
+    const { teamId } = task.handoff;
+    return (
+      this.#remote.resolveTeamScope(holder.id, teamId) !== null &&
+      isTeamTask(this.#engine.state, task, teamId)
+    );
+  }
+
+  #releaseHolds() {
+    for (const task of Object.values(this.#engine.state.tasks)) {
+      if (this.#isHoldKept(task) || this.#releasing.has(task.id)) continue;
+      this.#releasing.add(task.id);
+      this.#engine
+        .dispatch({ type: 'handoff.remove', taskId: task.id })
+        .catch((error: unknown) => {
+          log.warn('[Teams] Could not end a teammate’s hold on a task', {
+            taskId: task.id,
+            error: describeError(error),
+          });
+        })
+        .finally(() => this.#releasing.delete(task.id));
+    }
+  }
+
   #syncChannels() {
+    this.#releaseHolds();
     for (const channel of [...this.#channels.keys()]) {
       const subject = channel.subject;
       if (!subject) continue;

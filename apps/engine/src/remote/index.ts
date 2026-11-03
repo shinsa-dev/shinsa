@@ -100,6 +100,8 @@ const GUEST_FALLBACK_LOGIN = 'guest';
 
 const NOWHERE: ScopedActor['scope'] = { kind: 'task', taskId: '' };
 
+export type TeamScope = Extract<ScopedActor['scope'], { kind: 'team' }>;
+
 export function resolveMachineName(name = hostname()) {
   const bare = name.replace(/\.local$/i, '');
   if (!bare) return 'Machine';
@@ -418,7 +420,7 @@ export class Remote {
     if (!this.#claimer) return { kind: 'refused', reason: HANDOFF_UNAVAILABLE };
     const refusal = await this.#claimer(handoff.taskId, user);
     if (refusal) return { kind: 'refused', reason: refusal };
-    if (!this.#hasAccess(user.id)) {
+    if (!this.hasAccess(user.id)) {
       const guest = await this.#addGuest(user.id);
       if (typeof guest === 'string') return { kind: 'refused', reason: guest };
       this.#updateGuests((guests) => [...guests.filter((entry) => entry.user.id !== user.id), guest]);
@@ -467,10 +469,8 @@ export class Remote {
 
   #resolveScope(enrolled: RemoteDevice): ScopedActor['scope'] | null {
     if (enrolled.taskId) return { kind: 'task', taskId: enrolled.taskId };
-    if (!enrolled.teamId || this.#hasAccess(enrolled.userId)) return null;
-    const team = this.#selectTeamAccess(enrolled.userId, enrolled.teamId);
-    if (!team) return NOWHERE;
-    return { kind: 'team', teamId: team.id, permissions: resolveMemberPermissions(team, enrolled.userId) };
+    if (!enrolled.teamId || this.hasAccess(enrolled.userId)) return null;
+    return this.resolveTeamScope(enrolled.userId, enrolled.teamId) ?? NOWHERE;
   }
 
   #resolveGuest(device: string): ScopedActor | null {
@@ -490,6 +490,19 @@ export class Remote {
       !this.isOwner(userId) &&
       isTeamPerson(team, userId);
     return reaches ? team : null;
+  }
+
+  resolveTeamScope(userId: string, teamId: string): TeamScope | null {
+    const team = this.#selectTeamAccess(userId, teamId);
+    if (!team) return null;
+    return { kind: 'team', teamId: team.id, permissions: resolveMemberPermissions(team, userId) };
+  }
+
+  listTeamScopes(userId: string) {
+    return this.store.file.teams.flatMap((team) => {
+      const scope = this.resolveTeamScope(userId, team.id);
+      return scope ? [scope] : [];
+    });
   }
 
   resolveTeamGrant(userId: string, teamId: string) {
@@ -588,7 +601,7 @@ export class Remote {
       enrolledAt: this.#now(),
       lastSeenAt: null,
       userId,
-      ...(this.#hasAccess(userId) ? {} : { teamId: grant.teamId }),
+      ...(this.hasAccess(userId) ? {} : { teamId: grant.teamId }),
     });
     this.#publish();
     return true;
@@ -706,7 +719,7 @@ export class Remote {
     });
   }
 
-  #hasAccess(userId: string) {
+  hasAccess(userId: string) {
     const { access } = this.store.file;
     if (!access) return false;
     return access.owner.id === userId || access.members.some((member) => member.user.id === userId);

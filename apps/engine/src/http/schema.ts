@@ -22,6 +22,7 @@ import type { EngineRestarter, ServerInstance } from '../instance/index.ts';
 import type { Onboarding } from '../onboarding/index.ts';
 import type { Remote } from '../remote/index.ts';
 import type { PlacementAsker } from '../remote/placement.ts';
+import type { Presence } from '../remote/presence.ts';
 import type { PreviewLinks } from '../remote/previews.ts';
 import type { ShareLinks } from '../remote/shares.ts';
 import type { TeamFeeds } from '../remote/team-feeds.ts';
@@ -75,6 +76,7 @@ export interface HttpContext {
   shares?: ShareLinks;
   teams?: Teams;
   teamFeeds?: TeamFeeds;
+  presence?: Presence;
   previews?: PreviewLinks;
   slack?: Slack;
   config: ServerConfig;

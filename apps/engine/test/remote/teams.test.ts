@@ -29,6 +29,7 @@ import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
 import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
+import { Presence } from '../../src/remote/presence.ts';
 import { TEAM_REFUSALS, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
@@ -89,6 +90,7 @@ interface SetUp {
   patch?: (state: ShinsaState) => void;
   resolveLive?: () => Promise<never>;
   held?: TeamsOptions['held'];
+  presence?: Presence;
 }
 
 function setUp(options: SetUp = {}) {
@@ -145,6 +147,7 @@ function setUp(options: SetUp = {}) {
       },
     },
     ...(options.held ? { held: options.held } : {}),
+    ...(options.presence ? { presence: options.presence } : {}),
     now: () => 50,
     random: (bytes) => new Uint8Array(bytes).fill(6),
   });
@@ -409,6 +412,40 @@ describe('a team view of this machine', () => {
     await until('Mona’s view ends', () => mona.closed !== null);
     expect(mona.closed?.reason).toBe(TEAM_REMOTE_CHANGED);
     expect(teams.acceptsViewer()).toBe(false);
+  });
+
+  test('says who is here: the owner by their own pages, a teammate while a view of theirs is open', async () => {
+    const presence = new Presence(() => 50);
+    const { teams } = setUp({ presence });
+    const kai = await openViewer(teams, KAI.id, LIST);
+    expect((kai.views()[0] as TeamListView).presence).toEqual([
+      { userId: MONA.id, status: 'away', seenAt: null },
+      { userId: KAI.id, status: 'online', seenAt: 50 },
+    ]);
+    presence.recordOwner({ active: true, seenAt: 40 });
+    await until('the list is pushed again', () => kai.views().length === 2);
+    expect((kai.views().at(-1) as TeamListView).presence?.[0]).toEqual({
+      userId: MONA.id,
+      status: 'online',
+      seenAt: 40,
+    });
+  });
+
+  test('a teammate whose views all closed shows as last seen here', async () => {
+    const presence = new Presence(() => 50);
+    const { teams } = setUp({ presence });
+    const kai = await openViewer(teams, KAI.id, LIST);
+    const mona = await openViewer(teams, MONA.id, LIST);
+    await teams.removeMember('team1', KAI.id);
+    await until('Kai’s view ends', () => kai.closed !== null);
+    await until('the list is pushed again', () => mona.views().length > 1);
+    expect((mona.views().at(-1) as TeamListView).presence).toEqual([
+      { userId: MONA.id, status: 'away', seenAt: null },
+    ]);
+    expect(presence.listTeam(createTeam(), MONA.id)).toEqual([
+      { userId: MONA.id, status: 'away', seenAt: null },
+      { userId: KAI.id, status: 'offline', seenAt: 50 },
+    ]);
   });
 
   test('logs a view it could not close cleanly', async () => {
@@ -741,6 +778,54 @@ describe('team access to this machine', () => {
     expect(mona?.grant).toBeUndefined();
     expect(remote.store.file.grants.map((grant) => grant.userId)).toEqual([KAI.id, BOB.id]);
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineMemberAdd)).toBe(false);
+  });
+
+  test('a teammate’s hold on a task ends once they leave the team or the task leaves it', async () => {
+    const hold = (guest: typeof KAI) => ({ at: 1, url: null, guest, claimedAt: 1, teamId: 'team1' });
+    const { teams, stub } = setUp({
+      patch: (state) => {
+        state.tasks['task-1'] = createTask({ repoId: 'repo-1', activity: [], handoff: hold(KAI) });
+        state.tasks['task-3'] = createTask({
+          id: 'task-3',
+          repoId: 'repo-1',
+          activity: [],
+          handoff: hold(BOB),
+        });
+        state.tasks['task-4'] = createTask({ id: 'task-4', repoId: 'repo-1', activity: [], handoff: null });
+      },
+    });
+    const released = () =>
+      stub.dispatched.flatMap((command) => (command.type === 'handoff.remove' ? [command.taskId] : []));
+    stub.notify();
+    await until('Bob’s hold ends', () => released().includes('task-3'));
+    expect(released()).not.toContain('task-1');
+    await teams.removeMember('team1', KAI.id);
+    await until('Kai’s hold ends', () => released().includes('task-1'));
+    expect(released()).not.toContain('task-4');
+  });
+
+  test('a hold on a task that left the team ends too, and a failed release is logged and tried again', async () => {
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const { stub } = setUp({
+      patch: (state) => {
+        state.tasks['task-1'] = createTask({
+          repoId: 'repo-1',
+          activity: [],
+          handoff: { at: 1, url: null, guest: KAI, claimedAt: 1, teamId: 'team1' },
+        });
+      },
+    });
+    stub.reject((command) => command.type === 'handoff.remove');
+    if (stub.state.projects.p1) stub.state.projects.p1.teamIds = [];
+    stub.notify();
+    await until('the release is logged', () => warn.mock.calls.length > 0);
+    expect(warn.mock.calls[0]?.[0]).toBe('[Teams] Could not end a teammate’s hold on a task');
+    stub.notify();
+    await until(
+      'it is tried again',
+      () => stub.dispatched.filter((command) => command.type === 'handoff.remove').length > 1
+    );
+    warn.mockRestore();
   });
 
   test('no grant while remote access is off, or for a team this machine has no key for', () => {

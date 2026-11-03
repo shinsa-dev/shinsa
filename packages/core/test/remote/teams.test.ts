@@ -7,6 +7,7 @@ import {
   DEFAULT_TEAM_PERMISSIONS,
   FULL_TEAM_PERMISSIONS,
   isTeamPerson,
+  mergeTeamPresence,
   resolveMemberPermissions,
   resolveTeamPermissions,
   createTeamHello,
@@ -245,5 +246,31 @@ describe('resolveMemberPermissions', () => {
     expect(isTeamPerson(team, 'mona')).toBe(true);
     expect(isTeamPerson(team, 'kai')).toBe(true);
     expect(isTeamPerson(team, 'octo')).toBe(false);
+  });
+});
+
+describe('mergeTeamPresence', () => {
+  test('keeps each person’s liveliest status and latest sighting across every machine', () => {
+    const merged = mergeTeamPresence([
+      [
+        { userId: 'mona', status: 'away', seenAt: 100 },
+        { userId: 'kai', status: 'offline', seenAt: 300 },
+      ],
+      [
+        { userId: 'kai', status: 'online', seenAt: 200 },
+        { userId: 'mona', status: 'offline', seenAt: null },
+        { userId: 'tess', status: 'offline', seenAt: null },
+      ],
+      [{ userId: 'tess', status: 'offline', seenAt: 50 }],
+    ]);
+    expect([...merged.values()]).toEqual([
+      { userId: 'mona', status: 'away', seenAt: 100 },
+      { userId: 'kai', status: 'online', seenAt: 300 },
+      { userId: 'tess', status: 'offline', seenAt: 50 },
+    ]);
+  });
+
+  test('is empty when no machine reports anyone', () => {
+    expect(mergeTeamPresence([[], []]).size).toBe(0);
   });
 });

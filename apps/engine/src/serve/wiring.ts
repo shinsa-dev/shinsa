@@ -29,6 +29,7 @@ import {
   resolveMachineName,
 } from '../remote/index.ts';
 import { createPlacementAsker } from '../remote/placement.ts';
+import { Presence } from '../remote/presence.ts';
 import { Previews } from '../remote/previews.ts';
 import { ShareClock } from '../remote/share-clock.ts';
 import { createShareDescriber } from '../remote/share-describe.ts';
@@ -114,7 +115,8 @@ export function createServices(
   const shares = new Shares({ engine, remote, evidence, transcripts });
   const handoffs = new Handoffs({ engine, remote });
   const teamFeeds = new TeamFeeds({ remote });
-  const teams = new Teams({ engine, remote, shares, transcripts, held: teamFeeds });
+  const presence = new Presence();
+  const teams = new Teams({ engine, remote, shares, transcripts, held: teamFeeds, presence });
   const slack = new Slack({ engine, remote, ask: quick.classify });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
@@ -183,6 +185,7 @@ export function createServices(
     shares,
     teams,
     teamFeeds,
+    presence,
     previews,
     slack,
     inbox,
@@ -275,6 +278,7 @@ export function startHttp(
     shares: services.shares,
     teams: services.teams,
     teamFeeds: services.teamFeeds,
+    presence: services.presence,
     previews: services.previews,
     slack: services.slack,
     restarter: createServiceRestarter(engine, {

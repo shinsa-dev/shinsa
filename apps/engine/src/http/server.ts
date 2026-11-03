@@ -201,7 +201,9 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
         remote,
         context.teamFeeds,
         (context.instance ?? createServerInstance()).version,
-        context.resources
+        context.resources,
+        undefined,
+        context.presence
       )
     ),
     (opened) => Effect.sync(() => opened.stop())
