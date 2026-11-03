@@ -19,6 +19,8 @@ export const JSON_INDENT = 2;
 
 export const NEWLINE = 0x0a;
 
+export type JsonFileRead<A> = { readonly value: A | null; readonly problem: string | null };
+
 const TextEntries = Schema.Record(
   Schema.String,
   Schema.String.pipe(Schema.catchDecoding(() => Effect.succeedNone))

@@ -49,6 +49,8 @@ describe('the kept team snapshots', () => {
     expect(readTeamSnapshotsFile(odd)).toEqual([{ ...HELD, snapshot: null }]);
     writeFileSync(odd, JSON.stringify({ lists: 'none' }));
     expect(readTeamSnapshotsFile(odd)).toEqual([]);
+    writeFileSync(odd, 'null');
+    expect(readTeamSnapshotsFile(odd)).toEqual([]);
   });
 
   test('logs a list it could not keep', () => {

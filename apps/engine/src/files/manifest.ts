@@ -25,6 +25,10 @@ export function readPackageManifest(dir: string): PackageManifest | null {
   return Option.getOrNull(Option.flatMap(readText(join(dir, PACKAGE_MANIFEST)), decodeManifest));
 }
 
+export function findManifestFile<A>(path: string, schema: Schema.Decoder<A>): A {
+  return Schema.decodeUnknownSync(schema)(readFileSync(path, 'utf8'));
+}
+
 export function listDependencyNames(manifest: PackageManifest) {
   return [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.devDependencies ?? {})];
 }

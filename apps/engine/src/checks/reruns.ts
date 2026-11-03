@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { listDependencyNames, listWorkspacePatterns, readPackageManifest } from '../files/manifest.ts';
+import { PACKAGE_MANIFEST } from '../files/schema.ts';
 import type { FailedTestCase, FailedTestGroup, FailedTests, TestRunner } from './schema.ts';
 
 export type { FailedTestCase, FailedTestGroup, FailedTests, TestRunner } from './schema.ts';
@@ -86,7 +87,7 @@ function isInside(path: string, root: string) {
 
 function resolvePackageDir(file: string, root: string) {
   for (let dir = dirname(file); isInside(dir, root); dir = dirname(dir)) {
-    if (existsSync(join(dir, 'package.json'))) return dir;
+    if (existsSync(join(dir, PACKAGE_MANIFEST))) return dir;
     if (dir === root) break;
   }
   return null;

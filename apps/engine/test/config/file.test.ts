@@ -1,12 +1,9 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  ConfigStore,
-  createMachineConfig,
-  parseMachineConfig,
-  readMachineConfig,
-} from '../../src/config/file.ts';
+import { ConfigStore } from '../../src/config/file.ts';
+import { createMachineConfig, parseMachineConfig } from '../../src/config/machine/decode.ts';
+import { readMachineConfig } from '../../src/config/machine/index.ts';
 import { log } from '../../src/log/index.ts';
 import { createTempDir } from '../helpers/index.ts';
 

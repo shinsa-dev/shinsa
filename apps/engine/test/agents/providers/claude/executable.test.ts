@@ -37,6 +37,8 @@ describe('versions', () => {
     writeFileSync(bare, '{}');
     expect(resolveSdkClaudeVersion(bare)).toBe('0.0.0');
     expect(resolveSdkPackage(bare)).toEqual({ version: '0.0.0', claudeCodeVersion: '0.0.0' });
+    writeFileSync(bare, JSON.stringify({ version: 3, claudeCodeVersion: '2.1.0' }));
+    expect(resolveSdkPackage(bare)).toEqual({ version: '0.0.0', claudeCodeVersion: '2.1.0' });
     expect(resolveSdkPackage().version).toMatch(/^0\.\d+\.\d+$/);
   });
 
