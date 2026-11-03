@@ -29,6 +29,7 @@ import { Socket } from 'effect/socket';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
+import { canPageNotify } from '@/lib/notifications/browser.ts';
 import { isPageActive } from '@/lib/notifications/presence.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
@@ -136,6 +137,7 @@ export interface ConnectionOptions {
   transport?: SocketTransport;
   surface?: () => Surface;
   isActive?: () => boolean;
+  canAlert?: () => boolean;
   schedule?: Scheduler;
 }
 
@@ -309,8 +311,13 @@ export class Connection implements ShinsaConnection {
 
   selectAttention = (_taskId?: string | null) => this.#attention;
 
+  #canAlert() {
+    return (this.#options.canAlert ?? canPageNotify)();
+  }
+
   reportPresence = () => {
-    if (hasEngineFeature(this.#engine, 'attention')) this.#send({ type: 'presence', active: true });
+    if (hasEngineFeature(this.#engine, 'attention') && this.#canAlert())
+      this.#send({ type: 'presence', active: true });
   };
 
   selectMachine = (_id: string): MachineView | null => null;
@@ -620,7 +627,10 @@ export class Connection implements ShinsaConnection {
       case 'engine':
         this.#engine = message.engine;
         if (hasEngineFeature(message.engine, 'attention'))
-          this.#send({ type: 'presence', active: (this.#options.isActive ?? isPageActive)() });
+          this.#send({
+            type: 'presence',
+            active: (this.#options.isActive ?? isPageActive)() && this.#canAlert(),
+          });
         this.#state.publish();
         return;
       case 'task.detail':

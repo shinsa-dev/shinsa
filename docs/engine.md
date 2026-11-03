@@ -6706,7 +6706,9 @@ machine's app notifies only at that machine.
 **The device you use notifies** (`AttentionTracker`, `apps/engine/src/http/attention.ts`). Each page of the
 owner's (a local socket, the Mac app's included, or a sealed channel whose account owns the machine) says when you
 use it with `presence { active: true }`: when it comes forward (focus, or the tab shown again) and at most every 15 s
-while you click, type, scroll or move the pointer in it. The tracker keeps when each one was last used and answers
+while you click, type, scroll or move the pointer in it, but only a page that can show you a notification: the Mac
+app, or a browser with notifications switched on and allowed (`canPageNotify`), so a tab that cannot notify never
+silences the Mac app. The tracker keeps when each one was last used and answers
 every page that asked with `attention { where }`: `here` for the page used last, `elsewhere` for the owner's others,
 and `nowhere` once that page has been idle for five minutes (`ATTENTION_IDLE_MS`, a timer that fires then), when it
 closes and none other was used in that time, or always for a member's page and never for a share link's. A page

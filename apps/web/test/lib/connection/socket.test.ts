@@ -77,10 +77,11 @@ function entry(id: string): ChatEntry {
   return { id, kind: 'note', text: id } as unknown as ChatEntry;
 }
 
-function setup() {
+function setup(canAlert?: () => boolean) {
   const sockets: FakeSocket[] = [];
   const retries: PendingRetry[] = [];
   const subject = new Connection({
+    canAlert,
     transport: createSocketTransport(() => {
       const socket = new FakeSocket();
       sockets.push(socket);
@@ -649,7 +650,7 @@ describe('Connection attention', () => {
   const presences = (socket: FakeSocket) => socket.sent.filter((message) => message.type === 'presence');
 
   it('says whether this page is in use once the engine routes attention, and every time you use it after', () => {
-    const { subject, latest } = setup();
+    const { subject, latest } = setup(() => true);
     subject.start();
     latest().open();
     subject.reportPresence();
@@ -666,6 +667,15 @@ describe('Connection attention', () => {
     ]);
   });
 
+  it('never claims you are here from a page that cannot show you a notification', () => {
+    const { subject, latest } = setup(() => false);
+    subject.start();
+    latest().open();
+    latest().receive({ type: 'engine', engine: resolveEngineInfo('1.2.0') });
+    subject.reportPresence();
+    expect(presences(latest())).toEqual([{ type: 'presence', active: false }]);
+  });
+
   it('asks the page whether it is in use when it is given a check', () => {
     const sockets: FakeSocket[] = [];
     const subject = new Connection({
@@ -675,6 +685,7 @@ describe('Connection attention', () => {
         return socket;
       }),
       isActive: () => true,
+      canAlert: () => true,
     });
     subject.start();
     sockets[0]?.open();

@@ -1,4 +1,5 @@
 import { isDesktop, notifyDesktop } from '@/lib/desktop.ts';
+import { readNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import type { DecisionNotice } from './attention.ts';
 import { type NotificationWorker, selectNotificationWorker } from './worker.ts';
 
@@ -7,6 +8,14 @@ type NotificationPermissionState = NotificationPermission | 'unsupported';
 export function readNotificationPermission(): NotificationPermissionState {
   if (isDesktop()) return 'granted';
   return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+}
+
+export function canPageNotify(
+  desktop = isDesktop(),
+  notify = readNotificationPreferences().notify,
+  permission = readNotificationPermission()
+) {
+  return desktop || (notify !== 'never' && permission === 'granted');
 }
 
 export function requestNotificationPermission(): Promise<NotificationPermissionState> {

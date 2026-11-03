@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import {
+  canPageNotify,
   dismissDecisionNotification,
   readNotificationPermission,
   requestNotificationPermission,
@@ -35,6 +36,19 @@ let fake: ReturnType<typeof installNotifications> | null = null;
 afterEach(() => {
   fake?.restore();
   fake = null;
+});
+
+describe('canPageNotify', () => {
+  it('lets the Mac app always alert, and a browser only once notifications are on and allowed', () => {
+    expect(canPageNotify(true, 'never', 'denied')).toBe(true);
+    expect(canPageNotify(false, 'always', 'granted')).toBe(true);
+    expect(canPageNotify(false, 'unfocused', 'granted')).toBe(true);
+    expect(canPageNotify(false, 'never', 'granted')).toBe(false);
+    expect(canPageNotify(false, 'always', 'default')).toBe(false);
+    expect(canPageNotify(false, 'always', 'denied')).toBe(false);
+    expect(canPageNotify(false, 'always', 'unsupported')).toBe(false);
+    expect(typeof canPageNotify()).toBe('boolean');
+  });
 });
 
 describe('browser notifications', () => {
