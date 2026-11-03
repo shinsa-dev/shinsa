@@ -72,6 +72,14 @@ function mergeRecords(parts: FleetPart[], key: (typeof FLEET_RECORDS)[number]) {
   return Object.assign({}, ...parts.map((part) => part.state[key])) as WireState[typeof key];
 }
 
+function mergePresence(parts: FleetPart[]) {
+  const presence: Record<string, number> = {};
+  for (const part of parts)
+    for (const [hour, count] of Object.entries(part.state.presence ?? {}))
+      presence[hour] = (presence[hour] ?? 0) + count;
+  return presence;
+}
+
 export function listSharedHandles(parts: FleetPart[]) {
   const seen = new Map<string, string>();
   const shared = new Set<string>();
@@ -100,6 +108,7 @@ export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
     seq: parts.reduce((total, part) => total + part.state.seq, 0),
     taskNumbers: Object.assign({}, ...parts.map((part) => part.state.taskNumbers)),
     onBehalfActions: parts.flatMap((part) => part.state.onBehalfActions),
+    presence: mergePresence(parts),
   };
   for (const key of FLEET_RECORDS) Object.assign(state, { [key]: mergeRecords(parts, key) });
   return { state, owners, sharedHandles };

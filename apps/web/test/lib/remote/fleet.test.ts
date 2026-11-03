@@ -252,6 +252,17 @@ describe('merging the state of several machines', () => {
     expect(mergeFleetStates([])).toBeNull();
   });
 
+  it('adds up your hours from every machine, and reads a machine that sends none as none', () => {
+    const { presence: _, ...older } = createWire(1);
+    const merged = mergeFleetStates([
+      { id: 'm1', state: createWire(1, { presence: { '10': 2, '11': 1 } }) },
+      { id: 'm2', state: createWire(1, { presence: { '11': 3 } }) },
+      { id: 'm3', state: older as WireState },
+    ]);
+    expect(merged?.state.presence).toEqual({ '10': 2, '11': 4 });
+    expect(merged?.owners.has('10')).toBe(false);
+  });
+
   it('is open when any machine is, connecting while one still tries, and closed otherwise', () => {
     expect(resolveFleetStatus(['closed', 'open'])).toBe('open');
     expect(resolveFleetStatus(['closed', 'connecting'])).toBe('connecting');
