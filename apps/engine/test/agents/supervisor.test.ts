@@ -29,7 +29,15 @@ import { log } from '../../src/log/index.ts';
 import { ProcessLedger } from '../../src/resources/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
-import { createGitRepo, createTempDir, createTestConfig, git, until, writeFiles } from '../helpers/index.ts';
+import {
+  captureLogs,
+  createGitRepo,
+  createTempDir,
+  createTestConfig,
+  git,
+  until,
+  writeFiles,
+} from '../helpers/index.ts';
 import {
   createGate,
   createRepo,
@@ -253,16 +261,15 @@ describe('starting and ending runs', () => {
     expect(places[0]).toEqual({ repoPath: expect.any(String), project: null });
     sessions.started[0]?.finish();
     await first;
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const second = setup(withTask(createTempDir()), { startSession: sessions.startSession, extensions });
     const running = second.supervisor.execute('run-1');
     await until('the second session', () => sessions.started.length === 2);
     expect(sessions.started[1]?.input.extensions).toBeUndefined();
-    expect(warn).toHaveBeenCalledWith('[Runs] Could not resolve the MCP servers and skills for a run', {
-      runId: 'run-1',
-      error: 'extensions.json is gone',
-    });
-    warn.mockRestore();
+    expect(logs.fieldsOf('[Runs] Could not resolve the MCP servers and skills for a run')).toEqual([
+      { runId: 'run-1', error: 'extensions.json is gone' },
+    ]);
+    logs.restore();
     sessions.started[1]?.finish();
     await running;
   });
@@ -672,6 +679,7 @@ describe('one agent at a time in a worktree', () => {
       const first = supervisor.execute('run-1');
       await until('the first session', () => sessions.started.length === 1);
       const second = supervisor.execute('run-2');
+      await until('the second run to wait', () => set.mock.calls.some(([, delay]) => delay === 987_654));
       sessions.started[0]?.finish();
       await until('the second session', () => sessions.started.length === 2);
       sessions.started[1]?.finish();
@@ -696,7 +704,7 @@ describe('a session that never settles', () => {
     const wedged = createSessions({ wedged: true });
     const healthy = createSessions();
     let started = 0;
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const { supervisor } = setup(withTask(createTempDir(), [createRun(), createRun({ id: 'run-2' })]), {
       startSession: (input) => {
         started += 1;
@@ -711,18 +719,14 @@ describe('a session that never settles', () => {
       const second = supervisor.execute('run-2');
       await until('the second session', () => healthy.started.length === 1);
       expect(wedged.started[0]?.cancelled).toBe(true);
-      expect(warn).toHaveBeenCalledWith(
-        '[Runs] A run did not stop in time, so Shinsa stopped waiting for it',
-        {
-          runId: 'run-1',
-          taskId: 'task-1',
-        }
-      );
+      expect(logs.fieldsOf('[Runs] A run did not stop in time, so Shinsa stopped waiting for it')).toEqual([
+        { runId: 'run-1', taskId: 'task-1' },
+      ]);
       healthy.started[0]?.finish();
       await second;
       await supervisor.quiesce('task-1');
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 
@@ -736,6 +740,21 @@ describe('a session that never settles', () => {
     await until('the session', () => sessions.started.length === 1);
     await supervisor.cancel('run-1');
     expect(sessions.started[0]?.cancelled).toBe(true);
+  });
+
+  test('a run stuck before its session that shutdown interrupts still returns to its caller', async () => {
+    const leased: string[] = [];
+    const { supervisor } = setup(withTask(createTempDir()), {
+      accounts: createBroker((input) => {
+        leased.push(input.runId);
+        return new Promise(() => undefined);
+      }),
+      stopMs: 20,
+    });
+    const running = supervisor.execute('run-1');
+    await until('the lease', () => leased.length === 1);
+    await supervisor.interruptForShutdown();
+    expect(await running).toBeUndefined();
   });
 
   test('a shutdown with a session that never settles still finishes', async () => {
@@ -2058,6 +2077,20 @@ describe('steering windows', () => {
     await Promise.all([first, second]);
   });
 
+  test('a note from Shinsa that no running turn takes is never sent as your message', async () => {
+    const sessions = createSessions({ refuseSteer: true });
+    const { supervisor, dispatched } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+    });
+    const running = supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    await supervisor.steer('run-1', 'Another task changes a.ts.', undefined, 'shinsa');
+    sessions.started[0]?.finish();
+    await running;
+    await supervisor.steer('run-1', 'Another task changes b.ts.', undefined, 'shinsa');
+    expect(dispatched.filter((command) => command.type === 'message.deliver')).toEqual([]);
+  });
+
   test('a queued message the session will not take, and steers it never answered, come back as the next turn', async () => {
     const sessions = createSessions({ refuseSteer: true });
     const { supervisor, dispatched } = setup(
@@ -2240,7 +2273,7 @@ describe('holding new runs for a restart', () => {
   });
 
   test('a held run that cannot start is logged', async () => {
-    const errors = spyOn(log, 'error').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const { supervisor, reject } = setup(
       (state) => {
         state.runs['run-1'] = createRun();
@@ -2251,16 +2284,14 @@ describe('holding new runs for a restart', () => {
     supervisor.holdNewRuns(() => undefined);
     await supervisor.execute('run-1');
     supervisor.releaseHeldRuns();
-    await until('the log line', () => errors.mock.calls.length > 0);
-    expect(errors).toHaveBeenCalledWith('[Runs] Could not start a run held for the restart', {
-      runId: 'run-1',
-      error: 'log full',
-    });
-    errors.mockRestore();
+    const failure = '[Runs] Could not start a run held for the restart';
+    await until('the log line', () => logs.fieldsOf(failure).length > 0);
+    expect(logs.fieldsOf(failure)).toEqual([{ runId: 'run-1', error: 'log full' }]);
+    logs.restore();
   });
 
   test('shutdown marks a held run to start on the next engine, per continuation', async () => {
-    const warnings = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const { supervisor, dispatched, reject, update } = setup(
       withTask(createTempDir(), [createRun(), createRun({ id: 'run-2', continuations: [5] })]),
       { startSession: createSessions().startSession }
@@ -2280,12 +2311,11 @@ describe('holding new runs for a restart', () => {
       { type: 'run.interrupt', runId: 'run-1', attemptId: null },
       { type: 'run.interrupt', runId: 'run-2', attemptId: null },
     ]);
-    expect(warnings).toHaveBeenCalledWith('[Runs] Could not mark a run to resume after the restart', {
-      runId: 'run-2',
-      error: 'engine stopped',
-    });
+    expect(logs.fieldsOf('[Runs] Could not mark a run to resume after the restart')).toEqual([
+      { runId: 'run-2', error: 'engine stopped' },
+    ]);
     expect(supervisor.isHeld('run-1')).toBe(false);
-    warnings.mockRestore();
+    logs.restore();
   });
 });
 
@@ -3549,14 +3579,13 @@ describe('compacting an idle session', () => {
     sessions.started[0]?.finish('completed', { context: CONTEXT });
     await running;
     await until('the compaction', () => context.dispatched.some((command) => command.type === 'run.compact'));
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     await context.supervisor.interruptForShutdown();
     expect(cancelled).toBe(true);
-    expect(warn).toHaveBeenCalledWith('[Runs] Could not stop a compaction', {
-      runId: 'run-1',
-      error: 'already gone',
-    });
-    warn.mockRestore();
+    const failure = '[Runs] Could not stop a compaction';
+    await until('the log line', () => logs.fieldsOf(failure).length > 0);
+    expect(logs.fieldsOf(failure)).toEqual([{ runId: 'run-1', error: 'already gone' }]);
+    logs.restore();
   });
 
   test('a run without an account is compacted on the default login', async () => {
