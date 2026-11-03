@@ -49,7 +49,14 @@ const MINE = [
 const STATE = createShinsaState({
   tasks: MINE,
   gates: [createGate({ id: 'g', taskId: 'web', type: 'review' })],
-  repos: [createRepo({ id: 'paywall', name: 'paywall-next', projectId: 'apps' })],
+  repos: [
+    createRepo({
+      id: 'paywall',
+      name: 'paywall-next',
+      projectId: 'apps',
+      remote: 'github.com/acme/paywall-next',
+    }),
+  ],
   projects: [
     createProject({ id: 'apps', name: 'Apps', teamIds: ['team1'] }),
     createProject({ id: 'core', name: 'Core', teamIds: ['team2'] }),
@@ -58,7 +65,7 @@ const STATE = createShinsaState({
 
 const KAI = teamEntry({
   task: createTask({ id: 'kai-task', title: 'Team billing', priority: 'urgent' }),
-  project: createProject({ id: 'apps', name: 'Apps' }),
+  project: createProject({ id: 'kai-apps', name: 'Apps' }),
   repo: createRepo({ id: 'r', name: 'paywall-next' }),
 });
 
@@ -97,6 +104,22 @@ describe('listTaskRows', () => {
   it('lists only the focused project’s tasks, and a teammate’s only in that same project', () => {
     expect(ids(focused({ projectId: 'apps' }))).toEqual(['@kai-task', 'web']);
     expect(ids(focused({ projectId: 'core' }))).toEqual(['api', 'ask', 'shipped']);
+  });
+
+  it('matches a teammate’s row to your project by its repository’s remote, then by project name, never by id', () => {
+    const state = focused({ projectId: 'apps' });
+    const renamed = teamEntry({
+      task: createTask({ id: 'same-repo' }),
+      project: createProject({ id: 'p9', name: 'Billing' }),
+      repo: createRepo({ id: 'r9', name: 'pw', remote: 'GitHub.com/acme/paywall-next' }),
+    });
+    const sameId = teamEntry({
+      task: createTask({ id: 'same-id' }),
+      project: createProject({ id: 'apps', name: 'Other' }),
+    });
+    const listed = listTaskRows(state, [renamed, sameId], TEAMS, NOW).map((row) => row.task.id);
+    expect(listed).toContain('same-repo');
+    expect(listed).not.toContain('same-id');
   });
 
   it('lists everything again once the focus is over', () => {

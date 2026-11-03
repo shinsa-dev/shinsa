@@ -273,7 +273,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   inside each section. This is the page to open each day and work down. A task can be told to
   wait for others from here, from the task page and from ⌘K, and the new-task box's When to start offers
   Auto start, Start now, After another task… (a search over every open task, several at once) and Backlog.
-  It follows your focus: a focused project lists only that project's tasks, a focused team only that team's,
+  It follows your focus: a focused project lists only that project's tasks (a teammate's when its repository has the same
+  remote as one of yours, or its project the same name, since each machine names its projects itself), a focused team only that team's,
   yours and your teammates', and with no focus it lists yours and those of every team you are in. The Filter
   button narrows it by status, owner, team, project, repository, kind and priority, several values each; every
   filter shows as a chip you can remove, lives in the page's address so a link keeps it, and ⌘K offers the same

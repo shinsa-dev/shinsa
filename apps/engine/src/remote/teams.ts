@@ -34,11 +34,11 @@ import { resolveOwnerProfile } from './store.ts';
 import type { TeamFeeds } from './team-feeds.ts';
 
 export const TEAM_REFUSALS = {
-  team: 'This machine is no longer in that team.',
-  key: 'This machine has no key for that team. Its owner can rejoin from the team’s join link.',
+  team: 'That machine has left this team.',
+  key: 'That machine has no key for this team. Its owner can rejoin from the team’s join link.',
   member:
-    'This machine does not list you in that team yet. It catches up the next time it reaches Shinsa Cloud.',
-  mismatch: 'Your key for that team does not match this machine’s. Open the team’s join link again.',
+    'That machine does not list you in this team yet. It catches up the next time it reaches Shinsa Cloud.',
+  mismatch: 'Your key for this team does not match that machine’s. Open the team’s join link again.',
   task: 'This task is no longer shown to the team.',
 } as const;
 

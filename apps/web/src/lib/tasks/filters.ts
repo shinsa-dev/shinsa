@@ -2,6 +2,7 @@ import {
   isListedInFocus,
   isTeamTask,
   isWatchHome,
+  listProjectRepos,
   resolveFocusProject,
   resolveFocusTeam,
   resolveTaskProject,
@@ -122,11 +123,20 @@ function resolveTeamRow(team: TeamEntry): TaskRow {
   };
 }
 
+function isTeamRowInProject(state: ShinsaState, team: TeamEntry, projectId: string) {
+  const { project, repo } = team.entry;
+  const remote = repo?.remote?.toLowerCase();
+  if (remote && listProjectRepos(state, projectId).some((own) => own.remote?.toLowerCase() === remote))
+    return true;
+  const name = state.projects[projectId]?.name.toLowerCase();
+  return name !== undefined && project?.name.toLowerCase() === name;
+}
+
 function isTeamRowInFocus(state: ShinsaState, team: TeamEntry, now: number) {
   const teamId = resolveFocusTeam(state, now);
   if (teamId !== null) return team.entry.teamId === teamId;
   const projectId = resolveFocusProject(state, now);
-  return projectId === null || team.entry.project?.id === projectId;
+  return projectId === null || isTeamRowInProject(state, team, projectId);
 }
 
 export function listTaskRows(

@@ -127,13 +127,13 @@ describe('teammates’ tasks', () => {
       name: 'Mac.lan',
       userId: '7',
       status: 'refused' as const,
-      reason: 'This machine does not list you in that team yet.',
+      reason: 'That machine does not list you in this team yet.',
     };
     pushTeams({ machines: [refused], tasks: [] });
     renderTasks();
     const note = screen.getByRole('status');
     expect(note.textContent).toBe(
-      'Mac.lan in Platform is not listing its tasks. This machine does not list you in that team yet.'
+      'Mac.lan in Platform is not listing its tasks. That machine does not list you in this team yet.'
     );
     pushTeams({ machines: [{ ...refused, status: 'live', reason: null }], tasks: [] });
     expect(screen.queryByRole('status')).toBeNull();

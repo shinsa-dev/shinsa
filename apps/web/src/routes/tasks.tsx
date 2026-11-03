@@ -57,51 +57,53 @@ export function TasksPage({ state }: { state: ShinsaState }) {
         />
         <TaskFilterMenu fields={fields} filters={filters} />
       </div>
-      <TaskFilterChips fields={fields} filters={filters} />
       <TeamFeedNotices state={state} />
-      <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>
-        <div
-          className={cn(
-            'grid h-7 shrink-0 items-center gap-3 border-b border-border px-3 text-2xs font-medium text-fg-2',
-            columns
-          )}
-        >
-          <span>Task</span>
-          <span className='max-md:hidden'>Repository</span>
-          {owners && <span className='max-md:hidden'>Owner</span>}
-          <span className='max-md:hidden'>Status</span>
-          <span className='max-md:hidden'>Pull request</span>
-          <span className='text-right'>Updated</span>
-        </div>
-        <div className='-mb-px min-h-0 overflow-y-auto'>
-          {empty ? (
-            <EmptyState
-              icon={filtered ? 'IconMagnifyingGlass' : 'IconListBullets'}
-              title={filtered ? 'Nothing matches' : 'No tasks yet'}
-              description={
-                filtered
-                  ? 'Try another word from the title, branch or repository, or clear the filters.'
-                  : 'Describe the work on Home. Shinsa finds the repository and starts the agents.'
-              }
-            />
-          ) : (
-            sections.map(({ group, entries }) => (
-              <TaskGroupSection
-                key={`${group.key}-${statusKey || 'all'}`}
-                persistId={createDisclosureId(
-                  'tasks',
-                  'group',
-                  group.key,
-                  ...(statusKey ? ['status', statusKey] : [])
-                )}
-                group={group}
-                entries={entries}
-                state={state}
-                defaultOpen={group.defaultOpen || filters.status.length > 0}
-                columns={columns}
+      <div className='flex min-h-0 flex-col gap-2'>
+        <TaskFilterChips fields={fields} filters={filters} />
+        <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>
+          <div
+            className={cn(
+              'grid h-7 shrink-0 items-center gap-3 border-b border-border px-3 text-2xs font-medium text-fg-2',
+              columns
+            )}
+          >
+            <span>Task</span>
+            <span className='max-md:hidden'>Repository</span>
+            {owners && <span className='max-md:hidden'>Owner</span>}
+            <span className='max-md:hidden'>Status</span>
+            <span className='max-md:hidden'>Pull request</span>
+            <span className='text-right'>Updated</span>
+          </div>
+          <div className='-mb-px min-h-0 overflow-y-auto'>
+            {empty ? (
+              <EmptyState
+                icon={filtered ? 'IconMagnifyingGlass' : 'IconListBullets'}
+                title={filtered ? 'Nothing matches' : 'No tasks yet'}
+                description={
+                  filtered
+                    ? 'Try another word from the title, branch or repository, or clear the filters.'
+                    : 'Describe the work on Home. Shinsa finds the repository and starts the agents.'
+                }
               />
-            ))
-          )}
+            ) : (
+              sections.map(({ group, entries }) => (
+                <TaskGroupSection
+                  key={`${group.key}-${statusKey || 'all'}`}
+                  persistId={createDisclosureId(
+                    'tasks',
+                    'group',
+                    group.key,
+                    ...(statusKey ? ['status', statusKey] : [])
+                  )}
+                  group={group}
+                  entries={entries}
+                  state={state}
+                  defaultOpen={group.defaultOpen || filters.status.length > 0}
+                  columns={columns}
+                />
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -1035,11 +1035,16 @@ Only these, and they win over anything below:
       (`isListedInFocus`) and every member team's tasks in focus, each with its owner, teams, project and
       repository. `filterTaskRows` applies the search and the filters read from the address (`?status=working,review`,
       `owner`, `team`, `project`, `repo`, `kind`, `priority`; `resolveTaskFilters`), and the groups are drawn from what
-      is left. The Filter button (`TaskFilterMenu`, secondary `sm`, the count of active filters beside it) opens a
-      submenu per field with a checkbox and a count per value; a field shows only when it has two values or is
-      filtered, and its counts are over the rows in focus, not the filtered ones, so they hold still as you tick. Each
-      filtered field is a chip ("Priority: High, Normal") whose cross clears it, and Clear all follows once two are
-      on. ⌘K offers "Filter by …" for each field, several values at once, "Any …" and Clear filters, with the same
+      is left. The filters are the kit's composable
+      filter bar (`@shinsa/ui/components/filter-bar`: `FilterMenu`, `FilterBar`, `FilterChip`, `FilterClear`, fields
+      and options as plain data, the selection owned by the page). The Filter button is icon only (`IconFilter1`,
+      `icon` size with the input's fill, so it matches the search field beside it; "Filter, 2 on" for a screen reader)
+      and opens a submenu per field with a checkbox and a count per value; a field shows only when it has two values
+      or is filtered, and its counts are over the rows in focus, not the filtered ones, so they hold still as you
+      tick. Each filtered field is a chip in the row just above the table (8px from it, closer than the 24px to the
+      heading): its icon and label, "is" or "is any of", the chosen values (their icons, two names then "+N"), which
+      open the same checkboxes to change it in place, and a cross that clears it. A plus after the chips adds a field
+      not filtered yet, and Clear all follows once two are on. ⌘K offers "Filter by …" for each field, several values at once, "Any …" and Clear filters, with the same
       icons.
     - **Width and columns.** The page keeps `PAGE_COLUMN`'s width with any focus, teammates' tasks included. Columns
       sit `gap-3` apart: title, repository 7rem, owner 2.25rem when any row is a teammate's, status 10rem, pull
@@ -1047,7 +1052,7 @@ Only these, and they win over anything below:
       `TeammateOwnerMark` in `components/tasks/owner.tsx`) whose tooltip names them.
     - **Team feed notices** (`TeamFeedNotices`). Above the list, one `text-xs` `fg-3` line per teammate machine in
       focus that is offline (`IconCloudSimpleDisconnected`) or refuses the list (`IconLock`): the machine in `fg-4`,
-      its team, and the owner engine's reason ("This machine does not list you in that team yet…"), with when its copy was
+      its team, and the owner engine's reason ("That machine does not list you in this team yet…"), with when its copy was
       last updated.
     - **The pull request badge** (`PullRequestBadge`, the Pull request column) is the pull request's number on its
       tone's soft surface (`TONE_SURFACE`, one step stronger on hover), the same tint as a status tile.

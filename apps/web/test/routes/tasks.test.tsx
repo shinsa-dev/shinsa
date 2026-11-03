@@ -145,7 +145,8 @@ describe('filtering', () => {
     renderPage(TASKS, '/tasks?status=done');
     expect(groupHeaders()).toEqual(['Done1|true']);
     expect(screen.getByText('Rename the settings page')).toBeTruthy();
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Status Done' })));
+    expect(screen.getByRole('button', { name: 'Change the status filter' }).textContent).toBe('Done');
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Remove the status filter' })));
     expect(location.search).toBe('');
     expect(groupHeaders()).toHaveLength(8);
   });
@@ -153,8 +154,11 @@ describe('filtering', () => {
   it('shows every chosen status, and Clear all once two fields are filtered', () => {
     renderPage(TASKS, '/tasks?status=merge,done&priority=normal');
     expect(groupHeaders()).toEqual(['Ready to merge1|true', 'Done1|true']);
-    expect(screen.getByRole('button', { name: 'Status Ready to merge, Done' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Filter/ }).textContent).toBe('Filter3');
+    expect(screen.getByRole('button', { name: 'Change the status filter' }).textContent).toBe(
+      'Ready to merge, Done'
+    );
+    expect(screen.getByText('is any of')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Filter, 2 on' })).toBeTruthy();
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear all' })));
     expect(location.search).toBe('');
   });
@@ -172,6 +176,20 @@ describe('filtering', () => {
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Ready to merge 1' }));
     expect(location.search).toBe('?status=merge');
     expect(groupHeaders()).toEqual(['Ready to merge1|true']);
+  });
+
+  it('changes a filter from its chip', async () => {
+    renderPage(TASKS, '/tasks?status=merge');
+    fireEvent.click(screen.getByRole('button', { name: 'Change the status filter' }));
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Done 1' }));
+    expect(location.search).toBe('?status=merge%2Cdone');
+  });
+
+  it('adds another field from the row of chips, offering only the fields not filtered yet', async () => {
+    renderPage(TASKS, '/tasks?priority=normal');
+    fireEvent.click(screen.getByRole('button', { name: 'Add a filter' }));
+    expect(await screen.findByRole('menuitem', { name: 'Status' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /^Priority/ })).toBeNull();
   });
 
   it('clears every filter from the Filter menu', async () => {
