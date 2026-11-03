@@ -43,11 +43,12 @@ import {
   startAllServices,
   startService,
   stopService,
+  canOpenTerminals,
+  resolveTerminalTransport,
   useTerminals,
 } from '@/lib/connection/terminals.ts';
 import { useColorScheme } from '@/lib/preferences/theme.ts';
 import { listProjects } from '@/lib/projects.ts';
-import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { describeFindKey } from '@/lib/terminal/keys.ts';
 import {
   describeServiceClose,
@@ -98,7 +99,11 @@ function useKeptViews(snapshot: TerminalsSnapshot, active: TerminalInfo | null, 
     if (activeId) setShown((current) => (current.includes(activeId) ? current : [...current, activeId]));
   }, [activeId]);
   const visible = activeId && !shown.includes(activeId) ? [...shown, activeId] : shown;
-  const views = visible.flatMap((id) => (ids.includes(id) ? [resolveTerminalView({ id, scheme, mac })] : []));
+  const views = visible.flatMap((id) =>
+    ids.includes(id)
+      ? [resolveTerminalView({ id, scheme, mac, transport: resolveTerminalTransport(id) })]
+      : []
+  );
   React.useEffect(() => {
     for (const view of views) view.updateScheme(scheme);
   });
@@ -356,20 +361,6 @@ function ActiveServiceButtons({ view }: { view: ServiceView }) {
 }
 
 export function TerminalPage({ state }: { state: ShinsaState }) {
-  if (isRemoteBuild())
-    return (
-      <div className='grid flex-1 place-items-center'>
-        <EmptyState
-          icon='IconConsole'
-          title='Terminals stay on your machine'
-          description='A terminal is a shell on the machine that runs Shinsa, so it opens only there.'
-        />
-      </div>
-    );
-  return <TerminalWorkspace state={state} />;
-}
-
-function TerminalWorkspace({ state }: { state: ShinsaState }) {
   const snapshot = useTerminals();
   const search = useSearchString();
   React.useEffect(() => rememberTerminalPath(`/terminal${search}`), [search]);
@@ -387,6 +378,16 @@ function TerminalWorkspace({ state }: { state: ShinsaState }) {
         title='No projects yet'
         description='Terminals open in a project’s folders. Add a project in Settings first.'
       />
+    );
+  if (!canOpenTerminals(project.id))
+    return (
+      <div className='grid flex-1 place-items-center'>
+        <EmptyState
+          icon='IconConsole'
+          title='Terminals are for the machine’s owner'
+          description='A terminal is a shell on the machine that runs this project, so only its owner opens one from another device.'
+        />
+      </div>
     );
   return <ProjectTerminals state={state} project={project} snapshot={snapshot} />;
 }

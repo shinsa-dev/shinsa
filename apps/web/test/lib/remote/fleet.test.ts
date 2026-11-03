@@ -18,6 +18,8 @@ import {
   resolveScopedEngineInfo,
   SCOPE_MESSAGES,
 } from '@shinsa/core';
+import { Effect } from 'effect';
+import { Socket } from 'effect/socket';
 import type { ShinsaConnection, Snapshot } from '@/lib/connection/socket.ts';
 import {
   FLEET_WAIT_MS,
@@ -30,6 +32,7 @@ import {
   resolveRequestOwner,
 } from '@/lib/remote/fleet.ts';
 import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
+import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveCanonicalTaskPath, resolveTaskPath } from '@/router.ts';
 import { createMachineResources } from '../../support/resources.ts';
@@ -672,6 +675,37 @@ describe('sending to the machine that owns it', () => {
     const unknown = createTerminals('/Users/kai', []);
     fleet.replaceTerminals(unknown);
     expect([studio.connection.terminals, laptop.connection.terminals]).not.toContain(unknown);
+  });
+
+  it('opens a terminal on the machine that runs it, only on a machine you own', () => {
+    const { fleet, studio, laptop } = createFleet();
+    laptop.connection.push({
+      state: createWire(7, {
+        ...laptop.connection.current.state,
+        projects: { 'p-laptop': { id: 'p-laptop' } as WireState['projects'][string] },
+      }),
+      status: 'open',
+    });
+    studio.connection.terminals = createTerminals('/Users/mona', [], ['t1']);
+    laptop.connection.terminals = createTerminals('/Users/kai', [], ['t2']);
+    const opened: string[] = [];
+    laptop.member.openTerminal = (terminalId) => {
+      opened.push(terminalId);
+      return new EventTarget() as unknown as WebSocket;
+    };
+    laptop.connection.engine = { ...resolveEngineInfo('1.2.0'), features: [] };
+    expect(fleet.canOpenTerminals('p-laptop')).toBe(false);
+    laptop.connection.engine = resolveEngineInfo('1.2.0');
+    expect(fleet.canOpenTerminals('p-laptop')).toBe(true);
+    expect(fleet.canOpenTerminals('p-studio')).toBe(false);
+    expect(fleet.resolveTerminalTransport('t1')).toBeNull();
+    const transport = fleet.resolveTerminalTransport('t2');
+    expect(transport).not.toBeNull();
+    const open = Effect.runSync(
+      Effect.provide(Socket.WebSocketConstructor.use(Effect.succeed), transport as SocketTransport)
+    );
+    open('ws://ignored');
+    expect(opened).toEqual(['t2']);
   });
 
   it('sends a service’s request to the machine that runs it, by its id or the project in its body', async () => {

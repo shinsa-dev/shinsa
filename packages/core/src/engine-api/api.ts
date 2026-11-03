@@ -595,7 +595,7 @@ class TerminalsGroup extends HttpApiGroup.make('terminals')
       success: TerminalsAnswer,
     }).annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
+  .annotateEndpoints(OwnerOnlyRoute, true)
   .middleware(EngineGate) {}
 
 class ServicesGroup extends HttpApiGroup.make('services')

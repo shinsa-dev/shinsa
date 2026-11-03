@@ -1,4 +1,10 @@
-import type { Bytes, ChannelHeaders } from '@shinsa/core';
+import {
+  type Bytes,
+  type ChannelHeaders,
+  parseBase64Url,
+  serializeBase64Url,
+  TERMINAL_STREAM_CLOSE,
+} from '@shinsa/core';
 import { openRemoteChannel } from './channel.ts';
 import { type DashboardClient, isMachineGone } from './dashboard.ts';
 import {
@@ -6,6 +12,7 @@ import {
   ChannelError,
   type ChannelOptions,
   type RemoteChannel,
+  type TerminalStreamMessage,
 } from './remote-channel/schema.ts';
 import type { EnrolledDevice } from './schema.ts';
 
@@ -56,6 +63,96 @@ export class ChannelSocket extends EventTarget {
     for (const release of this.#release.splice(0)) release();
     this.#channel = null;
     this.dispatchEvent(new CloseEvent('close', { code: 1000, reason }));
+  }
+}
+
+const CHANNEL_GONE = 1006;
+
+let nextStream = 0;
+
+function toArrayBuffer(bytes: Uint8Array) {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+function toBytes(data: string | ArrayBufferLike | ArrayBufferView) {
+  if (typeof data === 'string') return null;
+  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  return new Uint8Array(data);
+}
+
+export class ChannelTerminalSocket extends EventTarget {
+  readyState: number = CONNECTING;
+  binaryType: BinaryType = 'blob';
+  readonly #terminal: string;
+  readonly #id: string;
+  #channel: RemoteChannel | null = null;
+  readonly #release: (() => void)[] = [];
+
+  constructor(terminal: string) {
+    super();
+    nextStream += 1;
+    this.#terminal = terminal;
+    this.#id = `t${nextStream}`;
+  }
+
+  attach(channel: RemoteChannel) {
+    if (this.readyState === CLOSED) return;
+    this.#channel = channel;
+    this.#release.push(
+      channel.subscribeTerminal((message) => this.#receive(message)),
+      channel.subscribeClose((error) => this.#finish(CHANNEL_GONE, error.message))
+    );
+    this.readyState = OPEN;
+    void channel.sendTerminal({ t: 'terminal-open', id: this.#id, terminal: this.#terminal });
+    this.dispatchEvent(new Event('open'));
+  }
+
+  #receive(message: TerminalStreamMessage) {
+    if (message.id !== this.#id) return;
+    if (message.t === 'terminal-close') {
+      this.#finish(message.code, message.reason);
+      return;
+    }
+    const data = message.t === 'terminal-text' ? message.data : parseBase64Url(message.chunk);
+    if (data === null) return;
+    this.dispatchEvent(
+      new MessageEvent('message', { data: typeof data === 'string' ? data : toArrayBuffer(data) })
+    );
+  }
+
+  send(data: string | ArrayBufferLike | ArrayBufferView) {
+    const channel = this.#channel;
+    if (this.readyState !== OPEN || !channel) return;
+    const bytes = toBytes(data);
+    void channel.sendTerminal(
+      bytes
+        ? { t: 'terminal-bytes', id: this.#id, chunk: serializeBase64Url(bytes as Bytes) }
+        : { t: 'terminal-text', id: this.#id, data: data as string }
+    );
+  }
+
+  close() {
+    const channel = this.#channel;
+    if (this.readyState === OPEN && channel)
+      void channel.sendTerminal({
+        t: 'terminal-close',
+        id: this.#id,
+        code: TERMINAL_STREAM_CLOSE.normal,
+        reason: '',
+      });
+    this.#finish(TERMINAL_STREAM_CLOSE.normal, 'Closed on this page.');
+  }
+
+  fail(reason: string) {
+    this.#finish(CHANNEL_GONE, reason);
+  }
+
+  #finish(code: number, reason: string) {
+    if (this.readyState === CLOSED) return;
+    this.readyState = CLOSED;
+    for (const release of this.#release.splice(0)) release();
+    this.#channel = null;
+    this.dispatchEvent(new CloseEvent('close', { code, reason }));
   }
 }
 
@@ -135,6 +232,15 @@ export class RemoteLink {
     const connecting = this.resolveChannel(this.#socketTaken);
     this.#socketTaken = true;
     connecting.then(
+      (channel) => socket.attach(channel),
+      (error: unknown) => socket.fail((error as Error).message)
+    );
+    return socket as unknown as WebSocket;
+  }
+
+  openTerminalSocket(terminal: string): WebSocket {
+    const socket = new ChannelTerminalSocket(terminal);
+    this.resolveChannel().then(
       (channel) => socket.attach(channel),
       (error: unknown) => socket.fail((error as Error).message)
     );

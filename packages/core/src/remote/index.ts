@@ -13,9 +13,11 @@ export {
   type ChannelHeaders,
   type ChannelMessage,
   listBodyMessages,
+  MAX_TERMINAL_STREAMS,
   parseBodyChunk,
   parseChannelMessage,
   serializeChannelMessage,
+  TERMINAL_STREAM_CLOSE,
 } from './channel.ts';
 export {
   CONNECT_TOKEN_TTL_MS,

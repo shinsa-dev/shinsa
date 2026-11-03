@@ -2,6 +2,10 @@ import { type Bytes, parseBase64Url, serializeBase64Url } from './bytes.ts';
 
 export const CHANNEL_BODY_CHUNK_BYTES = 256 * 1024;
 
+export const TERMINAL_STREAM_CLOSE = { normal: 1000, refused: 4403, gone: 4404 } as const;
+
+export const MAX_TERMINAL_STREAMS = 16;
+
 export type ChannelHeaders = [string, string][];
 
 export type ChannelMessage =
@@ -11,7 +15,11 @@ export type ChannelMessage =
   | { t: 'response'; id: string; status: number; headers: ChannelHeaders }
   | { t: 'body'; id: string; chunk: string }
   | { t: 'end'; id: string }
-  | { t: 'abort'; id: string };
+  | { t: 'abort'; id: string }
+  | { t: 'terminal-open'; id: string; terminal: string }
+  | { t: 'terminal-text'; id: string; data: string }
+  | { t: 'terminal-bytes'; id: string; chunk: string }
+  | { t: 'terminal-close'; id: string; code: number; reason: string };
 
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -45,6 +53,22 @@ function readMessage(fields: Record<string, unknown>): ChannelMessage | null {
     case 'end':
     case 'abort':
       return isText(id) ? { t: fields.t, id } : null;
+    default:
+      return isText(id) ? readTerminalMessage(id, fields) : null;
+  }
+}
+
+function readTerminalMessage(id: string, fields: Record<string, unknown>): ChannelMessage | null {
+  switch (fields.t) {
+    case 'terminal-open':
+      return isText(fields.terminal) ? { t: 'terminal-open', id, terminal: fields.terminal } : null;
+    case 'terminal-text':
+      return isText(fields.data) ? { t: 'terminal-text', id, data: fields.data } : null;
+    case 'terminal-bytes':
+      return isText(fields.chunk) ? { t: 'terminal-bytes', id, chunk: fields.chunk } : null;
+    case 'terminal-close':
+      if (!Number.isInteger(fields.code) || !isText(fields.reason)) return null;
+      return { t: 'terminal-close', id, code: fields.code as number, reason: fields.reason };
     default:
       return null;
   }

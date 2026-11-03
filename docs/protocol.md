@@ -1309,7 +1309,7 @@ offers nothing an engine cannot do (`docs/engine.md` → Remote access, What eac
 | `version` | The engine's build, `0.0.0` in development (`DEVELOPMENT_VERSION`) |
 | `protocol` | `ENGINE_PROTOCOL`, raised only when an older page and this engine cannot talk at all (a changed state shape) |
 | `commands` | Every user command type it parses, `USER_COMMAND_TYPES` itself, so a new command is announced the moment it exists |
-| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix` and `changelog` today) that are not a command, such as a route or a setting an older engine ignores |
+| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix`, `changelog` and `remote.terminals` today) that are not a command, such as a route or a setting an older engine ignores |
 
 `ENGINE_BASELINE_COMMANDS` is frozen: the commands every engine has had since before the `engine` message, which a page
 sends to any engine, one that never announced included (`resolveEngineCommands(null)`). A command added since is
@@ -1522,6 +1522,9 @@ the tunnel in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/e
 | `{ t: 'response', id, status, headers }` | Its answer |
 | `{ t: 'body', id, chunk }` / `{ t: 'end', id }` | A body in base64url chunks of 256 KB (`CHANNEL_BODY_CHUNK_BYTES`), then its end |
 | `{ t: 'abort', id }` | The page gave up on a request |
+| `{ t: 'terminal-open', id, terminal }` | The page attaches to a terminal; `id` names the stream, at most 64 characters |
+| `{ t: 'terminal-text', id, data }` / `{ t: 'terminal-bytes', id, chunk }` | One frame of the terminal's stream either way: a control frame as text (`TerminalClientFrame`, `TerminalServerFrame`), or keys and screen bytes in base64url |
+| `{ t: 'terminal-close', id, code, reason }` | Either side ends a stream: 1000 from the page, 4403 for a device that is not the owner's or too many streams (`MAX_TERMINAL_STREAMS`, 16), 4404 for a terminal that is gone (`TERMINAL_STREAM_CLOSE`) |
 
 **One task for a guest** (`scope.ts`): a device with a task is a `GuestActor` (`taskId`, `login`). Its socket gets `resolveScopedState` and `resolveScopedPatch` (that task, its runs, gates, evidence, repository and project, accounts without their email, no share, previews or hand-off link) and `resolveScopedEngineInfo` (only `SCOPED_COMMANDS`); `resolveScopedRefusal` refuses any other command, another task's, a secret or sign-in gate's answer and a retry on a chosen account, with the code `handoff_scope` (`SCOPE_REFUSAL_CODE`, `SCOPE_MESSAGES`).
 

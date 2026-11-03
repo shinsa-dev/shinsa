@@ -1,5 +1,6 @@
 import {
   type EngineInfo,
+  hasEngineFeature,
   isEngineProtocolMatch,
   type MachineResources,
   NO_TEAM_FEED,
@@ -20,6 +21,7 @@ import {
   NO_MACHINE_ACCESS,
   NO_MACHINES,
   NO_UNREACHABLE_MACHINES,
+  resolveSocketTransport,
   resolveUpdateMessage,
   type ShinsaConnection,
   type Snapshot,
@@ -27,6 +29,7 @@ import {
   type UnreachableMachine,
 } from '@/lib/connection/socket.ts';
 import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
+import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { mergeTeamFeeds, type TeamFeedSource } from '@/lib/teams/feeds.ts';
 import { replaceSharedHandles } from '@/router.ts';
@@ -40,6 +43,7 @@ export interface FleetMember {
   handedBy?: RemoteUser;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
+  openTerminal?: (terminalId: string) => WebSocket;
   close?: () => void;
 }
 
@@ -474,6 +478,19 @@ export class Fleet implements ShinsaConnection {
   }
 
   selectTerminals = () => this.#mergeTerminals().terminals;
+
+  #terminalOpener(machineId: string | null) {
+    const member = this.#memberOf(machineId);
+    if (!hasEngineFeature(member?.connection.selectEngine() ?? null, 'remote.terminals')) return null;
+    return member?.openTerminal ?? null;
+  }
+
+  canOpenTerminals = (projectId: string) => this.#terminalOpener(this.#ownerOf(projectId)) !== null;
+
+  resolveTerminalTransport = (terminalId: string): SocketTransport | null => {
+    const open = this.#terminalOpener(this.#mergeTerminals().owners.get(terminalId) ?? null);
+    return open ? resolveSocketTransport(() => open(terminalId)) : null;
+  };
 
   replaceTerminals = (terminals: Parameters<ShinsaConnection['replaceTerminals']>[0]) => {
     const reachable = this.#entries.filter(isReachable);

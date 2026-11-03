@@ -108,6 +108,8 @@ export interface ShinsaConnection {
   subscribeTerminals: (listener: () => void) => () => void;
   selectTerminals: () => TerminalsSnapshot | null;
   replaceTerminals: (terminals: TerminalsSnapshot) => void;
+  canOpenTerminals?: (projectId: string) => boolean;
+  resolveTerminalTransport?: (terminalId: string) => SocketTransport | null;
   subscribeResources: (listener: () => void) => () => void;
   selectResources: () => MachineResources | null;
   subscribeRemote: (listener: () => void) => () => void;

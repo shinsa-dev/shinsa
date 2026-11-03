@@ -3011,11 +3011,21 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   page for the routes only the page may call (`BrowserOnlyRoute`), since the channel opens only from
   app.shinsa.dev. The dashboard lists every machine's services together (`mergeFleetTerminals`) and sends each
   service's request to the machine that runs it, by the id in its path or the project in its body.
+- **Terminals from another device** are the owner's too (the `terminals` group is `OwnerOnlyRoute`). A terminal's
+  stream travels on the sealed channel itself, never a route of its own through the tunnel: the page opens one with
+  `terminal-open`, and its keys, resizes and the screen go both ways as `terminal-text` and `terminal-bytes` until
+  either side sends `terminal-close` (`RemoteChannel`, `apps/engine/src/remote/channel.ts`). The engine attaches the
+  stream to the terminal as one more viewer, with the same flow control as `/ws/terminals/<id>` (its backlog is the
+  frames still being sealed plus the socket's buffer, and the socket's drain sends a screen it held back); a member
+  or a guest gets `terminal-close` with 4403, a terminal that is gone 4404, and a page holds 16 streams at most
+  (`MAX_TERMINAL_STREAMS`). Closing the channel detaches them all. On the page, `ChannelTerminalSocket`
+  (`lib/remote/link.ts`) stands in for the WebSocket, and the fleet opens it on the machine that runs the terminal,
+  only for one you own whose engine announces `remote.terminals` (`Fleet.resolveTerminalTransport`,
+  `canOpenTerminals`); on another machine's project the Terminal page says terminals are for the machine's owner.
 - **What stays at the keyboard.** Refused to everyone off the machine with `local_only` ("Do this on the machine
   Shinsa runs on.", `LocalOnlyRoute`): pairing, cancelling a pairing, pausing, resuming and removing remote access
   (each ends or replaces the channel you are using), an MCP's OAuth sign-in (the provider sends you back to the machine's own address), installing the command
-  line and opening a task on the machine; terminals are refused even to read for now
-  (`docs/plans/remote-plan.md` → Parity with the machine). Everything else, closing gates included, is you, as on the
+  line and opening a task on the machine (`docs/plans/remote-plan.md` → Parity with the machine). Everything else, closing gates included, is you, as on the
   machine.
 - **Webhooks get a stable URL.** While remote access is on, a webhook schedule's URL is
   `https://app.shinsa.dev/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
@@ -3092,7 +3102,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
   this device on <name> first", since its policies live on that machine's engine and only a sealed channel reaches it.
   Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
-  Terminal page says terminals stay on the machine.
+  Terminal page opens terminals on machines you own (Terminals from another device, above).
 - **What each machine speaks** (core's `protocol/engine.ts`, `docs/protocol.md` → The socket). The remote build is
   app.shinsa.dev's, deployed from `main`; the tunnel carries only data, so a page can be newer than a machine on the
   stable channel. Every engine sends `engine { version, protocol, commands, features }` when a socket opens, and the
@@ -3108,7 +3118,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
-  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, and `changelog` for `GET /api/changelog`, today;
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `changelog` for `GET /api/changelog`, and
+  `remote.terminals` for terminal streams on the sealed channel, today;
   Settings → Teams, the review's Fix and approve choice and What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every

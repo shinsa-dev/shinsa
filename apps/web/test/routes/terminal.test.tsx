@@ -71,11 +71,21 @@ const SHELL = createTerminal({ id: 'shell', title: 'fish' });
 const ENDED = createTerminal({ id: 'ended', title: 'bun test', status: 'exited', exitCode: 1 });
 
 describe('the terminal page', () => {
-  it('says terminals stay on the machine in the remote build', () => {
-    import.meta.env.VITE_SHINSA_REMOTE = '1';
-    show(null);
-    import.meta.env.VITE_SHINSA_REMOTE = undefined;
-    expect(screen.getByText('Terminals stay on your machine')).toBeTruthy();
+  it('says only the machine’s owner opens terminals on a project of a machine you do not own', () => {
+    visit('/terminal?project=SH');
+    const asked: string[] = [];
+    Object.assign(connection, {
+      canOpenTerminals: (projectId: string) => {
+        asked.push(projectId);
+        return false;
+      },
+    });
+    const page = show(createTerminalsSnapshot([SERVER]));
+    Reflect.deleteProperty(connection, 'canOpenTerminals');
+    expect(screen.getByText('Terminals are for the machine’s owner')).toBeTruthy();
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(asked).toContain('shop');
+    page.unmount();
   });
 
   it('waits for the engine’s list, and asks for a project when there is none', () => {

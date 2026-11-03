@@ -614,6 +614,20 @@ describe('createTerminalSockets', () => {
     );
     handlers.drain({ data } as unknown as Parameters<typeof handlers.drain>[0]);
     handlers.drain({ data: { kind: 'hub' } } as unknown as Parameters<typeof handlers.drain>[0]);
+    const remoteDrains: unknown[] = [];
+    const withRemote = createSocketHandlers(
+      { open: () => undefined, close: () => undefined, message: () => undefined },
+      sockets,
+      {
+        open: () => undefined,
+        close: () => undefined,
+        message: () => undefined,
+        drain: (socket) => remoteDrains.push(socket),
+      }
+    );
+    const remoteSocket = { data: { kind: 'remote' } } as unknown as Parameters<typeof withRemote.drain>[0];
+    withRemote.drain(remoteSocket);
+    expect(remoteDrains).toEqual([remoteSocket]);
     expect(viewer.controls()).toHaveLength(4);
     sockets.drain({ data: { ...data, viewer: null } } as unknown as Parameters<typeof sockets.drain>[0]);
     expect(viewer.controls()).toHaveLength(4);

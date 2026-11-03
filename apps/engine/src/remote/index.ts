@@ -74,6 +74,7 @@ export interface RemoteOptions {
 
 interface ChannelParts {
   readonly hub: ChannelHost['hub'];
+  readonly terminals: ChannelHost['terminals'];
   readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Promise<Response>;
 }
 

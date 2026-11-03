@@ -126,6 +126,7 @@ const FEATURE_ROUTES = {
   ],
   'review.approve_after_fix': [],
   changelog: ['GET /api/changelog'],
+  'remote.terminals': [],
 };
 
 const LOCAL_ONLY = [
@@ -133,7 +134,6 @@ const LOCAL_ONLY = [
   { pattern: /^\/api\/extensions\/servers\/sign-in$/, writesOnly: true },
   { pattern: /^\/api\/tasks\/[^/]+\/open$/, writesOnly: true },
   { pattern: /^\/api\/onboarding\/install$/, writesOnly: true },
-  { pattern: /^\/api\/terminals(?:\/|$)/, writesOnly: false },
 ];
 
 const OWNER_ONLY = [
@@ -182,6 +182,13 @@ const OWNER_ONLY = [
   'POST /api/services/batch',
   'POST /api/services/remove',
   'POST /api/services/([^/]+)/update',
+  'GET /api/terminals',
+  'GET /api/terminals/([^/]+)/foreground',
+  'POST /api/terminals',
+  'POST /api/terminals/([^/]+)/close',
+  'POST /api/terminals/([^/]+)/rename',
+  'POST /api/terminals/([^/]+)/restart',
+  'POST /api/terminals/order',
 ];
 
 const OLD_TASK_READS = /^\/api\/tasks\/:taskRef(?:\/(?:blob|chat|diff|paths|raw|refs|search|tree))?$/;
@@ -216,7 +223,7 @@ describe('EngineApi routes', () => {
     expect(sorted(listEngineBaselineRoutes())).toEqual(sorted(BASELINE_ROUTES));
   });
 
-  test('keeps at the machine only what needs its screen or ends the channel, and terminals for now', () => {
+  test('keeps at the machine only what needs its screen or ends the channel', () => {
     for (const route of listEngineRoutes())
       expect([route.key, route.localOnly]).toEqual([route.key, isLocalOnly(route.method, route.path)]);
   });
@@ -226,7 +233,7 @@ describe('EngineApi routes', () => {
       expect([route.key, route.guest]).toEqual([route.key, resolveOldGuest(route.method, route.path)]);
   });
 
-  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack, the invite link, members, devices and a service’s command are for the owner, and only an attachment upload takes a larger body', () => {
+  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack, the invite link, members, devices, a service’s command and terminals are for the owner, and only an attachment upload takes a larger body', () => {
     const routes = listEngineRoutes();
     expect(sorted(routes.filter((route) => route.ownerOnly).map((route) => route.key))).toEqual(
       sorted(OWNER_ONLY)

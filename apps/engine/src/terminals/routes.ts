@@ -12,6 +12,7 @@ import {
   type ServiceSuggestion,
   type ShinsaState,
   type TerminalPlace,
+  TERMINAL_STREAM_CLOSE,
   type TerminalPlaceKind,
 } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
@@ -19,6 +20,7 @@ import { resolveSharedCacheEnv } from '../checks/caches.ts';
 import type { JsonObject } from '../http/schema.ts';
 import { listServiceSuggestions } from './detect.ts';
 import type { ServiceInput, ServiceRun, TerminalStart, Terminals, TerminalViewer } from './index.ts';
+import type { TerminalSession } from './session.ts';
 
 export interface TerminalSocketData {
   kind: 'terminal';
@@ -28,7 +30,7 @@ export interface TerminalSocketData {
 
 const SOCKET_PATH = /^\/ws\/terminals\/([A-Za-z0-9-]{1,64})$/;
 
-const CLOSED = 4404;
+const CLOSED = TERMINAL_STREAM_CLOSE.gone;
 
 export function readText(body: JsonObject, field: string, limit: number) {
   const value = body[field];
@@ -238,6 +240,13 @@ export function readTerminalSocketId(pathname: string) {
 
 type TerminalSocket = ServerWebSocket<TerminalSocketData>;
 
+export function applyTerminalText(session: TerminalSession, raw: string) {
+  const frame = parseTerminalClientFrame(raw);
+  if (frame?.type === 'resize') session.resize(frame.cols, frame.rows);
+  if (frame?.type === 'colors') session.replaceColors(frame.colors);
+  if (frame?.type === 'clear') session.clear();
+}
+
 export function createTerminalSockets(terminals: Terminals) {
   return {
     open(socket: TerminalSocket) {
@@ -261,10 +270,7 @@ export function createTerminalSockets(terminals: Terminals) {
         session.input(new Uint8Array(raw));
         return;
       }
-      const frame = parseTerminalClientFrame(raw);
-      if (frame?.type === 'resize') session.resize(frame.cols, frame.rows);
-      if (frame?.type === 'colors') session.replaceColors(frame.colors);
-      if (frame?.type === 'clear') session.clear();
+      applyTerminalText(session, raw);
     },
     drain(socket: TerminalSocket) {
       const { viewer } = socket.data;

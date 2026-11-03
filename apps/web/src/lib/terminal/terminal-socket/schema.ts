@@ -1,9 +1,13 @@
+import { TERMINAL_STREAM_CLOSE } from '@shinsa/core';
 import { type Effect, Schedule, Schema } from 'effect';
 import type { ReconnectPlan, SocketFrame } from '@/lib/runtime/socket/schema.ts';
 
 export const TERMINAL_SOCKET_PATH = '/ws/terminals/';
 
-export const TERMINAL_GONE_CODE = 4404;
+export const TERMINAL_FINAL_CODES: ReadonlySet<number> = new Set([
+  TERMINAL_STREAM_CLOSE.gone,
+  TERMINAL_STREAM_CLOSE.refused,
+]);
 
 const TERMINAL_REDIAL = '250 millis';
 

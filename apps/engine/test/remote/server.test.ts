@@ -918,7 +918,7 @@ describe('managing remote access on the machine', () => {
     expect(remote.snapshot().enabled).toBe(true);
   });
 
-  test('lets a member run a service and only the owner add, change or remove one', async () => {
+  test('lets a member run a service and only the owner add, change or remove one or open a terminal', async () => {
     const { remote, port } = await start({ access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] } });
     const machine = await remote.store.resolveMachineKey();
     const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
@@ -968,7 +968,7 @@ describe('managing remote access on the machine', () => {
       all: 404,
       remove: 404,
       update: 404,
-      terminal: 403,
+      terminal: 404,
     });
   });
 });

@@ -10,7 +10,7 @@ import { TerminalPane, useTerminalView } from '@/components/terminal/terminal-pa
 import { isMacPlatform } from '@/lib/code/keys.ts';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { requestOnboardingInstall } from '@/lib/connection/onboarding.ts';
-import { useTerminals } from '@/lib/connection/terminals.ts';
+import { resolveTerminalTransport, useTerminals } from '@/lib/connection/terminals.ts';
 import {
   countMissingInstalls,
   describeFixAction,
@@ -35,7 +35,12 @@ export function InstallTerminal({
 }) {
   const scheme = useColorScheme();
   const mac = React.useMemo(() => isMacPlatform(navigator.platform), []);
-  const view = resolveTerminalView({ id: terminalId, scheme, mac });
+  const view = resolveTerminalView({
+    id: terminalId,
+    scheme,
+    mac,
+    transport: resolveTerminalTransport(terminalId),
+  });
   const { background } = useTerminalView(view);
   const terminal = useTerminals()?.terminals.find((each) => each.id === terminalId) ?? null;
   const ended = terminal !== null && terminal.status !== 'running' ? terminal : null;
