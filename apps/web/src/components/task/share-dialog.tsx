@@ -17,7 +17,7 @@ import { MentionText, UserIdentity } from '@/components/people/user-tag.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
-import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
+import { useSettings, useTask } from '@/lib/connection/selectors.ts';
 import { useEngineCommand } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { type Mention, resolveFirstName } from '@/lib/remote/users.ts';
@@ -279,7 +279,7 @@ function describeHandoffView(view: HandoffView): Mention {
 
 function ShareContent({ task }: { task: Task }) {
   const { snapshot } = useRemoteAccess();
-  const settings = useShinsaSelector((state) => state.settings);
+  const settings = useSettings();
   const now = useNow();
   const live = selectLiveShare(task, now);
   const view = resolveShareView(task, snapshot, now);

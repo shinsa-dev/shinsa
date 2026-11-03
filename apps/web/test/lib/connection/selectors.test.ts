@@ -1,12 +1,19 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import type { ShinsaState } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
-import { useGate, useRun, useShinsaSelector, useShinsaState, useTask } from '@/lib/connection/selectors.ts';
+import {
+  useGate,
+  useRun,
+  useSettings,
+  useShinsaSelector,
+  useShinsaState,
+  useTask,
+} from '@/lib/connection/selectors.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function fakeStore(initial: ShinsaState | null) {
-  let current = { state: initial, status: 'open' as const };
+  let current: { state: ShinsaState | null; status: 'open' | 'closed' } = { state: initial, status: 'open' };
   const listeners = new Set<() => void>();
   const subscribe = spyOn(connection, 'subscribe').mockImplementation((listener) => {
     listeners.add(listener);
@@ -17,6 +24,12 @@ function fakeStore(initial: ShinsaState | null) {
     push(state: ShinsaState | null) {
       act(() => {
         current = { ...current, state };
+        for (const listener of listeners) listener();
+      });
+    },
+    reconnect() {
+      act(() => {
+        current = { ...current, status: 'closed' };
         for (const listener of listeners) listener();
       });
     },
@@ -34,6 +47,25 @@ afterEach(() => {
 });
 
 describe('selectors', () => {
+  it('read the settings, and render the state again only when it changes, never for the connection status', () => {
+    const state = createShinsaState({});
+    const store = fakeStore(state);
+    stores.push(store);
+    let renders = 0;
+    const read = renderHook(() => {
+      renders += 1;
+      return useShinsaState();
+    });
+    expect(renderHook(() => useSettings()).result.current).toBe(state.settings);
+    store.reconnect();
+    expect(read.result.current).toBe(state);
+    expect(renders).toBe(1);
+    const next = { ...state, seq: state.seq + 1 };
+    store.push(next);
+    expect(read.result.current).toBe(next);
+    expect(renders).toBe(2);
+  });
+
   it('give nothing before the first state', () => {
     stores.push(fakeStore(null));
     expect(renderHook(() => useShinsaState()).result.current).toBeNull();

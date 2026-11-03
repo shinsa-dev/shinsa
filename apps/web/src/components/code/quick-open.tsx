@@ -11,7 +11,7 @@ import {
 import * as React from 'react';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
-import { scheduleIdle } from '@/lib/code/prefetch.ts';
+import { schedulePrefetch } from '@/lib/code/prefetch.ts';
 import { rankPaths, splitHits } from '@/lib/code/rank.ts';
 import { listKeyedParts } from '@/lib/code/search.ts';
 import { resolveDirectory, resolveFileName } from '@/lib/code/tree.ts';
@@ -59,7 +59,7 @@ export function QuickOpenDialog({
   latestPrefetch.current = onPrefetch;
   React.useEffect(() => {
     if (!first) return;
-    return scheduleIdle(() => latestPrefetch.current?.(first));
+    return schedulePrefetch(() => latestPrefetch.current?.(first));
   }, [first]);
   return (
     <CommandDialog

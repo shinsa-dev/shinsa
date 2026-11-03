@@ -10,7 +10,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { VirtualRows } from '@/components/settings/virtual-rows.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
-import { scheduleIdle } from '@/lib/code/prefetch.ts';
+import { schedulePrefetch } from '@/lib/code/prefetch.ts';
 import {
   type TreeRow as ChangeRow,
   FILE_STATUS,
@@ -279,7 +279,7 @@ export function ChangesTree({
   );
   React.useEffect(
     () =>
-      scheduleIdle(() => {
+      schedulePrefetch(() => {
         for (const path of neighbours.split('\n')) if (path) actions.prefetch(path);
       }),
     [neighbours, actions]

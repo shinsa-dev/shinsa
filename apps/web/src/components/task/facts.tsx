@@ -42,7 +42,8 @@ import { useReadOnly, useReadOnlyOwnerName } from '@/components/task/read-only.t
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
-import { useConnection, useMachine, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
+import { useShinsaState } from '@/lib/connection/selectors.ts';
+import { useMachine, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
 import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -506,7 +507,7 @@ function DuplicateFact({ state, task }: { state: ShinsaState; task: Task }) {
 }
 
 function TeammateKeptOverFacts({ task }: { task: Task }) {
-  const { state } = useConnection();
+  const state = useShinsaState();
   const feed = useTeamFeed();
   return listTeammateDuplicates(state, feed, task).map(({ key, handle, title, path, listing }) => (
     <TeammateTaskFact

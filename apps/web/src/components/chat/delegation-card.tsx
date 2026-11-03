@@ -25,7 +25,7 @@ import {
   selectDelegation,
 } from '@/lib/chat/delegations.ts';
 import type { TimelineItemOf } from '@/lib/chat/timeline.ts';
-import { useConnection } from '@/lib/connection/socket.ts';
+import { useShinsaState } from '@/lib/connection/selectors.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { useDisclosure, useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 import { stopDelegation } from '@/lib/tasks/process.ts';
@@ -171,7 +171,7 @@ export function DelegationNotice({
   item: TimelineItemOf<'delegation'>;
   conversation: ConversationRenderer;
 }) {
-  const { state } = useConnection();
+  const state = useShinsaState();
   const views = item.runIds.flatMap((runId) => {
     const view = state ? selectDelegation(state, runId) : null;
     return view ? [view] : [];

@@ -5,6 +5,7 @@ import { EditorView } from '@codemirror/view';
 import type { CommentSide } from '@shinsa/core';
 import { resolveCommentRange } from '@/lib/code/notes.ts';
 import type { PairSource } from '@/lib/code/pane.ts';
+import { scheduleIdle } from '@/lib/idle.ts';
 import {
   annotationsField,
   type EditorAnnotations,
@@ -73,9 +74,8 @@ interface Pair extends Attachable, SplitPair {
 
 const ENTRY_LIMIT = 24;
 
-function scheduleIdle(run: () => void) {
-  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 250 });
-  else setTimeout(run, 16);
+function scheduleLanguage(run: () => void) {
+  scheduleIdle(run, 250, 16);
 }
 
 export function isSameText(state: EditorState, text: string) {
@@ -379,7 +379,7 @@ export class EditorSession {
 
   #scheduleLanguage(entry: Attachable, views: EditorView[]) {
     if (entry.attached) return;
-    const idle = this.#options.idle ?? scheduleIdle;
+    const idle = this.#options.idle ?? scheduleLanguage;
     idle(() => {
       if (this.#destroyed || this.#shown !== entry) return;
       void this.#options.language(entry.path).then((support) => {

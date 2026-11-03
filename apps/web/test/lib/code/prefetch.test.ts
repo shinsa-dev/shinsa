@@ -13,7 +13,7 @@ import {
   prefetchTaskCode,
   requestPairSource,
   SNIPPET_PREFETCH_LIMIT,
-  scheduleIdle,
+  schedulePrefetch,
 } from '@/lib/code/prefetch.ts';
 import { createTask } from '../../support/state.ts';
 
@@ -287,18 +287,18 @@ describe('prefetchSnippets', () => {
   });
 });
 
-describe('scheduleIdle', () => {
+describe('schedulePrefetch', () => {
   it('runs when the browser is idle, or a moment later without idle callbacks, and can be cancelled', async () => {
     const scope = globalThis as { requestIdleCallback?: unknown; cancelIdleCallback?: unknown };
     const saved = { request: scope.requestIdleCallback, cancel: scope.cancelIdleCallback };
     const runs: string[] = [];
     scope.requestIdleCallback = (run: () => void) => setTimeout(run, 0);
     scope.cancelIdleCallback = (handle: ReturnType<typeof setTimeout>) => clearTimeout(handle);
-    scheduleIdle(() => runs.push('idle'));
-    scheduleIdle(() => runs.push('cancelled'))();
+    schedulePrefetch(() => runs.push('idle'));
+    schedulePrefetch(() => runs.push('cancelled'))();
     delete scope.requestIdleCallback;
-    scheduleIdle(() => runs.push('later'));
-    scheduleIdle(() => runs.push('never'))();
+    schedulePrefetch(() => runs.push('later'));
+    schedulePrefetch(() => runs.push('never'))();
     await Bun.sleep(350);
     expect(runs).toEqual(['idle', 'later']);
     scope.requestIdleCallback = saved.request;

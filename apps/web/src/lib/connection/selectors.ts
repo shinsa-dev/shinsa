@@ -29,6 +29,10 @@ export function useShinsaState() {
   return useShinsaSelector((state) => state);
 }
 
+export function useSettings() {
+  return useShinsaSelector((state) => state.settings);
+}
+
 export function useTask(taskId: string | null): Task | null {
   return useShinsaSelector((state) => (taskId ? (state.tasks[taskId] ?? null) : null));
 }

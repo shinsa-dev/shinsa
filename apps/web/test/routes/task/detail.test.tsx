@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, cleanup, render } from '@testing-library/react';
-import { connection, useConnection } from '@/lib/connection/socket.ts';
+import { useShinsaState } from '@/lib/connection/selectors.ts';
+import { connection } from '@/lib/connection/socket.ts';
 import { TaskPage } from '@/routes/task/index.tsx';
 import { prefetchTask } from '@/routes/task/prefetch.tsx';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
@@ -34,7 +35,7 @@ afterEach(() => {
 });
 
 function Page({ taskId }: { taskId: string }) {
-  const { state } = useConnection();
+  const state = useShinsaState();
   if (!state) return null;
   return <TaskPage state={state as unknown as ShinsaState} taskId={taskId} />;
 }
