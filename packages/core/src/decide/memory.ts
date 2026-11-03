@@ -7,6 +7,7 @@ import {
   resolveMemoryText,
 } from '../domain/index.ts';
 import { listMemory } from '../state/memory.ts';
+import { findProject } from '../state/queries.ts';
 import { resolveTaskProject } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { findCurrentRun } from './runs.ts';
@@ -50,11 +51,6 @@ function assertRoomToKeep(decider: Decider, projectId: string | null, except: st
   });
 }
 
-function assertProject(decider: Decider, projectId: string | null) {
-  if (projectId === null || decider.state.projects[projectId]) return;
-  throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}` });
-}
-
 function keep(decider: Decider, entry: MemoryEntry, patch: Pick<MemoryEntry, 'projectId' | 'text'>) {
   const next = { ...entry, ...patch, status: 'kept' as const };
   if (next.status === entry.status && next.projectId === entry.projectId && next.text === entry.text) return;
@@ -66,7 +62,7 @@ export function writeMemory(decider: Decider, command: CommandOf<'memory.write'>
   assertHumanWrites(decider);
   const text = resolveMemoryText(command.text);
   assertText(text);
-  assertProject(decider, command.projectId);
+  if (command.projectId !== null) findProject(decider.state, command.projectId);
   const patch = { projectId: command.projectId, text };
   if (command.memoryId) {
     keep(decider, findMemory(decider, command.memoryId), patch);

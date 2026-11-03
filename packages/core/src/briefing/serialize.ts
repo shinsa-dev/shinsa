@@ -5,19 +5,19 @@ import type { Queue } from '../queue/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import type { Briefing } from './types.ts';
 
-function resolveTitle(state: ShinsaState, taskId: string) {
+function resolveTaskTitle(state: ShinsaState, taskId: string) {
   return state.tasks[taskId]?.title ?? 'a task';
 }
 
 export function serializeBriefing(briefing: Briefing, state: ShinsaState) {
   const parts = [
     briefing.now
-      ? `Start with ${quoteTitle(resolveTitle(state, briefing.now.taskId))}: ${lowerFirst(briefing.now.why)}.`
+      ? `Start with ${quoteTitle(resolveTaskTitle(state, briefing.now.taskId))}: ${lowerFirst(briefing.now.why)}.`
       : 'Nothing needs you right now.',
   ];
   if (briefing.next.length > 0) {
     parts.push(
-      `Then ${describeList(briefing.next.map((item) => quoteTitle(resolveTitle(state, item.taskId))))}.`
+      `Then ${describeList(briefing.next.map((item) => quoteTitle(resolveTaskTitle(state, item.taskId))))}.`
     );
   }
   parts.push(briefing.running);

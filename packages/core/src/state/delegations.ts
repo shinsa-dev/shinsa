@@ -187,7 +187,7 @@ function markItems(state: ShinsaState, items: string[], delivered: boolean) {
   }
 }
 
-function applyDelivered(state: ShinsaState, event: EventOf<'delegation.delivered'>) {
+function applyDelegationDelivered(state: ShinsaState, event: EventOf<'delegation.delivered'>) {
   const run = state.runs[event.runId];
   if (!run) return;
   markItems(state, event.items, true);
@@ -302,7 +302,7 @@ export function applyDelegationEvent(
       return;
     }
     case 'delegation.delivered':
-      applyDelivered(state, event);
+      applyDelegationDelivered(state, event);
       return;
     case 'delegation.released':
       applyReleased(state, event);

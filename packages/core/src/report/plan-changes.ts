@@ -1,3 +1,4 @@
+import { resolveComparableText } from '../chat/text.ts';
 import type { PlanDocument, PlanPhase } from './types.ts';
 
 export type PlanChange =
@@ -9,27 +10,24 @@ export type PlanChange =
   | { kind: 'phases_reordered' }
   | { kind: 'files'; added: number; removed: number };
 
-function normalize(text: string) {
-  return text.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
 function listTitles(steps: PlanPhase[]) {
-  return steps.map((step) => normalize(step.title));
+  return steps.map((step) => resolveComparableText(step.title));
 }
 
 function listPhaseChanges(before: PlanPhase[], after: PlanPhase[]): PlanChange[] {
-  const previous = new Map(before.map((step) => [normalize(step.title), step]));
-  const next = new Map(after.map((step) => [normalize(step.title), step]));
+  const previous = new Map(before.map((step) => [resolveComparableText(step.title), step]));
+  const next = new Map(after.map((step) => [resolveComparableText(step.title), step]));
   const changes: PlanChange[] = [];
   for (const step of after) {
-    const earlier = previous.get(normalize(step.title));
+    const earlier = previous.get(resolveComparableText(step.title));
     if (!earlier) changes.push({ kind: 'phase_added', title: step.title });
-    else if (normalize(earlier.detail) !== normalize(step.detail)) {
+    else if (resolveComparableText(earlier.detail) !== resolveComparableText(step.detail)) {
       changes.push({ kind: 'phase_changed', title: step.title });
     }
   }
   for (const step of before) {
-    if (!next.has(normalize(step.title))) changes.push({ kind: 'phase_removed', title: step.title });
+    if (!next.has(resolveComparableText(step.title)))
+      changes.push({ kind: 'phase_removed', title: step.title });
   }
   const kept = listTitles(after).filter((title) => previous.has(title));
   const order = listTitles(before).filter((title) => next.has(title));
@@ -48,9 +46,13 @@ function countFileChanges(before: PlanDocument, after: PlanDocument): PlanChange
 export function resolvePlanChanges(before: PlanDocument | null, after: PlanDocument | null): PlanChange[] {
   if (!before || !after) return [];
   return [
-    ...(normalize(before.goal) === normalize(after.goal) ? [] : [{ kind: 'goal' } as const]),
+    ...(resolveComparableText(before.goal) === resolveComparableText(after.goal)
+      ? []
+      : [{ kind: 'goal' } as const]),
     ...listPhaseChanges(before.phases, after.phases),
-    ...(normalize(before.approach) === normalize(after.approach) ? [] : [{ kind: 'approach' } as const]),
+    ...(resolveComparableText(before.approach) === resolveComparableText(after.approach)
+      ? []
+      : [{ kind: 'approach' } as const]),
     ...countFileChanges(before, after),
   ];
 }
@@ -58,10 +60,10 @@ export function resolvePlanChanges(before: PlanDocument | null, after: PlanDocum
 export type PhaseChange = 'added' | 'changed';
 
 export function resolvePhaseChange(changes: PlanChange[] | undefined, title: string): PhaseChange | null {
-  const key = normalize(title);
+  const key = resolveComparableText(title);
   for (const change of changes ?? []) {
-    if (change.kind === 'phase_added' && normalize(change.title) === key) return 'added';
-    if (change.kind === 'phase_changed' && normalize(change.title) === key) return 'changed';
+    if (change.kind === 'phase_added' && resolveComparableText(change.title) === key) return 'added';
+    if (change.kind === 'phase_changed' && resolveComparableText(change.title) === key) return 'changed';
   }
   return null;
 }

@@ -61,7 +61,7 @@ function describeDelegations(count: number) {
   return count === 1 ? '1 delegation is' : `${count} delegations are`;
 }
 
-function describeWaiting(count: number) {
+function describeWaitingDelegations(count: number) {
   return `waiting for ${count === 1 ? 'a delegation' : `${count} delegations`}`;
 }
 
@@ -365,7 +365,7 @@ export function waitForDelegations(decider: Decider, run: Run) {
   });
   decider.withdrawGates(task.id, (gate) => isAgentQuestion(gate) && gate.runId === run.id);
   if (live.length > 0 && !isDelegatedRun(run))
-    decider.stage(task.id, task.stage, describeWaiting(live.length));
+    decider.stage(task.id, task.stage, describeWaitingDelegations(live.length));
   planDelivery(decider, run.id);
 }
 

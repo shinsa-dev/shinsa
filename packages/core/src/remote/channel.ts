@@ -1,4 +1,4 @@
-import { parseJsonRecord } from '../domain/records.ts';
+import { isText, parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, parseBase64Url, serializeBase64Url } from './bytes.ts';
 
 export const CHANNEL_BODY_CHUNK_BYTES = 256 * 1024;
@@ -15,10 +15,6 @@ export type ChannelMessage =
   | { t: 'abort'; id: string };
 
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']);
-
-function isText(value: unknown): value is string {
-  return typeof value === 'string';
-}
 
 function isHeaders(value: unknown): value is ChannelHeaders {
   return (

@@ -1,15 +1,15 @@
-import { parseJsonRecord } from '../domain/records.ts';
+import { isText, parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, concatBytes, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parsePublicKey, serializePublicKey } from './keys.ts';
 import { SHARE_FILE_TYPES, type ShareFileType } from './shares.ts';
 import { importHmacKey, signHmac } from './tokens.ts';
 
-const HELLO_LABEL = 'shinsa-share-hello-v1';
+const SHARE_HELLO_LABEL = 'shinsa-share-hello-v1';
 
-const WELCOME_LABEL = 'shinsa-share-welcome-v1';
+const SHARE_WELCOME_LABEL = 'shinsa-share-welcome-v1';
 
-const SESSION_LABEL = 'shinsa-share-v1 server-to-client';
+const SHARE_SESSION_LABEL = 'shinsa-share-v1 server-to-client';
 
 export interface ShareHello {
   type: 'share-hello';
@@ -34,10 +34,6 @@ interface ShareKeys {
   share: string;
   clientEphemeral: string;
   serverEphemeral: string;
-}
-
-function isText(value: unknown): value is string {
-  return typeof value === 'string';
 }
 
 export async function signChannelProof(key: string, parts: string[]) {
@@ -79,8 +75,8 @@ export async function deriveChannelSessionKey(
   );
 }
 
-function listWelcomeParts(keys: ShareKeys) {
-  return [WELCOME_LABEL, keys.share, keys.clientEphemeral, keys.serverEphemeral];
+function listShareWelcomeParts(keys: ShareKeys) {
+  return [SHARE_WELCOME_LABEL, keys.share, keys.clientEphemeral, keys.serverEphemeral];
 }
 
 export async function createShareHello(
@@ -94,7 +90,7 @@ export async function createShareHello(
     version: REMOTE_PROTOCOL_VERSION,
     share,
     ephemeral: serialized,
-    proof: await signChannelProof(key, [HELLO_LABEL, share, serialized]),
+    proof: await signChannelProof(key, [SHARE_HELLO_LABEL, share, serialized]),
   };
 }
 
@@ -112,14 +108,14 @@ export function parseShareHello(text: string): ShareHello | null {
 }
 
 export function verifyShareHello(key: string, hello: ShareHello) {
-  return verifyChannelProof(key, hello.proof, [HELLO_LABEL, hello.share, hello.ephemeral]);
+  return verifyChannelProof(key, hello.proof, [SHARE_HELLO_LABEL, hello.share, hello.ephemeral]);
 }
 
 export async function createShareWelcome(key: string, keys: ShareKeys): Promise<ShareWelcome> {
   return {
     type: 'welcome',
     ephemeral: keys.serverEphemeral,
-    proof: await signChannelProof(key, listWelcomeParts(keys)),
+    proof: await signChannelProof(key, listShareWelcomeParts(keys)),
   };
 }
 
@@ -132,7 +128,7 @@ export function parseShareWelcome(text: string): ShareWelcome | null {
 }
 
 export function verifyShareWelcome(key: string, keys: ShareKeys, proof: string) {
-  return verifyChannelProof(key, proof, listWelcomeParts(keys));
+  return verifyChannelProof(key, proof, listShareWelcomeParts(keys));
 }
 
 export function deriveShareSessionKey(
@@ -142,7 +138,7 @@ export function deriveShareSessionKey(
   peerEphemeral: string
 ) {
   const parts = [keys.share, keys.clientEphemeral, keys.serverEphemeral];
-  return deriveChannelSessionKey(SESSION_LABEL, key, parts, privateKey, peerEphemeral);
+  return deriveChannelSessionKey(SHARE_SESSION_LABEL, key, parts, privateKey, peerEphemeral);
 }
 
 function readShareMessage(fields: Record<string, unknown>): ShareMessage | null {

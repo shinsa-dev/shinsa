@@ -24,3 +24,7 @@ export function lowerFirst(text: string) {
   if (/[A-Z]/.test(first.slice(1))) return text;
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
+
+export function resolveComparableText(text: string) {
+  return text.trim().toLowerCase().replace(/\s+/g, ' ');
+}

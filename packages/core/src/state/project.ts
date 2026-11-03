@@ -148,7 +148,7 @@ function resolveCreatedShape(event: EventOf<'task.created'>): TaskShape {
   return event.mode === 'ask' ? 'answer' : 'change';
 }
 
-function createTask(event: EventOf<'task.created'>): Task {
+function createTaskRecord(event: EventOf<'task.created'>): Task {
   const request = event.request;
   const title = request.split('\n', 1)[0]?.slice(0, UNTITLED_LENGTH) ?? '';
   const pipeline = [
@@ -809,7 +809,7 @@ function isCreatedByYou(event: EventOf<'task.created'>) {
 }
 
 function applyTaskCreated(state: ShinsaState, event: EventOf<'task.created'>) {
-  writeEntry(state, 'tasks', event.taskId, { ...createTask(event), ...resolveLineage(event) });
+  writeEntry(state, 'tasks', event.taskId, { ...createTaskRecord(event), ...resolveLineage(event) });
   if (isCreatedByYou(event)) recordPresence(state, event.at);
   if (event.handle) recordHandle(state, event.handle);
   recordCourierTask(state, event);
