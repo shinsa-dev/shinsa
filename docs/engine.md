@@ -5916,7 +5916,9 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   task scopes, the run fibers, a `Ref` holding the held runs and the shutdown flag, and the run's parts). The run loop
   is `Effect.fn` steps in `agents/supervisor/` over those two. Each run's turn is a fiber recorded on its `ActiveRun`,
   and its run scope is opened with that fiber: closing the scope from outside gives the fiber `stopMs` to finish, then
-  interrupts it, while the run closing its own scope at the end of its turn goes on to report. `run.cancel` closes the
+  interrupts it, while the run closing its own scope at the end of its turn goes on to report. A run that executes
+  again while its scope is kept for its delegations gives that scope its new fiber, so the next close bounds the turn
+  that runs now. `run.cancel` closes the
   run's scope, its session, every delegation below it and then its fiber; shutdown marks every live run interrupted, waits at most `stopMs` and closes every task's scope. The wait
   between overloaded attempts follows the named `OVERLOAD_RETRY` schedule, and a step's expected failures are tagged
   errors (`WorkspaceUnavailable`, `IsolationFailed`, `LeaseFailed`, `RunDispatchFailed`…). `RunSupervisor` in

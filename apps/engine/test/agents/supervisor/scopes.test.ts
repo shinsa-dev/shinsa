@@ -183,4 +183,23 @@ describe('a task scope', () => {
     );
     expect(after).toBe('settled');
   });
+
+  test('a run that executes again under its kept scope is bounded by its new fiber', async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const scopes = yield* makeTaskScopes(Duration.millis(20));
+          const first = yield* Effect.forkChild(Effect.void);
+          yield* scopes.open({ ...request('task-1', 'parent'), fiber: first });
+          yield* scopes.open({ ...request('task-1', 'child'), parentRunId: 'parent' });
+          yield* scopes.close('parent');
+          yield* Fiber.await(first);
+          const second = yield* Effect.forkChild(Effect.never);
+          yield* scopes.open({ ...request('task-1', 'parent'), fiber: second });
+          yield* scopes.closeRun('parent');
+          expect(Exit.hasInterrupts(yield* Fiber.await(second))).toBe(true);
+        })
+      )
+    );
+  });
 });

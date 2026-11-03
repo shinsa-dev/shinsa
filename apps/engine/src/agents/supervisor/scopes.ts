@@ -7,7 +7,10 @@ import {
   type TaskScopesHandle,
 } from './schema.ts';
 
-const settleOrInterrupt = (fiber: Fiber.Fiber<unknown, unknown>, grace: Duration.Duration) =>
+const settleOrInterrupt = (latest: Ref.Ref<Fiber.Fiber<unknown, unknown> | null>, grace: Duration.Duration) =>
+  Effect.flatMap(Ref.get(latest), (fiber) => (fiber === null ? Effect.void : settleFiber(fiber, grace)));
+
+const settleFiber = (fiber: Fiber.Fiber<unknown, unknown>, grace: Duration.Duration) =>
   Effect.withFiber((current) => {
     if (current.id === fiber.id) return Effect.void;
     return Fiber.await(fiber).pipe(
@@ -44,6 +47,7 @@ export const makeTaskScopes = Effect.fn('TaskScopes.make')(function* (
     const current = yield* Ref.get(table);
     const kept = current.runs.get(runId);
     if (kept) {
+      if (fiber) yield* Ref.set(kept.fiber, fiber);
       const attempt = yield* Scope.fork(kept.scope);
       yield* Ref.update(table, (latest) => ({
         ...latest,
@@ -57,9 +61,10 @@ export const makeTaskScopes = Effect.fn('TaskScopes.make')(function* (
       : { scope: yield* Scope.fork(root), open: 1 };
     const parent = parentRunId === null ? undefined : current.runs.get(parentRunId);
     const scope = yield* Scope.fork(parent?.scope ?? task.scope);
-    if (fiber) yield* Scope.addFinalizer(scope, settleOrInterrupt(fiber, grace));
+    const runFiber = yield* Ref.make<Fiber.Fiber<unknown, unknown> | null>(fiber ?? null);
+    yield* Scope.addFinalizer(scope, settleOrInterrupt(runFiber, grace));
     const attempt = yield* Scope.fork(scope);
-    const run: RunScope = { taskId, parentRunId, scope, attempt };
+    const run: RunScope = { taskId, parentRunId, scope, attempt, fiber: runFiber };
     yield* Ref.update(table, (latest) => ({
       tasks: new Map(latest.tasks).set(taskId, task),
       runs: new Map(latest.runs).set(runId, run),

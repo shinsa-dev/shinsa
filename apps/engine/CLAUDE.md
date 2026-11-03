@@ -681,7 +681,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `process.ts`, `killProcessTree` in `shell/`).
 - **A run is a fiber in its run scope.** The `RunSupervisor` service (`agents/supervisor/service.ts`) forks the run's
   turn and records the fiber on its `ActiveRun`; the run's scope, opened with that fiber, gives it `stopMs` to finish
-  when someone else closes the scope and then interrupts it. `run.cancel` closes the run's scope, which cancels its
+  when someone else closes the scope and then interrupts it; a run that executes again under a scope it kept for its
+  delegations swaps in its new fiber. `run.cancel` closes the run's scope, which cancels its
   session and every delegation below it, then the fiber; shutdown marks every live run interrupted, waits
   at most `stopMs` and closes every task's scope. A new step of the run loop is an `Effect.fn` in `agents/supervisor/`
   over `RunWorld` and `RunHost`, never a method on the class edge, and held runs and the shutdown flag live in

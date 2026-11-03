@@ -36,6 +36,7 @@ export interface RunScope {
   readonly parentRunId: string | null;
   readonly scope: Scope.Closeable;
   readonly attempt: Scope.Closeable | null;
+  readonly fiber: Ref.Ref<Fiber.Fiber<unknown, unknown> | null>;
 }
 
 export interface RunScopeRequest {
