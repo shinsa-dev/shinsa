@@ -1,20 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { useFocusedTeamTasks } from '@/components/teams/tasks.tsx';
 import { connection } from '@/lib/connection/socket.ts';
 import { HomePage } from '@/routes/home.tsx';
 import { TasksPage } from '@/routes/tasks.tsx';
 import { createTeamFeedTask } from '../../lib/teams/machine.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { pushTeams, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createRepo, createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
 import { createTeamEntry } from '../../support/teams.ts';
 
+const TASKS = [
+  createTask({ id: 'mine', title: 'My own task', stage: 'building', projectId: 'shared' }),
+  createTask({ id: 'private', title: 'My private task', stage: 'building', projectId: 'solo' }),
+];
+
+const PROJECTS = [
+  createProject({ id: 'shared', name: 'Shared', teamIds: ['team1'] }),
+  createProject({ id: 'solo', name: 'Solo' }),
+];
+
 const FOCUSED = createShinsaState({
-  tasks: [createTask({ id: 'mine', title: 'My own task', stage: 'building' })],
+  tasks: TASKS,
+  projects: PROJECTS,
   patch: { focus: { projectId: null, teamId: 'team1', until: null } },
 });
+
+const UNFOCUSED = createShinsaState({ tasks: TASKS, projects: PROJECTS });
 
 const OPEN = createTeamFeedTask({
   task: createTask({
@@ -45,10 +57,10 @@ function visit(path: string) {
   dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function renderTasks() {
+function renderTasks(state = FOCUSED) {
   return render(
     <TooltipProvider>
-      <TasksPage state={FOCUSED} />
+      <TasksPage state={state} />
     </TooltipProvider>
   );
 }
@@ -108,11 +120,36 @@ describe('teammates’ tasks', () => {
     expect(screen.queryByText('Offline')).toBeNull();
   });
 
-  it('shows no Owner column while your own work is in focus', () => {
-    function Unfocused() {
-      return <p>{useFocusedTeamTasks(createShinsaState({})) === null ? 'Your work' : 'Team'}</p>;
-    }
-    render(<Unfocused />);
-    expect(screen.getByText('Your work')).toBeDefined();
+  it('keeps your tasks outside the focused team off the list', () => {
+    renderTasks();
+    expect(screen.getByText('My own task')).toBeDefined();
+    expect(screen.queryByText('My private task')).toBeNull();
+  });
+
+  it('lists every team’s tasks beside all of yours while nothing is in focus', () => {
+    renderTasks(UNFOCUSED);
+    expect(screen.getByText('My private task')).toBeDefined();
+    expect(screen.getByText('Add the billing page')).toBeDefined();
+    expect(screen.getByText('Owner')).toBeDefined();
+  });
+
+  it('lists only that project’s tasks, none of the team’s, while one of your projects is in focus', () => {
+    renderTasks(
+      createShinsaState({
+        tasks: TASKS,
+        projects: PROJECTS,
+        patch: { focus: { projectId: 'solo', teamId: null, until: null } },
+      })
+    );
+    expect(screen.getByText('My private task')).toBeDefined();
+    expect(screen.queryByText('My own task')).toBeNull();
+    expect(screen.queryByText('Add the billing page')).toBeNull();
+  });
+
+  it('shows no Owner column when you belong to no team', () => {
+    act(() => connection.replaceRemote(createRemoteSnapshot({ teams: [] })));
+    renderTasks(UNFOCUSED);
+    expect(screen.getByText('My private task')).toBeDefined();
+    expect(screen.queryByText('Owner')).toBeNull();
   });
 });

@@ -77,15 +77,27 @@ describe('teammates’ task lists', () => {
     expect(selectTeamTaskHeldAt(held, createTeamFeedTask({ instanceId: 'bare' }))).toBeNull();
   });
 
-  it('lists one team’s tasks, open ones first and the newest first, leaving out machines you reach with full control', () => {
+  it('lists the tasks of the teams asked for, open ones first and the newest first, leaving out machines you reach with full control', () => {
     const done = createTeamFeedTask({ task: createTask({ id: 'done', stage: 'merged', updatedAt: 50 }) });
     const recent = createTeamFeedTask({ task: createTask({ id: 'recent', updatedAt: 40 }) });
     const old = createTeamFeedTask({ task: createTask({ id: 'old', updatedAt: 5 }) });
     const otherTeam = createTeamFeedTask({ teamId: 'team2', task: createTask({ id: 'other' }) });
     const reachable = createTeamFeedTask({ instanceId: 'k3x9', task: createTask({ id: 'mine' }) });
     const feed = { machines: [], tasks: [old, done, otherTeam, reachable, recent] };
-    const listed = listTeamFeedTasks(feed, 'team1', new Set(['k3x9']));
+    const listed = listTeamFeedTasks(feed, new Set(['team1']), new Set(['k3x9']));
     expect(listed.map((entry) => entry.task.id)).toEqual(['recent', 'old', 'done']);
+    const both = listTeamFeedTasks(feed, new Set(['team1', 'team2']), new Set());
+    expect(both.map((entry) => entry.task.id)).toEqual(['other', 'mine', 'recent', 'old', 'done']);
+  });
+
+  it('lists a task once when two teams both share it', () => {
+    const task = createTask({ id: 'shared' });
+    const feed = {
+      machines: [],
+      tasks: [createTeamFeedTask({ task }), createTeamFeedTask({ teamId: 'team2', task })],
+    };
+    const listed = listTeamFeedTasks(feed, new Set(['team1', 'team2']), new Set());
+    expect(listed.map((entry) => `${entry.teamId}:${entry.task.id}`)).toEqual(['team1:shared']);
   });
 
   it('opens a teammate’s task at its own address and names whose it is', () => {

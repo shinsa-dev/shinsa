@@ -1,4 +1,4 @@
-import type { ShinsaState, TeamFeedTask } from '@shinsa/core';
+import type { TeamFeedTask } from '@shinsa/core';
 import { Badge } from '@shinsa/ui/components/badge';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
@@ -18,7 +18,7 @@ import {
 } from '@/components/tasks/row.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useMachines, useRemoteSnapshot, useTeamFeed } from '@/lib/connection/socket.ts';
-import { type FocusTeam, listFocusTeams, selectFocusTeam } from '@/lib/focus.ts';
+import { type FocusTeam, listFocusTeams } from '@/lib/focus.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { resolveSharedProfile } from '@/lib/remote/users.ts';
@@ -35,28 +35,29 @@ import {
 } from '@/lib/teams/feeds.ts';
 import { navigate } from '@/router.ts';
 
-export interface FocusedTeamTasks {
-  team: FocusTeam;
+export interface TeamTasks {
+  teams: FocusTeam[];
   entries: TeamEntry[];
 }
 
-export function useFocusedTeamTasks(state: ShinsaState): FocusedTeamTasks | null {
-  const team = selectFocusTeam(state, listFocusTeams(useRemoteSnapshot()));
+export function useTeamTasks(): TeamTasks {
+  const remote = useRemoteSnapshot();
+  const teams = React.useMemo(() => listFocusTeams(remote), [remote]);
   const feed = useTeamFeed();
   const machines = useMachines();
-  const teamId = team?.id ?? null;
   const entries = React.useMemo(() => {
-    if (!teamId) return [];
+    if (teams.length === 0) return [];
     const held = listHeldTeamMachines(feed);
-    return listTeamFeedTasks(feed, teamId, new Set(machines.map((machine) => machine.id))).map(
+    const teamIds = new Set(teams.map((team) => team.id));
+    return listTeamFeedTasks(feed, teamIds, new Set(machines.map((machine) => machine.id))).map(
       (entry): TeamEntry => ({
         entry,
         state: resolveTeamTaskState(entry),
         heldAt: selectTeamTaskHeldAt(held, entry),
       })
     );
-  }, [feed, teamId, machines]);
-  return team ? { team, entries } : null;
+  }, [feed, teams, machines]);
+  return { teams, entries };
 }
 
 function openTeamTask(entry: TeamFeedTask) {

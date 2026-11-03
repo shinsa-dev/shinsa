@@ -1,0 +1,222 @@
+import { describe, expect, it } from 'bun:test';
+import type { ShinsaState } from '@shinsa/core';
+import {
+  countActiveFilters,
+  filterTaskRows,
+  isFiltering,
+  listTaskRows,
+  NO_TASK_FILTERS,
+  resolveClearedFilters,
+  resolveTaskFilters,
+  serializeFilterValues,
+  type TaskFilters,
+  toggleFilterValue,
+  YOUR_TASKS_OWNER,
+} from '@/lib/tasks/filters.ts';
+import type { TeamEntry } from '@/lib/tasks/groups.ts';
+import { resolveTeamTaskState } from '@/lib/teams/feeds.ts';
+import {
+  createGate,
+  createProject,
+  createRepo,
+  createShinsaState,
+  createTask,
+  NOW,
+} from '../../support/state.ts';
+import { createTeamFeedTask } from '../teams/machine.ts';
+
+const TEAMS = [
+  { id: 'team1', name: 'Apps' },
+  { id: 'team2', name: 'Platform' },
+];
+
+function teamEntry(overrides: Parameters<typeof createTeamFeedTask>[0]): TeamEntry {
+  const entry = createTeamFeedTask(overrides);
+  return { entry, state: resolveTeamTaskState(entry), heldAt: null };
+}
+
+const MINE = [
+  createTask({ id: 'web', title: 'Billing page', repoId: 'paywall', priority: 'high' }),
+  createTask({ id: 'api', title: 'Invoice export', projectId: 'core', branch: 'feat/invoices' }),
+  createTask({ id: 'ask', title: 'Why is CI slow', projectId: 'core', mode: 'ask' }),
+  createTask({ id: 'shipped', title: 'Old work', stage: 'merged', projectId: 'core' }),
+  createTask({ id: 'home', stage: 'watching', watchHome: true }),
+];
+
+const STATE = createShinsaState({
+  tasks: MINE,
+  gates: [createGate({ id: 'g', taskId: 'web', type: 'review' })],
+  repos: [createRepo({ id: 'paywall', name: 'paywall-next', projectId: 'apps' })],
+  projects: [
+    createProject({ id: 'apps', name: 'Apps', teamIds: ['team1'] }),
+    createProject({ id: 'core', name: 'Core', teamIds: ['team2'] }),
+  ],
+});
+
+const KAI = teamEntry({
+  task: createTask({ id: 'kai-task', title: 'Team billing', priority: 'urgent' }),
+  project: createProject({ id: 'apps', name: 'Apps' }),
+  repo: createRepo({ id: 'r', name: 'paywall-next' }),
+});
+
+const LEE = teamEntry({
+  task: createTask({ id: 'lee-task', title: 'Platform docs' }),
+  teamId: 'team2',
+  owner: 'lee',
+  machine: 'Laptop',
+  instanceId: 'l1',
+});
+
+const NOBODY = teamEntry({ task: createTask({ id: 'nobody' }), owner: null, instanceId: 'x9' });
+
+const TEAM = [KAI, LEE, NOBODY];
+
+function focused(focus: Partial<ShinsaState['focus']>): ShinsaState {
+  return { ...STATE, focus: { projectId: null, teamId: null, until: null, ...focus } };
+}
+
+function ids(state: ShinsaState, filters: Partial<TaskFilters> = {}) {
+  return filterTaskRows(listTaskRows(state, TEAM, TEAMS, NOW), { ...NO_TASK_FILTERS, ...filters })
+    .map((row) => (row.team ? `@${row.task.id}` : row.task.id))
+    .sort();
+}
+
+describe('listTaskRows', () => {
+  it('lists all your tasks and every team’s while nothing is in focus, leaving watch homes out', () => {
+    expect(ids(STATE)).toEqual(['@kai-task', '@lee-task', '@nobody', 'api', 'ask', 'shipped', 'web']);
+  });
+
+  it('lists only the focused team’s tasks, yours and theirs', () => {
+    expect(ids(focused({ teamId: 'team1' }))).toEqual(['@kai-task', '@nobody', 'web']);
+    expect(ids(focused({ teamId: 'team2' }))).toEqual(['@lee-task', 'api', 'ask', 'shipped']);
+  });
+
+  it('lists only the focused project’s tasks, and a teammate’s only in that same project', () => {
+    expect(ids(focused({ projectId: 'apps' }))).toEqual(['@kai-task', 'web']);
+    expect(ids(focused({ projectId: 'core' }))).toEqual(['api', 'ask', 'shipped']);
+  });
+
+  it('lists everything again once the focus is over', () => {
+    expect(ids(focused({ teamId: 'team1', until: NOW - 1 }))).toHaveLength(7);
+  });
+
+  it('names each row’s owner, teams, project, repository and group', () => {
+    const rows = listTaskRows(STATE, TEAM, TEAMS, NOW);
+    const row = (id: string) => rows.find((entry) => entry.task.id === id);
+    expect(row('web')).toMatchObject({
+      owner: YOUR_TASKS_OWNER,
+      teamIds: ['team1'],
+      project: 'Apps',
+      repo: 'paywall-next',
+      group: 'review',
+    });
+    expect(row('api')).toMatchObject({ teamIds: ['team2'], project: 'Core', repo: null, group: 'working' });
+    expect(row('kai-task')).toMatchObject({ owner: 'kai', teamIds: ['team1'], project: 'Apps' });
+    expect(row('nobody')).toMatchObject({ owner: 'x9', project: null, repo: null });
+  });
+
+  it('gives a task in no team’s project no team', () => {
+    const state = createShinsaState({ tasks: [createTask({ id: 'loose', repoId: 'gone' })] });
+    expect(listTaskRows(state, [], TEAMS, NOW)[0]).toMatchObject({ teamIds: [], project: null, repo: null });
+  });
+});
+
+describe('filterTaskRows', () => {
+  it('keeps everything with no filters', () => {
+    expect(ids(STATE, {})).toHaveLength(7);
+  });
+
+  it('filters by status group', () => {
+    expect(ids(STATE, { status: ['review'] })).toEqual(['web']);
+    expect(ids(STATE, { status: ['review', 'done'] })).toEqual(['shipped', 'web']);
+  });
+
+  it('filters by owner, you or a teammate', () => {
+    expect(ids(STATE, { owner: [YOUR_TASKS_OWNER] })).toEqual(['api', 'ask', 'shipped', 'web']);
+    expect(ids(STATE, { owner: ['lee', 'x9'] })).toEqual(['@lee-task', '@nobody']);
+  });
+
+  it('filters by team', () => {
+    expect(ids(STATE, { team: ['team1'] })).toEqual(['@kai-task', '@nobody', 'web']);
+  });
+
+  it('filters by project and by repository name, across machines', () => {
+    expect(ids(STATE, { project: ['Apps'] })).toEqual(['@kai-task', 'web']);
+    expect(ids(STATE, { repo: ['paywall-next'] })).toEqual(['@kai-task', 'web']);
+  });
+
+  it('filters by kind of task', () => {
+    expect(ids(STATE, { kind: ['answer'] })).toEqual(['ask']);
+  });
+
+  it('filters by priority', () => {
+    expect(ids(STATE, { priority: ['urgent', 'high'] })).toEqual(['@kai-task', 'web']);
+  });
+
+  it('combines filters, every one having to match', () => {
+    expect(ids(STATE, { project: ['Apps'], owner: [YOUR_TASKS_OWNER] })).toEqual(['web']);
+  });
+
+  it('searches title, request, branch, repository and a teammate’s name and machine', () => {
+    expect(ids(STATE, { search: '  BILLING ' })).toEqual(['@kai-task', 'web']);
+    expect(ids(STATE, { search: 'feat/invoices' })).toEqual(['api']);
+    expect(ids(STATE, { search: 'paywall-next' })).toEqual(['@kai-task', 'web']);
+    expect(ids(STATE, { search: 'laptop' })).toEqual(['@lee-task']);
+  });
+});
+
+describe('resolveTaskFilters', () => {
+  it('reads every filter from the address, comma separated, dropping unknown and repeated values', () => {
+    const filters = resolveTaskFilters(
+      '?q=bill&status=review,nope,review&owner=you,kai&team=team1&project=Apps&repo=paywall-next&kind=fix,bogus&priority=high,meh'
+    );
+    expect(filters).toEqual({
+      search: 'bill',
+      status: ['review'],
+      owner: ['you', 'kai'],
+      team: ['team1'],
+      project: ['Apps'],
+      repo: ['paywall-next'],
+      kind: ['fix'],
+      priority: ['high'],
+    });
+  });
+
+  it('reads an empty address as no filters', () => {
+    expect(resolveTaskFilters('')).toEqual(NO_TASK_FILTERS);
+    expect(resolveTaskFilters('?owner=,%20')).toEqual(NO_TASK_FILTERS);
+  });
+});
+
+describe('the filter helpers', () => {
+  it('writes values back for the address, or removes the parameter when none is left', () => {
+    expect(serializeFilterValues(['you', 'kai'])).toBe('you,kai');
+    expect(serializeFilterValues([])).toBeNull();
+  });
+
+  it('toggles a value on and off', () => {
+    expect(toggleFilterValue(['a'], 'b')).toEqual(['a', 'b']);
+    expect(toggleFilterValue(['a', 'b'], 'a')).toEqual(['b']);
+  });
+
+  it('counts the active filters and knows when the list is narrowed', () => {
+    const filters = { ...NO_TASK_FILTERS, owner: ['you', 'kai'], kind: ['fix'] };
+    expect(countActiveFilters(filters)).toBe(3);
+    expect(isFiltering(filters)).toBe(true);
+    expect(isFiltering({ ...NO_TASK_FILTERS, search: '  ' })).toBe(false);
+    expect(isFiltering({ ...NO_TASK_FILTERS, search: 'x' })).toBe(true);
+  });
+
+  it('clears the search and every filter', () => {
+    expect(resolveClearedFilters()).toEqual({
+      q: null,
+      status: null,
+      owner: null,
+      team: null,
+      project: null,
+      repo: null,
+      kind: null,
+      priority: null,
+    });
+  });
+});

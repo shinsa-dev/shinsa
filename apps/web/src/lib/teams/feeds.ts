@@ -93,11 +93,17 @@ export function mergeTeamFeeds(feeds: readonly TeamFeedSnapshot[]): TeamFeedSnap
 
 export function listTeamFeedTasks(
   feed: TeamFeedSnapshot,
-  teamId: string,
+  teamIds: ReadonlySet<string>,
   reachable: ReadonlySet<string>
 ): TeamFeedTask[] {
+  const seen = new Set<string>();
   return feed.tasks
-    .filter((task) => task.teamId === teamId && !reachable.has(task.instanceId))
+    .filter((task) => {
+      const key = `${task.instanceId}:${task.task.id}`;
+      if (!teamIds.has(task.teamId) || reachable.has(task.instanceId) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .sort(
       (left, right) =>
         Number(isTaskSettled(left.task)) - Number(isTaskSettled(right.task)) ||

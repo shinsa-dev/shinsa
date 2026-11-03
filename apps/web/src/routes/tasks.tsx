@@ -4,33 +4,42 @@ import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { TaskGroupSection } from '@/components/tasks/group.tsx';
 import { TASK_LIST_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
-import { useFocusedTeamTasks } from '@/components/teams/tasks.tsx';
+import { useTeamTasks } from '@/components/teams/tasks.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
+import { filterTaskRows, isFiltering, listTaskRows, resolveTaskFilters } from '@/lib/tasks/filters.ts';
 import { describeTaskCounts, listTaskGroupSections, selectTaskGroup } from '@/lib/tasks/groups.ts';
-import { updateSearchParams, useSearchParam } from '@/router.ts';
+import { updateSearchParams, useSearchString } from '@/router.ts';
 
 export function TasksPage({ state }: { state: ShinsaState }) {
-  const search = useSearchParam('q') ?? '';
-  const status = selectTaskGroup(useSearchParam('status'));
-  const team = useFocusedTeamTasks(state);
-  const sections = listTaskGroupSections(state, search, status?.key ?? null, team?.entries);
-  const columns = team ? TEAM_TASK_LIST_COLUMNS : TASK_LIST_COLUMNS;
-  const filtered = search.trim() !== '' || status !== null;
+  const filters = resolveTaskFilters(useSearchString());
+  const { search } = filters;
+  const status = filters.status.length === 1 ? selectTaskGroup(filters.status[0] ?? null) : null;
+  const team = useTeamTasks();
+  const rows = React.useMemo(
+    () => listTaskRows(state, team.entries, team.teams),
+    [state, team.entries, team.teams]
+  );
+  const sections = listTaskGroupSections(state, filterTaskRows(rows, filters), filters.status);
+  const owners = rows.some((row) => row.team);
+  const columns = owners ? TEAM_TASK_LIST_COLUMNS : TASK_LIST_COLUMNS;
+  const filtered = isFiltering(filters);
+  const statusKey = filters.status.join(',');
   const empty = sections.every((section) => section.entries.length === 0);
   useRegisterCommands(listTaskListSections(search, status?.key ?? null));
 
   return (
     <div
-      className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6', team && 'max-w-4xl')}
+      className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6', owners && 'max-w-4xl')}
     >
       <div className='flex items-end gap-3'>
         <PageHeading title='All tasks' description={describeTaskCounts(state)} className='flex-1' />
@@ -65,7 +74,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
         >
           <span>Task</span>
           <span className='max-md:hidden'>Repository</span>
-          {team && <span className='max-md:hidden'>Owner</span>}
+          {owners && <span className='max-md:hidden'>Owner</span>}
           <span className='max-md:hidden'>Status</span>
           <span className='max-md:hidden'>Pull request</span>
           <span className='text-right'>Updated</span>
@@ -84,17 +93,17 @@ export function TasksPage({ state }: { state: ShinsaState }) {
           ) : (
             sections.map(({ group, entries }) => (
               <TaskGroupSection
-                key={`${group.key}-${status?.key ?? 'all'}`}
+                key={`${group.key}-${statusKey || 'all'}`}
                 persistId={createDisclosureId(
                   'tasks',
                   'group',
                   group.key,
-                  ...(status ? ['status', status.key] : [])
+                  ...(statusKey ? ['status', statusKey] : [])
                 )}
                 group={group}
                 entries={entries}
                 state={state}
-                defaultOpen={group.defaultOpen || status !== null}
+                defaultOpen={group.defaultOpen || filters.status.length > 0}
                 columns={columns}
               />
             ))
