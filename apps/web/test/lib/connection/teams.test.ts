@@ -59,6 +59,24 @@ describe('team actions on this machine', () => {
     ]);
   });
 
+  it('changes which projects a team sees with a command for each one that moves', async () => {
+    await TEAM_ACTIONS.writeProjects(STATE, 'team1', ['api']);
+    expect(sent).toEqual([]);
+    expect(commandSpy.mock.calls.map(([command]) => command)).toEqual([
+      { type: 'project.add_to_team', projectId: 'api', teamId: 'team1' },
+      { type: 'project.remove_from_team', projectId: 'web', teamId: 'team1' },
+    ]);
+  });
+
+  it('stops at a refused command and says why', async () => {
+    commandSpy.mockRejectedValue(new Error('This project is gone.'));
+    await expect(TEAM_ACTIONS.writeProjects(STATE, 'team1', ['api'])).rejects.toMatchObject({
+      _tag: 'CommandFailed',
+      message: 'This project is gone.',
+    });
+    expect(commandSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('reads the link, and sends each change to its route, keeping the snapshot', async () => {
     answers['/api/remote/teams/link'] = { url: TEAM_URL };
     expect(await TEAM_ACTIONS.readLink('team1')).toEqual({ url: TEAM_URL });
