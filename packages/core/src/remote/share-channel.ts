@@ -3,6 +3,7 @@ import { type Bytes, concatBytes, encodeText, parseBase64Url, serializeBase64Url
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parsePublicKey, serializePublicKey } from './keys.ts';
 import { SHARE_FILE_TYPES, type ShareFileType } from './shares.ts';
+import { importHmacKey, signHmac } from './tokens.ts';
 
 const HELLO_LABEL = 'shinsa-share-hello-v1';
 
@@ -39,22 +40,14 @@ function isText(value: unknown): value is string {
   return typeof value === 'string';
 }
 
-function importChannelKey(key: string) {
-  const raw = parseBase64Url(key);
-  if (!raw || raw.length === 0) return null;
-  return crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
-}
-
 export async function signChannelProof(key: string, parts: string[]) {
-  const hmac = await importChannelKey(key);
+  const hmac = await importHmacKey(key);
   if (!hmac) throw new Error('The channel key is not valid.');
-  return serializeBase64Url(
-    new Uint8Array(await crypto.subtle.sign('HMAC', hmac, encodeText(parts.join('\n'))))
-  );
+  return serializeBase64Url(await signHmac(hmac, encodeText(parts.join('\n'))));
 }
 
 export async function verifyChannelProof(key: string, proof: string, parts: string[]) {
-  const hmac = await importChannelKey(key);
+  const hmac = await importHmacKey(key);
   const signature = parseBase64Url(proof);
   if (!hmac || !signature) return false;
   return crypto.subtle.verify('HMAC', hmac, signature, encodeText(parts.join('\n')));

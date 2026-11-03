@@ -1,7 +1,7 @@
 import { parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
 import type { TeamTask } from '../share/teams.ts';
-import { encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
+import { encodeText, hasBytes, parseBase64Url, serializeBase64Url, URL_SAFE_SEGMENT } from './bytes.ts';
 import { REMOTE_APP_ORIGIN, REMOTE_CONNECT_PARAM, REMOTE_PATHS, type TeamAction } from './contract.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parseSigningPublicKey, serializePublicKey } from './keys.ts';
@@ -16,8 +16,6 @@ const SESSION_LABEL = 'shinsa-team-v1 server-to-client';
 const SNAPSHOT_LABEL = 'shinsa-team-snapshot-v1';
 
 const SNAPSHOT_SIGNATURE = { name: 'ECDSA', hash: 'SHA-256' } as const;
-
-const SEGMENT = /^[A-Za-z0-9_-]+$/;
 
 export const TEAM_KEY_BYTES = 32;
 
@@ -105,7 +103,7 @@ export interface TeamViewTarget {
 }
 
 export function isTeamKey(key: string) {
-  return SEGMENT.test(key) && parseBase64Url(key)?.length === TEAM_KEY_BYTES;
+  return hasBytes(key, TEAM_KEY_BYTES);
 }
 
 export function serializeTeamJoinFragment(fragment: TeamJoinFragment) {
@@ -114,7 +112,7 @@ export function serializeTeamJoinFragment(fragment: TeamJoinFragment) {
 
 export function parseTeamJoinFragment(fragment: string): TeamJoinFragment | null {
   const parts = fragment.replace(/^#/, '').split('.');
-  if (parts.length !== 3 || parts.some((part) => !SEGMENT.test(part))) return null;
+  if (parts.length !== 3 || parts.some((part) => !URL_SAFE_SEGMENT.test(part))) return null;
   const [teamId, invite, key] = parts as [string, string, string];
   return isTeamKey(key) ? { teamId, invite, key } : null;
 }
@@ -163,7 +161,7 @@ export function parseTeamViewTarget(url: URL): TeamViewTarget | null {
   const instanceId = url.searchParams.get('machine');
   const taskId = url.searchParams.get('task');
   if (!(teamId && instanceId && taskId)) return null;
-  if (![teamId, instanceId, taskId].every((part) => SEGMENT.test(part))) return null;
+  if (![teamId, instanceId, taskId].every((part) => URL_SAFE_SEGMENT.test(part))) return null;
   return { teamId, instanceId, taskId };
 }
 
@@ -175,7 +173,7 @@ function readTeamView(value: unknown): TeamView | null {
   if (value === null || typeof value !== 'object') return null;
   const fields = value as Record<string, unknown>;
   if (fields.kind === 'list') return { kind: 'list' };
-  if (fields.kind === 'task' && typeof fields.taskId === 'string' && SEGMENT.test(fields.taskId))
+  if (fields.kind === 'task' && typeof fields.taskId === 'string' && URL_SAFE_SEGMENT.test(fields.taskId))
     return { kind: 'task', taskId: fields.taskId };
   return null;
 }

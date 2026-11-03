@@ -1,17 +1,5 @@
+import { hashText } from '../domain/hash.ts';
 import { type FixFingerprint, type FixReason, listBlockingChecks, type Task } from '../domain/index.ts';
-
-const FNV_OFFSET = 0x811c9dc5;
-
-const FNV_PRIME = 0x01000193;
-
-function hashText(text: string) {
-  let hash = FNV_OFFSET;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, FNV_PRIME) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0');
-}
 
 function listFailingChecks(task: Task) {
   return listBlockingChecks(task)
@@ -44,7 +32,7 @@ export function resolveRecoveryFingerprint(task: Task) {
         ]
       : null,
   };
-  return `recovery:${hashText(JSON.stringify(durable))}`;
+  return `recovery:${hashText(JSON.stringify(durable)).toString(16).padStart(8, '0')}`;
 }
 
 function isSameTree(fingerprint: FixFingerprint, tree: string | null) {
