@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { type Changelog, DEVELOPMENT_VERSION, resolveEngineInfo } from '@shinsa/core';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
@@ -48,6 +48,10 @@ function answerChangelog(changelog: Changelog = CHANGELOG) {
 function listVersions(releases: readonly { version: string | null }[]) {
   return releases.map((release) => release.version);
 }
+
+afterEach(() => {
+  mock.restore();
+});
 
 describe('resolveWhatsNew', () => {
   it('lists the releases after the one you saw, up to the version running', () => {
