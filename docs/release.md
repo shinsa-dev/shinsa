@@ -152,7 +152,9 @@ files or the code. Entries are never edited into a list by hand, and no file hol
   and tags (`fetch-depth: 0`). An engine run from a checkout reads `.changes/` when it starts and lists every entry as
   unreleased (`apps/engine/src/changelog`). Either way the engine serves it at `GET /api/changelog` (`Changelog`,
   behind the `changelog` engine feature); an embedded history that does not decode serves an empty changelog instead
-  of stopping the engine.
+  of stopping the engine. An engine run from a checkout also reads `SHINSA_BUILD_CHANGELOG` from its environment, so
+  `bun run seed` writes a long sample history, 50 releases (`scripts/seed-changelog.ts`, `<seed dir>/changelog.json`),
+  and the `seeded-changelog` service serves the seed with it, to see how the dialog holds a long changelog.
 - **What's new in the app.** After Shinsa updates, the header shows a What's new button (both layouts) that opens a
   dialog of every release since the version this browser last saw, by section (`docs/engine.md` → What's new).
   Releases before this change have no entries; nothing is backfilled.

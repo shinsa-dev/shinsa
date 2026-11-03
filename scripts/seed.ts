@@ -35,6 +35,7 @@ import {
   serializePlanMarkdown,
 } from '../packages/core/src/index.ts';
 import { listBundleTasks } from './seed-bundles.ts';
+import { writeSeedChangelog } from './seed-changelog.ts';
 import { writeCodeTranscripts } from './seed-code-transcripts.ts';
 import { createCodeSample, listCodeTasks } from './seed-code.ts';
 import { listDelegationTasks, writeDelegationTranscripts } from './seed-delegation.ts';
@@ -5759,9 +5760,13 @@ function seed() {
   writeAccountTranscripts(transcripts);
   const session = Bun.env.SHINSA_SEED_SESSION;
   if (session) writeSessionTranscript(session, runTimes, transcripts);
+  const changelog = writeSeedChangelog(ROOT);
   console.info(`Seeded ${tasks.length} tasks into ${DATA}`);
   console.info(
     `Run: SHINSA_DATA_DIR=${DATA} SHINSA_INSPECT=1 SHINSA_PORT=5190 bun run --cwd apps/engine start`
+  );
+  console.info(
+    `With a long changelog: SHINSA_BUILD_CHANGELOG="$(cat ${changelog})" before the command above`
   );
 }
 
