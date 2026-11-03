@@ -16,9 +16,7 @@ function StatTile({ tile }: { tile: ShippingTile }) {
       {tile.hint ? (
         <Hint label={tile.hint}>
           <span className='flex w-fit max-w-full min-w-0 cursor-help'>
-            <Truncate className='text-2xs text-fg-2 underline decoration-fg-1 decoration-dotted underline-offset-2'>
-              {tile.label}
-            </Truncate>
+            <Truncate className='text-2xs text-fg-2'>{tile.label}</Truncate>
           </span>
         </Hint>
       ) : (
