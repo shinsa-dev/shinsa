@@ -5,6 +5,9 @@ import { REMOTE_PROTOCOL_VERSION } from '../../src/remote/handshake.ts';
 import { SIGNING_KEY_ALGORITHM, serializePublicKey } from '../../src/remote/keys.ts';
 import {
   DEFAULT_TEAM_PERMISSIONS,
+  FULL_TEAM_PERMISSIONS,
+  isTeamPerson,
+  resolveMemberPermissions,
   resolveTeamPermissions,
   createTeamHello,
   createTeamWelcome,
@@ -217,5 +220,30 @@ describe('resolveTeamPermissions', () => {
       act: false,
     });
     expect(resolveTeamPermissions(undefined, { services: false }).services).toBe(false);
+  });
+});
+
+describe('resolveMemberPermissions', () => {
+  const user = (id: string) => ({ id, login: id, name: null, avatarUrl: null });
+  const team = {
+    owner: user('mona'),
+    members: [
+      { user: user('kai'), addedAt: 1 },
+      { user: user('lee'), addedAt: 1 },
+    ],
+    permissions: { ...DEFAULT_TEAM_PERMISSIONS, share: false },
+    overrides: [{ userId: 'kai', permissions: { message: true } }],
+  };
+
+  test('gives the team’s owner every right, a member the team’s, and a member set apart their own', () => {
+    expect(resolveMemberPermissions(team, 'mona')).toEqual(FULL_TEAM_PERMISSIONS);
+    expect(resolveMemberPermissions(team, 'lee')).toEqual({ ...DEFAULT_TEAM_PERMISSIONS, share: false });
+    expect(resolveMemberPermissions(team, 'kai')).toMatchObject({ message: true, share: false });
+  });
+
+  test('counts the owner and the members as the team’s people, and no one else', () => {
+    expect(isTeamPerson(team, 'mona')).toBe(true);
+    expect(isTeamPerson(team, 'kai')).toBe(true);
+    expect(isTeamPerson(team, 'octo')).toBe(false);
   });
 });

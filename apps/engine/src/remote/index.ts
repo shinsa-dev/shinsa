@@ -15,12 +15,14 @@ import {
   type ScopedActor,
   MACHINE_FEATURES,
   type HandshakeKeys,
+  isTeamPerson,
   MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
   type RemoteAccess,
   type TunnelStatus,
   resolveClaimUrl,
   resolveEnrollUrl,
+  resolveMemberPermissions,
   resolveRemoteHookUrl,
   serializeBase64Url,
   verifyConnectToken,
@@ -37,7 +39,14 @@ import {
   RemoteControl,
   selectRemoteFailureTag,
 } from './client/index.ts';
-import { listTeamEntries, RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
+import {
+  listTeamEntries,
+  type RemoteDevice,
+  RemoteStore,
+  type StoredHandoff,
+  type StoredLink,
+  type TeamGrant,
+} from './store.ts';
 import { Tunnel, type TunnelConnectorLayer, type TunnelPing } from './tunnel/index.ts';
 
 export { type ChannelPeer, RemoteChannel } from './channel.ts';
@@ -89,6 +98,8 @@ const HANDOFF_UNAVAILABLE = 'This machine cannot hand off tasks right now. Try a
 
 const GUEST_FALLBACK_LOGIN = 'guest';
 
+const NOWHERE: ScopedActor['scope'] = { kind: 'task', taskId: '' };
+
 export function resolveMachineName(name = hostname()) {
   const bare = name.replace(/\.local$/i, '');
   if (!bare) return 'Machine';
@@ -122,6 +133,7 @@ export class Remote {
   #claimer: HandoffClaimer | null = null;
   #leaver: GuestLeaver | null = null;
   #guestRevision = 0;
+  readonly #teamScopes = new Map<string, string>();
 
   constructor(options: RemoteOptions) {
     this.#options = options;
@@ -444,17 +456,74 @@ export class Remote {
   }
 
   #selectPerson(userId: string): TaskGuest {
-    const { access, guests } = this.store.file;
+    const { access, guests, teams } = this.store.file;
     const users = [access?.owner, ...(access?.members ?? []).map((member) => member.user)];
-    const known = [...users, ...guests.map((guest) => guest.user)].find((user) => user?.id === userId);
+    const teammates = teams.flatMap((team) => [team.owner, ...team.members.map((member) => member.user)]);
+    const known = [...users, ...guests.map((guest) => guest.user), ...teammates].find(
+      (user) => user?.id === userId
+    );
     return known ?? { id: userId, login: GUEST_FALLBACK_LOGIN, name: null, avatarUrl: null };
+  }
+
+  #resolveScope(enrolled: RemoteDevice): ScopedActor['scope'] | null {
+    if (enrolled.taskId) return { kind: 'task', taskId: enrolled.taskId };
+    if (!enrolled.teamId || this.#hasAccess(enrolled.userId)) return null;
+    const team = this.#selectTeamAccess(enrolled.userId, enrolled.teamId);
+    if (!team) return NOWHERE;
+    return { kind: 'team', teamId: team.id, permissions: resolveMemberPermissions(team, enrolled.userId) };
   }
 
   #resolveGuest(device: string): ScopedActor | null {
     const enrolled = this.store.selectDevice(device);
-    if (!enrolled?.taskId) return null;
+    const scope = enrolled ? this.#resolveScope(enrolled) : null;
+    if (!(enrolled && scope)) return null;
+    if (scope.kind === 'team') this.#teamScopes.set(device, JSON.stringify(scope));
     const { id, login, name, avatarUrl } = this.#selectPerson(enrolled.userId);
-    return { id, login, name, avatarUrl, scope: { kind: 'task', taskId: enrolled.taskId } };
+    return { id, login, name, avatarUrl, scope };
+  }
+
+  #selectTeamAccess(userId: string, teamId: string) {
+    const team = this.store.selectTeam(teamId);
+    const reaches =
+      team !== null &&
+      this.store.selectTeamKey(teamId) !== null &&
+      !this.isOwner(userId) &&
+      isTeamPerson(team, userId);
+    return reaches ? team : null;
+  }
+
+  resolveTeamGrant(userId: string, teamId: string) {
+    if (!(this.isEnabled && this.#selectTeamAccess(userId, teamId))) return null;
+    const existing = this.store.selectGrant(userId, teamId);
+    if (existing) return existing.secret;
+    const grant: TeamGrant = {
+      userId,
+      teamId,
+      secret: serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES))),
+    };
+    this.store.writeGrant(grant);
+    return grant.secret;
+  }
+
+  #syncTeamAccess() {
+    const outside = (userId: string, teamId: string) => !this.#selectTeamAccess(userId, teamId);
+    this.store.removeGrantsWhere((grant) => outside(grant.userId, grant.teamId));
+    const removed = new Set(
+      this.store.removeDevicesWhere(
+        (device) => device.teamId != null && outside(device.userId, device.teamId)
+      )
+    );
+    const narrowed = new Set(
+      [...this.#teamScopes].flatMap(([device, opened]) => {
+        const enrolled = this.store.selectDevice(device);
+        const scope = enrolled ? this.#resolveScope(enrolled) : null;
+        return JSON.stringify(scope) === opened ? [] : [device];
+      })
+    );
+    for (const device of [...removed, ...narrowed]) this.#teamScopes.delete(device);
+    this.#closeChannels(
+      (channel) => channel.device !== null && (removed.has(channel.device) || narrowed.has(channel.device))
+    );
   }
 
   async #resolveRequester(userId: string): Promise<RemoteUser | string> {
@@ -502,25 +571,24 @@ export class Remote {
     return answer;
   }
 
+  async #matchGrant(userId: string, proof: string, keys: ProofKeys) {
+    for (const grant of this.store.listGrants(userId)) {
+      if (!this.#selectTeamAccess(userId, grant.teamId)) continue;
+      if (await verifyEnrollProof(grant.secret, proof, keys)) return grant;
+    }
+    return null;
+  }
+
   async #admitTeammate(proof: string, keys: ProofKeys, name: string | null, userId: string) {
-    const grant = this.store.selectGrant(userId);
-    if (!(grant && this.store.file.access?.members.some((member) => member.user.id === userId))) return false;
-    const team = this.store.selectTeam(grant.teamId);
-    const inTeam = team?.owner.id === userId || team?.members.some((member) => member.user.id === userId);
-    if (
-      !(
-        inTeam &&
-        this.store.selectTeamKey(grant.teamId) &&
-        (await verifyEnrollProof(grant.secret, proof, keys))
-      )
-    )
-      return false;
+    const grant = await this.#matchGrant(userId, proof, keys);
+    if (!grant) return false;
     this.store.upsertDevice({
       publicKey: keys.device,
       name: name ?? 'Browser',
       enrolledAt: this.#now(),
       lastSeenAt: null,
       userId,
+      ...(this.#hasAccess(userId) ? {} : { teamId: grant.teamId }),
     });
     this.#publish();
     return true;
@@ -532,10 +600,7 @@ export class Remote {
     const team = this.store.selectTeam(teamId);
     if (!(team && this.store.selectTeamKey(teamId)))
       throw new DomainError({ code: 'team_not_found', message: 'This machine is not in that team.' });
-    const teammate = [team.owner, ...team.members.map((member) => member.user)].find(
-      (user) => user.id === userId
-    );
-    if (!(access && teammate) || access.owner.id === userId)
+    if (!(access && this.#selectTeamAccess(userId, teamId)))
       throw new DomainError({
         code: 'teammate_not_found',
         message: 'No one else in that team has that GitHub account.',
@@ -544,11 +609,7 @@ export class Remote {
       const member = await this.#requestMemberAddition(credentials.machineToken, userId);
       this.#recordAccess({ ...access, members: [...access.members, member] });
     }
-    this.store.writeGrant({
-      userId,
-      teamId,
-      secret: serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES))),
-    });
+    this.resolveTeamGrant(userId, teamId);
     this.#publish();
   }
 
@@ -662,13 +723,14 @@ export class Remote {
     const left = before.guests.map((guest) => guest.user.id).filter((id) => !listed.has(id));
     if (left.length > 0) this.#leaver?.(left);
     const removed = new Set(this.store.removeDevicesOutside(allowed, listed));
-    this.store.removeGrantsOutside(allowed);
     this.#closeChannels((channel) => channel.device !== null && removed.has(channel.device));
     if (changed || removed.size > 0) this.#publish();
   }
 
   #admits(device: string, userId: string) {
-    return this.store.selectDevice(device)?.userId === userId;
+    const enrolled = this.store.selectDevice(device);
+    if (enrolled?.userId !== userId) return false;
+    return !enrolled.teamId || this.#resolveScope(enrolled) !== NOWHERE;
   }
 
   publish() {
@@ -681,6 +743,7 @@ export class Remote {
   }
 
   #publish() {
+    this.#syncTeamAccess();
     for (const listener of this.#listeners) listener();
   }
 

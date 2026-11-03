@@ -6,6 +6,7 @@ import {
   REMOTE_APP_ORIGIN,
   REMOTE_CONNECT_PARAM,
   REMOTE_PATHS,
+  type RemoteTeam,
   type TeamAction,
   type TeamPermissions,
   type TeamPermissionsPatch,
@@ -51,6 +52,29 @@ export function resolveTeamPermissions(
   member: TeamPermissionsPatch | null | undefined = null
 ): TeamPermissions {
   return { ...DEFAULT_TEAM_PERMISSIONS, ...team, ...member };
+}
+
+export const FULL_TEAM_PERMISSIONS: TeamPermissions = {
+  act: true,
+  takeOver: true,
+  share: true,
+  services: true,
+  message: true,
+};
+
+type TeamPeople = Pick<RemoteTeam, 'owner' | 'members'>;
+
+export function isTeamPerson(team: TeamPeople, userId: string) {
+  return team.owner.id === userId || team.members.some((member) => member.user.id === userId);
+}
+
+export function resolveMemberPermissions(
+  team: TeamPeople & Pick<RemoteTeam, 'permissions' | 'overrides'>,
+  userId: string
+): TeamPermissions {
+  if (team.owner.id === userId) return FULL_TEAM_PERMISSIONS;
+  const override = team.overrides.find((entry) => entry.userId === userId);
+  return { ...team.permissions, ...override?.permissions };
 }
 
 export interface TeamJoinFragment {

@@ -1,5 +1,8 @@
 import {
+  type ActorScope,
   type ChatEntry,
+  isTaskInScope,
+  listScopedTasks,
   type ConnectChannel,
   LOCAL_ONLY_MESSAGE,
   OWNER_ONLY_MESSAGE,
@@ -7,6 +10,7 @@ import {
   SCOPE_MESSAGES,
   SHARE_CHANNEL_PARAM,
   splitMessageAttachments,
+  TEAM_SCOPE_MESSAGES,
 } from '@shinsa/core';
 import {
   ConnectRefused,
@@ -112,19 +116,27 @@ export class TunnelGate extends Context.Service<
           );
       };
 
-      const isGuestRoute = (taskId: string, { method, pathname }: GateRequest) => {
+      const isGuestRoute = (scope: ActorScope, { method, pathname }: GateRequest) => {
         if (!GUEST_READ_METHODS.has(method)) return false;
         if (pathname === GUEST_HEALTH_PATH) return true;
         const task = GUEST_TASK_READS.exec(pathname);
-        if (task) return decodeURIComponent(task[1] ?? '') === taskId;
+        if (task) return isTaskInScope(engine.state, scope, decodeURIComponent(task[1] ?? ''));
         if (!(pathname.startsWith(EVIDENCE_ROUTE) || pathname.startsWith(ATTACHMENT_ROUTE))) return false;
-        return isTaskFile(taskId, pathname);
+        return listScopedTasks(engine.state, scope).some((entry) => isTaskFile(entry.id, pathname));
       };
+
+      const resolveScopeMessage = (scope: ActorScope, pathname: string) => {
+        if (scope.kind === 'task') return SCOPE_MESSAGES.task;
+        return GUEST_TASK_READS.test(pathname) ? TEAM_SCOPE_MESSAGES.task : TEAM_SCOPE_MESSAGES.command;
+      };
+
+      const refuseScope = (scope: ActorScope, pathname: string) =>
+        new ScopeRefused({ message: resolveScopeMessage(scope, pathname) });
 
       const admitChannelRequest = (url: URL, source: RequestSourceShape) => {
         if (!url.pathname.startsWith('/api/')) return Effect.fail(notFound());
         if (!extensions?.isCallback(url.pathname)) return Effect.void;
-        if (source.guest) return Effect.fail(new ScopeRefused({ message: SCOPE_MESSAGES.task }));
+        if (source.guest) return Effect.fail(refuseScope(source.guest.scope, url.pathname));
         return Effect.fail(new LocalOnly({ message: LOCAL_ONLY_MESSAGE }));
       };
 
@@ -154,12 +166,12 @@ export class TunnelGate extends Context.Service<
       ) {
         if (source.via !== 'channel') return;
         const access = Context.get(annotations, GuestRoute);
-        const admitsGuest =
-          access === 'any' ||
-          (access !== 'none' &&
-            source.guest?.scope.kind === 'task' &&
-            isGuestRoute(source.guest.scope.taskId, request));
-        if (source.guest && !admitsGuest) return yield* new ScopeRefused({ message: SCOPE_MESSAGES.task });
+        if (
+          source.guest &&
+          access !== 'any' &&
+          !(access !== 'none' && isGuestRoute(source.guest.scope, request))
+        )
+          return yield* refuseScope(source.guest.scope, request.pathname);
         if (Context.get(annotations, LocalOnlyRoute))
           return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
         if (Context.get(annotations, OwnerOnlyRoute) && !remote?.isOwner(source.userId))

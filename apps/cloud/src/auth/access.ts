@@ -49,7 +49,7 @@ export const findMachineAccess = Effect.fn('findMachineAccess')(function* (
   return { machine: machine.value, role: role.value } satisfies MachineAccessGrant;
 });
 
-export const findPreviewMachine = Effect.fn('findPreviewMachine')(function* (
+export const findReachableMachine = Effect.fn('findReachableMachine')(function* (
   userId: RemoteUserId,
   instanceId: InstanceId
 ) {

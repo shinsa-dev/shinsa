@@ -3,6 +3,7 @@ import {
   createTeamWelcome,
   DomainError,
   deriveTeamSessionKey,
+  isTeamPerson,
   isTeamTask,
   listTeamProjectIds,
   listTeamTasks,
@@ -79,10 +80,6 @@ const TEAM_GONE = new DomainError({ code: 'team_not_found', message: 'This machi
 
 function createRandom(bytes: number) {
   return new Uint8Array(randomBytes(bytes));
-}
-
-function isTeamViewer(team: RemoteTeam, userId: string) {
-  return team.owner.id === userId || team.members.some((member) => member.user.id === userId);
 }
 
 function withoutUser(members: readonly RemoteMember[], userId: string) {
@@ -365,7 +362,7 @@ export class Teams implements TeamLinks {
     const team = this.#store.selectTeam(subject.teamId);
     if (!team) return TEAM_REFUSALS.team;
     if (!this.#store.selectTeamKey(subject.teamId)) return TEAM_REFUSALS.key;
-    if (!isTeamViewer(team, subject.userId)) return TEAM_REFUSALS.member;
+    if (!isTeamPerson(team, subject.userId)) return TEAM_REFUSALS.member;
     if (subject.view.kind === 'list') return null;
     const task = this.#engine.state.tasks[subject.view.taskId];
     return task && isTeamTask(this.#engine.state, task, subject.teamId) ? null : TEAM_REFUSALS.task;
@@ -403,14 +400,14 @@ export class Teams implements TeamLinks {
     });
     const tasks = EgressGate.listTeamTasks(listed);
     const { publicKey } = await this.#store.resolveMachineKey();
-    const grant = this.#store.selectGrant(subject.userId);
+    const grant = this.#remote.resolveTeamGrant(subject.userId, subject.teamId);
     const updatedAt = this.#now();
     const snapshot = await this.#signList(subject.teamId, tasks, updatedAt);
     const held = this.#held?.listHeld(subject.teamId) ?? [];
     const view: TeamListView = {
       tasks,
       machineKey: publicKey,
-      ...(grant?.teamId === subject.teamId ? { grant: grant.secret } : {}),
+      ...(grant ? { grant } : {}),
       updatedAt,
       ...(snapshot ? { snapshot } : {}),
       ...(held.length > 0 ? { held } : {}),

@@ -109,6 +109,7 @@ function readDevices(value: unknown): RemoteDevice[] {
     if (typeof entry.enrolledAt !== 'number' || typeof entry.userId !== 'string') return [];
     const lastSeenAt = typeof entry.lastSeenAt === 'number' ? entry.lastSeenAt : null;
     const taskId = typeof entry.taskId === 'string' ? { taskId: entry.taskId } : {};
+    const teamId = typeof entry.teamId === 'string' ? { teamId: entry.teamId } : {};
     return [
       {
         publicKey: entry.publicKey,
@@ -117,6 +118,7 @@ function readDevices(value: unknown): RemoteDevice[] {
         lastSeenAt,
         userId: entry.userId,
         ...taskId,
+        ...teamId,
       },
     ];
   });
@@ -245,6 +247,10 @@ function readGrants(value: unknown): TeamGrant[] {
     if (typeof entry.secret !== 'string') return [];
     return [{ userId: entry.userId, teamId: entry.teamId, secret: entry.secret }];
   });
+}
+
+function isSameGrant(grant: TeamGrant, other: Pick<TeamGrant, 'userId' | 'teamId'>) {
+  return grant.userId === other.userId && grant.teamId === other.teamId;
 }
 
 export function listTeamEntries(file: RemoteFile): RemoteTeamEntry[] {
@@ -401,9 +407,13 @@ export class RemoteStore {
   }
 
   removeDevicesOutside(userIds: ReadonlySet<string>, guestIds: ReadonlySet<string>) {
-    const removed = this.#file.devices.filter(
-      (device) => !(device.taskId ? guestIds : userIds).has(device.userId)
+    return this.removeDevicesWhere(
+      (device) => !device.teamId && !(device.taskId ? guestIds : userIds).has(device.userId)
     );
+  }
+
+  removeDevicesWhere(match: (device: RemoteDevice) => boolean) {
+    const removed = this.#file.devices.filter(match);
     if (removed.length === 0) return [];
     this.update((file) => ({
       ...file,
@@ -453,17 +463,21 @@ export class RemoteStore {
   writeGrant(grant: TeamGrant) {
     this.update((file) => ({
       ...file,
-      grants: [...file.grants.filter((entry) => entry.userId !== grant.userId), grant],
+      grants: [...file.grants.filter((entry) => !isSameGrant(entry, grant)), grant],
     }));
   }
 
-  selectGrant(userId: string) {
-    return this.#file.grants.find((grant) => grant.userId === userId) ?? null;
+  selectGrant(userId: string, teamId: string) {
+    return this.#file.grants.find((grant) => isSameGrant(grant, { userId, teamId })) ?? null;
   }
 
-  removeGrantsOutside(userIds: ReadonlySet<string>) {
-    if (this.#file.grants.every((grant) => userIds.has(grant.userId))) return;
-    this.update((file) => ({ ...file, grants: file.grants.filter((grant) => userIds.has(grant.userId)) }));
+  listGrants(userId: string) {
+    return this.#file.grants.filter((grant) => grant.userId === userId);
+  }
+
+  removeGrantsWhere(match: (grant: TeamGrant) => boolean) {
+    if (!this.#file.grants.some(match)) return;
+    this.update((file) => ({ ...file, grants: file.grants.filter((grant) => !match(grant)) }));
   }
 
   removeTeam(teamId: string) {

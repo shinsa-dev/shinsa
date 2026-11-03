@@ -290,6 +290,9 @@ export type {
 } from './status.ts';
 export {
   DEFAULT_TEAM_PERMISSIONS,
+  FULL_TEAM_PERMISSIONS,
+  isTeamPerson,
+  resolveMemberPermissions,
   resolveTeamPermissions,
   TEAM_PERMISSION_NAMES,
   type TeamPermission,

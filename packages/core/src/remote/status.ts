@@ -15,6 +15,7 @@ export interface RemoteDevice {
   lastSeenAt: number | null;
   userId: string;
   taskId?: string | null;
+  teamId?: string | null;
 }
 
 export interface RemoteLink {

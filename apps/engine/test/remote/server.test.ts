@@ -315,6 +315,31 @@ async function readAck(channel: OpenChannel) {
   }
 }
 
+async function readSocketUntil(channel: OpenChannel, type: string) {
+  const seen: { type: string; [key: string]: unknown }[] = [];
+  for (;;) {
+    const message = await channel.next();
+    if (message.t !== 'socket') continue;
+    const parsed = JSON.parse(message.data) as { type: string };
+    seen.push(parsed);
+    if (parsed.type === type) return seen;
+  }
+}
+
+async function sendCommand(channel: OpenChannel, id: string, command: unknown) {
+  await channel.send({ t: 'socket', data: JSON.stringify({ type: 'command', id, command }) });
+  return (await readAck(channel)).error?.code ?? null;
+}
+
+async function requestStatus(channel: OpenChannel, id: string, path: string) {
+  await channel.send({ t: 'request', id, method: 'GET', path, headers: [] });
+  await channel.send({ t: 'end', id });
+  for (;;) {
+    const message = await channel.next();
+    if (message.t === 'response' && message.id === id) return message.status;
+  }
+}
+
 describe('the tunnel entry point', () => {
   test('answers only health, webhooks and the channel, and 404s the rest of the app', async () => {
     const { tunnel } = await start();
@@ -1408,31 +1433,6 @@ describe('handing off a task', () => {
     return parseEnrollFragment(new URL(engine.state.tasks[taskId]?.handoff?.url ?? 'https://x').hash);
   }
 
-  async function readSocketUntil(channel: OpenChannel, type: string) {
-    const seen: { type: string; [key: string]: unknown }[] = [];
-    for (;;) {
-      const message = await channel.next();
-      if (message.t !== 'socket') continue;
-      const parsed = JSON.parse(message.data) as { type: string };
-      seen.push(parsed);
-      if (parsed.type === type) return seen;
-    }
-  }
-
-  async function sendCommand(channel: OpenChannel, id: string, command: unknown) {
-    await channel.send({ t: 'socket', data: JSON.stringify({ type: 'command', id, command }) });
-    return (await readAck(channel)).error?.code ?? null;
-  }
-
-  async function requestStatus(channel: OpenChannel, id: string, path: string) {
-    await channel.send({ t: 'request', id, method: 'GET', path, headers: [] });
-    await channel.send({ t: 'end', id });
-    for (;;) {
-      const message = await channel.next();
-      if (message.t === 'response' && message.id === id) return message.status;
-    }
-  }
-
   test('makes one claim link per task, only while remote access is on', async () => {
     const { remote, engine, taskId, plane } = await startHandoff();
     const url = engine.state.tasks[taskId]?.handoff?.url ?? '';
@@ -1758,5 +1758,91 @@ describe('naming and opening', () => {
 
   test('opens nothing on a machine without a display, since the command prints the pairing page', async () => {
     await openRemoteUrl('fail', createTempDir(), null);
+  });
+});
+
+describe('a teammate on this machine', () => {
+  function readEngineInfo(opened: { type: string; [key: string]: unknown }[]) {
+    return opened.find((message) => message.type === 'engine')?.engine as { commands: string[] };
+  }
+
+  const TEAM_KEY = serializeBase64Url(new Uint8Array(32).fill(3));
+
+  async function startTeammate(permissions = DEFAULT_TEAM_PERMISSIONS) {
+    const started = await start();
+    const { engine, remote, port } = started;
+    remote.store.update((file) => ({
+      ...file,
+      teams: [{ ...TEAM, permissions }],
+      teamKeys: [{ teamId: TEAM.id, name: TEAM.name, key: TEAM_KEY, invite: null, addedAt: 1 }],
+    }));
+    await engine.dispatch({ type: 'project.write', project: { name: 'Superwall', color: 'blue' } });
+    await engine.dispatch({ type: 'project.write', project: { name: 'Private', color: 'red' } });
+    const [shared, kept] = Object.keys(engine.state.projects);
+    await engine.dispatch({ type: 'project.add_to_team', projectId: shared as string, teamId: TEAM.id });
+    await engine.dispatch({ type: 'task.create', request: 'Team work', repoId: null, projectId: shared });
+    await engine.dispatch({ type: 'task.create', request: 'Mine alone', repoId: null, projectId: kept });
+    const [taskId, otherId] = Object.keys(engine.state.tasks);
+    const machine = await remote.store.resolveMachineKey();
+    const secret = remote.resolveTeamGrant(KAI.id, TEAM.id) ?? '';
+    const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey, {
+      userId: KAI.id,
+      onPending: () => {
+        throw new Error('A teammate never waits for an answer.');
+      },
+    });
+    expect(await channel.next()).toEqual({ t: 'ready' });
+    await channel.send({ t: 'ready' });
+    const opened = await readSocketUntil(channel, 'state');
+    return { ...started, channel, opened, taskId: taskId as string, otherId: otherId as string };
+  }
+
+  test('sees and acts on the team’s tasks only, with no invite and no request', async () => {
+    const { channel, opened, engine, remote, taskId, otherId } = await startTeammate();
+    expect(remote.snapshot().devices).toMatchObject([{ userId: KAI.id, teamId: TEAM.id }]);
+    const state = opened.at(-1)?.state as { tasks: Record<string, unknown> };
+    expect(Object.keys(state.tasks)).toEqual([taskId]);
+    const { commands } = readEngineInfo(opened);
+    expect(commands).toEqual(expect.arrayContaining(['task.prioritize', 'task.take_over', 'task.share']));
+    expect(commands).not.toContain('task.create');
+    expect(
+      await sendCommand(channel, 'c1', { type: 'task.prioritize', taskId, priority: 'high' })
+    ).toBeNull();
+    expect(engine.state.tasks[taskId]?.activity?.at(-1)?.byGuest).toBe('kai');
+    expect(
+      await sendCommand(channel, 'c2', { type: 'task.prioritize', taskId: otherId, priority: 'high' })
+    ).toBe('handoff_scope');
+    expect(await sendCommand(channel, 'c3', { type: 'task.message', taskId, text: 'Hello' })).toBe(
+      'handoff_scope'
+    );
+    expect(await requestStatus(channel, 'h1', `/api/tasks/${taskId}`)).toBe(200);
+    expect(await requestStatus(channel, 'h2', `/api/tasks/${otherId}`)).toBe(403);
+    expect(await requestStatus(channel, 'h3', '/api/tasks')).toBe(403);
+  });
+
+  test('a team that keeps teammates from acting leaves them reading, and taking a project out hides it', async () => {
+    const { channel, opened, engine, taskId } = await startTeammate({
+      ...DEFAULT_TEAM_PERMISSIONS,
+      act: false,
+    });
+    const { commands } = readEngineInfo(opened);
+    expect(commands).toContain('task.take_over');
+    expect(await sendCommand(channel, 'c1', { type: 'task.prioritize', taskId, priority: 'high' })).toBe(
+      'handoff_scope'
+    );
+    const projectId = engine.state.tasks[taskId]?.projectId as string;
+    await engine.dispatch({ type: 'project.remove_from_team', projectId, teamId: TEAM.id });
+    await channel.send({ t: 'socket', data: JSON.stringify({ type: 'state.sync' }) });
+    const synced = (await readSocketUntil(channel, 'state')).at(-1)?.state as { tasks: object };
+    expect(Object.keys(synced.tasks)).toEqual([]);
+    expect(await requestStatus(channel, 'h1', `/api/tasks/${taskId}`)).toBe(403);
+  });
+
+  test('removing them from the team closes their channel at once', async () => {
+    const { channel, remote } = await startTeammate();
+    remote.store.recordTeams([{ ...TEAM, members: [] }]);
+    remote.publish();
+    expect(await channel.closed).toBe(1008);
+    expect(remote.snapshot().devices).toEqual([]);
   });
 });

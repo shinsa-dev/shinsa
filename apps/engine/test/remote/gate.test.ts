@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { type ChatEntry, createState, type ScopedActor, type ShinsaState } from '@shinsa/core';
+import {
+  type ChatEntry,
+  createState,
+  DEFAULT_TEAM_PERMISSIONS,
+  type ScopedActor,
+  type ShinsaState,
+} from '@shinsa/core';
 import { GuestRoute, LocalOnlyRoute, OwnerOnlyRoute } from '@shinsa/core/engine-api/schema';
 import { Context, Effect, Layer, Result } from 'effect';
 import type { ServerConfig } from '../../src/config/index.ts';
@@ -167,13 +173,39 @@ function annotate(entries: {
   ) as Context.Context<never>;
 }
 
-async function canRead(path: string, method = 'GET') {
-  const result = await runGate((gate) =>
-    gate.admitEndpoint(
-      annotate({ guest: 'task_file' }),
-      { method, pathname: path },
-      channelSource('u-guest', GUEST)
-    )
+const TEAMMATE: ScopedActor = {
+  ...GUEST,
+  scope: { kind: 'team', teamId: 'team1', permissions: DEFAULT_TEAM_PERMISSIONS },
+};
+
+function createTeamState(): ShinsaState {
+  const state = createGuestState();
+  const project = (id: string, teamIds: string[]) => ({ id, name: id, teamIds });
+  return {
+    ...state,
+    projects: { p1: project('p1', ['team1']), p2: project('p2', []) } as unknown as ShinsaState['projects'],
+    tasks: Object.fromEntries(
+      Object.values(state.tasks).map((task) => [
+        task.id,
+        { ...task, projectId: task.id === 't1' ? 'p1' : 'p2' },
+      ])
+    ),
+  };
+}
+
+async function canRead(path: string, method = 'GET', guest = GUEST) {
+  const context =
+    guest.scope.kind === 'team'
+      ? createGateContext({ engine: { state: createTeamState() } as unknown as Engine })
+      : createGateContext();
+  const result = await runGate(
+    (gate) =>
+      gate.admitEndpoint(
+        annotate({ guest: 'task_file' }),
+        { method, pathname: path },
+        channelSource('u-guest', guest)
+      ),
+    context
   );
   return Result.isSuccess(result);
 }
@@ -447,6 +479,38 @@ describe('a guest’s reads inside the channel', () => {
     expect(await canRead('/api/commands', 'POST')).toBe(false);
     expect(await canRead('/api/attachments', 'POST')).toBe(false);
     expect(await canRead('/api/settings')).toBe(false);
+  });
+});
+
+describe('a teammate’s reads inside the channel', () => {
+  test('reads every task of the team’s projects and their files, and nothing outside them', async () => {
+    expect(await canRead('/api/tasks/t1', 'GET', TEAMMATE)).toBe(true);
+    expect(await canRead('/api/tasks/t1/diff', 'GET', TEAMMATE)).toBe(true);
+    expect(await canRead('/api/evidence/t1/round-1/shot.png', 'GET', TEAMMATE)).toBe(true);
+    expect(await canRead('/api/attachments/a1/brief.png', 'GET', TEAMMATE)).toBe(true);
+    expect(await canRead('/api/tasks/t2', 'GET', TEAMMATE)).toBe(false);
+    expect(await canRead('/api/attachments/a3/secret.png', 'GET', TEAMMATE)).toBe(false);
+    expect(await canRead('/api/tasks', 'GET', TEAMMATE)).toBe(false);
+    expect(await canRead('/api/commands', 'POST', TEAMMATE)).toBe(false);
+  });
+
+  test('is refused with the team’s reason, never the hand-off’s', async () => {
+    const refusal = async (pathname: string) => {
+      const result = await runGate(
+        (gate) =>
+          gate.admitEndpoint(
+            annotate({ guest: 'task_file' }),
+            { method: 'GET', pathname },
+            channelSource('u', TEAMMATE)
+          ),
+        createGateContext({ engine: { state: createTeamState() } as unknown as Engine })
+      );
+      return Result.isFailure(result) ? result.failure.message : null;
+    };
+    expect(await refusal('/api/tasks/t2')).toBe('This task is not in a project your team sees.');
+    expect(await refusal('/api/settings')).toBe(
+      'This stays with the owner of the machine. Teammates work on the tasks of the team’s projects.'
+    );
   });
 });
 

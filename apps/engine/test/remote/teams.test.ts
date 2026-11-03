@@ -16,6 +16,7 @@ import {
   resolveTeamJoinUrl,
   type ShareLiveView,
   type ShareMessage,
+  type ScopedActor,
   type ShinsaState,
   serializeBase64Url,
   type TeamListView,
@@ -227,7 +228,7 @@ describe('a team view of this machine', () => {
     });
     expect(view?.updatedAt).toBe(50);
     expect(view?.machineKey).toBe((await remote.store.resolveMachineKey()).publicKey);
-    expect(view?.grant).toBeUndefined();
+    expect(view?.grant).toBe(remote.store.selectGrant(KAI.id, 'team1')?.secret);
   });
 
   test('the list carries a snapshot this machine signed, which its signing key verifies', async () => {
@@ -599,9 +600,9 @@ describe('the heartbeat’s teams', () => {
   });
 });
 
-async function knock(remote: Remote, userId: string, secret: string) {
+async function knock(remote: Remote, userId: string, secret: string, known?: CryptoKeyPair) {
   const machine = await remote.store.resolveMachineKey();
-  const device = await createKeyPair();
+  const device = known ?? (await createKeyPair());
   const start = await startHandshake({
     machineKey: machine.publicKey,
     device,
@@ -653,14 +654,21 @@ describe('machine access for a teammate', () => {
     expect(remote.snapshot().devices).toEqual([]);
   });
 
-  test('a member already keeps their place; removing them takes the grant away too', async () => {
+  test('a member already keeps their place; removing them leaves only their team access', async () => {
     const { remote, plane } = setUp({
       file: { access: { owner: MONA, members: [{ user: KAI, addedAt: 2 }] } },
     });
     await remote.grantTeammate(KAI.id, 'team1');
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineMemberAdd)).toBe(false);
+    const secret = remote.store.selectGrant(KAI.id, 'team1')?.secret ?? '';
+    expect((await knock(remote, KAI.id, secret)).type).toBe('welcome');
+    expect(remote.snapshot().devices[0]?.teamId).toBeUndefined();
+    plane.answers.set(REMOTE_PATHS.machineMemberRemove, () => Response.json({ ok: true }));
     await remote.removeMember(KAI.id);
-    expect(remote.store.file.grants).toEqual([]);
+    expect(remote.snapshot().devices).toEqual([]);
+    expect(remote.store.selectGrant(KAI.id, 'team1')?.secret).toBe(secret);
+    expect((await knock(remote, KAI.id, secret)).type).toBe('welcome');
+    expect(remote.snapshot().devices[0]?.teamId).toBe('team1');
   });
 
   test('refuses a team this machine has no key for, someone outside it, and the owner', async () => {
@@ -668,5 +676,151 @@ describe('machine access for a teammate', () => {
     await expect(remote.grantTeammate(KAI.id, 'other')).rejects.toThrow('This machine is not in that team.');
     await expect(remote.grantTeammate(BOB.id, 'team1')).rejects.toThrow('No one else in that team');
     await expect(remote.grantTeammate(MONA.id, 'team1')).rejects.toThrow('No one else in that team');
+  });
+});
+
+async function enter(remote: Remote, userId: string, secret: string, known?: CryptoKeyPair) {
+  const machine = await remote.store.resolveMachineKey();
+  const device = known ?? (await createKeyPair());
+  const start = await startHandshake({ machineKey: machine.publicKey, device, enrollSecret: secret });
+  const sent: (string | Bytes)[] = [];
+  const guests: (ScopedActor | null)[] = [];
+  let closed: string | null = null;
+  const channel = remote.openChannel(
+    {
+      send: (data) => void sent.push(data as string | Bytes),
+      close: (_code, reason) => {
+        closed = reason ?? '';
+      },
+    },
+    {
+      hub: { open: () => undefined, close: () => undefined, message: () => undefined },
+      terminals: null,
+      respond: (_request, guest) => {
+        guests.push(guest);
+        return Promise.resolve(new Response(null, { status: 204 }));
+      },
+    },
+    userId
+  );
+  await channel.receive(start.hello);
+  await until('the machine answers', () => sent.length > 0);
+  const session = await start.finish(sent[0] as string);
+  const ask = async (id: string) => {
+    await channel.receive(
+      await session.seal({ t: 'request', id, method: 'GET', path: '/api/health', headers: [] })
+    );
+    await channel.receive(await session.seal({ t: 'end', id }));
+    await until('the request reaches the engine', () => guests.length > 0);
+    return guests.shift() ?? null;
+  };
+  return { ask, isClosed: () => closed !== null, closedWith: () => closed };
+}
+
+describe('team access to this machine', () => {
+  test('every teammate gets their own grant in the team list, without anyone giving it', async () => {
+    const { teams, remote, plane } = setUp({
+      file: {
+        teams: [
+          createTeam({
+            members: [
+              { user: KAI, addedAt: 2 },
+              { user: BOB, addedAt: 3 },
+            ],
+          }),
+        ],
+      },
+    });
+    const [kai] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
+    const [again] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
+    const [bob] = (await openViewer(teams, BOB.id, LIST)).views() as TeamListView[];
+    const [mona] = (await openViewer(teams, MONA.id, LIST)).views() as TeamListView[];
+    expect(kai?.grant).toBeString();
+    expect(again?.grant).toBe(kai?.grant as string);
+    expect(bob?.grant).not.toBe(kai?.grant as string);
+    expect(mona?.grant).toBeUndefined();
+    expect(remote.store.file.grants.map((grant) => grant.userId)).toEqual([KAI.id, BOB.id]);
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineMemberAdd)).toBe(false);
+  });
+
+  test('no grant while remote access is off, or for a team this machine has no key for', () => {
+    const off = setUp({ file: { enabled: false } });
+    expect(off.remote.resolveTeamGrant(KAI.id, 'team1')).toBeNull();
+    const keyless = setUp({ file: { teamKeys: [] } });
+    expect(keyless.remote.resolveTeamGrant(KAI.id, 'team1')).toBeNull();
+    expect(keyless.remote.resolveTeamGrant(BOB.id, 'team1')).toBeNull();
+  });
+
+  test('a teammate’s browser gets in with their grant, scoped to the team with their rights', async () => {
+    const team = createTeam({
+      permissions: { ...DEFAULT_TEAM_PERMISSIONS, share: false },
+      overrides: [{ userId: KAI.id, permissions: { message: true } }],
+    });
+    const { remote } = setUp({ file: { teams: [team] } });
+    const secret = remote.resolveTeamGrant(KAI.id, 'team1') ?? '';
+    expect((await knock(remote, KAI.id, OTHER_KEY)).type).toBe('refused');
+    expect((await knock(remote, BOB.id, secret)).type).toBe('refused');
+    const kai = await enter(remote, KAI.id, secret);
+    expect(remote.snapshot().devices).toMatchObject([{ userId: KAI.id, teamId: 'team1' }]);
+    expect(remote.snapshot().access?.members).toEqual([]);
+    expect(await kai.ask('r1')).toEqual({
+      ...KAI,
+      scope: {
+        kind: 'team',
+        teamId: 'team1',
+        permissions: { ...DEFAULT_TEAM_PERMISSIONS, share: false, message: true },
+      },
+    });
+  });
+
+  test('narrowing a teammate’s rights closes their channel, and they come back with the new ones', async () => {
+    const { remote } = setUp();
+    const secret = remote.resolveTeamGrant(KAI.id, 'team1') ?? '';
+    const kai = await enter(remote, KAI.id, secret);
+    await kai.ask('r1');
+    remote.store.recordTeams([createTeam({ name: 'Platform team' })]);
+    remote.publish();
+    expect(kai.isClosed()).toBe(false);
+    remote.store.recordTeams([createTeam({ overrides: [{ userId: KAI.id, permissions: { act: false } }] })]);
+    remote.publish();
+    expect(kai.closedWith()).toBe('Remote access to this machine changed.');
+    const back = await enter(remote, KAI.id, secret);
+    expect((await back.ask('r2'))?.scope).toMatchObject({ permissions: { act: false } });
+  });
+
+  test('leaving the team ends their access at once: the grant, the device and the open channel', async () => {
+    const { remote } = setUp();
+    const secret = remote.resolveTeamGrant(KAI.id, 'team1') ?? '';
+    const kai = await enter(remote, KAI.id, secret);
+    remote.store.recordTeams([createTeam({ members: [] })]);
+    remote.publish();
+    expect(kai.isClosed()).toBe(true);
+    expect(remote.snapshot().devices).toEqual([]);
+    expect(remote.store.file.grants).toEqual([]);
+    expect((await knock(remote, KAI.id, secret)).type).toBe('refused');
+  });
+
+  test('a teammate who is also a member of this machine reaches all of it, and is scoped again once removed', async () => {
+    const { remote, plane } = setUp();
+    const secret = remote.resolveTeamGrant(KAI.id, 'team1') ?? '';
+    const kai = await enter(remote, KAI.id, secret);
+    expect((await kai.ask('r1'))?.scope.kind).toBe('team');
+    plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => Response.json({ user: KAI, addedAt: 9 }));
+    await remote.grantTeammate(KAI.id, 'team1');
+    expect(kai.isClosed()).toBe(true);
+    const full = await enter(remote, KAI.id, secret);
+    expect(await full.ask('r2')).toBeNull();
+  });
+
+  test('a device whose team this machine forgot finds no way back in', async () => {
+    const { remote } = setUp();
+    const secret = remote.resolveTeamGrant(KAI.id, 'team1') ?? '';
+    const device = await createKeyPair();
+    await enter(remote, KAI.id, secret, device);
+    expect((await knock(remote, KAI.id, '', device)).type).toBe('welcome');
+    remote.store.update((file) => ({ ...file, teamKeys: [] }));
+    expect(remote.snapshot().devices).toHaveLength(1);
+    expect((await knock(remote, KAI.id, '', device)).type).toBe('refused');
+    expect((await knock(remote, BOB.id, '', device)).type).toBe('refused');
   });
 });

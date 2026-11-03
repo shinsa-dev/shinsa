@@ -10,6 +10,7 @@ import {
   type RemoteTeam,
   type RemoteUser,
   DEFAULT_TEAM_PERMISSIONS,
+  resolveInstanceConnectPath,
   resolveMachineTeamPath,
   resolveTeamConnectPath,
   resolveTeamLeavePath,
@@ -294,6 +295,21 @@ describe('team connect tokens', () => {
       harness.clock.now
     );
     expect(claim?.userId).toBe(KAI.id);
+  });
+
+  test('a member gets a token for a teammate’s machine channel too, which that machine scopes to the team', async () => {
+    const { harness, kai, studio, team } = await joinedTeam();
+    const answer = await readJson<ConnectResponse>(
+      await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session: kai })
+    );
+    const token = new URL(answer.url).searchParams.get('token') ?? '';
+    const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
+    expect((await verifyConnectToken(studio.connectKey, token, remote, harness.clock.now))?.userId).toBe(
+      KAI.id
+    );
+    await act(harness, studio, team.id, 'members/remove', { userId: KAI.id });
+    const refused = await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session: kai });
+    expect(refused.status).toBe(404);
   });
 
   test('no token for a machine outside the team', async () => {
