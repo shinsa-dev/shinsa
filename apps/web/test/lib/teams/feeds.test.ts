@@ -14,14 +14,13 @@ import {
   describeTeamTaskPlace,
   HostedTeamFeeds,
   listHeldTeamMachines,
-  listTeamFeedNotices,
+  listTeamFeedRefusals,
   listTeamFeedTasks,
   mergeTeamFeeds,
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
   selectTeamTaskHeldAt,
-  TEAM_FEED_HELD,
   TEAM_FEED_REFUSED,
 } from '@/lib/teams/feeds.ts';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
@@ -66,7 +65,7 @@ describe('teammates’ task lists', () => {
     expect(merged.machines).toEqual([newer]);
   });
 
-  it('notes each refused or offline machine of your teams, refused first, leaving out live ones, your own and other teams', () => {
+  it('notes each refused machine of your teams by name, leaving out live, offline, your own and other teams', () => {
     const feed = {
       machines: [
         createMachine({ instanceId: 'live' }),
@@ -90,18 +89,12 @@ describe('teammates’ task lists', () => {
       { id: 'team1', name: 'Platform' },
       { id: 'team2', name: 'Design' },
     ];
-    const notices = listTeamFeedNotices(feed, teams, new Set(['mine']), null);
-    expect(
-      notices.map((notice) => [notice.machine, notice.team, notice.status, notice.reason, notice.updatedAt])
-    ).toEqual([
-      ['Basement', 'Platform', 'refused', TEAM_FEED_REFUSED, null],
-      ['Mac.lan', 'Platform', 'refused', 'Not listed yet.', null],
-      ['Attic', 'Platform', 'offline', TEAM_FEED_HELD, 30],
-      ['Studio', 'Design', 'offline', TEAM_FEED_HELD, null],
+    const refusals = listTeamFeedRefusals(feed, teams, new Set(['mine']), null);
+    expect(refusals.map((refusal) => [refusal.machine, refusal.team, refusal.reason])).toEqual([
+      ['Basement', 'Platform', TEAM_FEED_REFUSED],
+      ['Mac.lan', 'Platform', 'Not listed yet.'],
     ]);
-    expect(listTeamFeedNotices(feed, teams, new Set(), 'team2').map((notice) => notice.team)).toEqual([
-      'Design',
-    ]);
+    expect(listTeamFeedRefusals(feed, teams, new Set(), 'team2')).toEqual([]);
   });
 
   it('knows which tasks come from a snapshot, and since when', () => {

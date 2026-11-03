@@ -4,12 +4,12 @@ import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
-import { PageHeading } from '@/components/layout/page/heading.tsx';
+import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TaskFilterChips, TaskFilterMenu } from '@/components/tasks/filter-menu.tsx';
 import { TaskGroupSection } from '@/components/tasks/group.tsx';
 import { TASK_LIST_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
-import { TeamFeedNotices, useTeamTasks } from '@/components/teams/tasks.tsx';
+import { TeamFeedRefusals, useTeamTasks } from '@/components/teams/tasks.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -44,7 +44,12 @@ export function TasksPage({ state }: { state: ShinsaState }) {
       <div className='flex items-end gap-3'>
         <PageHeading
           title='All tasks'
-          description={describeTaskCounts(rows.map((row) => row.task))}
+          description={
+            <p className={cn(PAGE_DESCRIPTION, 'flex items-center gap-1')}>
+              {describeTaskCounts(rows.map((row) => row.task))}
+              <TeamFeedRefusals state={state} />
+            </p>
+          }
           className='flex-1'
         />
         <div className='flex items-center gap-1.5'>
@@ -59,7 +64,6 @@ export function TasksPage({ state }: { state: ShinsaState }) {
           <TaskFilterMenu fields={fields} filters={filters} />
         </div>
       </div>
-      <TeamFeedNotices state={state} />
       <div className='flex min-h-0 flex-col gap-2'>
         <TaskFilterChips fields={fields} filters={filters} />
         <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>

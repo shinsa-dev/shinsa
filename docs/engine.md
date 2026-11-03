@@ -3561,8 +3561,8 @@ online, and the last list of it their own machine kept while it is not (Offline 
     `snapshot` when there is one, and a SHA-256 of the team key (`keyDigest`), never the key. A browser on
     app.shinsa.dev keeps what its own channels got in memory only, until the page reloads.
   - **What it shows.** A machine whose channel dropped keeps its tasks, with its `TeamFeedMachine.updatedAt` set to
-    when the owner's machine made the list. Their rows on All tasks carry an Offline badge in place of the kind of
-    task, whose hint reads "Updated 2 hours ago" (`OfflineBadge`, `listHeldTeamMachines`). When the machine is back
+    when the owner's machine made the list. Their rows on All tasks carry an offline icon after the status, whose hint reads "Updated 2 hours ago"
+    (`OfflineMark`, `listHeldTeamMachines`); the read-only task page shows the Offline badge (`OfflineBadge`). When the machine is back
     its live list replaces the copy at once.
   - **The full task, kept too.** Each engine also keeps the whole page of every task in a list it watches, as the
     owner's machine sent it (the view and its files: the diff, the code, evidence), in `data/team-views/` (`TeamViews`:

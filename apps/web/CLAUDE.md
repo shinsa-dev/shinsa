@@ -164,7 +164,7 @@ src/
     │                    key, and the engine relay of one task; team-socket/ is its TeamSocket service, reconnecting on
     │                    TEAM_RECONNECT: 1, 2, 5, 10, then every 30 s), schema.ts (the join's shapes and errors), feeds.ts (teammates' tasks from every team you are in,
     │                    merged from the machines and the browser, without machines the dashboard reaches, and a
-    │                    notice for each refused or offline teammate machine);
+    │                    refusal for each teammate machine that will not list its tasks);
     │                    components/teams/ (the new team dialog, the shared projects dropdown, a teammate's row on All tasks, among your own),
     │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and

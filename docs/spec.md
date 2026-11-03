@@ -278,7 +278,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   yours and your teammates', and with no focus it lists yours and those of every team you are in. The Filter
   button narrows it by status, owner, team, project, repository, kind and priority, several values each; every
   filter shows as a chip you can remove, lives in the page's address so a link keeps it, and ⌘K offers the same
-  filters. A teammate machine that is offline or refuses to list its tasks gets a line above the list saying why.
+  filters. A teammate task whose machine is offline carries an offline icon after its status, and one lock icon after the
+  heading's counts says which teammate machines refuse to list their tasks, and why.
 - **The backlog.** Work you want written down and planned now, but built later, waits in the backlog. It is
   triaged (a clean title, the repository, the kind of task, a priority) and planned, which costs a small share of a
   task, and then stops: its plan stays out of Needs you, the queue, the guide and the Dock badge, and shows in the

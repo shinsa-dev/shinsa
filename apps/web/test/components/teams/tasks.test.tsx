@@ -131,9 +131,9 @@ describe('teammates’ tasks', () => {
     };
     pushTeams({ machines: [offline], tasks: [OPEN, MERGED] });
     renderTasks();
-    expect(screen.getAllByText('Offline')).toHaveLength(1);
+    expect(screen.getAllByRole('img', { name: 'Their machine is offline. Updated 2h ago.' })).toHaveLength(1);
     pushTeams({ machines: [{ ...offline, status: 'live', reason: null }], tasks: [OPEN, MERGED] });
-    expect(screen.queryByText('Offline')).toBeNull();
+    expect(screen.queryByRole('img', { name: /offline/ })).toBeNull();
   });
 
   it('says why a teammate’s machine lists nothing, and drops the note once it is live', () => {
@@ -147,33 +147,34 @@ describe('teammates’ tasks', () => {
     };
     pushTeams({ machines: [refused], tasks: [] });
     renderTasks();
-    const note = screen.getByRole('status');
-    expect(note.textContent).toBe(
-      'Mac.lan in Platform is not listing its tasks. That machine does not list you in this team yet.'
-    );
+    expect(
+      screen.getByRole('img', {
+        name: 'Mac.lan in Platform is not listing its tasks. That machine does not list you in this team yet.',
+      })
+    ).toBeDefined();
     pushTeams({ machines: [{ ...refused, status: 'live', reason: null }], tasks: [] });
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('img', { name: /not listing/ })).toBeNull();
   });
 
-  it('says when a teammate’s machine is offline and when it last listed its tasks', () => {
+  it('counts the refusals in one mark when several machines refuse, naming each', () => {
+    const refused = {
+      teamId: 'team1',
+      userId: '7',
+      status: 'refused' as const,
+    };
     pushTeams({
       machines: [
-        {
-          teamId: 'team1',
-          instanceId: 'p7m2',
-          name: 'Studio',
-          userId: '7',
-          status: 'offline',
-          reason: 'Offline.',
-          updatedAt: Date.now() - 2 * 60 * 60 * 1000,
-        },
+        { ...refused, instanceId: 'b', name: 'Basement', reason: null },
+        { ...refused, instanceId: 'a', name: 'Attic', reason: 'That machine is in no team.' },
       ],
-      tasks: [OPEN],
+      tasks: [],
     });
     renderTasks();
-    expect(screen.getByRole('status').textContent).toBe(
-      'Studio in Platform is offline. Its tasks show as they were when it was last online. Updated 2h ago.'
-    );
+    expect(
+      screen.getByRole('img', {
+        name: '2 teammate machines are not listing their tasks. Attic: That machine is in no team. Basement: It refused to list its tasks.',
+      })
+    ).toBeDefined();
   });
 
   it('keeps your tasks outside the focused team off the list', () => {

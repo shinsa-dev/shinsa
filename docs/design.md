@@ -1057,10 +1057,13 @@ Only these, and they win over anything below:
       (`YourOwnerMark`, `TeammateOwnerMark` in `components/tasks/owner.tsx`): the avatar and first name, "You" for your
       own, the user card on hover with the machine it runs on ("On Kai’s MacBook, read-only"), their GitHub profile on
       click. A machine whose owner never signed in shows the team icon and the machine's name.
-    - **Team feed notices** (`TeamFeedNotices`). Above the list, one `text-xs` `fg-3` line per teammate machine in
-      focus that is offline (`IconCloudSimpleDisconnected`) or refuses the list (`IconLock`): the machine in `fg-4`,
-      its team, and the owner engine's reason ("That machine does not list you in this team yet…"), with when its copy was
-      last updated.
+    - **Offline and refused machines** take no lines of their own, so the page stays the same however many machines
+      a team has. A teammate row from a machine that is offline keeps its kind icon and gets `IconCloudSimpleDisconnected`
+      in `fg-2` after its status (`OfflineMark`), its hint "Their machine is offline" with when its copy was last
+      updated. Machines that refuse the list show no rows, so one `IconLock` in `fg-2` after the heading's counts
+      (`TeamFeedRefusals`) names them in its hint: "Mac.lan in Platform is not listing its tasks" and the owner
+      engine's reason ("That machine does not list you in this team yet."), or "2 teammate machines are not listing
+      their tasks" and each machine's reason.
     - **The pull request badge** (`PullRequestBadge`, the Pull request column) is the pull request's number on its
       tone's soft surface (`TONE_SURFACE`, one step stronger on hover), the same tint as a status tile.
     - **Change to approve** is its own section between Plan to approve and Needs your answer (`IconFileEdit`,

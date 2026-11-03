@@ -23,7 +23,7 @@ import { formatSince } from '@/lib/format/time.ts';
 import type { TeamEntry } from '@/lib/tasks/groups.ts';
 import {
   listHeldTeamMachines,
-  listTeamFeedNotices,
+  listTeamFeedRefusals,
   listTeamFeedTasks,
   resolveTeamTaskPath,
   resolveTeamTaskState,
@@ -57,37 +57,32 @@ export function useTeamTasks(): TeamTasks {
   return { teams, entries };
 }
 
-export function TeamFeedNotices({ state }: { state: ShinsaState }) {
+export function TeamFeedRefusals({ state }: { state: ShinsaState }) {
   const remote = useRemoteSnapshot();
   const teams = React.useMemo(() => listFocusTeams(remote), [remote]);
   const feed = useTeamFeed();
   const machines = useMachines();
-  const notices = listTeamFeedNotices(
+  const refusals = listTeamFeedRefusals(
     feed,
     teams,
     new Set(machines.map((machine) => machine.id)),
     resolveFocusTeam(state, Date.now())
   );
-  if (notices.length === 0) return null;
+  const [first] = refusals;
+  if (!first) return null;
+  const label =
+    refusals.length === 1
+      ? `${first.machine} in ${first.team} is not listing its tasks`
+      : `${refusals.length} teammate machines are not listing their tasks`;
+  const detail = refusals
+    .map((refusal) => (refusals.length === 1 ? refusal.reason : `${refusal.machine}: ${refusal.reason}`))
+    .join(' ');
   return (
-    <ul className='flex flex-col gap-1'>
-      {notices.map((notice) => (
-        <li key={notice.key} role='status' className='flex min-w-0 items-start gap-1.5 text-xs text-fg-3'>
-          <Icon
-            size='sm'
-            name={notice.status === 'refused' ? 'IconLock' : 'IconCloudSimpleDisconnected'}
-            className='mt-px shrink-0 text-fg-2'
-          />
-          <span className='min-w-0'>
-            <span className='font-medium text-fg-4'>{notice.machine}</span> in {notice.team}{' '}
-            {notice.status === 'refused' ? 'is not listing its tasks' : 'is offline'}. {notice.reason}
-            {notice.updatedAt !== null && (
-              <span className='text-fg-2'> {formatSince('Updated', notice.updatedAt)}.</span>
-            )}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <Hint label={label} detail={detail}>
+      <span role='img' aria-label={`${label}. ${detail}`} className='grid size-4 shrink-0 place-items-center'>
+        <Icon size='sm' name='IconLock' className='text-fg-2' />
+      </span>
+    </Hint>
   );
 }
 
@@ -97,8 +92,25 @@ function openTeamTask(entry: TeamFeedTask) {
 
 export function OfflineBadge({ heldAt }: { heldAt: number }) {
   return (
-    <Hint label='Their machine is offline' detail={formatSince('Updated', heldAt)}>
+    <Hint label={TEAM_MACHINE_OFFLINE_LABEL} detail={formatSince('Updated', heldAt)}>
       <Badge size='sm'>Offline</Badge>
+    </Hint>
+  );
+}
+
+export const TEAM_MACHINE_OFFLINE_LABEL = 'Their machine is offline';
+
+function OfflineMark({ heldAt }: { heldAt: number }) {
+  const updated = formatSince('Updated', heldAt);
+  return (
+    <Hint label={TEAM_MACHINE_OFFLINE_LABEL} detail={updated}>
+      <span
+        role='img'
+        aria-label={`${TEAM_MACHINE_OFFLINE_LABEL}. ${updated}.`}
+        className='grid size-4 shrink-0 place-items-center'
+      >
+        <Icon size='sm' name='IconCloudSimpleDisconnected' className='text-fg-2' />
+      </span>
     </Hint>
   );
 }
@@ -137,8 +149,9 @@ export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }:
         <TeammateOwnerMark entry={entry} />
       </span>
       <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
-        {heldAt === null ? <KindMark state={state} task={task} /> : <OfflineBadge heldAt={heldAt} />}
+        <KindMark state={state} task={task} />
         <RowStatus state={state} task={task} />
+        {heldAt !== null && <OfflineMark heldAt={heldAt} />}
       </span>
       <span className='max-md:hidden'>
         <PullRequestBadge task={task} />
