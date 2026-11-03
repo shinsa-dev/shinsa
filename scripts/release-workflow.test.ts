@@ -4,6 +4,8 @@ import { join } from 'node:path';
 
 interface WorkflowStep {
   name?: string;
+  uses?: string;
+  with?: Record<string, string | number>;
   if?: string;
   run?: string;
   env?: Record<string, string>;
@@ -100,8 +102,20 @@ describe('the engine archives', () => {
     expect(publish.step.run).toContain('shinsa-darwin-arm64.tar.gz shinsa-darwin-arm64.tar.gz.sha256');
   });
 
+  it('publishes the changelog’s notes file above GitHub’s generated notes', () => {
+    expect(publish.step.env?.NOTES_FILE).toBe(expression('steps.version.outputs.notes_file'));
+    expect(publish.step.run).toContain('--generate-notes --notes-file "$NOTES_FILE"');
+  });
+
   it('hands the version on to the Linux job', () => {
     expect(workflow.jobs.mac.outputs?.version).toBe(expression('steps.version.outputs.version'));
+  });
+
+  it('checks out every tag wherever it builds the engine, so its changelog knows each release', () => {
+    for (const job of ['mac', 'linux'] as const) {
+      const checkout = workflow.jobs[job].steps.find((step) => step.uses === 'actions/checkout@v4');
+      expect(checkout?.with?.['fetch-depth']).toBe(0);
+    }
   });
 
   it('builds each Linux engine on its own CPU, after the release exists', () => {

@@ -3,6 +3,7 @@ import type {
   ContentTypeInvalid,
   InspectReadOnly,
   LocalOnly,
+  NotMachineOwner,
   RequestFailed,
   RouteNotFound,
   ScopeRefused,
@@ -14,6 +15,7 @@ export type GateError =
   | ContentTypeInvalid
   | InspectReadOnly
   | LocalOnly
+  | NotMachineOwner
   | RequestFailed
   | RouteNotFound
   | ScopeRefused

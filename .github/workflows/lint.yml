@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
@@ -28,6 +30,15 @@ jobs:
       - run: bun lint:styles
       - run: bun lint:conventions
       - run: bun lint:spelling
+      - name: Changelog
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            bun scripts/changelog.ts check --base "origin/$BASE_REF"
+          else
+            bun scripts/changelog.ts check
+          fi
       - run: bunx sherif -i @types/node
       - run: bunx knip
       - run: bun check-types

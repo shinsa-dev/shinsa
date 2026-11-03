@@ -24,6 +24,7 @@ import {
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
 import { EffectFailed } from '../runtime/failures/schema.ts';
+import { EgressGate } from './egress/service.ts';
 import type { Remote } from './index.ts';
 
 export const PREVIEW_NOT_PAIRED =
@@ -179,21 +180,6 @@ export function resolveForwardHeaders(source: Headers, port: number) {
   headers.host = `localhost:${port}`;
   if (headers.origin) headers.origin = resolveLocalOrigin(port);
   if (headers.referer) headers.referer = rewriteOrigin(headers.referer, port);
-  return headers;
-}
-
-function resolveReturnHeaders(source: Headers, port: number) {
-  const headers = new Headers();
-  for (const [name, value] of source) {
-    if (DROPPED_HEADERS.has(name)) continue;
-    headers.append(name, value);
-  }
-  const location = headers.get('location');
-  const local = resolveLocalOrigin(port);
-  const loopback = `http://127.0.0.1:${port}`;
-  for (const prefix of [local, loopback]) {
-    if (location?.startsWith(prefix)) headers.set('location', location.slice(prefix.length) || '/');
-  }
   return headers;
 }
 
@@ -467,7 +453,10 @@ export class Previews implements PreviewEffects, PreviewLinks {
       return new Response(response.body, {
         status: response.status,
         statusText: response.statusText,
-        headers: resolveReturnHeaders(response.headers, port),
+        headers: EgressGate.resolvePreviewHeaders(response.headers, [
+          resolveLocalOrigin(port),
+          `http://127.0.0.1:${port}`,
+        ]),
       });
     } catch (error) {
       log.warn('[Preview] Could not reach the service', { target, error: describeError(error) });

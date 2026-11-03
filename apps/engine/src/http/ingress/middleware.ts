@@ -1,11 +1,9 @@
 import { SCOPE_MESSAGES } from '@shinsa/core';
-import { LOCAL_ONLY_MESSAGE } from '@shinsa/core';
 import { ENGINE_BODY_LIMIT_BYTES } from '@shinsa/core/engine-api/schema';
 import {
   BodyTooLarge,
   ContentTypeInvalid,
   InspectReadOnly,
-  LocalOnly,
   RequestFailed,
   RequestForbidden,
   RouteNotFound,
@@ -16,7 +14,7 @@ import { Cause, Effect, Option, Predicate, Schema, type Types } from 'effect';
 import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { INSPECT_MESSAGE } from '../../instance/index.ts';
 import { describeError } from '../../log/index.ts';
-import { isTunnelRequest, resolveTunnelRoute } from '../../remote/guard.ts';
+import { TunnelGate } from '../../remote/gate/service.ts';
 import { isWebhookPath } from '../../schedules/webhook.ts';
 import {
   resolveAllowedHosts,
@@ -33,7 +31,8 @@ import { serveStatic } from '../static.ts';
 export const Ingress = HttpRouter.middleware(
   Effect.gen(function* () {
     const services = yield* HttpServices;
-    const { config, remote, extensions } = services;
+    const { config, extensions } = services;
+    const gate = yield* TunnelGate;
     const allowedHosts = resolveAllowedHosts(config.allowedHosts);
     const isIngressFailure = Schema.is(IngressFailure);
     const notFound = () => new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
@@ -46,8 +45,8 @@ export const Ingress = HttpRouter.middleware(
       config.inspect ? Effect.fail(new InspectReadOnly({ message: INSPECT_MESSAGE })) : Effect.void;
 
     const resolveVia = (web: Request, source: RequestSourceShape): RequestSourceShape => {
-      if (source.via !== 'local' || !remote || !isTunnelRequest(web, remote.tunnelHost)) return source;
-      return { via: 'tunnel', guest: null };
+      if (source.via !== 'local' || !gate.isTunnel(web)) return source;
+      return { via: 'tunnel', guest: null, userId: null };
     };
 
     const respondPage = (pathname: string) =>
@@ -95,20 +94,8 @@ export const Ingress = HttpRouter.middleware(
       return yield* respondFailure(new RequestFailed({ code: REQUEST_FAILED, message }));
     });
 
-    const admitChannel = Effect.fn('Ingress.admitChannel')(function* (url: URL, source: RequestSourceShape) {
-      if (!url.pathname.startsWith('/api/')) return yield* notFound();
-      if (!extensions?.isCallback(url.pathname)) return;
-      if (source.guest) return yield* new ScopeRefused({ message: SCOPE_MESSAGES.task });
-      return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
-    });
-
-    const admitTunnel = Effect.fn('Ingress.admitTunnel')(function* (web: Request, url: URL) {
-      const route = remote?.isEnabled ? resolveTunnelRoute(web, url) : null;
-      if (route === null) return yield* notFound();
-      if (route === 'hook' || route === 'slack') yield* assertWritable();
-    });
-
     const admitLocal = Effect.fn('Ingress.admitLocal')(function* (web: Request, url: URL) {
+      yield* gate.admitRequest(web, url, { via: 'local', guest: null, userId: null });
       if (isWebhookPath(url.pathname)) return yield* assertWritable();
       if (web.method === 'GET' && extensions?.isCallback(url.pathname)) {
         yield* assertWritable();
@@ -122,9 +109,8 @@ export const Ingress = HttpRouter.middleware(
     });
 
     const admit = Effect.fn('Ingress.admit')(function* (web: Request, url: URL, source: RequestSourceShape) {
-      if (source.via === 'channel') return yield* admitChannel(url, source);
-      if (source.via === 'tunnel') return yield* admitTunnel(web, url);
-      return yield* admitLocal(web, url);
+      if (source.via === 'local') return yield* admitLocal(web, url);
+      return yield* gate.admitRequest(web, url, source);
     });
 
     return Effect.fn('Ingress')(function* (

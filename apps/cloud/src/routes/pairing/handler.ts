@@ -1,4 +1,12 @@
-import { ClaimCode, isSameSecret, type PairPollResponse, parsePublicKey, REMOTE_PATHS } from '@shinsa/core';
+import {
+  ClaimCode,
+  hasMachineFeature,
+  isSameSecret,
+  type PairPollResponse,
+  parseMachineCredentials,
+  parsePublicKey,
+  REMOTE_PATHS,
+} from '@shinsa/core';
 import { RemoteApi } from '@shinsa/core/remote/api';
 import { BodyInvalid, RateLimited } from '@shinsa/core/remote/errors';
 import { Clock, Duration, Effect, Option, Redacted, Schema } from 'effect';
@@ -41,6 +49,7 @@ export const PairingHandlers = HttpApiBuilder.group(
               name: payload.name,
               publicKey: payload.publicKey,
               version: payload.version,
+              features: payload.features ?? [],
               expiresAt,
             },
             clientIp
@@ -62,10 +71,15 @@ export const PairingHandlers = HttpApiBuilder.group(
           const secretHash = yield* crypto.hashToken(Redacted.make(payload.pollSecret));
           if (Option.isNone(pairing) || !isSameSecret(pairing.value.pollSecretHash, secretHash))
             return EXPIRED;
-          const { credentials, owner, expiresAt } = pairing.value;
+          const { credentials, owner, expiresAt, features } = pairing.value;
           if (credentials && owner) {
             yield* pairings.remove(claimCode.value);
-            return { status: 'claimed', credentials, owner } satisfies PairPollResponse;
+            if (hasMachineFeature(features, 'sealed-pairing'))
+              return { status: 'claimed', sealedCredentials: credentials, owner } satisfies PairPollResponse;
+            const legacy = parseMachineCredentials(credentials);
+            return legacy
+              ? ({ status: 'claimed', credentials: legacy, owner } satisfies PairPollResponse)
+              : EXPIRED;
           }
           if (expiresAt > (yield* Clock.currentTimeMillis))
             return { status: 'pending' } satisfies PairPollResponse;

@@ -8,6 +8,7 @@ import {
 } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
 import { createChannelEphemeral, ShareChannel } from '../../src/remote/share-channel.ts';
+import { createShareView } from '../helpers/state.ts';
 
 const KEY = serializeBase64Url(new Uint8Array(32).fill(5));
 
@@ -21,7 +22,10 @@ async function createHello() {
 function createPeer() {
   const peer = {
     closed: null as { code: number; reason: string } | null,
-    send: () => undefined,
+    sent: [] as unknown[],
+    send: (data: unknown) => {
+      peer.sent.push(data);
+    },
     close: (code: number, reason: string) => {
       peer.closed = { code, reason };
     },
@@ -67,6 +71,38 @@ describe('a share channel that breaks', () => {
     expect(channel.subject).toBeNull();
     await channel.receive('anything');
     await channel.end('Gone.');
+    warn.mockRestore();
+  });
+
+  test('closes without sending a view that breaks its allowlist', async () => {
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const peer = createPeer();
+    const ephemeral = await createChannelEphemeral();
+    const view = createShareView({ title: 'Leaky' });
+    const channel = new ShareChannel(peer, {
+      name: 'share link',
+      authorize: async () => ({
+        subject: 't1',
+        session: await deriveShareSessionKey(
+          KEY,
+          { share: 's1', clientEphemeral: 'c', serverEphemeral: 's' },
+          ephemeral.privateKey,
+          await serializePublicKey(ephemeral.publicKey)
+        ),
+        welcome: { type: 'welcome', ephemeral: 's', proof: 'p' },
+      }),
+      resolveLive: () =>
+        Promise.resolve({
+          view: {
+            ...view,
+            shared: { ...view.shared, task: { ...view.shared.task, worktreePath: '/wt/t1' } },
+          },
+          files: [],
+        }),
+    });
+    await channel.receive(await createHello());
+    expect(peer.closed).toEqual({ code: 1008, reason: 'The share link broke.' });
+    expect(peer.sent).toHaveLength(1);
     warn.mockRestore();
   });
 });

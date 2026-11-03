@@ -35,6 +35,7 @@ import {
   serializePlanMarkdown,
 } from '../packages/core/src/index.ts';
 import { listBundleTasks } from './seed-bundles.ts';
+import { writeSeedChangelog } from './seed-changelog.ts';
 import { writeCodeTranscripts } from './seed-code-transcripts.ts';
 import { createCodeSample, listCodeTasks } from './seed-code.ts';
 import { listDelegationTasks, writeDelegationTranscripts } from './seed-delegation.ts';
@@ -1540,6 +1541,33 @@ function pushTaskRevision(task: SeedTask, push: Push, clock: SeedClock) {
   push(clock.step(0.1), { type: 'fix.started', taskId: task.id, round: 1, reason: 'you' });
 }
 
+function pushTaskReview(task: SeedTask, push: Push, clock: SeedClock) {
+  if (!task.review) return;
+  const gateId = `${task.id}-review-approved`;
+  push(clock.step(0.2), {
+    type: 'gate.opened',
+    gate: {
+      id: gateId,
+      taskId: task.id,
+      type: 'review',
+      status: 'open',
+      title: `Review “${task.title}”`,
+      body: 'Built, checked and reviewed by the agents.',
+      runId: null,
+      openedAt: clock.at,
+      answeredAt: null,
+      decision: null,
+      response: null,
+    },
+  });
+  push(clock.step(task.review.minutes), {
+    type: 'gate.answered',
+    gateId,
+    decision: 'approve',
+    response: null,
+  });
+}
+
 interface SeedProgress {
   plan: PlanDocument | null;
   finished: number;
@@ -1840,6 +1868,7 @@ function pushTask(task: SeedTask, push: Push) {
   }
   pushTaskRuns(task, push, clock);
   pushTaskResults(task, push, clock);
+  pushTaskReview(task, push, clock);
   pushHandOverSteps(task, push, clock);
   if (task.note) push(clock.step(0.1), { type: 'task.noted', taskId: task.id, note: task.note });
   for (const event of task.extra ?? []) push(clock.step(0.1), event);
@@ -5759,9 +5788,13 @@ function seed() {
   writeAccountTranscripts(transcripts);
   const session = Bun.env.SHINSA_SEED_SESSION;
   if (session) writeSessionTranscript(session, runTimes, transcripts);
+  const changelog = writeSeedChangelog(ROOT);
   console.info(`Seeded ${tasks.length} tasks into ${DATA}`);
   console.info(
     `Run: SHINSA_DATA_DIR=${DATA} SHINSA_INSPECT=1 SHINSA_PORT=5190 bun run --cwd apps/engine start`
+  );
+  console.info(
+    `With a long changelog: SHINSA_BUILD_CHANGELOG="$(cat ${changelog})" before the command above`
   );
 }
 

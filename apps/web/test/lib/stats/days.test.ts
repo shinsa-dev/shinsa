@@ -9,8 +9,10 @@ import {
   parseStatsRange,
   resolveDayKey,
   resolveFirstActivity,
+  resolveHourOfWeek,
   resolveRangeWindow,
   resolveStatsWindow,
+  resolveTurnaroundWindow,
   resolveYearWindow,
   YEAR_WEEKS,
 } from '@/lib/stats/days.ts';
@@ -72,5 +74,15 @@ describe('stats days', () => {
     const tasks = { a: { createdAt: 50 } } as unknown as Parameters<typeof resolveFirstActivity>[0]['tasks'];
     const runs = { r: { startedAt: 20 } } as unknown as Parameters<typeof resolveFirstActivity>[0]['runs'];
     expect(resolveFirstActivity({ tasks, runs })).toBe(20);
+  });
+
+  it('counts the hour of the week from local Sunday midnight, for the turnaround clock', () => {
+    const tuesday = new Date(2026, 10, 3, 23, 30).getTime();
+    expect(resolveHourOfWeek(tuesday)).toBe(2 * 24 + 23);
+    expect(resolveHourOfWeek(new Date(2026, 10, 1, 0, 5).getTime())).toBe(0);
+    const window = resolveTurnaroundWindow(resolveRangeWindow(tuesday, 7), tuesday);
+    expect(window.now).toBe(tuesday);
+    expect(window.hourOf(tuesday)).toBe(71);
+    expect(window.days).toHaveLength(7);
   });
 });

@@ -1133,11 +1133,17 @@ function listSandboxSections(
   ];
 }
 
+function createConnectNonce() {
+  return serializeBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+}
+
 async function createConnect(machine: Machine, user: RemoteUser = USER): Promise<ConnectResponse> {
   const expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS;
   const token = await createConnectToken(machine.connectKey, {
     instanceId: machine.id,
     userId: user.id,
+    channel: 'remote',
+    nonce: createConnectNonce(),
     expiresAt,
   });
   return {
@@ -1246,6 +1252,8 @@ async function respondTeamConnect(request: Request, viewer: RemoteUser, teammate
   const token = await createConnectToken(target.connectKey, {
     instanceId: target.id,
     userId: viewer.id,
+    channel: 'team',
+    nonce: createConnectNonce(),
     expiresAt,
   });
   const answer: ConnectResponse = {

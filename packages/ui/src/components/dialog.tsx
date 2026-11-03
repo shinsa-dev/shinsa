@@ -16,6 +16,22 @@ import type * as React from 'react';
 export const DIALOG_MOTION =
   'transition-[opacity,scale] duration-150 ease-out data-ending-style:duration-100 starting:scale-96 starting:opacity-0 data-starting-style:scale-96 data-starting-style:opacity-0 data-ending-style:scale-96 data-ending-style:opacity-0 motion-reduce:starting:scale-100 motion-reduce:data-starting-style:scale-100 motion-reduce:data-ending-style:scale-100';
 
+/**
+ * A dialog's header stays put while its body scrolls under it: it sticks to
+ * the top of the body's scroller, bleeding over the body's padding so nothing
+ * shows above it, and fades the content scrolling in below it
+ * (`dialog-header-fade` in globals.css). Shared with `AlertDialogHeader`.
+ */
+export const DIALOG_HEADER_STICKY =
+  'sticky -top-4 z-10 -mx-4 -mt-4 w-auto self-stretch bg-background px-4 pt-4 dialog-header-fade';
+
+/**
+ * The part of a dialog that scrolls. The popup itself never scrolls, so the
+ * corner close button (absolute to the popup) stays put, and the body is not
+ * positioned, so nothing absolute inside it scrolls with it by accident.
+ */
+export const DIALOG_BODY = 'flex min-h-0 w-full flex-1 flex-col items-center gap-3 overflow-y-auto p-4';
+
 export const DIALOG_SCRIM_MOTION =
   'transition-opacity duration-150 ease-out data-ending-style:duration-100 starting:opacity-0 data-starting-style:opacity-0 data-ending-style:opacity-0';
 
@@ -52,12 +68,15 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
 
 function DialogContent({
   className,
+  bodyClassName,
   overlayClassName,
   children,
   showCloseButton = false,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
+  /** Classes for the scrolling body inside the popup, such as `p-0` for content that scrolls on its own. */
+  bodyClassName?: string;
   /** Classes for the scrim behind it, such as a faster motion to match the popup's. */
   overlayClassName?: string;
 }) {
@@ -68,14 +87,16 @@ function DialogContent({
         data-slot='dialog-content'
         data-reduced-motion='fade'
         className={cn(
-          'corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(26.25rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 overflow-y-auto rounded-xl bg-background p-4 text-fg-3 shadow-md outline-none',
+          'corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(26.25rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-background text-fg-3 shadow-md outline-none',
           DIALOG_MOTION,
           className
         )}
         {...props}
       >
-        {children}
-        {showCloseButton && <DialogCloseButton />}
+        <div data-slot='dialog-body' className={cn(DIALOG_BODY, bodyClassName)}>
+          {children}
+          {showCloseButton && <DialogCloseButton />}
+        </div>
       </DialogPrimitive.Popup>
     </DialogPortal>
   );
@@ -88,7 +109,7 @@ function DialogCloseButton({ className, ...props }: DialogPrimitive.Close.Props)
       data-slot='dialog-close'
       aria-label='Close'
       render={
-        <Button variant='secondary' size='icon-sm' className={cn('absolute top-3 right-3', className)} />
+        <Button variant='secondary' size='icon-sm' className={cn('absolute top-3 right-3 z-20', className)} />
       }
       {...props}
     >
@@ -101,7 +122,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot='dialog-header'
-      className={cn('flex w-full flex-col items-center gap-px text-center', className)}
+      className={cn('flex flex-col items-center gap-px text-center', DIALOG_HEADER_STICKY, className)}
       {...props}
     />
   );

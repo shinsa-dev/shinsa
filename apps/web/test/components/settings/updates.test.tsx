@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type UpdateActions, UpdateSettings, UpdatesGroup } from '@/components/settings/updates.tsx';
+import { selectChangelogView } from '@/lib/changelog.ts';
 import { refreshHealth } from '@/lib/connection/health.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import { installDesktop } from '../../support/desktop.ts';
+import { answerFetch } from '../../support/fetch-fake.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 
 let fake: ReturnType<typeof installDesktop> | null = null;
@@ -162,5 +164,39 @@ describe('the Updates settings', () => {
     expect(screen.getByText('1.2.0')).toBeTruthy();
     expect(screen.getByText('Up to date')).toBeTruthy();
     expect(screen.getByText('Stable channel · Updates install when you quit Shinsa')).toBeTruthy();
+  });
+
+  it('opens the changelog from its own row, in the app and in a browser', async () => {
+    const requests = answerFetch(() => Response.json({ releases: [] }));
+    const actions: UpdateActions = {
+      check: mock(),
+      install: mock(),
+      changeChannel: mock(),
+      answerDowngrade: mock(),
+    };
+    const { rerender } = render(
+      <TooltipProvider>
+        <UpdatesGroup app={null} changelog actions={actions} />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('What changed in each version of Shinsa.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open the changelog' }));
+    expect(selectChangelogView()).toMatchObject({ open: true, since: null });
+    await waitFor(() => expect(requests.map((request) => request.path)).toEqual(['/api/changelog']));
+    rerender(
+      <TooltipProvider>
+        <UpdatesGroup
+          app={{ version: '1.3.0', channel: 'stable', update: { status: 'current' } }}
+          changelog
+          actions={actions}
+        />
+      </TooltipProvider>
+    );
+    expect(screen.getByRole('button', { name: 'Open the changelog' })).toBeTruthy();
+  });
+
+  it('leaves the changelog row out for an engine without one', () => {
+    renderGroup({ status: 'current' });
+    expect(screen.queryByRole('button', { name: 'Open the changelog' })).toBeNull();
   });
 });

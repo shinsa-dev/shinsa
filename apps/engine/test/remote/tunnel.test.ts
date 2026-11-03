@@ -149,7 +149,12 @@ describe('the tunnel supervisor', () => {
         yield* TestClock.adjust(0);
         expect(world.heartbeats[0]).toEqual({
           token: 'machine',
-          request: { localUrl: 'http://127.0.0.1:7446', version: '1.0.0', signingKey: 'signing-key' },
+          request: {
+            localUrl: 'http://127.0.0.1:7446',
+            version: '1.0.0',
+            features: ['bound-connect-tokens', 'sealed-pairing'],
+            signingKey: 'signing-key',
+          },
         });
         yield* supervisor.stop;
       })
@@ -166,7 +171,11 @@ describe('the tunnel supervisor', () => {
         expect(world.statuses).toEqual(['starting', 'connected']);
         expect(world.heartbeats[0]).toEqual({
           token: 'machine',
-          request: { localUrl: 'http://127.0.0.1:7446', version: '1.0.0' },
+          request: {
+            localUrl: 'http://127.0.0.1:7446',
+            version: '1.0.0',
+            features: ['bound-connect-tokens', 'sealed-pairing'],
+          },
         });
         for (let ping = 0; ping < 3; ping += 1) yield* TestClock.adjust(PING);
         expect(world.heartbeats).toHaveLength(1);

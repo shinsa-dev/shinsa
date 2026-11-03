@@ -1603,6 +1603,13 @@ Only these, and they win over anything below:
       `ConfirmDialog` and `PercentDialog` keep their text. A busy button stays busy until the dialog
       is gone, `ConfirmDialog` runs its action once it has closed, and ⌘K resets to the root after it
       has faded, not while.
+    - **Only a dialog's body scrolls.** The kit's `DialogContent` and `AlertDialogContent` never scroll themselves:
+      they hold one body (`data-slot` `dialog-body`, `alert-dialog-body`) that does, so the corner close button stays
+      put, and `DialogHeader` and `AlertDialogHeader` stick to the top of that body (`DIALOG_HEADER_STICKY`), bleeding
+      over its padding, with a 1.5rem fade under them that grows as the body scrolls (`dialog-header-fade` in
+      `globals.css`, from the body's scroll timeline, so a dialog at rest shows none). Every dialog gets it from the
+      kit; a header's own `className` only sets its side padding (`px-10` where the close button sits beside the
+      title). The command menu, whose list scrolls on its own, passes `bodyClassName` to take the padding off.
     - **A dialog's description is `fg-2`**, two steps under the `fg-4` title, set once in the kit's
       `DialogDescription` and `AlertDialogDescription` (and `SheetDescription`, already `fg-2`), so every dialog,
       confirm dialog and sheet follows: the title and the fields lead, and the sentence under the title is the

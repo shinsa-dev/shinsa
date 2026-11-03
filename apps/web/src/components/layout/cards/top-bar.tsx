@@ -1,6 +1,7 @@
 import type { ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { UsageMenu } from '@/components/accounts/usage-menu.tsx';
+import { WhatsNewButton } from '@/components/changelog/dialog.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { FeedbackButton } from '@/components/feedback/button.tsx';
 import { FocusMenu } from '@/components/focus/menu.tsx';
@@ -40,6 +41,9 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
           <ConnectionStatus />
         </ErrorBoundary>
         <span className='flex-1' />
+        <ErrorBoundary size='icon' resetKey={resetKey}>
+          <WhatsNewButton />
+        </ErrorBoundary>
         <ErrorBoundary size='icon' resetKey={resetKey}>
           <UpdateButton />
         </ErrorBoundary>

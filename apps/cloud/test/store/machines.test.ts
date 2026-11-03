@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { MACHINE_FEATURES } from '@shinsa/core';
 import { Effect, Option, Redacted } from 'effect';
 import { TestClock } from 'effect/testing';
 import { MachineAccess } from '../../src/store/access/service.ts';
@@ -28,6 +29,7 @@ describe('machines', () => {
       localUrl: null,
       lastSeenAt: null,
       signingKey: null,
+      features: [...MACHINE_FEATURES],
       createdAt: TEST_NOW,
     });
     expect(Redacted.value(machine.connectKey)).toBe(`connect-${STUDIO}`);
@@ -42,10 +44,18 @@ describe('machines', () => {
         const machines = yield* Machines;
         yield* seedUsers(MONA);
         yield* seedMachine(STUDIO, MONA.id);
-        yield* machines.recordHeartbeat(STUDIO, 'http://127.0.0.1:7446', 'signing-1');
+        yield* machines.recordHeartbeat(STUDIO, {
+          localUrl: 'http://127.0.0.1:7446',
+          signingKey: 'signing-1',
+          features: [],
+        });
         const readFirst = Option.getOrThrow(yield* machines.select(STUDIO));
         yield* TestClock.adjust('1 minute');
-        yield* machines.recordHeartbeat(STUDIO, 'http://127.0.0.1:7447', null);
+        yield* machines.recordHeartbeat(STUDIO, {
+          localUrl: 'http://127.0.0.1:7447',
+          signingKey: null,
+          features: ['bound-connect-tokens'],
+        });
         const readSecond = Option.getOrThrow(yield* machines.select(STUDIO));
         yield* machines.recordOffline(STUDIO);
         return [readFirst, readSecond, Option.getOrThrow(yield* machines.select(STUDIO))] as const;
@@ -55,11 +65,13 @@ describe('machines', () => {
       online: true,
       localUrl: 'http://127.0.0.1:7446',
       signingKey: 'signing-1',
+      features: [],
       lastSeenAt: TEST_NOW,
     });
     expect(second).toMatchObject({
       localUrl: 'http://127.0.0.1:7447',
       signingKey: 'signing-1',
+      features: ['bound-connect-tokens'],
       lastSeenAt: TEST_NOW + 60_000,
     });
     expect(offline.online).toBe(false);

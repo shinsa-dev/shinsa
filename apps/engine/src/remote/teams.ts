@@ -26,6 +26,7 @@ import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { ChannelPeer } from './channel.ts';
 import { type RemoteControl, selectRemoteFailureTag } from './client/index.ts';
+import { EgressGate } from './egress/service.ts';
 import type { Remote } from './index.ts';
 import { createChannelEphemeral, type HelloAnswer, type LiveShare, ShareChannel } from './share-channel.ts';
 import type { Shares, ShareTranscripts } from './shares.ts';
@@ -385,11 +386,12 @@ export class Teams implements TeamLinks {
 
   async #resolveLive(subject: TeamSubject): Promise<LiveShare> {
     if (subject.view.kind === 'task') return this.#shares.resolveLive(subject.view.taskId, TEAM_SHARE_PRESET);
-    const tasks = listTeamTasks(this.#engine.state, subject.teamId, {
+    const listed = listTeamTasks(this.#engine.state, subject.teamId, {
       owner: this.#store.file.owner,
       ownerProfile: resolveOwnerProfile(this.#store.file),
       machine: this.#remote.snapshot().machineName,
     });
+    const tasks = EgressGate.listTeamTasks(listed);
     const { publicKey } = await this.#store.resolveMachineKey();
     const grant = this.#store.selectGrant(subject.userId);
     const updatedAt = this.#now();
