@@ -1,18 +1,22 @@
 import { isAgentQuestion, isDecisionGate } from '../domain/gates.ts';
 import { resolveTaskRounds, type Round } from '../domain/rounds.ts';
 import type { Task, TimingSpan, YourInput } from '../domain/types.ts';
-import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskTiming } from '../state/timing.ts';
 import type { StatsSource } from './index.ts';
-import { measureOnYourClock, resolveYourClock, type YourClock } from './presence.ts';
 import {
-  clipSpans,
+  listSetAside,
+  measureOnYourClock,
+  resolveYourClock,
+  type YourActivity,
+  type YourClock,
+} from './presence.ts';
+import { clipSpans, mergeSpans, subtractSpans } from './spans.ts';
+import {
   type FinishedRound,
   listFinishedRounds,
   listPaused,
   measureRound,
   resolveRoundEnd,
-  subtractSpans,
   toMedian,
   type TurnaroundMedian,
   type TurnaroundWindow,
@@ -46,34 +50,24 @@ interface Concurrency {
 
 const GOING_ROUNDS: readonly Round['status'][] = ['active', 'shipped'];
 
-export function mergeSpans(spans: readonly TimingSpan[]): TimingSpan[] {
-  const merged: TimingSpan[] = [];
-  for (const span of [...spans].sort((a, b) => a.from - b.from)) {
-    const last = merged.at(-1);
-    if (last && span.from <= last.to) last.to = Math.max(last.to, span.to);
-    else merged.push({ ...span });
-  }
-  return merged;
-}
-
 function resolveGoingEnd(task: Task, round: Round, now: number) {
   if (round.endedAt !== null) return round.endedAt;
   return GOING_ROUNDS.includes(round.status) ? now : resolveRoundEnd(task, round);
 }
 
-export function listGoingSpans(task: Task, window: TurnaroundWindow): TimingSpan[] {
+export function listGoingSpans(task: Task, clock: YourClock, window: TurnaroundWindow): TimingSpan[] {
   const range = { from: window.from, to: window.now };
   const rounds = resolveTaskRounds(task).flatMap((round) =>
     round.startedAt === null ? [] : [{ from: round.startedAt, to: resolveGoingEnd(task, round, window.now) }]
   );
-  const paused = listPaused(task, window.now);
-  return mergeSpans(clipSpans(rounds, range)).flatMap((span) => subtractSpans(span, paused));
+  const cuts = [...listPaused(task, window.now), ...listSetAside(clock, task, window.now)];
+  return mergeSpans(clipSpans(rounds, range)).flatMap((span) => subtractSpans(span, cuts));
 }
 
 function listConcurrency(source: StatsSource, clock: YourClock, window: TurnaroundWindow): Concurrency[] {
   const changes = new Map<number, number>();
   for (const task of Object.values(source.tasks)) {
-    for (const span of listGoingSpans(task, window)) {
+    for (const span of listGoingSpans(task, clock, window)) {
       changes.set(span.from, (changes.get(span.from) ?? 0) + 1);
       changes.set(span.to, (changes.get(span.to) ?? 0) - 1);
     }
@@ -144,10 +138,10 @@ function resolveApprovedFirstTime(rounds: readonly YourInput[][]): FirstTimeAppr
 
 export function resolveAttention(
   source: StatsSource,
-  presence: ShinsaState['presence'],
+  you: YourActivity,
   window: TurnaroundWindow
 ): YourAttention {
-  const clock = resolveYourClock(presence, window.now, window.hourOf);
+  const clock = resolveYourClock(you, window.now, window.hourOf);
   const rounds = listFinishedRounds(source, window).map((round) => ({
     inputs: listRoundInputs(round),
     agent: measureRound(round, clock, window.now).agent,

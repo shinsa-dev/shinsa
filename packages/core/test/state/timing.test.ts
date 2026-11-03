@@ -8,7 +8,7 @@ import {
   resolveTaskTiming,
   type UsageWait,
 } from '../../src/index.ts';
-import { approve, createHarness, createTask, proposePlan } from '../harness.ts';
+import { approve, createHarness, createTask, proposePlan, registerRepo } from '../harness.ts';
 
 function gate(taskId: string, id: string): Gate {
   return {
@@ -237,5 +237,73 @@ describe('your presence', () => {
     harness.send({ type: 'task.unsnooze', taskId });
     expect(harness.state.presence[String(first)]).toBeUndefined();
     expect(Object.keys(harness.state.presence)).toHaveLength(2);
+  });
+});
+
+describe('time away and focus', () => {
+  test('keeps each span you were away from your Mac, without counting it as something you did', () => {
+    const harness = createHarness();
+    harness.advance(3 * HOUR_MS);
+    const presence = { ...harness.state.presence };
+    const from = harness.now - 2 * HOUR_MS;
+    harness.send({ type: 'away.record', from, to: harness.now - HOUR_MS });
+    expect(harness.state.away[String(from)]).toEqual({ from, to: from + HOUR_MS });
+    expect(harness.state.presence).toEqual(presence);
+  });
+
+  test('refuses a span that ends before it starts, ends later than now or lasts over 30 days', () => {
+    const harness = createHarness();
+    harness.advance(40 * 24 * HOUR_MS);
+    const now = harness.now;
+    expect(() => harness.send({ type: 'away.record', from: now - 10, to: now - 10 })).toThrow('Time away');
+    expect(() => harness.send({ type: 'away.record', from: now - 10, to: now + 10 })).toThrow('Time away');
+    expect(() => harness.send({ type: 'away.record', from: now - 31 * 24 * HOUR_MS, to: now })).toThrow(
+      'Time away'
+    );
+    expect(harness.state.away).toEqual({});
+  });
+
+  test('takes time away only from you, never from an agent or a task on your behalf', () => {
+    const harness = createHarness();
+    harness.advance(HOUR_MS);
+    expect(() =>
+      harness.send({ type: 'away.record', from: 0, to: harness.now }, { onBehalf: true, byTask: 'other' })
+    ).toThrow();
+    expect(harness.state.away).toEqual({});
+  });
+
+  test('keeps each focus on a project from when it started to when it changed, with its end time', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness, 'paywall-next', 'Superwall');
+    const projectId = harness.state.repos[repoId]?.projectId ?? '';
+    const started = harness.now + 1;
+    harness.send({ type: 'focus.change', projectId, until: started + 8 * HOUR_MS });
+    expect(harness.state.focusHistory[String(started)]).toEqual({
+      projectId,
+      from: started,
+      to: null,
+      until: started + 8 * HOUR_MS,
+    });
+    harness.advance(HOUR_MS);
+    harness.send({ type: 'focus.change', projectId: null, until: null });
+    expect(harness.state.focusHistory[String(started)]?.to).toBe(started + HOUR_MS + 1);
+    expect(Object.keys(harness.state.focusHistory)).toEqual([String(started)]);
+  });
+
+  test('drops time away and focus that ended over a year ago', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness, 'paywall-next', 'Superwall');
+    const projectId = harness.state.repos[repoId]?.projectId ?? '';
+    harness.advance(2 * HOUR_MS);
+    const old = harness.now - HOUR_MS;
+    harness.send({ type: 'away.record', from: old - HOUR_MS, to: old });
+    harness.send({ type: 'focus.change', projectId, until: null });
+    harness.send({ type: 'focus.change', projectId: null, until: null });
+    harness.advance(PRESENCE_RETENTION_HOURS * HOUR_MS);
+    const recent = harness.now - HOUR_MS;
+    harness.send({ type: 'away.record', from: recent, to: harness.now });
+    harness.send({ type: 'focus.change', projectId, until: null });
+    expect(Object.keys(harness.state.away)).toEqual([String(recent)]);
+    expect(Object.keys(harness.state.focusHistory)).toEqual([String(harness.now)]);
   });
 });

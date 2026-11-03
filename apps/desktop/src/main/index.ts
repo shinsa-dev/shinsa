@@ -5,6 +5,7 @@ import { app, session } from 'electron';
 import { resolveUserDataDir } from '../app/dev-bundle.ts';
 import { APP_NAME } from '../app/schema.ts';
 import { AppLifecycle } from '../app/service.ts';
+import { AwayWatch } from '../away/service.ts';
 import { PageBridge } from '../bridge/service.ts';
 import { CommandLine } from '../command-line/service.ts';
 import { Connection } from '../connection/service.ts';
@@ -32,6 +33,7 @@ import { NativeNoticesLive } from './native-notices.ts';
 import { NativeTrayLive } from './native-tray.ts';
 import { NativeWindowLive } from './native-window.ts';
 import { PageChannelLive } from './page-channel.ts';
+import { PowerMonitorLive } from './power-monitor.ts';
 import { DesktopShellLive } from './shell.ts';
 import { UpdateClientLive } from './update-client.ts';
 
@@ -54,14 +56,18 @@ const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, Co
   Layer.provideMerge(ElectronLayer)
 );
 
-const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AppMenu.layer, StatusTray.layer).pipe(
+const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AwayWatch, AppMenu.layer, StatusTray.layer).pipe(
   Layer.provideMerge(Updater.layer),
   Layer.provideMerge(Notifications.layer),
   Layer.provideMerge(AppWindow.layer),
   Layer.provideMerge(
-    Layer.mergeAll(NativeWindowLive, NativeTrayLive, NativeNoticesLive, PageChannelLive).pipe(
-      Layer.provide(AppReady)
-    )
+    Layer.mergeAll(
+      NativeWindowLive,
+      NativeTrayLive,
+      NativeNoticesLive,
+      PageChannelLive,
+      PowerMonitorLive
+    ).pipe(Layer.provide(AppReady))
   ),
   Layer.provideMerge(EngineLayer)
 );

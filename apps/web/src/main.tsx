@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { relayDesktopAway } from '@/lib/away.ts';
 import { applyDesktop } from '@/lib/desktop.ts';
 import { applyLayoutParam } from '@/lib/preferences/layout.ts';
 import { followSystemTheme } from '@/lib/preferences/theme.ts';
@@ -12,6 +13,7 @@ import './app.css';
 followSystemTheme();
 applyLayoutParam();
 applyDesktop(navigate);
+relayDesktopAway();
 
 const root = document.getElementById('root');
 if (root) {

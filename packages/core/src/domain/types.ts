@@ -596,6 +596,13 @@ export interface TimingSpan {
   to: number;
 }
 
+export interface FocusSpan {
+  projectId: string;
+  from: number;
+  to: number | null;
+  until: number | null;
+}
+
 export interface NeedsYouSpan extends TimingSpan {
   answered: boolean;
 }

@@ -85,6 +85,7 @@ type EventBody =
   | { type: 'project.written'; project: Project }
   | { type: 'project.removed'; projectId: string }
   | { type: 'focus.changed'; focus: Focus }
+  | { type: 'away.recorded'; from: number; to: number }
   | { type: 'settings.changed'; settings: Settings }
   | {
       type: 'task.created';

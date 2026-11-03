@@ -78,12 +78,12 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
     [rangeWindow, minute]
   );
   const turnaround = React.useMemo(
-    () => resolveTurnaround(source, state.presence ?? {}, turnaroundWindow),
-    [source, state.presence, turnaroundWindow]
+    () => resolveTurnaround(source, state, turnaroundWindow),
+    [source, state.tasks, state.presence, state.away, state.focusHistory, turnaroundWindow]
   );
   const attention = React.useMemo(
-    () => resolveAttention(source, state.presence ?? {}, turnaroundWindow),
-    [source, state.presence, turnaroundWindow]
+    () => resolveAttention(source, state, turnaroundWindow),
+    [source, state.tasks, state.presence, state.away, state.focusHistory, turnaroundWindow]
   );
   const scope = focus && <span className='font-normal'>Only {focus.name}, the project in focus</span>;
   const rangeLabel = STATS_RANGES.find((entry) => entry.value === `${range}`)?.label ?? '';

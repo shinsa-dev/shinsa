@@ -98,6 +98,7 @@ export const UserCommand = Schema.Union([
     teamId: Optional(OrNull(IdText, FIELD_MESSAGES.text), FIELD_MESSAGES.text),
     until: NullByDefault(Time, FIELD_MESSAGES.time),
   }),
+  Command('away.record', { from: Time, to: Time }),
   Command('settings.change', { patch: SettingsPatch }),
   Command('task.create', {
     request: Text(),
