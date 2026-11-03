@@ -40,6 +40,14 @@ export const EFFECT_LOGIC_FILE_MESSAGE =
 export const EFFECT_SCHEMA_FILE_MESSAGE =
   'A schema file holds schemas, types and constants only. Move this function or effect next to the code that runs it (the effect skill → File layout)';
 
+export const ENGINE_PROMISE_MESSAGE =
+  'Promise I/O outside Effect in the engine. Write the module as a Context.Service provided by a Layer, with Effect.fn and Effect.tryPromise around the promise API, and run it with a runtime only at the edge (the effect skill → Services and layers)';
+
+export const ENGINE_PROMISE_STALE_MESSAGE =
+  'This file no longer does Promise I/O outside Effect. Remove it from ENGINE_PROMISE_FILES in scripts/lint-rules.ts';
+
+const ENGINE_SOURCE = /^apps\/engine\/src\//;
+
 const LOGIC_FILES = /(?:^|\/)(?:handler|service|middleware)\.tsx?$/;
 
 const SCHEMA_FILE = /(?:^|\/)schema\.tsx?$/;
@@ -191,6 +199,21 @@ function listMessages(node: Node, ancestors: Node[]) {
 export function isEffectSource(file: string, source: string) {
   const isTest = /\.test\.tsx?$/.test(file) || /(?:^|\/)test\//.test(file);
   return !isTest && EFFECT_IMPORT.test(source);
+}
+
+export function isEngineSource(file: string, source: string) {
+  const isTest = /\.test\.tsx?$/.test(file);
+  return ENGINE_SOURCE.test(file) && !isTest && !EFFECT_IMPORT.test(source);
+}
+
+export function listEnginePromiseLines(file: string, source: string) {
+  const plugins: ('typescript' | 'jsx')[] = file.endsWith('.tsx') ? ['typescript', 'jsx'] : ['typescript'];
+  const program = parse(source, { sourceType: 'module', plugins }).program as unknown as Node;
+  const lines: number[] = [];
+  walk(program, (node) => {
+    if (isPromiseNode(node)) lines.push(node.loc?.start.line ?? 0);
+  });
+  return lines;
 }
 
 function isFunctionValue(node: Node) {

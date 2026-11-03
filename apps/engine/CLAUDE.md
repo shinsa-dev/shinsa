@@ -30,7 +30,7 @@ src/
 │                        commands as one table (OPEN_COMMANDS, ENGINE_COMMANDS) that the help (describeHelp,
 │                        describeHelpAll), each command's --help and docs/cli.md's generated half
 │                        (replaceReference) come from; commands.ts open
-│                        (the app, a task, or a folder's project) / do / import / status; engine.ts start / stop /
+│                        (the app, a task, or a folder's project) / do / status; engine.ts start / stop /
 │                        restart / version through the platform's EngineService (EngineControl, readHealth,
 │                        HUMAN_ONLY_ENGINE_COMMANDS); launchd.ts the Mac's EngineService on the app's launchd job
 │                        (createLaunchdService); logs.ts `shinsa logs`; app.ts the app's bundle id, the
@@ -41,8 +41,7 @@ src/
 │                        DomainError with the engine's code, or request_failed, and one without JSON
 │                        EngineAnswerInvalid; index.ts createEngineCalls, the same calls as promises, the
 │                        client the web and desktop apps move to); api.ts (createSurfaceClient and
-│                        createApiClient over those calls); session.ts reads a Claude Code session for
-│                        `shinsa import`
+│                        createApiClient over those calls)
 ├── terminal/            How the command line draws (docs/cli.md → How it looks): style.ts (when there is colour and
 │                        which symbols: TTY, NO_COLOR, FORCE_COLOR, TERM; the 16-colour tones; code in backticks),
 │                        text.ts (visible width, wrapping, truncation, ~ for home, splitHint for an error's hint),

@@ -82,7 +82,7 @@ draft ─► plan ──[GATE: approve plan]──► build ─► self-check �
   you ask, the default: building starts as soon as the plan is written. Large plans: a plan with more than 3
   phases or 6 files stops at the plan gate, judged from the plan itself rather than from the request, and so
   does any plan the agent revised. Always: every plan stops there. A task you ask for plan first
-  (`shinsa do --plan-first`, or a session brought in with `shinsa import`) always stops there, and so does a task
+  (`shinsa do --plan-first`) always stops there, and so does a task
   in the backlog, a task that runs an operation or a plan that asks for your approval, whatever the setting says
   (`docs/engine.md` → A task's path).
 - **Self-check** is everything that can be verified before you look: the checks the agent chose for the
@@ -550,7 +550,7 @@ Built and verified end to end against a scratch repository:
   tools and the agent plugin (review, evidence, handover skills), live transcripts, steering.
 - **M2** done: plan, review, merge, question and failure gates; the ranked queue; the agent review
   loop with automatic fix rounds; review with evidence, a risk-ranked diff and line comments that go
-  back to the agent; plan first from `shinsa do --plan-first` and `shinsa import`.
+  back to the agent; plan first from `shinsa do --plan-first`.
 - **M3** built, unit-tested, not yet run against GitHub: PR opening, the 45 second PR watcher, CI and
   review-thread fix rounds, the merge gate, settlement and worktree cleanup.
 - **M4** partly: focus by project with an expiry, the briefing, dependencies (triage, the new-task
@@ -590,8 +590,7 @@ Built and verified end to end against a scratch repository:
 - **No repositories to manage.** Shinsa finds git repositories on the machine, registers one the
   first time it works there and files it into a project: the one whose folder holds it, the task's
   while that project has no repository yet, or one named after its GitHub owner.
-- **`shinsa` CLI.** The server is `shinsa engine`; `shinsa do "<request>"`, `shinsa import` (bring a
-  Claude Code session in as a task), `shinsa status` and `shinsa open` let people and agents hand work
+- **`shinsa` CLI.** The server is `shinsa engine`; `shinsa do "<request>"`, `shinsa status` and `shinsa open` let people and agents hand work
   over from any project.
 - **Design.** Blue is the one accent (primary buttons included), the Feedbase mark is the logo,
   controls are more compact and less rounded, the secondary button has real contrast.
@@ -1245,7 +1244,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 ## 11. Open questions
 
-1. **Plan gate threshold.** Today: `shinsa do --plan-first` and `shinsa import` always stop at the plan gate, and
+1. **Plan gate threshold.** Today: `shinsa do --plan-first` always stops at the plan gate, and
    with Settings → Agents → Engine, Approve plans on Large plans, plans of more than 3 phases or 6 files and
    revised plans stop too, and on Always every plan does. Are 3 phases and 6 files the right line?
 2. **Learning from you.** Your past corrections (in Kanna transcripts) could seed the rules skills

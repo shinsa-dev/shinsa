@@ -212,7 +212,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `projectId?` | string \| null | the project, else none |
 | `request` | string | your request, as written |
 | `title` | string | from triage (the request's first line until then) |
-| `origin` | string \| null | the folder `shinsa do` or `shinsa import` ran in, a hint for triage; `onboarding` for the welcome task setup records |
+| `origin` | string \| null | the folder `shinsa do` ran in, a hint for triage; `onboarding` for the welcome task setup records |
 | `mode?` | `build` \| `ask` | `ask` reads as the answer shape: `tasks create --ask`, a schedule's `just_answer` target |
 | `createdAt`, `updatedAt`, `stageChangedAt` | number | times (ms) |
 

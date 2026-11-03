@@ -369,58 +369,6 @@ describe('shinsa do', () => {
   });
 });
 
-describe('shinsa import', () => {
-  function writeSession(dir: string, name: string, cwd = '/code/app') {
-    writeFiles(dir, {
-      [name]: [
-        JSON.stringify({ type: 'user', cwd, message: { role: 'user', content: 'Build the importer' } }),
-        JSON.stringify({
-          type: 'assistant',
-          message: { content: [{ type: 'text', text: 'Started on it.' }] },
-        }),
-      ].join('\n'),
-    });
-    return join(dir, name);
-  }
-
-  test('turns a session file or id into a task that starts with a plan', async () => {
-    const { engine, port } = startTestServer();
-    const projects = createTempDir();
-    const path = writeSession(projects, 'proj/abc-123.jsonl', '/code/from-session');
-    const { io, out } = createIo(port, { projectsDir: projects });
-    expect(await runCli(['import', path], io)).toBe(0);
-    expect(await runCli(['import', 'abc-123', '--in', '/code/elsewhere', '--high'], io)).toBe(0);
-    const tasks = Object.values(engine.state.tasks);
-    expect(tasks.map((task) => [task.origin, task.planFirst, task.priority])).toEqual([
-      ['/code/from-session', true, 'normal'],
-      ['/code/elsewhere', true, 'high'],
-    ]);
-    expect(out[0]).toBe(`Imported ${path}`);
-    expect(tasks[0]?.request).toContain('What was asked first:\nBuild the importer');
-  });
-
-  test('a session without a working directory starts where shinsa ran', async () => {
-    const { engine, port } = startTestServer();
-    const projects = createTempDir();
-    writeFiles(projects, {
-      'p/s.jsonl': JSON.stringify({ type: 'user', message: { role: 'user', content: 'Hi' } }),
-    });
-    const { io } = createIo(port, { projectsDir: projects });
-    await runCli(['import', 's'], io);
-    expect(Object.values(engine.state.tasks)[0]?.origin).toBe('/code/app');
-  });
-
-  test('a missing session name or --in value is explained', async () => {
-    const { io, errors } = createIo('1');
-    expect(await runCli(['import'], io)).toBe(1);
-    expect(await runCli(['import', 'x', '--in'], io)).toBe(1);
-    expect(errors).toEqual([
-      'Error: Name the session by its file or id, such as `shinsa import 0b9c2f4e-6a8d`.',
-      'Error: --in needs a value.',
-    ]);
-  });
-});
-
 describe('shinsa status and open', () => {
   const HEALTH = {
     ok: true,

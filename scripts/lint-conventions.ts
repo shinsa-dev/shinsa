@@ -2,7 +2,14 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parse } from '@babel/parser';
 import { listDisclosureViolations } from './lint-disclosure.ts';
-import { isEffectSource, listEffectViolations } from './lint-effect.ts';
+import {
+  ENGINE_PROMISE_MESSAGE,
+  ENGINE_PROMISE_STALE_MESSAGE,
+  isEngineSource,
+  isEffectSource,
+  listEffectViolations,
+  listEnginePromiseLines,
+} from './lint-effect.ts';
 import {
   APP,
   APP_AND_KIT,
@@ -13,6 +20,7 @@ import {
   CLASS_RULES,
   type ClassRule,
   ECHO_TOOLTIP_MESSAGE,
+  ENGINE_PROMISE_FILES,
   GREEN_MESSAGE,
   ICON_BRIGHTER_MESSAGE,
   ICON_FADE_MESSAGE,
@@ -544,6 +552,15 @@ function collectClassViolations(file: string, source: string, violations: Violat
   });
 }
 
+function collectEnginePromiseViolations(file: string, source: string, violations: Violation[]): void {
+  if (!isEngineSource(file, source)) return;
+  const lines = listEnginePromiseLines(file, source);
+  const listed = ENGINE_PROMISE_FILES.has(file.replace(/^apps\/engine\/src\//, ''));
+  if (listed && lines.length === 0) violations.push({ file, line: 1, message: ENGINE_PROMISE_STALE_MESSAGE });
+  if (listed) return;
+  for (const line of lines) violations.push({ file, line, message: ENGINE_PROMISE_MESSAGE });
+}
+
 function parseSource(file: string, source: string) {
   return parse(source, {
     sourceType: 'module',
@@ -575,6 +592,7 @@ function checkFile(file: string, violations: Violation[], appSources: Record<str
   if (isEffectSource(file, source)) {
     for (const violation of listEffectViolations(file, source)) violations.push({ file, ...violation });
   }
+  collectEnginePromiseViolations(file, source, violations);
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
   if (isUnder(file, APP)) appSources[file] = source;
 }
@@ -586,6 +604,10 @@ function run(): void {
     for (const file of listSourceFiles(root)) checkFile(file, violations, appSources);
   }
   violations.push(...listToastViolations(appSources));
+  for (const listed of ENGINE_PROMISE_FILES) {
+    const file = join('apps/engine/src', listed);
+    if (!existsSync(file)) violations.push({ file, line: 1, message: ENGINE_PROMISE_STALE_MESSAGE });
+  }
   for (const sheet of APP.flatMap((root) => listStyleSheets(root)))
     collectRawSelection(sheet, readFileSync(sheet, 'utf8'), violations);
   if (violations.length === 0) return;

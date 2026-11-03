@@ -127,22 +127,6 @@ $ shinsa do "add search to the docs" --plan-first
 | `--urgent` | Put it ahead of everything else. |
 | `--high` | Put it ahead of normal work. |
 
-### shinsa import
-
-Create a task from a Claude Code session, starting with a plan to approve. Takes a session file (.jsonl) or a session id. The task starts with a plan for you to approve, so nothing builds until you have looked.
-
-```
-shinsa import <session> [--in <folder>] [--urgent | --high]
-$ shinsa import 0b9c2f4e-6a8d
-$ shinsa import ~/session.jsonl --in ~/Developer/shop
-```
-
-| Option | What it does |
-| --- | --- |
-| `--in <folder>` | Work in this folder instead of the one the session ran in. |
-| `--urgent` | Put it ahead of everything else. |
-| `--high` | Put it ahead of normal work. |
-
 ## Check and control the background engine
 
 ### shinsa status

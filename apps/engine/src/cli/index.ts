@@ -38,7 +38,7 @@ import {
 } from '../terminal/index.ts';
 import { createApiClient } from './api.ts';
 import { APP_BUNDLE_ID, isInsideApp, isPathArgument, ownsEngineJob, resolveLinkPage } from './app.ts';
-import { type CommandIo, createTask, importSession, openApp, parseArgs, printStatus } from './commands.ts';
+import { type CommandIo, createTask, openApp, parseArgs, printStatus } from './commands.ts';
 import {
   type EngineControl,
   type EngineIo,
@@ -65,7 +65,6 @@ export interface CliIo {
   runEngine: (env: Record<string, string | undefined>) => Promise<Shinsa>;
   onShutdown: (stop: () => Promise<void>) => void;
   terminal: Terminal;
-  projectsDir?: string;
 }
 
 const ENGINE_LOG_MAX_BYTES = 8 * 1024 * 1024;
@@ -266,7 +265,6 @@ function createCommandIo(io: CliIo): CommandIo {
     write: io.write,
     openApp: io.openApp,
     readRepoRoot: io.readRepoRoot,
-    projectsDir: io.projectsDir,
   };
 }
 
@@ -325,9 +323,6 @@ async function routeTopLevel(command: string, args: string[], io: CliIo) {
   switch (command) {
     case 'do':
       await createTask(args, createCommandIo(io));
-      return 0;
-    case 'import':
-      await importSession(args, createCommandIo(io));
       return 0;
     case 'status':
       return printStatus(args, createCommandIo(io));

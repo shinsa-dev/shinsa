@@ -397,7 +397,7 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    default branch.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
-   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) or kept in the backlog (Scheduling → The backlog, below)
+   (`planFirst`: `shinsa do --plan-first`) or kept in the backlog (Scheduling → The backlog, below)
    always waits at a plan gate; otherwise Settings → Agents →
    Engine, Approve plans (`approvePlans`: `when_asked`, the default, `large` or `always`) decides: on Large plans a
    large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
@@ -4951,8 +4951,7 @@ the context meter, take your messages mid-turn, hand a session over to the other
 gate when signed out. What is still Claude-only, and why: several accounts with rotation and Run on account (one
 Codex login), eunoe and its boundary folds (in front of the Anthropic API only; the `folds` capability), Claude Code's plugins as a whole and its PreToolUse hook
 (Codex gets a plugin's MCP servers and the skills' paths, and asks for approval per command instead), checking a session file before a resume (Codex
-has no file to check, so a refused resume is `session_lost`), background work pinning an idle session, and `shinsa
-import` (it reads Claude Code sessions).
+has no file to check, so a refused resume is `session_lost`), and background work pinning an idle session.
 
 Provider-agnostic pieces stay outside `providers/`: the tool schemas and MCP server (`agents/tools`), hand-over
 validation (`agents/handover.ts`), transcripts, the run clock, the command policy and the house instructions every

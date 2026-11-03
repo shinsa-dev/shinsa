@@ -11,7 +11,9 @@ import {
   EFFECT_THROW_MESSAGE,
   EFFECT_TRY_MESSAGE,
   isEffectSource,
+  isEngineSource,
   listEffectViolations,
+  listEnginePromiseLines,
 } from './lint-effect.ts';
 
 const messages = (source: string) =>
@@ -142,5 +144,29 @@ describe('Effect code is held to the house style', () => {
     expect(listEffectViolations('a/schema.ts', 'export const Row = Other.decode(Schema.String);')).toEqual(
       []
     );
+  });
+});
+
+describe('the engine does its I/O in Effect', () => {
+  test('only engine source files without an effect import are checked, never tests', () => {
+    expect(isEngineSource('apps/engine/src/remote/teams.ts', 'export class Teams {}')).toBe(true);
+    expect(isEngineSource('apps/engine/src/remote/teams.ts', "import { Effect } from 'effect';")).toBe(false);
+    expect(isEngineSource('apps/engine/src/remote/teams.test.ts', 'export class Teams {}')).toBe(false);
+    expect(isEngineSource('apps/engine/test/remote/teams.ts', 'export class Teams {}')).toBe(false);
+    expect(isEngineSource('apps/web/src/lib/api.ts', 'export class Api {}')).toBe(false);
+  });
+
+  test('every await, async function, new Promise and promise chain is found, with its line', () => {
+    const source = [
+      'export async function join() {',
+      '  await request();',
+      '}',
+      'const later = new Promise(() => {});',
+      'run().then(done);',
+      'Effect.catch(run, stop);',
+      'const plain = () => 1;',
+    ].join('\n');
+    expect(listEnginePromiseLines('apps/engine/src/a.ts', source)).toEqual([1, 2, 4, 5]);
+    expect(listEnginePromiseLines('apps/engine/src/a.tsx', 'const v = () => <Row />;')).toEqual([]);
   });
 });

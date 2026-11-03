@@ -12,7 +12,6 @@ import {
 import type { ApiClient } from './api.ts';
 import { isPathArgument, resolveHomeLink, resolvePathArgument, resolveTaskLink } from './app.ts';
 import { readHealth } from './engine.ts';
-import { describeSession, readSession } from './session.ts';
 
 export interface CommandIo {
   api: ApiClient;
@@ -22,7 +21,6 @@ export interface CommandIo {
   write: (line?: string) => void;
   openApp: (link: string) => Promise<void>;
   readRepoRoot: (dir: string) => Promise<string | null>;
-  projectsDir?: string;
 }
 
 interface ParsedArgs {
@@ -31,7 +29,7 @@ interface ParsedArgs {
   positional: string[];
 }
 
-const VALUE_FLAGS = new Set(['--in', '--lines']);
+const VALUE_FLAGS = new Set(['--lines']);
 
 export function parseArgs(args: string[]): ParsedArgs {
   const parsed: ParsedArgs = { flags: new Set(), values: new Map(), positional: [] };
@@ -86,24 +84,6 @@ export async function createTask(args: string[], io: CommandIo) {
       ? 'Added to the backlog. It plans now and builds when you start it.'
       : 'Started. Shinsa brings it back when it needs a decision.'
   );
-  writeTaskLink(io, result);
-}
-
-export async function importSession(args: string[], io: CommandIo) {
-  const { flags, values, positional } = parseArgs(args);
-  const [target] = positional;
-  if (!target) throw new Error('Name the session by its file or id, such as `shinsa import 0b9c2f4e-6a8d`.');
-  const session = readSession(target, io.projectsDir);
-  const result = await io.api.sendCommand({
-    type: 'task.create',
-    request: describeSession(session),
-    repoId: null,
-    priority: resolvePriority(flags),
-    planFirst: true,
-    origin: values.get('--in') ?? session.cwd ?? io.cwd,
-  });
-  writeDone(io, `Imported ${shortenHome(session.path, io.home)}`);
-  io.write('It starts with a plan for you to approve, so nothing builds until you have looked.');
   writeTaskLink(io, result);
 }
 
