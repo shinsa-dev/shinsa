@@ -30,14 +30,9 @@ import type {
   WorkReport,
 } from '../packages/core/src/index.ts';
 import { CHAT_PROTOCOL_VERSION, listRepoChecks } from '../packages/core/src/index.ts';
+import { MINUTE } from './kit/time.ts';
 
 export const NOW = Date.now();
-
-export const MINUTE = 60_000;
-
-export const HOUR = 60 * MINUTE;
-
-export const DAY = 24 * HOUR;
 
 export const CHOSEN_BY_YOU: TaskAuto = { shape: false, start: false, priority: false };
 

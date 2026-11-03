@@ -7,6 +7,7 @@ import {
   resolveChangelog,
   resolvePublicChangelog,
 } from '../packages/core/src/changelog/index.ts';
+import { DAY } from './kit/time.ts';
 
 const SEED_RELEASE_COUNT = 50;
 
@@ -37,8 +38,6 @@ const SEED_CHANGES: Record<Exclude<ChangeKind, 'internal'>, readonly string[]> =
     'The Terminal page keeps its scroll position when you switch tabs and come back.',
   ],
 };
-
-const DAY = 24 * 60 * 60 * 1000;
 
 const FIRST_RELEASE_AT = Date.UTC(2026, 0, 12);
 

@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { launchChrome, listTargets, ShellPage } from './shell-cdp.ts';
+import { type CdpPage, openChromium, waitForExpression } from '../kit/chromium/index.ts';
 import { type Frames, type SoakSample, serializeSoakRow, serializeSoakTable } from './soak-stats.ts';
 
 interface TaskRow {
@@ -116,48 +116,36 @@ const SOAK_PROBE = String.raw`(() => {
     });
 })()`;
 
-async function waitFor(page: ShellPage, expression: string, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (
-      await page.evaluate<boolean>(`(() => { try { return !!(${expression}); } catch { return false; } })()`)
-    )
-      return true;
-    await Bun.sleep(50);
-  }
-  return false;
-}
-
-async function click(page: ShellPage, point: { x: number; y: number }) {
+async function click(page: CdpPage, point: { x: number; y: number }) {
   await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
   await Bun.sleep(120);
   for (const type of ['mousePressed', 'mouseReleased'])
     await page.send('Input.dispatchMouseEvent', { type, ...point, button: 'left', clickCount: 1 });
 }
 
-async function readMetrics(page: ShellPage) {
+async function readMetrics(page: CdpPage) {
   const { metrics } = await page.send<{ metrics: { name: string; value: number }[] }>(
     'Performance.getMetrics'
   );
   return Object.fromEntries(metrics.map((metric) => [metric.name, metric.value])) as unknown as Metrics;
 }
 
-async function readHeapMb(page: ShellPage) {
+async function readHeapMb(page: CdpPage) {
   await page.send('HeapProfiler.collectGarbage');
   const heap = await page.send<{ usedSize: number }>('Runtime.getHeapUsage');
   return heap.usedSize / 1_000_000;
 }
 
-async function visitTab(page: ShellPage, name: string) {
-  if (!(await waitFor(page, `__soak.tab(${JSON.stringify(name)})`, 3000))) return false;
+async function visitTab(page: CdpPage, name: string) {
+  if (!(await waitForExpression(page, `__soak.tab(${JSON.stringify(name)})`, 3000))) return false;
   await page.evaluate(`__soak.tab(${JSON.stringify(name)}).click()`);
-  return waitFor(page, `__soak.selectedTab(${JSON.stringify(name)})`, 5000);
+  return waitForExpression(page, `__soak.selectedTab(${JSON.stringify(name)})`, 5000);
 }
 
-async function visitTask(page: ShellPage, handle: string) {
+async function visitTask(page: CdpPage, handle: string) {
   await page.evaluate(`__soak.go('/tasks/${handle}')`);
   if (
-    !(await waitFor(
+    !(await waitForExpression(
       page,
       `location.pathname === '/tasks/${handle}' && !!document.querySelector('[role=tab]')`
     ))
@@ -165,7 +153,7 @@ async function visitTask(page: ShellPage, handle: string) {
     return;
   if (await visitTab(page, 'Chat')) await page.evaluate('__soak.scrollUp(6)');
   if (await visitTab(page, 'Code')) {
-    await waitFor(page, `!!document.querySelector('[role=treeitem]')`, 5000);
+    await waitForExpression(page, `!!document.querySelector('[role=treeitem]')`, 5000);
     await page.evaluate(`__soak.openFiles(${FILES})`);
   }
   if (await visitTab(page, 'Review')) await Bun.sleep(200);
@@ -173,7 +161,7 @@ async function visitTask(page: ShellPage, handle: string) {
   await Bun.sleep(200);
 }
 
-async function measureTransition(page: ShellPage, handle: string, from: string, to: string) {
+async function measureTransition(page: CdpPage, handle: string, from: string, to: string) {
   await page.evaluate(`__soak.go('/tasks/${handle}')`);
   await visitTab(page, from);
   await Bun.sleep(600);
@@ -186,7 +174,7 @@ async function measureTransition(page: ShellPage, handle: string, from: string, 
   return frames;
 }
 
-async function measure(page: ShellPage, lap: number, startedAt: number, pinned: string): Promise<SoakSample> {
+async function measure(page: CdpPage, lap: number, startedAt: number, pinned: string): Promise<SoakSample> {
   await page.evaluate(`__soak.go('/tasks/${pinned}')`);
   await visitTab(page, 'Chat');
   await Bun.sleep(1000);
@@ -220,20 +208,6 @@ async function measure(page: ShellPage, lap: number, startedAt: number, pinned: 
   };
 }
 
-async function attach(port: string) {
-  const target = (await listTargets(port)).find(
-    (entry) => entry.type === 'page' && entry.url.startsWith(ORIGIN)
-  );
-  if (!target) throw new Error(`No page on ${ORIGIN} at port ${port}.`);
-  const page = await ShellPage.open(target.webSocketDebuggerUrl);
-  return { page, close: () => page.close() };
-}
-
-function openBrowser() {
-  if (ATTACH) return attach(ATTACH);
-  return launchChrome(1440, 1000);
-}
-
 async function runSoak() {
   const tasks = ((await (await fetch(`${ORIGIN}/api/tasks`)).json()) as { tasks: TaskRow[] }).tasks;
   const handles = tasks
@@ -245,14 +219,14 @@ async function runSoak() {
   const pinned = Bun.env.SOAK_TASK ?? handles[0];
   if (!pinned) throw new Error(`No tasks on ${ORIGIN}.`);
 
-  const browser = await openBrowser();
+  const browser = await openChromium(ATTACH, ORIGIN);
   const { page } = browser;
   await page.send('Page.enable');
   await page.send('Performance.enable');
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: SOAK_PROBE });
   if (ATTACH) await page.evaluate(SOAK_PROBE);
   else await page.send('Page.navigate', { url: `${ORIGIN}/` });
-  await waitFor(page, `window.__soak && ${HOME_DONE}`, 30_000);
+  await waitForExpression(page, `window.__soak && ${HOME_DONE}`, 30_000);
   await Bun.sleep(1500);
 
   const startedAt = performance.now();
@@ -268,7 +242,7 @@ async function runSoak() {
     await page.evaluate(`__soak.go('/tasks')`);
     await Bun.sleep(300);
     await page.evaluate(`__soak.go('/')`);
-    await waitFor(page, HOME_DONE);
+    await waitForExpression(page, HOME_DONE);
     if (lap % SAMPLE_EVERY === 0 || lap === LAPS) {
       const sample = await measure(page, lap, startedAt, pinned);
       samples.push(sample);

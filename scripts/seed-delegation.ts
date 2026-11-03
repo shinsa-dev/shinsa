@@ -8,11 +8,11 @@ import type {
   ShinsaEventInput,
 } from '../packages/core/src/index.ts';
 import { resolveDeliveryPrompt } from '../packages/core/src/index.ts';
+import { MINUTE } from './kit/time.ts';
 import {
   CHOSEN_BY_YOU,
   callTool,
   createPlanCheck,
-  MINUTE,
   NO_TRIAGE_DECISIONS,
   NOW,
   resolveToolOutput,

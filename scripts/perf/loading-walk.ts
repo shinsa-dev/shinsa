@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
+import { type CdpPage, launchChromium, waitForExpression } from '../kit/chromium/index.ts';
 import { LOADING_PROBE } from './loading-probe.ts';
 import { listFailures, serializeWaitTable, summarizeWaits, type WaitSample } from './loading-stats.ts';
-import { launchChrome, type ShellPage } from './shell-cdp.ts';
 
 const ORIGIN = Bun.argv[2] ?? 'http://127.0.0.1:5720';
 const WIDTHS = (Bun.env.LOADING_WALK_WIDTHS ?? '1440,900').split(',').map(Number);
@@ -25,20 +25,13 @@ interface Key {
   modifiers?: number;
 }
 
-async function waitFor(page: ShellPage, expression: string, timeoutMs = 10_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const done = await page.evaluate<boolean>(
-      `(() => { try { return !!(${expression}); } catch { return false; } })()`
-    );
-    if (done) return true;
-    await Bun.sleep(40);
-  }
+async function waitFor(page: CdpPage, expression: string, timeoutMs = 10_000) {
+  if (await waitForExpression(page, expression, timeoutMs)) return true;
   console.warn(`Timed out waiting for ${expression}`);
   return false;
 }
 
-async function press(page: ShellPage, key: Key) {
+async function press(page: CdpPage, key: Key) {
   const base = {
     key: key.key,
     code: key.code,
@@ -49,14 +42,14 @@ async function press(page: ShellPage, key: Key) {
   await page.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
 }
 
-async function typeText(page: ShellPage, text: string) {
+async function typeText(page: CdpPage, text: string) {
   for (const character of text) {
     await page.send('Input.insertText', { text: character });
     await Bun.sleep(60);
   }
 }
 
-async function click(page: ShellPage, target: string) {
+async function click(page: CdpPage, target: string) {
   const point = await page.evaluate<{ x: number; y: number } | null>(
     `__loading.center(${JSON.stringify(target)})`
   );
@@ -68,18 +61,18 @@ async function click(page: ShellPage, target: string) {
   return true;
 }
 
-async function step(page: ShellPage, label: string, run: () => Promise<unknown>, settleMs = SETTLE_MS) {
+async function step(page: CdpPage, label: string, run: () => Promise<unknown>, settleMs = SETTLE_MS) {
   await page.evaluate(`__loading.begin(${JSON.stringify(label)})`);
   const ran = await run();
   if (ran === false) console.warn(`Skipped ${label} at ${await page.evaluate<string>('location.href')}`);
   await Bun.sleep(settleMs);
 }
 
-async function goHome(page: ShellPage, prefix: string) {
+async function goHome(page: CdpPage, prefix: string) {
   await step(page, `${prefix}Home`, async () => (await click(page, HOME)) && waitFor(page, HOME_DONE));
 }
 
-async function pickRef(page: ShellPage, prefix: string, label: string) {
+async function pickRef(page: CdpPage, prefix: string, label: string) {
   await step(page, `${prefix}Code: ${label}`, async () => {
     const trigger = `__loading.rendered('[aria-label="Show the code at"]')[0]`;
     const options = `__loading.visible('[role=option]').length > 0`;
@@ -97,7 +90,7 @@ async function pickRef(page: ShellPage, prefix: string, label: string) {
   });
 }
 
-async function walkCode(page: ShellPage, prefix: string) {
+async function walkCode(page: CdpPage, prefix: string) {
   const treeItem = (index: number) =>
     `__loading.visible('[role=tree][aria-label="Changed files"] [role=treeitem]:not([aria-expanded])')[${index}]`;
   for (const index of [1, 2, 0])
@@ -143,7 +136,7 @@ async function walkCode(page: ShellPage, prefix: string) {
   );
 }
 
-async function walkTask(page: ShellPage, prefix: string, handle: string) {
+async function walkTask(page: CdpPage, prefix: string, handle: string) {
   await step(
     page,
     `${prefix}Home → All tasks`,
@@ -201,7 +194,7 @@ async function pickHandles(tasks: readonly { handle: string }[]) {
 }
 
 async function walk(width: number) {
-  const browser = await launchChrome(width, 1000);
+  const browser = await launchChromium(width, 1000);
   const { page } = browser;
   const prefix = `${width}px · `;
   await page.send('Page.enable');

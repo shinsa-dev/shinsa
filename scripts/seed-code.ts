@@ -24,6 +24,8 @@ import {
   resolveCoverageRanges,
   serializeReportMarkdown,
 } from '../packages/core/src/index.ts';
+import { runGit } from './kit/git/index.ts';
+import { DAY, HOUR, MINUTE } from './kit/time.ts';
 import {
   bumpLockfileEntry,
   countLines,
@@ -42,10 +44,7 @@ import {
 } from './seed-code-kit.ts';
 import {
   createPlanCheck,
-  DAY,
-  HOUR,
   listSeedCheckResults,
-  MINUTE,
   NOW,
   type Push,
   resolveAgentSession,
@@ -341,32 +340,6 @@ export function serializeReviewScreenshot(version: 'before' | 'after') {
   return serializeRectsPng(SCREEN.width, SCREEN.height, PALETTE.page, listScreenRects(version));
 }
 
-interface GitOptions {
-  at?: number;
-  index?: string;
-  input?: string | Uint8Array;
-}
-
-function git(args: string[], cwd: string, options: GitOptions = {}) {
-  const date = options.at === undefined ? null : `@${Math.floor(options.at / 1000)} +0000`;
-  const result = Bun.spawnSync(['git', ...args], {
-    cwd,
-    stdin:
-      typeof options.input === 'string'
-        ? new TextEncoder().encode(options.input)
-        : (options.input ?? 'ignore'),
-    env: {
-      ...Bun.env,
-      GIT_CONFIG_GLOBAL: '/dev/null',
-      GIT_CONFIG_NOSYSTEM: '1',
-      ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}),
-      ...(options.index ? { GIT_INDEX_FILE: options.index } : {}),
-    },
-  });
-  if (result.exitCode !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr.toString()}`);
-  return result.stdout.toString().trim();
-}
-
 function readText(root: string, path: string) {
   return readFileSync(join(root, path), 'utf8');
 }
@@ -378,10 +351,10 @@ function writeText(root: string, path: string, content: string | Uint8Array) {
 }
 
 function commit(path: string, message: string, at: number, paths: readonly string[]) {
-  git(['update-index', '--add', '--remove', '--', ...paths], path);
-  const tree = git(['write-tree'], path);
-  const sha = git(['commit-tree', tree, '-p', 'HEAD', '-m', message], path, { at });
-  git(['update-ref', '-m', `commit: ${message}`, 'HEAD', sha], path);
+  runGit(['update-index', '--add', '--remove', '--', ...paths], path);
+  const tree = runGit(['write-tree'], path);
+  const sha = runGit(['commit-tree', tree, '-p', 'HEAD', '-m', message], path, { at });
+  runGit(['update-ref', '-m', `commit: ${message}`, 'HEAD', sha], path);
   return { sha, tree };
 }
 
@@ -395,14 +368,14 @@ function commitFiles(
   const scratch = mkdtempSync(join(tmpdir(), 'shinsa-seed-'));
   const index = join(scratch, 'index');
   try {
-    git(['read-tree', parent], repo, { index });
+    runGit(['read-tree', parent], repo, { index });
     const entries = Object.entries(files).map(([path, content]) => {
-      const blob = git(['hash-object', '-w', '--stdin'], repo, { input: content });
+      const blob = runGit(['hash-object', '-w', '--stdin'], repo, { input: content });
       return `100644 ${blob}\t${path}`;
     });
-    git(['update-index', '--index-info'], repo, { index, input: `${entries.join('\n')}\n` });
-    const tree = git(['write-tree'], repo, { index });
-    return { sha: git(['commit-tree', tree, '-p', parent, '-m', message], repo, { at }), tree };
+    runGit(['update-index', '--index-info'], repo, { index, input: `${entries.join('\n')}\n` });
+    const tree = runGit(['write-tree'], repo, { index });
+    return { sha: runGit(['commit-tree', tree, '-p', parent, '-m', message], repo, { at }), tree };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -438,7 +411,7 @@ function extractSource(path: string) {
   if (archive.exitCode !== 0) throw new Error(`git archive: ${archive.stderr.toString()}`);
   const tar = Bun.spawnSync(['tar', '-x', '-C', path], { stdin: archive.stdout });
   if (tar.exitCode !== 0) throw new Error(`tar: ${tar.stderr.toString()}`);
-  return git(['ls-tree', '-r', '-z', SOURCE_COMMIT], SOURCE)
+  return runGit(['ls-tree', '-r', '-z', SOURCE_COMMIT], SOURCE)
     .split('\0')
     .filter(Boolean)
     .map((entry) => {
@@ -479,10 +452,10 @@ function commitHistory(path: string, files: { path: string; mode: string }[]) {
       files: [{ path: SAMPLE_PATHS.screenshot, mode: '100644', content: screenshot }],
     }
   );
-  git(['fast-import', '--quiet'], path, {
+  runGit(['fast-import', '--quiet'], path, {
     input: serializeFastImport('refs/heads/main', SEED_AUTHOR, commits),
   });
-  git(['reset', '-q'], path);
+  runGit(['reset', '-q'], path);
 }
 
 const SAMPLE_COVERAGE_COMMAND = 'bun test --coverage --coverage-reporter=lcov';
@@ -511,7 +484,7 @@ function measureSampleCoverage(
   range: string[],
   missed: Record<string, number>
 ): MeasuredCoverage {
-  const changed = parseChangedLines(git(['diff', '-U0', '--no-color', '--find-renames', ...range], cwd));
+  const changed = parseChangedLines(runGit(['diff', '-U0', '--no-color', '--find-renames', ...range], cwd));
   const sources = [...changed].filter(([path]) => COVERED_SOURCE.test(path) && !TEST_PATH.test(path));
   const files = sources
     .map(([path, lines]) => measureSampleFile(cwd, path, lines, missed[path] ?? 0))
@@ -546,7 +519,7 @@ function createMergedTask(repo: string, worktrees: string): MergedNotes {
   const start = NOW - MERGED_AGE_HOURS * HOUR;
   const at = (minutes: number) => start + minutes * MINUTE;
   const branch = 'feat/queue-priority-stack';
-  const main = git(['rev-parse', 'main'], repo);
+  const main = runGit(['rev-parse', 'main'], repo);
   const before = readText(repo, SAMPLE_PATHS.queueIndex);
   const after = `${before.trimEnd()}\nexport { stackByPriority } from './stack.ts';\n`;
   const first = commitFiles(
@@ -563,8 +536,8 @@ function createMergedTask(repo: string, worktrees: string): MergedNotes {
     'feat: cover the order with tests',
     at(MERGED_MARKS.builders[1][1] - 0.2)
   );
-  git(['branch', branch, second.sha], repo);
-  git(
+  runGit(['branch', branch, second.sha], repo);
+  runGit(
     [
       'merge',
       '-q',
@@ -582,7 +555,7 @@ function createMergedTask(repo: string, worktrees: string): MergedNotes {
     stack: QUEUE_STACK,
     test: QUEUE_TEST,
     head: second.sha,
-    mergeCommit: git(['rev-parse', 'HEAD'], repo),
+    mergeCommit: runGit(['rev-parse', 'HEAD'], repo),
     trees: [first.tree, second.tree],
     coverage: measureSampleCoverage(repo, [main, second.sha], {}),
   };
@@ -611,7 +584,7 @@ export interface ReviewNotes {
 
 function renameModule(worktree: string) {
   const targets = readText(worktree, SAMPLE_PATHS.targets);
-  git(['mv', SAMPLE_PATHS.targets, SAMPLE_PATHS.spots], worktree);
+  runGit(['mv', SAMPLE_PATHS.targets, SAMPLE_PATHS.spots], worktree);
   const renamed = replaceAllRequired(
     targets,
     [...RENAMES, ['targets', 'spots'], ['target', 'spot']],
@@ -668,7 +641,7 @@ function createReviewTask(repo: string, worktrees: string): ReviewNotes {
   const worktree = join(worktrees, SAMPLE_REVIEW);
   const importers = listGrepMatches(repo, 'lib/review/targets.ts');
   const ranking = readText(repo, SAMPLE_PATHS.ranking);
-  git(['worktree', 'add', '-q', '-b', 'refactor/review-spots', worktree, 'main'], repo);
+  runGit(['worktree', 'add', '-q', '-b', 'refactor/review-spots', worktree, 'main'], repo);
   const [phase0, phase1, phase2] = REVIEW_MARKS.builders;
 
   const renamed = renameModule(worktree);
@@ -712,7 +685,7 @@ function createReviewTask(repo: string, worktrees: string): ReviewNotes {
   trees.push(
     commit(worktree, 'fix: make the checks pass', at(REVIEW_MARKS.fix[1] - 0.2), [SAMPLE_PATHS.spotKeys]).tree
   );
-  const diffStat = git(['diff', '--stat', '--find-renames', 'main'], worktree);
+  const diffStat = runGit(['diff', '--stat', '--find-renames', 'main'], worktree);
 
   const guide = readText(worktree, SAMPLE_PATHS.webGuide);
   const webGuide = {
@@ -755,7 +728,7 @@ export interface LiveNotes {
 function createLiveTask(repo: string, worktrees: string): LiveNotes {
   const start = NOW - LIVE_AGE_HOURS * HOUR;
   const worktree = join(worktrees, SAMPLE_LIVE);
-  git(['worktree', 'add', '-q', '-b', 'feat/code-view-dark-theme', worktree, 'main'], repo);
+  runGit(['worktree', 'add', '-q', '-b', 'feat/code-view-dark-theme', worktree, 'main'], repo);
   const tokensBefore = readText(worktree, SAMPLE_PATHS.tokens);
   const tokens = { before: tokensBefore, after: `${tokensBefore.trimEnd()}\n${CODE_TOKENS}` };
   writeText(worktree, SAMPLE_PATHS.tokens, tokens.after);
@@ -786,9 +759,9 @@ export interface CodeSample {
 export function createCodeSample(repos: string, worktrees: string): CodeSample {
   const path = join(repos, 'shinsa-sample');
   mkdirSync(path, { recursive: true });
-  git(['init', '-q', '-b', 'main'], path);
-  git(['config', 'user.email', 'seed@shinsa.dev'], path);
-  git(['config', 'user.name', 'Shinsa seed'], path);
+  runGit(['init', '-q', '-b', 'main'], path);
+  runGit(['config', 'user.email', 'seed@shinsa.dev'], path);
+  runGit(['config', 'user.name', 'Shinsa seed'], path);
   commitHistory(path, extractSource(path));
   const merged = createMergedTask(path, worktrees);
   const review = createReviewTask(path, worktrees);

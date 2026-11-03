@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
+import { runGit } from './kit/git/index.ts';
 import {
   bumpLockfileEntry,
   countLines,
@@ -44,16 +45,6 @@ function readPixel(png: Uint8Array, width: number, x: number, y: number) {
   const rows = inflateSync(idat.data);
   const offset = y * (1 + width * 3) + 1 + x * 3;
   return [rows[offset], rows[offset + 1], rows[offset + 2]];
-}
-
-function git(args: string[], cwd: string, input?: Uint8Array) {
-  const result = Bun.spawnSync(['git', ...args], {
-    cwd,
-    stdin: input ?? 'ignore',
-    env: { ...Bun.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
-  });
-  if (result.exitCode !== 0) throw new Error(result.stderr.toString());
-  return result.stdout.toString().trim();
 }
 
 describe('resolveCrc32', () => {
@@ -254,7 +245,7 @@ describe('serializeFastImport', () => {
   test('imports commits with their files, dates and modes', () => {
     const repo = mkdtempSync(join(tmpdir(), 'seed-code-kit-'));
     try {
-      git(['init', '-q', '-b', 'main'], repo);
+      runGit(['init', '-q', '-b', 'main'], repo);
       const encode = (text: string) => new TextEncoder().encode(text);
       const stream = serializeFastImport('refs/heads/main', 'Seed <seed@example.com>', [
         {
@@ -268,11 +259,11 @@ describe('serializeFastImport', () => {
           files: [{ path: 'bin/run with space', mode: '100755', content: encode('#!/bin/sh\n') }],
         },
       ]);
-      git(['fast-import', '--quiet'], repo, stream);
-      expect(git(['log', '--format=%s %at %an', 'main'], repo)).toBe('second 2000 Seed\nfirst 1000 Seed');
-      expect(git(['show', 'main:a.txt'], repo)).toBe('one');
-      expect(git(['ls-tree', '-r', 'main'], repo)).toContain('100755 blob');
-      expect(git(['ls-tree', '-r', '--name-only', 'main'], repo).split('\n')).toEqual([
+      runGit(['fast-import', '--quiet'], repo, { input: stream });
+      expect(runGit(['log', '--format=%s %at %an', 'main'], repo)).toBe('second 2000 Seed\nfirst 1000 Seed');
+      expect(runGit(['show', 'main:a.txt'], repo)).toBe('one');
+      expect(runGit(['ls-tree', '-r', 'main'], repo)).toContain('100755 blob');
+      expect(runGit(['ls-tree', '-r', '--name-only', 'main'], repo).split('\n')).toEqual([
         'a.txt',
         'bin/run with space',
       ]);

@@ -74,6 +74,7 @@ import {
   type TeamJoinResponse,
   type TeamPreviewResponse,
 } from '../packages/core/src/index.ts';
+import { DAY } from './kit/time.ts';
 import { createSandboxCloud } from './sandbox-cloud.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -154,10 +155,8 @@ const TEAM: Omit<RemoteTeam, 'role'> = {
     { id: 'laptop', name: 'Laptop', userId: USER.id, online: true, lastSeenAt: Date.now() },
     { id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: true, lastSeenAt: Date.now() },
   ],
-  createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
+  createdAt: Date.now() - 7 * DAY,
 };
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const DESIGN_PEOPLE: RemoteUser[] = [
   { id: '21', login: 'ines', name: 'Inês Costa', avatarUrl: null },
@@ -176,11 +175,11 @@ const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
     owner: TEAMMATE,
     members: [USER, ...DESIGN_PEOPLE].map((user, index) => ({
       user,
-      addedAt: Date.now() - (index + 1) * DAY_MS,
+      addedAt: Date.now() - (index + 1) * DAY,
     })),
     requests: [],
     machines: [{ id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: false, lastSeenAt: null }],
-    createdAt: Date.now() - 30 * DAY_MS,
+    createdAt: Date.now() - 30 * DAY,
   },
   {
     id: 'platform',
@@ -189,7 +188,7 @@ const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
     members: [],
     requests: [],
     machines: TEAM.machines.filter((machine) => machine.userId === USER.id),
-    createdAt: Date.now() - DAY_MS,
+    createdAt: Date.now() - DAY,
   },
 ];
 
@@ -593,7 +592,7 @@ function listInstances(machines: Machine[], user: RemoteUser): Promise<RemoteIns
       fingerprint: await resolveKeyFingerprint(machine.publicKey),
       online: true,
       lastSeenAt: now,
-      createdAt: now - 7 * 24 * 60 * 60 * 1000,
+      createdAt: now - 7 * DAY,
       owner: USER,
       role: guest ? 'guest' : 'owner',
     }))

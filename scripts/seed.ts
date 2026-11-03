@@ -34,6 +34,8 @@ import {
   SHAPE_PIPELINES,
   serializePlanMarkdown,
 } from '../packages/core/src/index.ts';
+import { runGit } from './kit/git/index.ts';
+import { DAY, HOUR, MINUTE } from './kit/time.ts';
 import { listBundleTasks } from './seed-bundles.ts';
 import { writeSeedChangelog } from './seed-changelog.ts';
 import { writeCodeTranscripts } from './seed-code-transcripts.ts';
@@ -45,11 +47,8 @@ import {
   callTool,
   createPlanCheck,
   createSeedClock,
-  DAY,
-  HOUR,
   listSeedCheckResults,
   listSeedIterations,
-  MINUTE,
   NO_TRIAGE_DECISIONS,
   NOW,
   type Push,
@@ -78,15 +77,6 @@ const WORKTREES = join(DATA, 'worktrees');
 
 type Files = Record<string, string>;
 
-function git(args: string[], cwd: string) {
-  const result = Bun.spawnSync(['git', ...args], {
-    cwd,
-    env: { ...Bun.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
-  });
-  if (result.exitCode !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr.toString()}`);
-  return result.stdout.toString().trim();
-}
-
 function writeFiles(root: string, files: Files) {
   for (const [path, content] of Object.entries(files)) {
     const target = join(root, path);
@@ -98,25 +88,25 @@ function writeFiles(root: string, files: Files) {
 function createRepo(name: string, files: Files) {
   const path = join(REPOS, name);
   mkdirSync(path, { recursive: true });
-  git(['init', '-q', '-b', 'main'], path);
-  git(['config', 'user.email', 'seed@shinsa.dev'], path);
-  git(['config', 'user.name', 'Shinsa seed'], path);
+  runGit(['init', '-q', '-b', 'main'], path);
+  runGit(['config', 'user.email', 'seed@shinsa.dev'], path);
+  runGit(['config', 'user.name', 'Shinsa seed'], path);
   writeFiles(path, files);
-  git(['add', '-A'], path);
-  git(['commit', '-q', '-m', 'chore: initial commit'], path);
+  runGit(['add', '-A'], path);
+  runGit(['commit', '-q', '-m', 'chore: initial commit'], path);
   return path;
 }
 
 function createWorktree(repoPath: string, taskId: string, branch: string, base: string, files: Files) {
   const path = join(WORKTREES, taskId);
-  git(['worktree', 'add', '-q', '-b', branch, path, base], repoPath);
+  runGit(['worktree', 'add', '-q', '-b', branch, path, base], repoPath);
   writeFiles(path, files);
   return path;
 }
 
 function commitWorktree(path: string, message: string) {
-  git(['add', '-A'], path);
-  git(
+  runGit(['add', '-A'], path);
+  runGit(
     ['-c', 'user.email=seed@shinsa.dev', '-c', 'user.name=Shinsa seed', 'commit', '-q', '-m', message],
     path
   );
@@ -2796,7 +2786,7 @@ function createWorktrees({ paywall, kanna }: SeedRepos): SeedWorktrees {
     listCliNewFiles()
   );
   commitWorktree(registryPath, 'refactor(cli): declare every command with defineCommand');
-  git(['branch', 'feat/mcp-v2-agent-4', 'main'], paywallPath);
+  runGit(['branch', 'feat/mcp-v2-agent-4', 'main'], paywallPath);
   const roundsPath = createWorktree(
     paywallPath,
     'task-mcp-rounds',

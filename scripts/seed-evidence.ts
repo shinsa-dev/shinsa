@@ -1,7 +1,8 @@
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Evidence, ShinsaEventInput } from '../packages/core/src/index.ts';
-import { MINUTE } from './seed-kit.ts';
+import { MINUTE } from './kit/time.ts';
+import {} from './seed-kit.ts';
 
 const MEDIA = join(import.meta.dirname, 'seed-media');
 

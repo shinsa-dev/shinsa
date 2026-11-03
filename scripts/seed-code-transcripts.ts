@@ -1,4 +1,5 @@
 import type { ChatEvent, ChatTool, JudgementCall, ReviewFinding } from '../packages/core/src/index.ts';
+import { MINUTE } from './kit/time.ts';
 import { listEditHunks, resolveLine, serializeNumberedLines } from './seed-code-kit.ts';
 import {
   type CodeSample,
@@ -23,7 +24,6 @@ import {
 } from './seed-code.ts';
 import {
   callTool,
-  MINUTE,
   NOW,
   resolveToolOutput,
   say,

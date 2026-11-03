@@ -6,16 +6,9 @@ import type {
   ReviewFinding,
   RunUsage,
 } from '../packages/core/src/index.ts';
+import { HOUR, MINUTE } from './kit/time.ts';
 import { resolveLine } from './seed-code-kit.ts';
-import {
-  createPlanCheck,
-  HOUR,
-  MINUTE,
-  NOW,
-  type SeedReport,
-  type SeedTask,
-  type TimedSeedEvent,
-} from './seed-kit.ts';
+import { createPlanCheck, NOW, type SeedReport, type SeedTask, type TimedSeedEvent } from './seed-kit.ts';
 
 export const EXPORT_ROWS = `import { clickhouse } from '../clickhouse';
 

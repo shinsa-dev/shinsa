@@ -1,5 +1,6 @@
 import type { PullRequestChanges, Repo, RunUsage } from '../packages/core/src/index.ts';
-import { HOUR, NOW, type SeedRun, type SeedTask, type TimedSeedEvent } from './seed-kit.ts';
+import { HOUR } from './kit/time.ts';
+import { NOW, type SeedRun, type SeedTask, type TimedSeedEvent } from './seed-kit.ts';
 
 interface HistoryEntry {
   title: string;
