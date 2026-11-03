@@ -1,10 +1,11 @@
-import type { AgentProviderInfo, GuestActor } from '@shinsa/core';
+import type { AgentProviderInfo, Changelog, GuestActor } from '@shinsa/core';
 import {
   BodyTooLarge,
   ConnectRefused,
   ContentTypeInvalid,
   InspectReadOnly,
   LocalOnly,
+  NotMachineOwner,
   RequestFailed,
   RequestForbidden,
   RouteNotFound,
@@ -43,10 +44,11 @@ type RequestVia = (typeof REQUEST_VIAS)[number];
 export interface RequestSourceShape {
   readonly via: RequestVia;
   readonly guest: GuestActor | null;
+  readonly userId: string | null;
 }
 
 export const RequestSource = Context.Reference<RequestSourceShape>('shinsa/engine/http/RequestSource', {
-  defaultValue: () => ({ via: 'local', guest: null }),
+  defaultValue: () => ({ via: 'local', guest: null, userId: null }),
 });
 
 export const PORT_TAKEN = 'EADDRINUSE';
@@ -86,6 +88,7 @@ export interface HttpContext {
   transcripts: Transcripts;
   extensions?: Extensions;
   versions?: Versions;
+  changelog?: Changelog;
   roots?: RootSource;
   resolveLogin?: LoginResolver;
   classify?: Classifier;
@@ -106,6 +109,7 @@ export const FIXED_FAILURES = {
   BodyTooLarge,
   InspectReadOnly,
   LocalOnly,
+  NotMachineOwner,
   ScopeRefused,
   ConnectRefused,
 } as const;
@@ -117,6 +121,7 @@ export const IngressFailure = Schema.Union([
   BodyTooLarge,
   InspectReadOnly,
   LocalOnly,
+  NotMachineOwner,
   ScopeRefused,
   ConnectRefused,
   RequestFailed,

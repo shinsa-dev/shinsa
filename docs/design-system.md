@@ -1622,8 +1622,9 @@ Exports: `AlertDialog`, `AlertDialogTrigger`, `AlertDialogPortal`, `AlertDialogO
 | Part | `data-slot` | Classes |
 | --- | --- | --- |
 | Overlay | `alert-dialog-overlay` (also `data-reduced-motion="fade"`) | `fixed inset-0 isolate z-50 bg-black/10 dark:bg-black/55` + `DIALOG_SCRIM_MOTION` |
-| Content | `alert-dialog-content` (also `data-reduced-motion="fade"`, `data-size`) | `group/alert-dialog-content corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 gap-3 overflow-y-auto rounded-xl bg-background p-4 text-fg-3 shadow-md outline-none data-[size=default]:w-[min(26.25rem,calc(100vw-2rem))] data-[size=sm]:w-[min(20rem,calc(100vw-2rem))]` + `DIALOG_MOTION` |
-| Header | `alert-dialog-header` | `flex flex-col items-center gap-px text-center` |
+| Content | `alert-dialog-content` (also `data-reduced-motion="fade"`, `data-size`) | `group/alert-dialog-content corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-background text-fg-3 shadow-md outline-none data-[size=default]:w-[min(26.25rem,calc(100vw-2rem))] data-[size=sm]:w-[min(20rem,calc(100vw-2rem))]` + `DIALOG_MOTION` |
+| Body | `alert-dialog-body` | `grid min-h-0 flex-1 gap-3 overflow-y-auto p-4` |
+| Header | `alert-dialog-header` | `flex flex-col items-center gap-px text-center` + `DIALOG_HEADER_STICKY` |
 | Footer | `alert-dialog-footer` | `flex w-full gap-2 *:flex-1` |
 | Title | `alert-dialog-title` | `text-balance text-center font-medium text-fg-4 text-sm leading-tighter` |
 | Description | `alert-dialog-description` | `text-pretty text-center text-fg-2 text-xs *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-fg-4 *:[a]:active:text-fg-4` |
@@ -1636,7 +1637,7 @@ Exports: `AlertDialog`, `AlertDialogTrigger`, `AlertDialogPortal`, `AlertDialogO
 | --- | --- |
 | Width, `default` | `min(420px, 100vw − 32px)`, fixed: never set by content, so text that loads late cannot change it |
 | Width, `sm` | `min(320px, 100vw − 32px)` |
-| Max height | `100dvh − 32px`, then the popup scrolls (`overflow-y-auto`) |
+| Max height | `100dvh − 32px`, then only its body scrolls (`alert-dialog-body`, `overflow-y-auto`), the header sticking at the top with the same fade as `Dialog` |
 | Padding | 16px on every side |
 | Gap between header, body and footer | 12px (`grid gap-3`) |
 | Title to description | 1px (`gap-px`) |
@@ -2294,8 +2295,9 @@ Wraps Base UI `Dialog` (`@base-ui/react/dialog`). Base UI sets `data-starting-st
 ```
 Dialog (Root)
 ├─ DialogTrigger
-└─ DialogContent (showCloseButton?, overlayClassName?)   → DialogPortal > DialogOverlay + Popup
-   ├─ DialogHeader
+└─ DialogContent (showCloseButton?, bodyClassName?, overlayClassName?)
+   │                              → DialogPortal > DialogOverlay + Popup > body (the part that scrolls)
+   ├─ DialogHeader               (sticks to the top of the body, a fade under it)
    │  ├─ DialogTitle
    │  └─ DialogDescription
    ├─ (body: a <form className='w-full'> with Fields)
@@ -2305,14 +2307,14 @@ Dialog (Root)
    └─ DialogCloseButton          (when showCloseButton)
 ```
 
-Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, and the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`.
+Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`, and the layout strings `DIALOG_BODY` (the body that scrolls) and `DIALOG_HEADER_STICKY` (the header that stays).
 
 **Props**
 
 | Part | Props | Default |
 | --- | --- | --- |
 | `Dialog` | `open`, `defaultOpen`, `onOpenChange`, `onOpenChangeComplete`, `modal`, … | |
-| `DialogContent` | Popup props, `showCloseButton?: boolean`, `overlayClassName?: string`, `initialFocus`, `finalFocus` | `showCloseButton=false` |
+| `DialogContent` | Popup props, `showCloseButton?: boolean`, `bodyClassName?: string` (such as `p-0` for content that scrolls on its own), `overlayClassName?: string`, `initialFocus`, `finalFocus` | `showCloseButton=false` |
 | `DialogFooter` | `div` props, `showCloseButton?: boolean` (appends a `secondary` "Close") | `false` |
 | `DialogCloseButton` | Close props, `className` | |
 
@@ -2321,9 +2323,10 @@ Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverla
 | Part | `data-slot` | Classes |
 | --- | --- | --- |
 | Overlay | `dialog-overlay`, `data-reduced-motion="fade"` | `fixed inset-0 isolate z-50 bg-black/10 dark:bg-black/55` + `DIALOG_SCRIM_MOTION` + `overlayClassName` |
-| Content | `dialog-content`, `data-reduced-motion="fade"` | `corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(26.25rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 overflow-y-auto rounded-xl bg-background p-4 text-fg-3 shadow-md outline-none` + `DIALOG_MOTION` |
+| Content | `dialog-content`, `data-reduced-motion="fade"` | `corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(26.25rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-background text-fg-3 shadow-md outline-none` + `DIALOG_MOTION` |
+| Body | `dialog-body` | `DIALOG_BODY`: `flex min-h-0 w-full flex-1 flex-col items-center gap-3 overflow-y-auto p-4` + `bodyClassName` |
 | `DialogCloseButton` | `dialog-close`, `aria-label="Close"` | `Button variant='secondary' size='icon-sm'` with `absolute top-3 right-3`, child `<Icon name='IconCrossMedium' />` (14px) |
-| Header | `dialog-header` | `flex w-full flex-col items-center gap-px text-center` |
+| Header | `dialog-header` | `flex w-full flex-col items-center gap-px text-center` + `DIALOG_HEADER_STICKY` (`sticky -top-4 z-10 -mx-4 -mt-4 w-auto self-stretch bg-background px-4 pt-4 dialog-header-fade`) |
 | Footer | `dialog-footer` | `flex w-full gap-2 *:flex-1` |
 | Title | `dialog-title` | `text-balance text-center font-medium text-fg-4 text-sm leading-tighter` |
 | Description | `dialog-description` | `text-pretty text-center text-fg-2 text-xs *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-fg-4 *:[a]:active:text-fg-4` |
@@ -2334,7 +2337,7 @@ Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverla
 | | Value |
 | --- | --- |
 | Width | `min(420px, 100vw − 32px)`, fixed from the first frame; never set by content |
-| Max height | `100dvh − 32px`, then scrolls |
+| Max height | `100dvh − 32px`, then only the body scrolls: the header and the corner close button stay, with a fade under the header once the body has scrolled |
 | Position | centred on both axes |
 | Padding | 16px |
 | Children | a centred column, 12px apart |

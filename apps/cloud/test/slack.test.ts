@@ -3,25 +3,27 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type MachineCredentials,
-  type PairPollResponse,
-  type PairStartResponse,
-  REMOTE_KEY_ALGORITHM,
   REMOTE_PATHS,
-  resolvePairApprovePath,
   SLACK_ANSWER_ACTION,
   SLACK_FORWARD_HEADERS,
   SLACK_QUESTION_BLOCK,
   SLACK_RELAY_PATHS,
   type SlackLinks,
   type SlackMention,
-  serializePublicKey,
   serializeSlackAnswerValue,
   verifySlackForwardSignature,
 } from '@shinsa/core';
 import { SLACK_BOT_SCOPES } from '../src/integrations/slack/schema.ts';
 import { SLACK_USER_SCOPES } from '../src/routes/slack-link/schema.ts';
 import { SLACK_EVENT_BODY_LIMIT_BYTES } from '../src/slack/schema.ts';
-import { createHarness, createSlackSignature, type Harness, readJson, TEST_CONFIG } from './harness.ts';
+import {
+  createHarness,
+  createSlackSignature,
+  type Harness,
+  pairMachine,
+  readJson,
+  TEST_CONFIG,
+} from './harness.ts';
 
 type Fields = Record<string, unknown>;
 
@@ -99,23 +101,6 @@ function createFakeSlack(harness: Harness): FakeSlack {
     return Response.json(fields, { headers });
   });
   return { calls, answers, callsTo: (method) => calls.filter((call) => call.method === method) };
-}
-
-async function pairMachine(harness: Harness, session: string, name = 'Studio') {
-  const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
-  const start = await readJson<PairStartResponse>(
-    await harness.post(REMOTE_PATHS.pairStart, {
-      name,
-      publicKey: await serializePublicKey(pair.publicKey),
-      version: '1',
-    })
-  );
-  await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
-  const claimed = await readJson<PairPollResponse>(
-    await harness.post(REMOTE_PATHS.pairPoll, { claimCode: start.claimCode, pollSecret: start.pollSecret })
-  );
-  if (claimed.status !== 'claimed') throw new Error('Pairing was not claimed.');
-  return claimed.credentials;
 }
 
 async function bringOnline(harness: Harness, machine: MachineCredentials) {

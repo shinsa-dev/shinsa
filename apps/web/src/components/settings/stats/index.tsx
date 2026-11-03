@@ -1,4 +1,10 @@
-import { MINUTE_MS, resolveProjectStatsSource, resolveStats, type ShinsaState } from '@shinsa/core';
+import {
+  MINUTE_MS,
+  resolveProjectStatsSource,
+  resolveStats,
+  resolveTurnaround,
+  type ShinsaState,
+} from '@shinsa/core';
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
@@ -10,11 +16,13 @@ import {
   resolveDayKey,
   resolveFirstActivity,
   resolveStatsWindow,
+  resolveTurnaroundWindow,
   resolveYearWindow,
   STATS_RANGES,
   type StatsRange,
 } from '@/lib/stats/days.ts';
 import { listShippingTiles, SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
+import { listTurnaroundTiles, TURNAROUND_DESCRIPTION, TURNAROUND_SECTION } from '@/lib/stats/turnaround.ts';
 import { listBreakdowns, listTaskRows, listUsageTiles, USAGE_SECTION } from '@/lib/stats/usage.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 import { SettingsGroup } from '../group.tsx';
@@ -58,13 +66,19 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
     () => resolveStats(source, resolveYearWindow(parseDayKey(day).getTime())),
     [source, day]
   );
-  const stats = React.useMemo(
-    () =>
-      resolveStats(
-        source,
-        resolveStatsWindow(parseDayKey(day).getTime(), range, resolveFirstActivity(source))
-      ),
+  const rangeWindow = React.useMemo(
+    () => resolveStatsWindow(parseDayKey(day).getTime(), range, resolveFirstActivity(source)),
     [source, day, range]
+  );
+  const stats = React.useMemo(() => resolveStats(source, rangeWindow), [source, rangeWindow]);
+  const turnaround = React.useMemo(
+    () =>
+      resolveTurnaround(
+        source,
+        state.presence ?? {},
+        resolveTurnaroundWindow(rangeWindow, minute * MINUTE_MS)
+      ),
+    [source, state.presence, rangeWindow, minute]
   );
   const scope = focus && <span className='font-normal'>Only {focus.name}, the project in focus</span>;
   const rangeLabel = STATS_RANGES.find((entry) => entry.value === `${range}`)?.label ?? '';
@@ -74,6 +88,14 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
         <StatTiles tiles={listShippingTiles(stats, year)} />
         <ShippingGraph year={year} />
         <ShippingChart days={stats.days} aside={rangeLabel} />
+      </SettingsGroup>
+      <SettingsGroup
+        title={TURNAROUND_SECTION}
+        action={scope}
+        description={TURNAROUND_DESCRIPTION}
+        className='gap-1.5'
+      >
+        <StatTiles tiles={listTurnaroundTiles(turnaround)} />
       </SettingsGroup>
       <SettingsGroup title={USAGE_SECTION} action={scope} className='gap-1.5'>
         <StatTiles tiles={listUsageTiles(stats)} />

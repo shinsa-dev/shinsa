@@ -54,9 +54,10 @@ GitHub-hosted macOS 15 runner (`macos-15`, free for a public repository), the `m
    when signed, `bun scripts/release-verify.ts <app>` also runs `spctl --assess` and `xcrun stapler validate`, each up to
    five attempts like the staple, since both ask Apple's ticket service and a lost connection used to fail the release).
 5. Packs the signed app's engine folder as `shinsa-darwin-arm64.tar.gz` with its `.sha256` (`scripts/release-engine.ts`),
-   writes the update files for the channels (below) and publishes the release with GitHub's generated notes under a
-   one-line channel note: `Shinsa-mac-arm64.dmg`, `.zip`, their `.blockmap`s, the update files and the Mac engine
-   archive. A beta or a canary
+   writes the update files for the channels (below) and publishes the release with its notes: a one-line channel
+   note, then the release's changelog entries (The changelog, below), then GitHub's generated list of pull requests
+   (`--notes-file` with `--generate-notes`): `Shinsa-mac-arm64.dmg`, `.zip`, their `.blockmap`s, the update files and
+   the Mac engine archive. A beta or a canary
    is a pre-release titled `Shinsa <version> (beta)` or `(canary)`, never marked latest.
 6. A `linux` job (Ubuntu, a matrix over `bun-linux-x64` and `bun-linux-arm64`) builds each Linux engine at the
    release's version, checks that `shinsa version --json` reports it (the arm64 one on an arm64 runner), packs it the
@@ -98,11 +99,65 @@ the newest tested `main` is always what the Canary channel installs. The rules, 
   draft before it publishes.
 - **Loops.** The workflow pushes nothing itself: `gh release create` makes the tag through the API, a tag is not a
   push to `main`, and GitHub never starts a workflow from its own token's events.
-- **Notes.** The generated notes start at the previous canary's tag, so they list what this merge brought.
+- **Notes.** The changelog entries and the generated notes both start at the previous canary's tag, so they list
+  what this merge brought.
 - **How many are kept.** All of them. Every canary's GitHub release and tag stays, so its commit and the day it
   shipped can always be found, and its disk image, zip and blockmap stay in R2 under `releases/<version>/`. The app
   reads its updates from shinsa.dev, one file per channel, so the number of releases on GitHub never crowds a channel
   out (Moving off GitHub's feed, below).
+
+## The changelog
+
+Every change that reaches the app says what it changed for the person using Shinsa, in a changelog entry: a file in
+`.changes/` named for the change (`.changes/whats-new-changelog.md`, lowercase words joined by hyphens, at most 80
+characters), with one front matter field and one or two plain sentences under it, at most 280 characters:
+
+```md
+---
+kind: added
+---
+After an update, a What's new button in the header shows what changed since the version you last used.
+```
+
+| `kind` | Section | Shown in the app |
+|---|---|---|
+| `added` | New | Yes |
+| `improved` | Improved | Yes |
+| `fixed` | Fixed | Yes |
+| `internal` | Behind the scenes | No, only in the release notes: a refactor, a test, tooling |
+
+Write it for the person using Shinsa, in the `copy` skill's voice: what they can now do or what works now, never the
+files or the code. Entries are never edited into a list by hand, and no file holds the whole changelog: git does.
+
+- **Read and checked in core** (`packages/core/src/changelog`): `parseChangeEntry` reads one file against the
+  `ChangeEntry` schema and names every problem (no front matter, a field other than `kind`, a wrong kind, an empty or
+  overlong text, a bad file name); `resolveChangelog` groups entries by release, newest first, the unreleased ones on
+  top; `resolvePublicChangelog` leaves out `internal`; `serializeReleaseNotes` writes the sections.
+- **Required.** `bun lint:changelog` (`scripts/changelog.ts check --base origin/main`, part of `bun lint`) fails on any
+  invalid entry, and fails a branch that changes the app but adds no entry, with a message that says how to add one.
+  What counts as the app is what makes a canary: a branch that touches only the paths in `CANARY_IGNORED_PATHS`
+  (`docs/`, the site, Markdown, `CLAUDE.md`, `.claude/`, `.github/assets/`, `.changes/` itself) needs none. The Lint
+  workflow runs it against the pull request's base (`--base origin/<base>`), and on a push to `main` checks the
+  entries only. An agent writes the entry in the same change (`CLAUDE.md` → Key conventions).
+- **Which release an entry belongs to.** An entry belongs to the first release that contains its file, found from
+  the tags, never written in the file (`scripts/changelog-history.ts`, `resolveBuildChangelog`). Each channel follows
+  its own tags, so an entry is listed once per channel: a stable build walks the stable tags, a beta build the betas
+  and the stables, a canary build the canaries. Entries no earlier tag contains belong to the version being built. A
+  release's notes list its own entries (since `notes_start_tag`, or the last stable release for a beta), so every
+  beta of a version repeats what the betas before it listed.
+- **Release notes.** `scripts/release.ts` writes `release-notes.md` in the runner's temporary folder (`notes_file`)
+  and fails the release, before anything is built, when an entry is invalid.
+- **In the engine.** `apps/engine/scripts/build-engine.ts` works out the history at the release's version and embeds
+  it without `internal` entries (`SHINSA_BUILD_CHANGELOG`); every job that builds an engine checks out with full history
+  and tags (`fetch-depth: 0`). An engine run from a checkout reads `.changes/` when it starts and lists every entry as
+  unreleased (`apps/engine/src/changelog`). Either way the engine serves it at `GET /api/changelog` (`Changelog`,
+  behind the `changelog` engine feature); an embedded history that does not decode serves an empty changelog instead
+  of stopping the engine. An engine run from a checkout also reads `SHINSA_BUILD_CHANGELOG` from its environment, so
+  `bun run seed` writes a long sample history, 50 releases (`scripts/seed-changelog.ts`, `<seed dir>/changelog.json`),
+  and the `seeded-changelog` service serves the seed with it, to see how the dialog holds a long changelog.
+- **What's new in the app.** After Shinsa updates, the header shows a What's new button (both layouts) that opens a
+  dialog of every release since the version this browser last saw, by section (`docs/engine.md` → What's new).
+  Releases before this change have no entries; nothing is backfilled.
 
 ## Versions
 

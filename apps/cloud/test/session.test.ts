@@ -72,6 +72,9 @@ describe('signing in with GitHub', () => {
       '/\t/evil.dev',
       '/\n/evil.dev',
       '//[',
+      '/.//evil.dev',
+      '/%2e//evil.dev',
+      '/a/..//evil.dev',
     ]) {
       const start = await harness.call(`/__remote/sign-in?return=${encodeURIComponent(unsafe)}`);
       expect(readOAuthCookie(start).returnPath).toBe('/');

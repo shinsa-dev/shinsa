@@ -2,6 +2,7 @@ import type { ShinsaState } from '@shinsa/core';
 import { Sheet, SheetContent, SheetTitle } from '@shinsa/ui/components/sheet';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { ChangelogDialog } from '@/components/changelog/dialog.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { FeedbackDialog } from '@/components/feedback/dialog.tsx';
 import type { LayoutPreference } from '@/lib/preferences/layout.ts';
@@ -50,6 +51,9 @@ export function AppFrame({
       </main>
       <ErrorBoundary size='silent'>
         <FeedbackDialog state={state} />
+      </ErrorBoundary>
+      <ErrorBoundary size='silent'>
+        <ChangelogDialog />
       </ErrorBoundary>
     </div>
   );

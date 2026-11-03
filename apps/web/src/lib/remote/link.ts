@@ -1,4 +1,4 @@
-import { type Bytes, type ChannelHeaders, CONNECT_TOKEN_TTL_MS, type ConnectResponse } from '@shinsa/core';
+import type { Bytes, ChannelHeaders } from '@shinsa/core';
 import { openRemoteChannel } from './channel.ts';
 import { type DashboardClient, isMachineGone } from './dashboard.ts';
 import {
@@ -14,8 +14,6 @@ const CONNECTING = 0;
 const OPEN = 1;
 
 const CLOSED = 3;
-
-const CONNECT_TOKEN_MARGIN_MS = 20_000;
 
 export class ChannelSocket extends EventTarget {
   readyState: number = CONNECTING;
@@ -67,13 +65,7 @@ export interface RemoteLinkOptions {
   dashboard: Pick<DashboardClient, 'requestConnect'>;
   openChannel?: (options: ChannelOptions) => Promise<RemoteChannel>;
   onRefused?: (error: ChannelError) => void;
-  now?: () => number;
   onRemoved?: () => void;
-}
-
-interface HeldConnect {
-  url: string;
-  reusableUntil: number;
 }
 
 function listRequestHeaders(headers: Headers): ChannelHeaders {
@@ -85,40 +77,23 @@ export class RemoteLink {
   #channel: Promise<RemoteChannel> | null = null;
   #current: RemoteChannel | null = null;
   #socketTaken = false;
-  #connectHeld: HeldConnect | null = null;
 
   constructor(options: RemoteLinkOptions) {
     this.#options = options;
   }
 
-  #now() {
-    return (this.#options.now ?? Date.now)();
-  }
-
   async #resolveConnectUrl() {
-    const held = this.#connectHeld;
-    if (held && this.#now() < held.reusableUntil) return held.url;
-    this.#connectHeld = null;
-    const requestedAt = this.#now();
-    const answer: ConnectResponse = await this.#options.dashboard.requestConnect(this.#options.instanceId);
-    const reusableUntil =
-      Math.min(answer.expiresAt, requestedAt + CONNECT_TOKEN_TTL_MS) - CONNECT_TOKEN_MARGIN_MS;
-    if (requestedAt < reusableUntil) this.#connectHeld = { url: answer.url, reusableUntil };
+    const answer = await this.#options.dashboard.requestConnect(this.#options.instanceId);
     return answer.url;
   }
 
-  async #connect() {
-    try {
-      return await (this.#options.openChannel ?? openRemoteChannel)({
-        url: this.#resolveConnectUrl(),
-        machineKey: this.#options.device.machineKey,
-        device: this.#options.device.keys,
-        enrollSecret: null,
-      });
-    } catch (error) {
-      this.#connectHeld = null;
-      throw error;
-    }
+  #connect() {
+    return (this.#options.openChannel ?? openRemoteChannel)({
+      url: this.#resolveConnectUrl(),
+      machineKey: this.#options.device.machineKey,
+      device: this.#options.device.keys,
+      enrollSecret: null,
+    });
   }
 
   #adopt(channel: RemoteChannel, connecting: Promise<RemoteChannel>) {

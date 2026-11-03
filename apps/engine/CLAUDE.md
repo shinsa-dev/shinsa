@@ -300,10 +300,15 @@ src/
 │                        good; index.ts the Tunnel edge), access/ (AccessScope: the remote-access scope every
 │                        sealed channel and team feed socket is leased from, ended when access goes off, the
 │                        machine is revoked or removed, closing them all in parallel; RemoteAccessScope is its
-│                        edge), guard.ts (what the tunnel may reach), channel.ts (RemoteChannel: the handshake,
-│                        sealed frames, the app socket and HTTP inside, a lease on the access scope), local-only.ts
-│                        (isOwnerOnlyRoute; the routes a remote request is refused are EngineApi's `localOnly`
-│                        annotation), placement.ts (POST /api/placement: the
+│                        edge), gate/ (TunnelGate in service.ts: the one gate for everything through the tunnel,
+│                        the route table, the principal and the refusals in schema.ts; Ingress, EngineGate and
+│                        the server's socket upgrades ask it and decide nothing else about the tunnel),
+│                        egress/ (EgressGate in service.ts: the one gate for what leaves, every share and team
+│                        view and the team list this machine signs encoded through the allowlist schemas in
+│                        schema.ts, a view that breaks one refused, never sent; a preview's answer without the
+│                        headers that describe the machine, PREVIEW_DROPPED_HEADERS),
+│                        channel.ts (RemoteChannel: the handshake, sealed frames, the app socket and HTTP
+│                        inside, a lease on the access scope), placement.ts (POST /api/placement: the
 │                        classifier reads every machine's policies with a new task's request and names its machine),
 │                        shares.ts (Shares: the share.link effect, which makes a link's id and key; the live
 │                        view of a shared task, its evidence files by hash and its pull request's diff and changed
@@ -324,8 +329,7 @@ src/
 │                        (TeamSnapshots: each teammate machine's last list), team-views.ts (TeamViews and
 │                        TeamViewRecorder: each of their tasks' last full page, replayed while the machine is
 │                        offline), handoffs.ts (Handoffs: the handoff.link and handoff.revoke effects and the claim
-│                        recorded as handoff.claim), guest-routes.ts (isGuestRoute: the reads of its one task a
-│                        guest's channel may make), index.ts (Remote: wires them, pairing, pausing, removing,
+│                        recorded as handoff.claim), index.ts (Remote: wires them, pairing, pausing, removing,
 │                        enrolling, a hand-off's link, claim and removal, the stable webhook URL); its routes
 │                        are http/routes/remote, teams, placement and tunnel
 ├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
@@ -525,9 +529,10 @@ src/
                          web handler; the sockets: the page's `/ws`, `/ws/terminals/<id>`, the remote, share,
                          team and preview channels; a taken port is PortInUse naming config.json's `port`),
                          app.ts (makeEngineHandler: HttpRouter.toWebHandler over ApiRoutes, the plain routes
-                         and Ingress, a scoped resource), ingress/ (Ingress: Host, Origin, the tunnel's routes,
-                         local-only and guest scope, inspect mode, on every request), gate/ (EngineGateLive,
-                         EngineApi's EngineGate: content type, the body caps and every failure as
+                         and Ingress, a scoped resource), ingress/ (Ingress: Host, Origin and inspect mode for this
+                         machine, and TunnelGate for the tunnel and the channel, on every request), gate/
+                         (EngineGateLive, EngineApi's EngineGate: TunnelGate's endpoint check, content type, the
+                         body caps and every failure as
                          `{ error: { code, message } }`), guard.ts (the checks both use), routes/<group>/
                          (handler.ts, one HttpApiBuilder.group per EngineApi group, and its schema.ts: tasks,
                          code, commands, server, files, state, onboarding, accounts, secrets, extensions,

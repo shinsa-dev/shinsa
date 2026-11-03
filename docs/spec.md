@@ -337,7 +337,16 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
 - **Statistics.** Settings → Statistics, between General and Agents, shows what shipped and where the tokens went over the last
   7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). With a project in focus it counts only that project's tasks and their runs, and each section says so beside its title; it counts everything again once the focus ends. Shipping: pull requests merged, tasks finished, lines merged and the
   shipping streak, a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
-  past a month); every chart shows a readout of the day, point or bar under the pointer. Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
+  past a month); every chart shows a readout of the day, point or bar under the pointer. Turnaround: medians, never
+  averages, of rounds that merged or finished in the range and of waits you answered in it. Start to finish is a round
+  from its start to its end; agent time is the part not waiting on you; your turnaround is each wait from a task needing
+  you to you sending it back to work; waiting on you is the share of finished rounds' time spent waiting on you. Time a
+  task is snoozed, in the backlog, waiting on other tasks or waiting for a usage limit never counts, and a task counts
+  only once it starts. Agent time is wall clock, but a wait on you counts on your clock: an hour you did anything in
+  Shinsa counts in full, an hour with nothing from you for 6 hours either side counts nothing, and any other hour counts
+  as much as you are usually active at that hour of the week over the last 8 weeks (`state.presence`, your own actions
+  per hour, kept a year; `stats/presence.ts`), so a question asked at 23:00 and answered at 08:30 is a short wait and a
+  week away counts nothing (`resolveTurnaround`, `stats/turnaround.ts`). Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
   input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that
   used the most. Counts and costs stay compact as they grow (15.4k, 3.3B, 1.2T tokens; $12.34, then $15.4K): token
   counts everywhere drop a trailing `.0` and move up a unit rather than read 1000k, and costs keep cents under $1,000. Lines added show in green and lines removed in red, as in a diff. All of it is folded from the event log in core (`resolveStats`); lines

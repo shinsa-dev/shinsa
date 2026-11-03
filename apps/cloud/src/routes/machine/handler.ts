@@ -113,7 +113,11 @@ export const MachineHandlers = HttpApiBuilder.group(
               resolveTunnelHost(machine.id),
               payload.localUrl
             );
-          yield* machines.recordHeartbeat(machine.id, payload.localUrl, payload.signingKey ?? null);
+          yield* machines.recordHeartbeat(machine.id, {
+            localUrl: payload.localUrl,
+            signingKey: payload.signingKey ?? null,
+            features: payload.features ?? [],
+          });
           const { owner, members, guests } = yield* listMachinePeople(machine);
           return { ok: true as const, owner, members, guests, teams: yield* listUserTeams(machine.userId) };
         })

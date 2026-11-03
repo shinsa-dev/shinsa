@@ -1,31 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  type PairPollResponse,
-  type PairStartResponse,
-  REMOTE_KEY_ALGORITHM,
-  REMOTE_PATHS,
-  resolvePairApprovePath,
-  serializePublicKey,
-} from '@shinsa/core';
+import {} from '@shinsa/core';
 import { HOOK_BODY_LIMIT_BYTES } from '../src/routes/hooks/schema.ts';
-import { createHarness, type Harness, readJson } from './harness.ts';
+import { createHarness, type Harness, pairMachine } from './harness.ts';
 
 async function pairInstance(harness: Harness) {
-  const session = await harness.signIn();
-  const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
-  const start = await readJson<PairStartResponse>(
-    await harness.post(REMOTE_PATHS.pairStart, {
-      name: 'Studio',
-      publicKey: await serializePublicKey(pair.publicKey),
-      version: '1',
-    })
-  );
-  await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
-  const claimed = await readJson<PairPollResponse>(
-    await harness.post(REMOTE_PATHS.pairPoll, { claimCode: start.claimCode, pollSecret: start.pollSecret })
-  );
-  if (claimed.status !== 'claimed') throw new Error('Pairing was not claimed.');
-  return claimed.credentials.instanceId;
+  return (await pairMachine(harness, await harness.signIn())).instanceId;
 }
 
 function answerTunnel(harness: Harness, answer: () => Response | Promise<Response>) {
@@ -60,6 +39,22 @@ describe('webhooks through app.shinsa.dev', () => {
     expect(forwarded?.headers.get('x-maple-signature')).toBe('sig');
     expect(forwarded?.headers.get('cookie')).toBeNull();
     expect(forwarded?.headers.get('cf-connecting-ip')).toBeNull();
+  });
+
+  test('reaches only the machine’s webhook route, whatever the address encodes', async () => {
+    const harness = createHarness();
+    const instanceId = await pairInstance(harness);
+    answerTunnel(harness, () => new Response('ok'));
+    for (const path of [
+      `..%2F..%2Fremote/token-1`,
+      `schedule-1/..%2F..%2F..%2Fremote`,
+      `a%2Fb/token-1`,
+      `s/t%3Fq%3D1`,
+    ]) {
+      const refused = await harness.call(`/hooks/${instanceId}/${path}`, { method: 'POST', body: 'x' });
+      expect([path, refused.status]).toEqual([path, 404]);
+    }
+    expect(harness.calls.filter((call) => call.url.includes('.shinsa.dev/'))).toEqual([]);
   });
 
   test('passes a GET through without a body', async () => {

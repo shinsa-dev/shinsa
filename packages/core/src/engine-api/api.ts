@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from 'effect/http-api';
+import { Changelog } from '../changelog/schema.ts';
 import {
   EditConflictWire,
   FileNotFoundWire,
@@ -75,6 +76,7 @@ import {
   RouteFieldFailures,
   RouteNotFound,
   SchedulesAnswer,
+  NotMachineOwner,
   ScopeRefused,
   SearchAnswer,
   ServiceSuggestionsAnswer,
@@ -118,6 +120,7 @@ export class EngineGate extends HttpApiMiddleware.Service<EngineGate>()('shinsa/
     wire(InspectReadOnly),
     wire(LocalOnly),
     wire(ScopeRefused),
+    wire(NotMachineOwner),
   ],
 }) {}
 
@@ -393,6 +396,15 @@ class VersionsGroup extends HttpApiGroup.make('versions')
   )
   .middleware(EngineGate) {}
 
+class ChangelogGroup extends HttpApiGroup.make('changelog')
+  .add(
+    HttpApiEndpoint.get('list', '/api/changelog', { success: Changelog }).annotate(
+      EngineFeatureRoute,
+      'changelog'
+    )
+  )
+  .middleware(EngineGate) {}
+
 class RemoteGroup extends HttpApiGroup.make('remote')
   .add(
     HttpApiEndpoint.post('pair', '/api/remote/pair', { payload: EmptyBody, success: RemoteAnswer }),
@@ -631,6 +643,7 @@ export class EngineApi extends HttpApi.make('engine').add(
   SecretsGroup,
   ExtensionsGroup,
   VersionsGroup,
+  ChangelogGroup,
   RemoteGroup,
   TeamsGroup,
   PlacementGroup,

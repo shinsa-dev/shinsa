@@ -34,6 +34,7 @@ export const CANARY_IGNORED_PATHS = [
   '**/CLAUDE.md',
   '.claude/**',
   '.github/assets/**',
+  '.changes/**',
 ] as const;
 
 const IGNORED_GLOBS = CANARY_IGNORED_PATHS.map((pattern) => new Bun.Glob(pattern));
@@ -100,6 +101,11 @@ export function resolveReleasePlan({
   return { channel, version, tag: `v${version}`, prerelease: channel === 'beta', lastStable, notesStartTag };
 }
 
+export function resolveChangesSinceTag(plan: ReleasePlan) {
+  if (plan.notesStartTag) return plan.notesStartTag;
+  return plan.lastStable ? `v${plan.lastStable}` : null;
+}
+
 export function describeReleaseChannel(plan: ReleasePlan) {
   if (plan.channel === 'stable')
     return `**Stable release.** Shinsa updates itself to ${plan.version} on the Stable and Beta channels, unless it already runs a newer beta. The Canary channel takes the next canary, built above it.`;
@@ -133,4 +139,17 @@ export function describeCanaryDecision(decision: CanaryDecision) {
   const shown = decision.files.slice(0, 5).map((file) => `\`${file}\``);
   const more = decision.files.length - shown.length;
   return `Building a canary: since ${decision.base}, ${shown.join(', ')}${more > 0 ? ` and ${more} more` : ''} changed.`;
+}
+
+export function resolveVersionChannel(version: string): ReleaseChannel {
+  if (/-canary\.\d+$/.test(version)) return 'canary';
+  return /-beta\.\d+$/.test(version) ? 'beta' : 'stable';
+}
+
+export function listChannelTagsBefore(tags: readonly string[], version: string) {
+  const channel = resolveVersionChannel(version);
+  const pattern = { stable: STABLE_TAG, beta: RELEASE_TAG, canary: CANARY_TAG }[channel];
+  return tags
+    .filter((tag) => pattern.test(tag) && resolveVersionOrder(tag.replace(/^v/, ''), version) === -1)
+    .sort((a, b) => resolveVersionOrder(a.replace(/^v/, ''), b.replace(/^v/, '')) ?? 0);
 }

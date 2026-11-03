@@ -4,7 +4,9 @@ import {
   type Gate,
   type Repo,
   type Round,
+  resolveSharedTask,
   type Run,
+  type ShareLiveView,
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
@@ -51,6 +53,27 @@ export function createTask(overrides: Partial<Task> = {}): Task {
     createdAt: 1,
     ...overrides,
   } as unknown as Task;
+}
+
+export function createShareView(
+  overrides: Partial<Task> = {},
+  view: Partial<Omit<ShareLiveView, 'shared'>> = {}
+): ShareLiveView {
+  const state = createState();
+  const task = createTask({ repoId: null, worktreePath: null, activity: [], ...overrides });
+  state.tasks[task.id] = task;
+  const context = {
+    preset: 'standard',
+    owner: null,
+    ownerProfile: null,
+    machine: null,
+    repository: null,
+  } as const;
+  return { shared: resolveSharedTask(state, task, context), files: {}, updatedAt: 1, ...view };
+}
+
+export function readSentView(view: unknown) {
+  return JSON.parse(JSON.stringify(view)) as ShareLiveView;
 }
 
 export function createRound(overrides: Partial<Round> = {}): Round {

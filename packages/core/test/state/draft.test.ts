@@ -63,7 +63,7 @@ describe('state drafts', () => {
     expect(before.tasks[taskId]?.priority).toBe('normal');
     expect(decision.state.repos).toBe(before.repos);
     expect(decision.state.runs).toBe(before.runs);
-    expect(decision.changes).toEqual({ tasks: [taskId] });
+    expect(decision.changes).toEqual({ tasks: [taskId], presence: ['0'] });
     const unchanged = decideOrThrow(
       decision.state,
       { type: 'task.prioritize', taskId, priority: 'urgent' },

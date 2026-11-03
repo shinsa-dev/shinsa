@@ -3,9 +3,11 @@ import { Layer } from 'effect';
 import { HttpRouter, HttpServer } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
 import { JsonLogger } from '../log/service.ts';
+import { TunnelGate } from '../remote/gate/service.ts';
 import { EngineGateLive } from './gate/middleware.ts';
 import { Ingress } from './ingress/middleware.ts';
 import { AccountsHandlers } from './routes/accounts/handler.ts';
+import { ChangelogHandlers } from './routes/changelog/handler.ts';
 import { CodeHandlers } from './routes/code/handler.ts';
 import { CommandsHandlers } from './routes/commands/handler.ts';
 import { ExtensionsHandlers } from './routes/extensions/handler.ts';
@@ -42,6 +44,7 @@ export const ApiRoutes = HttpApiBuilder.layer(EngineApi).pipe(
     SecretsHandlers,
     ExtensionsHandlers,
     VersionsHandlers,
+    ChangelogHandlers,
     RemoteHandlers,
     TeamsHandlers,
     PlacementHandlers,
@@ -58,6 +61,7 @@ const EngineRoutes = Layer.mergeAll(ApiRoutes, WebhookRoutes, SignInRoutes, Tunn
 export const makeEngineHandler = (services: HttpServicesShape) =>
   HttpRouter.toWebHandler(
     Layer.mergeAll(EngineRoutes, Ingress).pipe(
+      Layer.provide(TunnelGate.layer),
       Layer.provide(HttpServices.layer(services)),
       Layer.provide(HttpServer.layerServices),
       Layer.provideMerge(JsonLogger)

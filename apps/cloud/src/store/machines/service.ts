@@ -4,7 +4,15 @@ import { SqlClient, SqlSchema } from 'effect/sql';
 import { TokenHash } from '../../crypto/schema.ts';
 import { Count } from '../shared/schema.ts';
 
-import { MACHINE_COLUMNS, Machine, NewMachine, type SharedMachine, SharedMachineRow } from './schema.ts';
+import {
+  MACHINE_COLUMNS,
+  Machine,
+  NewMachine,
+  type MachineBeat,
+  type SharedMachine,
+  SharedMachineRow,
+  StoredFeatures,
+} from './schema.ts';
 
 export class Machines extends Context.Service<
   Machines,
@@ -15,7 +23,7 @@ export class Machines extends Context.Service<
     listOfUser(userId: RemoteUserId): Effect.Effect<ReadonlyArray<SharedMachine>>;
     select(id: InstanceId): Effect.Effect<Option.Option<Machine>>;
     selectByToken(machineTokenHash: TokenHash): Effect.Effect<Option.Option<Machine>>;
-    recordHeartbeat(id: InstanceId, localUrl: string, signingKey: string | null): Effect.Effect<void>;
+    recordHeartbeat(id: InstanceId, beat: MachineBeat): Effect.Effect<void>;
     recordOffline(id: InstanceId): Effect.Effect<void>;
     remove(id: InstanceId): Effect.Effect<void>;
   }
@@ -41,7 +49,7 @@ export class Machines extends Context.Service<
       const insert = SqlSchema.void({
         Request: Schema.Struct({ ...NewMachine.fields, createdAt: Schema.Number }),
         execute: (row) =>
-          sql`INSERT INTO instances (id, user_id, name, fingerprint, tunnel_id, dns_record_id, machine_token_hash, connect_key, created_at) VALUES (${row.id}, ${row.userId}, ${row.name}, ${row.fingerprint}, ${row.tunnelId}, ${row.dnsRecordId}, ${row.machineTokenHash}, ${row.connectKey}, ${row.createdAt})`,
+          sql`INSERT INTO instances (id, user_id, name, fingerprint, tunnel_id, dns_record_id, machine_token_hash, connect_key, features, created_at) VALUES (${row.id}, ${row.userId}, ${row.name}, ${row.fingerprint}, ${row.tunnelId}, ${row.dnsRecordId}, ${row.machineTokenHash}, ${row.connectKey}, ${row.features}, ${row.createdAt})`,
       });
       const countAll = SqlSchema.findOne({
         Request: Schema.Void,
@@ -74,10 +82,11 @@ export class Machines extends Context.Service<
           id: InstanceId,
           localUrl: Schema.String,
           signingKey: Schema.NullOr(Schema.String),
+          features: StoredFeatures,
           at: Schema.Number,
         }),
         execute: (row) =>
-          sql`UPDATE instances SET local_url = ${row.localUrl}, online = 1, last_seen_at = ${row.at}, signing_key = COALESCE(${row.signingKey}, signing_key) WHERE id = ${row.id}`,
+          sql`UPDATE instances SET local_url = ${row.localUrl}, online = 1, last_seen_at = ${row.at}, signing_key = COALESCE(${row.signingKey}, signing_key), features = ${row.features} WHERE id = ${row.id}`,
       });
       const offline = SqlSchema.void({
         Request: InstanceId,
@@ -94,10 +103,9 @@ export class Machines extends Context.Service<
 
       const recordHeartbeat = Effect.fn('Machines.recordHeartbeat')(function* (
         id: InstanceId,
-        localUrl: string,
-        signingKey: string | null
+        beat: MachineBeat
       ) {
-        yield* heartbeat({ id, localUrl, signingKey, at: yield* Clock.currentTimeMillis });
+        yield* heartbeat({ id, ...beat, at: yield* Clock.currentTimeMillis });
       }, Effect.orDie);
 
       return Machines.of({

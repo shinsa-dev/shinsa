@@ -58,7 +58,8 @@ export const SignInRoutes = Layer.unwrap(
     const resolveReturnPath = (value: string | null | undefined) => {
       if (!value?.startsWith('/') || !URL.canParse(value, config.origin)) return REMOTE_PATHS.app;
       const url = new URL(value, config.origin);
-      return url.origin === config.origin ? `${url.pathname}${url.search}` : REMOTE_PATHS.app;
+      const onSite = url.origin === config.origin && !url.pathname.startsWith('//');
+      return onSite ? `${url.pathname}${url.search}` : REMOTE_PATHS.app;
     };
 
     const readOAuthState = (request: HttpServerRequest.HttpServerRequest) => {

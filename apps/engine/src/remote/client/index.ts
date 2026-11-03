@@ -12,7 +12,7 @@ import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
 import { Effect, Exit, Fiber, Layer, ManagedRuntime, Predicate, Redacted } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { JsonLogger } from '../../log/service.ts';
-import type { PairingEnd } from '../pairing/schema.ts';
+import type { MachineKeyPair, PairingEnd } from '../pairing/schema.ts';
 import { PairPollInterval } from '../pairing/schema.ts';
 import { Pairings } from '../pairing/service.ts';
 import { RELAY_FAILED_CODE, RemoteOrigin } from './schema.ts';
@@ -76,8 +76,8 @@ export class RemoteControl {
     return this.#run((client) => client.pairing.start(request));
   }
 
-  startPairing(start: PairStartResponse): PairingRun {
-    const fiber = this.#runtime.runFork(Pairings.use((pairings) => pairings.await(start)));
+  startPairing(start: PairStartResponse, machine: MachineKeyPair): PairingRun {
+    const fiber = this.#runtime.runFork(Pairings.use((pairings) => pairings.await(start, machine)));
     const done = this.#runtime.runPromise(
       Fiber.await(fiber).pipe(
         Effect.map((exit): PairingEnd => (Exit.isSuccess(exit) ? exit.value : { status: 'cancelled' }))

@@ -1,6 +1,7 @@
 import type { ShinsaState } from '@shinsa/core';
 import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { UsageMenu } from '@/components/accounts/usage-menu.tsx';
+import { WhatsNewButton } from '@/components/changelog/dialog.tsx';
 import { CommandMenuButton } from '@/components/command/menu.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { FeedbackButton } from '@/components/feedback/button.tsx';
@@ -33,6 +34,9 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
           <ConnectionStatus />
         </ErrorBoundary>
         <span className='flex-1' />
+        <ErrorBoundary size='icon' resetKey={resetKey}>
+          <WhatsNewButton />
+        </ErrorBoundary>
         <ErrorBoundary size='icon' resetKey={resetKey}>
           <UpdateButton />
         </ErrorBoundary>

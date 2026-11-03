@@ -2,7 +2,7 @@
 
 import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog';
 import { Button } from '@shinsa/ui/components/button';
-import { DIALOG_MOTION, DIALOG_SCRIM_MOTION } from '@shinsa/ui/components/dialog';
+import { DIALOG_HEADER_STICKY, DIALOG_MOTION, DIALOG_SCRIM_MOTION } from '@shinsa/ui/components/dialog';
 
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
@@ -37,6 +37,7 @@ function AlertDialogOverlay({ className, ...props }: AlertDialogPrimitive.Backdr
 function AlertDialogContent({
   className,
   size = 'default',
+  children,
   ...props
 }: AlertDialogPrimitive.Popup.Props & {
   size?: 'default' | 'sm';
@@ -49,12 +50,16 @@ function AlertDialogContent({
         data-reduced-motion='fade'
         data-size={size}
         className={cn(
-          'group/alert-dialog-content corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 gap-3 overflow-y-auto rounded-xl bg-background p-4 text-fg-3 shadow-md outline-none data-[size=default]:w-[min(26.25rem,calc(100vw-2rem))] data-[size=sm]:w-[min(20rem,calc(100vw-2rem))]',
+          'group/alert-dialog-content corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-background text-fg-3 shadow-md outline-none data-[size=default]:w-[min(26.25rem,calc(100vw-2rem))] data-[size=sm]:w-[min(20rem,calc(100vw-2rem))]',
           DIALOG_MOTION,
           className
         )}
         {...props}
-      />
+      >
+        <div data-slot='alert-dialog-body' className='grid min-h-0 flex-1 gap-3 overflow-y-auto p-4'>
+          {children}
+        </div>
+      </AlertDialogPrimitive.Popup>
     </AlertDialogPortal>
   );
 }
@@ -63,7 +68,7 @@ function AlertDialogHeader({ className, ...props }: React.ComponentProps<'div'>)
   return (
     <div
       data-slot='alert-dialog-header'
-      className={cn('flex flex-col items-center gap-px text-center', className)}
+      className={cn('flex flex-col items-center gap-px text-center', DIALOG_HEADER_STICKY, className)}
       {...props}
     />
   );

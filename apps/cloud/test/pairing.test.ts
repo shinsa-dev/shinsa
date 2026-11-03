@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import {
+  MACHINE_FEATURES,
   type PairPollResponse,
   type PairStartResponse,
   type PairView,
@@ -13,7 +14,7 @@ import {
 import { Duration } from 'effect';
 import { MAX_PENDING_PAIRS_PER_ADDRESS, PAIR_TTL } from '../src/routes/pairing/schema.ts';
 import { MAX_INSTANCES_PER_USER } from '../src/routes/pairs/schema.ts';
-import { createHarness, type Harness, readJson } from './harness.ts';
+import { createHarness, type Harness, openClaimed, readJson } from './harness.ts';
 
 const PAIR_TTL_MS = Duration.toMillis(PAIR_TTL);
 
@@ -22,14 +23,15 @@ async function createMachineKey() {
   return serializePublicKey(pair.publicKey);
 }
 
-async function startPair(harness: Harness, name = 'Studio') {
-  const publicKey = await createMachineKey();
+async function startPair(harness: Harness, name = 'Studio', features: readonly string[] = MACHINE_FEATURES) {
+  const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
+  const publicKey = await serializePublicKey(pair.publicKey);
   const response = await harness.post(
     REMOTE_PATHS.pairStart,
-    { name, publicKey, version: '1.2.0' },
+    { name, publicKey, version: '1.2.0', ...(features.length > 0 ? { features } : {}) },
     { sameOrigin: false }
   );
-  return { publicKey, start: await readJson<PairStartResponse>(response) };
+  return { pair, publicKey, start: await readJson<PairStartResponse>(response) };
 }
 
 function poll(harness: Harness, start: PairStartResponse, pollSecret = start.pollSecret) {
@@ -84,7 +86,7 @@ describe('pairing a machine', () => {
 
   test('approving makes a tunnel, its DNS record and the instance, and the machine collects its credentials once', async () => {
     const harness = createHarness();
-    const { start } = await startPair(harness);
+    const { pair, start } = await startPair(harness);
     const session = await harness.signIn('mona', 42);
     const approved = await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
     const { instanceId } = await readJson<{ instanceId: string }>(approved);
@@ -113,9 +115,9 @@ describe('pairing a machine', () => {
       proxied: true,
     });
     const claimed = await poll(harness, start);
-    if (claimed.status !== 'claimed') throw new Error('Pairing was not claimed.');
-    expect(claimed.owner).toBe('mona');
-    expect(claimed.credentials).toMatchObject({
+    expect(claimed).toMatchObject({ status: 'claimed', owner: 'mona' });
+    const credentials = await openClaimed(pair, claimed);
+    expect(credentials).toMatchObject({
       instanceId,
       tunnelToken: 'tunnel-token-1',
       tunnelHost: `t-${instanceId}.shinsa.dev`,
@@ -124,7 +126,46 @@ describe('pairing a machine', () => {
     const stored = harness.db.sqlite.query('SELECT machine_token_hash FROM instances').get() as {
       machine_token_hash: string;
     };
-    expect(stored.machine_token_hash).not.toBe(claimed.credentials.machineToken);
+    expect(stored.machine_token_hash).not.toBe(credentials.machineToken);
+  });
+
+  test('keeps the waiting credentials sealed to the machine’s key, so D1 never holds a token in clear', async () => {
+    const harness = createHarness();
+    const { start } = await startPair(harness);
+    const session = await harness.signIn();
+    await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
+    const row = harness.db.sqlite.query('SELECT credentials FROM pair_sessions').get() as {
+      credentials: string;
+    };
+    expect(row.credentials).not.toContain('tunnel-token-1');
+    expect(row.credentials).not.toContain('machineToken');
+  });
+
+  test('an older engine that names no features collects its credentials as it always has', async () => {
+    const harness = createHarness();
+    const { start } = await startPair(harness, 'Studio', []);
+    const session = await harness.signIn('mona', 42);
+    const { instanceId } = await readJson<{ instanceId: string }>(
+      await harness.post(resolvePairApprovePath(start.claimCode), {}, { session })
+    );
+    const claimed = await poll(harness, start);
+    expect(claimed).toMatchObject({
+      status: 'claimed',
+      owner: 'mona',
+      credentials: { instanceId, tunnelToken: 'tunnel-token-1', tunnelHost: `t-${instanceId}.shinsa.dev` },
+    });
+    expect(claimed).not.toHaveProperty('sealedCredentials');
+    const row = harness.db.sqlite.query('SELECT features FROM instances').get() as { features: string };
+    expect(JSON.parse(row.features)).toEqual([]);
+  });
+
+  test('a claim whose stored credentials no longer read ends as expired', async () => {
+    const harness = createHarness();
+    const { start } = await startPair(harness, 'Studio', []);
+    const session = await harness.signIn();
+    await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
+    harness.db.sqlite.query("UPDATE pair_sessions SET credentials = 'broken'").run();
+    expect(await poll(harness, start)).toEqual({ status: 'expired' });
   });
 
   test('never gives the credentials for a wrong poll secret', async () => {

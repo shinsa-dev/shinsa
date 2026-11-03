@@ -282,6 +282,8 @@ async function connectOnce(base: string, local: boolean, machine: BenchMachine) 
   const token = await createConnectToken(machine.connectKey, {
     instanceId: INSTANCE,
     userId: USER_ID,
+    channel: 'remote',
+    nonce: serializeBase64Url(crypto.getRandomValues(new Uint8Array(16))),
     expiresAt: Date.now() + CONNECT_TOKEN_TTL_MS,
   });
   const url = `${base}${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`;

@@ -8,7 +8,12 @@ describe('the router', () => {
     const page = await harness.call('/tasks/LOC-1');
     expect(await page.text()).toBe('asset /tasks/LOC-1');
     const policy = page.headers.get('content-security-policy') ?? '';
-    expect(policy).toContain("script-src 'self'");
+    const directives = new Map(
+      policy.split('; ').map((directive) => [directive.split(' ')[0], directive] as const)
+    );
+    expect(directives.get('script-src')).toBe("script-src 'self'");
+    expect(directives.get('object-src')).toBe("object-src 'none'");
+    expect(directives.get('base-uri')).toBe("base-uri 'none'");
     expect(policy).toContain("connect-src 'self' blob: wss://*.shinsa.dev");
     expect(policy).toContain("media-src 'self' blob:");
     expect(policy).toContain("frame-ancestors 'none'");

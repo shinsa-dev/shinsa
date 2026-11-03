@@ -15,6 +15,8 @@
     "xcarchive",
     "xcodeproj",
     "xcworkspace",
+    "aspnet",
+    "aspnetmvc",
     "websocat",
     "wscat",
     "tsgolint",

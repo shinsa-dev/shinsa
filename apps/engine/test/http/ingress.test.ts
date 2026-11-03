@@ -196,6 +196,7 @@ describe('the webhook and sign-in routes', () => {
     const remote = await handle(new Request(`${BASE}/api/mcp/oauth/callback`), {
       via: 'channel',
       guest: null,
+      userId: null,
     });
     expect(await remote.json()).toEqual({
       error: { code: 'local_only', message: 'Do this on the machine Shinsa runs on.' },
@@ -203,6 +204,7 @@ describe('the webhook and sign-in routes', () => {
     const guest = await handle(new Request(`${BASE}/api/mcp/oauth/callback`), {
       via: 'channel',
       guest: { taskId: 't', name: 'Kai' } as never,
+      userId: null,
     });
     expect((await guest.json()) as unknown).toMatchObject({ error: { code: 'handoff_scope' } });
   });
@@ -214,7 +216,7 @@ describe('the webhook and sign-in routes', () => {
 });
 
 describe('Ingress through the tunnel', () => {
-  test('only the tunnel’s own paths answer, and the rest of the engine is not found', async () => {
+  test('only the tunnel’s plain routes answer, its sockets open only as an upgrade, and the rest is not found', async () => {
     const handle = createWebHandler(createTunnelContext(), AllRoutes);
     expect(await (await call(handle, '/health', { headers: tunnel })).json()).toEqual({ ok: true });
     expect(await (await call(handle, '/health', { headers: { host: 'box.shinsa.dev' } })).json()).toEqual({
@@ -227,8 +229,9 @@ describe('Ingress through the tunnel', () => {
         { error: { code: 'not_found', message: 'No such endpoint.' } },
       ]);
     }
-    expect(await (await call(handle, '/share', { headers: tunnel })).text()).toBe('share socket');
+    expect((await call(handle, '/share', { headers: tunnel })).status).toBe(404);
     expect((await call(handle, '/team', { headers: tunnel })).status).toBe(404);
+    expect((await call(handle, '/remote', { headers: tunnel })).status).toBe(404);
   });
 
   test('a tunnel that is switched off answers nothing', async () => {
@@ -272,17 +275,24 @@ describe('Ingress through the tunnel', () => {
 describe('Ingress inside the remote channel', () => {
   test('only /api answers, and a guest is refused what is not theirs before not_found', async () => {
     const handle = createWebHandler(createHttpContext(), AllRoutes);
-    const page = await handle(new Request(`${BASE}/tasks/SW-1`), { via: 'channel', guest: null });
+    const page = await handle(new Request(`${BASE}/tasks/SW-1`), {
+      via: 'channel',
+      guest: null,
+      userId: null,
+    });
     expect(page.status).toBe(404);
     expect(
-      await (await handle(new Request(`${BASE}/api/queue`), { via: 'channel', guest: null })).json()
+      await (
+        await handle(new Request(`${BASE}/api/queue`), { via: 'channel', guest: null, userId: null })
+      ).json()
     ).toEqual({ decisions: [] });
-    expect((await handle(new Request(`${BASE}/api/nothing`), { via: 'channel', guest: null })).status).toBe(
-      404
-    );
+    expect(
+      (await handle(new Request(`${BASE}/api/nothing`), { via: 'channel', guest: null, userId: null })).status
+    ).toBe(404);
     const guest = await handle(new Request(`${BASE}/api/nothing`), {
       via: 'channel',
       guest: { taskId: 't', name: 'Kai' } as never,
+      userId: null,
     });
     expect([guest.status, ((await guest.json()) as { error: { code: string } }).error.code]).toEqual([
       403,

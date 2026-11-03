@@ -182,6 +182,8 @@ const RUN_SHARES = [0.2, 0.65, 0.15];
 
 const FIRST_PULL_REQUEST = 4400;
 
+const REVIEW_MINUTES = [35, 8, 140, 12, 0, 55, 20, 25, 90, 15, 18, 0, 70, 30, 45, 10, 0, 65, 22, 40, 12, 28];
+
 function resolveUsage(tokens: number, cacheHit: number): RunUsage {
   const output = Math.round(tokens * 0.04);
   const prompt = tokens - output;
@@ -239,6 +241,7 @@ export function listHistoryTasks(repo: Repo): SeedTask[] {
       merged: true,
       summary: entry.title,
       timed: listMeterEvents(id, entry, NOW - ageHours * HOUR + HOUR),
+      ...(REVIEW_MINUTES[index] ? { review: { minutes: REVIEW_MINUTES[index] } } : {}),
     };
   });
 }
