@@ -289,3 +289,4 @@ export function resolveStats(state: StatsSource, window: StatsWindow): Stats {
     tasks: listTaskTokens(state, fold),
   };
 }
+export * from './presence.ts';
