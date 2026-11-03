@@ -77,7 +77,7 @@ export function ChangelogDialog() {
       }}
     >
       <DialogContent className='w-[min(32rem,calc(100vw-2rem))]'>
-        <DialogHeader className='px-6'>
+        <DialogHeader className='px-10'>
           <DialogTitle>{CHANGELOG_COPY.title}</DialogTitle>
           <DialogDescription>{describeChangelogSince(view.since)}</DialogDescription>
         </DialogHeader>
