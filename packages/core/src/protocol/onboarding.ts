@@ -24,6 +24,7 @@ export interface RootSuggestion {
 export interface RootSuggestions {
   suggestions: RootSuggestion[];
   truncated: boolean;
+  refused: string[];
 }
 
 export type OnboardingStepId = 'roots' | 'projects' | 'defaults' | 'accounts' | 'prerequisites';

@@ -9,10 +9,6 @@ export function discoverRoots(home: string, options: DiscoveryOptions = {}) {
   return edgeRuntime.runPromise(RepoFolders.use((folders) => folders.discover(home, options)));
 }
 
-export function createDiscoverer(skipPrivate: boolean) {
-  return (home: string) => discoverRoots(home, { skipPrivate });
-}
-
 export function listLocalRepos(roots: readonly string[], limit?: number) {
   return edgeRuntime.runSync(RepoFolders.use((folders) => folders.listLocal(roots, limit)));
 }
