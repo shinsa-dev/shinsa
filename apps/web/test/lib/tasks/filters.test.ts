@@ -2,13 +2,16 @@ import { describe, expect, it } from 'bun:test';
 import type { ShinsaState } from '@shinsa/core';
 import {
   countActiveFilters,
+  describeFilterChoice,
   filterTaskRows,
   isFiltering,
+  listTaskFilterFields,
   listTaskRows,
   NO_TASK_FILTERS,
   resolveClearedFilters,
   resolveTaskFilters,
   serializeFilterValues,
+  type TaskFilterKey,
   type TaskFilters,
   toggleFilterValue,
   YOUR_TASKS_OWNER,
@@ -218,5 +221,87 @@ describe('the filter helpers', () => {
       kind: null,
       priority: null,
     });
+  });
+});
+
+function fields(filters: Partial<TaskFilters> = {}, team = TEAM, teams = TEAMS) {
+  const all = { ...NO_TASK_FILTERS, ...filters };
+  return listTaskFilterFields(listTaskRows(STATE, team, teams, NOW), teams, all);
+}
+
+function field(key: TaskFilterKey, list = fields()) {
+  const found = list.find((entry) => entry.key === key);
+  if (!found) throw new Error(`No field ${key}`);
+  return found;
+}
+
+describe('listTaskFilterFields', () => {
+  it('offers each field that can narrow the list, with the values the rows have and their counts', () => {
+    const list = fields();
+    expect(list.map((entry) => entry.label)).toEqual([
+      'Status',
+      'Owner',
+      'Team',
+      'Project',
+      'Kind',
+      'Priority',
+    ]);
+    expect(field('status', list).options.map(({ label, count }) => `${label} ${count}`)).toEqual([
+      'Changes to review 1',
+      'In progress 5',
+      'Done 1',
+    ]);
+    expect(
+      field('owner', list).options.map(({ value, label, count }) => `${value}:${label} ${count}`)
+    ).toEqual(['you:You 4', 'kai:kai 1', 'lee:lee 1', 'x9:Studio 1']);
+    expect(field('team', list).options.map(({ label, count }) => `${label} ${count}`)).toEqual([
+      'Apps 3',
+      'Platform 4',
+    ]);
+    expect(field('kind', list).options.map((option) => option.value)).toEqual(['answer', 'change']);
+    expect(field('priority', list).options.map((option) => option.label)).toEqual([
+      'Urgent',
+      'High',
+      'Normal',
+    ]);
+  });
+
+  it('leaves out a field with one value, unless it is filtered on', () => {
+    expect(fields().some((entry) => entry.key === 'repo')).toBe(false);
+    const repo = field('repo', fields({ repo: ['paywall-next', 'gone'] }));
+    expect(repo.options.map(({ value, count }) => `${value} ${count}`)).toEqual(['gone 0', 'paywall-next 2']);
+  });
+
+  it('keeps a filtered status that no row has, and every team you are in', () => {
+    expect(field('status', fields({ status: ['merge'] })).options[0]).toMatchObject({
+      value: 'merge',
+      count: 0,
+    });
+    const teams = [...TEAMS, { id: 'team3', name: 'Design' }];
+    expect(field('team', fields({}, TEAM, teams)).options.map((option) => option.label)).toEqual([
+      'Apps',
+      'Design',
+      'Platform',
+    ]);
+  });
+
+  it('names a team it no longer knows and an owner it has no row for', () => {
+    const list = fields({ team: ['old'], owner: ['ghost'] });
+    expect(field('team', list).options.find((option) => option.value === 'old')?.label).toBe('Your team');
+    expect(field('owner', list).options.find((option) => option.value === 'ghost')?.label).toBe('ghost');
+  });
+
+  it('offers no owner or team with only your own tasks and no teams', () => {
+    const keys = fields({}, [], []).map((entry) => entry.key);
+    expect(keys).not.toContain('owner');
+    expect(keys).not.toContain('team');
+  });
+});
+
+describe('describeFilterChoice', () => {
+  it('names the chosen values, or any', () => {
+    const status = field('status');
+    expect(describeFilterChoice(status, ['review', 'done'])).toBe('Changes to review, Done');
+    expect(describeFilterChoice(status, [])).toBe('Any status');
   });
 });

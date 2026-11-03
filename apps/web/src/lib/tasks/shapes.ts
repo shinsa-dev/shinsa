@@ -30,7 +30,7 @@ export const SHAPE_LABEL: Record<TaskShape, string> = {
   operation: 'Operation',
 };
 
-const SHAPE_ICON: Record<TaskShape, IconName> = {
+export const SHAPE_ICON: Record<TaskShape, IconName> = {
   answer: 'IconBubbleText',
   investigate: 'IconMagnifyingGlass',
   research: 'IconBook',

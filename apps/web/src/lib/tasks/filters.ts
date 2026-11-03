@@ -11,8 +11,14 @@ import {
   TASK_SHAPES,
   type Task,
 } from '@shinsa/core';
-import type { FocusTeam } from '@/lib/focus.ts';
+import type { IconName } from '@shinsa/ui/components/icon';
+import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import { type FocusTeam, UNNAMED_TEAM } from '@/lib/focus.ts';
+import { PRIORITY_ICON, PRIORITY_LABEL } from '@/lib/format/labels.ts';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveTaskGroup, TASK_GROUPS, type TaskGroupKey, type TeamEntry } from '@/lib/tasks/groups.ts';
+import { SHAPE_ICON, SHAPE_LABEL } from '@/lib/tasks/shapes.ts';
+import { describeTeamTaskOwner } from '@/lib/teams/feeds.ts';
 
 export const TASK_FILTER_KEYS = ['status', 'owner', 'team', 'project', 'repo', 'kind', 'priority'] as const;
 
@@ -164,4 +170,129 @@ export function matchesTaskFilters(row: TaskRow, filters: TaskFilters) {
 
 export function filterTaskRows(rows: readonly TaskRow[], filters: TaskFilters) {
   return rows.filter((row) => matchesTaskFilters(row, filters));
+}
+
+export interface TaskFilterOption {
+  value: string;
+  label: string;
+  icon?: MenuItemIcon;
+  count: number;
+}
+
+export interface TaskFilterField {
+  key: TaskFilterKey;
+  label: string;
+  icon: IconName;
+  options: TaskFilterOption[];
+}
+
+const FIELD_LABEL: Record<TaskFilterKey, { label: string; icon: IconName }> = {
+  status: { label: 'Status', icon: 'IconListBullets' },
+  owner: { label: 'Owner', icon: 'IconUser' },
+  team: { label: 'Team', icon: 'IconUserDuo' },
+  project: { label: 'Project', icon: 'IconFolder1' },
+  repo: { label: 'Repository', icon: 'IconFolderGit' },
+  kind: { label: 'Kind', icon: 'IconHammer' },
+  priority: { label: 'Priority', icon: 'IconPriorityHigh' },
+};
+
+const YOU_LABEL = 'You';
+
+const FIXED_OPTIONS: Partial<
+  Record<TaskFilterKey, readonly { value: string; label: string; icon: MenuItemIcon }[]>
+> = {
+  status: TASK_GROUPS.map((group) => ({
+    value: group.key,
+    label: group.title,
+    icon: { name: group.icon, className: TONE_TEXT[group.tone] },
+  })),
+  kind: TASK_SHAPES.map((shape) => ({ value: shape, label: SHAPE_LABEL[shape], icon: SHAPE_ICON[shape] })),
+  priority: TASK_PRIORITIES.map((priority) => ({
+    value: priority,
+    label: PRIORITY_LABEL[priority],
+    icon: PRIORITY_ICON[priority],
+  })),
+};
+
+function listRowValues(row: TaskRow, key: TaskFilterKey): readonly (string | null)[] {
+  if (key === 'status') return [row.group];
+  if (key === 'owner') return [row.owner];
+  if (key === 'team') return row.teamIds;
+  if (key === 'project') return [row.project];
+  if (key === 'repo') return [row.repo];
+  if (key === 'kind') return [resolveTaskShape(row.task)];
+  return [row.task.priority];
+}
+
+function describeOwner(rows: readonly TaskRow[], owner: string) {
+  if (owner === YOUR_TASKS_OWNER) return YOU_LABEL;
+  const entry = rows.find((row) => row.owner === owner)?.team?.entry;
+  return entry ? describeTeamTaskOwner(entry) : owner;
+}
+
+function describeValue(
+  key: TaskFilterKey,
+  value: string,
+  rows: readonly TaskRow[],
+  teams: readonly FocusTeam[]
+) {
+  if (key === 'owner') return describeOwner(rows, value);
+  if (key === 'team') return teams.find((team) => team.id === value)?.name ?? UNNAMED_TEAM;
+  return value;
+}
+
+function countValues(rows: readonly TaskRow[], key: TaskFilterKey) {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    for (const value of new Set(listRowValues(row, key))) {
+      if (value !== null) counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function rankOption(key: TaskFilterKey, option: TaskFilterOption) {
+  return key === 'owner' && option.value === YOUR_TASKS_OWNER ? 0 : 1;
+}
+
+function listFieldOptions(
+  key: TaskFilterKey,
+  rows: readonly TaskRow[],
+  teams: readonly FocusTeam[],
+  picked: readonly string[]
+): TaskFilterOption[] {
+  const counts = countValues(rows, key);
+  const fixed = FIXED_OPTIONS[key];
+  if (fixed) {
+    return fixed
+      .filter((option) => counts.has(option.value) || picked.includes(option.value))
+      .map((option) => ({ ...option, count: counts.get(option.value) ?? 0 }));
+  }
+  const values = new Set([
+    ...counts.keys(),
+    ...picked,
+    ...(key === 'team' ? teams.map((team) => team.id) : []),
+  ]);
+  return [...values]
+    .map((value) => ({ value, label: describeValue(key, value, rows, teams), count: counts.get(value) ?? 0 }))
+    .sort((a, b) => rankOption(key, a) - rankOption(key, b) || a.label.localeCompare(b.label));
+}
+
+export function listTaskFilterFields(
+  rows: readonly TaskRow[],
+  teams: readonly FocusTeam[],
+  filters: TaskFilters
+): TaskFilterField[] {
+  return TASK_FILTER_KEYS.map((key) => ({
+    key,
+    ...FIELD_LABEL[key],
+    options: listFieldOptions(key, rows, teams, filters[key]),
+  })).filter((field) => field.options.length > 1 || filters[field.key].length > 0);
+}
+
+export function describeFilterChoice(field: TaskFilterField, picked: readonly string[]) {
+  const labels = field.options
+    .filter((option) => picked.includes(option.value))
+    .map((option) => option.label);
+  return labels.length > 0 ? labels.join(', ') : `Any ${field.label.toLowerCase()}`;
 }

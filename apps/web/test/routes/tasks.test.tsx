@@ -53,7 +53,10 @@ function renderPage(state: ShinsaState = TASKS, path = '/tasks') {
 function groupHeaders() {
   return screen
     .queryAllByRole('button')
-    .filter((button) => button.hasAttribute('aria-expanded') && button.textContent)
+    .filter(
+      (button) =>
+        button.hasAttribute('aria-expanded') && !button.hasAttribute('aria-haspopup') && button.textContent
+    )
     .map((button) => `${button.textContent}|${button.getAttribute('aria-expanded')}`);
 }
 
@@ -118,13 +121,44 @@ describe('the task groups', () => {
 });
 
 describe('filtering', () => {
-  it('shows only the status in the URL, opened, with a button that clears it', () => {
+  it('shows only the status in the URL, opened, with a chip that clears it', () => {
     renderPage(TASKS, '/tasks?status=done');
     expect(groupHeaders()).toEqual(['Done1|true']);
     expect(screen.getByText('Rename the settings page')).toBeTruthy();
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Done' })));
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Status Done' })));
     expect(location.search).toBe('');
     expect(groupHeaders()).toHaveLength(8);
+  });
+
+  it('shows every chosen status, and Clear all once two fields are filtered', () => {
+    renderPage(TASKS, '/tasks?status=merge,done&priority=normal');
+    expect(groupHeaders()).toEqual(['Ready to merge1|true', 'Done1|true']);
+    expect(screen.getByRole('button', { name: 'Status Ready to merge, Done' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Filter/ }).textContent).toBe('Filter3');
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear all' })));
+    expect(location.search).toBe('');
+  });
+
+  it('ticks a value in the Filter menu into the URL', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    const trigger = await screen.findByRole('menuitem', { name: 'Status' });
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Ready to merge 1' }));
+    expect(location.search).toBe('?status=merge');
+    expect(groupHeaders()).toEqual(['Ready to merge1|true']);
+  });
+
+  it('clears every filter from the Filter menu', async () => {
+    renderPage(TASKS, '/tasks?status=merge');
+    fireEvent.click(screen.getByRole('button', { name: /^Filter/ }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Clear filters' }));
+    expect(location.search).toBe('');
   });
 
   it('ignores a status it does not know', () => {
@@ -161,7 +195,7 @@ describe('filtering', () => {
     renderPage(TASKS, '/tasks?q=nothing-like-this');
     expect(screen.getByText('Nothing matches')).toBeTruthy();
     expect(
-      screen.getByText('Try another word from the title, branch or repository, or clear the filter.')
+      screen.getByText('Try another word from the title, branch or repository, or clear the filters.')
     ).toBeTruthy();
   });
 

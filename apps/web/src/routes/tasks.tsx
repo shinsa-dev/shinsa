@@ -1,41 +1,43 @@
 import type { ShinsaState } from '@shinsa/core';
-import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
-import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
-import { Hint } from '@/components/overlays/hint.tsx';
+import { TaskFilterChips, TaskFilterMenu } from '@/components/tasks/filter-menu.tsx';
 import { TaskGroupSection } from '@/components/tasks/group.tsx';
 import { TASK_LIST_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
 import { useTeamTasks } from '@/components/teams/tasks.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
-import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
-import { filterTaskRows, isFiltering, listTaskRows, resolveTaskFilters } from '@/lib/tasks/filters.ts';
-import { describeTaskCounts, listTaskGroupSections, selectTaskGroup } from '@/lib/tasks/groups.ts';
-import { updateSearchParams, useSearchString } from '@/router.ts';
+import {
+  filterTaskRows,
+  isFiltering,
+  listTaskFilterFields,
+  listTaskRows,
+  resolveTaskFilters,
+} from '@/lib/tasks/filters.ts';
+import { describeTaskCounts, listTaskGroupSections } from '@/lib/tasks/groups.ts';
+import { useSearchString } from '@/router.ts';
 
 export function TasksPage({ state }: { state: ShinsaState }) {
   const filters = resolveTaskFilters(useSearchString());
-  const { search } = filters;
-  const status = filters.status.length === 1 ? selectTaskGroup(filters.status[0] ?? null) : null;
   const team = useTeamTasks();
   const rows = React.useMemo(
     () => listTaskRows(state, team.entries, team.teams),
     [state, team.entries, team.teams]
   );
+  const fields = listTaskFilterFields(rows, team.teams, filters);
   const sections = listTaskGroupSections(state, filterTaskRows(rows, filters), filters.status);
   const owners = rows.some((row) => row.team);
   const columns = owners ? TEAM_TASK_LIST_COLUMNS : TASK_LIST_COLUMNS;
   const filtered = isFiltering(filters);
   const statusKey = filters.status.join(',');
   const empty = sections.every((section) => section.entries.length === 0);
-  useRegisterCommands(listTaskListSections(search, status?.key ?? null));
+  useRegisterCommands(listTaskListSections(filters, fields));
 
   return (
     <div
@@ -43,28 +45,17 @@ export function TasksPage({ state }: { state: ShinsaState }) {
     >
       <div className='flex items-end gap-3'>
         <PageHeading title='All tasks' description={describeTaskCounts(state)} className='flex-1' />
-        {status && (
-          <Hint label='Clear the filter'>
-            <Button
-              variant='secondary'
-              size='sm'
-              icon={{ name: 'IconCrossSmall', position: 'inline-end' }}
-              onClick={() => updateSearchParams({ status: null })}
-            >
-              <Icon name={status.icon} className={TONE_TEXT[status.tone]} />
-              {status.title}
-            </Button>
-          </Hint>
-        )}
         <Input
           type='search'
-          value={search}
+          value={filters.search}
           onChange={(event) => applySearch(event.target.value)}
           placeholder='Search tasks'
           aria-label='Search tasks'
           className='w-52 max-md:w-32'
         />
+        <TaskFilterMenu fields={fields} filters={filters} />
       </div>
+      <TaskFilterChips fields={fields} filters={filters} />
       <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>
         <div
           className={cn(
@@ -86,7 +77,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
               title={filtered ? 'Nothing matches' : 'No tasks yet'}
               description={
                 filtered
-                  ? 'Try another word from the title, branch or repository, or clear the filter.'
+                  ? 'Try another word from the title, branch or repository, or clear the filters.'
                   : 'Describe the work on Home. Shinsa finds the repository and starts the agents.'
               }
             />
