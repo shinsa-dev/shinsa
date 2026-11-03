@@ -5,7 +5,7 @@ import { resolveEngineInfo } from '../protocol/engine.ts';
 import { resolveStatePatch, type StatePatch } from '../protocol/patch.ts';
 import type { StateChanges } from '../state/draft.ts';
 import { createState, type ShinsaState } from '../state/project.ts';
-import { LOCAL_ONLY_MESSAGE } from './local-only.ts';
+import { OWNER_ONLY_MESSAGE } from './local-only.ts';
 
 export const SCOPED_COMMANDS = [
   'task.prioritize',
@@ -69,7 +69,7 @@ function resolveWrittenText(command: ScopedCommand) {
 export function resolveScopedRefusal(state: ShinsaState, taskId: string, command: UserCommand) {
   if (!isScopedCommand(command)) return SCOPE_MESSAGES.command;
   if (resolveCommandTask(state, command) !== taskId) return SCOPE_MESSAGES.task;
-  if (command.type === 'task.retry' && command.account) return LOCAL_ONLY_MESSAGE;
+  if (command.type === 'task.retry' && command.account) return OWNER_ONLY_MESSAGE;
   if (splitMessageAttachments(resolveWrittenText(command)).attachments.length > 0)
     return SCOPE_MESSAGES.attachments;
   const gate = command.type === 'gate.answer' ? state.gates[command.gateId] : undefined;

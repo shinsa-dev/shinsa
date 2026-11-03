@@ -622,7 +622,7 @@ describe('the tunnel entry point', () => {
 });
 
 describe('the sealed channel over the tunnel', () => {
-  test('enrolls a device, serves the app socket and the API inside it, and refuses local-only commands', async () => {
+  test('enrolls a device, serves the app socket and the API inside it, and takes the owner’s owner-only commands', async () => {
     const { remote, port } = await start();
     const machine = await remote.store.resolveMachineKey();
     const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
@@ -640,7 +640,7 @@ describe('the sealed channel over the tunnel', () => {
         command: { type: 'settings.change', patch: { mergeMethod: 'squash' } },
       }),
     });
-    expect((await readAck(channel)).error?.code).toBe('local_only');
+    expect((await readAck(channel)).error).toBeNull();
     await channel.send({
       t: 'socket',
       data: JSON.stringify({ type: 'command', id: 'c2', command: { type: 'not.a.command' } }),
@@ -848,43 +848,59 @@ describe('managing remote access on the machine', () => {
     warn.mockRestore();
   });
 
-  test('refuses from a remote device what stays at the keyboard, over HTTP as over the socket', async () => {
-    const { remote, port } = await start();
+  test('keeps at the keyboard what ends the channel, and gives the owner alone what a member may not do', async () => {
+    const { remote, port } = await start({ access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] } });
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
-      device: await addDevice(remote),
-    });
-    expect(await channel.next()).toEqual({ t: 'ready' });
     const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
-    await channel.send({
-      t: 'request',
-      id: 'pair',
-      method: 'POST',
-      path: '/api/remote/disable',
-      headers: [],
-    });
-    await channel.send({ t: 'end', id: 'pair' });
-    await channel.send({ t: 'request', id: 'read', method: 'GET', path: '/api/remote', headers: [] });
-    await channel.send({ t: 'end', id: 'read' });
-    await channel.send({
-      t: 'request',
-      id: 'cmd',
-      method: 'POST',
-      path: '/api/commands',
-      headers: [['content-type', 'application/json']],
-    });
-    await channel.send({
-      t: 'body',
-      id: 'cmd',
-      chunk: body(JSON.stringify({ type: 'settings.change', patch: { mergeMethod: 'squash' } })),
-    });
-    await channel.send({ t: 'end', id: 'cmd' });
-    const statuses = new Map<string, number>();
-    while (statuses.size < 3) {
-      const message = await channel.next();
-      if (message.t === 'response') statuses.set(message.id, message.status);
-    }
-    expect(Object.fromEntries(statuses)).toEqual({ pair: 403, read: 200, cmd: 400 });
+    const statusesFor = async (userId: string) => {
+      const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+        userId,
+        device: await addDevice(remote, userId),
+      });
+      expect(await channel.next()).toEqual({ t: 'ready' });
+      await channel.send({
+        t: 'request',
+        id: 'pause',
+        method: 'POST',
+        path: '/api/remote/disable',
+        headers: [],
+      });
+      await channel.send({ t: 'end', id: 'pause' });
+      await channel.send({ t: 'request', id: 'read', method: 'GET', path: '/api/remote', headers: [] });
+      await channel.send({ t: 'end', id: 'read' });
+      await channel.send({
+        t: 'request',
+        id: 'account',
+        method: 'POST',
+        path: '/api/accounts/remove',
+        headers: [['content-type', 'application/json']],
+      });
+      await channel.send({ t: 'body', id: 'account', chunk: body(JSON.stringify({ accountId: 'none' })) });
+      await channel.send({ t: 'end', id: 'account' });
+      await channel.send({
+        t: 'request',
+        id: 'cmd',
+        method: 'POST',
+        path: '/api/commands',
+        headers: [['content-type', 'application/json']],
+      });
+      await channel.send({
+        t: 'body',
+        id: 'cmd',
+        chunk: body(JSON.stringify({ type: 'settings.change', patch: { mergeMethod: 'squash' } })),
+      });
+      await channel.send({ t: 'end', id: 'cmd' });
+      const statuses = new Map<string, number>();
+      while (statuses.size < 4) {
+        const message = await channel.next();
+        if (message.t === 'response') statuses.set(message.id, message.status);
+      }
+      return Object.fromEntries(statuses);
+    };
+    expect(await statusesFor(KAI.id)).toEqual({ pause: 403, read: 200, account: 403, cmd: 400 });
+    const owner = await statusesFor(OWNER.id);
+    expect([owner.pause, owner.read, owner.cmd]).toEqual([403, 200, 200]);
+    expect(owner.account).not.toBe(403);
     expect(remote.snapshot().enabled).toBe(true);
   });
 });
@@ -1399,7 +1415,7 @@ describe('handing off a task', () => {
     ).toBe('handoff_scope');
     expect(
       await sendCommand(channel, 'c2', { type: 'settings.change', patch: { mergeMethod: 'squash' } })
-    ).toBe('local_only');
+    ).toBe('not_owner');
     await channel.send({
       t: 'socket',
       data: JSON.stringify({

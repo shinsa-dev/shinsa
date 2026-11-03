@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { AccountsSnapshot } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { SignInDialog } from '@/components/accounts/sign-in-dialog.tsx';
+import { SignInDialog, SignInPrompt } from '@/components/accounts/sign-in-dialog.tsx';
 import { closeSignIn, startSignIn, useSignInDialog } from '@/lib/connection/accounts.ts';
 import { createLogin, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
@@ -48,6 +48,27 @@ async function openDialog(started: AccountsSnapshot, routes: Parameters<typeof s
 }
 
 describe('the sign-in dialog', () => {
+  it('from another device, sends you to the sign-in page in this browser instead of one on the machine', () => {
+    const view = { phase: 'waiting' as const, loginId: 'login-1', url: createLogin().url };
+    render(
+      <TooltipProvider>
+        <SignInPrompt
+          open
+          view={view}
+          onClose={() => undefined}
+          onSubmitCode={() => Promise.resolve(true)}
+          onRetry={() => undefined}
+          remote
+        />
+      </TooltipProvider>
+    );
+    expect(screen.getByRole('link', { name: 'Open the sign-in page' }).getAttribute('href')).toBe(
+      'https://claude.ai/oauth/authorize?code=abc'
+    );
+    expect(screen.getByText(/in this browser, then paste the code it shows here\./)).toBeTruthy();
+    expect(screen.queryByText(/A browser window opened/)).toBeNull();
+  });
+
   it('shows the sign-in page link and sends the code you paste', async () => {
     await openDialog(createSnapshot({ login: createLogin() }), {
       'POST /api/accounts/login/code': {

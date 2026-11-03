@@ -57,6 +57,7 @@ export interface ChannelHost {
   resolveMachineKey: () => Promise<{ publicKey: string; privateKey: CryptoKey }>;
   isEnrolled: (device: string) => boolean;
   resolveGuest: (device: string) => GuestActor | null;
+  isOwner: () => boolean;
   requestAccess: (
     proof: string,
     keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>,
@@ -268,8 +269,17 @@ export class RemoteChannel {
   }
 
   #createSocket(guest: GuestActor | null): HubSocket {
+    const host = this.#host;
     return {
-      data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'remote', guest },
+      data: {
+        kind: 'hub',
+        transcripts: new Map(),
+        surface: null,
+        get origin() {
+          return host.isOwner() ? 'owner' : 'remote';
+        },
+        guest,
+      },
       send: (payload: string) => this.#send({ t: 'socket', data: payload }),
     };
   }

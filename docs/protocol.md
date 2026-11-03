@@ -1525,10 +1525,12 @@ the tunnel in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/e
 
 **One task for a guest** (`scope.ts`): a device with a task is a `GuestActor` (`taskId`, `login`). Its socket gets `resolveScopedState` and `resolveScopedPatch` (that task, its runs, gates, evidence, repository and project, accounts without their email, no share, previews or hand-off link) and `resolveScopedEngineInfo` (only `SCOPED_COMMANDS`); `resolveScopedRefusal` refuses any other command, another task's, a secret or sign-in gate's answer and a retry on a chosen account, with the code `handoff_scope` (`SCOPE_REFUSAL_CODE`, `SCOPE_MESSAGES`).
 
-**What stays at the keyboard** (`local-only.ts`): `isLocalOnlyCommand` names the user commands a remote request may
-not send (a human-only setting or repository field, `task.bind_account`); the refusal's code is `local_only`
-(`LOCAL_ONLY_CODE`, `LOCAL_ONLY_MESSAGE`). A request's `RequestOrigin` (`local` or `remote`) comes from how it
-arrived, never from the page.
+**What only the owner sends from another device** (`local-only.ts`): `isOwnerOnlyCommand` names the user commands
+that need you at the keyboard or the machine's owner on a sealed channel (a human-only setting or repository field,
+`task.bind_account`, `task.retry` on a chosen account); `resolveOwnerOnlyRefusal` refuses them to any other remote
+request with the code `not_owner` (`OWNER_ONLY_CODE`, `OWNER_ONLY_MESSAGE`). A request's `RequestOrigin` (`local`,
+`owner` or `remote`) comes from how it arrived and whose connect token opened its channel, never from the page.
+`LOCAL_ONLY_MESSAGE` is the refusal of a route that stays on the machine itself.
 
 **The engine's snapshot** (`status.ts`, `GET /api/remote`): `RemoteSnapshot` is `paired`, `enabled`, `status`
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,

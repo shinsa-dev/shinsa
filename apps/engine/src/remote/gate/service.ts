@@ -2,6 +2,7 @@ import {
   type ChatEntry,
   type ConnectChannel,
   LOCAL_ONLY_MESSAGE,
+  OWNER_ONLY_MESSAGE,
   REMOTE_CONNECT_PARAM,
   SCOPE_MESSAGES,
   SHARE_CHANNEL_PARAM,
@@ -33,7 +34,6 @@ import {
   GUEST_HEALTH_PATH,
   GUEST_READ_METHODS,
   GUEST_TASK_READS,
-  OWNER_ONLY_MESSAGE,
   type RequestRefusal,
   TUNNEL_HEADER,
   TUNNEL_HTTP_ROUTES,
@@ -121,9 +121,6 @@ export class TunnelGate extends Context.Service<
         return isTaskFile(taskId, pathname);
       };
 
-      const isOwner = (userId: string | null) =>
-        userId !== null && remote?.store.file.access?.owner.id === userId;
-
       const admitChannelRequest = (url: URL, source: RequestSourceShape) => {
         if (!url.pathname.startsWith('/api/')) return Effect.fail(notFound());
         if (!extensions?.isCallback(url.pathname)) return Effect.void;
@@ -163,7 +160,7 @@ export class TunnelGate extends Context.Service<
         if (source.guest && !admitsGuest) return yield* new ScopeRefused({ message: SCOPE_MESSAGES.task });
         if (Context.get(annotations, LocalOnlyRoute))
           return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
-        if (Context.get(annotations, OwnerOnlyRoute) && !isOwner(source.userId))
+        if (Context.get(annotations, OwnerOnlyRoute) && !remote?.isOwner(source.userId))
           return yield* new NotMachineOwner({ message: OWNER_ONLY_MESSAGE });
         yield* assertWritable(request.method);
       });

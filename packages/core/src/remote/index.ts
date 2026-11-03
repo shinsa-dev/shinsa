@@ -144,11 +144,12 @@ export {
   sealPairingCredentials,
 } from './pairing-seal.ts';
 export {
-  isLocalOnlyCommand,
-  LOCAL_ONLY_CODE,
+  isOwnerOnlyCommand,
   LOCAL_ONLY_MESSAGE,
+  OWNER_ONLY_CODE,
+  OWNER_ONLY_MESSAGE,
   type RequestOrigin,
-  resolveLocalOnlyRefusal,
+  resolveOwnerOnlyRefusal,
 } from './local-only.ts';
 export {
   isPlacementPoliciesValid,

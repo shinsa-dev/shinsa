@@ -27,6 +27,7 @@ interface Harness {
   machineKey: string;
   enrolled: Set<string>;
   seen: string[];
+  owner: boolean;
   access: { answer: AccessAnswer; asked: (string | null)[]; waiting: AccessAnswer | null };
 }
 
@@ -50,12 +51,14 @@ async function createHarness(
     machineKey,
     enrolled: new Set<string>(),
     seen: [],
+    owner: false,
     access: { answer: { kind: 'refused', reason: 'This link was turned off.' }, asked: [], waiting: null },
   } as unknown as Harness;
   const host: ChannelHost = {
     resolveMachineKey: () => Promise.resolve({ publicKey: machineKey, privateKey: machine.privateKey }),
     isEnrolled: (device) => harness.enrolled.has(device),
     resolveGuest: () => null,
+    isOwner: () => harness.owner,
     requestAccess: (_proof, _keys, name) => {
       harness.access.asked.push(name);
       return Promise.resolve(harness.access.answer);
@@ -126,6 +129,8 @@ describe('the sealed channel', () => {
     await harness.channel.receive(await session.seal({ t: 'ready' }));
     expect(harness.hubOpened).toHaveLength(1);
     expect(harness.hubOpened[0]?.data.origin).toBe('remote');
+    harness.owner = true;
+    expect(harness.hubOpened[0]?.data.origin).toBe('owner');
     await until(() => harness.sent.length >= 3);
     expect(await readFrom(harness, session, 2)).toEqual([{ t: 'socket', data: '{"type":"state"}' }]);
     await harness.channel.receive(await session.seal({ t: 'socket', data: '{"type":"state.sync"}' }));

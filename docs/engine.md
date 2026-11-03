@@ -2889,9 +2889,11 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `EngineGate`), from the request's principal (`RequestSource`: the channel's user and, for a guest, the task handed
   to them) and the endpoint's annotations in core's `EngineApi`: only `/api/` paths and never an extension's sign-in
   callback, a guest only its own task's reads (`GuestRoute`), never a `localOnly` route (403 `local_only`), an
-  `ownerOnly` route only for the machine's owner (403 `not_owner`, joining a team from this machine), and no write in
-  inspect mode. A command's own fields are checked once more in `dispatchUserCommand` (core's `isLocalOnlyCommand`
-  and, for a guest, `resolveScopedRefusal`), the one path both the socket and `POST /api/commands` take.
+  `ownerOnly` route only for the machine's owner (403 `not_owner`, `Remote.isOwner`), and no write in
+  inspect mode. A command's own fields are checked once more in `dispatchUserCommand` (core's `isOwnerOnlyCommand`
+  and, for a guest, `resolveScopedRefusal`), the one path both the socket and `POST /api/commands` take; the origin it
+  is given (`resolveRequestOrigin`, and the channel socket's `origin`) is `owner` when the channel's account owns the
+  machine.
 - **The way out** (`EgressGate`, `remote/egress/`): the one gate for what this machine sends to anyone but its own
   browsers. Core's `resolveSharedTask` and `listTeamTasks` choose what a share preset or a team may see; the gate
   bounds it: every view a share link or a team channel sends (`ShareChannel`, both kinds) and the team list this
@@ -2993,13 +2995,19 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `POST /api/remote/pair`, `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/link/create` and `/link/remove`,
   `/requests/accept` and `/requests/decline` (`{ requestId }`), `/members/remove` (`{ userId }`) and
   `/devices/remove` (`{ publicKey }`).
-- **What stays at the keyboard.** A remote request is refused with `local_only` ("Do this on the machine Shinsa runs
-  on.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
-  repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
-  takes the origin), and for these routes (their `LocalOnlyRoute` annotation, 403): any change to remote access, accounts, MCP servers,
-  plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
-  programs, opening a task on the machine and restarting the engine; terminals and services are refused even to read.
-  Everything else, closing gates included, is you, as on the machine.
+- **What only the owner does from another device.** The machine's owner on a sealed channel counts as the keyboard;
+  a member is refused with `not_owner` ("Only this machine’s owner can do this from another device.") every command
+  core's `isOwnerOnlyCommand` names (a human-only setting or repository field, binding an account, retrying on a
+  chosen account), on the socket and on `POST /api/commands` alike, and these routes (their `OwnerOnlyRoute`
+  annotation, 403): Claude accounts (signing in takes the code the sign-in page shows, so it works from any
+  browser), MCP servers, plugins, skills and the optimizer, onboarding and folders, a secret (`/api/secrets/<gate>`)
+  or a webhook's signing secret, updating the agent programs, restarting the engine and joining a team.
+- **What stays at the keyboard.** Refused to everyone off the machine with `local_only` ("Do this on the machine
+  Shinsa runs on.", `LocalOnlyRoute`): pairing, pausing, resuming and removing remote access and the rest of its
+  changes, an MCP's OAuth sign-in (the provider sends you back to the machine's own address), installing the command
+  line and opening a task on the machine; terminals and services are refused even to read for now
+  (`docs/plans/remote-plan.md` → Parity with the machine). Everything else, closing gates included, is you, as on the
+  machine.
 - **Webhooks get a stable URL.** While remote access is on, a webhook schedule's URL is
   `https://app.shinsa.dev/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
   `hookUrl`), which app.shinsa.dev forwards to the tunnel's `/api/hooks/<schedule>/<token>`; otherwise it is this

@@ -108,7 +108,7 @@ Only what would end the channel you are using, or needs a program on the machine
 
 Where a gate lives: a route's `LocalOnlyRoute` or `OwnerOnlyRoute` in core's `EngineApi` (`packages/core/src/engine-api/api.ts`,
 listed by `listEngineRoutes`), checked by `TunnelGate.admitEndpoint` (`apps/engine/src/remote/gate/service.ts`); a
-command's fields in core's `isLocalOnlyCommand` (`packages/core/src/remote/local-only.ts`), checked by
+command's fields in core's `isOwnerOnlyCommand` (`packages/core/src/remote/local-only.ts`), checked by
 `dispatchUserCommand` (`apps/engine/src/http/commands.ts`); and every `isRemoteBuild()` branch in `apps/web`.
 
 ### What the page cannot do today
@@ -117,16 +117,17 @@ command's fields in core's `isLocalOnlyCommand` (`packages/core/src/remote/local
 |---|---|---|---|---|
 | Code highlighting (Code tab, diffs, chat and review code blocks) | The hosted page's CSP, `script-src 'self'` (`apps/cloud/src/http/ingress/schema.ts`) | Shiki's WebAssembly regex engine is refused, so every file and diff is plain text; the theme boot script in `index.html` was refused too | `'wasm-unsafe-eval'` in `script-src`, the boot script moved to `public/color-scheme.js`; the sandbox sends the same headers | 1, done |
 | Browser notifications | `isPageQuiet` → core's `isQuietSurface`, fed by `Fleet.isDesktopConnected` (`apps/web/src/lib/remote/fleet.ts`) | The page stays silent whenever the Mac app is open on any machine, since it assumes the desktop app notifies; on Android `new Notification()` throws (only a service worker may show one) | Done: the remote build never defers to a machine's desktop app; it shows notifications through the service worker's registration, and a click on one focuses or opens the task | 3 |
-| Human-only settings (`HUMAN_ONLY_SETTINGS`: plan approval, merge method, budgets, usage limits, auto-resume, snoozing at a limit, account switching, fast mode, delegation and share limits, the share preset) | `isLocalOnlyCommand`, `settings.change` | Refused, `local_only` | Owner-only | 4 |
-| A repository's checks, workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`) | `isLocalOnlyCommand`, `repo.update` | Refused | Owner-only | 4 |
-| Binding a task to an account | `isLocalOnlyCommand`, `task.bind_account` | Refused | Owner-only | 4 |
-| Claude accounts: refresh, sign in (with the pasted code), cancel, import, update, remove | `LocalOnlyRoute`, `accounts` group | Refused | Owner-only; sign-in uses the code you paste, since the browser that signs in is yours | 4 |
-| MCPs, plugins, skills, the context optimizer: check, add, update, remove, choose, sign out | `LocalOnlyRoute`, `extensions` group | Refused | Owner-only | 4 |
+| Human-only settings (`HUMAN_ONLY_SETTINGS`: plan approval, merge method, budgets, usage limits, auto-resume, snoozing at a limit, account switching, fast mode, delegation and share limits, the share preset) | `isOwnerOnlyCommand`, `settings.change` | Refused, `local_only` | Owner-only | 4, done |
+| A repository's checks, workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`) | `isOwnerOnlyCommand`, `repo.update` | Refused | Owner-only | 4, done |
+| Binding a task to an account | `isOwnerOnlyCommand`, `task.bind_account` | Refused | Owner-only | 4, done |
+| Retrying a task on a chosen account | `isOwnerOnlyCommand`, `task.retry` with `account` | Allowed to any member | Owner-only, as binding an account | 4, done |
+| Claude accounts: refresh, sign in (with the pasted code), cancel, import, update, remove | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `accounts` group | Refused | Owner-only; sign-in uses the code you paste, since the browser that signs in is yours | 4, done |
+| MCPs, plugins, skills, the context optimizer: check, add, update, remove, choose, sign out | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `extensions` group | Refused | Owner-only | 4, done |
 | An MCP's OAuth sign-in | `LocalOnlyRoute` and `TunnelGate.admitChannelRequest` refusing the callback path | Refused | Stays local: the provider redirects to the machine's own address | stays |
-| Agent versions: update Claude Code and Codex | `LocalOnlyRoute`, `POST /api/versions/update` | Refused | Owner-only | 4 |
-| Secrets and webhook signing secrets | `LocalOnlyRoute`, `secrets` group | Refused, so a gate asking for a secret cannot be answered away from the machine | Owner-only; the value travels sealed end to end | 4 |
-| Restarting the engine | `LocalOnlyRoute`, `POST /api/engine/restart` | Refused | Owner-only; the page reconnects as it does after any drop | 4 |
-| Onboarding and Settings → Folders: folders, privacy, flow | `LocalOnlyRoute`, `onboarding` group | Refused | Owner-only | 4 |
+| Agent versions: update Claude Code and Codex | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `POST /api/versions/update` | Refused | Owner-only | 4, done |
+| Secrets and webhook signing secrets | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `secrets` group | Refused, so a gate asking for a secret cannot be answered away from the machine | Owner-only; the value travels sealed end to end | 4, done |
+| Restarting the engine | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `POST /api/engine/restart` | Refused | Owner-only; the page reconnects as it does after any drop | 4, done |
+| Onboarding and Settings → Folders: folders, privacy, flow | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `onboarding` group | Refused | Owner-only | 4, done |
 | Installing the command line | `LocalOnlyRoute`, `POST /api/onboarding/install` | Refused | Stays local: it writes into the machine's own `PATH` | stays |
 | Teams: create, invite link, renew, requests, members, leave, remove | `LocalOnlyRoute`, `teams` group; the remote build shows `HostedTeamsSettings`, and the focus menu hides Edit teams | Read only | Owner-only, routed to the machine each team lives on; Settings → Teams and the focus menu as on the machine | 5 |
 | Joining a team | `OwnerOnlyRoute`, `POST /api/remote/teams/join` | Owner only already | Unchanged | — |
@@ -138,6 +139,7 @@ command's fields in core's `isLocalOnlyCommand` (`packages/core/src/remote/local
 | Services: add, change a command, remove, suggestions | `LocalOnlyRoute`, `services` group | Refused | Owner-only: a service's command runs on the machine | 6 |
 | Terminals | `LocalOnlyRoute`, `terminals` group; `TerminalPage` shows "Terminals stay on your machine"; the PTY stream is a local socket only | Not available | Owner-only, with terminal frames on the existing sealed channel; no new tunnel route | 7 |
 | Opening a task in an editor on the machine | `LocalOnlyRoute`, `POST /api/tasks/:taskRef/open` | Refused | Stays local: it opens a window on the machine's screen | stays |
+| Settings with more than one machine | Settings' reads and writes go to the first reachable machine (`Fleet.#memberOf`) | One machine's settings, accounts and MCPs only | A machine picker in Settings, routed with `?machine=` as access requests are | later |
 | Web Push to a closed tab | None: not built | No notification once every tab is closed | A follow-up task: Shinsa Cloud relays sealed pushes | later |
 
 Already the same in both: the overview, the queue, chat, every task action and its menu, the Code tab's reads
