@@ -17,5 +17,12 @@ export function applyPowerEvent(state: AwayState, event: PowerEvent, now: number
     const observed = observeInput(state, now, idleMs);
     return { state: { ...observed.state, frozen: true }, span: observed.span };
   }
-  return observeInput({ ...state, frozen: false }, now, idleMs);
+  if (!state.frozen || state.lastInput === null)
+    return observeInput({ ...state, frozen: false }, now, idleMs);
+  return resumeFrom(state.lastInput, now - idleMs);
+}
+
+function resumeFrom(before: number, input: number): AwayStep {
+  const state = { lastInput: Math.max(before, input), frozen: false };
+  return { state, span: input > before ? { from: before, to: input } : null };
 }

@@ -8,7 +8,7 @@ import type { ShippingTile } from '@/lib/stats/shipping.ts';
 export const STAT_PANEL = cn(INSET, 'bg-bg-a1');
 
 const TILE_EDGE =
-  'border-border md:not-first:border-l max-md:even:border-l max-md:nth-[n+3]:border-t md:nth-[n+5]:border-t';
+  'border-border md:border-l md:nth-[4n+1]:border-l-0 max-md:even:border-l max-md:nth-[n+3]:border-t md:nth-[n+5]:border-t';
 
 function StatTile({ tile }: { tile: ShippingTile }) {
   return (

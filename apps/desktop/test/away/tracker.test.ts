@@ -29,9 +29,29 @@ describe('time away from your Mac', () => {
     expect(observeInput(locked.state, 30 * MINUTE, 0)).toEqual({ state: locked.state, span: null });
     const asleep = applyPowerEvent(locked.state, 'suspend', 3 * MINUTE, MINUTE);
     expect(applyPowerEvent(asleep.state, 'resume', 60 * MINUTE, 0).span).toEqual({
-      from: 12 * MINUTE,
+      from: 2 * MINUTE,
       to: 60 * MINUTE,
     });
-    expect(applyPowerEvent(locked.state, 'unlock', 5 * MINUTE, 0).span).toBeNull();
+    expect(applyPowerEvent(locked.state, 'unlock', 5 * MINUTE, 0).span).toEqual({
+      from: 2 * MINUTE,
+      to: 5 * MINUTE,
+    });
+  });
+
+  it('counts no time away when you come back before your last input moves on', () => {
+    const working = observeInput(NO_INPUT_YET, 0, 0).state;
+    const locked = applyPowerEvent(working, 'lock', 2 * MINUTE, 0).state;
+    expect(applyPowerEvent(locked, 'unlock', 3 * MINUTE, MINUTE)).toEqual({
+      state: { lastInput: 2 * MINUTE, frozen: false },
+      span: null,
+    });
+  });
+
+  it('waits for your first input when the Mac locks before it saw any', () => {
+    const locked = applyPowerEvent(NO_INPUT_YET, 'lock', 0, 0).state;
+    expect(applyPowerEvent({ ...locked, lastInput: null }, 'unlock', 5 * MINUTE, 0)).toEqual({
+      state: { lastInput: 5 * MINUTE, frozen: false },
+      span: null,
+    });
   });
 });

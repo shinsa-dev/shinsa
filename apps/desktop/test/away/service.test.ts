@@ -28,7 +28,7 @@ describe('the away watch', () => {
     );
     expect(awaySent(world)).toEqual([
       { from: 10 * 60_000, to: 20.5 * 60_000 },
-      { from: 30.5 * 60_000, to: 80.5 * 60_000 },
+      { from: 20.5 * 60_000, to: 80.5 * 60_000 },
     ]);
   });
 });
