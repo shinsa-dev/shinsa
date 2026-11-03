@@ -324,9 +324,11 @@ src/
     ├── notifications/   attention.ts (decisions, the tab badge and status), watcher.ts, sounds.ts,
     │                    browser.ts, settings.ts (the Notifications rows), page.ts (the tab title and Floaty's
     │                    meta tags)
-    ├── format/          Counts, times, money, labels, tones, the shared minute and second clocks (clock.ts), a small LRU
-    │                    cache (cache.ts), the rows in view of a list (rows.ts), a checklist's progress and a Markdown
-    │                    task list's items (checklist.ts)
+    ├── format/          The one home of every formatter: numbers, percents, bytes and line ranges (count.ts; a count
+    │                    with its noun is core's describeCount), ages, durations, spans and clocks (time.ts), money,
+    │                    labels, tones, the shared minute and second clocks (clock.ts), a small LRU cache (cache.ts),
+    │                    the rows in view of a list (rows.ts), a checklist's progress and a Markdown task list's items
+    │                    (checklist.ts)
     ├── preferences/     localStorage: theme, layout, rail width, recent tasks, flags, notifications, the
     │                    terminal's font size, disclosure.ts (every collapsible's open state: useDisclosure,
     │                    createDisclosureId, DisclosureScope; docs/design.md 40)
@@ -338,7 +340,8 @@ src/
     │                    `DesktopChrome` gives a subtree the app's look without the bridge (the site's demos)
     ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings and Terminal, each rendered
     │                    ahead at idle) and the last three task pages, by key, with the URL each was left at
-    └── errors.ts (a render error's message and details, the reset key, ⌘K's error toast), queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
+    └── errors.ts (a render error's message and details, the reset key, ⌘K's error toast), idle.ts (scheduleIdle: the one
+        requestIdleCallback with its timeout and the fallback timer), queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
         checks, repository choices, the actions), workspaces.ts (where agents work: worktrees or the main checkout,
         changing a repository's mode), coverage.ts (a repository's test coverage setting, Auto / Custom /
         Off and the Custom dialog's draft, and the changed-line coverage lines the Review tab and the Overview show; what
