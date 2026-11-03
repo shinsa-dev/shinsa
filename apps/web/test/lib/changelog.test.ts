@@ -93,6 +93,21 @@ describe('useWhatsNew', () => {
     expect(selectChangelogView().open).toBe(false);
   });
 
+  it('reads the changelog again when the engine updates while the page stays open', async () => {
+    localStorage.setItem(CHANGELOG_SEEN_KEY, '1.1.0');
+    const engine = spyOnEngine(resolveEngineInfo('1.2.0'));
+    let answer: Changelog = { releases: CHANGELOG.releases.slice(1) };
+    const requests = answerFetch(() => Response.json(answer));
+    const { result, rerender } = renderHook(() => useWhatsNew());
+    await waitFor(() => expect(listVersions(result.current.releases)).toEqual(['1.2.0']));
+
+    answer = CHANGELOG;
+    engine.mockReturnValue(resolveEngineInfo('1.3.0'));
+    rerender();
+    await waitFor(() => expect(listVersions(result.current.releases)).toEqual(['1.3.0', '1.2.0']));
+    expect(requests.map((request) => request.path)).toEqual(['/api/changelog', '/api/changelog']);
+  });
+
   it('reads nothing while the version you saw is the one running', async () => {
     localStorage.setItem(CHANGELOG_SEEN_KEY, '1.3.0');
     spyOnEngine(resolveEngineInfo('1.3.0'));

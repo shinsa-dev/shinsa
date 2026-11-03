@@ -31,12 +31,13 @@ export const CHANGELOG_COPY = {
 
 interface ChangelogView {
   changelog: Changelog | null;
+  readFor: string | null;
   failure: string | null;
   open: boolean;
   since: string | null;
 }
 
-const CLOSED: ChangelogView = { changelog: null, failure: null, open: false, since: null };
+const CLOSED: ChangelogView = { changelog: null, readFor: null, failure: null, open: false, since: null };
 
 const signal = createSignal();
 
@@ -50,9 +51,18 @@ function publish(patch: Partial<ChangelogView>) {
 const read = createSharedRun(
   Effect.gen(function* () {
     const engine = yield* EngineClient;
-    publish({ changelog: yield* engine.changelog.list(), failure: null });
+    const readFor = selectEngineVersion();
+    publish({ changelog: yield* engine.changelog.list(), readFor, failure: null });
   }).pipe(Effect.catch((error) => Effect.sync(() => publish({ failure: describeFailure(error) }))))
 );
+
+function selectEngineVersion() {
+  return connection.selectEngine()?.version ?? null;
+}
+
+function isChangelogStale(version: string | null) {
+  return !view.changelog || view.readFor !== version;
+}
 
 export function refreshChangelog() {
   return read.run();
@@ -93,10 +103,10 @@ export function resolveWhatsNew(
 }
 
 export function openChangelog(since: string | null = null) {
-  const version = connection.selectEngine()?.version ?? null;
+  const version = selectEngineVersion();
   if (isReleasedVersion(version)) recordSeenVersion(version);
   publish({ open: true, since });
-  if (!view.changelog) void read.run();
+  if (isChangelogStale(version)) void read.run();
 }
 
 export function closeChangelog() {
@@ -134,18 +144,15 @@ export function useChangelogAvailable() {
 
 export function useWhatsNew() {
   const available = useChangelogAvailable();
-  const version = React.useSyncExternalStore(
-    connection.subscribe,
-    () => connection.selectEngine()?.version ?? null
-  );
+  const version = React.useSyncExternalStore(connection.subscribe, selectEngineVersion);
   const seen = React.useSyncExternalStore(signal.subscribe, selectSeenVersion);
   const shown = useChangelogView();
   const known = available && isReleasedVersion(version);
   React.useEffect(() => {
     if (!known) return;
     if (seen === null) recordSeenVersion(version);
-    else if (!shown.changelog && resolveVersionOrder(version, seen) === 1) void read.run();
-  }, [known, version, seen, shown.changelog]);
+    else if (isChangelogStale(version) && resolveVersionOrder(version, seen) === 1) void read.run();
+  }, [known, version, seen, shown]);
   if (!known) return { releases: [], seen };
   return { releases: resolveWhatsNew(shown.changelog, version, seen), seen };
 }
