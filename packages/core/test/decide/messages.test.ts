@@ -180,6 +180,35 @@ describe('messages before work starts', () => {
     readyWorktree(harness, second);
     expect(harness.activeRun(second).prompt).toContain('The human added since:\n- Use the blue variant.');
   });
+
+  test('line comments sent before planning starts reach the planner, with or without words', () => {
+    const harness = createHarness();
+    const first = createTask(harness);
+    const second = createTask(harness, { request: 'Second', waitsOn: [first] });
+    const comment = { path: 'src/a.ts', side: 'new' as const, line: 4, endLine: 6, text: 'Split this.' };
+    harness.send({
+      type: 'task.message',
+      taskId: second,
+      text: 'Use the blue variant.',
+      comments: [comment],
+    });
+    harness.advance(10 * 60_000);
+    harness.send({
+      type: 'task.message',
+      taskId: second,
+      text: '',
+      comments: [{ ...comment, line: 9, endLine: null }],
+    });
+    shipAndMerge(harness, first);
+    readyWorktree(harness, second);
+    const prompt = harness.activeRun(second).prompt ?? '';
+    expect(prompt).toContain(
+      'The human added since:\n- Use the blue variant.\n\nLine comments:\n- src/a.ts, lines 4-6: Split this.'
+    );
+    expect(prompt).toContain(
+      '- The human left line comments on the code.\n\nLine comments:\n- src/a.ts, line 9: Split this.'
+    );
+  });
 });
 
 describe('questions that lose their agent', () => {

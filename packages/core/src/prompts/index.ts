@@ -1,7 +1,7 @@
+export { resolveCommentedMessage } from './comments.ts';
 export {
   resolveChecksFixPrompt,
   resolveCodeFence,
-  resolveCommentedMessage,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
   resolvePushHookFixPrompt,

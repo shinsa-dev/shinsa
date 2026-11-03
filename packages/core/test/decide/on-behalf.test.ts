@@ -260,6 +260,24 @@ describe('acting for the human', () => {
     expect(reviewer.prompt).not.toContain('Keep the old flag.');
   });
 
+  test('a message kept at a gate keeps its line comments for the next agent', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    const comment = { path: 'src/flag.ts', side: 'new' as const, line: 3, endLine: null, text: 'This one.' };
+    harness.send(
+      { type: 'task.message', taskId, text: 'Keep the old flag.', comments: [comment] },
+      { onBehalf: true, byTask: 'agent-task' }
+    );
+    expect(harness.task(taskId).untoldMessages).toEqual([
+      { at: harness.now, text: 'Keep the old flag.', sender: 'agent', comments: [comment] },
+    ]);
+    harness.send({ type: 'task.message', taskId, text: 'hello', kind: 'feedback' });
+    expect(harness.activeRun(taskId).prompt).toContain(
+      `${KEPT_NOTE}\n\nLine comments:\n- src/flag.ts, line 3: This one.`
+    );
+  });
+
   test('a message kept at the merge gate reaches the fix your reply starts', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

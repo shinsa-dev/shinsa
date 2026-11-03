@@ -15,6 +15,7 @@ import {
   type UntoldMessage,
 } from '../domain/index.ts';
 import type { CheckNote, ReportCheck, ReviewFinding, TaskCheck } from '../report/types.ts';
+import { resolveCommentedMessage } from './comments.ts';
 
 export function describeRepository(repo: Repo | null) {
   if (!repo) return '';
@@ -294,9 +295,12 @@ function isUntold(task: Task, entry: Activity) {
 export function resolveLaterMessages(task: Task) {
   const round = resolveCurrentRound(task).number;
   const messages = task.activity
-    .filter((entry) => entry.kind === 'message' && entry.detail)
+    .filter((entry) => entry.kind === 'message' && (entry.detail || (entry.comments ?? []).length > 0))
     .filter((entry) => (entry.round ?? 1) === round && !isUntold(task, entry))
-    .map((entry) => `- ${describeSender(entry)}${entry.detail}`);
+    .map(
+      (entry) =>
+        `- ${describeSender(entry)}${resolveCommentedMessage(entry.detail ?? '', entry.comments ?? [])}`
+    );
   if (messages.length === 0) return '';
   return ['', 'The human added since:', ...messages].join('\n');
 }
@@ -304,6 +308,9 @@ export function resolveLaterMessages(task: Task) {
 export function describeUntoldMessages(messages: readonly UntoldMessage[]) {
   return [
     'While this task waited for the human, these messages were left for you. Act on them along with the rest of this turn:',
-    ...messages.map((message) => `- ${SENT_BY[message.sender]}${message.text}`),
+    ...messages.map(
+      (message) =>
+        `- ${SENT_BY[message.sender]}${resolveCommentedMessage(message.text, message.comments ?? [])}`
+    ),
   ].join('\n');
 }

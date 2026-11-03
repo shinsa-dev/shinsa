@@ -270,7 +270,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `approveAfterFix?` | boolean | you asked for changes with Fix N findings and approve (`gate.answered` with `thenApprove`): the next review gate that opens without an escalation is approved at once (`ahead`); written by every review answer, false in a new round |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
-| `untoldMessages?` | `UntoldMessage[]` (`at`, `text`, `sender`: `agent` \| `schedule`) | messages sent for you while a gate was open (`task.messaged` with `kept`), not yet told; the next run of the task's session is told them (`task.messages_told`) |
+| `untoldMessages?` | `UntoldMessage[]` (`at`, `text`, `sender`: `agent` \| `schedule`, `comments?`) | messages sent for you while a gate was open (`task.messaged` with `kept`), not yet told; the next run of the task's session is told them (`task.messages_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
 | `treeHash?` | string \| null | the tree of the last commit Shinsa made |
 

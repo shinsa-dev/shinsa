@@ -2,6 +2,7 @@ import { describeCount } from '../chat/text.ts';
 import { isBlockingCheck } from '../domain/checks.ts';
 import type { PullRequest, PullRequestWatchChange, ReviewComment } from '../domain/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
+import { describeLineComments } from './comments.ts';
 import { describeFindingPlace } from './context.ts';
 import { describeReplyInstruction } from './replies.ts';
 
@@ -65,28 +66,6 @@ export function resolveReviewFixPrompt(findings: ReviewFinding[]) {
     describeFindingLines(findings),
     describeFixClosing(WORK_FIX_NEXT),
   ].join('\n');
-}
-
-function describeCommentLines(comment: ReviewComment) {
-  const plural = comment.endLine !== null;
-  const lines = plural ? `${comment.line}-${comment.endLine}` : String(comment.line);
-  return `${comment.side === 'old' ? 'removed ' : ''}${plural ? 'lines' : 'line'} ${lines}`;
-}
-
-function describeLineComment(comment: ReviewComment) {
-  return `- ${comment.path}, ${describeCommentLines(comment)}: ${comment.text}`;
-}
-
-function describeLineComments(comments: readonly ReviewComment[]) {
-  if (comments.length === 0) return [];
-  return ['', 'Line comments:', ...comments.map(describeLineComment)];
-}
-
-export function resolveCommentedMessage(message: string, comments: readonly ReviewComment[]) {
-  if (comments.length === 0) return message;
-  return [message || 'The human left line comments on the code.', ...describeLineComments(comments)].join(
-    '\n'
-  );
 }
 
 export function resolveHumanFixPrompt(message: string | null, comments: readonly ReviewComment[]) {
