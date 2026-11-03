@@ -67,3 +67,5 @@ export const NOT_STARTED_READ = 127;
 export const CANCELLED_READ = 130;
 
 export const CANCELLED_READ_MESSAGE = 'The read was cancelled.';
+
+export const HEAD_TIMEOUT = Duration.seconds(5);
