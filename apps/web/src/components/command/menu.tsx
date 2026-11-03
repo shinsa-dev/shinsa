@@ -29,6 +29,8 @@ import {
   JUMP_KEYWORDS,
   JUMP_VALUE,
   listCommandKeywords,
+  listDecisionCommands,
+  listJumpEntries,
   listMenuTasks,
   listOptionKeywords,
   listRootBlocks,
@@ -41,6 +43,7 @@ import {
   resolveFirstValue,
   resolvePlaceholder,
   resolveRepoName,
+  type TaskEntry,
   TASKS_FRAME,
   type Visit,
 } from '@/lib/command/menu.ts';
@@ -358,20 +361,20 @@ function ComposeGroup({
 
 function JumpGroup({
   state,
-  tasks,
+  entries,
   onOpen,
 }: {
   state: ShinsaState;
-  tasks: Task[];
+  entries: TaskEntry[];
   onOpen: (task: Task) => void;
 }) {
   return (
     <CommandGroup value='tasks' heading='Tasks'>
-      {tasks.map((task) => (
+      {entries.map(({ task, keywords }) => (
         <CommandItem
           key={task.id}
           value={`jump:${task.id}`}
-          keywords={[task.title, task.handle ?? '', resolveRepoName(state, task), task.branch ?? '']}
+          keywords={keywords}
           icon={resolveTaskMenuIcon(state, task)}
           onSelect={() => onOpen(task)}
         >
@@ -402,12 +405,19 @@ function usePrefetchSelected(state: ShinsaState | null, selected: string) {
   }, [taskId]);
 }
 
-export function CommandMenu() {
+interface MenuFocus {
+  restore: boolean;
+}
+
+function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefObject<MenuFocus> }) {
   const { state } = useConnection();
-  const open = useCommandMenuOpen();
   const route = useRoute();
-  const focusTeams = listFocusTeams(useRemoteSnapshot());
+  const remote = useRemoteSnapshot();
+  const focusTeams = React.useMemo(() => listFocusTeams(remote), [remote]);
   const registered = useRegisteredSections();
+  const registeredIds = registered
+    .flatMap((section) => section.commands.map((command) => command.id))
+    .join('\n');
   const theme = useThemePreference();
   const layout = useLayoutPreference();
   const engineCommands = useEngineCommands();
@@ -419,42 +429,54 @@ export function CommandMenu() {
   const [query, setQuery] = React.useState('');
   const [stack, setStack] = React.useState<Visit[]>([]);
   const [selected, setSelected] = React.useState('');
-  const [recent, setRecent] = React.useState<string[]>([]);
+  const [recent] = React.useState(listRecentTaskIds);
   usePrefetchSelected(state, selected);
-  const restoreFocus = React.useRef(true);
-  const openedFrom = React.useRef<HTMLElement | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const frame = stack.at(-1)?.frame;
   const trimmed = query.trim();
   const typing = trimmed !== '';
   const currentTaskId = useRouteTaskId(state);
 
-  useCommandHotkey();
-
-  React.useEffect(() => {
-    if (currentTaskId) recordRecentTask(currentTaskId);
-  }, [currentTaskId]);
-
-  React.useEffect(() => {
-    if (!open) return;
-    restoreFocus.current = true;
-    openedFrom.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setRecent(listRecentTaskIds());
-  }, [open]);
-
   React.useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open, stack.length]);
 
+  const shared = React.useMemo(
+    () =>
+      state
+        ? [
+            ...listGlobalSections(state, route, theme, layout, engineCommands, focusTeams),
+            ...listAccountSections(accounts),
+            ...listScheduleSections(state),
+            ...listServiceSections(state, terminals, Date.now()),
+            ...listExtensionSections(extensions.snapshot),
+            ...listVersionSections(versions.snapshot, versions.updating, changelogAvailable),
+          ]
+        : [],
+    [
+      state,
+      route,
+      theme,
+      layout,
+      engineCommands,
+      focusTeams,
+      accounts,
+      terminals,
+      extensions.snapshot,
+      versions.snapshot,
+      versions.updating,
+      changelogAvailable,
+    ]
+  );
+  const decisions = React.useMemo(
+    () => (state && typing ? listDecisionCommands(state, currentTaskId, registered) : []),
+    [state, typing, currentTaskId, registeredIds]
+  );
+  const sections = [...registered, ...shared].sort((a, b) => a.rank - b.rank);
+
   if (!state) return null;
 
   const close = () => writeCommandMenuOpen(false);
-
-  const finalFocus = () => {
-    if (!restoreFocus.current) return false;
-    const origin = openedFrom.current;
-    return origin?.isConnected && origin !== document.body ? origin : false;
-  };
 
   const highlight = (value: string) => {
     setSelected(value);
@@ -475,7 +497,7 @@ export function CommandMenu() {
   };
 
   const later = (action: () => void) => {
-    restoreFocus.current = false;
+    focus.current.restore = false;
     close();
     setTimeout(action, 0);
   };
@@ -530,17 +552,6 @@ export function CommandMenu() {
     later(() => requestNewTaskOnHome(request));
   };
 
-  const sections = [
-    ...registered,
-    ...listGlobalSections(state, route, theme, layout, engineCommands, focusTeams),
-    ...listAccountSections(accounts),
-    ...listScheduleSections(state),
-    ...(open ? listServiceSections(state, terminals, Date.now()) : []),
-    ...listExtensionSections(extensions.snapshot),
-    ...listVersionSections(versions.snapshot, versions.updating, changelogAvailable),
-  ].sort((a, b) => a.rank - b.rank);
-  const allTasks = listMenuTasks(state);
-
   const renderBlock = (block: MenuBlock) => (
     <MenuBlockGroup
       key={block.key}
@@ -557,6 +568,7 @@ export function CommandMenu() {
         state,
         sections,
         registered,
+        decisions,
         recent,
         currentTaskId,
         query: trimmed,
@@ -587,7 +599,7 @@ export function CommandMenu() {
       return (
         <JumpGroup
           state={state}
-          tasks={allTasks}
+          entries={listJumpEntries(state, trimmed)}
           onOpen={(task) => enter(resolveTaskPage(state, task, accounts), `jump:${task.id}`)}
         />
       );
@@ -597,44 +609,70 @@ export function CommandMenu() {
   })();
 
   return (
+    <Command
+      loop={false}
+      value={selected}
+      onValueChange={setSelected}
+      filter={scoreCommand}
+      shouldFilter={frame?.kind !== 'compose'}
+    >
+      <CommandInput
+        ref={inputRef}
+        value={query}
+        onValueChange={(value) => {
+          setQuery(value);
+          if (frame?.kind !== 'compose') setSelected('');
+        }}
+        placeholder={resolvePlaceholder(frame, route)}
+        start={frame && <Crumb>{resolveCrumb(frame)}</Crumb>}
+        end={<Kbd>esc</Kbd>}
+        onKeyDown={(event) => {
+          if (event.key !== 'Backspace' || query !== '' || !frame) return;
+          event.preventDefault();
+          back();
+        }}
+      />
+      <CommandList page={['root', ...stack.map((visit) => visit.from)].join('>')}>{page}</CommandList>
+    </Command>
+  );
+}
+
+export function CommandMenu() {
+  const { state } = useConnection();
+  const open = useCommandMenuOpen();
+  const focus = React.useRef<MenuFocus>({ restore: true });
+  const openedFrom = React.useRef<HTMLElement | null>(null);
+  const currentTaskId = useRouteTaskId(state);
+
+  useCommandHotkey();
+
+  React.useEffect(() => {
+    if (currentTaskId) recordRecentTask(currentTaskId);
+  }, [currentTaskId]);
+
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    focus.current.restore = true;
+    openedFrom.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, [open]);
+
+  if (!state) return null;
+
+  const finalFocus = () => {
+    if (!focus.current.restore) return false;
+    const origin = openedFrom.current;
+    return origin?.isConnected && origin !== document.body ? origin : false;
+  };
+
+  return (
     <CommandDialog
       open={open}
       onOpenChange={writeCommandMenuOpen}
-      onOpenChangeComplete={(next) => {
-        if (next) return;
-        setQuery('');
-        setStack([]);
-        setSelected('');
-      }}
       finalFocus={finalFocus}
       title='Command menu'
       description='Act on the task in front of you, jump anywhere, or start a new task.'
     >
-      <Command
-        loop={false}
-        value={selected}
-        onValueChange={setSelected}
-        filter={scoreCommand}
-        shouldFilter={frame?.kind !== 'compose'}
-      >
-        <CommandInput
-          ref={inputRef}
-          value={query}
-          onValueChange={(value) => {
-            setQuery(value);
-            if (frame?.kind !== 'compose') setSelected('');
-          }}
-          placeholder={resolvePlaceholder(frame, route)}
-          start={frame && <Crumb>{resolveCrumb(frame)}</Crumb>}
-          end={<Kbd>esc</Kbd>}
-          onKeyDown={(event) => {
-            if (event.key !== 'Backspace' || query !== '' || !frame) return;
-            event.preventDefault();
-            back();
-          }}
-        />
-        <CommandList page={['root', ...stack.map((visit) => visit.from)].join('>')}>{page}</CommandList>
-      </Command>
+      <CommandMenuContent open={open} focus={focus} />
     </CommandDialog>
   );
 }

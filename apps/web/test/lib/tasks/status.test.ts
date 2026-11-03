@@ -274,6 +274,11 @@ describe('resolveTaskStatus', () => {
       label: 'Waiting for delegations',
       tone: 'neutral',
     });
+    const waits = { delegations: ['child'], since: 1, reason: 'Waiting for the survey.' };
+    const ended = createRun({ id: 'r', taskId: 't', status: 'waiting', waitingOn: waits, endedAt: 2 });
+    expect(resolveTaskStatus(createShinsaState({ tasks: [task], runs: [ended] }), task).label).toBe(
+      'Building'
+    );
     const working = createRun({ id: 'r', taskId: 't', status: 'running' });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task], runs: [working] }), task).label).toBe(
       'Building'

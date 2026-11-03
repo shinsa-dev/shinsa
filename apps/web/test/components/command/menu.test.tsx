@@ -147,6 +147,21 @@ describe('typing in the root', () => {
     ]);
   });
 
+  it('finds a task older than the newest 300', async () => {
+    const many = Array.from({ length: 320 }, (_, index) =>
+      createTask({
+        id: `t${index}`,
+        title: index === 0 ? 'Oldest login fix' : `Task ${index}`,
+        updatedAt: index + 10,
+      })
+    );
+    showState(createShinsaState({ tasks: many }));
+    renderMenu();
+    await pressCommandK();
+    await type('oldest');
+    expect(optionNames()[0]).toMatch(/^Oldest login fix/);
+  });
+
   it('opens All tasks on Enter and closes', async () => {
     renderMenu();
     await pressCommandK();
@@ -260,6 +275,14 @@ describe('pages', () => {
     await press('Backspace');
     expect(input().getAttribute('placeholder')).toBe('Search tasks and actions, or describe a new task…');
     expect(selectedOption()).toMatch(/^Jump to a task/);
+  });
+
+  it('searches the Tasks page by title and opens the match', async () => {
+    renderMenu();
+    await pressCommandK();
+    await choose(/^Jump to a task/);
+    await type('billing');
+    expect(optionNames()).toEqual(['Rework billing emails']);
   });
 
   it('keeps the page while Backspace edits the query', async () => {
