@@ -14,6 +14,7 @@ import {
   RemoteControl,
 } from '../../apps/engine/src/remote/index.ts';
 import { createPlacementAsker } from '../../apps/engine/src/remote/placement.ts';
+import { Presence } from '../../apps/engine/src/remote/presence.ts';
 import { Previews } from '../../apps/engine/src/remote/previews.ts';
 import { ShareClock } from '../../apps/engine/src/remote/share-clock.ts';
 import { createShareDescriber } from '../../apps/engine/src/remote/share-describe.ts';
@@ -211,7 +212,8 @@ export async function startMachine(id: string, name: string, dataDir: string) {
     transcripts,
     github: createPreviewGitHub(engine),
   });
-  const teams = new Teams({ engine, remote, shares, transcripts });
+  const presence = new Presence();
+  const teams = new Teams({ engine, remote, shares, transcripts, presence });
   const teamFeeds = new TeamFeeds({ remote });
   const previews = new Previews({
     engine,
@@ -245,6 +247,7 @@ export async function startMachine(id: string, name: string, dataDir: string) {
     resources: PREVIEW_LOADS[id] ? createPreviewResources(engine, PREVIEW_LOADS[id]) : undefined,
     teams,
     teamFeeds,
+    presence,
     previews,
     terminals,
   });

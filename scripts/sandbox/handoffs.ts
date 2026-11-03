@@ -1,8 +1,15 @@
 import type { Engine } from '../../apps/engine/src/runtime/index.ts';
-import { isTaskSettled, resolveFirstName, type Task } from '../../packages/core/src/index.ts';
+import {
+  DEFAULT_TEAM_PERMISSIONS,
+  isTaskSettled,
+  resolveFirstName,
+  resolveTaskProject,
+  type Task,
+} from '../../packages/core/src/index.ts';
 import type { StartedMachine } from './machine.ts';
-import { GUEST, HANDOFF_FRESH, HOST, ORIGIN, SANDBOX_PATH, SIGN_IN_AS, USER } from './schema.ts';
+import { GUEST, HANDOFF_FRESH, HOST, ORIGIN, SANDBOX_PATH, SIGN_IN_AS, TEAMMATE, USER } from './schema.ts';
 import { respondSignInAs } from './session.ts';
+import { TEAM } from './team.ts';
 
 function waitForHandoffLink(engine: Engine, taskId: string) {
   return new Promise<string>((done) => {
@@ -54,7 +61,7 @@ export async function createPreviewHandoffs(studio: StartedMachine) {
   await engine.dispatch({ type: 'handoff.claim', taskId: claimed.id, guest: GUEST });
   await engine.dispatch(
     { type: 'task.message', taskId: claimed.id, text: 'I have this from here. Keep going with the plan.' },
-    { guest: { taskId: claimed.id, login: GUEST.login } }
+    { guest: { ...GUEST, scope: { kind: 'task', taskId: claimed.id } } }
   );
   await engine.dispatch({ type: 'task.hand_off', taskId: waiting.id });
   const claim = await waitForHandoffLink(engine, waiting.id);
@@ -74,5 +81,39 @@ export async function createPreviewHandoffs(studio: StartedMachine) {
       url: `${ORIGIN}${SANDBOX_PATH}/handoff/${waiting.handle}`,
     },
     { label: `Sign in as ${resolveFirstName(USER)} again`, url: `${ORIGIN}${SANDBOX_PATH}/as/${USER.login}` },
+  ];
+}
+
+export async function createPreviewTakeOver(studio: StartedMachine, projectId: string | undefined) {
+  const { engine } = studio;
+  const task = Object.values(engine.state.tasks).find(
+    (entry) =>
+      entry.handle &&
+      !entry.handoff &&
+      !entry.backlog &&
+      !entry.share &&
+      !isTaskSettled(entry) &&
+      resolveTaskProject(engine.state, entry) === projectId
+  );
+  if (!task?.handle) return [];
+  const kai = {
+    ...TEAMMATE,
+    scope: { kind: 'team' as const, teamId: TEAM.id, permissions: DEFAULT_TEAM_PERMISSIONS },
+  };
+  await engine.dispatch({ type: 'task.take_over', taskId: task.id }, { guest: kai });
+  const at = `http://${HOST}:${studio.machine.port}/tasks/${task.handle}`;
+  return [
+    {
+      label: `Studio: ${task.handle}, taken over by ${resolveFirstName(TEAMMATE)}, with Remove in its banner`,
+      url: at,
+    },
+    {
+      label: `The same task on the remote dashboard, where its owner sees who holds it`,
+      url: `${ORIGIN}/tasks/${task.handle}`,
+    },
+    {
+      label: `Sign in as ${resolveFirstName(TEAMMATE)} to see it in their Needs you, with Give it back`,
+      url: `${ORIGIN}${SANDBOX_PATH}/as/${TEAMMATE.login}`,
+    },
   ];
 }

@@ -146,8 +146,16 @@ export function listSandboxSections(
           url: `http://${HOST}:${studioPort}/tasks`,
         },
         {
-          label: 'Studio: Settings, Teams, with Inês asking to join',
+          label: `Studio: Settings, Teams, with Inês asking to join, What teammates can do, and Kai’s own rights`,
           url: `http://${HOST}:${studioPort}/settings`,
+        },
+        {
+          label: `The remote dashboard: Settings, Teams, with each person’s presence and last seen`,
+          url: `${ORIGIN}/settings`,
+        },
+        {
+          label: `The remote dashboard: All tasks, with Kai’s MacBook in your fleet and its tasks marked with their owner`,
+          url: `${ORIGIN}/tasks`,
         },
         {
           label: 'Take Kai’s MacBook offline (Studio keeps its tasks as Offline)',

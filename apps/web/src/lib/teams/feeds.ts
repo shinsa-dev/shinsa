@@ -101,6 +101,10 @@ export function listHeldTaskIds(state: Pick<ShinsaState, 'tasks' | 'teammateTask
 
 const NO_HELD_TASKS: ReadonlySet<string> = new Set();
 
+export function listFullMachineIds(machines: readonly Pick<MachineView, 'id' | 'teammate'>[]) {
+  return new Set(machines.filter((machine) => !machine.teammate).map((machine) => machine.id));
+}
+
 export function listTeamFeedTasks(
   feed: TeamFeedSnapshot,
   teamIds: ReadonlySet<string>,

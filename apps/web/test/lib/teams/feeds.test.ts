@@ -16,6 +16,7 @@ import {
   listHeldTeamMachines,
   listTeamFeedRefusals,
   listHeldTaskIds,
+  listFullMachineIds,
   listTeamFeedTasks,
   mergeTeamFeeds,
   resolveFleetTeamTaskPath,
@@ -180,6 +181,24 @@ describe('teammates’ task lists', () => {
     expect(state.repos).toEqual({ r1: repo });
     expect(resolveTeamTaskState(createTeamFeedTask()).projects).toEqual({});
     expect(resolveTeamTaskState(createTeamFeedTask()).repos).toEqual({});
+  });
+});
+
+describe('machines the dashboard reaches in full', () => {
+  it('leaves a teammate’s machine out, so its tasks stay listed as theirs', () => {
+    const teammate = { owner: { id: 'u1', login: 'kai', name: null, avatarUrl: null }, viewerId: 'u2' };
+    const reachable = listFullMachineIds([{ id: 'studio' }, { id: 'kai', teammate }]);
+    expect([...reachable]).toEqual(['studio']);
+    const feed = {
+      machines: [],
+      tasks: [
+        createTeamFeedTask({ instanceId: 'kai', task: createTask({ id: 'theirs' }) }),
+        createTeamFeedTask({ instanceId: 'studio', task: createTask({ id: 'mine' }) }),
+      ],
+    };
+    expect(listTeamFeedTasks(feed, new Set(['team1']), reachable).map((entry) => entry.task.id)).toEqual([
+      'theirs',
+    ]);
   });
 });
 

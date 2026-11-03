@@ -445,6 +445,15 @@ live output but never your messages to them, and no controls, read live from its
 and each machine's public signing key. While a teammate's machine is offline its tasks stay listed, marked Offline with
 when they were last updated, from the copy each teammate's machine keeps and passes on, signed by the owner's machine
 (`docs/engine.md` → Teams → Offline teammates).
+On app.shinsa.dev a teammate does more than watch: their browser reaches the team's tasks on every member's machine
+by itself, with no invite and no Give machine access, and sees nothing outside the team's projects. The team's owner
+sets What teammates can do in Settings → Teams, for the team and for each person: act on tasks, take over, share and
+open services are on by default, messaging agents is off. A teammate presses Take over and the task is theirs to
+steer, its gates in their Needs you, until they give it back or you take it back; you hand a task to a teammate from
+Share task with no link. They open a team task's running services at its private address and make share links for
+it. Every person and machine shows Online, Away or Offline with when they were last seen, and leaving the team,
+taking a project out of it or narrowing someone's rights ends their access at once (`docs/engine.md` → Teams →
+Teammates act on team tasks).
 Share preview, on a task's running service with a preview URL, does the same for the dev server itself: a link,
 `<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's tunnel, hot reload
 included, each preview its own origin on a domain apart from shinsa.dev. It has the same time limits, ends with the
@@ -1212,6 +1221,24 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   full control, never twice.
 - **For agents.** The engine serves the team's tasks at `GET /api/teams/tasks`, which triage's team-wide duplicate
   check will read. Agents can list teams (`teams_list`) and change nothing about them.
+
+### Teams act together (2026-11-04)
+
+- **One Shinsa per team.** Watching was not enough: a team should feel like one shared instance. Full remote access
+  for a teammate gave them every project on the machine, so nobody granted it. Team access is the hand-off guest's
+  scope widened from one task to the team's projects: the same sealed channel, state and refusals, keyed by a device
+  each member's browser enrols with by itself.
+- **Generous by default, the owner's to narrow.** Act, take over, share and services are on, messaging agents is off,
+  since a message steers someone else's agent. One switch per right for the whole team, and each person's own value
+  beside it, so a large team changes one setting and a small one picks people. Only the team's owner changes them,
+  from their own machine; a machine's owner cannot override them for their own machine yet.
+- **Take over is a hand-off without the link.** It reuses `TaskHandoff`, so the banner and its Remove, Needs you and activity
+  work as they do for a link, and the holder may message the agent whatever the team's setting.
+- **Presence from what is live.** A machine is offline when its channel drops, and a person is online while a page
+  of theirs is in use or they have a teammate's team view open; app.shinsa.dev's five-minute heartbeat is only the
+  fallback.
+- **Not yet.** The local Mac app acting on teammate tasks (it keeps the read-only view), teammates creating tasks on
+  someone else's machine, and terminals or Code-tab edits for teammates, both of which write to the owner's disk.
 
 ### Bundles (2026-11-01)
 

@@ -23,6 +23,7 @@ import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import type { TeamEntry } from '@/lib/tasks/groups.ts';
 import {
+  listFullMachineIds,
   listHeldTaskIds,
   listHeldTeamMachines,
   listTeamFeedRefusals,
@@ -49,12 +50,13 @@ export function useTeamTasks(): TeamTasks {
     if (teams.length === 0) return [];
     const held = listHeldTeamMachines(feed);
     const teamIds = new Set(teams.map((team) => team.id));
-    const reachable = new Set(machines.map((machine) => machine.id));
-    return listTeamFeedTasks(feed, teamIds, reachable, listed ?? undefined).map((entry): TeamEntry => ({
-      entry,
-      state: resolveTeamTaskState(entry),
-      heldAt: selectTeamTaskHeldAt(held, entry),
-    }));
+    return listTeamFeedTasks(feed, teamIds, listFullMachineIds(machines), listed ?? undefined).map(
+      (entry): TeamEntry => ({
+        entry,
+        state: resolveTeamTaskState(entry),
+        heldAt: selectTeamTaskHeldAt(held, entry),
+      })
+    );
   }, [feed, teams, machines, listed]);
   return { teams, entries };
 }
@@ -67,7 +69,7 @@ export function TeamFeedRefusals({ state }: { state: ShinsaState }) {
   const refusals = listTeamFeedRefusals(
     feed,
     teams,
-    new Set(machines.map((machine) => machine.id)),
+    listFullMachineIds(machines),
     resolveFocusTeam(state, Date.now())
   );
   const [first] = refusals;

@@ -4,6 +4,7 @@ import {
   REMOTE_PATHS,
   type RemoteInstance,
   type RemoteMember,
+  type RemoteRole,
   type RemoteUser,
   resolveKeyFingerprint,
 } from '../../packages/core/src/index.ts';
@@ -11,9 +12,9 @@ import { MINUTE, DAY } from '../kit/time.ts';
 import { createConnect, respondConnect } from './connect.ts';
 import { respondPreviewOpen } from './previews.ts';
 import { readBearerMachine, readPreviewUser } from './requests.ts';
-import { GUEST, type Machine, USER } from './schema.ts';
+import { GUEST, type Machine, TEAMMATE, USER } from './schema.ts';
 import { respondSession } from './session.ts';
-import { respondTeams } from './team.ts';
+import { MACHINE_OWNERS, respondTeams, teammateLink } from './team.ts';
 
 const GUEST_MACHINES = new Set<string>();
 
@@ -23,24 +24,38 @@ const INVITES = new Map<string, string>();
 
 const HANDOFFS = new Map<string, string>();
 
-function listInstances(machines: Machine[], user: RemoteUser): Promise<RemoteInstance[]> {
+async function describeInstance(
+  machine: Machine,
+  owner: RemoteUser,
+  role: RemoteRole
+): Promise<RemoteInstance> {
   const now = Date.now();
+  return {
+    id: machine.id,
+    name: machine.name,
+    fingerprint: await resolveKeyFingerprint(machine.publicKey),
+    online: owner.id === USER.id || teammateLink.online,
+    lastSeenAt: now,
+    createdAt: now - 7 * DAY,
+    owner,
+    role,
+  };
+}
+
+function listInstances(machines: Machine[], teammates: Machine[], user: RemoteUser) {
   const guest = user.id === GUEST.id;
-  const listed = guest
-    ? machines.filter((machine) => GUEST_MACHINES.has(machine.id) || MEMBER_MACHINES.has(machine.id))
-    : machines;
-  return Promise.all(
-    listed.map(async (machine) => ({
-      id: machine.id,
-      name: machine.name,
-      fingerprint: await resolveKeyFingerprint(machine.publicKey),
-      online: true,
-      lastSeenAt: now,
-      createdAt: now - 7 * DAY,
-      owner: USER,
-      role: resolvePreviewRole(guest, machine.id),
-    }))
-  );
+  if (guest)
+    return Promise.all(
+      machines
+        .filter((machine) => GUEST_MACHINES.has(machine.id) || MEMBER_MACHINES.has(machine.id))
+        .map((machine) => describeInstance(machine, USER, resolvePreviewRole(guest, machine.id)))
+    );
+  const own = machines.map((machine) => describeInstance(machine, USER, 'owner'));
+  const theirs = user.id !== USER.id ? [] : teammates.filter((machine) => !machines.includes(machine));
+  return Promise.all([
+    ...own,
+    ...theirs.map((machine) => describeInstance(machine, MACHINE_OWNERS[machine.id] ?? TEAMMATE, 'teammate')),
+  ]);
 }
 
 function respondInviteCreate(request: Request, machines: Machine[], tokens: Map<string, string>) {
@@ -77,7 +92,7 @@ async function respondInviteAccept(
   return Response.json(answer);
 }
 
-function resolvePreviewRole(guest: boolean, machineId: string) {
+function resolvePreviewRole(guest: boolean, machineId: string): RemoteRole {
   if (!guest) return 'owner';
   return MEMBER_MACHINES.has(machineId) ? 'member' : 'guest';
 }
@@ -139,7 +154,8 @@ export async function respondDashboard(
   const session = respondSession(request, url);
   if (session) return session;
   if (pathname === REMOTE_PATHS.previewOpen) return respondPreviewOpen(url, machines);
-  if (pathname === REMOTE_PATHS.instances) return Response.json(await listInstances(machines, user));
+  if (pathname === REMOTE_PATHS.instances)
+    return Response.json(await listInstances(machines, teammates, user));
   if (pathname.startsWith(`${REMOTE_PATHS.pairs}/`)) {
     const [studio] = machines;
     if (pathname.endsWith('/approve')) return Response.json({ instanceId: studio?.id, name: studio?.name });
@@ -151,7 +167,7 @@ export async function respondDashboard(
       claimed: false,
     });
   }
-  const machine = machines.find((entry) => pathname.startsWith(`${REMOTE_PATHS.instances}/${entry.id}/`));
+  const machine = teammates.find((entry) => pathname.startsWith(`${REMOTE_PATHS.instances}/${entry.id}/`));
   if (machine && pathname.endsWith('/connect') && request.method === 'POST')
     return respondConnect(machine, user);
   if (machine && (pathname.endsWith('/remove') || pathname.endsWith('/leave'))) return Response.json({});

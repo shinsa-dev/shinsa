@@ -3508,11 +3508,14 @@ projection and channel serve teams, always at Standard (Teams, below).
 
 ## Teams
 
-A team is people who watch each other's work. You put your own projects in a team, and every member then sees every
-task in them, live and read-only, next to their own tasks, on the hosted dashboard and in the local app. It is a share
-link for a whole project, on the same projection and the same one-way channel, with membership in place of the link:
-nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its tunnel while it is
-online, and the last list of it their own machine kept while it is not (Offline teammates, below). Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
+A team is people who work as if on one Shinsa. You put your own projects in a team, and every member then sees every
+task in them, live, next to their own tasks, on the hosted dashboard and in the local app. The list and the read-only
+view are a share link for a whole project, on the same projection and the same one-way channel, with membership in
+place of the link: nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its
+tunnel while it is online, and the last list of it their own machine kept while it is not (Offline teammates, below).
+On app.shinsa.dev a teammate also acts on those tasks, with what the team's owner lets them do, through a device your
+machine admits by itself and scopes to the team's projects (Teammates act on team tasks, below); the local app keeps
+the read-only view. Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
 
 - **What app.shinsa.dev keeps** (`apps/cloud/src/routes/teams/`, `routes/machine-teams/`, `migrations/0005_teams.sql`): who is in which team. A
   team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
@@ -3688,14 +3691,74 @@ online, and the last list of it their own machine kept while it is not (Offline 
     refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause, but still drops
     those past 30 days, with their full tasks, each time remote access changes and when the engine starts. Removing
     the machine from remote access, or app.shinsa.dev forgetting it, drops every copy and full task at once.
+- **Teammates act on team tasks.** Every member of a team reaches the team's tasks on every other member's machine
+  from app.shinsa.dev, with no invite and no Give machine access, and nothing outside the team's projects.
+  - **Rights** (`TeamPermissions`, core's `remote/teams.ts`; `migrations/0008_team_permissions.sql`). Five, each a
+    switch: `act` (answer gates, approve, retry, everything a hand-off guest may send but messaging), `takeOver`,
+    `share` (share links, status shares and service previews of team tasks), `services` (open a team task's running
+    services at their private address) and `message` (message agents, edit and send a round). The first four are on
+    by default and `message` is off (`DEFAULT_TEAM_PERMISSIONS`). app.shinsa.dev keeps the team's own (`teams.permissions`,
+    a JSON patch over the defaults) and one patch per person (`team_members.permissions`), so a right is the person's
+    own when set, else the team's (`resolveTeamPermissions`). The team's owner always has every right
+    (`FULL_TEAM_PERMISSIONS`, `resolveMemberPermissions`). Only the owner changes them, from their own machine:
+    `POST /__remote/machine/teams/<team>/permissions { userId?, permissions }` (`TeamPermissionsRequest`, a `null`
+    clears a person's own value), reached from Settings → Teams, `POST /api/remote/teams/permissions` and `shinsa
+    teams permissions <team> [--login] --act on|off|default …`, human-only. Take over, Give it back and Hand off
+    are `shinsa tasks take-over|give-back|hand-to-teammate`, human-only too. The heartbeat carries both on each
+    `RemoteTeam` (`permissions`, `overrides`).
+  - **A device per member, without a click** (`Remote.resolveTeamGrant`, `admitTeamMachines` in `lib/teams/admit.ts`).
+    The first time a member's team channel opens, the machine makes them a grant (`remote.json` `grants`, a fresh
+    32-byte secret per person and team) and sends it only on that person's channel (`TeamListView.grant`, sealed with
+    the team key), with the machine's public key. The machine's own owner gets none. The hosted dashboard lists every
+    machine of a teammate with the role `teammate` and its owner (`listInstances` in `apps/cloud`), and the browser,
+    holding the team key, checks the key against the listed fingerprint and enrols with an enroll proof made with the
+    grant's secret. The machine admits that device without asking, recording its team (`RemoteDevice.teamId`), while
+    the person is still in the team, the team key is here and the proof checks. app.shinsa.dev hands a teammate a
+    `remote` connect token for the machine (`findReachableMachine` in `auth/access.ts`); the token alone opens nothing.
+  - **What a team device reaches** (`resolveScopedState`, `resolveScopedRefusal` in core's `remote/scope.ts`; the
+    engine's `Remote.#resolveScope`, `http/socket.ts`, `remote/gate/service.ts`). Its channel carries a `ScopedActor`
+    with `scope: { kind: 'team', teamId, permissions }`. The state it gets keeps only the tasks of the team's projects
+    (`isTeamTask`), with their repositories and projects, never your settings, accounts, inbox or other tasks; the
+    socket's patches are scoped the same way. Reads under `/api/tasks/<id>` answer only for those tasks, and every
+    other route is refused. A command is refused unless it names a team task and the person's rights allow it
+    (`TEAM_SCOPE_MESSAGES`): no new task, no terminal, no change to the Code tab, no setting. A person who is also a
+    member of the machine (Give machine access) gets full access instead, and falls back to the team's once that ends.
+  - **Ending at once.** Every change to remote access, the team list or a project's teams checks each team device
+    again (`Remote.#syncTeamAccess`): leaving or being removed, losing the team key, the team removed or the project
+    taken out drops the grant, removes the device and closes its channel; narrower rights close its channel, and the
+    browser connects again with the new ones.
+  - **Taking a task over** (`task.take_over`, `task.give_back`, core's `decide/handoffs.ts`). A teammate with
+    `takeOver` presses Take over on a team task and holds it, as a hand-off guest does: `Task.handoff` names them, with
+    the team (`handoff.teamId`), the task's gates show in their Needs you and not in yours (`queue/rank.ts`), and its
+    activity reads "Kai took this task over". The holder may message its agent even without `message`. Give it back
+    ends the hold; you end it with Remove in the task's banner, as for any hand-off. A hold also ends by itself when the holder leaves the
+    team or the task's project leaves it (`handoff.left`). A task already held by someone else, or handed off by a
+    link someone opened, cannot be taken over (`handoff_claimed`); a hand-off link no one opened yet stops working.
+  - **Handing a task to a teammate** (`task.hand_to_teammate { taskId, teamId, teammate }`). The owner picks a
+    teammate under Share task → Hand off, with no link: the task is held by them at once, as if they had taken it over.
+  - **Services** (`remote/previews.ts`, `routes/preview-open/` in `apps/cloud`). A teammate with `services` opens any
+    running service of a team task at its private address (`<hash>.shinsa.page`), as you do over remote access:
+    app.shinsa.dev admits an account that shares a team with the machine's owner, and the machine admits them for a
+    run of a team task only. A service started outside a task stays yours. Losing the right or the project leaving the
+    team closes their open connections.
+  - **Sharing.** A teammate with `share` makes and stops share links, status shares and service previews of team
+    tasks (`task.share`, `task.unshare`, `preview.share`, `preview.unshare`), the link's preset being the machine's.
+  - **Presence** (`remote/presence.ts`, `http/attention.ts`; core's `TeamPresence`, `mergeTeamPresence`). Each
+    machine's list view carries each person it can tell about: its owner Online while one of their Shinsa pages, on
+    the machine or their own browser, was used in the last five minutes (`ATTENTION_IDLE_MS`), else Away; a teammate
+    Online while they have this machine's team view open, else Offline with when they last had it (`seenAt`). The
+    page merges every machine's reports into one status per person, the best one winning and the latest last seen
+    kept (`resolveTeamPresence`), and shows it as a dot on avatars, user cards and People rows, with "Seen 2 hours ago"
+    when not online. A teammate's machine shows Offline the moment its team channel drops, not at app.shinsa.dev's
+    five-minute heartbeat window.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, on the machine, and on
   app.shinsa.dev for each machine you own, below; every change is the owner's, `OwnerOnlyRoute`): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
   New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
-  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
+  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with their presence, Give machine access (or Can reach this machine) and, for the owner, Rights and Remove; What teammates can do lists the team's five rights as switches, the owner's to change, and a member's to read (`components/teams/permissions.tsx`, `lib/teams/permissions.ts`); Rights opens one person's, each Team, On or Off, and anyone whose rights differ from the team's reads Own rights; the owner has Join link,
   which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
   member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
-  owner's routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`
+  owner's routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|permissions|leave|remove`
   and `POST /api/remote/members/grant`,
   and the remote snapshot carries the teams (`RemoteSnapshot.teams`, `listTeamEntries`), so every change reaches every
   page at once.
@@ -3738,7 +3801,8 @@ one task on your machine through remote access, as you do, from its own dashboar
 back. The task stays yours and keeps running on your machine, in its worktree, sessions and accounts; nothing moves,
 you see and do everything on it as before, and both pages say so (Share task, and the claim page's "The task stays
 theirs"). Sharing (above) is
-for watching; a hand-off is for steering. Teams are another matter (LOC-78).
+for watching; a hand-off is for steering. Inside a team no link is needed: a teammate takes a team task over, or you
+hand it to them, under Teams → Teammates act on team tasks.
 
 - **Handing off is yours alone.** `task.hand_off` and `handoff.remove` (Hand off in Share task's Share as, `shinsa tasks
   hand-off|hand-off-remove`) are human-only: their surface specs are `humanOnly`, and core refuses them on your behalf
@@ -3766,7 +3830,7 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   for one link cannot both get in; a failed step after it leaves the same account free to open the link again. Once
   claimed, the link is gone: no second browser and no second person can use it. A browser that already reaches the
   machine does not claim, and one browser takes at most one handed task per machine.
-- **One task, on the engine.** A device with a task is a guest (`GuestActor`: `taskId`, `login`), and its channel's hub
+- **One task, on the engine.** A device with a task is a guest (`ScopedActor` with `scope: { kind: 'task', taskId }`), and its channel's hub
   socket is scoped to that task (`apps/engine/src/http/socket.ts`):
   - **State.** It gets `resolveScopedState` (core's `remote/scope.ts`): that task alone, its runs, gates and evidence,
     its repository and project, nothing else (no other task, schedule, memory, setting or focus); the task without its
