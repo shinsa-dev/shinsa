@@ -7,6 +7,7 @@ import {
   type RemoteUser,
   SCOPE_MESSAGES,
   type TeamFeedSnapshot,
+  type TerminalsSnapshot,
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
@@ -114,6 +115,42 @@ export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
   return { state, owners, sharedHandles };
 }
 
+interface FleetTerminalsPart {
+  id: string;
+  terminals: TerminalsSnapshot;
+}
+
+interface FleetTerminals {
+  terminals: TerminalsSnapshot | null;
+  owners: ReadonlyMap<string, string>;
+}
+
+function mergeFleetTerminals(parts: FleetTerminalsPart[]): FleetTerminals {
+  const owners = new Map<string, string>();
+  for (const part of parts)
+    for (const item of [...part.terminals.terminals, ...part.terminals.services])
+      owners.set(item.id, part.id);
+  const [home] = parts;
+  if (!home) return { terminals: null, owners };
+  if (parts.length === 1) return { terminals: home.terminals, owners };
+  return {
+    terminals: {
+      home: home.terminals.home,
+      terminals: parts.flatMap((part) => part.terminals.terminals),
+      services: parts.flatMap((part) => part.terminals.services),
+    },
+    owners,
+  };
+}
+
+function resolveTerminalsOwner(terminals: TerminalsSnapshot, owners: ReadonlyMap<string, string>) {
+  for (const item of [...terminals.terminals, ...terminals.services]) {
+    const owner = owners.get(item.id);
+    if (owner) return owner;
+  }
+  return null;
+}
+
 export function resolveFleetStatus(statuses: ConnectionStatus[]): ConnectionStatus {
   if (statuses.includes('open')) return 'open';
   if (statuses.includes('connecting')) return 'connecting';
@@ -161,6 +198,26 @@ interface FleetEntry {
 
 const EMPTY_OWNERS: ReadonlyMap<string, string> = new Map();
 
+const NO_FLEET_TERMINALS: FleetTerminals = { terminals: null, owners: EMPTY_OWNERS };
+
+const BODY_ROUTED_PREFIX = '/api/services';
+
+function isBodyRouted(request: Request, url: URL) {
+  return (
+    request.method === 'POST' &&
+    url.pathname.startsWith(BODY_ROUTED_PREFIX) &&
+    (request.headers.get('content-type') ?? '').includes('json')
+  );
+}
+
+async function readRequestJson(request: Request): Promise<unknown> {
+  try {
+    return JSON.parse(await request.clone().text());
+  } catch {
+    return null;
+  }
+}
+
 const NO_SHARED_HANDLES: ReadonlySet<string> = new Set();
 
 export const FLEET_WAIT_MS = 10_000;
@@ -192,11 +249,14 @@ export class Fleet implements ShinsaConnection {
   #listedUnreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES;
   #accessInputs: (RemoteSnapshot | null)[] = [];
   #access: MachineAccess[] = NO_MACHINE_ACCESS;
+  #terminalInputs: (TerminalsSnapshot | null)[] = [];
+  #terminalMembers: string[] = [];
+  #terminals: FleetTerminals = NO_FLEET_TERMINALS;
   readonly #state = createSignal();
   readonly #transcripts = createSignal();
   readonly #accounts = createSignal();
   readonly #surfaces = createSignal();
-  readonly #terminals = createSignal();
+  readonly #terminalsSignal = createSignal();
   readonly #resources = createSignal();
   readonly #remote = createSignal();
   readonly #teams = createSignal();
@@ -242,7 +302,7 @@ export class Fleet implements ShinsaConnection {
         connection.subscribeTranscripts(() => this.#transcripts.publish()),
         connection.subscribeAccounts(() => this.#accounts.publish()),
         connection.subscribeSurfaces(() => this.#surfaces.publish()),
-        connection.subscribeTerminals(() => this.#terminals.publish()),
+        connection.subscribeTerminals(() => this.#terminalsSignal.publish()),
         connection.subscribeResources(() => {
           this.#resources.publish();
           this.#state.publish();
@@ -390,12 +450,38 @@ export class Fleet implements ShinsaConnection {
 
   isDesktopConnected = () => this.#entries.some((entry) => entry.member.connection.isDesktopConnected());
 
-  subscribeTerminals = (listener: () => void) => this.#terminals.subscribe(listener);
+  subscribeTerminals = (listener: () => void) => this.#terminalsSignal.subscribe(listener);
 
-  selectTerminals = () => this.#home?.selectTerminals() ?? null;
+  #mergeTerminals() {
+    const reachable = this.#entries.filter(isReachable);
+    const inputs = reachable.map((entry) => entry.member.connection.selectTerminals());
+    const members = reachable.map((entry) => entry.member.id);
+    if (
+      inputs.length === this.#terminalInputs.length &&
+      inputs.every((input, index) => input === this.#terminalInputs[index]) &&
+      members.every((id, index) => id === this.#terminalMembers[index])
+    )
+      return this.#terminals;
+    this.#terminalInputs = inputs;
+    this.#terminalMembers = members;
+    this.#terminals = mergeFleetTerminals(
+      reachable.flatMap((entry, index) => {
+        const terminals = inputs[index];
+        return terminals ? [{ id: entry.member.id, terminals }] : [];
+      })
+    );
+    return this.#terminals;
+  }
 
-  replaceTerminals = (terminals: Parameters<ShinsaConnection['replaceTerminals']>[0]) =>
-    this.#home?.replaceTerminals(terminals);
+  selectTerminals = () => this.#mergeTerminals().terminals;
+
+  replaceTerminals = (terminals: Parameters<ShinsaConnection['replaceTerminals']>[0]) => {
+    const reachable = this.#entries.filter(isReachable);
+    const owner =
+      resolveTerminalsOwner(terminals, this.#mergeTerminals().owners) ??
+      (reachable.length === 1 ? (reachable[0]?.member.id ?? null) : null);
+    reachable.find((entry) => entry.member.id === owner)?.member.connection.replaceTerminals(terminals);
+  };
 
   subscribeResources = (listener: () => void) => this.#resources.subscribe(listener);
 
@@ -495,12 +581,21 @@ export class Fleet implements ShinsaConnection {
     return member.connection.command(command);
   };
 
-  fetch = (request: Request) => {
+  fetch = async (request: Request) => {
     this.snapshot();
-    const member = this.#memberOf(resolveRequestOwner(new URL(request.url), this.#owners));
-    if (!member) return Promise.reject(new Error('No machine is connected.'));
+    const member = this.#memberOf(await this.#resolveFetchOwner(request));
+    if (!member) throw new Error('No machine is connected.');
     return member.fetch(request);
   };
+
+  async #resolveFetchOwner(request: Request) {
+    const url = new URL(request.url);
+    const terminalOwners = this.#mergeTerminals().owners;
+    const owner = resolveRequestOwner(url, this.#owners) ?? resolveRequestOwner(url, terminalOwners);
+    if (owner || !isBodyRouted(request, url)) return owner;
+    const body = await readRequestJson(request);
+    return findOwner(body, this.#owners, SCAN_DEPTH) ?? findOwner(body, terminalOwners, SCAN_DEPTH);
+  }
 
   reset = () => {
     for (const entry of this.#entries) entry.member.connection.reset();

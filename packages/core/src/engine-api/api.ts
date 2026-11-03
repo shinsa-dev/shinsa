@@ -603,19 +603,22 @@ class ServicesGroup extends HttpApiGroup.make('services')
     HttpApiEndpoint.get('suggestions', '/api/services/suggestions', {
       query: ServiceSuggestionsQuery,
       success: ServiceSuggestionsAnswer,
-    }),
-    HttpApiEndpoint.post('add', '/api/services', { payload: AnyBody, success: TerminalsAnswer }).annotate(
-      BrowserOnlyRoute,
-      BROWSER_ONLY_TERMINALS
-    ),
+    }).annotate(OwnerOnlyRoute, true),
+    HttpApiEndpoint.post('add', '/api/services', { payload: AnyBody, success: TerminalsAnswer })
+      .annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
+      .annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('addBatch', '/api/services/batch', {
       payload: Schema.Struct({ projectId: Field, services: Field }),
       success: TerminalsAnswer,
-    }).annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS),
+    })
+      .annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
+      .annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('remove', '/api/services/remove', {
       payload: Schema.Struct({ ids: Field }),
       success: TerminalsAnswer,
-    }).annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS),
+    })
+      .annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
+      .annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('startAll', '/api/services/start-all', {
       payload: Schema.Struct({ projectId: Field }),
       success: TerminalsAnswer,
@@ -624,7 +627,9 @@ class ServicesGroup extends HttpApiGroup.make('services')
       params: ServiceParams,
       payload: AnyBody,
       success: TerminalsAnswer,
-    }).annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS),
+    })
+      .annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
+      .annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('start', '/api/services/:serviceId/start', {
       params: ServiceParams,
       payload: [ServiceRunBody, Schema.Null],
@@ -641,7 +646,6 @@ class ServicesGroup extends HttpApiGroup.make('services')
       success: ObjectAnswer,
     })
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
   .middleware(EngineGate) {}
 
 export class EngineApi extends HttpApi.make('engine').add(

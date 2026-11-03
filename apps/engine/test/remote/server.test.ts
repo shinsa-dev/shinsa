@@ -917,6 +917,60 @@ describe('managing remote access on the machine', () => {
     expect(owner.account).not.toBe(403);
     expect(remote.snapshot().enabled).toBe(true);
   });
+
+  test('lets a member run a service and only the owner add, change or remove one', async () => {
+    const { remote, port } = await start({ access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] } });
+    const machine = await remote.store.resolveMachineKey();
+    const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
+    const requests = [
+      { id: 'start', path: '/api/services/web/start' },
+      { id: 'stop', path: '/api/services/web/stop' },
+      { id: 'all', path: '/api/services/start-all', json: { projectId: 'p1' } },
+      { id: 'remove', path: '/api/services/remove', json: { ids: ['web'] } },
+      { id: 'update', path: '/api/services/web/update', json: { name: 'web' } },
+      { id: 'terminal', path: '/api/terminals', json: { projectId: 'p1', path: '/tmp' } },
+    ];
+    const statusesFor = async (userId: string) => {
+      const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+        userId,
+        device: await addDevice(remote, userId),
+      });
+      expect(await channel.next()).toEqual({ t: 'ready' });
+      for (const request of requests) {
+        await channel.send({
+          t: 'request',
+          id: request.id,
+          method: 'POST',
+          path: request.path,
+          headers: [['content-type', 'application/json']],
+        });
+        await channel.send({ t: 'body', id: request.id, chunk: body(JSON.stringify(request.json ?? null)) });
+        await channel.send({ t: 'end', id: request.id });
+      }
+      const statuses = new Map<string, number>();
+      while (statuses.size < requests.length) {
+        const message = await channel.next();
+        if (message.t === 'response') statuses.set(message.id, message.status);
+      }
+      return Object.fromEntries(statuses);
+    };
+    expect(await statusesFor(KAI.id)).toEqual({
+      start: 404,
+      stop: 404,
+      all: 404,
+      remove: 403,
+      update: 403,
+      terminal: 403,
+    });
+    expect(await statusesFor(OWNER.id)).toEqual({
+      start: 404,
+      stop: 404,
+      all: 404,
+      remove: 404,
+      update: 404,
+      terminal: 403,
+    });
+  });
 });
 
 describe('links, access requests and members', () => {

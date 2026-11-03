@@ -133,7 +133,7 @@ const LOCAL_ONLY = [
   { pattern: /^\/api\/extensions\/servers\/sign-in$/, writesOnly: true },
   { pattern: /^\/api\/tasks\/[^/]+\/open$/, writesOnly: true },
   { pattern: /^\/api\/onboarding\/install$/, writesOnly: true },
-  { pattern: /^\/api\/(?:terminals|services)(?:\/|$)/, writesOnly: false },
+  { pattern: /^\/api\/terminals(?:\/|$)/, writesOnly: false },
 ];
 
 const OWNER_ONLY = [
@@ -177,6 +177,11 @@ const OWNER_ONLY = [
   'POST /api/extensions/plugins/choose',
   'POST /api/extensions/optimizer',
   'POST /api/versions/update',
+  'GET /api/services/suggestions',
+  'POST /api/services',
+  'POST /api/services/batch',
+  'POST /api/services/remove',
+  'POST /api/services/([^/]+)/update',
 ];
 
 const OLD_TASK_READS = /^\/api\/tasks\/:taskRef(?:\/(?:blob|chat|diff|paths|raw|refs|search|tree))?$/;
@@ -211,7 +216,7 @@ describe('EngineApi routes', () => {
     expect(sorted(listEngineBaselineRoutes())).toEqual(sorted(BASELINE_ROUTES));
   });
 
-  test('keeps at the machine only what needs its screen or ends the channel, and terminals and services for now', () => {
+  test('keeps at the machine only what needs its screen or ends the channel, and terminals for now', () => {
     for (const route of listEngineRoutes())
       expect([route.key, route.localOnly]).toEqual([route.key, isLocalOnly(route.method, route.path)]);
   });
@@ -221,7 +226,7 @@ describe('EngineApi routes', () => {
       expect([route.key, route.guest]).toEqual([route.key, resolveOldGuest(route.method, route.path)]);
   });
 
-  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack and the invite link, members and devices are for the owner, and only an attachment upload takes a larger body', () => {
+  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack, the invite link, members, devices and a service’s command are for the owner, and only an attachment upload takes a larger body', () => {
     const routes = listEngineRoutes();
     expect(sorted(routes.filter((route) => route.ownerOnly).map((route) => route.key))).toEqual(
       sorted(OWNER_ONLY)

@@ -3005,11 +3005,16 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   annotation, 403): Claude accounts (signing in takes the code the sign-in page shows, so it works from any
   browser), MCP servers, plugins, skills and the optimizer, onboarding and folders, a secret (`/api/secrets/<gate>`)
   or a webhook's signing secret, updating the agent programs, restarting the engine, every change to a team,
-  disconnecting Slack, and remote access's invite link, members and devices.
+  disconnecting Slack, remote access's invite link, members and devices, and adding, changing or removing a
+  service or asking for suggested ones (a service's command runs on the machine). Starting, stopping and restarting
+  a service is any member's, as every other task control; a request inside the channel counts as Shinsa's own
+  page for the routes only the page may call (`BrowserOnlyRoute`), since the channel opens only from
+  app.shinsa.dev. The dashboard lists every machine's services together (`mergeFleetTerminals`) and sends each
+  service's request to the machine that runs it, by the id in its path or the project in its body.
 - **What stays at the keyboard.** Refused to everyone off the machine with `local_only` ("Do this on the machine
   Shinsa runs on.", `LocalOnlyRoute`): pairing, cancelling a pairing, pausing, resuming and removing remote access
   (each ends or replaces the channel you are using), an MCP's OAuth sign-in (the provider sends you back to the machine's own address), installing the command
-  line and opening a task on the machine; terminals and services are refused even to read for now
+  line and opening a task on the machine; terminals are refused even to read for now
   (`docs/plans/remote-plan.md` → Parity with the machine). Everything else, closing gates included, is you, as on the
   machine.
 - **Webhooks get a stable URL.** While remote access is on, a webhook schedule's URL is

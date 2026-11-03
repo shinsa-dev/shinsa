@@ -122,6 +122,14 @@ class FakeConnection implements ShinsaConnection {
   };
 }
 
+function createTerminals(home: string, serviceIds: string[], terminalIds: string[] = []): TerminalsSnapshot {
+  return {
+    home,
+    services: serviceIds.map((id) => ({ id }) as TerminalsSnapshot['services'][number]),
+    terminals: terminalIds.map((id) => ({ id }) as TerminalsSnapshot['terminals'][number]),
+  };
+}
+
 function createMember(id: string, name: string) {
   const connection = new FakeConnection();
   const requests: string[] = [];
@@ -617,16 +625,13 @@ describe('sending to the machine that owns it', () => {
     expect(resolveRequestOwner(url, merged?.owners ?? new Map())).toBe('m2');
   });
 
-  it('reads accounts, terminals and remote access from the first machine, and is quiet while any machine has its desktop app open', () => {
+  it('reads accounts and remote access from the first machine, and is quiet while any machine has its desktop app open', () => {
     const { fleet, studio, laptop } = createFleet();
     const accounts = { accounts: [] } as unknown as AccountsSnapshot;
-    const terminals = { terminals: [] } as unknown as TerminalsSnapshot;
     const remote = { devices: [] } as unknown as RemoteSnapshot;
     fleet.replaceAccounts(accounts);
-    fleet.replaceTerminals(terminals);
     fleet.replaceRemote(remote);
     expect(fleet.selectAccounts()).toBe(accounts);
-    expect(fleet.selectTerminals()).toBe(terminals);
     expect(fleet.selectRemote()).toBe(remote);
     expect(studio.connection.accounts).toBe(accounts);
     expect(studio.connection.remote).toBe(remote);
@@ -646,6 +651,57 @@ describe('sending to the machine that owns it', () => {
       });
     laptop.connection.push(laptop.connection.current);
     expect(heard).toBe(5);
+  });
+
+  it('lists every machine’s services and terminals, keeps the list until one changes, and puts an answer back on its machine', () => {
+    const { fleet, studio, laptop } = createFleet();
+    expect(fleet.selectTerminals()).toBeNull();
+    studio.connection.terminals = createTerminals('/Users/mona', ['web'], ['t1']);
+    expect(fleet.selectTerminals()).toBe(studio.connection.terminals);
+    laptop.connection.terminals = createTerminals('/Users/kai', ['api']);
+    const merged = fleet.selectTerminals();
+    expect(merged).toEqual({
+      home: '/Users/mona',
+      services: [{ id: 'web' }, { id: 'api' }],
+      terminals: [{ id: 't1' }],
+    } as unknown as TerminalsSnapshot);
+    expect(fleet.selectTerminals()).toBe(merged);
+    const answer = createTerminals('/Users/kai', ['api', 'docs']);
+    fleet.replaceTerminals(answer);
+    expect(laptop.connection.terminals).toBe(answer);
+    const unknown = createTerminals('/Users/kai', []);
+    fleet.replaceTerminals(unknown);
+    expect([studio.connection.terminals, laptop.connection.terminals]).not.toContain(unknown);
+  });
+
+  it('sends a service’s request to the machine that runs it, by its id or the project in its body', async () => {
+    const { fleet, studio, laptop } = createFleet();
+    laptop.connection.push({
+      state: createWire(7, {
+        ...laptop.connection.current.state,
+        projects: { 'p-laptop': { id: 'p-laptop' } as WireState['projects'][string] },
+      }),
+      status: 'open',
+    });
+    studio.connection.terminals = createTerminals('/Users/mona', ['svc-web']);
+    laptop.connection.terminals = createTerminals('/Users/kai', ['svc-api'], ['t2']);
+    const post = (path: string, body: unknown, type = 'application/json') =>
+      fleet.fetch(
+        new Request(`https://app.shinsa.dev${path}`, {
+          method: 'POST',
+          headers: { 'content-type': type },
+          body: typeof body === 'string' ? body : JSON.stringify(body),
+        })
+      );
+    expect(await (await post('/api/services/svc-api/start', null)).text()).toBe('Laptop');
+    expect(await (await post('/api/services/svc-web/stop', null)).text()).toBe('Studio');
+    expect(await (await post('/api/services/start-all', { projectId: 'p-laptop' })).text()).toBe('Laptop');
+    expect(await (await post('/api/services/remove', { ids: ['svc-api'] })).text()).toBe('Laptop');
+    expect(await (await post('/api/services/batch', 'not json')).text()).toBe('Studio');
+    expect(await (await post('/api/services/batch', { projectId: 'p-laptop' }, 'text/plain')).text()).toBe(
+      'Studio'
+    );
+    expect(await (await post('/api/terminals/t2/close', null)).text()).toBe('Laptop');
   });
 
   it('starts, flushes and resets every machine, and drops one that no longer accepts this browser', async () => {
@@ -673,7 +729,7 @@ describe('sending to the machine that owns it', () => {
     expect(fleet.selectRemote()).toBeNull();
     fleet.replaceRemote({ devices: [] } as unknown as RemoteSnapshot);
     fleet.replaceAccounts(null);
-    fleet.replaceTerminals({ terminals: [] } as unknown as TerminalsSnapshot);
+    fleet.replaceTerminals(createTerminals('/Users/mona', ['web']));
     fleet.watchTranscript('run')();
     fleet.requestTaskDetail('task');
     fleet.watchTaskDetail('task')();
