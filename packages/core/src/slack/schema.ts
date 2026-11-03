@@ -61,7 +61,7 @@ export const SlackDecisionValue = Schema.Struct({
 
 export type SlackDecisionValue = typeof SlackDecisionValue.Type;
 
-export const SlackDecisionPlace = Schema.Struct({
+const SlackDecisionPlace = Schema.Struct({
   channelId: SlackId,
   threadTs: SlackId,
   messageTs: SlackId,
