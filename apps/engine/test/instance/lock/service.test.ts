@@ -2,11 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Context, Effect, Exit, Layer, Scope } from 'effect';
-import { createServerInstance } from '../../src/instance/index.ts';
-import { LOCK_FILE, ServerRunning } from '../../src/instance/lock/schema.ts';
-import { ServeLock } from '../../src/instance/lock/service.ts';
-import { runTest } from '../harness.ts';
-import { createTempDir } from '../helpers/index.ts';
+import { createServerInstance } from '../../../src/instance/index.ts';
+import { LOCK_FILE, ServerRunning } from '../../../src/instance/lock/schema.ts';
+import { ServeLock } from '../../../src/instance/lock/service.ts';
+import { runTest } from '../../harness.ts';
+import { createTempDir } from '../../helpers/index.ts';
 
 const owner = { ...createServerInstance('e'.repeat(40), 9), port: 5180, url: 'http://127.0.0.1:5180' };
 

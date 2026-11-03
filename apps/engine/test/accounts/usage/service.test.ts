@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Effect, Fiber, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { TestClock } from 'effect/testing';
-import { UsageApi } from '../../src/accounts/usage/service.ts';
+import { UsageApi } from '../../../src/accounts/usage/service.ts';
 
 const NEVER = Object.assign(() => new Promise<Response>(() => undefined), { preconnect: fetch.preconnect });
 

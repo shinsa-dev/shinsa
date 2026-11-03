@@ -4,10 +4,14 @@ import { BodyInvalid, MembersFull, Revoked } from '@shinsa/core/remote/errors';
 import { Effect, Fiber, Layer, Redacted } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { TestClock } from 'effect/testing';
-import { isRemoteRetryable, RemoteControl, selectRemoteFailureTag } from '../../src/remote/client/index.ts';
-import { RemoteOrigin } from '../../src/remote/client/schema.ts';
-import { RemoteClient } from '../../src/remote/client/service.ts';
-import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
+import {
+  isRemoteRetryable,
+  RemoteControl,
+  selectRemoteFailureTag,
+} from '../../../src/remote/client/index.ts';
+import { RemoteOrigin } from '../../../src/remote/client/schema.ts';
+import { RemoteClient } from '../../../src/remote/client/service.ts';
+import { type FakeControlPlane, refuse, startFakeControlPlane } from '../control-plane.ts';
 
 const USER = { id: 'u1', login: 'kai', name: null, avatarUrl: null };
 

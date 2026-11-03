@@ -6811,7 +6811,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   keys, cancellation (a running effect aborted, its late result ignored), damaged effect and event
   rows, and command receipts (a repeat answered, a reused id refused, a refusal remembered, receipts across a restart
   and pruned after a week). `test/store/service.test.ts` runs the store's Effect services themselves through `runTest`
-  (`apps/engine/test/harness.ts`) on SQLite in memory, as `test/config`, `test/shell` and `test/instance/lock-service.test.ts`
+  (`apps/engine/test/harness.ts`) on SQLite in memory, as `test/config`, `test/shell` and `test/instance/lock/service.test.ts`
   do for the configuration, the shell and the lock. `test/runtime/snapshots.test.ts` and `test/store/snapshot.test.ts` cover snapshots: a boot
   that replays only the events after one, one of another version, of a log changed under it or with a damaged payload
   replaced by a full replay, problems kept across one, none written read-only or without a version, a write once
