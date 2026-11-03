@@ -28,9 +28,9 @@ import type {
   TaskStage,
   TriageDecisions,
   WorkReport,
-} from '../packages/core/src/index.ts';
-import { CHAT_PROTOCOL_VERSION, listRepoChecks } from '../packages/core/src/index.ts';
-import { MINUTE } from './kit/time.ts';
+} from '../../packages/core/src/index.ts';
+import { CHAT_PROTOCOL_VERSION, listRepoChecks } from '../../packages/core/src/index.ts';
+import { MINUTE } from '../kit/time.ts';
 
 export const NOW = Date.now();
 
@@ -128,7 +128,7 @@ export interface SeedTask {
 
 export type SeedReport = Omit<WorkReport, 'checks'>;
 
-export interface SeedAddedCheck extends PlanCheck {
+interface SeedAddedCheck extends PlanCheck {
   phase: number;
   run: number;
   reason: string;

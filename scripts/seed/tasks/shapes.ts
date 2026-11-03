@@ -1,6 +1,12 @@
-import type { ChatTool, PlanDocument, Repo, RunRole, TriageDecisions } from '../packages/core/src/index.ts';
-import { resolveProposalUpgrade, SHAPE_PIPELINES } from '../packages/core/src/index.ts';
-import { createPlanCheck, type SeedTask } from './seed-kit.ts';
+import type {
+  ChatTool,
+  PlanDocument,
+  Repo,
+  RunRole,
+  TriageDecisions,
+} from '../../../packages/core/src/index.ts';
+import { resolveProposalUpgrade, SHAPE_PIPELINES } from '../../../packages/core/src/index.ts';
+import { createPlanCheck, type SeedTask } from '../kit.ts';
 
 const AUTO = { shape: true, start: true, priority: true };
 

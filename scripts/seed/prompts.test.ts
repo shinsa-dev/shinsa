@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import type { PlanDocument, Repo, Run, RunPurpose, ShinsaEventInput } from '../packages/core/src/index.ts';
-import { resolveHouseRules } from '../packages/core/src/index.ts';
-import type { TimedSeedEvent } from './seed-kit.ts';
-import { listRunOpenings, resolveRunOpening, stampRunPrompts } from './seed-prompts.ts';
+import type { PlanDocument, Repo, Run, RunPurpose, ShinsaEventInput } from '../../packages/core/src/index.ts';
+import { resolveHouseRules } from '../../packages/core/src/index.ts';
+import type { TimedSeedEvent } from './kit.ts';
+import { listRunOpenings, resolveRunOpening, stampRunPrompts } from './prompts.ts';
 
 const TASK = 'task-seed-prompts';
 

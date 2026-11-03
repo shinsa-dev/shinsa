@@ -1,10 +1,10 @@
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Evidence, ShinsaEventInput } from '../packages/core/src/index.ts';
-import { MINUTE } from './kit/time.ts';
-import {} from './seed-kit.ts';
+import type { Evidence, ShinsaEventInput } from '../../packages/core/src/index.ts';
+import { MINUTE } from '../kit/time.ts';
+import {} from './kit.ts';
 
-const MEDIA = join(import.meta.dirname, 'seed-media');
+const MEDIA = join(import.meta.dirname, '../seed-media');
 
 type SeedEvidence = Omit<Evidence, 'uri' | 'attachedAt' | 'taskId' | 'runId'> & {
   runId: string;

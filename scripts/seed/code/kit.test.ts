@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
-import { runGit } from './kit/git/index.ts';
+import { runGit } from '../../kit/git/index.ts';
 import {
   bumpLockfileEntry,
   countLines,
@@ -22,7 +22,7 @@ import {
   serializePng,
   serializeRectsPng,
   serializeReviewFixture,
-} from './seed-code-kit.ts';
+} from './kit.ts';
 
 function listChunks(png: Uint8Array) {
   const view = new DataView(png.buffer, png.byteOffset, png.byteLength);

@@ -8,9 +8,9 @@ import {
   type Schedule,
   type ScheduleRun,
   type UsageWindow,
-} from '../packages/core/src/index.ts';
-import { HOUR, MINUTE } from './kit/time.ts';
-import { NOW, type SeedTask } from './seed-kit.ts';
+} from '../../../packages/core/src/index.ts';
+import { HOUR, MINUTE } from '../../kit/time.ts';
+import { NOW, type SeedTask } from '../kit.ts';
 
 const OPS = { id: 'acct-ops', email: 'ops@superwall.dev' };
 

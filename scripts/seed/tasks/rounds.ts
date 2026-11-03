@@ -4,7 +4,7 @@ import type {
   Repo,
   RoundShipping,
   RunPurpose,
-} from '../packages/core/src/index.ts';
+} from '../../../packages/core/src/index.ts';
 import {
   createPlanCheck,
   listSeedCheckResults,
@@ -12,7 +12,7 @@ import {
   resolveAgentSession,
   type SeedClock,
   type SeedTask,
-} from './seed-kit.ts';
+} from '../kit.ts';
 
 const TASK = 'task-mcp-rounds';
 const BRANCH = 'feat/mcp-v2-agent';

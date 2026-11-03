@@ -5,12 +5,12 @@ import type {
   Repo,
   ReviewFinding,
   RunUsage,
-} from '../packages/core/src/index.ts';
-import { HOUR, MINUTE } from './kit/time.ts';
-import { resolveLine } from './seed-code-kit.ts';
-import { createPlanCheck, NOW, type SeedReport, type SeedTask, type TimedSeedEvent } from './seed-kit.ts';
+} from '../../../packages/core/src/index.ts';
+import { HOUR, MINUTE } from '../../kit/time.ts';
+import { resolveLine } from '../code/kit.ts';
+import { createPlanCheck, NOW, type SeedReport, type SeedTask, type TimedSeedEvent } from '../kit.ts';
 
-export const EXPORT_ROWS = `import { clickhouse } from '../clickhouse';
+const EXPORT_ROWS = `import { clickhouse } from '../clickhouse';
 
 export interface App {
   id: string;
@@ -33,7 +33,7 @@ export async function readRows(app: App, start: number, end: number) {
 }
 `;
 
-export const EXPORT_CHUNKS_BASE = `import { clickhouse } from '../clickhouse';
+const EXPORT_CHUNKS_BASE = `import { clickhouse } from '../clickhouse';
 import { type App, type Chunk, readRows } from './rows';
 
 export const CHUNK_ROWS = 50_000;
@@ -55,7 +55,7 @@ export async function writeChunk(app: App, chunk: Chunk) {
 }
 `;
 
-export const EXPORT_CHUNKS_NEW = `import { clickhouse } from '../clickhouse';
+const EXPORT_CHUNKS_NEW = `import { clickhouse } from '../clickhouse';
 import { type App, type Chunk, readRows } from './rows';
 
 export const CHUNK_ROWS = 50_000;
@@ -96,7 +96,7 @@ async function writeBatch(app: App, start: number, end: number) {
 }
 `;
 
-export const EXPORT_RUN_BASE = `import { db } from '../db';
+const EXPORT_RUN_BASE = `import { db } from '../db';
 import { planChunks, writeChunk } from './chunks';
 import type { App } from './rows';
 
@@ -107,7 +107,7 @@ export async function runExport(app: App, exportId: string) {
 }
 `;
 
-export const EXPORT_RUN_NEW = `import { db } from '../db';
+const EXPORT_RUN_NEW = `import { db } from '../db';
 import { logger } from '../logger';
 import { planChunks, writeChunkWithRetry } from './chunks';
 import type { App } from './rows';
@@ -125,11 +125,11 @@ export async function runExport(app: App, exportId: string) {
 }
 `;
 
-export const EXPORT_MIGRATION_NEW = `ALTER TABLE exports
+const EXPORT_MIGRATION_NEW = `ALTER TABLE exports
   ADD COLUMN "offset" integer NOT NULL DEFAULT 0;
 `;
 
-export const EXPORT_TEST_NEW = `import { describe, expect, it } from 'bun:test';
+const EXPORT_TEST_NEW = `import { describe, expect, it } from 'bun:test';
 import { planChunks } from './chunks';
 
 describe('planChunks', () => {

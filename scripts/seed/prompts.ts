@@ -1,5 +1,10 @@
-import type { ReportCheck, Run, ShinsaEvent, ShinsaState, Task } from '../packages/core/src/index.ts';
-import { applyEvent, createState, listBlockingChecks, splitHouseRules } from '../packages/core/src/index.ts';
+import type { ReportCheck, Run, ShinsaEvent, ShinsaState, Task } from '../../packages/core/src/index.ts';
+import {
+  applyEvent,
+  createState,
+  listBlockingChecks,
+  splitHouseRules,
+} from '../../packages/core/src/index.ts';
 import {
   resolveAgentPrompt,
   resolveChecksFixPrompt,
@@ -9,9 +14,9 @@ import {
   resolvePlanningPrompt,
   resolvePullRequestFixPrompt,
   resolveReviewFixPrompt,
-} from '../packages/core/src/prompts/index.ts';
-import { listTaskBases } from '../packages/core/src/prompts/root.ts';
-import type { TimedSeedEvent } from './seed-kit.ts';
+} from '../../packages/core/src/prompts/index.ts';
+import { listTaskBases } from '../../packages/core/src/prompts/root.ts';
+import type { TimedSeedEvent } from './kit.ts';
 
 const SEED_FAILED_CHECKS: ReportCheck[] = [
   {

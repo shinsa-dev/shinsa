@@ -1,5 +1,5 @@
-import type { Repo, ShinsaEventInput } from '../packages/core/src/index.ts';
-import type { SeedTask } from './seed-kit.ts';
+import type { Repo, ShinsaEventInput } from '../../../packages/core/src/index.ts';
+import type { SeedTask } from '../kit.ts';
 
 function stack(taskId: string, stacksOn: string, base: string | null): ShinsaEventInput[] {
   return [

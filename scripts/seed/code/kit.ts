@@ -1,5 +1,5 @@
 import { deflateSync } from 'node:zlib';
-import type { ChatEditHunk } from '../packages/core/src/index.ts';
+import type { ChatEditHunk } from '../../../packages/core/src/index.ts';
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -82,7 +82,7 @@ export function replaceRequired(content: string, from: string, to: string, label
     ? new RegExp(`(?<![\\w$])${escapeRegExp(from)}(?![\\w$])`, 'g')
     : new RegExp(escapeRegExp(from), 'g');
   if (!pattern.test(content))
-    throw new Error(`${label}: “${from}” is not in the file; update scripts/seed-code.ts.`);
+    throw new Error(`${label}: “${from}” is not in the file; update scripts/seed/code/sample.ts.`);
   return content.replace(pattern, to);
 }
 
@@ -96,7 +96,8 @@ export function replaceAllRequired(
 
 export function resolveLine(content: string, needle: string, after = 0) {
   const index = content.split('\n').findIndex((line, at) => at >= after && line.includes(needle));
-  if (index < 0) throw new Error(`“${needle}” is not in the seeded file; update scripts/seed-code.ts.`);
+  if (index < 0)
+    throw new Error(`“${needle}” is not in the seeded file; update scripts/seed/code/sample.ts.`);
   return index + 1;
 }
 
@@ -123,7 +124,8 @@ export function insertAfterImports(content: string, block: string) {
 export function insertBeforeLastHeading(markdown: string, block: string) {
   const lines = markdown.split('\n');
   const index = lines.reduce((last, line, at) => (line.startsWith('## ') ? at : last), -1);
-  if (index < 0) throw new Error('The document has no second-level heading; update scripts/seed-code.ts.');
+  if (index < 0)
+    throw new Error('The document has no second-level heading; update scripts/seed/code/sample.ts.');
   return [...lines.slice(0, index), ...block.split('\n'), ...lines.slice(index)].join('\n');
 }
 
@@ -146,7 +148,7 @@ export function bumpLockfileEntry(lockfile: string): LockfileBump {
     return !found[6]?.includes(version) && !lockfile.includes(`"${found[2]}": "${version}"`);
   });
   const match = entry.exec(lines[index] ?? '');
-  if (!match) throw new Error('bun.lock has no package entry to bump; update scripts/seed-code.ts.');
+  if (!match) throw new Error('bun.lock has no package entry to bump; update scripts/seed/code/sample.ts.');
   const [, indent, name, major, minor, patch, rest] = match;
   const from = `${major}.${minor}.${patch}`;
   const to = `${major}.${minor}.${Number(patch) + 1}`;
@@ -191,7 +193,7 @@ export function listEditHunks(before: string, after: string): ChatEditHunk[] {
   ];
 }
 
-export interface ImportFile {
+interface ImportFile {
   path: string;
   mode: string;
   content: Uint8Array;

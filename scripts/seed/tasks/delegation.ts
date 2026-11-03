@@ -6,9 +6,9 @@ import type {
   Run,
   RunDelegation,
   ShinsaEventInput,
-} from '../packages/core/src/index.ts';
-import { resolveDeliveryPrompt } from '../packages/core/src/index.ts';
-import { MINUTE } from './kit/time.ts';
+} from '../../../packages/core/src/index.ts';
+import { resolveDeliveryPrompt } from '../../../packages/core/src/index.ts';
+import { MINUTE } from '../../kit/time.ts';
 import {
   CHOSEN_BY_YOU,
   callTool,
@@ -21,8 +21,8 @@ import {
   spreadEvents,
   type TimedSeedEvent,
   writeTranscript,
-} from './seed-kit.ts';
-import { listRunOpenings } from './seed-prompts.ts';
+} from '../kit.ts';
+import { listRunOpenings } from '../prompts.ts';
 
 const RETRY = 'task-delegated-retry';
 

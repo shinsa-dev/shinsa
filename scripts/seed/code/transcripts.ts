@@ -1,6 +1,16 @@
-import type { ChatEvent, ChatTool, JudgementCall, ReviewFinding } from '../packages/core/src/index.ts';
-import { MINUTE } from './kit/time.ts';
-import { listEditHunks, resolveLine, serializeNumberedLines } from './seed-code-kit.ts';
+import type { ChatEvent, ChatTool, JudgementCall, ReviewFinding } from '../../../packages/core/src/index.ts';
+import { MINUTE } from '../../kit/time.ts';
+import {
+  callTool,
+  NOW,
+  resolveToolOutput,
+  say,
+  spreadEvents,
+  type TimedSeedEvent,
+  writeTranscript,
+} from '../kit.ts';
+import { listRunOpenings } from '../prompts.ts';
+import { listEditHunks, resolveLine, serializeNumberedLines } from './kit.ts';
 import {
   type CodeSample,
   LIVE_PLAN,
@@ -21,17 +31,7 @@ import {
   SAMPLE_PATHS,
   SAMPLE_REVIEW,
   type SamplePhase,
-} from './seed-code.ts';
-import {
-  callTool,
-  NOW,
-  resolveToolOutput,
-  say,
-  spreadEvents,
-  type TimedSeedEvent,
-  writeTranscript,
-} from './seed-kit.ts';
-import { listRunOpenings } from './seed-prompts.ts';
+} from './sample.ts';
 
 interface Step {
   call: ChatTool;

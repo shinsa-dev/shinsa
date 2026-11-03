@@ -17,15 +17,23 @@ import type {
   RunPurpose,
   RunRole,
   WorkReport,
-} from '../packages/core/src/index.ts';
+} from '../../../packages/core/src/index.ts';
 import {
   type CoverageFile,
   parseChangedLines,
   resolveCoverageRanges,
   serializeReportMarkdown,
-} from '../packages/core/src/index.ts';
-import { runGit } from './kit/git/index.ts';
-import { DAY, HOUR, MINUTE } from './kit/time.ts';
+} from '../../../packages/core/src/index.ts';
+import { runGit } from '../../kit/git/index.ts';
+import { DAY, HOUR, MINUTE } from '../../kit/time.ts';
+import {
+  createPlanCheck,
+  listSeedCheckResults,
+  NOW,
+  type Push,
+  resolveAgentSession,
+  type SeedTask,
+} from '../kit.ts';
 import {
   bumpLockfileEntry,
   countLines,
@@ -41,19 +49,11 @@ import {
   serializeFastImport,
   serializeRectsPng,
   serializeReviewFixture,
-} from './seed-code-kit.ts';
-import {
-  createPlanCheck,
-  listSeedCheckResults,
-  NOW,
-  type Push,
-  resolveAgentSession,
-  type SeedTask,
-} from './seed-kit.ts';
+} from './kit.ts';
 
 const SAMPLE_BASELINE = { checkCommands: ['bun lint', 'bunx knip'] };
 
-const SOURCE = join(import.meta.dir, '..');
+const SOURCE = join(import.meta.dir, '../../..');
 const SOURCE_COMMIT = '359025295bdde05bff64cbdd711ee9bb1aee7956';
 const PROJECT_ID = 'project-sample';
 const REPO_ID = 'repo-shinsa-sample';
@@ -89,12 +89,12 @@ export const SAMPLE_PATHS = {
   theme: 'apps/web/src/lib/code/theme.ts',
 } as const;
 
-export const REVIEW_AGE_HOURS = 5;
-export const MERGED_AGE_HOURS = 30;
-export const LIVE_AGE_HOURS = 0.7;
-export const ANSWER_AGE_HOURS = 2;
+const REVIEW_AGE_HOURS = 5;
+const MERGED_AGE_HOURS = 30;
+const LIVE_AGE_HOURS = 0.7;
+const ANSWER_AGE_HOURS = 2;
 
-export const REVIEW_MARKS = {
+const REVIEW_MARKS = {
   planner: [1, 7],
   builders: [
     [7.5, 22],
@@ -107,7 +107,7 @@ export const REVIEW_MARKS = {
   reviewer: [51.5, 58],
 } as const;
 
-export const MERGED_MARKS = {
+const MERGED_MARKS = {
   planner: [1, 5],
   builders: [
     [5.5, 14],
@@ -120,9 +120,9 @@ export const MERGED_MARKS = {
   merge: 240,
 } as const;
 
-export const LIVE_MARKS = { planner: [0.5, 4], builder: [4.5, 16], working: 16.5 } as const;
+const LIVE_MARKS = { planner: [0.5, 4], builder: [4.5, 16], working: 16.5 } as const;
 
-export const ANSWER_MARKS = { answerer: [0.5, 3] } as const;
+const ANSWER_MARKS = { answerer: [0.5, 3] } as const;
 
 export const PULL_REQUEST_NUMBER = 12;
 
@@ -336,7 +336,7 @@ function listScreenRects(version: 'before' | 'after'): Rect[] {
   ];
 }
 
-export function serializeReviewScreenshot(version: 'before' | 'after') {
+function serializeReviewScreenshot(version: 'before' | 'after') {
   return serializeRectsPng(SCREEN.width, SCREEN.height, PALETTE.page, listScreenRects(version));
 }
 
@@ -499,12 +499,12 @@ function measureSampleCoverage(
   };
 }
 
-export interface FileChange {
+interface FileChange {
   before: string;
   after: string;
 }
 
-export interface MergedNotes {
+interface MergedNotes {
   worktree: string;
   index: FileChange;
   stack: string;
@@ -561,7 +561,7 @@ function createMergedTask(repo: string, worktrees: string): MergedNotes {
   };
 }
 
-export interface ReviewNotes {
+interface ReviewNotes {
   worktree: string;
   spots: FileChange;
   spotsRenamed: string;
@@ -717,7 +717,7 @@ function createReviewTask(repo: string, worktrees: string): ReviewNotes {
   };
 }
 
-export interface LiveNotes {
+interface LiveNotes {
   worktree: string;
   theme: string;
   tokens: FileChange;

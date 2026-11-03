@@ -6197,9 +6197,9 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
   that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
-  (`scripts/seed-services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
+  (`scripts/seed/services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
   running `scripts/sandbox-service.ts` in the project's seeded repository with a preview URL; the command names the
-  script by its path in the checkout that seeded it. The evidence (`scripts/seed-evidence.ts`) is real files in
+  script by its path in the checkout that seeded it. The evidence (`scripts/seed/evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of
@@ -6213,8 +6213,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   Code session `.jsonl`, replaces one task's transcript with that real session.
 - **The sample repository.** For the code views the seed also builds `repos/shinsa-sample` offline from Shinsa's own
   tree at a pinned commit, `3590252` (`SOURCE_COMMIT`; `git archive`, about 1,250 files, imported as eight commits
-  with `git fast-import`), and files it under a Sample project (`scripts/seed-code.ts`, helpers in `seed-code-kit.ts`, transcripts in
-  `seed-code-transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
+  with `git fast-import`), and files it under a Sample project (`scripts/seed/code/sample.ts`, helpers in `code/kit.ts`, transcripts in
+  `code/transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
   commit and one uncommitted edit, twelve changed files (a rename with edits, a deletion, two additions, a PNG,
   `bun.lock` and a 5,000-line fixture), a report of 40 points (18 spots, the key ones explained, one in a file outside the diff; 10 judgement calls with
   their alternatives, two disputed by the reviewer; 7 risks) with the Agent's walkthrough, findings of both

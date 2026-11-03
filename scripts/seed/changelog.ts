@@ -6,8 +6,8 @@ import {
   type Changelog,
   resolveChangelog,
   resolvePublicChangelog,
-} from '../packages/core/src/changelog/index.ts';
-import { DAY } from './kit/time.ts';
+} from '../../packages/core/src/changelog/index.ts';
+import { DAY } from '../kit/time.ts';
 
 const SEED_RELEASE_COUNT = 50;
 
@@ -53,7 +53,7 @@ function listSeedEntries(release: number): ChangeEntry[] {
   });
 }
 
-export function createSeedChangelog(): Changelog {
+function createSeedChangelog(): Changelog {
   const changes = Array.from({ length: SEED_RELEASE_COUNT }, (_, release) =>
     listSeedEntries(release).map((entry) => ({
       version: `1.${release}.0`,
