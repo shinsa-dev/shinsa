@@ -211,7 +211,7 @@ class ServerGroup extends HttpApiGroup.make('server')
       payload: RestartRequest,
       success: RestartAnswer,
     })
-      .annotate(LocalOnlyRoute, true)
+      .annotate(OwnerOnlyRoute, true)
       .annotate(RouteFieldFailures, {
         when: { code: 'when_invalid', message: 'Restart now or once agents are idle.' },
       }),
@@ -266,19 +266,19 @@ class OnboardingGroup extends HttpApiGroup.make('onboarding')
     HttpApiEndpoint.post('setup', '/api/onboarding/setup', {
       payload: AnyBody,
       success: OnboardingAnswer,
-    }).annotate(LocalOnlyRoute, true),
+    }).annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('worktrees', '/api/onboarding/worktrees', {
       payload: AnyBody,
       success: OnboardingAnswer,
     })
-      .annotate(LocalOnlyRoute, true)
+      .annotate(OwnerOnlyRoute, true)
       .annotate(EngineFeatureRoute, 'worktree-root'),
     HttpApiEndpoint.get('worktreeUsage', '/api/onboarding/worktrees/usage', {
       success: WorktreeUsageAnswer,
     }).annotate(EngineFeatureRoute, 'worktree-root'),
     HttpApiEndpoint.get('prerequisites', '/api/onboarding/prerequisites', { success: ObjectAnswer }),
     HttpApiEndpoint.post('privacy', '/api/onboarding/privacy', { success: ObjectAnswer }).annotate(
-      LocalOnlyRoute,
+      OwnerOnlyRoute,
       true
     ),
     HttpApiEndpoint.post('install', '/api/onboarding/install', { payload: AnyBody, success: ObjectAnswer })
@@ -286,7 +286,7 @@ class OnboardingGroup extends HttpApiGroup.make('onboarding')
       .annotate(BrowserOnlyRoute, BROWSER_ONLY_INSTALL),
     HttpApiEndpoint.get('flow', '/api/onboarding/flow', { success: FlowAnswer }),
     HttpApiEndpoint.post('reply', '/api/onboarding/flow', { payload: AnyBody, success: FlowAnswer }).annotate(
-      LocalOnlyRoute,
+      OwnerOnlyRoute,
       true
     )
   )
@@ -325,7 +325,7 @@ class AccountsGroup extends HttpApiGroup.make('accounts')
       success: AccountsAnswer,
     })
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
+  .annotateEndpoints(OwnerOnlyRoute, true)
   .add(HttpApiEndpoint.get('list', '/api/accounts', { success: AccountsAnswer }))
   .middleware(EngineGate) {}
 
@@ -339,12 +339,12 @@ class SecretsGroup extends HttpApiGroup.make('secrets')
       params: { scheduleId: Schema.String },
       payload: Schema.Struct({ secret: Field }),
       success: WebhookAnswer,
-    }).annotate(LocalOnlyRoute, true),
+    }).annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('answer', '/api/secrets/:gateId', {
       params: { gateId: Schema.String },
       payload: Schema.Struct({ decline: Field, value: Field }),
       success: OkAnswer,
-    }).annotate(LocalOnlyRoute, true)
+    }).annotate(OwnerOnlyRoute, true)
   )
   .middleware(EngineGate) {}
 
@@ -373,7 +373,7 @@ class ExtensionsGroup extends HttpApiGroup.make('extensions')
     HttpApiEndpoint.post('signIn', '/api/extensions/servers/sign-in', {
       payload: Schema.Struct({ serverId: Field }),
       success: SignInAnswer,
-    }),
+    }).annotate(LocalOnlyRoute, true),
     HttpApiEndpoint.post('signOut', '/api/extensions/servers/sign-out', {
       payload: Schema.Struct({ serverId: Field }),
       success: ExtensionsAnswer,
@@ -391,7 +391,7 @@ class ExtensionsGroup extends HttpApiGroup.make('extensions')
       success: ExtensionsAnswer,
     })
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
+  .annotateEndpoints(OwnerOnlyRoute, true)
   .add(HttpApiEndpoint.get('snapshot', '/api/extensions', { success: ExtensionsAnswer }))
   .middleware(EngineGate) {}
 
@@ -402,7 +402,7 @@ class VersionsGroup extends HttpApiGroup.make('versions')
     HttpApiEndpoint.post('update', '/api/versions/update', {
       payload: Schema.Struct({ program: Field }),
       success: UpdateAnswer,
-    }).annotate(LocalOnlyRoute, true)
+    }).annotate(OwnerOnlyRoute, true)
   )
   .middleware(EngineGate) {}
 
@@ -417,14 +417,6 @@ class ChangelogGroup extends HttpApiGroup.make('changelog')
 
 class RemoteGroup extends HttpApiGroup.make('remote')
   .add(
-    HttpApiEndpoint.post('pair', '/api/remote/pair', { payload: EmptyBody, success: RemoteAnswer }),
-    HttpApiEndpoint.post('cancelPairing', '/api/remote/pair/cancel', {
-      payload: EmptyBody,
-      success: RemoteAnswer,
-    }),
-    HttpApiEndpoint.post('enable', '/api/remote/enable', { payload: EmptyBody, success: RemoteAnswer }),
-    HttpApiEndpoint.post('disable', '/api/remote/disable', { payload: EmptyBody, success: RemoteAnswer }),
-    HttpApiEndpoint.post('remove', '/api/remote/remove', { payload: EmptyBody, success: RemoteAnswer }),
     HttpApiEndpoint.post('createLink', '/api/remote/link/create', {
       payload: EmptyBody,
       success: RemoteAnswer,
@@ -455,7 +447,29 @@ class RemoteGroup extends HttpApiGroup.make('remote')
       publicKey: { code: 'publicKey_invalid', message: 'Name the device to remove by its key.' },
     })
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
+  .annotateEndpoints(OwnerOnlyRoute, true)
+  .add(
+    HttpApiEndpoint.post('pair', '/api/remote/pair', { payload: EmptyBody, success: RemoteAnswer }).annotate(
+      LocalOnlyRoute,
+      true
+    ),
+    HttpApiEndpoint.post('cancelPairing', '/api/remote/pair/cancel', {
+      payload: EmptyBody,
+      success: RemoteAnswer,
+    }).annotate(LocalOnlyRoute, true),
+    HttpApiEndpoint.post('enable', '/api/remote/enable', {
+      payload: EmptyBody,
+      success: RemoteAnswer,
+    }).annotate(LocalOnlyRoute, true),
+    HttpApiEndpoint.post('disable', '/api/remote/disable', {
+      payload: EmptyBody,
+      success: RemoteAnswer,
+    }).annotate(LocalOnlyRoute, true),
+    HttpApiEndpoint.post('remove', '/api/remote/remove', {
+      payload: EmptyBody,
+      success: RemoteAnswer,
+    }).annotate(LocalOnlyRoute, true)
+  )
   .add(
     HttpApiEndpoint.get('snapshot', '/api/remote', { success: RemoteAnswer }),
     HttpApiEndpoint.post('acceptRequest', '/api/remote/requests/accept', {
@@ -514,15 +528,14 @@ class TeamsGroup extends HttpApiGroup.make('teams')
     HttpApiEndpoint.post('remove', '/api/remote/teams/remove', {
       payload: TeamBody,
       success: RemoteAnswer,
-    }).annotate(RouteFieldFailures, TEAM_FAILURES)
+    }).annotate(RouteFieldFailures, TEAM_FAILURES),
+    HttpApiEndpoint.post('join', '/api/remote/teams/join', {
+      payload: TeamJoinBody,
+      success: TeamJoinAnswer,
+    }).annotate(RouteFieldFailures, { url: { code: 'url_invalid', message: 'Paste the team link.' } })
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
-  .add(
-    HttpApiEndpoint.post('join', '/api/remote/teams/join', { payload: TeamJoinBody, success: TeamJoinAnswer })
-      .annotate(OwnerOnlyRoute, true)
-      .annotate(RouteFieldFailures, { url: { code: 'url_invalid', message: 'Paste the team link.' } }),
-    HttpApiEndpoint.get('tasks', '/api/teams/tasks', { query: TeamTasksQuery, success: TeamTasksAnswer })
-  )
+  .annotateEndpoints(OwnerOnlyRoute, true)
+  .add(HttpApiEndpoint.get('tasks', '/api/teams/tasks', { query: TeamTasksQuery, success: TeamTasksAnswer }))
   .annotateEndpoints(EngineFeatureRoute, 'teams')
   .middleware(EngineGate) {}
 
@@ -534,7 +547,7 @@ class SlackGroup extends HttpApiGroup.make('slack')
   .add(
     HttpApiEndpoint.get('snapshot', '/api/slack', { success: SlackAnswer }),
     HttpApiEndpoint.post('disconnect', '/api/slack/disconnect', { success: SlackAnswer }).annotate(
-      LocalOnlyRoute,
+      OwnerOnlyRoute,
       true
     )
   )
@@ -592,7 +605,7 @@ class TerminalsGroup extends HttpApiGroup.make('terminals')
       success: TerminalsAnswer,
     }).annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
+  .annotateEndpoints(OwnerOnlyRoute, true)
   .middleware(EngineGate) {}
 
 class ServicesGroup extends HttpApiGroup.make('services')
@@ -600,19 +613,22 @@ class ServicesGroup extends HttpApiGroup.make('services')
     HttpApiEndpoint.get('suggestions', '/api/services/suggestions', {
       query: ServiceSuggestionsQuery,
       success: ServiceSuggestionsAnswer,
-    }),
-    HttpApiEndpoint.post('add', '/api/services', { payload: AnyBody, success: TerminalsAnswer }).annotate(
-      BrowserOnlyRoute,
-      BROWSER_ONLY_TERMINALS
-    ),
+    }).annotate(OwnerOnlyRoute, true),
+    HttpApiEndpoint.post('add', '/api/services', { payload: AnyBody, success: TerminalsAnswer })
+      .annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
+      .annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('addBatch', '/api/services/batch', {
       payload: Schema.Struct({ projectId: Field, services: Field }),
       success: TerminalsAnswer,
-    }).annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS),
+    })
+      .annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
+      .annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('remove', '/api/services/remove', {
       payload: Schema.Struct({ ids: Field }),
       success: TerminalsAnswer,
-    }).annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS),
+    })
+      .annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
+      .annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('startAll', '/api/services/start-all', {
       payload: Schema.Struct({ projectId: Field }),
       success: TerminalsAnswer,
@@ -621,7 +637,9 @@ class ServicesGroup extends HttpApiGroup.make('services')
       params: ServiceParams,
       payload: AnyBody,
       success: TerminalsAnswer,
-    }).annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS),
+    })
+      .annotate(BrowserOnlyRoute, BROWSER_ONLY_TERMINALS)
+      .annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('start', '/api/services/:serviceId/start', {
       params: ServiceParams,
       payload: [ServiceRunBody, Schema.Null],
@@ -638,7 +656,6 @@ class ServicesGroup extends HttpApiGroup.make('services')
       success: ObjectAnswer,
     })
   )
-  .annotateEndpoints(LocalOnlyRoute, true)
   .middleware(EngineGate) {}
 
 export class EngineApi extends HttpApi.make('engine').add(

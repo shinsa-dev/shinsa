@@ -46,6 +46,7 @@ import {
   REQUEST_ABORTED,
   RequestAborted,
   type RequestFailure,
+  type TerminalStreamMessage,
 } from './schema.ts';
 
 export class RemoteChannels extends Context.Service<
@@ -103,6 +104,7 @@ export class RemoteChannels extends Context.Service<
         const pending = new Map<string, PendingResponse>();
         const outstanding = new Set<Outgoing>();
         const socketListeners = new Set<(data: string) => void>();
+        const terminalListeners = new Set<(message: TerminalStreamMessage) => void>();
         const closeListeners = new Set<(error: ChannelError) => void>();
         const outbox = yield* Queue.unbounded<Outgoing>();
 
@@ -162,6 +164,11 @@ export class RemoteChannels extends Context.Service<
           subscribeSocket: (listener) => {
             socketListeners.add(listener);
             return () => socketListeners.delete(listener);
+          },
+          sendTerminal: (message) => send(message),
+          subscribeTerminal: (listener) => {
+            terminalListeners.add(listener);
+            return () => terminalListeners.delete(listener);
           },
           subscribeClose: (listener) => {
             closeListeners.add(listener);
@@ -223,6 +230,11 @@ export class RemoteChannels extends Context.Service<
             }
             case 'end':
               finish(message.id);
+              return Effect.void;
+            case 'terminal-text':
+            case 'terminal-bytes':
+            case 'terminal-close':
+              for (const listener of terminalListeners) listener(message);
               return Effect.void;
             default:
               return Effect.fail(refuse(CHANNEL_BROWSER_ONLY));

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  LOCAL_ONLY_MESSAGE,
+  OWNER_ONLY_MESSAGE,
   REMOTE_APP_ORIGIN,
   resolveClaimUrl,
   resolveScopedEngineInfo,
@@ -71,7 +71,7 @@ describe('resolveScopedRefusal', () => {
       SCOPE_MESSAGES.command
     );
     expect(resolveScopedRefusal(state, taskId, { type: 'task.retry', taskId, account: ACCOUNT })).toBe(
-      LOCAL_ONLY_MESSAGE
+      OWNER_ONLY_MESSAGE
     );
     const secret = { ...state, gates: { ...state.gates, [gate.id]: { ...gate, type: 'secret' as const } } };
     expect(

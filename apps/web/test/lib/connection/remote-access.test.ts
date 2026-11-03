@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'b
 import type { RemoteSnapshot } from '@shinsa/core';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
-  acceptMachineRequest,
-  declineMachineRequest,
+  createMachineAccessActions,
   REMOTE_ACCESS_ACTIONS,
   refreshRemoteAccess,
   resetRemoteAccess,
@@ -107,12 +106,32 @@ describe('remote access on this machine', () => {
     const snapshot = createRemoteSnapshot();
     answerSnapshot('POST /api/remote/requests/accept?machine=k3x9', snapshot);
     answerSnapshot('POST /api/remote/requests/decline?machine=w4t8', snapshot);
-    await acceptMachineRequest('k3x9', 'r1');
-    await declineMachineRequest('w4t8', 'r2');
+    await createMachineAccessActions('k3x9').acceptRequest('r1');
+    await createMachineAccessActions('w4t8').declineRequest('r2');
     expect(sent.map((entry) => [entry.path, entry.body])).toEqual([
       ['/api/remote/requests/accept?machine=k3x9', { requestId: 'r1' }],
       ['/api/remote/requests/decline?machine=w4t8', { requestId: 'r2' }],
     ]);
+  });
+
+  it('sends the owner’s changes to the invite link, members and devices to that machine, and leaves this page’s snapshot to its push', async () => {
+    const snapshot = createRemoteSnapshot();
+    for (const path of ['link/create', 'link/remove', 'members/remove', 'devices/remove'])
+      answerSnapshot(`POST /api/remote/${path}?machine=k3x9`, snapshot);
+    const replaced = spyOn(connection, 'replaceRemote');
+    const actions = createMachineAccessActions('k3x9');
+    await actions.createLink();
+    await actions.removeLink();
+    await actions.removeMember('7');
+    expect(await actions.revokeDevice('dev-1')).toEqual(snapshot);
+    expect(sent.map((entry) => [entry.path, entry.body])).toEqual([
+      ['/api/remote/link/create?machine=k3x9', {}],
+      ['/api/remote/link/remove?machine=k3x9', {}],
+      ['/api/remote/members/remove?machine=k3x9', { userId: '7' }],
+      ['/api/remote/devices/remove?machine=k3x9', { publicKey: 'dev-1' }],
+    ]);
+    expect(replaced).not.toHaveBeenCalled();
+    replaced.mockRestore();
   });
 
   it('reads once when opened, then shows every snapshot the server pushes without asking again', async () => {

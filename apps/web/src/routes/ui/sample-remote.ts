@@ -308,6 +308,8 @@ export function createStaticConnection(
     replaceAccounts: () => undefined,
     subscribeSurfaces: quiet,
     isDesktopConnected: () => false,
+    reportPresence: () => undefined,
+    selectAttention: () => 'nowhere',
     subscribeTerminals: quiet,
     selectTerminals: none,
     replaceTerminals: () => undefined,

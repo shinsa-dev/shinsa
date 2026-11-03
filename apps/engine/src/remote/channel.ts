@@ -12,6 +12,8 @@ import {
   encodeText,
   type GuestActor,
   type HandshakeKeys,
+  MAX_TERMINAL_STREAMS,
+  parseBase64Url,
   parseBodyChunk,
   parseChannelMessage,
   parseClientHello,
@@ -21,9 +23,12 @@ import {
   serializeBase64Url,
   serializeChannelMessage,
   serializePublicKey,
+  TERMINAL_STREAM_CLOSE,
 } from '@shinsa/core';
 import type { HubSocket } from '../http/socket.ts';
 import { describeError, log } from '../log/index.ts';
+import type { TerminalSession, TerminalViewer } from '../terminals/session.ts';
+import { applyTerminalText } from '../terminals/sockets.ts';
 import { POLICY_VIOLATION } from './schema.ts';
 
 const CHANNEL_REQUEST_ORIGIN = 'http://remote.shinsa.internal';
@@ -34,11 +39,32 @@ const MAX_INFLATED_FRAME_BYTES = 64 * 1024 * 1024;
 
 const DROPPED = 0;
 
+const SENT = 1;
+
+const MAX_STREAM_ID_LENGTH = 64;
+
+export const TERMINAL_STREAM_MESSAGES = {
+  ownerOnly: 'Only the owner of this machine opens its terminals from another device.',
+  tooMany: 'Close a terminal on this page to open another.',
+  closed: 'That terminal is closed.',
+} as const;
+
 const DROPPED_HEADERS = new Set(['host', 'connection', 'cookie', 'origin', 'content-length', 'upgrade']);
 
 export interface ChannelPeer {
   send: (data: string | Bytes) => unknown;
   close: (code: number, reason: string) => void;
+  buffered?: () => number;
+}
+
+interface ChannelTerminals {
+  select: (id: string) => TerminalSession | null;
+}
+
+interface TerminalStream {
+  terminalId: string;
+  viewer: TerminalViewer;
+  pending: number;
 }
 
 interface ChannelHub {
@@ -56,6 +82,7 @@ export interface ChannelHost {
   resolveMachineKey: () => Promise<{ publicKey: string; privateKey: CryptoKey }>;
   isEnrolled: (device: string) => boolean;
   resolveGuest: (device: string) => GuestActor | null;
+  isOwner: () => boolean;
   requestAccess: (
     proof: string,
     keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>,
@@ -64,6 +91,7 @@ export interface ChannelHost {
   resumeAccess: (device: string) => AccessAnswer | null;
   recordSeen: (device: string) => void;
   hub: ChannelHub;
+  terminals: ChannelTerminals | null;
   respond: (request: Request, guest: GuestActor | null) => Promise<Response>;
   maxBodyBytes: number;
 }
@@ -112,6 +140,7 @@ export class RemoteChannel {
   readonly #peer: ChannelPeer;
   readonly #host: ChannelHost;
   readonly #requests = new Map<string, OpenRequest>();
+  readonly #streams = new Map<string, TerminalStream>();
   #state: ChannelState = { kind: 'hello' };
   #queue: Promise<void> = Promise.resolve();
 
@@ -263,12 +292,106 @@ export class RemoteChannel {
       case 'response':
         this.fail('The browser cannot send a response.');
         return;
+      case 'terminal-open':
+        this.#openTerminal(message.id, message.terminal, state.guest);
+        return;
+      case 'terminal-text':
+        this.#withTerminal(message.id, (session) => applyTerminalText(session, message.data));
+        return;
+      case 'terminal-bytes': {
+        const bytes = parseBase64Url(message.chunk);
+        if (bytes) this.#withTerminal(message.id, (session) => session.input(bytes));
+        return;
+      }
+      case 'terminal-close':
+        this.#detachTerminal(message.id);
+        return;
     }
   }
 
+  #openTerminal(id: string, terminalId: string, guest: GuestActor | null) {
+    if (this.#streams.has(id) || id.length > MAX_STREAM_ID_LENGTH) {
+      this.fail('A terminal stream was not valid.');
+      return;
+    }
+    if (guest || !this.#host.isOwner()) {
+      void this.#closeStream(id, TERMINAL_STREAM_CLOSE.refused, TERMINAL_STREAM_MESSAGES.ownerOnly);
+      return;
+    }
+    if (this.#streams.size >= MAX_TERMINAL_STREAMS) {
+      void this.#closeStream(id, TERMINAL_STREAM_CLOSE.refused, TERMINAL_STREAM_MESSAGES.tooMany);
+      return;
+    }
+    const session = this.#host.terminals?.select(terminalId);
+    if (!session) {
+      void this.#closeStream(id, TERMINAL_STREAM_CLOSE.gone, TERMINAL_STREAM_MESSAGES.closed);
+      return;
+    }
+    const stream: TerminalStream = {
+      terminalId,
+      pending: 0,
+      viewer: {
+        send: (data) => {
+          this.#sendTerminal(id, stream, data);
+          return SENT;
+        },
+        buffered: () => stream.pending + (this.#peer.buffered?.() ?? 0),
+        end: () => {
+          if (!this.#streams.delete(id)) return;
+          void this.#closeStream(id, TERMINAL_STREAM_CLOSE.gone, TERMINAL_STREAM_MESSAGES.closed);
+        },
+      },
+    };
+    this.#streams.set(id, stream);
+    session.attach(stream.viewer);
+  }
+
+  #withTerminal(id: string, apply: (session: TerminalSession) => void) {
+    const stream = this.#streams.get(id);
+    const session = stream ? this.#host.terminals?.select(stream.terminalId) : null;
+    if (session) apply(session);
+  }
+
+  #sendTerminal(id: string, stream: TerminalStream, data: string | Uint8Array) {
+    const message: ChannelMessage =
+      typeof data === 'string'
+        ? { t: 'terminal-text', id, data }
+        : { t: 'terminal-bytes', id, chunk: serializeBase64Url(data as Bytes) };
+    stream.pending += data.length;
+    void this.#send(message).then(() => {
+      stream.pending -= data.length;
+      if (this.#streams.get(id) === stream) this.drain();
+    });
+  }
+
+  #closeStream(id: string, code: number, reason: string) {
+    return this.#send({ t: 'terminal-close', id, code, reason });
+  }
+
+  #detachTerminal(id: string) {
+    const stream = this.#streams.get(id);
+    if (!stream) return;
+    this.#streams.delete(id);
+    this.#host.terminals?.select(stream.terminalId)?.detach(stream.viewer);
+  }
+
+  drain() {
+    for (const stream of this.#streams.values())
+      this.#host.terminals?.select(stream.terminalId)?.drain(stream.viewer);
+  }
+
   #createSocket(guest: GuestActor | null): HubSocket {
+    const host = this.#host;
     return {
-      data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'remote', guest },
+      data: {
+        kind: 'hub',
+        transcripts: new Map(),
+        surface: null,
+        get origin() {
+          return host.isOwner() ? 'owner' : 'remote';
+        },
+        guest,
+      },
       send: (payload: string) => this.#send({ t: 'socket', data: payload }),
     };
   }
@@ -374,5 +497,6 @@ export class RemoteChannel {
     if (state.kind === 'open' && state.socket) this.#host.hub.close(state.socket);
     for (const request of this.#requests.values()) request.controller.abort();
     this.#requests.clear();
+    for (const id of [...this.#streams.keys()]) this.#detachTerminal(id);
   }
 }

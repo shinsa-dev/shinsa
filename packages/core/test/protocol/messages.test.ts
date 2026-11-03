@@ -32,6 +32,7 @@ describe('parseClientMessage', () => {
       surface: 'desktop',
     });
     expect(read({ type: 'state.sync' })).toEqual({ type: 'state.sync' });
+    expect(read({ type: 'presence', active: true })).toEqual({ type: 'presence', active: true });
     expect(read({ type: 'task.detail', taskId: 't-1' })).toEqual({ type: 'task.detail', taskId: 't-1' });
     expect(read({ type: 'command', id: 'c-1', command: { type: 'task.cancel' } })).toEqual({
       type: 'command',
@@ -66,6 +67,7 @@ describe('parseClientMessage', () => {
       JSON.stringify({ type: 'command', id: 'x'.repeat(201) }),
       JSON.stringify({ type: 'transcript.unsubscribe' }),
       JSON.stringify({ type: 'shutdown' }),
+      JSON.stringify({ type: 'presence' }),
     ])
       expect(parseClientMessage(text)).toBeNull();
   });
@@ -93,6 +95,8 @@ describe('ServerMessage', () => {
       start: 0,
     });
     expect(read({ type: 'surfaces', desktop: true })).toEqual({ type: 'surfaces', desktop: true });
+    for (const where of ['here', 'elsewhere', 'nowhere'])
+      expect(read({ type: 'attention', where })).toEqual({ type: 'attention', where });
     const snapshots = {
       'state.patch': 'patch',
       'task.detail': 'detail',
@@ -120,5 +124,6 @@ describe('ServerMessage', () => {
     expect(read({ type: 'ack', id: 'c1' })).toBeNull();
     expect(read({ type: 'transcript', runId: 'r1', entries: ['line'], start: 0 })).toBeNull();
     expect(read({ type: 'accounts', accounts: null })).toBeNull();
+    expect(read({ type: 'attention', where: 'somewhere' })).toBeNull();
   });
 });

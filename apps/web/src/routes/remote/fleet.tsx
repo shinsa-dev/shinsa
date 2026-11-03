@@ -1,6 +1,7 @@
 import { describeList } from '@shinsa/core';
 import * as React from 'react';
 import { replaceConnection } from '@/lib/connection/socket.ts';
+import { serveNotificationOpens } from '@/lib/notifications/worker.ts';
 import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import { requestWaitingAnswer } from '@/lib/remote/enroll.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
@@ -15,6 +16,7 @@ import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts'
 import type { RemoteServices } from '@/lib/remote/services.ts';
 import { admitTeamMachines } from '@/lib/teams/admit.ts';
 import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
+import { navigate } from '@/router.ts';
 import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteSteps } from './shell.tsx';
 
 type FleetState =
@@ -200,6 +202,7 @@ export function FleetApp({
         if (!live) return;
         const current = fleet;
         release.push(serveRelayedRequests(services.worker, (request) => current.fetch(request)));
+        release.push(serveNotificationOpens(services.worker, navigate));
         replaceConnection(current);
         release.push(() => replaceConnection(null));
         setState({ kind: 'ready', fleet: current });

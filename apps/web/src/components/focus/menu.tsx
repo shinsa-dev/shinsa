@@ -17,7 +17,6 @@ import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useRemoteSnapshot } from '@/lib/connection/socket.ts';
 import { listFocusTeams, resolveFocusUntil, selectFocus, selectFocusTeam, YOUR_WORK } from '@/lib/focus.ts';
 import { listProjects } from '@/lib/projects.ts';
-import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import { TEAMS_SECTION } from '@/lib/teams/settings.ts';
 import { navigate } from '@/router.ts';
@@ -165,11 +164,9 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
         <DropdownMenuItem onClick={() => navigate(resolveSettingsPath('projects'))}>
           {projects.length === 0 ? 'Create a project…' : 'Edit projects…'}
         </DropdownMenuItem>
-        {!isRemoteBuild() && (
-          <DropdownMenuItem onClick={() => navigate(resolveSettingsPath('general', TEAMS_SECTION))}>
-            {teams.length === 0 ? 'Create or join a team…' : 'Edit teams…'}
-          </DropdownMenuItem>
-        )}
+        <DropdownMenuItem onClick={() => navigate(resolveSettingsPath('general', TEAMS_SECTION))}>
+          {teams.length === 0 ? 'Create or join a team…' : 'Edit teams…'}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

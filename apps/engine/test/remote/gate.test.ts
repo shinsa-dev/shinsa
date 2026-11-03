@@ -8,6 +8,7 @@ import { HttpServices } from '../../src/http/services/service.ts';
 import { EgressGate } from '../../src/remote/egress/service.ts';
 import type { TunnelGate as TunnelGateService } from '../../src/remote/gate/service.ts';
 import { TunnelGate } from '../../src/remote/gate/service.ts';
+import { Remote } from '../../src/remote/index.ts';
 import type { Engine } from '../../src/runtime/index.ts';
 import { createGate, createRepo, createRun, createShareView, readSentView } from '../helpers/state.ts';
 import { createHttpContext } from '../helpers/web.ts';
@@ -94,6 +95,7 @@ function createRemote(overrides: Record<string, unknown> = {}) {
     appOrigin: APP,
     ...createConnects(),
     store: { file: { access: { owner: { id: OWNER_ID }, members: [] } } },
+    isOwner: Remote.prototype.isOwner,
     ...overrides,
   } as unknown as HttpContext['remote'];
 }
