@@ -1,6 +1,7 @@
 import { join } from 'node:path';
-import { APP_IDENTITY, resolveEngineLabel } from '@shinsa/core';
+import { resolveEngineLabel } from '@shinsa/core';
 import { Option, Schema } from 'effect';
+import { resolveConfigHome } from '../server/url.ts';
 import {
   AGENT_PROGRAM,
   APP_ID,
@@ -156,5 +157,5 @@ export function isCrashing(job: LaunchdJob) {
 export function resolveDataDir(env: Record<string, string | undefined>, home: string) {
   if (env.SHINSA_HOME) return join(env.SHINSA_HOME, 'data');
   if (env.SHINSA_DATA_DIR) return env.SHINSA_DATA_DIR;
-  return join(env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'), APP_IDENTITY.configDir, 'data');
+  return join(resolveConfigHome(env, home), 'data');
 }
