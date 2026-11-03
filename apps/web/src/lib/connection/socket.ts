@@ -23,11 +23,24 @@ import {
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
+import { Deferred, Effect, Exit, type Fiber, Layer } from 'effect';
+import { Socket } from 'effect/socket';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
+import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
+import { provideTransport } from '@/lib/runtime/socket/transport.ts';
 import { useSharedTranscript } from '@/lib/share/transcripts.ts';
 import { createSignal } from '@/lib/signal.ts';
+import {
+  CONNECTION_LOST_MESSAGE,
+  CommandRefused,
+  type EngineLink,
+  NOT_CONNECTED_MESSAGE,
+  UPDATE_ENGINE_MESSAGE,
+} from './engine-socket/schema.ts';
+import { EngineSocket } from './engine-socket/service.ts';
 import { selectReadOnlyRefusal } from './read-only.ts';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
@@ -39,8 +52,7 @@ export interface Snapshot {
 
 interface Pending {
   message: ClientMessage;
-  resolve: () => void;
-  reject: (error: Error) => void;
+  answer: Deferred.Deferred<void, CommandRefused>;
   drops: number;
 }
 
@@ -115,13 +127,10 @@ export interface ShinsaConnection {
 }
 
 export interface ConnectionOptions {
-  openSocket: () => WebSocket;
-  retry: (reconnect: () => void, delayMs: number) => void;
+  transport?: SocketTransport;
   surface?: () => Surface;
   schedule?: Scheduler;
 }
-
-const RETRY_STEPS_MS = [250, 1000, 2000, 5000];
 
 const MAX_RESENDS = 2;
 
@@ -134,8 +143,6 @@ export const NO_MACHINES: MachineChoice[] = [];
 export const NO_UNREACHABLE_MACHINES: UnreachableMachine[] = [];
 
 export const NO_MACHINE_ACCESS: MachineAccess[] = [];
-
-const UPDATE_ENGINE_MESSAGE = 'Update Shinsa to use this.';
 
 const BASELINE_COMMANDS = resolveEngineCommands(null);
 
@@ -158,26 +165,9 @@ export const TRANSCRIPT_CACHE_LIMIT = 24;
 
 export const TRANSCRIPT_ENTRY_LIMIT = 10_000;
 
-function openShinsaSocket() {
-  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  return new WebSocket(`${protocol}://${location.host}/ws`);
-}
-
-export function retryLater(reconnect: () => void, delayMs: number) {
-  setTimeout(reconnect, delayMs);
-}
-
 function scheduleFrame(flush: () => void) {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => flush());
   setTimeout(flush, HIDDEN_FRAME_MS);
-}
-
-function parseServerMessage(data: string) {
-  try {
-    return JSON.parse(data) as ServerMessage;
-  } catch {
-    return null;
-  }
 }
 
 function mergeTranscript(entries: ChatEntry[], chunk: TranscriptChunk): ChatEntry[] | null {
@@ -188,7 +178,8 @@ function mergeTranscript(entries: ChatEntry[], chunk: TranscriptChunk): ChatEntr
 }
 
 export class Connection implements ShinsaConnection {
-  #socket: WebSocket | null = null;
+  #fiber: Fiber.Fiber<never> | null = null;
+  #link: EngineLink | null = null;
   #snapshot: Snapshot = { state: null, status: 'connecting' };
   #confirmed: WireState | null = null;
   #incomingState: WireState | null | undefined = undefined;
@@ -196,7 +187,6 @@ export class Connection implements ShinsaConnection {
   readonly #incomingTranscripts = new Map<string, TranscriptChunk[]>();
   #flushing = false;
   #syncing = false;
-  #attempt = 0;
   #stopped = false;
   #accounts: AccountsSnapshot | null = null;
   #terminals: TerminalsSnapshot | null = null;
@@ -221,45 +211,51 @@ export class Connection implements ShinsaConnection {
   readonly #detailRefs = new Map<string, number>();
   readonly #detailsAsked = new Set<string>();
 
-  constructor(options: ConnectionOptions = { openSocket: openShinsaSocket, retry: retryLater }) {
+  constructor(options: ConnectionOptions = {}) {
     this.#options = options;
   }
 
   start() {
-    if (this.#socket === null && !this.#stopped) this.#connect();
+    if (this.#fiber !== null || this.#stopped) return;
+    const session = {
+      opened: (link: EngineLink) => this.#open(link),
+      received: (message: ServerMessage) => this.#receive(message),
+      closed: () => this.#close(),
+    };
+    const connect = Effect.gen(function* () {
+      const socket = yield* EngineSocket;
+      return yield* socket.connect(session);
+    });
+    this.#fiber = forkApp(
+      connect.pipe(Effect.provide(EngineSocket.layer), provideTransport(this.#options.transport))
+    );
   }
 
   stop() {
     this.#stopped = true;
-    this.#socket?.close();
+    this.#link = null;
+    this.#fiber?.interruptUnsafe();
     if (this.#snapshot.status !== 'closed') this.#update({ status: 'closed' });
   }
 
-  #connect() {
-    const socket = this.#options.openSocket();
-    this.#socket = socket;
-    socket.addEventListener('open', () => {
-      this.#syncing = true;
-      this.#detailsAsked.clear();
-      this.#update({ status: 'open' });
-      this.#send({ type: 'hello', surface: (this.#options.surface ?? resolveSurface)() });
-      for (const runId of this.#transcriptRefs.keys()) this.#subscribeTranscript(runId);
-      for (const pending of this.#pending.values()) this.#send(pending.message);
-    });
-    socket.addEventListener('message', (event) => {
-      const message = parseServerMessage(String(event.data));
-      if (message) this.#receive(message);
-    });
-    socket.addEventListener('close', () => {
-      this.#update({ status: 'closed' });
-      this.#dropPending();
-      if (this.#stopped) return;
-      const delay = RETRY_STEPS_MS[Math.min(this.#attempt, RETRY_STEPS_MS.length - 1)] ?? 5000;
-      this.#attempt += 1;
-      this.#options.retry(() => {
-        if (!this.#stopped) this.#connect();
-      }, delay);
-    });
+  #open(link: EngineLink) {
+    this.#link = link;
+    this.#syncing = true;
+    this.#detailsAsked.clear();
+    this.#update({ status: 'open' });
+    this.#send({ type: 'hello', surface: (this.#options.surface ?? resolveSurface)() });
+    for (const runId of this.#transcriptRefs.keys()) this.#subscribeTranscript(runId);
+    for (const pending of this.#pending.values()) this.#send(pending.message);
+  }
+
+  #isOpen() {
+    return this.#link?.isOpen() ?? false;
+  }
+
+  #close() {
+    this.#link = null;
+    this.#update({ status: 'closed' });
+    this.#dropPending();
   }
 
   subscribe = (listener: () => void) => this.#state.subscribe(listener);
@@ -324,23 +320,23 @@ export class Connection implements ShinsaConnection {
   }
 
   command(command: UserCommand) {
-    return new Promise<void>((resolve, reject) => {
-      if (this.#socket?.readyState !== WebSocket.OPEN) {
-        reject(new Error('Not connected to Shinsa.'));
-        return;
-      }
-      if (!selectEngineCommands(this.#engine).has(command.type)) {
-        reject(new Error(UPDATE_ENGINE_MESSAGE));
-        return;
-      }
-      const message: ClientMessage = { type: 'command', id: crypto.randomUUID(), command };
-      this.#pending.set(message.id, { message, resolve, reject, drops: 0 });
-      if (isOptimistic(command) && this.#confirmed) {
-        this.#optimistic.set(message.id, command);
-        this.#publishState();
-      }
-      this.#send(message);
-    });
+    return runApp(
+      Effect.suspend(() => {
+        if (!this.#isOpen())
+          return Effect.fail(new CommandRefused({ code: 'not_connected', message: NOT_CONNECTED_MESSAGE }));
+        if (!selectEngineCommands(this.#engine).has(command.type))
+          return Effect.fail(new CommandRefused({ code: 'engine_outdated', message: UPDATE_ENGINE_MESSAGE }));
+        const message: ClientMessage = { type: 'command', id: crypto.randomUUID(), command };
+        const answer = Deferred.makeUnsafe<void, CommandRefused>();
+        this.#pending.set(message.id, { message, answer, drops: 0 });
+        if (isOptimistic(command) && this.#confirmed) {
+          this.#optimistic.set(message.id, command);
+          this.#publishState();
+        }
+        this.#send(message);
+        return Deferred.await(answer);
+      })
+    );
   }
 
   watchTranscript(runId: string) {
@@ -367,7 +363,7 @@ export class Connection implements ShinsaConnection {
   requestTaskDetail(taskId: string) {
     const task = this.#confirmed?.tasks[taskId];
     if (!task?.summarized || this.#detailsAsked.has(taskId)) return;
-    if (this.#socket?.readyState !== WebSocket.OPEN) return;
+    if (!this.#isOpen()) return;
     this.#detailsAsked.add(taskId);
     this.#send({ type: 'task.detail', taskId });
   }
@@ -529,7 +525,10 @@ export class Connection implements ShinsaConnection {
       if (pending.drops <= MAX_RESENDS) continue;
       this.#pending.delete(id);
       this.#settleOptimistic(id);
-      pending.reject(new Error('Lost the connection to Shinsa.'));
+      Deferred.doneUnsafe(
+        pending.answer,
+        Exit.fail(new CommandRefused({ code: 'connection_lost', message: CONNECTION_LOST_MESSAGE }))
+      );
     }
   }
 
@@ -543,13 +542,13 @@ export class Connection implements ShinsaConnection {
   }
 
   #send(message: ClientMessage) {
-    if (this.#socket?.readyState === WebSocket.OPEN) this.#socket.send(JSON.stringify(message));
+    const link = this.#link;
+    if (link?.isOpen()) forkApp(link.send(message));
   }
 
   #receive(message: ServerMessage) {
     switch (message.type) {
       case 'state':
-        this.#attempt = 0;
         this.#incomingState = message.state;
         this.#incoming = [];
         this.#scheduleFlush();
@@ -564,13 +563,15 @@ export class Connection implements ShinsaConnection {
         if (!pending) return;
         this.flush();
         this.#settleOptimistic(message.id);
-        if (message.error) pending.reject(new Error(message.error.message));
-        else pending.resolve();
+        Deferred.doneUnsafe(
+          pending.answer,
+          message.error ? Exit.fail(new CommandRefused(message.error)) : Exit.void
+        );
         return;
       }
       case 'transcript': {
         const chunks = this.#incomingTranscripts.get(message.runId) ?? [];
-        chunks.push({ start: message.start, entries: message.entries });
+        chunks.push({ start: message.start, entries: [...message.entries] });
         this.#incomingTranscripts.set(message.runId, chunks);
         this.#scheduleFlush();
         return;
@@ -606,6 +607,10 @@ export class Connection implements ShinsaConnection {
         return;
     }
   }
+}
+
+export function resolveSocketTransport(open: () => WebSocket): SocketTransport {
+  return Layer.succeed(Socket.WebSocketConstructor, () => open());
 }
 
 const localConnection = new Connection();

@@ -15,7 +15,7 @@ import {
 } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import * as React from 'react';
-import { requestJson } from '@/lib/connection/http.ts';
+import { requestPlacement } from '@/lib/connection/placement.ts';
 import type { MachineChoice, UnreachableMachine } from '@/lib/connection/socket.ts';
 import { selectFocus } from '@/lib/focus.ts';
 import { listPriorityItems } from '@/lib/format/labels.ts';
@@ -275,14 +275,10 @@ export function resolveNewTaskMachine(
 
 export type PlacementAsker = (question: PlacementQuestion) => Promise<{ answer: PlacementAnswer | null }>;
 
-function askPlacement(question: PlacementQuestion) {
-  return requestJson<{ answer: PlacementAnswer | null }>('/api/placement', question);
-}
-
 export async function requestRoutedPlacement(
   machines: PlacementMachine[],
   request: string,
-  ask: PlacementAsker = askPlacement
+  ask: PlacementAsker = requestPlacement
 ): Promise<RoutedPlacement> {
   try {
     const { answer } = await ask({ request, machines: listPlacementCandidates(machines) });

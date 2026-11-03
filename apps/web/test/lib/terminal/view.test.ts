@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import { waitFor } from '@testing-library/react';
 import { FitAddon } from '@xterm/addon-fit';
+import type { Socket } from 'effect/socket';
 import { readTerminalFontSize } from '@/lib/preferences/terminal.ts';
 import {
   createWebglRenderer,
@@ -7,23 +9,26 @@ import {
   resolveTerminalView,
   selectTerminalView,
   syncTerminalViews,
-  type TerminalSocket,
   TerminalView,
   type TerminalViewOptions,
   WEBGL_LIMIT,
 } from '@/lib/terminal/view.ts';
+import { createSocketTransport, type PendingRetry } from '../../support/engine-socket.ts';
 
-interface FakeSocket extends TerminalSocket {
+type Listener = (event: Socket.WebSocketEvent) => void;
+
+interface FakeSocket extends Socket.WebSocketLike {
   path: string;
+  binaryType: string;
   sent: (string | Uint8Array)[];
   closed: boolean;
   emit: (type: 'open' | 'message' | 'close', event?: object) => void;
 }
 
-function createSockets() {
+function createSockets(retries: PendingRetry[] = []) {
   const sockets: FakeSocket[] = [];
-  const openSocket = (path: string) => {
-    const listeners = new Map<string, ((event: Event) => void)[]>();
+  const open = (path: string) => {
+    let listeners: { type: string; listener: Listener }[] = [];
     const socket: FakeSocket = {
       path,
       binaryType: 'blob',
@@ -34,17 +39,20 @@ function createSockets() {
       close: () => {
         socket.closed = true;
       },
-      addEventListener: (type, listener) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
+      addEventListener: (type, listener) => listeners.push({ type, listener }),
+      removeEventListener: (type, listener) => {
+        listeners = listeners.filter((entry) => entry.type !== type || entry.listener !== listener);
+      },
       emit: (type, event = {}) => {
         if (type === 'open') Object.assign(socket, { readyState: 1 });
         if (type === 'close') Object.assign(socket, { readyState: 3 });
-        for (const listener of listeners.get(type) ?? []) listener(event as Event);
+        for (const entry of listeners) if (entry.type === type) entry.listener(event);
       },
     };
     sockets.push(socket);
     return socket;
   };
-  return { sockets, openSocket };
+  return { sockets, transport: createSocketTransport((url) => open(new URL(url).pathname), retries) };
 }
 
 const views: TerminalView[] = [];
@@ -64,16 +72,15 @@ function sizedHost(width = 800, height = 400) {
 }
 
 function createView(options: Partial<TerminalViewOptions> = {}) {
-  const { sockets, openSocket } = createSockets();
-  const retries: (() => void)[] = [];
+  const retries: PendingRetry[] = [];
+  const { sockets, transport } = createSockets(retries);
   const links: string[] = [];
   const view = new TerminalView({
     id: 'term-1',
     scheme: 'light',
     mac: true,
     read: () => '',
-    openSocket,
-    retry: (reconnect) => retries.push(reconnect),
+    transport,
     loadRenderer: () => null,
     observeSize: () => () => undefined,
     openLink: (url) => links.push(url),
@@ -156,7 +163,7 @@ describe('TerminalView', () => {
     const { socket, sockets, retries, view } = createView();
     socket().emit('close', { code: 1006 });
     expect(view.connection).toBe('closed');
-    retries[0]?.();
+    retries[0]?.reconnect();
     expect(sockets).toHaveLength(2);
     socket().emit('open');
     expect(view.connection).toBe('open');
@@ -171,7 +178,7 @@ describe('TerminalView', () => {
     const { socket, retries, view } = createView();
     socket().emit('close', { code: 1006 });
     view.dispose();
-    retries[0]?.();
+    retries[0]?.reconnect();
     socket().emit('close', { code: 1006 });
     expect(retries).toHaveLength(1);
     expect(socket().closed).toBe(true);
@@ -219,13 +226,13 @@ describe('TerminalView', () => {
     const hosts: HTMLElement[] = [];
     const released: string[] = [];
     const shown = Array.from({ length: WEBGL_LIMIT + 1 }, (_, index) => {
-      const { openSocket } = createSockets();
+      const { transport } = createSockets();
       const view = resolveTerminalView({
         id: `many-${index}`,
         scheme: 'light',
         mac: true,
         read: () => '',
-        openSocket,
+        transport,
         observeSize: () => () => undefined,
         loadRenderer: () => ({ dispose: () => released.push(`many-${index}`) }),
       });
@@ -374,12 +381,12 @@ describe('TerminalView', () => {
 
 describe('the views kept across pages', () => {
   it('keeps one view per terminal and drops the ones whose terminal closed', () => {
-    const { openSocket } = createSockets();
+    const { transport } = createSockets();
     const options = {
       scheme: 'light' as const,
       mac: true,
       read: () => '',
-      openSocket,
+      transport,
       loadRenderer: () => null,
     };
     const first = resolveTerminalView({ ...options, id: 'a' });
@@ -391,8 +398,8 @@ describe('the views kept across pages', () => {
   });
 
   it('releases one view on its own, and a view it does not keep is nothing to release', () => {
-    const { openSocket } = createSockets();
-    const view = resolveTerminalView({ id: 'setup', scheme: 'light', mac: true, read: () => '', openSocket });
+    const { transport } = createSockets();
+    const view = resolveTerminalView({ id: 'setup', scheme: 'light', mac: true, read: () => '', transport });
     const dispose = spyOn(view, 'dispose');
     releaseTerminalView('setup');
     expect(dispose).toHaveBeenCalledTimes(1);
@@ -403,7 +410,7 @@ describe('the views kept across pages', () => {
 });
 
 describe('the defaults it runs with in the page', () => {
-  it('has no WebGL renderer where the browser has no WebGL, and opens sockets and links the page’s way', () => {
+  it('has no WebGL renderer where the browser has no WebGL, and opens sockets and links the page’s way', async () => {
     const open = spyOn(window, 'open').mockReturnValue(null);
     const sockets: string[] = [];
     const RealSocket = globalThis.WebSocket;
@@ -417,19 +424,15 @@ describe('the defaults it runs with in the page', () => {
       addEventListener(type: string, listener: (event: Event) => void) {
         if (type === 'close') closes.push(listener);
       }
+      removeEventListener() {}
       send() {}
       close() {}
     } as unknown as typeof WebSocket;
-    const timers = spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void) => {
-      run();
-      return 0;
-    }) as unknown as typeof setTimeout);
     const view = new TerminalView({ id: 'x', scheme: 'dark', mac: false });
     views.push(view);
     expect(sockets).toEqual(['ws://localhost/ws/terminals/x']);
     closes[0]?.({ code: 1006 } as unknown as Event);
-    timers.mockRestore();
-    expect(sockets).toHaveLength(2);
+    await waitFor(() => expect(sockets).toHaveLength(2));
     view.terminal.options.linkHandler?.activate(new MouseEvent('click'), 'https://a.example', {
       start: { x: 1, y: 1 },
       end: { x: 1, y: 1 },

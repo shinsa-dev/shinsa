@@ -16,10 +16,12 @@ import {
   replaceConnection,
   type Snapshot,
 } from '@/lib/connection/socket.ts';
-import { type DashboardClient, DashboardError } from '@/lib/remote/dashboard.ts';
-import type { DeviceStore, EnrolledDevice } from '@/lib/remote/devices.ts';
+import type { DashboardClient } from '@/lib/remote/dashboard.ts';
+import type { DeviceStore } from '@/lib/remote/devices.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { type RemoteServices, RemoteServicesContext } from '@/lib/remote/services.ts';
+import { CloudRefused } from '@/lib/runtime/remote/schema.ts';
 import type { TeamKeyStore } from '@/lib/teams/join.ts';
 import { ClaimPage } from '@/routes/remote/claim.tsx';
 import { EnrollPage } from '@/routes/remote/enroll.tsx';
@@ -218,7 +220,8 @@ describe('the remote dashboard', () => {
     const view = renderRoot('/tasks', {
       devices,
       dashboard: createDashboard({
-        requestConnect: () => Promise.reject(new DashboardError('not_found', 'No such machine.', 404)),
+        requestConnect: () =>
+          Promise.reject(new CloudRefused({ code: 'not_found', message: 'No such machine.', status: 404 })),
       }),
     });
     expect(await screen.findByText('The app')).toBeTruthy();

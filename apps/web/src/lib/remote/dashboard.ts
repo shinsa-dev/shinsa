@@ -1,48 +1,8 @@
-import {
-  type ConnectResponse,
-  type InviteAcceptResponse,
-  type PairApproveResponse,
-  type PairView,
-  REMOTE_PATHS,
-  type RemoteInstance,
-  type RemoteSession,
-  type RemoteTeam,
-  resolveInstanceConnectPath,
-  resolveInstanceLeavePath,
-  resolveInstanceRemovePath,
-  resolvePairApprovePath,
-  resolvePairPath,
-  type TeamJoinResponse,
-  type TeamPreviewResponse,
-} from '@shinsa/core';
-
-type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
-
-export class DashboardError extends Error {
-  readonly code: string;
-  readonly status: number;
-
-  constructor(code: string, message: string, status: number) {
-    super(message);
-    this.name = 'DashboardError';
-    this.code = code;
-    this.status = status;
-  }
-}
-
-async function readError(response: Response) {
-  try {
-    const body = (await response.json()) as { error?: { code?: unknown; message?: unknown } };
-    const code = typeof body.error?.code === 'string' ? body.error.code : 'failed';
-    const message =
-      typeof body.error?.message === 'string'
-        ? body.error.message
-        : `Shinsa Cloud answered ${response.status}.`;
-    return new DashboardError(code, message, response.status);
-  } catch {
-    return new DashboardError('failed', `Shinsa Cloud answered ${response.status}.`, response.status);
-  }
-}
+import { ClaimCode, InstanceId, REMOTE_PATHS } from '@shinsa/core';
+import { Effect, Schema } from 'effect';
+import { runApp } from '@/lib/runtime/app.ts';
+import { CLOUD_NOT_FOUND, CloudRefused } from '@/lib/runtime/remote/schema.ts';
+import { RemoteClient } from '@/lib/runtime/remote/service.ts';
 
 const SIGN_IN_ERRORS: Record<string, string> = {
   sign_in_failed: 'GitHub did not finish the sign-in. Try again.',
@@ -56,40 +16,60 @@ export function resolveSignInUrl(returnPath: string) {
   return `${REMOTE_PATHS.signIn}?return=${encodeURIComponent(returnPath)}`;
 }
 
-export function createDashboardClient(fetchApi: Fetch = (input, init) => fetch(input, init)) {
-  async function call<T>(path: string, method: 'GET' | 'POST' = 'GET', body: unknown = {}): Promise<T> {
-    let response: Response;
-    try {
-      response = await fetchApi(path, {
-        method,
-        credentials: 'same-origin',
-        ...(method === 'POST'
-          ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-          : {}),
-      });
-    } catch {
-      throw new DashboardError('offline', 'Couldn’t reach Shinsa Cloud.', 0);
-    }
-    if (!response.ok) throw await readError(response);
-    return (await response.json()) as T;
-  }
+export function isMachineGone(error: unknown) {
+  return error instanceof CloudRefused && error.status === CLOUD_NOT_FOUND.status;
+}
+
+export function createDashboardClient() {
+  const notFound = new CloudRefused(CLOUD_NOT_FOUND);
+  const decodeInstanceId = Schema.decodeUnknownEffect(InstanceId);
+  const decodeClaimCode = Schema.decodeUnknownEffect(ClaimCode);
+  const call = <A, E>(pick: (remote: RemoteClient['Service']) => Effect.Effect<A, E>) =>
+    runApp(
+      Effect.gen(function* () {
+        return yield* pick(yield* RemoteClient);
+      })
+    );
+  const onInstance = <A, E>(
+    id: string,
+    pick: (remote: RemoteClient['Service'], params: { instanceId: InstanceId }) => Effect.Effect<A, E>
+  ) =>
+    call((remote) =>
+      decodeInstanceId(id).pipe(
+        Effect.mapError(() => notFound),
+        Effect.flatMap((instanceId) => pick(remote, { instanceId }))
+      )
+    );
+  const onClaim = <A, E>(
+    code: string,
+    pick: (remote: RemoteClient['Service'], params: { claimCode: ClaimCode }) => Effect.Effect<A, E>
+  ) =>
+    call((remote) =>
+      decodeClaimCode(code).pipe(
+        Effect.mapError(() => notFound),
+        Effect.flatMap((claimCode) => pick(remote, { claimCode }))
+      )
+    );
 
   return {
-    readSession: () => call<RemoteSession>(REMOTE_PATHS.session),
-    listInstances: () => call<RemoteInstance[]>(REMOTE_PATHS.instances),
+    readSession: () => call((remote) => remote.session.read()),
+    listInstances: () => call((remote) => remote.instances.list()),
     requestConnect: (instanceId: string) =>
-      call<ConnectResponse>(resolveInstanceConnectPath(instanceId), 'POST'),
-    removeInstance: (instanceId: string) => call<{ ok: true }>(resolveInstanceRemovePath(instanceId), 'POST'),
-    leaveInstance: (instanceId: string) => call<{ ok: true }>(resolveInstanceLeavePath(instanceId), 'POST'),
-    acceptInvite: (token: string) => call<InviteAcceptResponse>(REMOTE_PATHS.inviteAccept, 'POST', { token }),
+      onInstance(instanceId, (remote, params) => remote.instances.connect({ params })),
+    removeInstance: (instanceId: string) =>
+      onInstance(instanceId, (remote, params) => remote.instances.remove({ params })),
+    leaveInstance: (instanceId: string) =>
+      onInstance(instanceId, (remote, params) => remote.instances.leave({ params })),
+    acceptInvite: (token: string) => call((remote) => remote.instances.inviteAccept({ payload: { token } })),
     acceptHandoff: (token: string) =>
-      call<InviteAcceptResponse>(REMOTE_PATHS.handoffAccept, 'POST', { token }),
-    listTeams: () => call<RemoteTeam[]>(REMOTE_PATHS.teams),
-    joinTeam: (invite: string) => call<TeamJoinResponse>(REMOTE_PATHS.teamJoin, 'POST', { invite }),
-    previewTeam: (invite: string) => call<TeamPreviewResponse>(REMOTE_PATHS.teamPreview, 'POST', { invite }),
-    readPair: (claimCode: string) => call<PairView>(resolvePairPath(claimCode)),
-    approvePair: (claimCode: string) => call<PairApproveResponse>(resolvePairApprovePath(claimCode), 'POST'),
-    signOut: () => call<{ ok: true }>(REMOTE_PATHS.signOut, 'POST'),
+      call((remote) => remote.instances.handoffAccept({ payload: { token } })),
+    listTeams: () => call((remote) => remote.teams.list()),
+    joinTeam: (invite: string) => call((remote) => remote.teams.join({ payload: { invite } })),
+    previewTeam: (invite: string) => call((remote) => remote.teams.preview({ payload: { invite } })),
+    readPair: (claimCode: string) => onClaim(claimCode, (remote, params) => remote.pairs.view({ params })),
+    approvePair: (claimCode: string) =>
+      onClaim(claimCode, (remote, params) => remote.pairs.approve({ params })),
+    signOut: () => call((remote) => remote.session.signOut()),
   };
 }
 

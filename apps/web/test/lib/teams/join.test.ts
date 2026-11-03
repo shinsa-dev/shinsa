@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { TeamJoinResponse } from '@shinsa/core';
-import type { KeyValueStore } from '@/lib/remote/devices.ts';
+import type { KeyValueStore } from '@/lib/remote/schema.ts';
 import {
   clearTeamJoinFragment,
   createTeamKeyStore,

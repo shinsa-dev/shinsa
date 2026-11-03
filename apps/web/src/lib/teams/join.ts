@@ -1,6 +1,6 @@
 import { parseTeamJoinFragment, type TeamJoinFragment, type TeamJoinStatus } from '@shinsa/core';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
-import type { KeyValueStore } from '@/lib/remote/devices.ts';
+import type { KeyValueStore } from '@/lib/remote/schema.ts';
 import type { UserProfile } from '@/lib/remote/users.ts';
 
 const JOIN_KEY = 'shinsa.remote.team-join';

@@ -2,7 +2,8 @@ import { isTaskSettled } from '../domain/stages.ts';
 import type { Activity, Evidence, Gate, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { type EntryChange, resolveEntryChange, type StatePatch } from './patch.ts';
-import { serializeRun, serializeState, type WireRun, type WireState, type WireTask } from './runs.ts';
+import { serializeRun, serializeState } from './runs.ts';
+import type { WireRun, WireState, WireTask } from './schema.ts';
 
 export interface TaskDetail {
   taskId: string;

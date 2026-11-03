@@ -11,6 +11,7 @@ import {
   useVersions,
 } from '@/lib/connection/versions.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import { createProgram, createVersions } from '../../support/versions.ts';
 
 const SNAPSHOT = createVersions();
@@ -49,15 +50,8 @@ beforeEach(() => {
     input: RequestInfo | URL,
     init?: RequestInit
   ) => {
-    const path = String(input);
-    const method = init?.method ?? 'GET';
-    const headers = new Headers(init?.headers);
-    sent.push({
-      path,
-      method,
-      body: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
-      accept: headers.get('accept'),
-    });
+    const { path, method, headers, body } = readFetchCall(input, init);
+    sent.push({ path, method, body, accept: headers.get('accept') });
     const answer = routes[`${method} ${path}`];
     if (!answer) return new Response('offline', { status: 503 });
     return typeof answer === 'function' ? answer() : answer;

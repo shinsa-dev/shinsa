@@ -6,7 +6,8 @@ import {
   type StateRecordKey,
 } from '../state/draft.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { serializeRun, type WireState } from './runs.ts';
+import { serializeRun } from './runs.ts';
+import type { WireState } from './schema.ts';
 
 export type ValueChange = { put: unknown } | { drop: number; append: unknown[] };
 

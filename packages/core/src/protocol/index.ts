@@ -101,7 +101,6 @@ export {
   isSurface,
   parseClientMessage,
   type RepoCandidate,
-  type ServerMessage,
   type TaskDiff,
 } from './messages.ts';
 export type {
@@ -133,7 +132,7 @@ export {
   type StatePatch,
   type ValueChange,
 } from './patch.ts';
-export { serializeRun, serializeState, type WireRun, type WireState, type WireTask } from './runs.ts';
+export { serializeRun, serializeState } from './runs.ts';
 export {
   isServiceActive,
   isServiceEnvKey,
@@ -193,14 +192,19 @@ export type {
   VersionsSnapshot,
 } from './versions.ts';
 export {
-  type ClientMessage,
+  ClientMessage,
+  CommandRefusal,
   DEVELOPMENT_VERSION,
   type EngineInfo,
   type ParsedClientMessage,
+  ServerMessage,
   type Surface,
   SURFACES,
   TERMINAL_LIMITS,
   type TerminalClientFrame,
   type TerminalColors,
   type TerminalServerFrame,
+  WireState,
+  type WireRun,
+  type WireTask,
 } from './schema.ts';

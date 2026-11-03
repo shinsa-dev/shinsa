@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 import * as socket from '@/lib/connection/socket.ts';
 import { TEAM_ACTIONS } from '@/lib/connection/teams.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
 import { createTeamEntry, TEAM_URL } from '../../support/teams.ts';
@@ -22,8 +23,8 @@ beforeEach(() => {
     input: RequestInfo | URL,
     init?: RequestInit
   ) => {
-    const path = String(input);
-    sent.push({ path, body: JSON.parse(String(init?.body)) });
+    const { path, body } = readFetchCall(input, init);
+    sent.push({ path, body });
     return Response.json(answers[path] ?? createRemoteSnapshot());
   }) as typeof fetch);
   commandSpy = spyOn(socket, 'sendCommand').mockResolvedValue(undefined as never);
@@ -56,6 +57,24 @@ describe('team actions on this machine', () => {
     expect(commandSpy.mock.calls.map(([command]) => command)).toEqual([
       { type: 'project.add_to_team', projectId: 'api', teamId: 'team1' },
     ]);
+  });
+
+  it('changes which projects a team sees with a command for each one that moves', async () => {
+    await TEAM_ACTIONS.writeProjects(STATE, 'team1', ['api']);
+    expect(sent).toEqual([]);
+    expect(commandSpy.mock.calls.map(([command]) => command)).toEqual([
+      { type: 'project.add_to_team', projectId: 'api', teamId: 'team1' },
+      { type: 'project.remove_from_team', projectId: 'web', teamId: 'team1' },
+    ]);
+  });
+
+  it('stops at a refused command and says why', async () => {
+    commandSpy.mockRejectedValue(new Error('This project is gone.'));
+    await expect(TEAM_ACTIONS.writeProjects(STATE, 'team1', ['api'])).rejects.toMatchObject({
+      _tag: 'CommandFailed',
+      message: 'This project is gone.',
+    });
+    expect(commandSpy).toHaveBeenCalledTimes(1);
   });
 
   it('reads the link, and sends each change to its route, keeping the snapshot', async () => {

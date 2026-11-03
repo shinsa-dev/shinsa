@@ -121,9 +121,10 @@ export function releaseAcks(error: { code: string; message: string } | null = nu
   });
 }
 
-export function pushState(state: ShinsaState) {
+export function pushState(state: ShinsaState | null) {
   act(() => {
-    push({ type: 'state', state: state && serializeState(state) });
+    if (state === null) connection.reset();
+    else push({ type: 'state', state: serializeState(state) });
     if (!connection.selectEngine()) push({ type: 'engine', engine: resolveEngineInfo('1.0.0') });
   });
 }

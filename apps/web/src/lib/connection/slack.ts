@@ -1,7 +1,9 @@
 import type { SlackSnapshot } from '@shinsa/core';
+import { Effect } from 'effect';
 import * as React from 'react';
-import { describeFailure } from '@/lib/connection/commands.ts';
-import { requestJson } from '@/lib/connection/http.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
+import { createSharedRun } from '@/lib/runtime/shared-run.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 interface SlackView {
@@ -15,32 +17,37 @@ const EMPTY: SlackView = { snapshot: null, failure: null };
 
 let view: SlackView = EMPTY;
 
-let pending: Promise<void> | null = null;
-
 function publish(next: SlackView) {
   view = next;
   signal.publish();
 }
+
+const read = createSharedRun(
+  Effect.gen(function* () {
+    const engine = yield* EngineClient;
+    const snapshot = yield* engine.slack.snapshot();
+    publish({ snapshot, failure: null });
+  }).pipe(Effect.catch((error) => Effect.sync(() => publish({ ...view, failure: error.message }))))
+);
+
+const disconnect = Effect.gen(function* () {
+  const engine = yield* EngineClient;
+  const snapshot = yield* engine.slack.disconnect();
+  publish({ snapshot, failure: null });
+  return snapshot;
+});
 
 export function selectSlack() {
   return view;
 }
 
 export function resetSlack() {
-  pending = null;
+  read.reset();
   publish(EMPTY);
 }
 
 export function refreshSlack() {
-  pending ??= requestJson<SlackSnapshot>('/api/slack')
-    .then(
-      (snapshot) => publish({ snapshot, failure: null }),
-      (error: unknown) => publish({ ...view, failure: describeFailure(error) })
-    )
-    .then(() => {
-      pending = null;
-    });
-  return pending;
+  return read.run();
 }
 
 export interface SlackActions {
@@ -48,11 +55,7 @@ export interface SlackActions {
 }
 
 export const SLACK_ACTIONS: SlackActions = {
-  disconnect: async () => {
-    const snapshot = await requestJson<SlackSnapshot>('/api/slack/disconnect', {});
-    publish({ snapshot, failure: null });
-    return snapshot;
-  },
+  disconnect: () => runApp(disconnect),
 };
 
 function refreshWhenVisible() {

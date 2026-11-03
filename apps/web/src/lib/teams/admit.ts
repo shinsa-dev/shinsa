@@ -1,10 +1,13 @@
 import { type RemoteTeam, resolveKeyFingerprint, type TeamListView } from '@shinsa/core';
-import { type ChannelOptions, openRemoteChannel, type RemoteChannel } from '@/lib/remote/channel.ts';
+import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
-import { createDeviceKeys, type DeviceStore, type EnrolledDevice } from '@/lib/remote/devices.ts';
+import { createDeviceKeys, type DeviceStore } from '@/lib/remote/devices.ts';
 import type { MachineRow } from '@/lib/remote/machines.ts';
-import { openTeamChannel, type TeamChannelHandlers, type TeamChannelTarget } from './channel.ts';
+import type { ChannelOptions, RemoteChannel } from '@/lib/remote/remote-channel/schema.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
+import { openTeamChannel } from './channel.ts';
 import type { StoredTeamKey } from './join.ts';
+import type { TeamChannelHandlers, TeamChannelTarget } from './team-socket/schema.ts';
 
 type OpenTeam = (target: TeamChannelTarget, handlers: TeamChannelHandlers) => () => void;
 
@@ -70,7 +73,7 @@ async function enroll(row: MachineRow, machineKey: string, secret: string, optio
   return device;
 }
 
-async function admitMachine(row: MachineRow, teams: RemoteTeam[], options: TeamAdmitOptions) {
+async function admitMachine(row: MachineRow, teams: readonly RemoteTeam[], options: TeamAdmitOptions) {
   for (const team of teams) {
     if (!team.machines.some((machine) => machine.id === row.instance.id)) continue;
     const stored = await options.selectTeamKey(team.id);
@@ -91,7 +94,7 @@ export async function admitTeamMachines(rows: MachineRow[], options: TeamAdmitOp
     (row) => row.instance.role === 'member' && !row.device && row.instance.online
   );
   if (candidates.length === 0) return rows;
-  let teams: RemoteTeam[];
+  let teams: readonly RemoteTeam[];
   try {
     teams = await options.dashboard.listTeams();
   } catch {

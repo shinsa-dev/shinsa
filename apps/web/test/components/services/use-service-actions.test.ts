@@ -3,6 +3,7 @@ import { resolveServiceView } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import { useServiceActions } from '@/components/services/use-service-actions.ts';
 import { closePreviewShareDialog, usePreviewShareDialog } from '@/lib/share/previews.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import { createProject, createShinsaState, createTask, NOW } from '../../support/state.ts';
 import { createService, createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
 
@@ -17,8 +18,8 @@ const SHOP = createProject({ id: 'shop', name: 'Shop', key: 'SH' });
 
 describe('useServiceActions', () => {
   it('sends each row and panel action to the engine, and opens a running service’s terminal', async () => {
-    const fetch = mock(async (url: string) =>
-      Response.json(url.includes('suggestions') ? { suggestions: [] } : createTerminalsSnapshot())
+    const fetch = mock(async (url: URL) =>
+      Response.json(String(url).includes('suggestions') ? { suggestions: [] } : createTerminalsSnapshot())
     );
     globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
     const left = mock(() => undefined);
@@ -58,7 +59,7 @@ describe('useServiceActions', () => {
       expect(await actions.update(api, input)).toBe(true);
       expect(await actions.remove([api])).toBe(true);
     });
-    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+    expect(fetch.mock.calls.map(([url]) => readFetchCall(url).path)).toEqual([
       '/api/services/api/start',
       '/api/services/api/stop',
       '/api/services/api/restart',

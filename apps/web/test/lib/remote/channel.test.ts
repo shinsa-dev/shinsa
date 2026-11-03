@@ -6,7 +6,8 @@ import {
   serializePublicKey,
 } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
-import { ChannelError, openRemoteChannel } from '@/lib/remote/channel.ts';
+import { openRemoteChannel } from '@/lib/remote/channel.ts';
+import { ChannelError } from '@/lib/remote/remote-channel/schema.ts';
 import { createKeyPair, FakeMac, type FakeMacOptions } from './fake-mac.ts';
 
 const SECRET = serializeBase64Url(new Uint8Array(32).fill(5));

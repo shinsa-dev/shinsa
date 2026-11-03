@@ -3,6 +3,7 @@ import { SERVICE_LIMITS } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import { listServiceSections } from '@/lib/command/services.ts';
 import { useServicesPanelRequest } from '@/lib/terminal/services-panel.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import { createProject, createShinsaState, NOW } from '../../support/state.ts';
 import { createService, createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
 
@@ -33,7 +34,7 @@ describe('listServiceSections', () => {
   });
 
   it('starts, stops and restarts each service, and starts all of a project’s that are stopped', () => {
-    const fetch = mock(async (_url: string) => Response.json(createTerminalsSnapshot()));
+    const fetch = mock(async (_url: URL) => Response.json(createTerminalsSnapshot()));
     globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
     const snapshot = createTerminalsSnapshot(
       [createTerminal({ id: 'svc', serviceId: 'api', startedAt: NOW })],
@@ -60,7 +61,7 @@ describe('listServiceSections', () => {
     renderHook(() => useServicesPanelRequest(opened));
     for (const command of commands) if (command.kind === 'run') act(() => command.run());
     expect(opened.mock.calls.map(([mode]) => mode)).toEqual(['add', 'manage']);
-    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+    expect(fetch.mock.calls.map(([url]) => readFetchCall(url).path)).toEqual([
       '/api/services/start-all',
       '/api/services/site/start',
       '/api/services/api/restart',

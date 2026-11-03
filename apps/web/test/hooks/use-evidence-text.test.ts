@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useEvidenceText } from '@/hooks/use-evidence-text.ts';
 import { EVIDENCE_TEXT_LIMIT } from '@/lib/evidence/texts.ts';
+import { readFetchCall } from '../support/fetch.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -34,7 +35,9 @@ describe('useEvidenceText', () => {
     const { result } = renderHook(() => useEvidenceText('/api/evidence/hook-run.log'));
     expect(result.current).toBeNull();
     await waitFor(() => expect(result.current).toBe('All 42 tests passed.'));
-    expect(fetch).toHaveBeenCalledWith('/api/evidence/hook-run.log');
+    expect(readFetchCall(...(fetch.mock.calls[0] as unknown as [URL])).path).toBe(
+      '/api/evidence/hook-run.log'
+    );
   });
 
   it('says why it could not read evidence the server refused', async () => {

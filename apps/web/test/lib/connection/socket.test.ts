@@ -39,6 +39,7 @@ import {
   useTranscript,
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
+import { createSocketTransport, type PendingRetry } from '../../support/engine-socket.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createMachineResources } from '../../support/resources.ts';
 import { createGate, createShinsaState, createTask } from '../../support/state.ts';
@@ -77,16 +78,13 @@ function entry(id: string): ChatEntry {
 
 function setup() {
   const sockets: FakeSocket[] = [];
-  const retries: { reconnect: () => void; delayMs: number }[] = [];
+  const retries: PendingRetry[] = [];
   const subject = new Connection({
-    openSocket: () => {
+    transport: createSocketTransport(() => {
       const socket = new FakeSocket();
       sockets.push(socket);
-      return socket as unknown as WebSocket;
-    },
-    retry: (reconnect, delayMs) => {
-      retries.push({ reconnect, delayMs });
-    },
+      return socket;
+    }, retries),
     schedule: (flush) => flush(),
   });
   const latest = () => {
@@ -172,6 +170,7 @@ describe('Connection', () => {
     latest().open();
     const first = subject.command(COMMAND);
     const second = subject.command({ type: 'task.cancel', taskId: 't2' });
+    void Promise.allSettled([second]);
     const [firstId = '', secondId = ''] = commandIds(latest());
     latest().receive({
       type: 'ack',
@@ -209,6 +208,24 @@ describe('Connection', () => {
     await expect(sent).resolves.toBeUndefined();
   });
 
+  it('keeps a command the socket could not write and sends it on the next socket', async () => {
+    const { subject, retries, latest } = setup();
+    subject.start();
+    latest().open();
+    const send = spyOn(latest(), 'send').mockImplementation(() => {
+      throw new Error('The socket broke.');
+    });
+    const sent = subject.command(COMMAND);
+    send.mockRestore();
+    latest().close();
+    retries.at(-1)?.reconnect();
+    latest().open();
+    const [id = ''] = commandIds(latest());
+    expect(latest().sent).toEqual([HELLO, { type: 'command', id, command: COMMAND }]);
+    latest().receive({ type: 'ack', id, error: null });
+    await expect(sent).resolves.toBeUndefined();
+  });
+
   it('gives up on a command once the connection has dropped three times under it', async () => {
     const { subject, retries, latest } = setup();
     subject.start();
@@ -241,6 +258,9 @@ describe('Connection', () => {
     latest().close();
     expect(retries.at(-1)?.delayMs).toBe(250);
     expect(subject.snapshot().status).toBe('closed');
+    retries.at(-1)?.reconnect();
+    latest().close();
+    expect(retries.map((retry) => retry.delayMs).slice(5)).toEqual([250, 1000]);
   });
 
   it('keeps backing off when each socket opens and breaks before its state arrives', () => {
@@ -367,12 +387,11 @@ describe('Connection state', () => {
     const frames: (() => void)[] = [];
     const sockets: FakeSocket[] = [];
     const subject = new Connection({
-      openSocket: () => {
+      transport: createSocketTransport(() => {
         const socket = new FakeSocket();
         sockets.push(socket);
-        return socket as unknown as WebSocket;
-      },
-      retry: () => undefined,
+        return socket;
+      }),
       schedule: (flush) => {
         frames.push(flush);
       },
@@ -508,24 +527,26 @@ describe('Connection task detail', () => {
   });
 
   it('asks again for a watched task on a new socket, and not for a released one', () => {
-    const { subject, latest } = setup();
+    const { subject, sockets, retries, latest } = setup();
+    const allDetailRequests = () => sockets.flatMap(detailRequests);
     subject.start();
     const releaseFirst = subject.watchTaskDetail('m1');
     const releaseSecond = subject.watchTaskDetail('m1');
     latest().open();
     latest().receive({ type: 'state', state: view(settled()) });
-    expect(detailRequests(latest())).toEqual([{ type: 'task.detail', taskId: 'm1' }]);
+    expect(allDetailRequests()).toEqual([{ type: 'task.detail', taskId: 'm1' }]);
     latest().close();
+    retries.at(-1)?.reconnect();
     latest().open();
     latest().receive({ type: 'state', state: view(settled()) });
-    expect(detailRequests(latest())).toHaveLength(2);
+    expect(allDetailRequests()).toHaveLength(2);
     releaseFirst();
     releaseFirst();
     latest().receive({ type: 'state', state: view(settled(6)) });
-    expect(detailRequests(latest())).toHaveLength(3);
+    expect(allDetailRequests()).toHaveLength(3);
     releaseSecond();
     latest().receive({ type: 'state', state: view(settled(7)) });
-    expect(detailRequests(latest())).toHaveLength(3);
+    expect(allDetailRequests()).toHaveLength(3);
   });
 
   it('asks for nothing while closed, and forgets what it watched on reset', () => {
@@ -558,12 +579,11 @@ describe('the frame the connection waits for', () => {
     }) as unknown as typeof setTimeout);
     const sockets: FakeSocket[] = [];
     const subject = new Connection({
-      openSocket: () => {
+      transport: createSocketTransport(() => {
         const socket = new FakeSocket();
         sockets.push(socket);
-        return socket as unknown as WebSocket;
-      },
-      retry: () => undefined,
+        return socket;
+      }),
     });
     subject.start();
     sockets[0]?.open();
@@ -597,12 +617,11 @@ describe('Connection surfaces', () => {
   it('says it is the desktop app when its surface is', () => {
     const sockets: FakeSocket[] = [];
     const subject = new Connection({
-      openSocket: () => {
+      transport: createSocketTransport(() => {
         const socket = new FakeSocket();
         sockets.push(socket);
-        return socket as unknown as WebSocket;
-      },
-      retry: () => undefined,
+        return socket;
+      }),
       surface: () => 'desktop',
     });
     subject.start();
@@ -947,7 +966,7 @@ describe('the shared connection', () => {
     globalThis.WebSocket = RealWebSocket;
   });
 
-  it('opens a WebSocket to /ws on this host and retries it after a delay', () => {
+  it('opens a WebSocket to /ws on this host, waits for it to open, and retries it after a delay', () => {
     const sockets: FakeSocket[] = [];
     const urls: string[] = [];
     globalThis.WebSocket = class extends FakeSocket {
@@ -970,8 +989,8 @@ describe('the shared connection', () => {
     subject.start();
     expect(urls).toEqual(['ws://localhost/ws']);
     sockets[0]?.close();
-    expect(timers.map((timer) => timer.delayMs)).toEqual([250]);
-    timers[0]?.run();
+    expect(timers.map((timer) => timer.delayMs)).toEqual([10_000, 250]);
+    timers[1]?.run();
     expect(urls).toHaveLength(2);
     timeout.mockRestore();
   });

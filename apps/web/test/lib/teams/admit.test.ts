@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { type RemoteInstance, type RemoteTeam, resolveKeyFingerprint } from '@shinsa/core';
-import type { ChannelOptions, RemoteChannel } from '@/lib/remote/channel.ts';
-import type { EnrolledDevice } from '@/lib/remote/devices.ts';
 import { describeMachine } from '@/lib/remote/machines.ts';
+import type { ChannelOptions, RemoteChannel } from '@/lib/remote/remote-channel/schema.ts';
+import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { admitTeamMachines, readTeamMachineGrant } from '@/lib/teams/admit.ts';
-import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/channel.ts';
+import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
 import { createKeyPair } from '../remote/fake-mac.ts';
 import { TEAM_KEY } from './machine.ts';
 
@@ -163,7 +163,7 @@ describe('adding this browser to a teammate’s machine', () => {
     let stopped = 0;
     const ended = await readTeamMachineGrant(target, (_target, handlers) => {
       setTimeout(() => {
-        handlers.onMessage({ t: 'closed', reason: 'gone' });
+        handlers.onMessage({ t: 'end', id: 'gone' });
         handlers.onEnd({ reason: 'gone', gone: true });
         handlers.onEnd({ reason: 'again', gone: true });
       }, 0);

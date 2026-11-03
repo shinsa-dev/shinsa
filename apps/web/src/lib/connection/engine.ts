@@ -4,10 +4,12 @@ import {
   resolveEngineFit,
   type ShinsaBuild,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import * as React from 'react';
-import { refreshHealth, type ServerHealth } from '@/lib/connection/health.ts';
-import { requestJson } from '@/lib/connection/http.ts';
+import { type ServerHealth, syncHealth } from '@/lib/connection/health.ts';
 import type { Tone } from '@/lib/format/tone.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export type EngineAction = 'update_app';
@@ -89,8 +91,13 @@ export function resolveEngineView(
   };
 }
 
-export async function requestEngineRestart(when: EngineRestartWhen) {
-  const result = await requestJson<{ restarting: boolean }>('/api/engine/restart', { when });
-  await refreshHealth();
+const restart = Effect.fn('Engine.restart')(function* (when: EngineRestartWhen) {
+  const engine = yield* EngineClient;
+  const result = yield* engine.server.restart({ payload: { when } });
+  yield* syncHealth;
   return result;
+});
+
+export function requestEngineRestart(when: EngineRestartWhen) {
+  return runApp(restart(when));
 }

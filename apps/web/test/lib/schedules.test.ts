@@ -197,7 +197,7 @@ describe('changing a schedule', () => {
     expect(await requestWebhook(HOOK)).toEqual({
       url: 'http://localhost/api/hooks/s-hook/t',
       hasSecret: false,
-    });
+    } as never);
     await copyWebhookUrl(HOOK);
     expect(spies.copied).toHaveBeenCalledWith('http://localhost/api/hooks/s-hook/t');
     fake.stop();

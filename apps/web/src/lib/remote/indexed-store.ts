@@ -1,4 +1,4 @@
-import type { KeyValueStore } from './devices.ts';
+import type { KeyValueStore } from './schema.ts';
 
 const DATABASE = 'shinsa-remote';
 

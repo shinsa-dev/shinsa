@@ -24,6 +24,7 @@ import {
   useTaskDiff,
   useTaskRefs,
 } from '@/lib/connection/code.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import { createTask } from '../../support/state.ts';
 
 const realFetch = globalThis.fetch;
@@ -33,7 +34,7 @@ afterEach(() => {
 });
 
 function serve(respond: (url: string) => Response | Promise<Response>) {
-  const fetch = mock(async (url: string, _init?: RequestInit) => respond(url));
+  const fetch = mock(async (url: URL, init?: RequestInit) => respond(readFetchCall(url, init).path));
   globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
   return fetch;
 }
@@ -268,7 +269,7 @@ describe('the code reads', () => {
       })
     );
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(7));
-    expect(fetch.mock.calls.map(([url]) => url).sort()).toEqual(
+    expect(fetch.mock.calls.map((call) => readFetchCall(...call).path).sort()).toEqual(
       [
         `/api/tasks/reads/refs?v=${encodeURIComponent(resolveRefsVersion(task))}`,
         `/api/tasks/reads/paths?ref=${SHA}`,
@@ -305,7 +306,7 @@ describe('requestFileWrite', () => {
     const write = { path: 'src/a.ts', content: 'b', base: 'a' };
     const fetch = serve(() => Response.json({ path: 'src/a.ts', changed: true }));
     expect(await requestFileWrite('t 1', write)).toEqual({ kind: 'saved', changed: true });
-    expect(fetch.mock.calls[0]?.[0]).toBe('/api/tasks/t%201/file');
+    expect(readFetchCall(...(fetch.mock.calls[0] as [URL])).path).toBe('/api/tasks/t%201/file');
     serve(() =>
       Response.json({ error: { code: 'file_changed', message: 'x' }, content: 'theirs' }, { status: 409 })
     );
@@ -358,7 +359,9 @@ describe('useRepoSearch', () => {
       status: 'ready',
       value: { ref: SHA, matches: [match(1), match(2)], truncated: true, timedOut: false },
     });
-    expect(fetch.mock.calls[0]?.[1]).toEqual({ headers: { accept: 'application/x-ndjson' } });
+    expect(readFetchCall(...(fetch.mock.calls[0] as [URL, RequestInit])).headers.get('accept')).toBe(
+      'application/x-ndjson'
+    );
     const again = renderHook(() => useRepoSearch(task, SHA, search));
     expect(again.result.current.loaded.status).toBe('ready');
     expect(fetch).toHaveBeenCalledTimes(1);

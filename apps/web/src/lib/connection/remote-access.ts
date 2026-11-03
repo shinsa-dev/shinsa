@@ -1,8 +1,10 @@
 import type { RemoteSnapshot } from '@shinsa/core';
+import { Effect } from 'effect';
 import * as React from 'react';
-import { describeFailure } from '@/lib/connection/commands.ts';
-import { requestJson } from '@/lib/connection/http.ts';
 import { connection } from '@/lib/connection/socket.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
+import { createSharedRun } from '@/lib/runtime/shared-run.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 interface RemoteAccessView {
@@ -15,8 +17,6 @@ const failureSignal = createSignal();
 let failure: string | null = null;
 
 let view: RemoteAccessView = { snapshot: null, failure: null };
-
-let pending: Promise<void> | null = null;
 
 function replaceFailure(next: string | null) {
   failure = next;
@@ -39,7 +39,7 @@ export function selectRemoteAccess() {
 }
 
 export function resetRemoteAccess() {
-  pending = null;
+  read.reset();
   replaceFailure(null);
 }
 
@@ -53,33 +53,44 @@ function applyFirstRead(snapshot: RemoteSnapshot) {
   else replaceFailure(null);
 }
 
+const read = createSharedRun(
+  Effect.gen(function* () {
+    const engine = yield* EngineClient;
+    applyFirstRead(yield* engine.remote.snapshot());
+  }).pipe(Effect.catch((error) => Effect.sync(() => replaceFailure(error.message))))
+);
+
 export function refreshRemoteAccess() {
-  pending ??= requestJson<RemoteSnapshot>('/api/remote')
-    .then(applyFirstRead, (error: unknown) => replaceFailure(describeFailure(error)))
-    .then(() => {
-      pending = null;
-    });
-  return pending;
+  return read.run();
 }
 
-async function act(path: string, body: unknown = {}) {
-  const snapshot = await requestJson<RemoteSnapshot>(`/api/remote${path}`, body);
-  applyRemoteAccess(snapshot);
-  return snapshot;
+type RemoteEndpoints = EngineClient['Service']['remote'];
+
+function act(call: (remote: RemoteEndpoints) => Effect.Effect<RemoteSnapshot, Error>) {
+  return runApp(
+    Effect.gen(function* () {
+      const engine = yield* EngineClient;
+      const snapshot = yield* call(engine.remote);
+      applyRemoteAccess(snapshot);
+      return snapshot;
+    })
+  );
 }
+
+const NO_BODY = { payload: {} };
 
 export const REMOTE_ACCESS_ACTIONS = {
-  pair: () => act('/pair'),
-  cancelPairing: () => act('/pair/cancel'),
-  resume: () => act('/enable'),
-  pause: () => act('/disable'),
-  remove: () => act('/remove'),
-  revokeDevice: (publicKey: string) => act('/devices/remove', { publicKey }),
-  createLink: () => act('/link/create'),
-  removeLink: () => act('/link/remove'),
-  acceptRequest: (requestId: string) => act('/requests/accept', { requestId }),
-  declineRequest: (requestId: string) => act('/requests/decline', { requestId }),
-  removeMember: (userId: string) => act('/members/remove', { userId }),
+  pair: () => act((remote) => remote.pair(NO_BODY)),
+  cancelPairing: () => act((remote) => remote.cancelPairing(NO_BODY)),
+  resume: () => act((remote) => remote.enable(NO_BODY)),
+  pause: () => act((remote) => remote.disable(NO_BODY)),
+  remove: () => act((remote) => remote.remove(NO_BODY)),
+  revokeDevice: (publicKey: string) => act((remote) => remote.removeDevice({ payload: { publicKey } })),
+  createLink: () => act((remote) => remote.createLink(NO_BODY)),
+  removeLink: () => act((remote) => remote.removeLink(NO_BODY)),
+  acceptRequest: (requestId: string) => act((remote) => remote.acceptRequest({ payload: { requestId } })),
+  declineRequest: (requestId: string) => act((remote) => remote.declineRequest({ payload: { requestId } })),
+  removeMember: (userId: string) => act((remote) => remote.removeMember({ payload: { userId } })),
 };
 
 export type RemoteAccessActions = typeof REMOTE_ACCESS_ACTIONS;
@@ -92,14 +103,22 @@ export function useRemoteAccess() {
   return current;
 }
 
-function resolveMachinePath(path: string, machineId: string) {
-  return `/api/remote${path}?machine=${encodeURIComponent(machineId)}`;
+function actOnMachine(
+  machineId: string,
+  call: (remote: RemoteEndpoints) => Effect.Effect<RemoteSnapshot, Error>
+) {
+  return runApp(
+    Effect.gen(function* () {
+      const engine = yield* EngineClient;
+      return yield* call(engine.remote);
+    }).pipe(Effect.provide(EngineClient.onMachine(machineId)))
+  );
 }
 
 export function acceptMachineRequest(machineId: string, requestId: string) {
-  return requestJson<RemoteSnapshot>(resolveMachinePath('/requests/accept', machineId), { requestId });
+  return actOnMachine(machineId, (remote) => remote.acceptRequest({ payload: { requestId } }));
 }
 
 export function declineMachineRequest(machineId: string, requestId: string) {
-  return requestJson<RemoteSnapshot>(resolveMachinePath('/requests/decline', machineId), { requestId });
+  return actOnMachine(machineId, (remote) => remote.declineRequest({ payload: { requestId } }));
 }

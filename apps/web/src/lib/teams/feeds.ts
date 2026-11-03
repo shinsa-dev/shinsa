@@ -17,15 +17,19 @@ import {
   verifyTeamSnapshot,
 } from '@shinsa/core';
 import { resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
-import { waitFor } from '@/lib/share/live.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { openTeamChannel } from './channel.ts';
+import type { StoredTeamKey } from './join.ts';
 import {
-  openTeamChannel,
   TEAM_MACHINE_OFFLINE,
   type TeamChannelHandlers,
   type TeamChannelTarget,
-} from './channel.ts';
-import type { StoredTeamKey } from './join.ts';
+} from './team-socket/schema.ts';
+
+function waitFor(ms: number, run: () => void) {
+  const timer = setTimeout(run, ms);
+  return () => clearTimeout(timer);
+}
 
 const FEED_RETRY_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 
@@ -135,7 +139,7 @@ export interface TeamFeedSource {
 }
 
 export interface HostedTeamFeedsOptions {
-  listTeams: () => Promise<RemoteTeam[]>;
+  listTeams: () => Promise<readonly RemoteTeam[]>;
   selectTeamKey: (teamId: string) => Promise<StoredTeamKey | null>;
   openChannel?: (target: TeamChannelTarget, handlers: TeamChannelHandlers) => () => void;
   wait?: (ms: number, run: () => void) => () => void;
@@ -171,7 +175,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
 
   async start() {
     this.#started = true;
-    let teams: RemoteTeam[];
+    let teams: readonly RemoteTeam[];
     try {
       teams = await this.#options.listTeams();
     } catch {

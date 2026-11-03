@@ -308,15 +308,16 @@ export const ChatQuery = {
 export const CodeQuery = {
   ref: Schema.optionalKey(Schema.String),
   dir: Schema.optionalKey(Schema.String),
-  path: Schema.optionalKey(Schema.String),
-  previous: Schema.optionalKey(Schema.String),
   base: Schema.optionalKey(Schema.String),
   head: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String),
+  previous: Schema.optionalKey(Schema.String),
   q: Schema.optionalKey(Schema.String),
-  glob: Schema.optionalKey(Schema.String),
   regex: Schema.optionalKey(Schema.String),
   case: Schema.optionalKey(Schema.String),
   word: Schema.optionalKey(Schema.String),
+  glob: Schema.optionalKey(Schema.String),
+  v: Schema.optionalKey(Schema.String),
 };
 
 export const RefreshQuery = { refresh: Schema.optionalKey(Schema.String) };

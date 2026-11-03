@@ -1,27 +1,12 @@
+import { Effect, Schema } from 'effect';
 import * as React from 'react';
-import { requestJson } from '@/lib/connection/http.ts';
 import { type Connection, connection } from '@/lib/connection/socket.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { type LogProblem, ServerHealth } from './schema.ts';
 
-export interface LogProblem {
-  seq: number;
-  type: string;
-  kind: 'unreadable' | 'unappliable';
-  error: string;
-}
-
-export interface ServerHealth {
-  ok: boolean;
-  seq: number;
-  problems: LogProblem[];
-  version?: string;
-  protocol?: number;
-  busy?: boolean;
-  working?: number;
-  restart?: 'idle' | null;
-  restartBy?: number | null;
-  dataDir?: string;
-}
+export type { LogProblem, ServerHealth } from './schema.ts';
 
 export interface HealthBannerView {
   text: string;
@@ -50,20 +35,18 @@ function publish() {
   signal.publish();
 }
 
-async function readHealth() {
-  try {
-    return await requestJson<ServerHealth>('/api/health');
-  } catch {
-    return health;
-  }
+const decodeHealth = Schema.decodeUnknownEffect(ServerHealth);
+
+export const syncHealth = Effect.gen(function* () {
+  const engine = yield* EngineClient;
+  health = yield* decodeHealth(yield* engine.server.health());
+}).pipe(Effect.ignore, Effect.andThen(Effect.sync(publish)));
+
+export function refreshHealth() {
+  return runApp(syncHealth);
 }
 
-export async function refreshHealth() {
-  health = await readHealth();
-  publish();
-}
-
-function resolveProblemsKey(problems: LogProblem[]) {
+function resolveProblemsKey(problems: readonly LogProblem[]) {
   return problems.map((problem) => `${problem.seq}:${problem.kind}`).join(',');
 }
 

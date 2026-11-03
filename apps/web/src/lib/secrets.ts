@@ -1,11 +1,11 @@
 import type { Gate } from '@shinsa/core';
 import { requestWithToast } from '@/lib/connection/commands.ts';
-import { requestJson } from '@/lib/connection/http.ts';
+import { requestSecretAnswer } from '@/lib/connection/secrets.ts';
 
 export const SECRET_NOTE = 'It goes to Shinsa’s secret store. The agent and the chat never see it.';
 
-function requestSecret(gateId: string, body: unknown, done: string) {
-  return requestWithToast(() => requestJson(`/api/secrets/${encodeURIComponent(gateId)}`, body), done);
+function requestSecret(gateId: string, body: { value: string } | { decline: true }, done: string) {
+  return requestWithToast(() => requestSecretAnswer(gateId, body), done);
 }
 
 export function saveSecret(gateId: string, value: string) {

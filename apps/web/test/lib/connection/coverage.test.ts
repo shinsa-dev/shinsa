@@ -6,6 +6,7 @@ import {
   selectCoverageDetection,
   useCoverageDetection,
 } from '@/lib/connection/coverage.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 
 let fetchSpy: Mock<typeof fetch>;
 let answer: () => Response;
@@ -29,7 +30,7 @@ describe('coverage detection', () => {
     await waitFor(() =>
       expect(result.current).toEqual({ web: { tool: 'Vitest', command: 'npx vitest run --coverage' } })
     );
-    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe('/api/repos/coverage');
+    expect(readFetchCall(...(fetchSpy.mock.calls[0] as [URL])).path).toBe('/api/repos/coverage');
     rerender({ key: 'web,app' });
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
     rerender({ key: '' });

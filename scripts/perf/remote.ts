@@ -11,7 +11,8 @@ import { createRefusedConnector, REMOTE_FILE, Remote } from '../../apps/engine/s
 import { Roots } from '../../apps/engine/src/repos/index.ts';
 import { Engine } from '../../apps/engine/src/runtime/index.ts';
 import { EventLog, EvidenceStore, resolveStateVersion } from '../../apps/engine/src/store/index.ts';
-import { openRemoteChannel, type RemoteChannel } from '../../apps/web/src/lib/remote/channel.ts';
+import { openRemoteChannel } from '../../apps/web/src/lib/remote/channel.ts';
+import type { RemoteChannel } from '../../apps/web/src/lib/remote/remote-channel/schema.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   createConnectToken,

@@ -375,6 +375,9 @@ describe('the setup page', () => {
     await waitFor(() =>
       expect(fake?.requests.some((request) => request.path === '/api/accounts/refresh')).toBe(true)
     );
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(false)
+    );
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     await waitFor(() =>
       expect(sentReplies()).toEqual([{ type: 'answer', stepId: 'accounts', values: ['continue'] }])

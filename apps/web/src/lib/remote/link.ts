@@ -1,7 +1,13 @@
 import { type Bytes, type ChannelHeaders, CONNECT_TOKEN_TTL_MS, type ConnectResponse } from '@shinsa/core';
-import { ChannelError, type ChannelOptions, openRemoteChannel, type RemoteChannel } from './channel.ts';
-import { type DashboardClient, DashboardError } from './dashboard.ts';
-import type { EnrolledDevice } from './devices.ts';
+import { openRemoteChannel } from './channel.ts';
+import { type DashboardClient, isMachineGone } from './dashboard.ts';
+import {
+  CHANNEL_REPLACED,
+  ChannelError,
+  type ChannelOptions,
+  type RemoteChannel,
+} from './remote-channel/schema.ts';
+import type { EnrolledDevice } from './schema.ts';
 
 const CONNECTING = 0;
 
@@ -70,10 +76,6 @@ interface HeldConnect {
   reusableUntil: number;
 }
 
-function isRemoved(error: unknown) {
-  return error instanceof DashboardError && error.status === 404;
-}
-
 function listRequestHeaders(headers: Headers): ChannelHeaders {
   return [...headers.entries()];
 }
@@ -122,7 +124,7 @@ export class RemoteLink {
   #adopt(channel: RemoteChannel, connecting: Promise<RemoteChannel>) {
     if (this.#channel !== connecting) {
       channel.close();
-      throw new ChannelError('A newer connection to your machine replaced this one.');
+      throw new ChannelError({ message: CHANNEL_REPLACED });
     }
     this.#current = channel;
     channel.subscribeClose(() => {
@@ -147,7 +149,7 @@ export class RemoteLink {
       connecting.catch((error: unknown) => {
         if (this.#channel === connecting) this.#forget();
         if ((error as ChannelError).refused) this.#options.onRefused?.(error as ChannelError);
-        if (isRemoved(error)) this.#options.onRemoved?.();
+        if (isMachineGone(error)) this.#options.onRemoved?.();
       });
     }
     return this.#channel;
