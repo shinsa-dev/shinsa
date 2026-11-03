@@ -1614,6 +1614,7 @@ Behind the scenes).
 | Decisions | `packages/core/src/decide/` (`messages.ts` for `resolveMessageEffect`) |
 | State folds | `packages/core/src/state/` |
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
+| Shared helpers: sentences and quoted titles, record checks, the hash, URL-safe ids, signed tokens | `packages/core/src/chat/text.ts`, `domain/records.ts`, `domain/hash.ts`, `remote/bytes.ts`, `remote/tokens.ts` |
 | Socket messages, surfaces, what an engine speaks | `packages/core/src/protocol/messages.ts`, `protocol/engine.ts`; `apps/engine/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
 | Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/engine/src/terminals/`, `apps/web/src/lib/terminal/` |
 | Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `ServiceView.url`, `resolveServiceUrl`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |
