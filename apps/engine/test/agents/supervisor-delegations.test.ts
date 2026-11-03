@@ -10,6 +10,7 @@ import {
 } from '../../src/agents/providers/index.ts';
 import { log } from '../../src/log/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
+import { WorktreeRoot, Workspaces } from '../../src/workspaces/index.ts';
 import { createTempDir, createTestConfig, until } from '../helpers/index.ts';
 import { createGate, createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
 
@@ -182,6 +183,31 @@ describe('starting a delegated run', () => {
         outcome: 'failed',
         summary:
           'Shinsa could not set up its own checkout: "not-a-commit" is not a commit Shinsa will pass to git.',
+        failure: expect.objectContaining({ code: 'isolation' }),
+      }),
+    ]);
+  });
+
+  test('a delegation whose worktree folder is not mounted fails and names the folder', async () => {
+    const sessions = createSessions();
+    const missing = `${createTempDir()}/bucket/worktrees`;
+    const child = finishedChild({
+      role: 'builder',
+      endedAt: null,
+      outcome: null,
+      delegation: delegation({ isolation: 'worktree', baseCommit: 'a'.repeat(40) }),
+    });
+    const root = new WorktreeRoot({ defaultDir: createTempDir(), readConfigured: () => missing });
+    const { supervisor, dispatched } = setup([createRun(), child], {
+      startSession: sessions.startSession,
+      workspaces: new Workspaces({ root }),
+    });
+    await supervisor.execute('child');
+    expect(sessions.started).toHaveLength(0);
+    expect(ofType(dispatched, 'run.end')).toEqual([
+      expect.objectContaining({
+        outcome: 'failed',
+        summary: expect.stringContaining(`The worktree folder ${missing} does not exist.`),
         failure: expect.objectContaining({ code: 'isolation' }),
       }),
     ]);

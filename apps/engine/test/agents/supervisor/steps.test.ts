@@ -11,6 +11,7 @@ import { isOverloadRetry, resolveOverloadDelay } from '../../../src/agents/super
 import { prepareWorkspace } from '../../../src/agents/supervisor/workspace.ts';
 import { RunWorld } from '../../../src/agents/supervisor/world/service.ts';
 import { Transcripts } from '../../../src/agents/transcripts/index.ts';
+import { WorktreeRoot } from '../../../src/workspaces/index.ts';
 import { createTempDir, createTestConfig } from '../../helpers/index.ts';
 import { createRun, createStubEngine } from '../../helpers/state.ts';
 
@@ -36,6 +37,7 @@ function provideWorld(lease: () => Promise<null>) {
     RunWorld.layer({
       engine: stub.engine,
       config,
+      worktreeRoot: new WorktreeRoot({ defaultDir: config.worktreesDir }),
       transcripts,
       providers: new ProviderRegistry(),
       leasing: new AccountLeasing(broker, () => stub.state, transcripts),

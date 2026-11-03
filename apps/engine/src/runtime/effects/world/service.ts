@@ -21,7 +21,7 @@ import type { Slack } from '../../../slack/index.ts';
 import { EvidenceStore } from '../../../store/evidence/index.ts';
 import type { TriageResolver } from '../../../triage/index.ts';
 import type { RepositoryFinder } from '../../../triage/message.ts';
-import { Workspaces } from '../../../workspaces/index.ts';
+import { WorktreeRoot, Workspaces } from '../../../workspaces/index.ts';
 import type { Engine } from '../../engine.ts';
 import type { DispatchOptions } from '../../engine/schema.ts';
 import { createEffectFailed, resolveEffectFailure } from '../../failures/classify.ts';
@@ -137,7 +137,9 @@ export class EffectWorld extends Context.Service<
         roots: options.roots ?? { listRoots: () => Promise.resolve(config.roots) },
         watchInterval:
           options.watchIntervalMs === undefined ? WATCH_INTERVAL : Duration.millis(options.watchIntervalMs),
-        workspaces: options.workspaces ?? new Workspaces({ worktreesDir: config.worktreesDir }),
+        workspaces:
+          options.workspaces ??
+          new Workspaces({ root: new WorktreeRoot({ defaultDir: config.worktreesDir }) }),
         services: options.services ?? null,
         shares: options.shares,
         previews: options.previews,

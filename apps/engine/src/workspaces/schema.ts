@@ -3,6 +3,7 @@ import { type Effect, Schema } from 'effect';
 import type { MergeUnresolved } from '../git/checkout/schema.ts';
 import type { BaseUpdate, PushError } from '../git/remote/schema.ts';
 import type { GitFailed, RefNameInvalid } from '../git/schema.ts';
+import type { WorktreeRoot, WorktreeRootUnavailable } from './root/index.ts';
 
 export const WorkspaceCheckout = Schema.Struct({
   path: Schema.String,
@@ -43,7 +44,8 @@ type WorkspaceFailure =
   | MergeUnresolved
   | TaskCheckoutMissing
   | CheckoutDirty
-  | CheckoutOffBranch;
+  | CheckoutOffBranch
+  | WorktreeRootUnavailable;
 
 export interface Workspace {
   readonly mode: WorkspaceMode;
@@ -88,7 +90,7 @@ export interface WorkspaceStrategy {
 }
 
 export interface WorkspacesOptions {
-  worktreesDir: string;
+  root: WorktreeRoot;
 }
 
 export const NO_WORKTREE = 'The task has no worktree.';

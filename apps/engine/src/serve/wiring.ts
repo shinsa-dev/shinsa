@@ -53,6 +53,7 @@ import { MessageInbox } from '../triage/inbox.ts';
 import { resolveTriage } from '../triage/index.ts';
 import { createClassifier, createCommandRouter, resolveRoundRepository } from '../triage/message.ts';
 import { Versions } from '../versions/index.ts';
+import { WorktreeRoot, Workspaces } from '../workspaces/index.ts';
 
 import type { ShinsaOptions } from './schema.ts';
 
@@ -132,7 +133,13 @@ export function createServices(
   terminals.applyRemoteUrls(previews);
   const ledger = new ProcessLedger(terminals.listServiceProcesses);
   const resources = new ResourceMonitor({ ledger, state: () => engine.state, dataDir: config.dataDir });
+  const root = new WorktreeRoot({
+    defaultDir: config.worktreesDir,
+    fromEnvironment: config.worktreesDirFromEnvironment,
+    readConfigured: () => store.config.worktreesDir,
+  });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
+    workspaces: new Workspaces({ root }),
     schedules,
     services: terminals,
     trackProcess: ledger.track,

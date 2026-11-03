@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { describeWorkspaceProblem, Workspaces } from '../../src/workspaces/index.ts';
+import { describeWorkspaceProblem, WorktreeRoot, Workspaces } from '../../src/workspaces/index.ts';
 import { createGitRepo, createTempDir, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
 describe('where agents work', () => {
   test('each task runs on the strategy of the place it was set up in, worktrees by default', () => {
-    const workspaces = new Workspaces({ worktreesDir: createTempDir() });
+    const workspaces = new Workspaces({ root: new WorktreeRoot({ defaultDir: createTempDir() }) });
     expect(workspaces.resolve(createTask()).mode).toBe('worktrees');
     expect(workspaces.resolve(createTask({ workspace: 'worktrees' })).mode).toBe('worktrees');
     expect(workspaces.resolve(createTask({ workspace: 'main_checkout' })).mode).toBe('main_checkout');

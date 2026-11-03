@@ -4,6 +4,8 @@ const MachineText = Schema.Trim.check(Schema.isNonEmpty());
 
 const MachineRoots = Schema.Array(MachineText);
 
+export const MachineFolder = MachineText.check(Schema.isPattern(/^\//));
+
 const MAX_PORT = 65_535;
 
 export const MachinePort = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: MAX_PORT }));
@@ -18,6 +20,7 @@ export const MachineConfig = Schema.Struct({
   hostname: Schema.NullOr(MachineText),
   editor: Schema.NullOr(MachineText),
   terminal: Schema.NullOr(MachineText),
+  worktreesDir: Schema.NullOr(MachineFolder),
 });
 export type MachineConfig = typeof MachineConfig.Type;
 
@@ -28,6 +31,7 @@ export const MachineFields = Schema.Struct({
   hostname: Schema.NullishOr(MachineText),
   editor: Schema.NullishOr(MachineText),
   terminal: Schema.NullishOr(MachineText),
+  worktreesDir: Schema.NullishOr(MachineFolder),
 });
 
 export type MachineField = keyof typeof MachineFields.fields;
@@ -39,6 +43,7 @@ export const MACHINE_FIELD_PROBLEMS: Record<MachineField, string> = {
   hostname: 'hostname must be text; it was ignored.',
   editor: 'editor must be text; it was ignored.',
   terminal: 'terminal must be text; it was ignored.',
+  worktreesDir: 'worktreesDir must be the full path of a folder; it was ignored.',
 };
 
 export const NOT_AN_OBJECT_PROBLEM = 'The file is not a JSON object.';

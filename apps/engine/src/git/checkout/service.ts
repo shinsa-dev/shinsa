@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type { Repo } from '@shinsa/core';
 import { Clock, Context, Effect, Layer } from 'effect';
 import { resolveInstallCommand } from '../../checks/install.ts';
@@ -11,6 +11,7 @@ import { decodeRefName } from '../ref-name.ts';
 import type { GitFailed, RefNameInvalid } from '../schema.ts';
 import { Git } from '../service.ts';
 import {
+  isDelegationCheckout,
   listChangedNames,
   parseWorktreeList,
   resolveDelegationFolder,
@@ -374,16 +375,27 @@ export class Checkout extends Context.Service<
         return status.stdout.split('\n').filter((line) => line.trim().length > 0).length;
       });
 
+      const listDelegationCheckouts = Effect.fnUntraced(function* (repo: Repo, taskId: string) {
+        const listed = yield* git.attempt(['worktree', 'list', '--porcelain'], repo.path);
+        if (!listed.ok) return [];
+        return parseWorktreeList(listed.stdout)
+          .map((worktree) => worktree.path)
+          .filter((path) => isDelegationCheckout(path, taskId));
+      });
+
       const removeIsolated = Effect.fn('Checkout.removeIsolated')(function* (
         repo: Repo,
         worktreesDir: string,
         taskId: string
       ) {
         const folder = resolveDelegationFolder(worktreesDir, taskId);
-        if (!(yield* Effect.sync(() => existsSync(folder)))) return;
-        const entries = yield* Effect.sync(() => readdirSync(folder));
-        for (const entry of entries) {
-          const path = join(folder, entry);
+        const registered = yield* listDelegationCheckouts(repo, taskId);
+        const loose = yield* Effect.sync(() =>
+          existsSync(folder) ? readdirSync(folder).map((entry) => join(folder, entry)) : []
+        );
+        const paths = [...new Set([...registered, ...loose])];
+        if (paths.length === 0 && !(yield* Effect.sync(() => existsSync(folder)))) return;
+        for (const path of paths) {
           const removed = yield* git.attempt(['worktree', 'remove', '--force', path], repo.path);
           if (!removed.ok) {
             yield* Effect.logWarning(
@@ -391,7 +403,10 @@ export class Checkout extends Context.Service<
             ).pipe(Effect.annotateLogs({ path, error: removed.stderr.trim() }));
           }
         }
-        yield* Effect.sync(() => rmSync(folder, { recursive: true, force: true }));
+        const folders = new Set([folder, ...registered.map((path) => dirname(path))]);
+        yield* Effect.sync(() => {
+          for (const each of folders) rmSync(each, { recursive: true, force: true });
+        });
         yield* git.attempt(['worktree', 'prune'], repo.path);
       });
 

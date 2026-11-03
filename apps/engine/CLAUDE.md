@@ -409,10 +409,14 @@ src/
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one Workspace of effects per mode
 │                        (schema.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
 │                        before a push; TaskCheckoutMissing, CheckoutDirty, CheckoutOffBranch),
-│                        worktrees-mode/ (WorktreeWorkspaces: make(worktreesDir) and the commit both modes share),
+│                        worktrees-mode/ (WorktreeWorkspaces: make(root) and the commit both modes share),
+│                        root/ (WorktreeRoot: the folder new worktrees go in, read again on every call from
+│                        SHINSA_WORKTREES_DIR, then config.json's worktreesDir, then data/worktrees;
+│                        assertWorktreeRoot refuses a chosen folder that is missing, not a folder or not writable
+│                        with WorktreeRootUnavailable, and never creates it),
 │                        main-checkout-mode/ (MainCheckoutWorkspace: the workspace and the setup check's
 │                        describeProblem); the edges: edge.ts (EdgeWorkspace, the WorkspaceStrategy of promises),
-│                        worktrees.ts, main-checkout.ts, index.ts (Workspaces.resolve, describeWorkspaceProblem)
+│                        worktrees.ts, main-checkout.ts, index.ts (Workspaces.resolve, Workspaces.root, describeWorkspaceProblem)
 ├── github/              `gh`, the one way the engine reaches GitHub: process/ (GitHubProcess: gh with GITHUB_TIMEOUT,
 │                        and layerTest, which plays gh in a test), service.ts (GitHubCli: run fails with
 │                        GitHubFailed, json decodes the answer with a schema or fails with GitHubAnswerInvalid),
