@@ -1,13 +1,16 @@
-import { existsSync } from 'node:fs';
-import type { ConfigProblem, Repo } from '@shinsa/core';
+import { existsSync, readdirSync } from 'node:fs';
+import type { ConfigProblem, Repo, RepoStart } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { decodeRefName } from '../../git/ref-name.ts';
 import { Git } from '../../git/service.ts';
-import { SETUP_FETCH_TIMEOUT, type SetupScope } from '../schema.ts';
+import { FIRST_COMMIT_MESSAGE, SETUP_FETCH_TIMEOUT, SETUP_PUSH_TIMEOUT, type SetupScope } from '../schema.ts';
 
 export class RepoSetup extends Context.Service<
   RepoSetup,
-  { verify(repo: Repo, scope: SetupScope, signal?: AbortSignal): Effect.Effect<ConfigProblem[]> }
+  {
+    prepare(repo: Repo, signal?: AbortSignal): Effect.Effect<RepoStart | null>;
+    verify(repo: Repo, scope: SetupScope, signal?: AbortSignal): Effect.Effect<ConfigProblem[]>;
+  }
 >()('shinsa/engine/repos/setup/RepoSetup') {
   static readonly layer = Layer.effect(
     RepoSetup,
@@ -76,7 +79,68 @@ export class RepoSetup extends Context.Service<
         return branch ? [branch] : [];
       });
 
-      return RepoSetup.of({ verify });
+      const isEmptyFolder = (path: string) =>
+        Effect.sync(() => existsSync(path) && readdirSync(path).length === 0);
+
+      const hasCommits = Effect.fn('RepoSetup.hasCommits')(function* (path: string) {
+        const result = yield* git.attempt(['for-each-ref', '--count=1', '--format=%(refname)'], path);
+        return !result.ok || result.stdout !== '';
+      });
+
+      const hasOrigin = Effect.fn('RepoSetup.hasOrigin')(function* (path: string) {
+        const result = yield* git.attempt(['remote'], path);
+        return result.ok && result.stdout.split('\n').includes('origin');
+      });
+
+      const isOriginEmpty = Effect.fn('RepoSetup.isOriginEmpty')(function* (
+        path: string,
+        signal?: AbortSignal
+      ) {
+        const result = yield* git.attempt(['ls-remote', '--heads', 'origin'], path, {
+          timeout: SETUP_FETCH_TIMEOUT,
+          signal,
+        });
+        return result.ok && result.stdout === '';
+      });
+
+      const startRepo = Effect.fn('RepoSetup.startRepo')(function* (
+        path: string,
+        branch: string,
+        initialized: boolean,
+        signal?: AbortSignal
+      ) {
+        const origin = yield* hasOrigin(path);
+        if (origin && !(yield* isOriginEmpty(path, signal))) return null;
+        const head = yield* git.attempt(['symbolic-ref', 'HEAD', `refs/heads/${branch}`], path);
+        if (!head.ok) return null;
+        const commit = yield* git.attempt(
+          ['commit', '--quiet', '--allow-empty', '--no-verify', '-m', FIRST_COMMIT_MESSAGE],
+          path
+        );
+        if (!commit.ok) return null;
+        if (!origin) return { branch, initialized, pushed: false } satisfies RepoStart;
+        const push = yield* git.attempt(
+          ['push', '--quiet', 'origin', `refs/heads/${branch}:refs/heads/${branch}`],
+          path,
+          { timeout: SETUP_PUSH_TIMEOUT, signal }
+        );
+        return { branch, initialized, pushed: push.ok } satisfies RepoStart;
+      });
+
+      const prepare = Effect.fn('RepoSetup.prepare')(function* (repo: Repo, signal?: AbortSignal) {
+        const decoded = yield* Effect.result(decodeRefName(repo.defaultBranch));
+        if (decoded._tag === 'Failure') return null;
+        const branch = decoded.success;
+        if (yield* isEmptyFolder(repo.path)) {
+          const init = yield* git.attempt(['init', '--quiet', `--initial-branch=${branch}`], repo.path);
+          if (!init.ok) return null;
+          return yield* startRepo(repo.path, branch, true, signal);
+        }
+        if (!(yield* isGitRepo(repo.path)) || (yield* hasCommits(repo.path))) return null;
+        return yield* startRepo(repo.path, branch, false, signal);
+      });
+
+      return RepoSetup.of({ prepare, verify });
     })
   );
 }

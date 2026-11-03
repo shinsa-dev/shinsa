@@ -93,6 +93,7 @@ export {
   discoverRoots,
   listCandidateRepos,
   listLocalRepos,
+  prepareSetup,
   readOriginRemote,
   verifySetup,
 } from './edge.ts';

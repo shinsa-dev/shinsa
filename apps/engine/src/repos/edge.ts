@@ -25,6 +25,10 @@ export function readOriginRemote(repo: string) {
   return edgeRuntime.runSync(RepoFolders.use((folders) => folders.readOrigin(repo)));
 }
 
+export function prepareSetup(repo: Repo, signal?: AbortSignal) {
+  return edgeRuntime.runPromise(RepoSetup.use((setup) => setup.prepare(repo, signal)));
+}
+
 export function verifySetup(repo: Repo, scope: SetupScope, signal?: AbortSignal) {
   return edgeRuntime.runPromise(RepoSetup.use((setup) => setup.verify(repo, scope, signal)));
 }

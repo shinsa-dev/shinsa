@@ -727,6 +727,30 @@ describe('the setup check', () => {
     expect(started.dispatched).toEqual([]);
   });
 
+  test('a repository with no commits is started before the check, and only when the work needs a worktree', async () => {
+    const root = createTempDir();
+    const empty = { ...(await createGitRepo({ remote: false })).repo, path: root };
+    const question = setup(withTask({ stage: 'triage', pipeline: ['answer'] }, empty));
+    await question.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
+    expect(question.dispatched).toEqual([
+      {
+        type: 'config.record',
+        taskId: 'task-1',
+        problems: [{ kind: 'repository', detail: `${root} is not a git repository.` }],
+      },
+    ]);
+    const change = setup(withTask({ stage: 'triage' }, empty));
+    await change.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
+    expect(change.dispatched).toEqual([
+      {
+        type: 'config.record',
+        taskId: 'task-1',
+        problems: [],
+        started: { branch: 'main', initialized: true, pushed: false },
+      },
+    ]);
+  });
+
   test('a task with no repository finds one when its work needs it, and binds it with what its check found', async () => {
     const { repo, root } = await createGitRepo({ remote: false });
     const { path } = await inspectRepo(repo.path);

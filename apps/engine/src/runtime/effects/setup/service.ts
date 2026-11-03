@@ -8,7 +8,7 @@ import {
   type Task,
 } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
-import { listCandidateRepos, upsertRepo, verifySetup } from '../../../repos/index.ts';
+import { listCandidateRepos, prepareSetup, upsertRepo, verifySetup } from '../../../repos/index.ts';
 import { resolveRepoProject } from '../../../triage/index.ts';
 import { describeWorkspaceProblem } from '../../../workspaces/index.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
@@ -84,6 +84,9 @@ export class TaskSetup extends Context.Service<
         bind: boolean
       ) {
         const pipeline = resolveTaskPipeline(task);
+        const started = needsWorktree(pipeline)
+          ? yield* world.bridge((signal) => prepareSetup(repo, signal))
+          : null;
         const problems = yield* world.bridge((signal) =>
           verifySetup(repo, { defaultBranch: needsWorktree(pipeline) }, signal)
         );
@@ -95,7 +98,13 @@ export class TaskSetup extends Context.Service<
           if (workspace) problems.push(workspace);
         }
         yield* world.dispatch(
-          { type: 'config.record', taskId: task.id, problems, ...(bind ? { repoId: repo.id } : {}) },
+          {
+            type: 'config.record',
+            taskId: task.id,
+            problems,
+            ...(bind ? { repoId: repo.id } : {}),
+            ...(started ? { started } : {}),
+          },
           { id: `${attempt.key}:config.record` }
         );
       });

@@ -938,7 +938,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | --- | --- | --- |
 | `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
-| `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
+| `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none, and how it started a repository with no commits (`started`: `branch`, `initialized`, `pushed`) |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
 | `task.record_edit` | the file route after a save from the Code tab (`http/routes/tasks`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
 | `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
@@ -1010,6 +1010,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project; `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
 | `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
+| `task.repo_started` | the setup check started a repository with no commits: an empty first commit on the default branch (`start`: `branch`, `initialized` when it ran `git init` on an empty folder, `pushed` when it pushed to an origin with no branches) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `preset`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
 | `share.recorded`, `share.failed` | the engine made the link (`url`, null when unchanged), or could not (`detail`) |

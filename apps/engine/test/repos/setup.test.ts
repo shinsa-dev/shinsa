@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { verifySetup } from '../../src/repos/index.ts';
+import { prepareSetup, verifySetup } from '../../src/repos/index.ts';
+import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { createGitRepo, createTempDir, git } from '../helpers/index.ts';
 
 const BUILD = { defaultBranch: true };
@@ -50,5 +51,104 @@ describe('verifySetup', () => {
       { kind: 'default_branch', detail: `"${defaultBranch}" is not a branch name Shinsa will pass to git.` },
     ]);
     expect(existsSync(marker)).toBe(false);
+  });
+});
+
+async function createEmptyRepo(origin: 'none' | 'empty' | 'busy' = 'none') {
+  const { repo } = await createGitRepo({ remote: false });
+  const root = createTempDir();
+  const path = join(root, 'fresh');
+  mkdirSync(path);
+  await git(path, 'init', '-q', '-b', 'master');
+  const bare = join(root, 'origin.git');
+  if (origin !== 'none') {
+    await runCommandOrThrow(['git', 'init', '--bare', '-q', bare], root);
+    await git(path, 'remote', 'add', 'origin', bare);
+  }
+  if (origin === 'busy') {
+    await git(repo.path, 'push', '-q', bare, 'main:refs/heads/other');
+  }
+  return { repo: { ...repo, path, remote: origin === 'none' ? null : 'github.com/acme/fresh' }, path, bare };
+}
+
+async function readLog(path: string, ref = 'HEAD') {
+  return (await git(path, 'log', '--format=%s', ref)).trim();
+}
+
+describe('prepareSetup', () => {
+  test('a repository with no commits gets an empty first commit on its default branch, and then verifies', async () => {
+    const { repo, path } = await createEmptyRepo();
+    writeFileSync(join(path, 'notes.md'), 'kept\n');
+    expect(await prepareSetup(repo)).toEqual({ branch: 'main', initialized: false, pushed: false });
+    expect(await readLog(path, 'main')).toBe('chore: start the repository');
+    expect((await git(path, 'status', '--porcelain')).trim()).toBe('?? notes.md');
+    expect(await verifySetup(repo, BUILD)).toEqual([]);
+    expect(await prepareSetup(repo)).toBeNull();
+  });
+
+  test('an empty folder becomes a repository on the default branch', async () => {
+    const { repo } = await createGitRepo({ remote: false });
+    const path = createTempDir();
+    expect(await prepareSetup({ ...repo, path, defaultBranch: 'trunk' })).toEqual({
+      branch: 'trunk',
+      initialized: true,
+      pushed: false,
+    });
+    expect(await readLog(path, 'trunk')).toBe('chore: start the repository');
+  });
+
+  test('the first commit is pushed to an origin with no branches', async () => {
+    const { repo, path, bare } = await createEmptyRepo('empty');
+    expect(await prepareSetup(repo)).toEqual({ branch: 'main', initialized: false, pushed: true });
+    expect(await readLog(bare, 'main')).toBe('chore: start the repository');
+    expect(await readLog(path, 'origin/main')).toBe('chore: start the repository');
+  });
+
+  test('a push the origin refuses still leaves the local first commit', async () => {
+    const { repo, path, bare } = await createEmptyRepo('empty');
+    writeFileSync(join(bare, 'hooks', 'pre-receive'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    expect(await prepareSetup(repo)).toEqual({ branch: 'main', initialized: false, pushed: false });
+    expect(await readLog(path, 'main')).toBe('chore: start the repository');
+  });
+
+  test('nothing is touched where work could be lost or the origin already has history', async () => {
+    const { repo: started } = await createGitRepo();
+    expect(await prepareSetup(started)).toBeNull();
+
+    const busy = await createEmptyRepo('busy');
+    expect(await prepareSetup(busy.repo)).toBeNull();
+    expect(await git(busy.path, 'for-each-ref')).toBe('');
+
+    const unreachable = await createEmptyRepo('empty');
+    await git(unreachable.path, 'remote', 'set-url', 'origin', join(unreachable.path, 'missing.git'));
+    expect(await prepareSetup(unreachable.repo)).toBeNull();
+
+    const files = createTempDir();
+    writeFileSync(join(files, 'index.ts'), 'x\n');
+    expect(await prepareSetup({ ...started, path: files })).toBeNull();
+    expect(existsSync(join(files, '.git'))).toBe(false);
+
+    expect(await prepareSetup({ ...started, path: join(files, 'gone') })).toBeNull();
+
+    const option = await createEmptyRepo();
+    expect(await prepareSetup({ ...option.repo, defaultBranch: '--force' })).toBeNull();
+  });
+
+  test('a step git refuses leaves the repository as it was', async () => {
+    const locked = await createEmptyRepo();
+    writeFileSync(join(locked.path, '.git', 'HEAD.lock'), '');
+    expect(await prepareSetup(locked.repo)).toBeNull();
+
+    const nameless = await createEmptyRepo();
+    await git(nameless.path, 'config', 'user.name', '');
+    await git(nameless.path, 'config', 'user.useConfigOnly', 'true');
+    expect(await prepareSetup(nameless.repo)).toBeNull();
+    expect(await git(nameless.path, 'for-each-ref')).toBe('');
+
+    const { repo } = await createGitRepo({ remote: false });
+    const sealed = createTempDir();
+    chmodSync(sealed, 0o555);
+    expect(await prepareSetup({ ...repo, path: sealed })).toBeNull();
+    chmodSync(sealed, 0o755);
   });
 });

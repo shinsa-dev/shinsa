@@ -2112,6 +2112,16 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   whose steps need one finds it first (A task without a repository, above), and the problem when none is found is
   `no_repository`. Checks are not part of it: a task's checks come from its plan, and a repository without its own
   commands runs nothing extra, so nothing about them can be missing (Checks, above).
+- **A new repository is started first.** When the task needs a worktree, `RepoSetup.prepare` runs before the
+  checks and acts only where nothing can be lost: a repository with no refs at all (no branch, tag or remote branch)
+  gets an empty first commit (`chore: start the repository`, `--allow-empty`, so untracked files stay untracked) on its
+  default branch, and an empty folder that is not a repository yet is `git init`ed on that branch first. With an
+  origin it acts only when `git ls-remote --heads origin` answers and lists no branch, then pushes the commit there; an
+  unreachable origin, or one with history, leaves the repository as it was for the checks to describe. A folder with
+  files that is not a repository, a repository with any ref, and a default branch git would read as an option are
+  never touched. What it did rides on `config.record` (`started`: the branch, `initialized`, `pushed`) and core records
+  it once (`task.repo_started`, "Started the repository with an empty first commit on main", "…, and pushed it to
+  origin"). Doing it again finds the commit and does nothing, so the effect stays replay safe.
 - Problems open their own `configuration` gate, not a failure: nothing ran. Its title names the problem ("The
   repository is missing", or "The setup has 2 problems") and its body lists what is wrong and how to fix each; the
   web labels the task "Setup incomplete". Verify again (`approve`) verifies the setup again; Cancel ends the task. A

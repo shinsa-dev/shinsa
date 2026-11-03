@@ -83,3 +83,7 @@ export const SECTION = /^\s*\[/;
 export const URL_LINE = /^\s*url\s*=\s*(\S+)\s*$/;
 
 export const SETUP_FETCH_TIMEOUT = Duration.minutes(1);
+
+export const SETUP_PUSH_TIMEOUT = Duration.minutes(1);
+
+export const FIRST_COMMIT_MESSAGE = 'chore: start the repository';
