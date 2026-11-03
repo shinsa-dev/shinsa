@@ -742,6 +742,21 @@ describe('a session that never settles', () => {
     expect(sessions.started[0]?.cancelled).toBe(true);
   });
 
+  test('a run stuck before its session that shutdown interrupts still returns to its caller', async () => {
+    const leased: string[] = [];
+    const { supervisor } = setup(withTask(createTempDir()), {
+      accounts: createBroker((input) => {
+        leased.push(input.runId);
+        return new Promise(() => undefined);
+      }),
+      stopMs: 20,
+    });
+    const running = supervisor.execute('run-1');
+    await until('the lease', () => leased.length === 1);
+    await supervisor.interruptForShutdown();
+    expect(await running).toBeUndefined();
+  });
+
   test('a shutdown with a session that never settles still finishes', async () => {
     const sessions = createSessions({ wedged: true });
     const { supervisor, dispatched } = setup(withTask(createTempDir()), {
