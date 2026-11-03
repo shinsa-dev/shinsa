@@ -274,7 +274,9 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   answer writes one warn line, `[Cloud] Machine offline` (`recordMachineOffline` in `http/forward.ts`), with
   `surface` (`webhook`, `slack` or `preview`), `instanceId` and `reason`: `unreachable` with the fetch's `error`, or
   `status` with the tunnel's status. A machine asleep or off its network is expected, so a watch counts this line
-  on its own; Workers Logs still marks the webhook's 503 itself as an error, as it does any 5xx.
+  on its own. Workers Logs still marks the webhook's 503 request itself as error level, as it does any 5xx, with no
+  `console.error` behind it, so a watch on the Worker's errors must leave out a 503 on `/hooks/` (and on a preview
+  host) that comes with this warn line, and count the warn line apart.
 - **The Slack bot** (`docs/engine.md` → Slack). One Slack app for everyone, on the Events API at `/slack/events`.
   Connecting (`/slack/connect?instance=<id>`, signed in with GitHub, the machine one you own, never one shared with you, else the one you own seen last)
   signs you in with Slack (OpenID Connect, `openid profile`), and when the workspace has no Shinsa yet, or its bot
