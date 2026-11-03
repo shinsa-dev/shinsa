@@ -1020,17 +1020,35 @@ Only these, and they win over anything below:
     (`orderChains`, parents from `waitsOn` and `stacksOn`): each task appears once. Its depth is its longest path from
     a task outside the section, and it sits under the parent at the level above that comes last on screen, so in a
     diamond (B and C wait on A, D on B and C) D sits under whichever of B and C is shown second,
-    after both. Fan-out siblings sit side by side under their parent. The status column names
-    every parent, "Waits on ‹A›, ‹B›", each a link that opens it and truncates on its own, with
-    all of them, one per line, in the tooltip ("‹task› was cancelled" when one was). A nested
-    row's corner arrow sits under its parent's priority mark (26px per level) and is a 20px
+    after both. Fan-out siblings sit side by side under their parent. The status column reads
+    "Waits on LOC-143 +2" (`WaitsOnLinks`): the first parent's handle, a link that opens it (its title when it has
+    no handle), and how many more, with every parent, handle and title, one per line, in the tooltip ("LOC-143 was
+    cancelled" when one was). A nested
+    row's corner arrow sits under its parent's priority mark (16px per level) and is a 20px
     button: `bg-bg-a2` and `fg-4` on hover and pressed alike, the same while its menu is open,
     "Waits on" and the parents in its tooltip; it opens the Waits on menu. Every row starts with
     its priority mark, and its status column with its kind's icon in the status's tone (`SHAPE_ICON`, named
     for screen readers) whose tooltip lists the steps the task takes ("Investigation: find the
     repository, investigate, then your OK to change.", composed steps included, `describeTaskSteps` in `lib/tasks/shapes.ts`,
-    from core's `resolveTaskProgress` with a plan's phases as one build). Filter by status in
-    ⌘K offers the same sections with the same icons.
+    from core's `resolveTaskProgress` with a plan's phases as one build).
+    - **Scope and filters.** The rows are `listTaskRows` (`lib/tasks/filters.ts`): your tasks in focus
+      (`isListedInFocus`) and every member team's tasks in focus, each with its owner, teams, project and
+      repository. `filterTaskRows` applies the search and the filters read from the address (`?status=working,review`,
+      `owner`, `team`, `project`, `repo`, `kind`, `priority`; `resolveTaskFilters`), and the groups are drawn from what
+      is left. The Filter button (`TaskFilterMenu`, secondary `sm`, the count of active filters beside it) opens a
+      submenu per field with a checkbox and a count per value; a field shows only when it has two values or is
+      filtered, and its counts are over the rows in focus, not the filtered ones, so they hold still as you tick. Each
+      filtered field is a chip ("Priority: High, Normal") whose cross clears it, and Clear all follows once two are
+      on. ⌘K offers "Filter by …" for each field, several values at once, "Any …" and Clear filters, with the same
+      icons.
+    - **Width and columns.** The page keeps `PAGE_COLUMN`'s width with any focus, teammates' tasks included. Columns
+      sit `gap-3` apart: title, repository 7rem, owner 2.25rem when any row is a teammate's, status 10rem, pull
+      request 4rem, age 3rem in its compact form ("5m", "2d"). The owner is an avatar (`YourOwnerMark`,
+      `TeammateOwnerMark` in `components/tasks/owner.tsx`) whose tooltip names them.
+    - **Team feed notices** (`TeamFeedNotices`). Above the list, one `text-xs` `fg-3` line per teammate machine in
+      focus that is offline (`IconCloudSimpleDisconnected`) or refuses the list (`IconLock`): the machine in `fg-4`,
+      its team, and the owner engine's reason ("This machine does not list you in that team yet…"), with when its copy was
+      last updated.
     - **The pull request badge** (`PullRequestBadge`, the Pull request column) is the pull request's number on its
       tone's soft surface (`TONE_SURFACE`, one step stronger on hover), the same tint as a status tile.
     - **Change to approve** is its own section between Plan to approve and Needs your answer (`IconFileEdit`,

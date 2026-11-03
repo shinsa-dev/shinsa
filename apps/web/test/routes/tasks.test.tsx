@@ -3,7 +3,7 @@ import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { TasksPage } from '@/routes/tasks.tsx';
-import { createGate, createShinsaState, createTask } from '../support/state.ts';
+import { createGate, createProject, createShinsaState, createTask } from '../support/state.ts';
 
 const TASKS = createShinsaState({
   tasks: [
@@ -117,6 +117,26 @@ describe('the task groups', () => {
     renderPage();
     act(() => fireEvent.keyDown(rowFor('Plan the export'), { key: ' ' }));
     expect(location.pathname).toBe('/tasks');
+  });
+});
+
+describe('the focus', () => {
+  it('lists and counts only the focused project’s tasks', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'mine', title: 'Ship the basket tier', projectId: 'basket' }),
+        createTask({ id: 'shipped', title: 'Old basket work', projectId: 'basket', stage: 'merged' }),
+        createTask({ id: 'other', title: 'Rotate paywall keys', projectId: 'paywall' }),
+      ],
+      projects: [
+        createProject({ id: 'basket', name: 'Basket' }),
+        createProject({ id: 'paywall', name: 'Paywall' }),
+      ],
+    });
+    renderPage({ ...state, focus: { projectId: 'basket', teamId: null, until: null } });
+    expect(screen.getByText('1 open · 1 done')).toBeTruthy();
+    expect(screen.getByText('Ship the basket tier')).toBeTruthy();
+    expect(screen.queryByText('Rotate paywall keys')).toBeNull();
   });
 });
 

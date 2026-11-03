@@ -271,8 +271,7 @@ export function listTaskGroupSections(
   );
 }
 
-export function describeTaskCounts(state: ShinsaState) {
-  const tasks = Object.values(state.tasks).filter((task) => !isWatchHome(task));
+export function describeTaskCounts(tasks: readonly Task[]) {
   const open = tasks.filter((task) => !isTaskSettled(task)).length;
   const done = tasks.filter((task) => task.stage === 'merged' || task.stage === 'done').length;
   return `${open} open · ${done} done`;

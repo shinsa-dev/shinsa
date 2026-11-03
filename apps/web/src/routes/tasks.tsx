@@ -42,7 +42,11 @@ export function TasksPage({ state }: { state: ShinsaState }) {
   return (
     <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6')}>
       <div className='flex items-end gap-3'>
-        <PageHeading title='All tasks' description={describeTaskCounts(state)} className='flex-1' />
+        <PageHeading
+          title='All tasks'
+          description={describeTaskCounts(rows.map((row) => row.task))}
+          className='flex-1'
+        />
         <Input
           type='search'
           value={filters.search}

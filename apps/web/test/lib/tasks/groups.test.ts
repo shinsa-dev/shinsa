@@ -482,20 +482,16 @@ describe('listTaskGroupSections search by repository', () => {
 });
 
 describe('describeTaskCounts', () => {
-  it('counts open tasks and finished ones, leaving cancelled tasks and watch homes out of both', () => {
-    const state = createShinsaState({
-      tasks: [
-        createTask({ id: 'a' }),
-        createTask({ id: 'b', stage: 'waiting_on_tasks' }),
-        createTask({ id: 'c', stage: 'merged' }),
-        createTask({ id: 'd', stage: 'done' }),
-        createTask({ id: 'e', stage: 'cancelled' }),
-        createTask({ id: 'home', stage: 'watching', watchHome: true }),
-        createTask({ id: 'rested', stage: 'done', watchHome: true }),
-      ],
-    });
-    expect(describeTaskCounts(state)).toBe('2 open · 2 done');
-    expect(describeTaskCounts(createShinsaState({}))).toBe('0 open · 0 done');
+  it('counts open tasks and finished ones among the tasks it is given, leaving cancelled tasks out of both', () => {
+    const tasks = [
+      createTask({ id: 'a' }),
+      createTask({ id: 'b', stage: 'waiting_on_tasks' }),
+      createTask({ id: 'c', stage: 'merged' }),
+      createTask({ id: 'd', stage: 'done' }),
+      createTask({ id: 'e', stage: 'cancelled' }),
+    ];
+    expect(describeTaskCounts(tasks)).toBe('2 open · 2 done');
+    expect(describeTaskCounts([])).toBe('0 open · 0 done');
   });
 });
 
