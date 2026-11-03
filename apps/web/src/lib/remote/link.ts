@@ -87,7 +87,7 @@ export class RemoteLink {
     return answer.url;
   }
 
-  async #connect() {
+  #connect() {
     return (this.#options.openChannel ?? openRemoteChannel)({
       url: this.#resolveConnectUrl(),
       machineKey: this.#options.device.machineKey,

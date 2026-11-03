@@ -191,6 +191,17 @@ export class TunnelGate extends Context.Service<
         return claim.userId;
       });
 
+      const admitShare = Effect.fn('TunnelGate.admitShare')(function* (
+        request: Request,
+        url: URL
+      ): Effect.fn.Return<TunnelUpgrade, UpgradeRefusal> {
+        if (!shares) return yield* notFound();
+        yield* assertAppOrigin(request);
+        const shareId = url.searchParams.get(SHARE_CHANNEL_PARAM) ?? '';
+        if (!(shares.acceptsShare(shareId) && isSocketUpgrade(request))) return yield* notFound();
+        return { route: 'share', shareId };
+      });
+
       const admitUpgrade = Effect.fn('TunnelGate.admitUpgrade')(function* (
         request: Request,
         url: URL
@@ -204,13 +215,7 @@ export class TunnelGate extends Context.Service<
           if (!previews) return yield* notFound();
           return { route: 'preview' };
         }
-        if (route === 'share') {
-          if (!shares) return yield* notFound();
-          yield* assertAppOrigin(request);
-          const shareId = url.searchParams.get(SHARE_CHANNEL_PARAM) ?? '';
-          if (!(shares.acceptsShare(shareId) && isSocketUpgrade(request))) return yield* notFound();
-          return { route: 'share', shareId };
-        }
+        if (route === 'share') return yield* admitShare(request, url);
         if (route === 'team') {
           if (!teams?.acceptsViewer()) return yield* notFound();
           yield* assertAppOrigin(request);
