@@ -11,9 +11,9 @@ import {
 } from '@shinsa/core/engine-api/schema';
 import { Effect, Predicate, Schema } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
+import { assertRepoPath, resolveInside, resolveWritableInside } from '../../../files/paths.ts';
 import { runCommand, runCommandOrThrow } from '../../../shell/index.ts';
 import { requestPromise, requestSync } from '../../failures.ts';
-import { assertRepoPath, resolveInside, resolveWritableInside } from '../../paths.ts';
 import { BODY_INVALID } from '../../schema.ts';
 import { HttpServices } from '../../services/service.ts';
 import { findTaskByRef } from '../../task-lookup.ts';

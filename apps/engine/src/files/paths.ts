@@ -2,8 +2,9 @@ import { existsSync, realpathSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { DomainError } from '@shinsa/core';
 
-function isInside(root: string, path: string) {
-  return path === root || path.startsWith(`${root}${sep}`);
+export function isInside(root: string, path: string) {
+  const base = root.replace(/\/+$/, '');
+  return path === root || path === base || path.startsWith(`${base}${sep}`);
 }
 
 export function resolveInside(root: string, relative: string): string | null {

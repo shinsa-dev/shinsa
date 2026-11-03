@@ -16,6 +16,7 @@ import {
 } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import { resolveSharedCacheEnv } from '../checks/caches.ts';
+import { isInside } from '../files/paths.ts';
 import type { JsonObject } from '../http/schema.ts';
 import { listServiceSuggestions } from './detect.ts';
 import type { ServiceInput, ServiceRun, TerminalStart, Terminals, TerminalViewer } from './index.ts';
@@ -67,20 +68,15 @@ export function resolveTerminalStart(
   return { projectId, cwd: path, place: place?.kind ?? 'folder', taskId: place?.taskId ?? null };
 }
 
-function isInside(path: string, folder: string) {
-  const base = folder.replace(/\/+$/, '');
-  return path === base || path === folder || path.startsWith(`${base}/`);
-}
-
 export function resolveServicePlace(
   places: TerminalPlace[],
   cwd: string,
   home: string
 ): TerminalPlaceKind | null {
   const own = places.filter((each) => each.kind !== 'worktree');
-  const found = own.find((each) => isInside(cwd, each.path));
+  const found = own.find((each) => isInside(each.path, cwd));
   if (found) return found.kind;
-  return own.length === 0 && isInside(cwd, home) ? 'folder' : null;
+  return own.length === 0 && isInside(home, cwd) ? 'folder' : null;
 }
 
 function readEnv(body: JsonObject) {

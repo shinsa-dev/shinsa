@@ -1,5 +1,5 @@
 import { lstatSync, readlinkSync, realpathSync, statSync } from 'node:fs';
-import { extname, join, sep } from 'node:path';
+import { extname, join } from 'node:path';
 import {
   type ChatEntry,
   countShareTranscriptPages,
@@ -35,6 +35,7 @@ import {
   type Task,
   verifyShareHello,
 } from '@shinsa/core';
+import { isInside } from '../files/paths.ts';
 import { readWorkingPatch } from '../git/diff.ts';
 import { resolveTaskCheckout, resolveTaskRefs } from '../git/task-refs.ts';
 import { readPullRequestDiff, readRepoFile, resolveRepoSlug } from '../github/index.ts';
@@ -143,7 +144,7 @@ export function readWorktreeFile(worktree: string, path: string) {
   const full = join(root, path);
   if (lstatSync(full).isSymbolicLink()) return Promise.resolve(readlinkSync(full));
   const real = realpathSync(full);
-  if (!real.startsWith(`${root}${sep}`)) {
+  if (real === root || !isInside(root, real)) {
     return Promise.reject(new Error(`${path} leads outside the working copy.`));
   }
   return Bun.file(real).text();

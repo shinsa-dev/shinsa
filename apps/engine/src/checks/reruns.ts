@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 import { listDependencyNames, listWorkspacePatterns, readPackageManifest } from '../files/manifest.ts';
+import { isInside } from '../files/paths.ts';
 import { PACKAGE_MANIFEST } from '../files/schema.ts';
 import type { FailedTestCase, FailedTestGroup, FailedTests, TestRunner } from './schema.ts';
 
@@ -81,12 +82,8 @@ function listWorkspaceDirs(root: string) {
   });
 }
 
-function isInside(path: string, root: string) {
-  return path === root || path.startsWith(`${root}${sep}`);
-}
-
 function resolvePackageDir(file: string, root: string) {
-  for (let dir = dirname(file); isInside(dir, root); dir = dirname(dir)) {
+  for (let dir = dirname(file); isInside(root, dir); dir = dirname(dir)) {
     if (existsSync(join(dir, PACKAGE_MANIFEST))) return dir;
     if (dir === root) break;
   }
@@ -99,7 +96,7 @@ function readPackageName(dir: string) {
 
 function resolveTestFile(root: string, dirs: readonly string[], failed: FailedFile) {
   if (isAbsolute(failed.path))
-    return isInside(failed.path, root) && existsSync(failed.path) ? failed.path : null;
+    return isInside(root, failed.path) && existsSync(failed.path) ? failed.path : null;
   const found = [...new Set([root, ...dirs].map((dir) => join(dir, failed.path)))].filter(existsSync);
   if (found.length <= 1) return found[0] ?? null;
   const named = found.filter((file) => {
@@ -242,7 +239,7 @@ export function isCoverageFloorOnly(output: string) {
 }
 
 function selectBin(packageDir: string, root: string, name: string) {
-  for (let dir = packageDir; isInside(dir, root); dir = dirname(dir)) {
+  for (let dir = packageDir; isInside(root, dir); dir = dirname(dir)) {
     const bin = join(dir, 'node_modules', '.bin', name);
     if (existsSync(bin)) return bin;
     if (dir === root) break;

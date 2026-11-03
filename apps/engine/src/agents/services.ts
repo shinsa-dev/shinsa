@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { isAbsolute, join, normalize } from 'node:path';
+import { join, normalize, resolve } from 'node:path';
 import {
   isServiceActive,
   listTaskServices,
@@ -15,6 +15,7 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
+import { isInside } from '../files/paths.ts';
 import type { ServiceInput, ServiceRun } from '../terminals/index.ts';
 import { readServiceInput, resolveServiceRunIn } from '../terminals/routes.ts';
 import { readString } from './handover.ts';
@@ -146,7 +147,7 @@ async function runService(input: Record<string, unknown>, context: ServiceToolCo
 function resolveServiceFolder(repoPath: string, input: Record<string, unknown>) {
   const path = readString(input, 'path')?.trim() ?? '.';
   const relative = normalize(path).replace(/\/+$/, '');
-  if (isAbsolute(relative) || relative === '..' || relative.startsWith('../'))
+  if (!isInside(repoPath, resolve(repoPath, relative)))
     throw new Error('path must be a folder inside this task’s repository, relative to its root.');
   return {
     relative: relative === '.' ? '' : relative,

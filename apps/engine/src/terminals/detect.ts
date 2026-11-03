@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { SERVICE_PORT_VARIABLE, type ServiceSource, type ServiceSuggestion } from '@shinsa/core';
 import { listWorkspacePatterns, parseDenoTasks, parsePackageManifest } from '../files/manifest.ts';
+import { isInside } from '../files/paths.ts';
 import { PACKAGE_MANIFEST } from '../files/schema.ts';
 
 export { parseDenoTasks } from '../files/manifest.ts';
@@ -288,7 +289,7 @@ function resolveUniqueNames(suggestions: ServiceSuggestion[], roots: string[]) {
   for (const each of suggestions) counts.set(each.name, (counts.get(each.name) ?? 0) + 1);
   return suggestions.map((each) => {
     if ((counts.get(each.name) ?? 0) < 2) return each;
-    const root = roots.find((path) => each.cwd === path || each.cwd.startsWith(`${path}/`)) ?? each.cwd;
+    const root = roots.find((path) => isInside(path, each.cwd)) ?? each.cwd;
     const where = relative(root, each.cwd);
     return { ...each, name: where || `${basename(root)}-${each.name}` };
   });
