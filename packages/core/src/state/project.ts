@@ -17,6 +17,7 @@ import {
   parseTaskHandle,
   quoteDuplicateOriginal,
   type Repo,
+  type RepoStart,
   type Run,
   type RunUsage,
   resolveShapeOf,
@@ -271,6 +272,22 @@ function applyRepoBound(state: ShinsaState, event: EventOf<'task.repo_bound'>) {
     actor: 'shinsa',
     kind: 'set_up',
     text: `Chose the repository ${state.repos[event.repoId]?.name ?? ''}`.trim(),
+  });
+}
+
+function describeRepoStart(start: RepoStart) {
+  const commit = `an empty first commit on ${start.branch}`;
+  const started = start.initialized
+    ? `Made the folder a git repository and started it with ${commit}`
+    : `Started the repository with ${commit}`;
+  return start.pushed ? `${started}, and pushed it to origin` : started;
+}
+
+function applyRepoStarted(state: ShinsaState, event: EventOf<'task.repo_started'>) {
+  record(state, event.taskId, event.at, {
+    actor: 'shinsa',
+    kind: 'set_up',
+    text: describeRepoStart(event.start),
   });
 }
 
@@ -834,6 +851,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.repo_bound':
       applyRepoBound(state, event);
+      break;
+    case 'task.repo_started':
+      applyRepoStarted(state, event);
       break;
     case 'task.staged':
       applyStaged(state, event);
