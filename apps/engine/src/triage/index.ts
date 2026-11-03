@@ -195,7 +195,7 @@ export function describeRepoCandidates(candidates: LocalRepo[]) {
   ];
 }
 
-export function parseNewRepoAnswer(candidates: LocalRepo[], value: unknown) {
+function parseNewRepoAnswer(candidates: LocalRepo[], value: unknown) {
   if (typeof value !== 'string' || !REPOSITORY_NAME.test(value) || value.endsWith('.git')) return null;
   const listed = candidates.find((candidate) => candidate.name === value);
   return listed ? { path: listed.path } : { name: value };

@@ -94,7 +94,7 @@ export async function upsertProjectFolderRepo(engine: Engine, projectId: string 
   return await upsertRepo(engine, local.path, null, project.id);
 }
 
-export function resolveNewRepoParent(state: Pick<ShinsaState, 'projects' | 'repos'>, projectId: string) {
+function resolveNewRepoParent(state: Pick<ShinsaState, 'projects' | 'repos'>, projectId: string) {
   const folder = state.projects[projectId]?.folders[0];
   if (folder) return folder;
   const sibling = Object.values(state.repos).find((repo) => repo.projectId === projectId);
@@ -158,7 +158,6 @@ export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {
 export {
   createDiscoverer,
   createLoginResolver,
-  createRepoFolder,
   discoverRoots,
   listCandidateRepos,
   listLocalRepos,
