@@ -293,6 +293,33 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   request can send the cookie but never the token. Every response carries a strict content security policy (scripts only from the site, sockets
   only to `wss://*.shinsa.dev` (and `blob:` reads and media, a share page's files), no framing), Strict-Transport-Security, `nosniff` and `Referrer-Policy: no-referrer`.
 
+## Threat model
+
+The whole model, with every gate and what each stolen credential reaches, is `docs/engine.md` → Remote access, Threat
+model. The Worker's part of it:
+
+- **Trusted for identity, never for content.** The Worker decides who is signed in, which machines and teams an
+  account reaches, and mints the connect tokens that say so. It holds no key that opens a sealed channel, and no task
+  data, so a Worker or a D1 copy in the wrong hands can mint a token naming anyone yet cannot read a task: a channel
+  also needs a device key the machine enrolled. Previews, webhook bodies and Slack text pass through it in the clear,
+  and none of them is stored.
+- **Three gates in, one gate out.** Every request passes `Ingress`, the sign-in middleware its group names
+  (`PageSession` or `MachineSession`) and `RequestGate`, in that order, and nothing else decides who may call a route
+  (`test/gates.test.ts`, which reads every route from `RemoteApi` and fails on a new one open to anyone until it is
+  added to the open list on purpose). Everything that reaches a machine goes through `Tunnels`, with a path built only
+  from checked parts (a webhook's schedule and token, 1 to 128 base64url characters, `test/hooks.test.ts`), never
+  following a redirect.
+- **What D1 keeps.** Hashes of sessions, sign-in codes, poll secrets, machine tokens and invite and hand-off tokens;
+  Slack bot tokens sealed with `SLACK_TOKEN_KEY`; a waiting pairing's credentials sealed to the machine's own key. The
+  one secret kept plain is each machine's connect key, which the Worker signs connect, preview and Slack tokens with:
+  a D1 copy can therefore act as the Worker toward that machine's previews and Slack, though still not open its
+  channel. Sealing it needs a Worker secret of its own and a rewrite of every row, left for a change of its own.
+- **What logs keep.** Failures of 500 or more with their cause, and the ids and statuses of what a machine or Slack
+  refused (`WorkerLogger`); never a body, and every secret is `Redacted`, so a cause prints it as `<redacted>`.
+  Workers Logs record each request's URL too, which for a webhook includes its token.
+- **Known limits.** Rate limits only on pairing start (10 waiting per address); expired session rows are not swept
+  (hashes only); signing out ends that one session, not every session of the account.
+
 ## Running and deploying
 
 - `bun test test` (100% line and function coverage, `bunfig.toml`) and `bun run check-types`.

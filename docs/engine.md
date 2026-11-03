@@ -3117,6 +3117,65 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.
 
+### Threat model
+
+What remote access protects is a person's code, tasks, transcripts and keys. Only the machine holds them; everything
+else is a way in or a way through, and is trusted with as little as it needs:
+
+- **The machine** holds every task and every key (`remote.json`). It trusts nothing that arrives through the tunnel
+  until `TunnelGate` has admitted it, and sends nothing to anyone but its own enrolled browsers except through
+  `EgressGate`.
+- **app.shinsa.dev** (`apps/cloud`) is trusted for identity: who is signed in, which machines an account may reach,
+  and the connect tokens that say so. It is not trusted with content: it holds no key that opens a sealed channel, so
+  a Worker or a D1 copy in the wrong hands can deny service, or mint tokens naming any user, but cannot read a task. A
+  channel still needs a device key the machine enrolled, or a link proof that only turns into a request you accept.
+  What does pass through it in the clear is said where it happens: previews, webhook bodies and Slack text.
+- **Cloudflare's tunnel** carries sealed frames it cannot open, and previews and webhooks in the clear.
+- **A browser** is enrolled per machine, and its device key cannot be read out by script. The web app treats every
+  machine as hostile to the others: no machine's data runs as a page of app.shinsa.dev (the relay above).
+- **A teammate, a guest or a share link** sees only what its preset or team allows, encoded through `EgressGate`.
+- **An agent on the machine** already reaches the engine; `agents/policy.ts` keeps `remote.json` out of its shell.
+
+Every way in or out passes one gate, and each has a test that a request outside it is refused:
+
+| Gate | Where | Decides | Refusal test |
+|---|---|---|---|
+| Worker edge | `Ingress`, `PageSession` or `MachineSession`, `RequestGate` (`apps/cloud`) | every route, by caller: anonymous, signed in, machine, owner, member, guest, teammate | `apps/cloud/test/gates.test.ts` |
+| Worker to machine | `Tunnels` (`apps/cloud`, `integrations/tunnels/`) | webhooks, previews and Slack, by checked path, never following a redirect | `apps/cloud/test/hooks.test.ts` |
+| Into the machine | `TunnelGate` (`remote/gate/`) | every tunnel request, socket upgrade and channel request, by route and principal | `apps/engine/test/remote/gate.test.ts` |
+| Out of the machine | `EgressGate` (`remote/egress/`) | every share and team view, the signed team list and a preview's headers, by allowlist | `apps/engine/test/remote/gate.test.ts` |
+| The sealed channel | core's `remote/` handshake and frames | which device keys open it, and every frame after | `packages/core/test/remote/handshake.test.ts`, `frames.test.ts`, `connect-token.test.ts` |
+| The browser | the service worker relay (`apps/web`, `relay.ts`) | that nothing a machine serves runs as a page | `apps/web/test/lib/remote/relay.test.ts` |
+
+What a stolen credential reaches, and how it is ended:
+
+| Stolen | Reaches | Ended by |
+|---|---|---|
+| A connect token | one channel of its kind, once, within 60 seconds, and still not past the handshake without an enrolled key | its nonce, spent on first use |
+| A session (cookie or bearer) | the account's machine list, connect tokens and private previews of machines it owns or belongs to; no task, since a channel also needs an enrolled device | signing out (the row is deleted), 30 days |
+| A session and that browser itself | everything that account reaches on the machines that browser is enrolled on | revoking the device on the machine, then signing out |
+| A share link | one task, live, read-only, at its preset | Stop sharing |
+| A team key | nothing by itself: every team view also needs a team connect token for a current member | removing the member, who then gets no token |
+| A webhook address | firing that one schedule, at most 60 a minute, and only with its signature when it has one | pausing or removing the schedule |
+| An invite or hand-off link | one claim, then an access request or the hand-off you answer | its single use, or turning the link off |
+| The machine token | the machine's own routes on app.shinsa.dev (heartbeat, invites, members, guests, Slack posts, removal); no task, which the Worker never holds | removing the machine, or pairing again |
+| The tunnel token | running a connector for that tunnel, so receiving its webhooks, previews and Slack forwards; a channel still fails, since the impostor lacks the machine's key | removing the machine, or pairing again |
+| The connect key | acting as app.shinsa.dev toward that one machine: connect tokens (still stopped by the handshake), private previews as any member, and Slack forwards | pairing again, which mints a new one |
+
+Known limits, each a decision rather than an oversight:
+
+- The connect key sits unsealed in D1, which the Worker needs to mint tokens; sealing it needs a Worker secret and a
+  rewrite of every row, a change of its own. Pairing credentials waiting in D1 are sealed to the machine's key.
+- A team key is not rotated when a member leaves; the key alone opens nothing.
+- The Worker limits only pairing start (10 waiting per address), and the engine only webhooks (60 a minute per
+  schedule); everything else leans on Cloudflare's own limits.
+- A webhook's token is never replaced; a schedule made again gets a new one.
+- Workers Logs record request URLs, so a webhook's token is in the account's own logs.
+- Expired session rows are not swept; they hold only hashes.
+- Signing out keeps this browser's device records and team keys, so you need not enroll again; without a session
+  they open nothing.
+- A preview is plain to the Worker and to Cloudflare; a task's share is not.
+
 ## Sharing a task
 
 A task you share can be read by anyone with its link, `https://app.shinsa.dev/share/t/<token>#<key>`, without signing
