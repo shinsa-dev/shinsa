@@ -1,104 +1,115 @@
 import type { ShinsaState } from '@shinsa/core';
-import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
-import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
-import { PageHeading } from '@/components/layout/page/heading.tsx';
+import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
-import { Hint } from '@/components/overlays/hint.tsx';
+import { TaskFilterChips, TaskFilterMenu } from '@/components/tasks/filter-menu.tsx';
 import { TaskGroupSection } from '@/components/tasks/group.tsx';
 import { TASK_LIST_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
-import { useFocusedTeamTasks } from '@/components/teams/tasks.tsx';
+import { TeamFeedRefusals, useTeamTasks } from '@/components/teams/tasks.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
-import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
-import { describeTaskCounts, listTaskGroupSections, selectTaskGroup } from '@/lib/tasks/groups.ts';
-import { updateSearchParams, useSearchParam } from '@/router.ts';
+import {
+  filterTaskRows,
+  isFiltering,
+  listTaskFilterFields,
+  listTaskRows,
+  resolveTaskFilters,
+} from '@/lib/tasks/filters.ts';
+import { describeTaskCounts, listTaskGroupSections } from '@/lib/tasks/groups.ts';
+import { useSearchString } from '@/router.ts';
 
 export function TasksPage({ state }: { state: ShinsaState }) {
-  const search = useSearchParam('q') ?? '';
-  const status = selectTaskGroup(useSearchParam('status'));
-  const team = useFocusedTeamTasks(state);
-  const sections = listTaskGroupSections(state, search, status?.key ?? null, team?.entries);
-  const columns = team ? TEAM_TASK_LIST_COLUMNS : TASK_LIST_COLUMNS;
-  const filtered = search.trim() !== '' || status !== null;
+  const filters = resolveTaskFilters(useSearchString());
+  const team = useTeamTasks();
+  const rows = React.useMemo(
+    () => listTaskRows(state, team.entries, team.teams),
+    [state, team.entries, team.teams]
+  );
+  const fields = listTaskFilterFields(rows, team.teams, filters);
+  const sections = listTaskGroupSections(state, filterTaskRows(rows, filters), filters.status);
+  const owners = rows.some((row) => row.team);
+  const columns = owners ? TEAM_TASK_LIST_COLUMNS : TASK_LIST_COLUMNS;
+  const filtered = isFiltering(filters);
+  const statusKey = filters.status.join(',');
   const empty = sections.every((section) => section.entries.length === 0);
-  useRegisterCommands(listTaskListSections(search, status?.key ?? null));
+  useRegisterCommands(listTaskListSections(filters, fields));
 
   return (
-    <div
-      className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6', team && 'max-w-4xl')}
-    >
+    <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6')}>
       <div className='flex items-end gap-3'>
-        <PageHeading title='All tasks' description={describeTaskCounts(state)} className='flex-1' />
-        {status && (
-          <Hint label='Clear the filter'>
-            <Button
-              variant='secondary'
-              size='sm'
-              icon={{ name: 'IconCrossSmall', position: 'inline-end' }}
-              onClick={() => updateSearchParams({ status: null })}
-            >
-              <Icon name={status.icon} className={TONE_TEXT[status.tone]} />
-              {status.title}
-            </Button>
-          </Hint>
-        )}
-        <Input
-          type='search'
-          value={search}
-          onChange={(event) => applySearch(event.target.value)}
-          placeholder='Search tasks'
-          aria-label='Search tasks'
-          className='w-52 max-md:w-32'
+        <PageHeading
+          title='All tasks'
+          description={
+            <p className={cn(PAGE_DESCRIPTION, 'flex items-center gap-1')}>
+              {describeTaskCounts(rows.map((row) => row.task))}
+              <TeamFeedRefusals state={state} />
+            </p>
+          }
+          className='flex-1'
         />
-      </div>
-      <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>
-        <div
-          className={cn(
-            'grid h-7 shrink-0 items-center gap-4 border-b border-border px-3 text-2xs font-medium text-fg-2',
-            columns
-          )}
-        >
-          <span>Task</span>
-          <span className='max-md:hidden'>Repository</span>
-          {team && <span className='max-md:hidden'>Owner</span>}
-          <span className='max-md:hidden'>Status</span>
-          <span className='max-md:hidden'>Pull request</span>
-          <span className='text-right'>Updated</span>
+        <div className='flex items-center gap-1.5'>
+          <Input
+            type='search'
+            value={filters.search}
+            onChange={(event) => applySearch(event.target.value)}
+            placeholder='Search tasks'
+            aria-label='Search tasks'
+            className='w-52 max-md:w-32'
+          />
+          <TaskFilterMenu fields={fields} filters={filters} />
         </div>
-        <div className='-mb-px min-h-0 overflow-y-auto'>
-          {empty ? (
-            <EmptyState
-              icon={filtered ? 'IconMagnifyingGlass' : 'IconListBullets'}
-              title={filtered ? 'Nothing matches' : 'No tasks yet'}
-              description={
-                filtered
-                  ? 'Try another word from the title, branch or repository, or clear the filter.'
-                  : 'Describe the work on Home. Shinsa finds the repository and starts the agents.'
-              }
-            />
-          ) : (
-            sections.map(({ group, entries }) => (
-              <TaskGroupSection
-                key={`${group.key}-${status?.key ?? 'all'}`}
-                persistId={createDisclosureId(
-                  'tasks',
-                  'group',
-                  group.key,
-                  ...(status ? ['status', status.key] : [])
-                )}
-                group={group}
-                entries={entries}
-                state={state}
-                defaultOpen={group.defaultOpen || status !== null}
-                columns={columns}
+      </div>
+      <div className='flex min-h-0 flex-col gap-2'>
+        <TaskFilterChips fields={fields} filters={filters} />
+        <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>
+          <div
+            className={cn(
+              'grid h-7 shrink-0 items-center gap-3 border-b border-border px-3 text-2xs font-medium text-fg-2',
+              columns
+            )}
+          >
+            <span>Task</span>
+            <span className='max-md:hidden'>Repository</span>
+            {owners && <span className='max-md:hidden'>Owner</span>}
+            <span className='max-md:hidden'>Status</span>
+            <span className='max-md:hidden'>Pull request</span>
+            <span className='text-right'>Updated</span>
+          </div>
+          <div className='-mb-px min-h-0 overflow-y-auto'>
+            {empty ? (
+              <EmptyState
+                icon={filtered ? 'IconMagnifyingGlass' : 'IconListBullets'}
+                title={filtered ? 'Nothing matches' : 'No tasks yet'}
+                description={
+                  filtered
+                    ? 'Try another word from the title, branch or repository, or clear the filters.'
+                    : 'Describe the work on Home. Shinsa finds the repository and starts the agents.'
+                }
               />
-            ))
-          )}
+            ) : (
+              sections.map(({ group, entries }) => (
+                <TaskGroupSection
+                  key={`${group.key}-${statusKey || 'all'}`}
+                  persistId={createDisclosureId(
+                    'tasks',
+                    'group',
+                    group.key,
+                    ...(statusKey ? ['status', statusKey] : [])
+                  )}
+                  group={group}
+                  entries={entries}
+                  state={state}
+                  defaultOpen={group.defaultOpen || filters.status.length > 0}
+                  columns={columns}
+                />
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>

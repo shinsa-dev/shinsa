@@ -64,6 +64,7 @@ export const ICON_NAMES = [
   'IconClipboard2',
   'IconClock',
   'IconClockSnooze',
+  'IconCloudOff',
   'IconCloudSimpleDisconnected',
   'IconCode',
   'IconCodeBrackets',
@@ -474,6 +475,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconClockSnooze: {
     '3': '<g><path d="M15 3.51212C14.0617 3.18046 13.0519 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21C16.9706 21 21 16.9706 21 12C21 11.3126 20.9229 10.6432 20.777 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M19 2H22L19 6H22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8V12L14.5 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconCloudOff: {
+    '3': '<g><path d="M10.7807 5.12397C11.1744 5.0427 11.5822 5 12 5C15.3137 5 18 7.68629 18 11C20.2091 11 22 12.7909 22 15C22 15.4069 21.9392 15.7996 21.8263 16.1696M18.8987 18.8987L7.28675 7.28675C6.8743 7.80955 6.54697 8.40264 6.32568 9.04508C3.88316 9.37436 2 11.4673 2 14C2 16.7614 4.23858 19 7 19H18C18.309 19 18.6098 18.965 18.8987 18.8987ZM18.8987 18.8987L21 21L3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconCloudSimpleDisconnected: {
     '3': '<g><path d="M5 17.7453C3.18652 16.4804 2 14.3787 2 12C2 8.13401 5.13401 5 9 5C11.5628 5 13.8039 6.37723 15.0236 8.43195C15.2884 8.87791 15.8167 9.11316 16.3308 9.0444C16.5497 9.01512 16.7731 9 17 9C19.7614 9 22 11.2386 22 14C22 16.0503 20.7659 17.8124 19 18.584" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 16L12 18M12 18L10 20M12 18L10 16M12 18L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',

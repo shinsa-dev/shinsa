@@ -33,7 +33,7 @@ import {
 } from '../../src/remote/team-feeds.ts';
 import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots.ts';
 import { TEAM_VIEWS_DIR, TeamViews } from '../../src/remote/team-views.ts';
-import { TEAM_GONE_REASON, Teams } from '../../src/remote/teams.ts';
+import { TEAM_REFUSALS, Teams } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
@@ -324,7 +324,7 @@ describe('watching teammates’ machines', () => {
     const { feeds, laptop, sockets, waits } = setUp({ watcherKey: OTHER_KEY });
     feeds.start();
     await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
-    expect(listMachineStatus(feeds)).toEqual([['inst1', 'refused', TEAM_GONE_REASON]]);
+    expect(listMachineStatus(feeds)).toEqual([['inst1', 'refused', TEAM_REFUSALS.mismatch]]);
     expect(waits).toHaveLength(1);
     laptop.publish();
     expect(sockets).toHaveLength(1);
@@ -822,7 +822,7 @@ describe('relaying a teammate’s task to the local app', () => {
     if (stub.state.projects.p1) stub.state.projects.p1.teamIds = [];
     stub.notify();
     await until('the relay ends', () => peer.closed !== null);
-    expect(peer.messages.at(-1)).toEqual({ t: 'closed', reason: TEAM_GONE_REASON });
+    expect(peer.messages.at(-1)).toEqual({ t: 'closed', reason: TEAM_REFUSALS.task });
     feeds.stop();
   });
 
