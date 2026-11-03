@@ -12,6 +12,14 @@ import {
   FieldSeparator,
   FieldSet,
 } from '@shinsa/ui/components/field';
+import {
+  FilterBar,
+  FilterChip,
+  FilterClear,
+  type FilterField,
+  FilterMenu,
+  type FilterSelection,
+} from '@shinsa/ui/components/filter-bar';
 import { Input } from '@shinsa/ui/components/input';
 import { Label } from '@shinsa/ui/components/label';
 import {
@@ -28,6 +36,7 @@ import { Switch } from '@shinsa/ui/components/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@shinsa/ui/components/tabs';
 import { Textarea } from '@shinsa/ui/components/textarea';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import * as React from 'react';
 import { Section, Specimen } from './section.tsx';
 
 export const INPUT_SECTIONS = [
@@ -40,6 +49,7 @@ export const INPUT_SECTIONS = [
   { id: 'select', label: 'Select' },
   { id: 'controls', label: 'Switch & Checkbox' },
   { id: 'tabs', label: 'Tabs' },
+  { id: 'filter', label: 'Filter' },
 ];
 
 const BADGE_VARIANTS = [
@@ -66,6 +76,76 @@ const AGENT_ITEMS = [
   { label: 'Codex', value: 'codex' },
   { label: 'Cursor', value: 'cursor' },
 ];
+
+type SampleFilterKey = 'status' | 'priority';
+
+const SAMPLE_FILTER_FIELDS: FilterField<SampleFilterKey>[] = [
+  {
+    key: 'status',
+    label: 'Status',
+    icon: 'IconListBullets',
+    options: [
+      { value: 'working', label: 'In progress', count: 4 },
+      { value: 'review', label: 'Changes to review', count: 2 },
+      { value: 'done', label: 'Done', count: 9 },
+    ],
+  },
+  {
+    key: 'priority',
+    label: 'Priority',
+    icon: 'IconPriorityHigh',
+    options: [
+      { value: 'high', label: 'High', count: 3 },
+      { value: 'normal', label: 'Normal', count: 12 },
+    ],
+  },
+];
+
+const NO_SAMPLE_FILTERS: FilterSelection<SampleFilterKey> = { status: [], priority: [] };
+
+function FilterSpecimen() {
+  const [selected, setSelected] = React.useState<FilterSelection<SampleFilterKey>>({
+    status: ['working', 'review'],
+    priority: [],
+  });
+  const toggle = (key: SampleFilterKey, value: string) => {
+    setSelected((current) => ({
+      ...current,
+      [key]: current[key].includes(value)
+        ? current[key].filter((chosen) => chosen !== value)
+        : [...current[key], value],
+    }));
+  };
+  const chosen = SAMPLE_FILTER_FIELDS.filter((field) => selected[field.key].length > 0);
+  const unused = SAMPLE_FILTER_FIELDS.filter((field) => selected[field.key].length === 0);
+  return (
+    <div className='flex flex-col items-start gap-2'>
+      <FilterMenu
+        fields={SAMPLE_FILTER_FIELDS}
+        selected={selected}
+        onToggle={toggle}
+        onClear={() => setSelected(NO_SAMPLE_FILTERS)}
+      />
+      {chosen.length > 0 && (
+        <FilterBar>
+          {chosen.map((field) => (
+            <FilterChip
+              key={field.key}
+              field={field}
+              values={selected[field.key]}
+              onToggle={toggle}
+              onRemove={() => setSelected((current) => ({ ...current, [field.key]: [] }))}
+            />
+          ))}
+          {unused.length > 0 && (
+            <FilterMenu variant='add' fields={unused} selected={selected} onToggle={toggle} />
+          )}
+          {chosen.length > 1 && <FilterClear onClick={() => setSelected(NO_SAMPLE_FILTERS)} />}
+        </FilterBar>
+      )}
+    </div>
+  );
+}
 
 export function InputSpecimens() {
   return (
@@ -515,6 +595,16 @@ export function InputSpecimens() {
               <TabsTrigger value='agents'>Agents</TabsTrigger>
             </TabsList>
           </Tabs>
+        </Specimen>
+      </Section>
+      <Section
+        id='filter'
+        title='Filter'
+        description='A multi-value filter: the icon button opens a checkbox submenu per field, each filtered field becomes a chip whose values open in place, + adds a field and Clear all shows from two fields on.'
+        className='flex-col items-start'
+      >
+        <Specimen label='menu, chips, add and clear'>
+          <FilterSpecimen />
         </Specimen>
       </Section>
     </>
