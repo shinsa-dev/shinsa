@@ -27,6 +27,8 @@ import {
   resolveStepState,
   resolveSubmitValues,
   resolveToggledRoots,
+  describeWorktreesSaved,
+  resolveWorktreeFolder,
 } from '@/lib/onboarding.ts';
 import { createAccount, createProviderLogin } from '../support/accounts.ts';
 import {
@@ -35,6 +37,7 @@ import {
   createOption,
   createStep,
   createSuggestions,
+  createWorktreesStatus,
 } from '../support/onboarding.ts';
 import { createGate, createShinsaState, createTask } from '../support/state.ts';
 
@@ -237,6 +240,42 @@ describe('listFolderRows', () => {
       { path: '/srv/code', label: '/srv/code', removable: true },
       { path: '/Users/me/work', label: '~/work', removable: false },
     ]);
+  });
+});
+
+describe('resolveWorktreeFolder', () => {
+  it('names the default folder', () => {
+    expect(resolveWorktreeFolder(createOnboardingStatus())).toEqual({
+      label: '/h/data/worktrees',
+      origin: 'default',
+      problem: null,
+    });
+  });
+
+  it('names a chosen folder from the home folder, with its problem', () => {
+    const status = createWorktreesStatus({
+      effective: '/Users/me/bucket/worktrees',
+      configured: '/Users/me/bucket/worktrees',
+      problem: 'The worktree folder ~/bucket/worktrees does not exist.',
+    });
+    expect(resolveWorktreeFolder(status)).toEqual({
+      label: '~/bucket/worktrees',
+      origin: 'chosen',
+      problem: 'The worktree folder ~/bucket/worktrees does not exist.',
+    });
+  });
+
+  it('says when SHINSA_WORKTREES_DIR sets the folder', () => {
+    const status = createWorktreesStatus({ effective: '/mnt/r2', fromEnvironment: '/mnt/r2' });
+    expect(resolveWorktreeFolder(status).origin).toBe('environment');
+  });
+});
+
+describe('describeWorktreesSaved', () => {
+  it('says where new worktrees go', () => {
+    expect(describeWorktreesSaved(createOnboardingStatus())).toBe('New worktrees go to the default folder.');
+    const chosen = createWorktreesStatus({ effective: '/Volumes/r2', configured: '/Volumes/r2' });
+    expect(describeWorktreesSaved(chosen)).toBe('New worktrees go to /Volumes/r2.');
   });
 });
 

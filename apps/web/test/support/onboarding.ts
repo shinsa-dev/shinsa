@@ -48,6 +48,11 @@ export function createOnboardingStatus(overrides: Partial<OnboardingStatus['root
   } satisfies OnboardingStatus;
 }
 
+export function createWorktreesStatus(worktrees: Partial<OnboardingStatus['worktrees']>) {
+  const status = createOnboardingStatus();
+  return { ...status, worktrees: { ...status.worktrees, ...worktrees } } satisfies OnboardingStatus;
+}
+
 export function createSuggestions(paths: [string, number][]): RootSuggestions {
   return {
     suggestions: paths.map(([path, repoCount]) => ({ path, repoCount, repos: [], chosen: false })),

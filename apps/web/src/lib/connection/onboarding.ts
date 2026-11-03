@@ -50,6 +50,13 @@ const writeRoots = Effect.fn('Onboarding.writeRoots')(function* (roots: string[]
   publishStatus(yield* engine.onboarding.setup({ payload: { roots } }));
 });
 
+const writeWorktreesDir = Effect.fn('Onboarding.writeWorktreesDir')(function* (path: string | null) {
+  const engine = yield* EngineClient;
+  const next = yield* engine.onboarding.worktrees({ payload: { path } });
+  publishStatus(next);
+  return next;
+});
+
 const readRootSuggestions = Effect.gen(function* () {
   const engine = yield* EngineClient;
   return yield* engine.onboarding.roots({ query: { refresh: '1' } });
@@ -104,6 +111,10 @@ export function useOnboardingStatus() {
 
 export function updateRoots(roots: string[], done: string) {
   return requestWithToast(() => runApp(writeRoots(roots)), done);
+}
+
+export function updateWorktreesDir(path: string | null) {
+  return runApp(writeWorktreesDir(path));
 }
 
 export function requestRootSuggestions() {

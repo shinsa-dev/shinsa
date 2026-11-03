@@ -28,6 +28,14 @@ interface FolderRow {
   removable: boolean;
 }
 
+export type WorktreeFolderOrigin = 'default' | 'chosen' | 'environment';
+
+interface WorktreeFolder {
+  label: string;
+  origin: WorktreeFolderOrigin;
+  problem: string | null;
+}
+
 interface FolderSuggestion {
   path: string;
   label: string;
@@ -46,6 +54,27 @@ export function listFolderRows(status: OnboardingStatus): FolderRow[] {
     .filter((path) => !status.roots.configured.includes(path))
     .map((path) => ({ path, label: resolveDisplayPath(path, userHome), removable: false }));
   return [...configured, ...fromEnvironment];
+}
+
+function resolveWorktreeOrigin(worktrees: OnboardingStatus['worktrees']): WorktreeFolderOrigin {
+  if (worktrees.fromEnvironment !== null) return 'environment';
+  if (worktrees.configured !== null) return 'chosen';
+  return 'default';
+}
+
+export function resolveWorktreeFolder(status: OnboardingStatus): WorktreeFolder {
+  const { worktrees, paths } = status;
+  return {
+    label: resolveDisplayPath(worktrees.effective, paths.userHome),
+    origin: resolveWorktreeOrigin(worktrees),
+    problem: worktrees.problem,
+  };
+}
+
+export function describeWorktreesSaved(status: OnboardingStatus) {
+  const folder = resolveWorktreeFolder(status);
+  if (folder.origin === 'default') return 'New worktrees go to the default folder.';
+  return `New worktrees go to ${folder.label}.`;
 }
 
 export function listFolderSuggestions(status: OnboardingStatus, suggestions: RootSuggestion[]) {
