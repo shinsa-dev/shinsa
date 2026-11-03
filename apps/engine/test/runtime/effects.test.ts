@@ -1006,7 +1006,7 @@ describe('worktrees', () => {
       stdout: 'ignore',
       stderr: 'ignore',
     });
-    const services = { closeTaskServices: () => undefined, listTerminalPids: () => [shell.pid] };
+    const services = { closeTaskTerminals: () => undefined, listTerminalPids: () => [shell.pid] };
     const { runner, dispatched } = setup(withTask({ worktreePath: worktree }, repo), { services });
     await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
     expect(await server.exited).not.toBe(0);
@@ -1037,7 +1037,7 @@ describe('worktrees', () => {
     const { repo, worktree } = await createShippingRepo();
     const closed: string[] = [];
     const services = {
-      closeTaskServices: (taskId: string) => closed.push(taskId),
+      closeTaskTerminals: (taskId: string) => closed.push(taskId),
       listTerminalPids: () => [],
     };
     const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo), {
@@ -1077,12 +1077,18 @@ describe('scratch folders', () => {
 
   test('a settled task’s scratch folder is removed once its runs stop, and removing it again is harmless', async () => {
     for (const stage of ['done', 'merged', 'cancelled'] as const) {
-      const { runner, config, calls, dispatched } = setup(withTask({ stage, repoId: null }));
+      const closed: string[] = [];
+      const services = {
+        closeTaskTerminals: (taskId: string) => closed.push(taskId),
+        listTerminalPids: () => [],
+      };
+      const { runner, config, calls, dispatched } = setup(withTask({ stage, repoId: null }), { services });
       const scratch = writeScratch(config.dataDir);
       await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
       expect(existsSync(scratch)).toBe(false);
       await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
       expect(calls).toEqual(['quiesce:task-1', 'quiesce:task-1']);
+      expect(closed).toEqual(['task-1', 'task-1']);
       expect(dispatched).toEqual([]);
     }
     const gone = setup();
@@ -1091,10 +1097,16 @@ describe('scratch folders', () => {
   });
 
   test('a task reopened before or while its runs stop keeps its scratch folder', async () => {
-    const reopened = setup(withTask({ stage: 'answering', repoId: null }));
+    const closed: string[] = [];
+    const services = {
+      closeTaskTerminals: (taskId: string) => closed.push(taskId),
+      listTerminalPids: () => [],
+    };
+    const reopened = setup(withTask({ stage: 'answering', repoId: null }), { services });
     const kept = writeScratch(reopened.config.dataDir);
     await reopened.runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
     expect(existsSync(kept)).toBe(true);
+    expect(closed).toEqual([]);
     expect(reopened.calls).toEqual([]);
 
     const stub = createStubEngine(withTask({ stage: 'done', repoId: null }));

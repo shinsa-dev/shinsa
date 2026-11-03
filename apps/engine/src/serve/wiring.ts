@@ -127,6 +127,7 @@ export function createServices(
     home: config.userHome,
     version: instance.version,
     readOnly: config.inspect,
+    engine,
     ...options.terminals,
   });
   const previews = new Previews({ engine, remote, services: terminals, origin: config.previewOrigin });

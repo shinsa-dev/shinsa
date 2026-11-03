@@ -5,6 +5,7 @@ import {
   SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceSuggestion,
+  type ShinsaState,
   type TerminalInfo,
   type TerminalPlaceKind,
 } from '@shinsa/core';
@@ -110,6 +111,22 @@ type PortPicker = (preferred: number | null, taken: ReadonlySet<number>) => numb
 
 type ForegroundReader = (pid: number) => Promise<string | null>;
 
+interface TerminalTask {
+  handle: string | null;
+  settled: boolean;
+}
+
+export type TaskDescriber = (taskId: string) => TerminalTask | null;
+
+interface TaskStateSource {
+  readonly state: ShinsaState;
+}
+
+export interface TerminalHolder {
+  taskId: string | null;
+  service: string | null;
+}
+
 export interface TerminalsOptions {
   dataDir: string;
   home: string;
@@ -118,6 +135,7 @@ export interface TerminalsOptions {
   env?: Env;
   spawn?: TerminalSpawner;
   readForeground?: ForegroundReader;
+  engine?: TaskStateSource;
   pickPort?: PortPicker;
   now?: () => number;
   newId?: () => string;

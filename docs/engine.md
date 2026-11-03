@@ -562,7 +562,8 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
   agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
   linker can fail on files it is still writing (`ERR_PNPM_EEXIST`) and pass the second time; only when that run fails
   too is it logged, and the agent sets the dependencies up itself. Base checkouts for checks are prepared the same way.
-- **A removed worktree takes its processes with it.** `worktree.remove` closes the task's service runs, then stops
+- **A removed worktree takes its processes with it.** `worktree.remove` closes the task's service runs and ended
+  shells, then stops
   every process still working inside the worktree (`stopProcessesIn` in `git/processes.ts`: `lsof -d cwd` finds each
   process whose working folder is the worktree or inside it; SIGTERM, then SIGKILL for any still alive after 3 s).
   That catches a dev server an agent started from its shell, which outlives the agent's run and would otherwise keep
@@ -2620,7 +2621,16 @@ running when the window closes or the app quits, and a page that comes back find
   the list to every page as `terminals` on the main socket whenever it changes (coalesced over 50 ms), with your
   services and your home folder. Each
   terminal's screen is saved to `data/terminals/<id>.screen` (its last 1,000 lines, serialized) two seconds after it
-  last printed and when Shinsa stops. At most 32 terminals.
+  last printed and when Shinsa stops. At most 32 terminals (`TERMINAL_LIMITS`), counting ended ones, since each keeps
+  its screen.
+- **The limit reclaims ended terminals.** When a new terminal or service run would make 33, `#open` first closes
+  ended ones (`exited` or `stopped`), oldest first within each group (`listReclaimable` in `limit.ts`): a finished or
+  unknown task's (the engine's state, with `isTaskSettled`), then stopped service
+  runs (starting the service opens a new one), then task shells, and your own last. A running terminal, or a service
+  run waiting to start again after a restart, is never closed to make room, and nothing is closed when the ended ones
+  would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with
+  its services and shells, and how many are yours (`resolveLimitMessage`), so an agent's `run_service` or you can free
+  one. On start, `resumeServices` drops the ended terminals of finished and unknown tasks before anything resumes.
 - **When the engine stops.** `stop()` hangs up every shell (`SIGHUP` and the PTY closed, as closing a terminal window
   does, then `SIGKILL` after 3 s), so nothing it started outlives the engine, and saves each screen. A restarted
   engine cannot have the shell back: a terminal that was running shows as `stopped`, with its last screen and Start
@@ -2717,8 +2727,9 @@ beside your run (Runs for a task, below).
   skill); Evidence's Preview group also links each active run of the task the agent did not attach
   (`docs/design.md`, 37). The preview runs while the task waits for review and the merge, and stops when the task settles:
   `settleTask` removes the worktree, and `worktree.remove` closes the task's runs (below).
-- **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
-  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), then stops every other process Shinsa or a
+- **When a task's worktree goes.** `worktree.remove` closes the task's service runs and its ended shells first
+  (`Terminals.closeTaskTerminals`, from `EffectRunner`, the `services` option; `scratch.remove` does the same for
+  every finished task, so one without a worktree frees its terminals too), then stops every other process Shinsa or a
   finished agent left working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
   worktree takes its processes with it), so no dev server keeps running in a deleted folder; your own shells opened
   in that worktree, and what runs in them, are left as they are.
