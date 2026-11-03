@@ -66,6 +66,19 @@ describe('what an agent changes through its management tools', () => {
     expect(routed).toEqual([]);
   });
 
+  test('a router that fails passes its reason back to the agent', async () => {
+    const client = createManageClient({
+      engine: createEngine(),
+      base: 'http://127.0.0.1:1',
+      key: null,
+      byTask: 'task-1',
+      route: () => Promise.reject(new Error('The classifier is down.')),
+    });
+    await expect(client.send({ type: 'task.message', taskId: 'task-2', text: 'Rebase.' })).rejects.toThrow(
+      'The classifier is down.'
+    );
+  });
+
   test('without a router, a command it sends goes straight to the engine on your behalf', async () => {
     const engine = createEngine();
     await engine.dispatch({ type: 'project.write', project: { name: 'Basket', color: 'blue' } });

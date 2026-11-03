@@ -1,8 +1,12 @@
-import { parseUserCommand, type ShinsaEvent, type UserCommand } from '@shinsa/core';
+import { DomainError, parseUserCommand, type ShinsaEvent, type UserCommand } from '@shinsa/core';
+import { Effect } from 'effect';
 import { createSurfaceClient } from '../../cli/api.ts';
+import { describeError } from '../../log/index.ts';
 import type { ProjectChanges } from '../../projects/changes.ts';
+import { edgeRuntime } from '../../runtime/edge.ts';
 import type { DispatchOptions, Engine } from '../../runtime/engine.ts';
 import type { SurfaceClient, SurfaceHookSecrets } from '../../surface/index.ts';
+import { ToolCallFailed } from '../tools/schema.ts';
 
 export type CommandRouter = (command: UserCommand, options: DispatchOptions) => Promise<ShinsaEvent[]>;
 
@@ -39,21 +43,26 @@ export function createManageClient(options: ManageClientOptions): SurfaceClient 
         }
       : {}),
     ...(hookSecrets ? { hookSecrets } : {}),
-    send: async (command) => {
+    send: (command) => {
       sent += 1;
-      const parsed = parseUserCommand(command);
-      if (parsed._tag === 'Failure') throw parsed.failure;
-      const events = await route(parsed.success, {
-        ...(key === null ? {} : { id: `${key}:${sent}` }),
-        ...from,
-      });
-      const created = events.find((event) => event.type === 'task.created');
-      const written = events.find((event) => event.type === 'schedule.written');
-      return {
-        ok: true,
-        taskId: created?.type === 'task.created' ? created.taskId : null,
-        ...(written?.type === 'schedule.written' ? { scheduleId: written.schedule.id } : {}),
-      };
+      const id = key === null ? {} : { id: `${key}:${sent}` };
+      return edgeRuntime.runPromise(
+        Effect.gen(function* () {
+          const parsed = yield* Effect.fromResult(parseUserCommand(command));
+          const events = yield* Effect.tryPromise({
+            try: () => route(parsed, { ...id, ...from }),
+            catch: (error) =>
+              error instanceof DomainError ? error : new ToolCallFailed({ message: describeError(error) }),
+          });
+          const created = events.find((event) => event.type === 'task.created');
+          const written = events.find((event) => event.type === 'schedule.written');
+          return {
+            ok: true as const,
+            taskId: created?.type === 'task.created' ? created.taskId : null,
+            ...(written?.type === 'schedule.written' ? { scheduleId: written.schedule.id } : {}),
+          };
+        })
+      );
     },
   };
 }

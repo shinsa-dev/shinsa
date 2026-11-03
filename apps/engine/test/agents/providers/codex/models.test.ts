@@ -1,8 +1,8 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { KNOWN_CODEX_MODELS } from '@shinsa/core';
 import { CodexModelCatalog, resolveCodexModels } from '../../../../src/agents/providers/codex/models.ts';
-import { log } from '../../../../src/log/index.ts';
 import { FakeCodex } from '../../../helpers/codex.ts';
+import { captureLogs } from '../../../helpers/logs.ts';
 
 describe('the Codex model list', () => {
   test('comes from model/list, without hidden models, across pages, and is asked once', async () => {
@@ -29,7 +29,7 @@ describe('the Codex model list', () => {
   });
 
   test('falls back to the built-in list when Codex cannot answer, and asks again next time', async () => {
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const empty = new CodexModelCatalog(new FakeCodex({ models: [] }).runtime);
     expect(await empty.list()).toEqual(KNOWN_CODEX_MODELS);
     const missing = new CodexModelCatalog({
@@ -39,9 +39,7 @@ describe('the Codex model list', () => {
     expect(await missing.list()).toEqual(KNOWN_CODEX_MODELS);
     const slow = new CodexModelCatalog(new FakeCodex().runtime, 1);
     expect(await slow.list()).toEqual(KNOWN_CODEX_MODELS);
-    expect(warn.mock.calls.map(([message]) => message)).toContain(
-      '[Models] Falling back to the built-in Codex list'
-    );
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Models] Falling back to the built-in Codex list')).toHaveLength(3);
   });
 });

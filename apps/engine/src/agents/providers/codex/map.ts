@@ -2,7 +2,7 @@ import type { ChatEditHunk, ChatEvent, ChatNotice, ChatTodo, ChatTool, ChatToolA
 import { mapClaudeTool, mapToolResult } from '../claude/map.ts';
 import { MAX_TEXT } from '../schema.ts';
 import type { ImageStore } from '../types.ts';
-import { readText } from './client.ts';
+import { readText } from './params.ts';
 
 export type CodexItem = { type: string; id: string } & Record<string, unknown>;
 

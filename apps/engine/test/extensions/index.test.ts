@@ -414,6 +414,26 @@ describe('checking servers', () => {
     expect(checked.at(-1)?.command).toBe('kampala');
   });
 
+  test('a checker that fails fails the check, and without one Shinsa starts the server itself', async () => {
+    const { machine, state } = createWorld();
+    const options = {
+      state: () => state,
+      config: { home: machine.shinsaHome, userHome: machine.userHome, pluginDir: machine.pluginDir },
+      secrets: new SecretStore(join(machine.shinsaHome, 'secrets.json')),
+      baseUrl: () => 'http://127.0.0.1:5180',
+      env: machine.env,
+    };
+    const failing = new Extensions({
+      ...options,
+      check: () => Promise.reject(new Error('The checker is gone.')),
+    });
+    await expect(failing.check('claude:files')).rejects.toThrow('The checker is gone.');
+    const own = new Extensions(options);
+    own.createServer({ name: 'missing', transport: 'stdio', command: '/nonexistent/mcp-server' });
+    const snapshot = await own.check('shinsa:missing');
+    expect(findServer(snapshot.servers, 'shinsa:missing').status.state).toBe('failing');
+  });
+
   test('a check outlives a restart, and editing the server forgets it', async () => {
     const { extensions, machine, state } = createWorld();
     await extensions.check('claude:files');

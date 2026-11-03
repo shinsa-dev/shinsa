@@ -13,9 +13,11 @@ import {
   selectSessionCwd,
   splitHouseRules,
 } from '@shinsa/core';
-import { log } from '../../log/index.ts';
+import { Effect } from 'effect';
+import { describeError } from '../../log/index.ts';
+import { edgeRuntime } from '../../runtime/edge.ts';
 import { resolveCapabilities } from '../providers/index.ts';
-import { type TurnPlan, type TurnContext, FRESH, type TurnFoldInput } from './schema.ts';
+import { type TurnPlan, type TurnContext, FRESH, type TurnFoldInput, TurnPlanFailed } from './schema.ts';
 
 function resolveSessionTaskId(context: TurnContext, sessionId: string) {
   const fork = context.run.fork;
@@ -36,27 +38,25 @@ function listConversation(context: TurnContext, sessionId: string): HandoffSourc
   }));
 }
 
-function resolveHandoffPlan(
+const resolveHandoffPlan = Effect.fn('TurnPlan.resolveHandoff')(function* (
   context: TurnContext,
   reason: RunHandoffReason,
   sessionId: string,
   fromProvider: string
-): TurnPlan {
+) {
   if (!resolveCapabilities(context.provider).contextHandoff) {
-    log.warn('[Runs] The provider takes no context handoff; the step starts fresh', {
-      runId: context.run.id,
-      provider: context.provider.id,
-    });
+    yield* Effect.logWarning('[Runs] The provider takes no context handoff; the step starts fresh').pipe(
+      Effect.annotateLogs({ runId: context.run.id, provider: context.provider.id })
+    );
     return FRESH;
   }
-  const fromLabel = context.labelOf(fromProvider);
   const handoff = resolveHandoff({
     reason,
-    fromProvider: fromLabel,
+    fromProvider: context.labelOf(fromProvider),
     sources: listConversation(context, sessionId),
   });
   if (!handoff) return FRESH;
-  return {
+  const plan: TurnPlan = {
     resume: null,
     fork: false,
     handoff,
@@ -68,54 +68,76 @@ function resolveHandoffPlan(
       approxTokens: handoff.approxTokens,
     },
   };
+  return plan;
+});
+
+function requestTurnStep<T>(request: () => Promise<T>) {
+  return Effect.tryPromise({
+    try: request,
+    catch: (error) => new TurnPlanFailed({ message: describeError(error) }),
+  });
 }
 
-async function resolveForkPlan(context: TurnContext, fork: RunFork): Promise<TurnPlan> {
+const inspectSession = Effect.fn('TurnPlan.inspectSession')(function* (
+  context: TurnContext,
+  sessionId: string
+) {
+  const { provider } = context;
+  const capabilities = resolveCapabilities(provider);
+  if (!capabilities.sessions.inspect || !provider.inspectSession) return null;
+  const inspect = provider.inspectSession;
+  const status = yield* requestTurnStep(() => inspect({ cwd: context.cwd, sessionId }));
+  return status === 'missing' || status === 'empty' ? status : null;
+});
+
+const resolveForkPlan = Effect.fn('TurnPlan.resolveFork')(function* (context: TurnContext, fork: RunFork) {
   const { provider } = context;
   const source = context.state.runs[fork.runId];
   const owner = source?.sessionProvider ?? source?.provider ?? provider.id;
-  const capabilities = resolveCapabilities(provider);
-  if (owner !== provider.id || !capabilities.sessions.fork) {
-    return resolveHandoffPlan(context, 'fork', fork.sessionId, owner);
+  if (owner !== provider.id || !resolveCapabilities(provider).sessions.fork) {
+    return yield* resolveHandoffPlan(context, 'fork', fork.sessionId, owner);
   }
-  if (!capabilities.sessions.inspect || !provider.inspectSession) {
-    return { ...FRESH, resume: fork.sessionId, fork: true };
-  }
-  const status = await provider.inspectSession({ cwd: context.cwd, sessionId: fork.sessionId });
-  if (status !== 'missing' && status !== 'empty') return { ...FRESH, resume: fork.sessionId, fork: true };
-  log.warn('[Runs] The session to fork is gone; restoring it from the source task’s transcript', {
-    runId: context.run.id,
-    sourceTaskId: fork.taskId,
-    sessionId: fork.sessionId,
-    status,
-  });
-  return resolveHandoffPlan(context, 'fork', fork.sessionId, owner);
-}
+  const gone = yield* inspectSession(context, fork.sessionId);
+  if (gone === null) return { ...FRESH, resume: fork.sessionId, fork: true };
+  yield* Effect.logWarning(
+    '[Runs] The session to fork is gone; restoring it from the source task’s transcript'
+  ).pipe(
+    Effect.annotateLogs({
+      runId: context.run.id,
+      sourceTaskId: fork.taskId,
+      sessionId: fork.sessionId,
+      status: gone,
+    })
+  );
+  return yield* resolveHandoffPlan(context, 'fork', fork.sessionId, owner);
+});
 
-export function resolveRestorePlan(context: TurnContext, plan: TurnPlan, sessionId: string) {
-  return resolveHandoffPlan(context, plan.fork ? 'fork' : 'session_restore', sessionId, context.provider.id);
-}
-
-export async function resolveTurnPlan(context: TurnContext): Promise<TurnPlan> {
+const planTurn = Effect.fn('TurnPlan.resolve')(function* (context: TurnContext) {
   const { run, provider } = context;
   const sessionId = run.sessionId;
-  if (!sessionId) return run.fork ? resolveForkPlan(context, run.fork) : FRESH;
+  if (!sessionId) return run.fork ? yield* resolveForkPlan(context, run.fork) : FRESH;
   const owner = run.sessionProvider ?? run.provider;
-  if (owner !== provider.id) return resolveHandoffPlan(context, 'provider_switch', sessionId, owner);
-  const capabilities = resolveCapabilities(provider);
-  if (run.sessionLost || !capabilities.sessions.resume) {
-    return resolveHandoffPlan(context, 'session_restore', sessionId, owner);
+  if (owner !== provider.id) return yield* resolveHandoffPlan(context, 'provider_switch', sessionId, owner);
+  if (run.sessionLost || !resolveCapabilities(provider).sessions.resume) {
+    return yield* resolveHandoffPlan(context, 'session_restore', sessionId, owner);
   }
-  if (!capabilities.sessions.inspect || !provider.inspectSession) return { ...FRESH, resume: sessionId };
-  const status = await provider.inspectSession({ cwd: context.cwd, sessionId });
-  if (status !== 'missing' && status !== 'empty') return { ...FRESH, resume: sessionId };
-  log.warn('[Runs] The session to resume is gone; restoring it from the transcript', {
-    runId: run.id,
-    sessionId,
-    status,
-  });
-  await context.recordLost(sessionId);
-  return resolveHandoffPlan(context, 'session_restore', sessionId, owner);
+  const gone = yield* inspectSession(context, sessionId);
+  if (gone === null) return { ...FRESH, resume: sessionId };
+  yield* Effect.logWarning('[Runs] The session to resume is gone; restoring it from the transcript').pipe(
+    Effect.annotateLogs({ runId: run.id, sessionId, status: gone })
+  );
+  yield* requestTurnStep(() => context.recordLost(sessionId));
+  return yield* resolveHandoffPlan(context, 'session_restore', sessionId, owner);
+});
+
+export function resolveRestorePlan(context: TurnContext, plan: TurnPlan, sessionId: string): TurnPlan {
+  return edgeRuntime.runSync(
+    resolveHandoffPlan(context, plan.fork ? 'fork' : 'session_restore', sessionId, context.provider.id)
+  );
+}
+
+export function resolveTurnPlan(context: TurnContext): Promise<TurnPlan> {
+  return edgeRuntime.runPromise(planTurn(context));
 }
 
 function readBriefing(entry: ChatEntry, rules: string) {

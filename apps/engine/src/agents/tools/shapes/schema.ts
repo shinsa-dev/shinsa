@@ -1,4 +1,10 @@
-import { COMPOSABLE_STEPS, SCHEDULE_LIMITS, SHAPE_LIMITS, STEP_SCHEMA } from '@shinsa/core';
+import {
+  COMPOSABLE_STEPS,
+  type DeliveringStep,
+  SCHEDULE_LIMITS,
+  SHAPE_LIMITS,
+  STEP_SCHEMA,
+} from '@shinsa/core';
 import { limitedText } from '../fields.ts';
 import { REPLY_SPEC } from '../reply.ts';
 import type { ToolSpec } from '../schema.ts';
@@ -134,3 +140,12 @@ export const SHAPE_TOOL_SPECS = {
     },
   },
 } satisfies Record<string, ToolSpec>;
+
+export const DELIVERING_TOOLS = new Map<string, DeliveringStep>([
+  ['answer', 'answer'],
+  ['report_diagnosis', 'investigate'],
+  ['submit_report', 'research'],
+  ['report_outcome', 'operate'],
+]);
+
+export const UNCHANGED_SHAPE = 'Those are the steps this task already has. Plan it with `propose_plan`.';

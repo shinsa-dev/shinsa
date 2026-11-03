@@ -5,43 +5,70 @@ import {
   serializeRepositoryWork,
   type Task,
 } from '@shinsa/core';
-import { listChangedFiles } from '../../git/changed-files.ts';
-import { describeError, log } from '../../log/index.ts';
-import type { Engine } from '../../runtime/engine.ts';
-import { type Overlap } from './schema.ts';
+import { Effect } from 'effect';
+import { History } from '../../git/history/service.ts';
+import type { Overlap, RepositoryWorkDefinition, RepositoryWorkHandle } from './schema.ts';
 
-function listOverlaps(files: Map<string, Set<string>>, taskId: string): Overlap[] {
-  const own = files.get(taskId) ?? new Set<string>();
-  return [...files]
-    .filter(([otherId]) => otherId !== taskId)
-    .map(([otherId, paths]) => ({
-      taskId: otherId,
-      paths: [...paths].filter((path) => own.has(path)).sort(),
-    }))
-    .filter((overlap) => overlap.paths.length > 0);
-}
+export const makeRepositoryWork = Effect.fn('RepositoryWork.make')(function* (
+  definition: RepositoryWorkDefinition
+) {
+  const history = yield* History;
 
-export class RepositoryWork {
-  readonly #engine: Engine;
+  const listOverlaps = (files: Map<string, Set<string>>, taskId: string): Overlap[] => {
+    const own = files.get(taskId) ?? new Set<string>();
+    return [...files]
+      .filter(([otherId]) => otherId !== taskId)
+      .map(([otherId, paths]) => ({
+        taskId: otherId,
+        paths: [...paths].filter((path) => own.has(path)).sort(),
+      }))
+      .filter((overlap) => overlap.paths.length > 0);
+  };
 
-  constructor(engine: Engine) {
-    this.#engine = engine;
-  }
+  const listTasks = Effect.fn('RepositoryWork.listTasks')(function* (taskId: string) {
+    const state = yield* definition.state;
+    const task = state.tasks[taskId];
+    const others = listRepositoryWork(state, taskId);
+    return task && others.length > 0 ? [task, ...others] : [];
+  });
 
-  async describe(taskId: string, signal?: AbortSignal) {
-    const tasks = this.#listTasks(taskId);
+  const listFiles = Effect.fn('RepositoryWork.listFiles')(function* (task: Task, signal?: AbortSignal) {
+    const state = yield* definition.state;
+    const repo = task.repoId ? state.repos[task.repoId] : undefined;
+    if (!repo) return null;
+    return yield* history
+      .changedFiles(repo, task, resolveRoundBase(task), signal)
+      .pipe(
+        Effect.catch((failure) =>
+          Effect.logWarning('[RepositoryWork] Could not list the files a task changed').pipe(
+            Effect.annotateLogs({ taskId: task.id, error: failure.message }),
+            Effect.as(null)
+          )
+        )
+      );
+  });
+
+  const listAllFiles = (tasks: Task[], signal?: AbortSignal) =>
+    Effect.forEach(tasks, (task) => listFiles(task, signal), { concurrency: 'unbounded' });
+
+  const describe = Effect.fn('RepositoryWork.describe')(function* (taskId: string, signal?: AbortSignal) {
+    const tasks = yield* listTasks(taskId);
+    const listed = yield* listAllFiles(tasks, signal);
     const files: RepositoryFiles = {};
-    const listed = await Promise.all(tasks.map((task) => this.#listFiles(task, signal)));
     tasks.forEach((task, index) => {
       files[task.id] = listed[index] ?? null;
     });
-    return serializeRepositoryWork(this.#engine.state, taskId, files);
-  }
+    return serializeRepositoryWork(yield* definition.state, taskId, files);
+  });
 
-  async recordOverlaps(taskId: string, planned: readonly string[], signal?: AbortSignal) {
-    const tasks = this.#listTasks(taskId);
+  const recordOverlaps = Effect.fn('RepositoryWork.recordOverlaps')(function* (
+    taskId: string,
+    planned: readonly string[],
+    signal?: AbortSignal
+  ) {
+    const tasks = yield* listTasks(taskId);
     if (tasks.length < 2) return;
-    const listed = await Promise.all(tasks.map((task) => this.#listFiles(task, signal)));
+    const listed = yield* listAllFiles(tasks, signal);
     const files = new Map<string, Set<string>>();
     tasks.forEach((task, index) => {
       const paths = [...(listed[index] ?? []), ...(task.id === taskId ? planned : [])];
@@ -51,38 +78,18 @@ export class RepositoryWork {
       const overlaps = listOverlaps(files, task.id);
       if (overlaps.length === 0) continue;
       const id = `overlaps:${task.id}:${Bun.hash(JSON.stringify(overlaps)).toString(36)}`;
-      try {
-        await this.#engine.dispatch(
-          { type: 'task.record_overlaps', taskId: task.id, overlaps, from: taskId },
-          { id }
+      yield* definition
+        .dispatch({ type: 'task.record_overlaps', taskId: task.id, overlaps, from: taskId }, id)
+        .pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning('[RepositoryWork] Could not record the files another task changes too').pipe(
+              Effect.annotateLogs({ taskId: task.id, error: failure.message })
+            )
+          )
         );
-      } catch (error) {
-        log.warn('[RepositoryWork] Could not record the files another task changes too', {
-          taskId: task.id,
-          error: describeError(error),
-        });
-      }
     }
-  }
+  });
 
-  #listTasks(taskId: string) {
-    const task = this.#engine.state.tasks[taskId];
-    const others = listRepositoryWork(this.#engine.state, taskId);
-    return task && others.length > 0 ? [task, ...others] : [];
-  }
-
-  async #listFiles(task: Task, signal?: AbortSignal) {
-    const state = this.#engine.state;
-    const repo = task.repoId ? state.repos[task.repoId] : undefined;
-    if (!repo) return null;
-    try {
-      return await listChangedFiles(repo, task, resolveRoundBase(task), signal);
-    } catch (error) {
-      log.warn('[RepositoryWork] Could not list the files a task changed', {
-        taskId: task.id,
-        error: describeError(error),
-      });
-      return null;
-    }
-  }
-}
+  const handle: RepositoryWorkHandle = { describe, recordOverlaps };
+  return handle;
+});

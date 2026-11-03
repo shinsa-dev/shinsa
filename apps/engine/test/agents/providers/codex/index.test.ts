@@ -1,13 +1,13 @@
-import { describe, expect, mock, spyOn, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import { KNOWN_CODEX_MODELS } from '@shinsa/core';
 import type { CodexExecutable } from '../../../../src/agents/providers/codex/executable.ts';
 import { CODEX_CAPABILITIES, createCodexProvider } from '../../../../src/agents/providers/codex/index.ts';
 import { CODEX_RUNTIME } from '../../../../src/agents/providers/codex/session.ts';
 import type { AgentSessionInput } from '../../../../src/agents/providers/types.ts';
 import { createShinsaTools } from '../../../../src/agents/tools/index.ts';
-import { log } from '../../../../src/log/index.ts';
 import { FakeCodex } from '../../../helpers/codex.ts';
 import { createTempDir } from '../../../helpers/index.ts';
+import { captureLogs } from '../../../helpers/logs.ts';
 
 function createInput(patch: Partial<AgentSessionInput> = {}): AgentSessionInput {
   return {
@@ -56,7 +56,7 @@ describe('the Codex provider', () => {
     };
     const resolveExecutable = mock(() => Promise.resolve(outdated));
     const provider = createCodexProvider({ resolveExecutable }, {}, { env: { CODEX_HOME: createTempDir() } });
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     expect(await provider.startSession(createInput()).done).toMatchObject({
       outcome: 'failed',
       summary: outdated.message,
@@ -68,8 +68,10 @@ describe('the Codex provider', () => {
       summary: outdated.message,
     });
     expect(await provider.listModels()).toEqual(KNOWN_CODEX_MODELS);
-    expect(warn.mock.calls[0]?.[1]).toEqual({ error: outdated.message });
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Models] Falling back to the built-in Codex list')).toEqual([
+      { error: outdated.message },
+    ]);
     await expect(provider.complete({ system: 's', prompt: 'p', model: 'm' })).rejects.toThrow(
       outdated.message
     );

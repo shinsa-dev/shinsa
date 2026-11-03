@@ -8,9 +8,8 @@ import {
   type ServerCheck,
 } from '../../src/extensions/index.ts';
 import { UsageIndex } from '../../src/extensions/usage.ts';
-import { log } from '../../src/log/index.ts';
 import { SecretStore } from '../../src/secrets/store.ts';
-import { until } from '../helpers/index.ts';
+import { captureLogs, until } from '../helpers/index.ts';
 import { createFakeMachine, serializeClaudeToolUse, writeFile, writeSkill } from './fixtures.ts';
 
 const DAY = 86_400_000;
@@ -300,13 +299,12 @@ describe('reading usage in the background', () => {
   test('a read that fails is logged, and stopping waits for the read', async () => {
     const { extensions, usage } = createWorld();
     const refresh = spyOn(usage, 'refresh').mockImplementation(() => Promise.reject(new Error('disk gone')));
-    const warn = spyOn(log, 'warn');
-    await extensions.syncUsage();
-    expect(warn).toHaveBeenCalledWith('[Extensions] Could not read which servers and skills agents used', {
-      error: 'disk gone',
-    });
+    const logs = captureLogs();
+    await extensions.syncUsage().finally(() => logs.restore());
+    expect(logs.fieldsOf('[Extensions] Could not read which servers and skills agents used')).toEqual([
+      { error: 'disk gone' },
+    ]);
     refresh.mockRestore();
-    warn.mockRestore();
     expect(await extensions.stop()).toBeUndefined();
   });
 });
@@ -333,18 +331,17 @@ describe('the snapshot Settings reads', () => {
     await extensions.syncUsage();
     await until('the snapshot carries the usage', () => extensions.readSnapshot().usage.readAt !== null);
     expect(before.usage.readAt).toBeNull();
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const catalog = spyOn(extensions, 'snapshot').mockImplementation(() => {
       state.fail = true;
       throw new Error('disk gone');
     });
     extensions.syncSnapshot();
-    await until('the refresh ran', () => state.fail);
-    expect(warn).toHaveBeenCalledWith('[Extensions] Could not refresh the MCPs, plugins and skills', {
-      error: 'disk gone',
-    });
+    await until('the refresh ran', () => state.fail).finally(() => logs.restore());
+    expect(logs.fieldsOf('[Extensions] Could not refresh the MCPs, plugins and skills')).toEqual([
+      { error: 'disk gone' },
+    ]);
     catalog.mockRestore();
-    warn.mockRestore();
     await extensions.stop();
     extensions.syncSnapshot();
   });

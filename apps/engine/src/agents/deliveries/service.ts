@@ -1,96 +1,102 @@
-import { describeError, log } from '../../log/index.ts';
+import { Effect } from 'effect';
 import { isSteerable, resolveAttemptKey } from '../active/run.ts';
 import { type ActiveRun } from '../active/schema.ts';
 import { resolveDelivery } from '../delegations/delivery.ts';
 import { type Delivery } from '../delegations/schema.ts';
-import { type DeliveriesOptions } from './schema.ts';
+import type { DeliveriesDefinition, DeliveriesHandle } from './schema.ts';
 
-export class Deliveries {
-  readonly #options: DeliveriesOptions;
+export const makeDeliveries = (definition: DeliveriesDefinition) => {
+  const { active: live } = definition;
 
-  constructor(options: DeliveriesOptions) {
-    this.#options = options;
-  }
+  const recordUndelivered = (runId: string, generation: number) =>
+    definition.dispatch(
+      { type: 'delegation.release', runId, generation, items: [] },
+      `delegation.release:${runId}:${generation}`
+    );
 
-  async deliver(runId: string, generation: number) {
-    const state = this.#options.engine.state;
+  const recordDelivered = (runId: string, delivery: Delivery) =>
+    definition.dispatch(
+      { type: 'delegation.record_delivery', runId, generation: delivery.generation, items: delivery.items },
+      `delegation.record_delivery:${runId}:${delivery.generation}`
+    );
+
+  const recordReported = Effect.fn('Deliveries.recordReported')(function* (
+    runId: string,
+    delivery: Delivery
+  ) {
+    if (delivery.runIds.length === 0) return;
+    yield* definition.record(runId, {
+      type: 'notice',
+      notice: { kind: 'delegation', event: 'reported', runIds: delivery.runIds },
+    });
+  });
+
+  const steer = Effect.fn('Deliveries.steer')(function* (
+    runId: string,
+    active: ActiveRun,
+    delivery: Delivery
+  ) {
+    const steered = yield* Effect.sync(() => active.session?.steer(delivery.text, 'shinsa') ?? false);
+    if (!steered) return yield* recordUndelivered(runId, delivery.generation);
+    active.steered.set(delivery.text, delivery.items);
+    yield* recordReported(runId, delivery);
+    yield* recordDelivered(runId, delivery);
+  });
+
+  const deliver = Effect.fn('Deliveries.deliver')(function* (runId: string, generation: number) {
+    const state = yield* definition.state;
     const run = state.runs[runId];
     const delivery = run && run.endedAt === null ? resolveDelivery(state, run) : null;
     if (!delivery || delivery.generation !== generation) return;
-    const active = this.#options.active.get(runId);
-    if (!active || !isSteerable(active)) {
-      await this.#recordUndelivered(runId, generation);
-      return;
-    }
+    const active = live.get(runId);
+    if (!active || !isSteerable(active)) return yield* recordUndelivered(runId, generation);
     if (!active.session) {
       active.held.push(delivery);
       return;
     }
-    await this.steer(runId, active, delivery);
-  }
+    yield* steer(runId, active, delivery);
+  });
 
-  async wake(runId: string, generation: number) {
-    const state = this.#options.engine.state;
+  const wake = Effect.fn('Deliveries.wake')(function* (runId: string, generation: number) {
+    const state = yield* definition.state;
     const run = state.runs[runId];
-    if (!run || run.endedAt !== null || run.status !== 'waiting' || this.#options.active.has(runId)) return;
+    if (!run || run.endedAt !== null || run.status !== 'waiting' || live.has(runId)) return;
     const delivery = resolveDelivery(state, run);
     if (delivery?.generation !== generation) return;
-    await this.#options.execute(runId, delivery.text, delivery);
-  }
+    yield* definition.execute(runId, delivery.text, delivery);
+  });
 
-  async steer(runId: string, active: ActiveRun, delivery: Delivery) {
-    if (!active.session?.steer(delivery.text, 'shinsa')) {
-      await this.#recordUndelivered(runId, delivery.generation);
-      return;
-    }
-    active.steered.set(delivery.text, delivery.items);
-    this.#recordReported(runId, delivery);
-    await this.#recordDelivered(runId, delivery);
-  }
-
-  confirmWake(runId: string, active: ActiveRun) {
+  const confirmWake = Effect.fn('Deliveries.confirmWake')(function* (runId: string, active: ActiveRun) {
     const delivery = active.delivery;
     if (!delivery) return;
     active.delivery = null;
-    this.#recordReported(runId, delivery);
-    this.#recordDelivered(runId, delivery).catch((error: unknown) => {
-      log.warn('[Runs] Could not record a delivered report', { runId, error: describeError(error) });
-    });
-  }
+    yield* recordReported(runId, delivery);
+    yield* recordDelivered(runId, delivery).pipe(
+      Effect.catch((failure) =>
+        Effect.logWarning('[Runs] Could not record a delivered report').pipe(
+          Effect.annotateLogs({ runId, error: failure.message })
+        )
+      ),
+      Effect.forkDetach
+    );
+  });
 
-  async release(runId: string, active: ActiveRun, undelivered: string[]) {
+  const release = Effect.fn('Deliveries.release')(function* (
+    runId: string,
+    active: ActiveRun,
+    undelivered: string[]
+  ) {
     const items = undelivered.flatMap((text) => active.steered.get(text) ?? []);
-    if (items.length > 0) {
-      const id = `delegation.release:${resolveAttemptKey(runId, active.attemptId)}:steered`;
-      await this.#options.engine.dispatch(
+    if (items.length > 0)
+      yield* definition.dispatch(
         { type: 'delegation.release', runId, generation: null, items },
-        { id }
+        `delegation.release:${resolveAttemptKey(runId, active.attemptId)}:steered`
       );
-    }
-    if (active.delivery) await this.#recordUndelivered(runId, active.delivery.generation);
-    for (const delivery of active.held.splice(0)) await this.#recordUndelivered(runId, delivery.generation);
+    if (active.delivery) yield* recordUndelivered(runId, active.delivery.generation);
+    for (const delivery of active.held.splice(0)) yield* recordUndelivered(runId, delivery.generation);
     return undelivered.filter((text) => !active.steered.has(text));
-  }
+  });
 
-  #recordUndelivered(runId: string, generation: number) {
-    return this.#options.engine.dispatch(
-      { type: 'delegation.release', runId, generation, items: [] },
-      { id: `delegation.release:${runId}:${generation}` }
-    );
-  }
-
-  #recordDelivered(runId: string, delivery: Delivery) {
-    return this.#options.engine.dispatch(
-      { type: 'delegation.record_delivery', runId, generation: delivery.generation, items: delivery.items },
-      { id: `delegation.record_delivery:${runId}:${delivery.generation}` }
-    );
-  }
-
-  #recordReported(runId: string, delivery: Delivery) {
-    if (delivery.runIds.length === 0) return;
-    this.#options.transcripts.record(runId, {
-      type: 'notice',
-      notice: { kind: 'delegation', event: 'reported', runIds: delivery.runIds },
-    });
-  }
-}
+  const handle: DeliveriesHandle = { deliver, wake, steer, confirmWake, release };
+  return Effect.succeed(handle);
+};

@@ -1,4 +1,5 @@
 import { type Handoff, type Run, type RunHandoff, type ShinsaState } from '@shinsa/core';
+import { Schema } from 'effect';
 import { type AgentProvider } from '../providers/index.ts';
 import type { Transcripts } from '../transcripts/index.ts';
 
@@ -28,3 +29,8 @@ export interface TurnFoldInput {
   firstAttempt: boolean;
   folds: boolean;
 }
+
+export class TurnPlanFailed extends Schema.TaggedError<TurnPlanFailed, { readonly brand: unique symbol }>()(
+  'TurnPlanFailed',
+  { message: Schema.String }
+) {}

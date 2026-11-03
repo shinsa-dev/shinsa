@@ -4,11 +4,11 @@ import { AccountLeasing } from '../accounts.ts';
 import type { ActiveRun } from '../active/schema.ts';
 import { IdleCompaction } from '../compaction.ts';
 import type { Delivery } from '../delegations/schema.ts';
-import { Deliveries } from '../deliveries/service.ts';
+import { Deliveries } from '../deliveries.ts';
 import { SessionExtensionSets } from '../extension-sets.ts';
 import { ProviderRegistry } from '../providers/index.ts';
 import { Questions } from '../questions.ts';
-import { ToolCalls } from '../tool-calls/service.ts';
+import { ToolCalls } from '../tool-calls.ts';
 import { compactSession } from './compact.ts';
 import {
   cancelRun,

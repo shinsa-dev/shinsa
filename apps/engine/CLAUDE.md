@@ -182,10 +182,11 @@ src/
 │   │                    live state of a run (active/: run.ts, its shape in schema.ts), resume or
 │   │                    hand over per turn, the house rules only to a session without them and the round's
 │   │                    whole brief to an agent session that may not hold the round (turns/plan.ts), the
-│   │                    tool calls (tool-calls/: ToolCallFailed, each call an Effect in service.ts), questions and their waiters (questions.ts; questions/: each
-│   │                    reply a Deferred, ReplyWaiters its edge), idle release (idle.ts, the edge over idle/:
+│   │                    tool calls (tool-calls/service.ts: makeToolCalls, each call an Effect failing with ToolCallFailed;
+│   │                    tool-calls.ts its edge), questions and their waiters (questions/service.ts: makeQuestions;
+│   │                    questions/waiters/: each reply a Deferred; questions.ts its edge), idle release (idle/service.ts:
 │   │                    makeIdleRelease, one timer fiber per waiting run in a FiberMap), delegated reports in and
-│   │                    out of a turn (deliveries/service.ts, delegations/delivery.ts), the account seam: leases and rejections
+│   │                    out of a turn (deliveries/service.ts: makeDeliveries, deliveries.ts its edge; delegations/delivery.ts), the account seam: leases and rejections
 │   │                    (accounts.ts), idle compaction (compaction.ts, the edge over compaction/: makeIdleCompaction,
 │   │                    the wait and the running compaction as fibers per task, the window in window.ts; stopping
 │   │                    one aborts it and waits for it), quiet runs (silence.ts, the edge over
@@ -195,8 +196,9 @@ src/
 │   │                    Clock), the commands no agent may run (policy.ts: also the
 │   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading/task.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
-│   │                    (repository-work/service.ts: `list_repository_work` and task.record_overlaps before a hand-over),
-│   │                    the task's own service runs and the services it adds and removes (services.ts: `list_services`,
+│   │                    (repository-work/service.ts: makeRepositoryWork, `list_repository_work` and task.record_overlaps before a
+│   │                    hand-over, reading git through History; repository-work.ts its edge),
+│   │                    the task's own service runs and the services it adds and removes (services/service.ts: runServiceTool, services.ts its edge: `list_services`,
 │   │                    `run_service`, `add_service`, `remove_service`),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
 │   ├── manage/          The surface as every task agent's tools (docs/engine.md → Agents manage Shinsa): tools.ts
@@ -226,8 +228,8 @@ src/
 │   │                    or direct, and the fallback notice (route.ts)
 │   │   └── codex/       The `codex app-server` provider: the JSON-RPC client (client/: makeCodexClient, the
 │   │                    process a scoped resource, its stdout and stderr read as streams, each request a Deferred
-│   │                    failing with CodexRequestError, the process group killed when its scope closes; client.ts
-│   │                    is its edge), the session (session.ts:
+│   │                    failing with CodexRequestError, the process group killed when its scope closes; params.ts reads
+│   │                    its loose records), the session (session/service.ts: makeCodexSession, session.ts its edge:
 │   │                    turns, steering, the agents Codex starts, compaction), the chat mapping (map.ts), failure
 │   │                    classes (classify.ts), the HTTP MCP endpoint (mcp.ts), the price table and what a turn costs
 │   │                    (pricing.ts, meter.ts), usage windows read like CodexBar and fast mode credits (usage.ts),
@@ -365,11 +367,14 @@ src/
 │                        Code sessions and Shinsa's transcripts read incrementally; names.ts), tools.ts (tool lists,
 │                        their tokens and what counts as unauthorized), credentials.ts (stored sign-ins decoded),
 │                        layers.ts (ExtensionsLayer, in runtime/edge.ts). The edges keep their exports: discover.ts,
-│                        definitions.ts, skills.ts, plugins.ts, store.ts, health.ts, usage.ts; one row per server
+│                        definitions.ts, skills.ts, store.ts, health.ts (createServerCheck), usage.ts (UsageIndex over
+│                        usage-index/: makeUsageIndex, the scan a fiber, each refresh a Deferred); one row per server
 │                        however many places define it (catalog.ts), checking and redacting what you send
-│                        (input.ts), sign-in (oauth.ts, and sign-in.ts: the callback page), what a run loads and
+│                        (input.ts), sign-in (oauth.ts over oauth/: makeMcpOAuth, McpSignInFailed, the SDK's provider in provider.ts;
+│                        sign-in.ts: the callback page), what a run loads and
 │                        leaves out and what it is told about it (session.ts), loading what the context optimizer
-│                        left out mid-run, by any name (loader.ts), the Extensions service (index.ts; its routes are
+│                        left out mid-run, by any name (loader.ts over loader/: makeExtensionLoader, one Deferred per load
+│                        in flight, names.ts), the Extensions registry (index.ts over registry/: makeExtensions; its routes are
 │                        http/routes/extensions and sign-in)
 ├── versions/            The agent programs' versions and their updates (docs/engine.md → Versions and updates):
 │                        registry/ (NpmRegistry: the latest from the npm registry over HttpClient, decoded by

@@ -1,4 +1,5 @@
 import { resolveAgentFastMode, resolveAgentModel, resolveAgentProvider, type Settings } from '@shinsa/core';
+import { Effect } from 'effect';
 import { edgeRuntime } from '../../runtime/edge.ts';
 import type { AgentProvider, JsonSchema, ProviderRegistry } from '../providers/index.ts';
 import { parseObject } from './json.ts';
@@ -29,23 +30,26 @@ function createQuickJson(
   role: QuickRole,
   readFastMode: FastModeReader | undefined
 ): QuickJson {
-  return async <T>(system: string, prompt: string, schema?: JsonSchema) => {
-    const settings = readSettings();
-    const result = await requestQuickStructured<T>(
-      {
-        task: 'a quick answer',
-        system,
-        prompt,
-        schema: schema ?? null,
-        parse: parseObject,
-        model: (provider) => resolveAgentModel(settings, role, provider),
-        fastMode: resolveAgentFastMode(settings, role),
-        ...(readFastMode ? { readFastMode } : {}),
-      },
-      listQuickProviders(registry, resolveAgentProvider(settings, role))
+  return <T>(system: string, prompt: string, schema?: JsonSchema) =>
+    edgeRuntime.runPromise(
+      Effect.gen(function* () {
+        const settings = yield* Effect.sync(readSettings);
+        const result = yield* requestQuick<T>(
+          {
+            task: 'a quick answer',
+            system,
+            prompt,
+            schema: schema ?? null,
+            parse: parseObject,
+            model: (provider) => resolveAgentModel(settings, role, provider),
+            fastMode: resolveAgentFastMode(settings, role),
+            ...(readFastMode ? { readFastMode } : {}),
+          },
+          listQuickProviders(registry, resolveAgentProvider(settings, role))
+        );
+        return result.value;
+      })
     );
-    return result.value;
-  };
 }
 
 export function createQuickCalls(

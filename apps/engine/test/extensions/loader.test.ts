@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -9,7 +9,7 @@ import {
   type LoadableExtensions,
   resolveSkillBody,
 } from '../../src/extensions/loader.ts';
-import { log } from '../../src/log/index.ts';
+import { captureLogs } from '../helpers/index.ts';
 import { writeSkill } from './fixtures.ts';
 
 const STDIO_SERVER = resolve(import.meta.dirname, '../helpers/mcp/stdio-server.ts');
@@ -146,7 +146,7 @@ describe('loading what a run left out', () => {
   });
 
   test('falls back to connecting through Shinsa when the session refuses or fails to load it, and tells the session it gave up', async () => {
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const refused = createLoader();
     refused.attach({ loadMcpServers: () => Promise.resolve({ echo: 'It would not start.' }) });
     expect(await refused.handle('load_mcp_server', { name: 'echo' })).toStartWith(
@@ -169,15 +169,13 @@ describe('loading what a run left out', () => {
     expect(await unable.handle('load_mcp_server', { name: 'echo' })).toStartWith(
       'Connected to echo through Shinsa.'
     );
-    expect(warn).toHaveBeenCalledWith(
-      '[Extensions] A server did not load into the session; connecting through Shinsa',
-      { server: 'echo', error: 'It would not start.' }
-    );
-    expect(warn).toHaveBeenCalledWith(
-      '[Extensions] Could not load a server into the session; connecting through Shinsa',
-      { server: 'echo', error: 'The session has ended.' }
-    );
-    warn.mockRestore();
+    logs.restore();
+    expect(
+      logs.fieldsOf('[Extensions] A server did not load into the session; connecting through Shinsa')
+    ).toEqual([{ server: 'echo', error: 'It would not start.' }]);
+    expect(
+      logs.fieldsOf('[Extensions] Could not load a server into the session; connecting through Shinsa')
+    ).toEqual([{ server: 'echo', error: 'The session has ended.' }]);
   });
 
   test('a server that fails to answer while connecting through Shinsa is closed again', async () => {
@@ -202,6 +200,14 @@ describe('loading what a run left out', () => {
         { name: 'broken' }
       )
     ).rejects.toThrow('no key');
+  });
+
+  test('a server it cannot open is refused with the reason', async () => {
+    const loader = new ExtensionLoader(
+      { deferred: [createServer('echo')], deferredSkills: [], loadedNames: [] },
+      () => Promise.reject(new Error('It would not start.'))
+    );
+    await expect(loader.handle('load_mcp_server', { name: 'echo' })).rejects.toThrow('It would not start.');
   });
 
   test('every connection it opens is closed when the run ends, even one still connecting', async () => {

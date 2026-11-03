@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { DeliveryCohort, Run, RunDelegation, ShinsaCommand, ShinsaState } from '@shinsa/core';
 import { RunSupervisor, type SupervisorOptions, Transcripts } from '../../src/agents/index.ts';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
@@ -8,9 +8,8 @@ import {
   type AgentSessionResult,
   ProviderRegistry,
 } from '../../src/agents/providers/index.ts';
-import { log } from '../../src/log/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
-import { createTempDir, createTestConfig, until } from '../helpers/index.ts';
+import { captureLogs, createTempDir, createTestConfig, until } from '../helpers/index.ts';
 import { createGate, createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
 
 type Broker = NonNullable<SupervisorOptions['accounts']>;
@@ -552,14 +551,12 @@ describe('waking a run that waits on its delegations', () => {
       { startSession: sessions.startSession }
     );
     reject((command) => command.type === 'delegation.record_delivery');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const waking = supervisor.wake('run-1', 1);
     await until('the session', () => sessions.started.length === 1);
     sessions.started[0]?.input.onSession('s');
-    await until('the warning', () =>
-      warn.mock.calls.some(([message]) => message === '[Runs] Could not record a delivered report')
-    );
-    warn.mockRestore();
+    await until('the warning', () => logs.fieldsOf('[Runs] Could not record a delivered report').length > 0);
+    logs.restore();
     sessions.started[0]?.finish();
     await waking;
   });

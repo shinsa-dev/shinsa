@@ -25,7 +25,6 @@ import {
   ProviderRegistry,
   type SessionStarter,
 } from '../../src/agents/providers/index.ts';
-import { log } from '../../src/log/index.ts';
 import { ProcessLedger } from '../../src/resources/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
@@ -3404,14 +3403,12 @@ describe('secret requests, schedule tools and idle sessions', () => {
     });
     const run = context.supervisor.execute('run-1');
     await until('the session', () => sessions.started.length === 1);
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     void sessions.started[0]?.input.tools.handle('ask', { question: 'x' }, new AbortController().signal);
     await until('the release', () => sessions.started[0]?.cancelled === true);
     await run;
-    await until('the warning', () =>
-      warn.mock.calls.some(([message]) => message === '[Runs] Could not stop an idle session')
-    );
-    warn.mockRestore();
+    await until('the warning', () => logs.fieldsOf('[Runs] Could not stop an idle session').length > 0);
+    logs.restore();
   });
 });
 

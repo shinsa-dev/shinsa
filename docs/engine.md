@@ -5454,7 +5454,7 @@ choice among the listed decisions' ids; `parseBriefing` still validates), and ea
 option (`model`, `merge`, `plans`, `accounts`, `prerequisites`: its option values plus `unclear`).
 
 **Idle release and idle compaction** (harness plan WS7). A session left waiting on your
-answer is released after 30 minutes (`IdleRelease`, `agents/idle.ts`, driven by `agents/questions.ts`): the session
+answer is released after 30 minutes (`makeIdleRelease`, `agents/idle/service.ts`, driven by `agents/questions.ts`): the session
 is stopped, the run stays open, and your answer, or a message that supersedes the question, resumes the same session
 (`resolveQuestion` waits for the release to finish first). Only a step waiting on you is released: a delegated run
 waiting on the agent that delegated it keeps its session. Work the agent

@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { IDLE_RELEASE_MS, IdleRelease, MAX_IDLE_PIN_MS } from '../../src/agents/idle.ts';
+import { Duration, Effect, Scope } from 'effect';
+import { IDLE_RELEASE_MS, type IdleReleaseOptions, MAX_IDLE_PIN_MS } from '../../src/agents/idle/schema.ts';
+import { makeIdleRelease } from '../../src/agents/idle/service.ts';
 import type { AgentSession } from '../../src/agents/providers/index.ts';
 import { until } from '../helpers/index.ts';
-import { captureLogs } from '../helpers/logs.ts';
 
 function createSession(background: () => boolean = () => false) {
   let checks = 0;
@@ -18,15 +19,25 @@ function createSession(background: () => boolean = () => false) {
   return { session, checks: () => checks };
 }
 
-function track(options: ConstructorParameters<typeof IdleRelease>[1] = {}) {
+function track({ idleMs = 5, maxPinMs = MAX_IDLE_PIN_MS, now = Date.now }: IdleReleaseOptions = {}) {
   const released: string[] = [];
-  const idle = new IdleRelease(
-    (runId) => {
-      released.push(runId);
-      return Promise.resolve();
-    },
-    { idleMs: 5, ...options }
+  const handle = Effect.runSync(
+    makeIdleRelease({
+      release: (runId) => Effect.sync(() => released.push(runId)),
+      idle: Duration.millis(idleMs),
+      maxPinMs,
+      now: Effect.sync(now),
+    }).pipe(Scope.provide(Effect.runSync(Scope.make())))
   );
+  const idle = {
+    wait: (runId: string, session: AgentSession) => {
+      const end = Effect.runSync(handle.wait(runId, session));
+      return () => Effect.runSync(end);
+    },
+    isWaiting: (runId: string, session: AgentSession) => Effect.runSync(handle.isWaiting(runId, session)),
+    touch: (runId: string) => Effect.runSync(handle.touch(runId)),
+    forget: (runId: string) => Effect.runSync(handle.forget(runId)),
+  };
   return { idle, released };
 }
 
@@ -91,19 +102,16 @@ describe('releasing an idle session', () => {
     expect([...released].sort()).toEqual(['run-1', 'run-3']);
   });
 
-  test('a session that cannot say whether work is pending is released, and a failed release is logged', async () => {
-    const logs = captureLogs();
-    const idle = new IdleRelease(() => Promise.reject(new Error('stuck')), { idleMs: 5 });
+  test('a session that cannot say whether work is pending is released, and stops waiting', async () => {
+    const { idle, released } = track();
     const session: AgentSession = {
       done: Promise.resolve({ outcome: 'completed', summary: null }),
       steer: () => true,
       cancel: () => Promise.resolve(),
     };
     idle.wait('run-1', session);
-    await until('the warning', () => logs.fieldsOf('[Runs] Could not release an idle session').length > 0);
-    expect(logs.fieldsOf('[Runs] Could not release an idle session')).toEqual([
-      { runId: 'run-1', error: 'stuck' },
-    ]);
-    logs.restore();
+    expect(idle.isWaiting('run-1', session)).toBe(true);
+    await until('the release', () => released.length === 1);
+    expect(idle.isWaiting('run-1', session)).toBe(false);
   });
 });

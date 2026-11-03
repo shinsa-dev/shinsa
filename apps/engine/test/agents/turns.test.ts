@@ -94,6 +94,16 @@ describe('resolveTurnPlan', () => {
     expect(turn.lost).toEqual([]);
   });
 
+  test('a session check that fails fails the plan with its message', async () => {
+    const run = createRun({ sessionId: 's' });
+    const turn = context(run, [], {
+      provider: provider({
+        inspectSession: () => Promise.reject(new Error('The session store is unreadable.')),
+      }),
+    });
+    await expect(resolveTurnPlan(turn)).rejects.toThrow('The session store is unreadable.');
+  });
+
   test('a provider that is no longer registered is named by its id', async () => {
     const run = createRun({ sessionId: 's', sessionProvider: 'gemini' });
     const turn = context(run, [], { labelOf: (id) => (id === 'claude' ? 'Claude' : id) });

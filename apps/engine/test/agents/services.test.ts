@@ -143,6 +143,12 @@ describe('the service tools', () => {
     );
   });
 
+  test('passes back the reason a run could not stop', async () => {
+    const { call, runner } = setup();
+    runner.stopService = () => Promise.reject(new Error('The process is stuck.'));
+    expect(call('run_service', { service: 'api', action: 'stop' })).rejects.toThrow('The process is stuck.');
+  });
+
   test('refuses a run the task has lost since it listed the service', async () => {
     const { call, other } = setup();
     expect(

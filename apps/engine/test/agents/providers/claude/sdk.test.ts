@@ -38,6 +38,9 @@ describe('resolveClaudeProcess', () => {
     );
     expect(missing).rejects.toBeInstanceOf(ClaudeSetupError);
     expect(missing).rejects.toThrow('Claude Code is not installed.');
+    const broken = resolveClaudeProcess(() => Promise.reject(new Error('which failed')));
+    expect(broken).rejects.toBeInstanceOf(ClaudeSetupError);
+    expect(broken).rejects.toThrow('which failed');
   });
 
   test('the default runtime finds claude through CLAUDE_EXECUTABLE or the PATH', async () => {

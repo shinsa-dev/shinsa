@@ -11,272 +11,244 @@ import {
   validateReview,
   type WatchdogSpec,
 } from '@shinsa/core';
-import { resolveHead } from '../../git/index.ts';
-import { createProjectRepository, upsertProjectFolderRepo } from '../../repos/index.ts';
-import { awaitDelegation } from '../delegations/delivery.ts';
+import { Clock, Effect } from 'effect';
+import { describeError } from '../../log/index.ts';
 import {
   assertHeldSourcesUsed,
   assertProtocol,
   HANDED_OVER,
   readString,
   resolveCommitMessage,
-  storeEvidence,
 } from '../handover.ts';
-import { createManageClient, isSurfaceTool, readSurfaceToolCall } from '../manage/index.ts';
-import { resolveTaskReading } from '../reading/task.ts';
-import { RepositoryWork } from '../repository-work/service.ts';
-import { handleServiceTool, type ServiceToolName } from '../services.ts';
-import { handleOrchestrationTool } from '../tools/orchestration/handler.ts';
-import { handleProcessTool } from '../tools/process/handler.ts';
-import type { ToolCallsOptions, ToolCall, CallDispatch, CommitHandOver, HandOverTool } from './schema.ts';
+import { isSurfaceTool } from '../manage/index.ts';
+import type { ServiceToolName } from '../services/schema.ts';
+import { runServiceTool } from '../services/service.ts';
+import { ToolCallFailed } from '../tools/schema.ts';
+import type {
+  CommitHandOver,
+  EffectCallDispatch,
+  HandOverTool,
+  ToolCall,
+  ToolCallsDefinition,
+  ToolCallsHandle,
+} from './schema.ts';
 
-export class ToolCalls {
-  readonly #options: ToolCallsOptions;
-  readonly #work: RepositoryWork;
+export const makeToolCalls = (definition: ToolCallsDefinition) => {
+  const { questions, work } = definition;
 
-  constructor(options: ToolCallsOptions) {
-    this.#options = options;
-    this.#work = new RepositoryWork(options.engine);
-  }
+  const refuse = (message: string) => new ToolCallFailed({ message });
 
-  handle(name: string, call: ToolCall): Promise<string> {
-    const { runId, attemptId, input, signal } = call;
-    const dispatch = this.#createDispatch(call);
-    switch (name) {
-      case 'propose_plan':
-      case 'complete_phase':
-      case 'complete_fix':
-      case 'report_review':
-        return this.#handOver(name, call, dispatch);
-      case 'ask':
-        return this.#options.questions.ask(runId, attemptId, input, signal, dispatch);
-      case 'request_secret':
-        return this.#options.questions.requestSecret(runId, attemptId, input, signal, dispatch);
-      case 'attach_evidence':
-        return this.#attachEvidence(call, dispatch);
-      case 'remove_evidence':
-        return this.#removeEvidence(call, dispatch);
-      case 'find_tasks':
-        return Promise.resolve(
-          serializeTaskReferences(this.#options.engine.state, readString(input, 'query') ?? '')
-        );
-      case 'read_task':
-        return this.#readTask(input);
-      case 'list_repository_work':
-        return this.#work.describe(this.#findCurrent(runId, attemptId).task.id, signal);
-      case 'note':
-        return this.#note(call, dispatch);
-      case 'list_services':
-      case 'run_service':
-      case 'add_service':
-      case 'remove_service':
-        return this.#runServiceTool(name, call);
-      default:
-        if (isSurfaceTool(name)) return this.#manage(name, call);
-        return this.#handleOther(name, call, dispatch);
-    }
-  }
+  const assertCalled = <T>(check: () => T) =>
+    Effect.try({ try: check, catch: (error) => refuse(describeError(error)) });
 
-  #createDispatch({ runId, attemptId, requestId }: ToolCall): CallDispatch {
-    const { engine } = this.#options;
+  const createDispatch = ({ runId, attemptId, requestId }: ToolCall): EffectCallDispatch => {
     const sent = new Map<string, number>();
     return (command, id) => {
-      if (id !== undefined) return engine.dispatch(command, { id });
-      if (requestId === undefined) return engine.dispatch(command);
+      if (id !== undefined) return definition.dispatch(command, { id });
+      if (requestId === undefined) return definition.dispatch(command, undefined);
       const count = (sent.get(command.type) ?? 0) + 1;
       sent.set(command.type, count);
       const suffix = count === 1 ? command.type : `${command.type}:${count}`;
-      return engine.dispatch(command, { id: `agent:${runId}:${attemptId}:call:${requestId}:${suffix}` });
+      return definition.dispatch(command, { id: `agent:${runId}:${attemptId}:call:${requestId}:${suffix}` });
     };
-  }
+  };
 
-  #findCurrent(runId: string, attemptId: string) {
-    const state = this.#options.engine.state;
+  const findCurrent = Effect.fn('ToolCalls.findCurrent')(function* (runId: string, attemptId: string) {
+    const state = yield* definition.state;
     const run = state.runs[runId];
     const task = run ? state.tasks[run.taskId] : undefined;
-    if (!run || !task) throw new Error('This run no longer exists. End your turn.');
-    if (run.endedAt !== null) throw new Error('This step is already over. End your turn.');
-    if (run.attemptId && run.attemptId !== attemptId) {
-      throw new Error('A newer attempt of this step has taken over. End your turn.');
-    }
+    if (!run || !task) return yield* refuse('This run no longer exists. End your turn.');
+    if (run.endedAt !== null) return yield* refuse('This step is already over. End your turn.');
+    if (run.attemptId && run.attemptId !== attemptId)
+      return yield* refuse('A newer attempt of this step has taken over. End your turn.');
     return { run, task };
-  }
+  });
 
-  async #commitThenDispatch(call: ToolCall, command: CommitHandOver, dispatch: CallDispatch) {
-    const { run, task } = this.#findCurrent(call.runId, call.attemptId);
-    const repo = task.repoId ? this.#options.engine.state.repos[task.repoId] : undefined;
-    if (!task.worktreePath || !repo) return dispatch({ ...command, treeHash: null });
-    const commit = await this.#options.workspaces
-      .resolve(task)
-      .commit(repo, task, resolveCommitMessage(task, run));
-    try {
-      await this.#work.recordOverlaps(task.id, [], call.signal);
-      return await dispatch({ ...command, treeHash: commit.treeHash, files: commit.files });
-    } catch (error) {
-      await commit.undo();
-      throw error;
-    }
-  }
+  const commitThenDispatch = Effect.fn('ToolCalls.commitThenDispatch')(function* (
+    call: ToolCall,
+    command: CommitHandOver,
+    dispatch: EffectCallDispatch
+  ) {
+    const { run, task } = yield* findCurrent(call.runId, call.attemptId);
+    const repo = task.repoId ? (yield* definition.state).repos[task.repoId] : undefined;
+    if (!task.worktreePath || !repo) return yield* dispatch({ ...command, treeHash: null });
+    const commit = yield* definition.commit(repo, task, resolveCommitMessage(task, run));
+    return yield* work.recordOverlaps(task.id, [], call.signal).pipe(
+      Effect.andThen(dispatch({ ...command, treeHash: commit.treeHash, files: commit.files })),
+      Effect.tapError(() => commit.undo)
+    );
+  });
 
-  async #assertHeldSourcesUsed(call: ToolCall, watchdogs: readonly WatchdogSpec[] = []) {
+  const assertSourcesUsed = Effect.fn('ToolCalls.assertSourcesUsed')(function* (
+    call: ToolCall,
+    watchdogs: readonly WatchdogSpec[] = []
+  ) {
     if (!watchdogs.some((watchdog) => watchdog.sourceRequest)) return;
-    const { run } = this.#findCurrent(call.runId, call.attemptId);
-    assertHeldSourcesUsed(watchdogs, await this.#options.listServerNames(run));
-  }
+    const { run } = yield* findCurrent(call.runId, call.attemptId);
+    const serverNames = yield* definition.listServerNames(run);
+    yield* assertCalled(() => assertHeldSourcesUsed(watchdogs, serverNames));
+  });
 
-  async #handOver(name: HandOverTool, call: ToolCall, dispatch: CallDispatch) {
+  const handOver = Effect.fn('ToolCalls.handOver')(function* (
+    name: HandOverTool,
+    call: ToolCall,
+    dispatch: EffectCallDispatch
+  ) {
     const { runId, attemptId, input } = call;
     switch (name) {
       case 'propose_plan': {
-        const { document, reply } = assertProtocol(validatePlanHandOver(input));
-        const { task } = this.#findCurrent(runId, attemptId);
-        await this.#work.recordOverlaps(
+        const { document, reply } = yield* assertCalled(() => assertProtocol(validatePlanHandOver(input)));
+        const { task } = yield* findCurrent(runId, attemptId);
+        yield* work.recordOverlaps(
           task.id,
           document.files.map((file) => file.path),
           call.signal
         );
-        await dispatch({ type: 'agent.propose_plan', runId, attemptId, document, reply });
+        yield* dispatch({ type: 'agent.propose_plan', runId, attemptId, document, reply });
         break;
       }
       case 'complete_phase': {
-        const handOver = assertProtocol(validatePhaseHandOver(input));
-        await this.#assertHeldSourcesUsed(call, handOver.walkthrough?.watchdogs);
-        await this.#commitThenDispatch(
+        const phase = yield* assertCalled(() => assertProtocol(validatePhaseHandOver(input)));
+        yield* assertSourcesUsed(call, phase.walkthrough?.watchdogs);
+        yield* commitThenDispatch(
           call,
-          { type: 'agent.complete_phase', runId, attemptId, ...handOver },
+          { type: 'agent.complete_phase', runId, attemptId, ...phase },
           dispatch
         );
         break;
       }
       case 'complete_fix': {
-        const handOver = assertProtocol(validateFixHandOver(input));
-        await this.#assertHeldSourcesUsed(call, handOver.walkthrough?.watchdogs);
-        await this.#commitThenDispatch(
-          call,
-          { type: 'agent.complete_fix', runId, attemptId, ...handOver },
-          dispatch
-        );
+        const fix = yield* assertCalled(() => assertProtocol(validateFixHandOver(input)));
+        yield* assertSourcesUsed(call, fix.walkthrough?.watchdogs);
+        yield* commitThenDispatch(call, { type: 'agent.complete_fix', runId, attemptId, ...fix }, dispatch);
         break;
       }
       case 'report_review': {
-        const review = assertProtocol(validateReview(input));
-        this.#findCurrent(runId, attemptId);
-        await dispatch({ type: 'agent.report_review', runId, attemptId, ...review });
+        const review = yield* assertCalled(() => assertProtocol(validateReview(input)));
+        yield* findCurrent(runId, attemptId);
+        yield* dispatch({ type: 'agent.report_review', runId, attemptId, ...review });
         break;
       }
     }
     return HANDED_OVER;
-  }
+  });
 
-  async #attachEvidence({ runId, attemptId, input }: ToolCall, dispatch: CallDispatch) {
-    const { task } = this.#findCurrent(runId, attemptId);
+  const attachEvidence = Effect.fn('ToolCalls.attachEvidence')(function* (
+    { runId, attemptId, input }: ToolCall,
+    dispatch: EffectCallDispatch
+  ) {
+    const { task } = yield* findCurrent(runId, attemptId);
     const folder = { taskId: task.id, round: resolveCurrentRound(task).number };
-    const evidence = storeEvidence(input, task.worktreePath, this.#options.evidence, folder);
-    await dispatch({ ...evidence, runId, attemptId });
+    const evidence = yield* definition.storeEvidence(input, task.worktreePath, folder);
+    yield* dispatch({ ...evidence, runId, attemptId });
     return 'Attached.';
-  }
+  });
 
-  async #removeEvidence({ runId, attemptId, input }: ToolCall, dispatch: CallDispatch) {
-    const { items, reason } = assertProtocol(validateEvidenceRemoval(input));
-    this.#findCurrent(runId, attemptId);
-    await dispatch({ type: 'agent.remove_evidence', runId, attemptId, items, reason });
+  const removeEvidence = Effect.fn('ToolCalls.removeEvidence')(function* (
+    { runId, attemptId, input }: ToolCall,
+    dispatch: EffectCallDispatch
+  ) {
+    const { items, reason } = yield* assertCalled(() => assertProtocol(validateEvidenceRemoval(input)));
+    yield* findCurrent(runId, attemptId);
+    yield* dispatch({ type: 'agent.remove_evidence', runId, attemptId, items, reason });
     return 'Removed.';
-  }
+  });
 
-  #readTask(input: Record<string, unknown>) {
-    const { engine, transcripts } = this.#options;
+  const readTask = Effect.fn('ToolCalls.readTask')(function* (input: Record<string, unknown>) {
     const taskId = readString(input, 'task_id');
-    if (!taskId) return Promise.reject(new Error('task_id is required.'));
-    return Promise.resolve(resolveTaskReading(engine.state, transcripts, taskId));
-  }
+    if (!taskId) return yield* refuse('task_id is required.');
+    return yield* definition.readTask(taskId);
+  });
 
-  async #runServiceTool(name: ServiceToolName, { runId, attemptId, input }: ToolCall) {
-    const { engine, services } = this.#options;
-    const { run, task } = this.#findCurrent(runId, attemptId);
-    assertRunTool(run, name);
-    if (!services) throw new Error(`${name} is not available while Shinsa runs without terminals.`);
-    return await handleServiceTool(name, input, {
-      state: engine.state,
+  const runService = Effect.fn('ToolCalls.runService')(function* (
+    name: ServiceToolName,
+    { runId, attemptId, input }: ToolCall
+  ) {
+    const { run, task } = yield* findCurrent(runId, attemptId);
+    yield* assertCalled(() => assertRunTool(run, name));
+    if (!definition.services)
+      return yield* refuse(`${name} is not available while Shinsa runs without terminals.`);
+    return yield* runServiceTool(name, input, {
+      state: yield* definition.state,
       task,
-      runner: services,
-      now: Date.now(),
+      runner: definition.services,
+      now: yield* Clock.currentTimeMillis,
     });
-  }
+  });
 
-  async #note({ runId, attemptId, input }: ToolCall, dispatch: CallDispatch) {
-    const note = readString(input, 'note');
-    if (!note) throw new Error('note is required.');
-    await dispatch({ type: 'agent.note', runId, attemptId, note });
+  const note = Effect.fn('ToolCalls.note')(function* (
+    { runId, attemptId, input }: ToolCall,
+    dispatch: EffectCallDispatch
+  ) {
+    const text = readString(input, 'note');
+    if (!text) return yield* refuse('note is required.');
+    yield* dispatch({ type: 'agent.note', runId, attemptId, note: text });
     return 'Noted.';
-  }
+  });
 
-  async #manage(name: string, { runId, attemptId, input, requestId }: ToolCall) {
-    const { engine, manage } = this.#options;
-    const { run, task } = this.#findCurrent(runId, attemptId);
-    if (!manage || isDelegatedRun(run)) throw new Error(`${name} is not available to this agent.`);
-    const call = readSurfaceToolCall(name, input);
-    const client = createManageClient({
-      engine,
-      base: manage.baseUrl(),
-      key: requestId === undefined ? null : `agent:${runId}:${attemptId}:call:${requestId}`,
-      byTask: task.id,
-      projects: manage.projects,
-      route: manage.route,
-      ...(manage.hookSecrets ? { hookSecrets: manage.hookSecrets(task.id) } : {}),
-    });
-    const { text } = await call.spec.run(client, call.values);
-    return isTaskSettled(engine.state.tasks[task.id] ?? task)
+  const manage = Effect.fn('ToolCalls.manage')(function* (
+    name: string,
+    { runId, attemptId, input, requestId }: ToolCall
+  ) {
+    const { run, task } = yield* findCurrent(runId, attemptId);
+    if (!definition.manage || isDelegatedRun(run))
+      return yield* refuse(`${name} is not available to this agent.`);
+    const text = yield* definition.manage({ name, input, runId, attemptId, requestId, taskId: task.id });
+    return isTaskSettled((yield* definition.state).tasks[task.id] ?? task)
       ? `${text} Stop here without a closing message.`
       : text;
-  }
+  });
 
-  async #handleOther(name: string, call: ToolCall, dispatch: CallDispatch) {
-    const { runId, attemptId, input } = call;
-    const reply =
-      (await handleProcessTool(name, input, { runId, attemptId, dispatch })) ??
-      (await this.#handleOrchestration(name, call, dispatch)) ??
-      (await this.#handleSchedules(name, call, dispatch));
-    if (reply === null) throw new Error(`Unknown tool ${name}.`);
-    return reply;
-  }
-
-  #handleOrchestration(
+  const handleOther = Effect.fn('ToolCalls.handleOther')(function* (
     name: string,
-    { runId, attemptId, input, signal, requestId }: ToolCall,
-    dispatch: CallDispatch
+    call: ToolCall,
+    dispatch: EffectCallDispatch
   ) {
-    const { engine, transcripts, providers, minuteMs } = this.#options;
-    return handleOrchestrationTool(name, input, {
-      runId,
-      attemptId,
-      requestKey: requestId === undefined ? Bun.randomUUIDv7() : `call:${attemptId}:${requestId}`,
-      signal,
-      minuteMs,
-      state: () => engine.state,
-      dispatch,
-      resolveBaseCommit: () => resolveHead(this.#findCurrent(runId, attemptId).task.worktreePath ?? ''),
-      registerRepo: (projectId, repoName) => upsertProjectFolderRepo(engine, projectId, repoName),
-      createRepo: (projectId, repoName) => createProjectRepository(engine, projectId, repoName),
-      hasProvider: (id) => providers.select(id) !== null,
-      awaitDelegation: (childRunId, timeoutMs, waitSignal) =>
-        awaitDelegation(engine, childRunId, timeoutMs, waitSignal),
-      recordStarted: (childRunId) => {
-        transcripts.record(runId, {
-          type: 'notice',
-          notice: { kind: 'delegation', event: 'started', runIds: [childRunId] },
-        });
-      },
-    });
-  }
+    const worktreePath = Effect.map(
+      findCurrent(call.runId, call.attemptId),
+      ({ task }) => task.worktreePath ?? ''
+    );
+    const reply = yield* definition.handleOther(name, call, { dispatch, worktreePath });
+    if (reply === null) return yield* refuse(`Unknown tool ${name}.`);
+    return reply;
+  });
 
-  #handleSchedules(name: string, { runId, attemptId, input }: ToolCall, dispatch: CallDispatch) {
-    const { schedules, engine } = this.#options;
-    if (!schedules) return null;
-    return schedules.handleTool(name, input, {
-      runId,
-      attemptId,
-      state: () => engine.state,
-      dispatch,
-    });
-  }
-}
+  const handle = Effect.fn('ToolCalls.handle')(function* (name: string, call: ToolCall) {
+    const { runId, attemptId, input, signal } = call;
+    const dispatch = createDispatch(call);
+    switch (name) {
+      case 'propose_plan':
+      case 'complete_phase':
+      case 'complete_fix':
+      case 'report_review':
+        return yield* handOver(name, call, dispatch);
+      case 'ask':
+        return yield* questions.ask(runId, attemptId, input, signal, dispatch);
+      case 'request_secret':
+        return yield* questions.requestSecret(runId, attemptId, input, signal, dispatch);
+      case 'attach_evidence':
+        return yield* attachEvidence(call, dispatch);
+      case 'remove_evidence':
+        return yield* removeEvidence(call, dispatch);
+      case 'find_tasks':
+        return serializeTaskReferences(yield* definition.state, readString(input, 'query') ?? '');
+      case 'read_task':
+        return yield* readTask(input);
+      case 'list_repository_work':
+        return yield* work.describe((yield* findCurrent(runId, attemptId)).task.id, signal);
+      case 'note':
+        return yield* note(call, dispatch);
+      case 'list_services':
+      case 'run_service':
+      case 'add_service':
+      case 'remove_service':
+        return yield* runService(name, call);
+      default:
+        if (isSurfaceTool(name)) return yield* manage(name, call);
+        return yield* handleOther(name, call, dispatch);
+    }
+  });
+
+  const toolCalls: ToolCallsHandle = { handle };
+  return Effect.succeed(toolCalls);
+};

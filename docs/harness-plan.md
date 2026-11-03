@@ -232,7 +232,7 @@ The last column says where the build differs from the plan on purpose, in one li
 | 1 Schedules | Built | core `schedules/`, `decide/schedules.ts`; engine `schedules/clock.ts`, `schedules/tools.ts`; web `components/settings/schedules.tsx`, `lib/schedules.ts` | |
 | 2 Webhooks | Built | engine `schedules/webhook.ts`, `verify.ts`, `template.ts`, `secrets/store.ts` | |
 | 3 Secrets | Built | core `decide/secrets.ts`; engine `secrets/store.ts`, `http/routes/secrets`; web `components/overview/secret-card.tsx`, `lib/secrets.ts` | |
-| 4 Idle release | Built | engine `agents/idle.ts`, `agents/questions.ts` | |
+| 4 Idle release | Built | engine `agents/idle/service.ts`, `agents/questions.ts` | |
 | 5 Idle compaction | Built | engine `agents/compaction.ts`, `providers/claude/context.ts`; core `decide/compaction.ts` | It also skips split sub-tasks |
 | 6 Notifications | Built | web `lib/notifications/`, `hooks/use-attention.ts`, `components/settings/notifications.tsx` | |
 

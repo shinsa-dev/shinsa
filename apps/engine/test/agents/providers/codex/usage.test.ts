@@ -183,6 +183,9 @@ describe('Codex’s usage endpoint, read the way CodexBar reads it', () => {
     expect(readCodexOAuthLogin(createHome({ tokens: { access_token: '' } }))).toBeNull();
     expect(readCodexOAuthLogin(createHome('{ broken'))).toBeNull();
     expect(readCodexOAuthLogin(createHome(undefined))).toBeNull();
+    const unreadable = createHome(undefined);
+    mkdirSync(join(unreadable, 'auth.json'));
+    expect(readCodexOAuthLogin(unreadable)).toBeNull();
   });
 });
 
@@ -272,6 +275,21 @@ describe('reading Codex’s usage', () => {
       reason: 'failed',
       detail: 'Could not reach Codex: offline',
     });
+  });
+
+  test('an endpoint that never answers is given up on, and its request aborted', async () => {
+    const home = createHome(SIGNED_IN);
+    const signals: AbortSignal[] = [];
+    const requestHttp: UsageRequester = (_url, init) => {
+      if (init.signal) signals.push(init.signal);
+      return new Promise(() => undefined);
+    };
+    const reading = await readCodexUsage(MISSING, { env: { CODEX_HOME: home }, requestHttp, timeoutMs: 5 });
+    expect(reading.read).toMatchObject({
+      reason: 'failed',
+      detail: 'Could not reach Codex: The operation timed out.',
+    });
+    expect(signals[0]?.aborted).toBe(true);
   });
 
   test('a token the endpoint refuses falls back to the app server, which Codex refreshes itself', async () => {

@@ -1,82 +1,54 @@
-import type { ExtensionUsageRead } from '@shinsa/core';
+import { Effect, Scope } from 'effect';
 import { edgeRuntime } from '../runtime/edge.ts';
-import { USAGE_CHUNK_BYTES, USAGE_HORIZON_DAYS, type UsageFile, type UsageSource } from './schema.ts';
-import { ExtensionFiles } from './store/service.ts';
-import { normalizeServerName, resolveServerLabel } from './usage/names.ts';
-import { ExtensionUsage } from './usage/service.ts';
+import { USAGE_CHUNK_BYTES, USAGE_HORIZON_DAYS } from './schema.ts';
+import type { UsageIndexHandle, UsageIndexOptions, UsageRefresh } from './usage-index/schema.ts';
+import { makeUsageIndex } from './usage-index/service.ts';
 
 export { normalizeServerName, resolveServerLabel } from './usage/names.ts';
-
-export interface UsageIndexOptions {
-  sources: UsageSource[];
-  cachePath: string | null;
-  now?: () => number;
-  horizonDays?: number;
-  chunkBytes?: number;
-}
+export type { UsageIndexOptions } from './usage-index/schema.ts';
 
 export class UsageIndex {
-  readonly #options: UsageIndexOptions;
-  readonly #now: () => number;
-  readonly #stop = new AbortController();
-  #file: UsageFile;
-  #running: Promise<void> | null = null;
+  readonly #handle: UsageIndexHandle;
+  #joined: { refresh: UsageRefresh; promise: Promise<void> } | null = null;
 
   constructor(options: UsageIndexOptions) {
-    this.#options = options;
-    this.#now = options.now ?? Date.now;
-    this.#file = edgeRuntime.runSync(ExtensionFiles.use((files) => files.readUsage(options.cachePath)));
+    const now = options.now ?? Date.now;
+    this.#handle = edgeRuntime.runSync(
+      makeUsageIndex({
+        sources: options.sources,
+        cachePath: options.cachePath,
+        now: Effect.sync(now),
+        horizonDays: options.horizonDays ?? USAGE_HORIZON_DAYS,
+        chunkBytes: options.chunkBytes ?? USAGE_CHUNK_BYTES,
+      }).pipe(Scope.provide(edgeRuntime.runSync(Scope.make())))
+    );
   }
 
-  read(): ExtensionUsageRead {
-    return { readAt: this.#file.readAt, since: this.#file.since };
+  read() {
+    return edgeRuntime.runSync(this.#handle.read);
   }
 
   selectServer(runtimeName: string) {
-    const name = normalizeServerName(runtimeName);
-    const exact = this.#file.servers[name] ?? null;
-    const labelled = this.#file.labels[resolveServerLabel(name)] ?? null;
-    if (exact === null) return labelled;
-    return labelled === null ? exact : Math.max(exact, labelled);
+    return edgeRuntime.runSync(this.#handle.selectServer(runtimeName));
   }
 
   selectSkill(name: string) {
-    return this.#file.skills[name] ?? null;
+    return edgeRuntime.runSync(this.#handle.selectSkill(name));
   }
 
   isStale(maxAgeMs: number) {
-    return this.#file.readAt === null || this.#now() - this.#file.readAt > maxAgeMs;
+    return edgeRuntime.runSync(this.#handle.isStale(maxAgeMs));
   }
 
   refresh() {
-    this.#running ??= this.#scan().finally(() => {
-      this.#running = null;
-    });
-    return this.#running;
+    const refresh = edgeRuntime.runSync(this.#handle.refresh);
+    if (this.#joined?.refresh !== refresh) {
+      this.#joined = { refresh, promise: edgeRuntime.runPromise(this.#handle.join(refresh)) };
+    }
+    return this.#joined.promise;
   }
 
   stop() {
-    this.#stop.abort();
-    return this.#running ?? Promise.resolve();
-  }
-
-  async #scan() {
-    const {
-      sources,
-      cachePath,
-      horizonDays = USAGE_HORIZON_DAYS,
-      chunkBytes = USAGE_CHUNK_BYTES,
-    } = this.#options;
-    const { signal } = this.#stop;
-    try {
-      this.#file = await edgeRuntime.runPromise(
-        ExtensionUsage.use((usage) =>
-          usage.scan({ sources, cachePath, now: this.#now(), horizonDays, chunkBytes }, this.#file)
-        ),
-        { signal }
-      );
-    } catch (error) {
-      if (!signal.aborted) throw error;
-    }
+    return edgeRuntime.runPromise(this.#handle.stop);
   }
 }

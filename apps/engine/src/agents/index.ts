@@ -6,7 +6,7 @@ export type {
   RunRejection,
 } from './accounts.ts';
 export type { IdleCompactionOptions } from './compaction.ts';
-export type { IdleReleaseOptions } from './idle.ts';
+export type { IdleReleaseOptions } from './idle/schema.ts';
 export { convertClaudeSession } from './providers/claude/import.ts';
 export {
   listDefaultProviders,

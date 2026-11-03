@@ -212,6 +212,8 @@ describe('reading which servers and skills agents used', () => {
     expect(index.refresh()).toBe(index.refresh());
     await index.stop();
     expect(index.read().readAt).toBeNull();
+    await index.refresh();
+    expect(index.read().readAt).toBeNull();
     expect(await createIndex(dirs).stop()).toBeUndefined();
   });
 

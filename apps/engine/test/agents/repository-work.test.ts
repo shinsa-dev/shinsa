@@ -1,9 +1,8 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { Repo, ShinsaCommand, Task } from '@shinsa/core';
-import { RepositoryWork } from '../../src/agents/repository-work/service.ts';
+import { RepositoryWork } from '../../src/agents/repository-work.ts';
 import { createWorktree } from '../../src/git/index.ts';
-import { log } from '../../src/log/index.ts';
-import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import { captureLogs, createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createRun, createStubEngine, createTask } from '../helpers/state.ts';
 
 async function commitAll(path: string, message: string) {
@@ -55,14 +54,13 @@ describe('the other work in a task’s repository', () => {
       await createWorkingTask(created, 'mine', { 'src/a.ts': '1\n' }),
     ]);
     stub.state.tasks.broken = createTask({ id: 'broken', title: 'Broken', worktreePath: createTempDir() });
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const text = await work.describe('mine');
+    logs.restore();
     expect(text).toContain('  Changed files: not known.');
-    expect(warn).toHaveBeenCalledWith(
-      '[RepositoryWork] Could not list the files a task changed',
-      expect.objectContaining({ taskId: 'broken' })
-    );
-    warn.mockRestore();
+    expect(logs.fieldsOf('[RepositoryWork] Could not list the files a task changed')).toEqual([
+      expect.objectContaining({ taskId: 'broken' }),
+    ]);
   });
 
   test('records the files two tasks both change for each of them, the plan’s named files included', async () => {
@@ -102,12 +100,11 @@ describe('the other work in a task’s repository', () => {
       await createWorkingTask(repo, 'theirs', { 'src/a.ts': '2\n' }),
     ]);
     pair.stub.reject((command) => command.type === 'task.record_overlaps');
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     await pair.work.recordOverlaps('mine', []);
-    expect(warn).toHaveBeenCalledWith(
-      '[RepositoryWork] Could not record the files another task changes too',
-      expect.objectContaining({ taskId: 'mine' })
+    logs.restore();
+    expect(logs.fieldsOf('[RepositoryWork] Could not record the files another task changes too')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ taskId: 'mine' })])
     );
-    warn.mockRestore();
   });
 });
