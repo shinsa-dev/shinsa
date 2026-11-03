@@ -34,7 +34,7 @@ import { createShareDescriber } from '../remote/share-describe.ts';
 import { Shares } from '../remote/shares.ts';
 import { TeamFeeds } from '../remote/team-feeds.ts';
 import { Teams } from '../remote/teams.ts';
-import { createDiscoverer, createLoginResolver, Roots } from '../repos/index.ts';
+import { createLoginResolver, Roots } from '../repos/index.ts';
 import { ProcessLedger, ResourceMonitor } from '../resources/index.ts';
 import { EffectRunner, Engine, MonitorClock, WatchdogClock } from '../runtime/index.ts';
 import { Schedules } from '../schedules/index.ts';
@@ -153,12 +153,7 @@ export function createServices(
   const briefings = new Briefings(engine, { ask: quick.write });
   terminals.resumeServices(engine.state);
   const inbox = new MessageInbox(engine, classify.message);
-  const roots = new Roots(
-    config.roots,
-    store,
-    config.userHome,
-    options.discover ?? createDiscoverer(Boolean(BUNDLE))
-  );
+  const roots = new Roots(config.roots, store, config.userHome, options.discover);
   return {
     config,
     store,

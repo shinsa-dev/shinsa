@@ -18,13 +18,25 @@ type RootCandidate = typeof RootCandidate.Type;
 export interface Discovery {
   candidates: RootCandidate[];
   truncated: boolean;
+  refused: string[];
 }
 
 export interface DiscoveryOptions {
   readonly maxDepth?: number;
   readonly maxDirs?: number;
-  readonly skipPrivate?: boolean;
+  readonly budget?: Duration.Duration;
 }
+
+export interface DiscoveryScan {
+  readonly home: string;
+  readonly parents: Map<string, string[]>;
+  readonly refused: string[];
+}
+
+export class FolderUnreadable extends Schema.TaggedError<
+  FolderUnreadable,
+  { readonly brand: unique symbol }
+>()('FolderUnreadable', { path: Schema.String, code: Schema.NullOr(Schema.String) }) {}
 
 export interface SetupScope {
   readonly defaultBranch: boolean;
@@ -56,11 +68,13 @@ export const REPOSITORY_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export const FALLBACK_DEFAULT_BRANCH = 'main';
 
-export const PRIVATE_HOME_DIRS = new Set(['Desktop', 'Documents', 'Downloads']);
+export const MAX_DEPTH = 8;
 
-export const MAX_DEPTH = 4;
+export const MAX_DIRS = 150_000;
 
-export const MAX_DIRS = 20_000;
+export const DISCOVERY_BUDGET = Duration.seconds(20);
+
+export const REFUSED_CODES = new Set(['EPERM', 'EACCES']);
 
 export const SAMPLE_REPOS = 8;
 
@@ -73,18 +87,26 @@ export const SKIPPED_DIRS = new Set([
   'Caches',
   'cache',
   'Cache',
-  'vendor',
   'Pods',
   'DerivedData',
-  'build',
-  'dist',
-  'target',
   'venv',
-  'go',
-  'Movies',
-  'Music',
-  'Pictures',
 ]);
+
+export const BUNDLE_SUFFIXES = [
+  '.app',
+  '.bundle',
+  '.framework',
+  '.photoslibrary',
+  '.musiclibrary',
+  '.tvlibrary',
+  '.imovielibrary',
+  '.fcpbundle',
+  '.logicx',
+  '.band',
+  '.xcarchive',
+  '.xcodeproj',
+  '.xcworkspace',
+];
 
 export const DISCOVERY_TTL_MS = 10 * 60 * 1000;
 

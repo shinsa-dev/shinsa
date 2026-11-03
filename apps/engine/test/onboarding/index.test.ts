@@ -18,7 +18,11 @@ function setup(run?: CommandRunner, terminals?: InstallTerminals, simulateMissin
   const developer = join(root, 'Developer');
   mkdirSync(join(developer, 'app', '.git'), { recursive: true });
   const roots = new Roots([], store, root, () =>
-    Promise.resolve({ candidates: [{ path: developer, repoCount: 1, repos: ['app'] }], truncated: false })
+    Promise.resolve({
+      candidates: [{ path: developer, repoCount: 1, repos: ['app'] }],
+      truncated: false,
+      refused: [],
+    })
   );
   const onboarding = new Onboarding({
     engine,

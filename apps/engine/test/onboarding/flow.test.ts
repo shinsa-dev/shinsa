@@ -68,6 +68,7 @@ function setup(options: Setup = {}) {
                 { path: work, repoCount: 1, repos: ['site'] },
               ],
         truncated: false,
+        refused: [],
       })
     );
     const onboarding = new Onboarding({
