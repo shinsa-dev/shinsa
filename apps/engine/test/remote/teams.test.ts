@@ -23,12 +23,11 @@ import {
   verifyTeamSnapshot,
 } from '@shinsa/core';
 import { InviteInvalid, MembersFull, NotFound, NotOwner, TeamsFull } from '@shinsa/core/remote/errors';
-import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
 import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
 import { TEAM_REFUSALS, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+import { captureLogs, createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { createKeyPair, startHandshake } from './client.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
@@ -85,6 +84,7 @@ interface SetUp {
   patch?: (state: ShinsaState) => void;
   resolveLive?: () => Promise<never>;
   held?: TeamsOptions['held'];
+  defaults?: boolean;
 }
 
 function setUp(options: SetUp = {}) {
@@ -141,8 +141,7 @@ function setUp(options: SetUp = {}) {
       },
     },
     ...(options.held ? { held: options.held } : {}),
-    now: () => 50,
-    random: (bytes) => new Uint8Array(bytes).fill(6),
+    ...(options.defaults ? {} : { now: () => 50, random: (bytes) => new Uint8Array(bytes).fill(6) }),
   });
   const writeTranscript = (runId: string) => {
     for (const listener of transcriptListeners) listener(runId);
@@ -408,30 +407,68 @@ describe('a team view of this machine', () => {
   });
 
   test('logs a view it could not close cleanly', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    const { teams, remote } = setUp();
-    const channel = teams.openChannel(
-      {
-        send: (data) => {
-          if (typeof data !== 'string') throw new Error('the socket is gone');
+    const logs = captureLogs();
+    try {
+      const { teams, remote } = setUp();
+      const ephemeral = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
+        'deriveBits',
+      ])) as CryptoKeyPair;
+      const channel = teams.openChannel(
+        {
+          send: () => undefined,
+          close: () => {
+            throw new Error('closed twice');
+          },
         },
-        close: () => undefined,
-      },
-      KAI.id
-    );
-    const ephemeral = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
-      'deriveBits',
-    ])) as CryptoKeyPair;
-    await channel.receive(
-      JSON.stringify(await createTeamHello('team1', TEAM_KEY, LIST, ephemeral.publicKey))
-    );
+        KAI.id
+      );
+      await channel.receive(
+        JSON.stringify(await createTeamHello('team1', TEAM_KEY, LIST, ephemeral.publicKey))
+      );
+      await remote.disable();
+      await until(
+        'the failure is logged',
+        () => logs.fieldsOf('[Teams] Could not close a team view').length > 0
+      );
+      expect(logs.fieldsOf('[Teams] Could not close a team view')).toEqual([{ error: 'closed twice' }]);
+    } finally {
+      logs.restore();
+    }
+  });
+});
+
+describe('a team view that ends on this machine’s side', () => {
+  test('a view the socket closed is no longer ended when access goes off', async () => {
+    const { teams, remote } = setUp();
+    const viewer = await openViewer(teams, KAI.id, LIST);
+    const channel = teams.openChannel({ send: () => undefined, close: () => undefined }, KAI.id);
     teams.closeChannel(channel);
-    const other = teams.openChannel({ send: () => undefined, close: () => undefined }, KAI.id);
-    await other.receive(JSON.stringify(await createTeamHello('team1', TEAM_KEY, LIST, ephemeral.publicKey)));
-    spyOn(other, 'end').mockImplementation(() => Promise.reject(new Error('closed twice')));
     await remote.disable();
-    await until('the failure is logged', () => warn.mock.calls.length > 0);
-    warn.mockRestore();
+    await until('the open view ends', () => viewer.closed !== null);
+    expect(viewer.closed?.reason).toBe(TEAM_REMOTE_CHANGED);
+  });
+
+  test('a task view whose share cannot be read breaks', async () => {
+    const logs = captureLogs();
+    try {
+      const { teams } = setUp({ resolveLive: () => Promise.reject(new Error('the task moved')) });
+      const viewer = await openViewer(teams, KAI.id, TASK_VIEW);
+      expect(viewer.closed).toEqual({ code: 1008, reason: 'The team view broke.' });
+      expect(logs.fieldsOf('[Share] Closing a live view')).toEqual([
+        { reason: 'The team view broke.', error: 'the task moved' },
+      ]);
+    } finally {
+      logs.restore();
+    }
+  });
+
+  test('removing a team passes on a project change that breaks', async () => {
+    const { teams, stub } = setUp();
+    stub.reject((command) => command.type === 'project.remove_from_team', new Error('disk full'));
+    await expect(teams.remove('team1')).rejects.toMatchObject({
+      _tag: 'TeamCommandFailed',
+      message: 'disk full',
+    });
   });
 });
 
@@ -500,6 +537,19 @@ describe('making and joining teams', () => {
     await expect(teams.join(url)).rejects.toMatchObject({ code: 'team_link_invalid' });
   });
 
+  test('a join whose heartbeat fails says so', async () => {
+    const { teams, plane, remote } = setUp();
+    spyOn(remote, 'requestHeartbeat').mockRejectedValue(new Error('tunnel down'));
+    const url = resolveTeamJoinUrl({ teamId: 'team1', invite: 'invite-1', key: TEAM_KEY }, plane.origin);
+    plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
+      Response.json({ teamId: 'team1', name: 'Platform', owner: MONA, status: 'member' })
+    );
+    await expect(teams.join(url)).rejects.toMatchObject({
+      _tag: 'TeamHeartbeatFailed',
+      message: 'tunnel down',
+    });
+  });
+
   test('the owner renews or turns off the link; a member cannot', async () => {
     const { teams, plane, remote } = setUp({
       file: { teamKeys: [{ ...STORED_KEY, invite: null }] },
@@ -544,6 +594,21 @@ describe('the members of a team', () => {
     plane.answers.set(path, () => refuse(NotOwner));
     await expect(teams.acceptRequest('team1', BOB.id)).rejects.toMatchObject({ code: 'not_owner' });
     await expect(teams.removeMember('team1', BOB.id)).rejects.toMatchObject({ code: 'member_not_found' });
+    plane.answers.set(resolveMachineTeamPath('team1', 'invite'), () => refuse(NotFound));
+    await expect(teams.renewInvite('team1')).rejects.toMatchObject({ code: 'team_not_found' });
+    plane.answers.set(resolveMachineTeamPath('team1', 'invite'), () => refuse(NotOwner));
+    await expect(teams.renewInvite('team1')).rejects.toMatchObject({ code: 'not_owner' });
+  });
+
+  test('a new team’s key is random when no source is given', async () => {
+    const { teams, plane, remote } = setUp({ file: { teams: [], teamKeys: [] }, defaults: true });
+    const team = createTeam({ id: 'team2', name: 'Growth', members: [], requests: [] });
+    plane.answers.set(REMOTE_PATHS.machineTeams, () => Response.json({ team, invite: 'invite-2' }));
+    await teams.create('Growth');
+    const stored = remote.store.selectTeamKey('team2');
+    expect(stored?.key).toHaveLength(43);
+    expect(stored?.key).not.toBe(serializeBase64Url(new Uint8Array(32).fill(6)));
+    expect(stored?.addedAt).toBeGreaterThan(50);
   });
 
   test('leaving forgets the key and takes the team off every project, even when the cloud forgot it first', async () => {
@@ -575,6 +640,10 @@ describe('the members of a team', () => {
     );
     await expect(failing.teams.remove('team1')).rejects.toThrow('status 500');
     expect(failing.remote.store.selectTeamKey('team1')).not.toBeNull();
+    const forgotten = setUp();
+    forgotten.plane.answers.set(resolveMachineTeamPath('team1', 'remove'), () => refuse(NotFound));
+    await forgotten.teams.remove('team1');
+    expect(forgotten.remote.store.selectTeamKey('team1')).toBeNull();
   });
 });
 

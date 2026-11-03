@@ -1,44 +1,28 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import type {
-  AccessRequest,
-  PairingView,
-  RemoteMember,
-  RemoteSnapshot,
-  RemoteUser,
-  TaskGuest,
-} from '@shinsa/core';
-import {
-  type ConnectChannel,
-  type ConnectClaim,
-  DomainError,
-  type GuestActor,
-  MACHINE_FEATURES,
-  type HandshakeKeys,
-  MAX_INSTANCE_GUESTS,
-  MAX_INSTANCE_MEMBERS,
-  type RemoteAccess,
-  type TunnelStatus,
-  resolveClaimUrl,
-  resolveEnrollUrl,
-  resolveRemoteHookUrl,
-  serializeBase64Url,
-  verifyConnectToken,
-  verifyEnrollProof,
-} from '@shinsa/core';
-import { describeError, log } from '../log/index.ts';
+import { type ConnectChannel, type ConnectClaim, serializeBase64Url } from '@shinsa/core';
+import { Effect, Layer, ManagedRuntime } from 'effect';
+import { describeError } from '../log/redact.ts';
+import { JsonLogger } from '../log/service.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import { resolveBrowserCommand } from '../shell/browser.ts';
 import { runCommandOrThrow } from '../shell/index.ts';
 import { RemoteAccessScope } from './access/index.ts';
-import { type AccessAnswer, type ChannelHost, type ChannelPeer, RemoteChannel } from './channel.ts';
+import { type ChannelPeer, RemoteChannel } from './channel.ts';
+import { RemoteControl } from './client/index.ts';
 import {
-  type PairedMachine,
-  type PairingRun,
-  RemoteControl,
-  selectRemoteFailureTag,
-} from './client/index.ts';
-import { listTeamEntries, RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
-import { Tunnel, type TunnelConnectorLayer, type TunnelPing } from './tunnel/index.ts';
+  type ChannelParts,
+  type GuestLeaver,
+  type HandoffClaimer,
+  HandoffClaimFailed,
+  RemoteKeyUnreadable,
+  type RemoteOptions,
+  RemoteUrlUnopened,
+  SECRET_BYTES,
+} from './machine/schema.ts';
+import { makeRemote } from './machine/service.ts';
+import { RemoteStore } from './store.ts';
+import { Tunnel } from './tunnel/index.ts';
 
 export { type ChannelPeer, RemoteChannel } from './channel.ts';
 export { createInstalledConnector } from './connector/installed.ts';
@@ -48,45 +32,12 @@ export { TunnelConnector } from './connector/service.ts';
 export type { TunnelConnectorLayer } from './tunnel/index.ts';
 export { RemoteControl } from './client/index.ts';
 export { REMOTE_FILE, RemoteStore } from './store.ts';
-
-const REMOTE_ACCESS_CHANGED = 'Remote access to this machine changed.';
-
+export type { GuestLeaver, HandoffClaimer, RemoteOptions } from './machine/schema.ts';
 export type { RemoteSnapshot } from '@shinsa/core';
 
-const SECRET_BYTES = 32;
+type RemoteHandle = Effect.Success<ReturnType<typeof makeRemote>>;
 
-const MAX_REQUESTS = 20;
-
-type ProofKeys = Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>;
-
-export interface RemoteOptions {
-  path: string;
-  control?: RemoteControl;
-  connector: TunnelConnectorLayer;
-  ping?: TunnelPing;
-  localUrl: () => string;
-  version: string;
-  maxBodyBytes: number;
-  now?: () => number;
-  machineName: string;
-  openUrl: (url: string) => Promise<void>;
-}
-
-interface ChannelParts {
-  readonly hub: ChannelHost['hub'];
-  readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Promise<Response>;
-}
-
-export type HandoffClaimer = (taskId: string, guest: TaskGuest) => Promise<string | null>;
-
-export type GuestLeaver = (userIds: string[]) => void;
-
-const HANDOFF_NOT_ENABLED =
-  'Turn on remote access in Settings → General to hand off this task. Its link works once this machine is reachable.';
-
-const HANDOFF_UNAVAILABLE = 'This machine cannot hand off tasks right now. Try again in a moment.';
-
-const GUEST_FALLBACK_LOGIN = 'guest';
+type RemoteRuntime = ManagedRuntime.ManagedRuntime<Layer.Success<RemoteControl['layer']>, never>;
 
 export function resolveMachineName(name = hostname()) {
   const bare = name.replace(/\.local$/i, '');
@@ -97,8 +48,14 @@ export function resolveMachineName(name = hostname()) {
     .replace(/(^|[\s-])(\p{L})/gu, (_, gap: string, letter: string) => gap + letter.toUpperCase());
 }
 
-export async function openRemoteUrl(url: string, cwd: string, command = resolveBrowserCommand(url)) {
-  if (command) await runCommandOrThrow(command, cwd);
+export function openRemoteUrl(url: string, cwd: string, command = resolveBrowserCommand(url)) {
+  const open = command
+    ? Effect.tryPromise({
+        try: () => runCommandOrThrow(command, cwd),
+        catch: (error) => new RemoteUrlUnopened({ message: describeError(error) }),
+      })
+    : Effect.void;
+  return edgeRuntime.runPromise(Effect.asVoid(open));
 }
 
 export function createUrlOpener(cwd: string) {
@@ -109,43 +66,68 @@ export class Remote {
   readonly store: RemoteStore;
   readonly control: RemoteControl;
   readonly access = new RemoteAccessScope();
-  readonly #tunnel: Tunnel;
-  #tunnelStatus: TunnelStatus = 'off';
   readonly #options: RemoteOptions;
-  readonly #now: () => number;
-  readonly #channels = new Map<RemoteChannel, () => void>();
-  readonly #spentConnects = new Map<string, number>();
-  readonly #listeners = new Set<() => void>();
-  readonly #waiters = new Map<string, ((approved: boolean) => void)[]>();
-  #pairing: { view: PairingView; run: PairingRun } | null = null;
-  #claimer: HandoffClaimer | null = null;
-  #leaver: GuestLeaver | null = null;
-  #guestRevision = 0;
+  readonly #tunnel: Tunnel;
+  readonly #runtime: RemoteRuntime;
+  readonly #handle: RemoteHandle;
 
   constructor(options: RemoteOptions) {
     this.#options = options;
-    this.#now = options.now ?? Date.now;
+    const now = options.now ?? Date.now;
     this.store = new RemoteStore(options.path);
     this.control = options.control ?? new RemoteControl();
+    this.#runtime = ManagedRuntime.make(this.control.layer.pipe(Layer.provideMerge(JsonLogger)));
     this.#tunnel = new Tunnel({
       control: this.control,
       connector: options.connector,
       ping: options.ping,
       version: options.version,
       localUrl: options.localUrl,
-      signingKey: async () => (await this.store.resolveSigningKey()).publicKey,
-      guestRevision: () => this.#guestRevision,
+      signingKey: () => this.#runtime.runPromise(this.#handle.signingKey),
+      guestRevision: () => this.#runtime.runSync(this.#handle.guestRevision),
       guests: () => this.store.file.guests,
-      onAccess: (access, guests) => this.#recordAccess(access, guests),
-      onTeams: (teams) => {
-        if (this.store.recordTeams(teams)) this.#publish();
-      },
-      onStatus: (status) => {
-        this.#tunnelStatus = status;
-        this.#publish();
-      },
-      onRevoked: () => this.#forget(),
+      onAccess: (access, guests) => this.#runtime.runSync(this.#handle.recordAccess(access, guests)),
+      onTeams: (teams) => this.#runtime.runSync(this.#handle.recordTeams(teams)),
+      onStatus: (status) => this.#runtime.runSync(this.#handle.recordStatus(status)),
+      onRevoked: () => this.#runtime.runSync(this.#handle.forget),
     });
+    const tunnel = this.#tunnel;
+    const access = this.access;
+    const runtime = this.#runtime;
+    const toKeyFailure = (error: unknown) => new RemoteKeyUnreadable({ message: describeError(error) });
+    this.#handle = this.#runtime.runSync(
+      makeRemote({
+        store: this.store,
+        origin: this.control.origin,
+        machineName: options.machineName,
+        version: options.version,
+        now: Effect.sync(now),
+        secret: Effect.sync(() => serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES)))),
+        newId: Effect.sync(randomUUID),
+        machineKey: Effect.tryPromise({ try: () => this.store.resolveMachineKey(), catch: toKeyFailure }),
+        signingKey: Effect.tryPromise({
+          try: () => this.store.resolveSigningKey(),
+          catch: toKeyFailure,
+        }).pipe(Effect.map((key) => key.publicKey)),
+        openUrl: (url) =>
+          Effect.tryPromise({
+            try: () => options.openUrl(url),
+            catch: (error) => new RemoteUrlUnopened({ message: describeError(error) }),
+          }),
+        tunnel: {
+          start: (credentials) => Effect.sync(() => tunnel.start(credentials)),
+          stop: Effect.promise(() => tunnel.stop()),
+        },
+        access: {
+          acquire: (close) =>
+            Effect.sync(() => {
+              const release = access.acquire(() => runtime.runSync(close));
+              return Effect.sync(release);
+            }),
+          end: Effect.sync(() => access.end()),
+        },
+      })
+    );
   }
 
   get appOrigin() {
@@ -153,622 +135,138 @@ export class Remote {
   }
 
   get isEnabled() {
-    const { file } = this.store;
-    return file.enabled && file.credentials !== null;
+    return this.#runtime.runSync(this.#handle.isEnabled);
   }
 
   get tunnelHost() {
-    return this.store.file.credentials?.tunnelHost ?? null;
+    return this.#runtime.runSync(this.#handle.tunnelHost);
   }
 
-  snapshot(): RemoteSnapshot {
-    const { file } = this.store;
-    return {
-      paired: file.credentials !== null,
-      enabled: this.isEnabled,
-      status: this.#tunnelStatus,
-      instanceId: file.credentials?.instanceId ?? null,
-      owner: file.owner,
-      machineName: this.#options.machineName,
-      machineKey: file.machine?.publicKey ?? null,
-      pairing: this.#pairing?.view ?? null,
-      devices: file.devices,
-      access: file.access,
-      link: file.credentials && file.machine && file.link ? this.#serializeLink(file.link) : null,
-      requests: file.requests,
-      teams: listTeamEntries(file),
-    };
+  snapshot() {
+    return this.#runtime.runSync(this.#handle.snapshot);
   }
 
-  #serializeLink(link: StoredLink) {
-    const { credentials, machine } = this.store.file;
-    const fragment = {
-      instanceId: credentials?.instanceId ?? '',
-      machineKey: machine?.publicKey ?? '',
-      secret: link.secret,
-      invite: link.invite,
-    };
-    return { url: resolveEnrollUrl(fragment, this.appOrigin), createdAt: link.createdAt };
-  }
-
-  async startPairing() {
-    if (this.store.file.credentials)
-      throw new DomainError({ code: 'remote_paired', message: 'This machine is already paired.' });
-    if (this.#pairing) return this.#pairing.view;
-    const machine = await this.store.resolveMachineKey();
-    const start = await this.control.requestPairStart({
-      name: this.#options.machineName,
-      publicKey: machine.publicKey,
-      version: this.#options.version,
-      features: [...MACHINE_FEATURES],
-    });
-    const pairing = {
-      view: { claimCode: start.claimCode, url: start.url, expiresAt: start.expiresAt },
-      run: this.control.startPairing(start, machine),
-    };
-    this.#pairing = pairing;
-    this.#publish();
-    void pairing.run.done.then((end) => {
-      if (this.#pairing === pairing) this.#pairing = null;
-      if (end.status === 'claimed') this.#recordPaired(end.machine);
-      this.#publish();
-    });
-    await this.#options.openUrl(start.url).catch((error: unknown) => {
-      log.warn('[Remote] Could not open the pairing page', { error: describeError(error) });
-    });
-    return pairing.view;
+  startPairing() {
+    return this.#runtime.runPromise(this.#handle.startPairing);
   }
 
   resolveHookUrl(scheduleId: string, token: string) {
-    const { credentials } = this.store.file;
-    if (!(credentials && this.isEnabled)) return null;
-    return resolveRemoteHookUrl(credentials.instanceId, scheduleId, token, this.appOrigin);
+    return this.#runtime.runSync(this.#handle.resolveHookUrl(scheduleId, token));
   }
 
   cancelPairing() {
-    this.#pairing?.run.cancel();
-  }
-
-  #recordPaired(machine: PairedMachine) {
-    this.store.update((file) => ({
-      ...file,
-      credentials: machine.credentials,
-      owner: machine.owner,
-      enabled: true,
-    }));
-    log.info('[Remote] Paired', { instanceId: machine.credentials.instanceId, owner: machine.owner });
-    this.start();
-  }
-
-  #assertPaired() {
-    const { credentials } = this.store.file;
-    if (!credentials)
-      throw new DomainError({ code: 'remote_not_paired', message: 'Turn on remote access first.' });
-    return credentials;
+    this.#runtime.runSync(this.#handle.cancelPairing);
   }
 
   enable() {
-    this.#assertPaired();
-    this.store.update((file) => ({ ...file, enabled: true }));
-    this.start();
-    this.#publish();
+    this.#runtime.runSync(this.#handle.enable);
   }
 
-  async disable() {
-    this.#assertPaired();
-    this.store.update((file) => ({ ...file, enabled: false }));
-    await this.stop();
-    this.#publish();
+  disable() {
+    return this.#runtime.runPromise(this.#handle.disable);
   }
 
-  async remove() {
-    const credentials = this.#assertPaired();
-    await this.stop();
-    try {
-      await this.control.requestRemoval(credentials.machineToken);
-    } catch (error) {
-      log.warn('[Remote] Shinsa Cloud did not confirm the removal', { error: describeError(error) });
-    }
-    this.store.update((file) => ({
-      ...file,
-      credentials: null,
-      owner: null,
-      enabled: false,
-      devices: [],
-      access: null,
-      link: null,
-      requests: [],
-      guests: [],
-      handoffs: [],
-      teams: [],
-      teamKeys: [],
-      grants: [],
-    }));
-    this.#settleWaiters(false);
-    this.#publish();
+  remove() {
+    return this.#runtime.runPromise(this.#handle.remove);
   }
 
-  async createLink() {
-    const credentials = this.#assertPaired();
-    if (this.store.file.link) return;
-    await this.store.resolveMachineKey();
-    const { token } = await this.control.requestInvite(credentials.machineToken);
-    const link: StoredLink = {
-      secret: serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES))),
-      invite: token,
-      createdAt: this.#now(),
-    };
-    this.store.update((file) => ({ ...file, link }));
-    this.#publish();
+  createLink() {
+    return this.#runtime.runPromise(this.#handle.createLink);
   }
 
-  async removeLink() {
-    const credentials = this.#assertPaired();
-    await this.control.requestInviteRemoval(credentials.machineToken);
-    this.store.update((file) => ({ ...file, link: null }));
-    this.#publish();
-  }
-
-  async #matchesLink(proof: string, keys: ProofKeys) {
-    const { link } = this.store.file;
-    return link !== null && (await verifyEnrollProof(link.secret, proof, keys));
-  }
-
-  async #matchHandoff(proof: string, keys: ProofKeys) {
-    for (const handoff of this.store.file.handoffs) {
-      if (await verifyEnrollProof(handoff.secret, proof, keys)) return handoff;
-    }
-    return null;
+  removeLink() {
+    return this.#runtime.runPromise(this.#handle.removeLink);
   }
 
   handleClaims(claimer: HandoffClaimer) {
-    this.#claimer = claimer;
+    this.#runtime.runSync(
+      this.#handle.handleClaims((taskId, guest) =>
+        Effect.tryPromise({
+          try: () => claimer(taskId, guest),
+          catch: (error) => new HandoffClaimFailed({ message: describeError(error) }),
+        })
+      )
+    );
   }
 
   handleLeaves(leaver: GuestLeaver) {
-    this.#leaver = leaver;
+    this.#runtime.runSync(this.#handle.handleLeaves(leaver));
   }
 
-  #updateGuests(change: (guests: RemoteMember[]) => RemoteMember[]) {
-    this.#guestRevision += 1;
-    this.store.update((file) => ({ ...file, guests: change(file.guests) }));
+  createHandoff(taskId: string) {
+    return this.#runtime.runPromise(this.#handle.createHandoff(taskId));
   }
 
-  #resolveHandoffUrl(handoff: StoredHandoff) {
-    const { credentials, machine } = this.store.file;
-    const fragment = {
-      instanceId: credentials?.instanceId ?? '',
-      machineKey: machine?.publicKey ?? '',
-      secret: handoff.secret,
-      invite: handoff.invite,
-    };
-    return resolveClaimUrl(fragment, this.appOrigin);
+  removeHandoff(taskId: string, guestId: string | null) {
+    return this.#runtime.runPromise(this.#handle.removeHandoff(taskId, guestId));
   }
 
-  async createHandoff(taskId: string) {
-    const { credentials } = this.store.file;
-    if (!(credentials && this.isEnabled))
-      throw new DomainError({ code: 'remote_not_enabled', message: HANDOFF_NOT_ENABLED });
-    const existing = this.store.file.handoffs.find((entry) => entry.taskId === taskId);
-    if (existing) return this.#resolveHandoffUrl(existing);
-    await this.store.resolveMachineKey();
-    const { token } = await this.control.requestHandoff(credentials.machineToken);
-    const handoff: StoredHandoff = {
-      taskId,
-      secret: serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES))),
-      invite: token,
-      createdAt: this.#now(),
-    };
-    this.store.update((file) => ({ ...file, handoffs: [...file.handoffs, handoff] }));
-    return this.#resolveHandoffUrl(handoff);
+  grantTeammate(userId: string, teamId: string) {
+    return this.#runtime.runPromise(this.#handle.grantTeammate(userId, teamId));
   }
 
-  async #retireHandoff(handoff: StoredHandoff) {
-    this.store.update((file) => ({
-      ...file,
-      handoffs: file.handoffs.filter((entry) => entry.invite !== handoff.invite),
-    }));
-    const { credentials } = this.store.file;
-    if (!credentials) return;
-    try {
-      await this.control.requestHandoffRemoval(credentials.machineToken, handoff.invite);
-    } catch (error) {
-      log.warn('[Remote] Shinsa Cloud did not turn off a hand-off link', { error: describeError(error) });
-    }
-  }
-
-  async #addGuest(userId: string): Promise<RemoteMember | string> {
-    const { credentials } = this.store.file;
-    if (!credentials) return HANDOFF_UNAVAILABLE;
-    try {
-      return await this.control.requestGuestAddition(credentials.machineToken, userId);
-    } catch (error) {
-      if (selectRemoteFailureTag(error) === 'GuestsFull')
-        return `This machine already has ${MAX_INSTANCE_GUESTS} people working on its tasks. Ask its owner to remove one.`;
-      log.warn('[Remote] Could not add the guest a task was handed to', { error: describeError(error) });
-      return HANDOFF_UNAVAILABLE;
-    }
-  }
-
-  async #claimHandoff(
-    handoff: StoredHandoff,
-    device: string,
-    name: string | null,
-    userId: string
-  ): Promise<AccessAnswer> {
-    const user = await this.#resolveRequester(userId);
-    if (typeof user === 'string') return { kind: 'refused', reason: user };
-    if (!this.#claimer) return { kind: 'refused', reason: HANDOFF_UNAVAILABLE };
-    const refusal = await this.#claimer(handoff.taskId, user);
-    if (refusal) return { kind: 'refused', reason: refusal };
-    if (!this.#hasAccess(user.id)) {
-      const guest = await this.#addGuest(user.id);
-      if (typeof guest === 'string') return { kind: 'refused', reason: guest };
-      this.#updateGuests((guests) => [...guests.filter((entry) => entry.user.id !== user.id), guest]);
-    }
-    this.store.upsertDevice({
-      publicKey: device,
-      name: name ?? 'Browser',
-      enrolledAt: this.#now(),
-      lastSeenAt: null,
-      userId: user.id,
-      taskId: handoff.taskId,
-    });
-    await this.#retireHandoff(handoff);
-    this.#publish();
-    return { kind: 'admitted' };
-  }
-
-  async removeHandoff(taskId: string, guestId: string | null) {
-    const handoff = this.store.file.handoffs.find((entry) => entry.taskId === taskId);
-    if (handoff) await this.#retireHandoff(handoff);
-    const removed = this.store.file.devices.filter((device) => device.taskId === taskId);
-    for (const device of removed) this.store.removeDevice(device.publicKey);
-    const keys = new Set(removed.map((device) => device.publicKey));
-    this.#closeChannels((channel) => channel.device !== null && keys.has(channel.device));
-    if (guestId) await this.#removeGuest(guestId);
-    this.#publish();
-  }
-
-  async #removeGuest(guestId: string) {
-    const { credentials, devices, guests } = this.store.file;
-    const handedMore = devices.some((device) => device.userId === guestId && device.taskId);
-    if (handedMore || !guests.some((guest) => guest.user.id === guestId)) return;
-    if (credentials) await this.control.requestGuestRemoval(credentials.machineToken, guestId);
-    this.#updateGuests((current) => current.filter((guest) => guest.user.id !== guestId));
-  }
-
-  #selectLogin(userId: string) {
-    const { access, guests } = this.store.file;
-    const users = [access?.owner, ...(access?.members ?? []).map((member) => member.user)];
-    const known = [...users, ...guests.map((guest) => guest.user)].find((user) => user?.id === userId);
-    return known?.login ?? GUEST_FALLBACK_LOGIN;
-  }
-
-  #resolveGuest(device: string): GuestActor | null {
-    const enrolled = this.store.selectDevice(device);
-    if (!enrolled?.taskId) return null;
-    return { taskId: enrolled.taskId, login: this.#selectLogin(enrolled.userId) };
-  }
-
-  async #resolveRequester(userId: string): Promise<RemoteUser | string> {
-    const { access, credentials } = this.store.file;
-    if (!(access && credentials)) return 'This machine is still connecting. Try again in a moment.';
-    if (access.owner.id === userId) return access.owner;
-    try {
-      return await this.control.requestRequester(credentials.machineToken, userId);
-    } catch (error) {
-      log.warn('[Remote] Could not look up who asked for access', { error: describeError(error) });
-      return 'This machine could not check who you are. Try again in a moment.';
-    }
-  }
-
-  async #requestAccess(
-    proof: string,
-    keys: ProofKeys,
-    name: string | null,
-    userId: string
-  ): Promise<AccessAnswer> {
-    const handoff = await this.#matchHandoff(proof, keys);
-    if (handoff) return this.#claimHandoff(handoff, keys.device, name, userId);
-    if (!(await this.#matchesLink(proof, keys))) {
-      if (await this.#admitTeammate(proof, keys, name, userId)) return { kind: 'admitted' };
-      return { kind: 'refused', reason: 'This link was turned off. Ask for a new one.' };
-    }
-    const user = await this.#resolveRequester(userId);
-    if (typeof user === 'string') return { kind: 'refused', reason: user };
-    const earlier = this.store.file.requests.find((entry) => entry.publicKey === keys.device);
-    const request: AccessRequest = {
-      id: earlier?.id ?? randomUUID(),
-      publicKey: keys.device,
-      deviceName: name ?? earlier?.deviceName ?? 'Browser',
-      user,
-      requestedAt: earlier?.requestedAt ?? this.#now(),
-    };
-    this.store.update((file) => ({
-      ...file,
-      requests: earlier
-        ? file.requests.map((entry) => (entry.id === request.id ? request : entry))
-        : [...file.requests, request].slice(-MAX_REQUESTS),
-    }));
-    const answer = this.#awaitDecision(request.id);
-    this.#publish();
-    return answer;
-  }
-
-  async #admitTeammate(proof: string, keys: ProofKeys, name: string | null, userId: string) {
-    const grant = this.store.selectGrant(userId);
-    if (!(grant && this.store.file.access?.members.some((member) => member.user.id === userId))) return false;
-    const team = this.store.selectTeam(grant.teamId);
-    const inTeam = team?.owner.id === userId || team?.members.some((member) => member.user.id === userId);
-    if (
-      !(
-        inTeam &&
-        this.store.selectTeamKey(grant.teamId) &&
-        (await verifyEnrollProof(grant.secret, proof, keys))
-      )
-    )
-      return false;
-    this.store.upsertDevice({
-      publicKey: keys.device,
-      name: name ?? 'Browser',
-      enrolledAt: this.#now(),
-      lastSeenAt: null,
-      userId,
-    });
-    this.#publish();
-    return true;
-  }
-
-  async grantTeammate(userId: string, teamId: string) {
-    const credentials = this.#assertPaired();
-    const access = this.store.file.access;
-    const team = this.store.selectTeam(teamId);
-    if (!(team && this.store.selectTeamKey(teamId)))
-      throw new DomainError({ code: 'team_not_found', message: 'This machine is not in that team.' });
-    const teammate = [team.owner, ...team.members.map((member) => member.user)].find(
-      (user) => user.id === userId
-    );
-    if (!(access && teammate) || access.owner.id === userId)
-      throw new DomainError({
-        code: 'teammate_not_found',
-        message: 'No one else in that team has that GitHub account.',
-      });
-    if (!access.members.some((member) => member.user.id === userId)) {
-      const member = await this.#requestMemberAddition(credentials.machineToken, userId);
-      this.#recordAccess({ ...access, members: [...access.members, member] });
-    }
-    this.store.writeGrant({
-      userId,
-      teamId,
-      secret: serializeBase64Url(new Uint8Array(randomBytes(SECRET_BYTES))),
-    });
-    this.#publish();
-  }
-
-  #resumeAccess(device: string, userId: string): AccessAnswer | null {
-    const request = this.store.file.requests.find(
-      (entry) => entry.publicKey === device && entry.user.id === userId
-    );
-    return request ? this.#awaitDecision(request.id) : null;
-  }
-
-  #awaitDecision(requestId: string): AccessAnswer {
-    const decided = new Promise<boolean>((resolve) => {
-      this.#waiters.set(requestId, [...(this.#waiters.get(requestId) ?? []), resolve]);
-    });
-    return { kind: 'waiting', decided };
-  }
-
-  #findRequest(requestId: string) {
-    const request = this.store.file.requests.find((entry) => entry.id === requestId);
-    if (!request)
-      throw new DomainError({
-        code: 'request_not_found',
-        message: 'That access request was already handled.',
-      });
-    return request;
-  }
-
-  #settleRequest(request: AccessRequest, approved: boolean) {
-    this.store.update((file) => ({
-      ...file,
-      requests: file.requests.filter((entry) => entry.id !== request.id),
-    }));
-    for (const resolve of this.#waiters.get(request.id) ?? []) resolve(approved);
-    this.#waiters.delete(request.id);
-    this.#publish();
-  }
-
-  #settleWaiters(approved: boolean) {
-    for (const resolvers of this.#waiters.values()) for (const resolve of resolvers) resolve(approved);
-    this.#waiters.clear();
-  }
-
-  async acceptRequest(requestId: string) {
-    const credentials = this.#assertPaired();
-    const request = this.#findRequest(requestId);
-    const access = this.store.file.access;
-    const joins =
-      access !== null &&
-      access.owner.id !== request.user.id &&
-      !access.members.some((member) => member.user.id === request.user.id);
-    if (joins) {
-      const member = await this.#requestMemberAddition(credentials.machineToken, request.user.id);
-      this.#recordAccess({ ...access, members: [...access.members, member] });
-    }
-    this.store.upsertDevice({
-      publicKey: request.publicKey,
-      name: request.deviceName,
-      enrolledAt: this.#now(),
-      lastSeenAt: null,
-      userId: request.user.id,
-    });
-    this.#settleRequest(request, true);
-  }
-
-  async #requestMemberAddition(machineToken: string, userId: string) {
-    try {
-      return await this.control.requestMemberAddition(machineToken, userId);
-    } catch (error) {
-      if (selectRemoteFailureTag(error) === 'MembersFull')
-        throw new DomainError({
-          code: 'members_full',
-          message: `This machine has ${MAX_INSTANCE_MEMBERS} members already.`,
-        });
-      throw error;
-    }
+  acceptRequest(requestId: string) {
+    return this.#runtime.runPromise(this.#handle.acceptRequest(requestId));
   }
 
   declineRequest(requestId: string) {
-    this.#settleRequest(this.#findRequest(requestId), false);
+    this.#runtime.runSync(this.#handle.declineRequest(requestId));
   }
 
-  async removeMember(userId: string) {
-    const credentials = this.#assertPaired();
-    const access = this.store.file.access;
-    if (!access?.members.some((member) => member.user.id === userId))
-      throw new DomainError({
-        code: 'member_not_found',
-        message: 'No member with that GitHub account has access to this machine.',
-      });
-    await this.control.requestMemberRemoval(credentials.machineToken, userId);
-    this.#recordAccess({
-      ...access,
-      members: access.members.filter((member) => member.user.id !== userId),
-    });
-  }
-
-  #hasAccess(userId: string) {
-    const { access } = this.store.file;
-    if (!access) return false;
-    return access.owner.id === userId || access.members.some((member) => member.user.id === userId);
-  }
-
-  #recordAccess(access: RemoteAccess, guests: RemoteMember[] = this.store.file.guests) {
-    const before = this.store.file;
-    const changed =
-      JSON.stringify(access) !== JSON.stringify(before.access) ||
-      JSON.stringify(guests) !== JSON.stringify(before.guests);
-    if (changed) this.store.update((file) => ({ ...file, access, guests }));
-    const allowed = new Set([access.owner.id, ...access.members.map((member) => member.user.id)]);
-    const listed = new Set([...allowed, ...guests.map((guest) => guest.user.id)]);
-    const left = before.guests.map((guest) => guest.user.id).filter((id) => !listed.has(id));
-    if (left.length > 0) this.#leaver?.(left);
-    const removed = new Set(this.store.removeDevicesOutside(allowed, listed));
-    this.store.removeGrantsOutside(allowed);
-    this.#closeChannels((channel) => channel.device !== null && removed.has(channel.device));
-    if (changed || removed.size > 0) this.#publish();
-  }
-
-  #admits(device: string, userId: string) {
-    return this.store.selectDevice(device)?.userId === userId;
+  removeMember(userId: string) {
+    return this.#runtime.runPromise(this.#handle.removeMember(userId));
   }
 
   publish() {
-    this.#publish();
+    this.#runtime.runSync(this.#handle.publish);
   }
 
   subscribe(listener: () => void) {
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
-  }
-
-  #publish() {
-    for (const listener of this.#listeners) listener();
+    return this.#runtime.runSync(this.#handle.subscribe(listener));
   }
 
   start() {
-    const { credentials } = this.store.file;
-    if (!(this.isEnabled && credentials)) return;
-    this.#tunnel.start(credentials);
+    this.#runtime.runSync(this.#handle.start);
   }
 
   requestHeartbeat() {
     return this.#tunnel.requestHeartbeat();
   }
 
-  async stop() {
-    this.#pairing?.run.cancel();
-    this.access.end();
-    await this.#tunnel.stop();
-  }
-
-  #forget() {
-    this.store.update((file) => ({
-      ...file,
-      credentials: null,
-      owner: null,
-      enabled: false,
-      access: null,
-      guests: [],
-      handoffs: [],
-      teams: [],
-      teamKeys: [],
-      grants: [],
-    }));
-    this.access.end();
-    this.#publish();
+  stop() {
+    return this.#runtime.runPromise(this.#handle.stop);
   }
 
   verifyConnect(token: string | null, channel: ConnectChannel): Promise<ConnectClaim | null> {
-    const credentials = this.store.file.credentials;
-    if (!(token && credentials && this.isEnabled)) return Promise.resolve(null);
-    const audience = { instanceId: credentials.instanceId, channel };
-    return verifyConnectToken(credentials.connectKey, token, audience, this.#now());
+    return this.#runtime.runPromise(this.#handle.verifyConnect(token, channel));
   }
 
   spendConnect(claim: ConnectClaim) {
-    const now = this.#now();
-    for (const [nonce, expiresAt] of this.#spentConnects)
-      if (expiresAt <= now) this.#spentConnects.delete(nonce);
-    if (claim.expiresAt <= now || this.#spentConnects.has(claim.nonce)) return false;
-    this.#spentConnects.set(claim.nonce, claim.expiresAt);
-    return true;
+    return this.#runtime.runSync(this.#handle.spendConnect(claim));
   }
 
   openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string) {
     const channel = new RemoteChannel(peer, {
-      ...parts,
+      hub: parts.hub,
       respond: (request, guest) => parts.respond(request, guest, userId),
       resolveMachineKey: () => this.store.resolveMachineKey(),
-      isEnrolled: (device) => this.#admits(device, userId),
-      resolveGuest: (device) => this.#resolveGuest(device),
-      requestAccess: (proof, keys, name) => this.#requestAccess(proof, keys, name, userId),
-      resumeAccess: (device) => this.#resumeAccess(device, userId),
-      recordSeen: (device) => this.store.recordDeviceSeen(device, this.#now()),
+      isEnrolled: (device) => this.#runtime.runSync(this.#handle.admits(device, userId)),
+      resolveGuest: (device) => this.#runtime.runSync(this.#handle.resolveGuest(device)),
+      requestAccess: (proof, keys, name) =>
+        this.#runtime.runPromise(this.#handle.requestAccess(proof, keys, name, userId)),
+      resumeAccess: (device) => this.#runtime.runSync(this.#handle.resumeAccess(device, userId)),
+      recordSeen: (device) => this.#runtime.runSync(this.#handle.recordSeen(device)),
       maxBodyBytes: this.#options.maxBodyBytes,
     });
-    const release = this.access.acquire(() => {
-      if (this.#channels.delete(channel)) channel.fail(REMOTE_ACCESS_CHANGED);
-    });
-    this.#channels.set(channel, release);
+    this.#runtime.runSync(this.#handle.trackChannel(channel.handle));
     return channel;
   }
 
   closeChannel(channel: RemoteChannel) {
-    channel.close();
-    this.#releaseChannel(channel);
-  }
-
-  #releaseChannel(channel: RemoteChannel) {
-    const release = this.#channels.get(channel);
-    this.#channels.delete(channel);
-    release?.();
-  }
-
-  #closeChannels(match: (channel: RemoteChannel) => boolean) {
-    for (const channel of [...this.#channels.keys()]) {
-      if (!match(channel)) continue;
-      this.#releaseChannel(channel);
-      channel.fail(REMOTE_ACCESS_CHANGED);
-    }
+    this.#runtime.runSync(this.#handle.closeChannel(channel.handle));
   }
 
   removeDevice(publicKey: string) {
-    const removed = this.store.removeDevice(publicKey);
-    this.#closeChannels((channel) => channel.device === publicKey);
-    this.#publish();
-    return removed;
+    return this.#runtime.runSync(this.#handle.removeDevice(publicKey));
   }
 }

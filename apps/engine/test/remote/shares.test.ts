@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type Bytes,
@@ -45,7 +45,7 @@ import {
 } from '../../src/remote/shares.ts';
 import { EffectFailed } from '../../src/runtime/failures/schema.ts';
 import { EvidenceStore } from '../../src/store/evidence/index.ts';
-import { createGitRepo, createTempDir, until } from '../helpers/index.ts';
+import { createGitRepo, createTempDir, overrideEnv, until } from '../helpers/index.ts';
 import { createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
 
@@ -219,7 +219,7 @@ function setUp(options: SetUp = {}) {
     random: (bytes) => new Uint8Array(bytes).fill(fill++),
     ...(options.now ? { now: options.now } : {}),
   });
-  return { plane, stub, publisher, github, remote, transcripts };
+  return { plane, stub, publisher, github, remote, transcripts, evidenceDir };
 }
 
 function sha256(text: string) {
@@ -698,6 +698,62 @@ describe('what a link shows', () => {
     await expect(readWorktreeFile(worktree, 'keys/id_rsa')).rejects.toThrow('leads outside the working copy');
     writeFileSync(join(worktree, 'a.ts'), 'inside');
     expect(await readWorktreeFile(worktree, 'a.ts')).toBe('inside');
+  });
+
+  test('an evidence file removed after it was listed fails to read', async () => {
+    const { publisher, evidenceDir } = setUp();
+    const shot = (await publisher.resolveLive('task-1')).files.find((file) => file.id === 'shot-1');
+    rmSync(join(evidenceDir, 'settings.png'));
+    await expect(shot?.read() ?? Promise.resolve()).rejects.toBeDefined();
+  });
+
+  test('a path that is missing, or a folder, is refused', async () => {
+    const worktree = createTempDir();
+    mkdirSync(join(worktree, 'src'));
+    await expect(readWorktreeFile(worktree, 'missing.ts')).rejects.toThrow('missing.ts');
+    await expect(readWorktreeFile(worktree, 'src')).rejects.toBeDefined();
+  });
+
+  test('by default the code comes from GitHub through gh, and a pull request gh cannot read leaves it out', async () => {
+    const state = join(createTempDir(), 'gh.json');
+    writeFileSync(
+      state,
+      JSON.stringify({
+        next: 1,
+        defaultChecks: 'pending',
+        pulls: [],
+        calls: [],
+        diffs: { '7': DIFF },
+        contents: { 'src/a.ts@abc123': 'from gh' },
+      })
+    );
+    const restore = overrideEnv({ FAKE_GH_STATE: state });
+    try {
+      const { stub, remote } = setUp({
+        patch: (current) => {
+          current.repos['repo-1'] = createRepo({ path: createTempDir() });
+        },
+      });
+      const shares = new Shares({
+        engine: stub.engine,
+        remote,
+        evidence: new EvidenceStore(createTempDir()),
+        transcripts: createTranscripts(),
+      });
+      const live = await shares.resolveLive('task-1');
+      const code = live.files.find((file) => file.id === SHARE_CODE_FILE);
+      expect(JSON.parse(decodeText((await code?.read()) as Bytes))).toEqual({
+        files: { 'src/a.ts': 'from gh' },
+      });
+      const task = shareTask();
+      stub.state.tasks['task-1'] = {
+        ...task,
+        pullRequest: task.pullRequest && { ...task.pullRequest, number: 8 },
+      };
+      expect(Object.keys((await shares.resolveLive('task-1')).view.files)).toEqual([]);
+    } finally {
+      restore();
+    }
   });
 
   test('the working copy’s code is read from its checkout, against the branch’s base', async () => {

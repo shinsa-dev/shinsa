@@ -374,8 +374,7 @@ src/
 ├── files/               service.ts (JsonFile: read(path, schema), a missing file Option.none and broken text or a
 │                        breaking value the typed JsonFileUnreadable; keepAside, the `<name>.unreadable-<time>` copy;
 │                        write, atomic through `<name>.writing-<pid>` and mode 600), schema.ts, index.ts (the edge:
-│                        writeJsonFile, keepJsonFileAside, readJsonFile: a file's value through its schema and the
-│                        problem when it has one, for modules not moved to Effect), manifest.ts (the
+│                        writeJsonFile, keepJsonFileAside, for modules not moved to Effect), manifest.ts (the
 │                        one reader of a checkout's package.json and deno.json, and the Claude SDK's, through the
 │                        lenient PackageManifest schema: a field that breaks its shape is dropped, the rest kept),
 │                        lenient-list.ts (createLenientList: a list keeping the entries that decode), paths.ts

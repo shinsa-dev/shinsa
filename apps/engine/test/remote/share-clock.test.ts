@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { createState, type ShinsaCommand, type TaskShare } from '@shinsa/core';
+import { createState, DomainError, type ShinsaCommand, type TaskShare } from '@shinsa/core';
 import { ShareClock } from '../../src/remote/share-clock.ts';
 import type { Engine } from '../../src/runtime/engine.ts';
 import { createTask } from '../helpers/state.ts';
 
-function createFakeEngine(shares: Record<string, TaskShare | null>, answer: 'events' | 'nothing') {
+function createFakeEngine(
+  shares: Record<string, TaskShare | null>,
+  answer: 'events' | 'nothing' | 'refused' | 'broken'
+) {
   const state = createState();
   for (const [id, share] of Object.entries(shares)) state.tasks[id] = createTask({ id, share });
   const sent: { command: ShinsaCommand; id: string | undefined }[] = [];
@@ -13,6 +16,9 @@ function createFakeEngine(shares: Record<string, TaskShare | null>, answer: 'eve
     subscribe: () => () => undefined,
     dispatch: (command: ShinsaCommand, options: { id?: string } = {}) => {
       sent.push({ command, id: options.id });
+      if (answer === 'refused')
+        return Promise.reject(new DomainError({ code: 'share_not_found', message: 'Not shared.' }));
+      if (answer === 'broken') return Promise.reject(new Error('log closed'));
       return Promise.resolve(answer === 'events' ? [{ type: 'task.unshared' }] : []);
     },
   };
@@ -58,5 +64,18 @@ describe('the share clock', () => {
       { command: { type: 'share.expire', taskId: 'due' }, id: 'share:due:1000' },
       { command: { type: 'preview.expire', taskId: 'due', serviceId: 'web' }, id: 'preview:due:web:2000' },
     ]);
+  });
+
+  test('an end core refuses is not sent again, and one that breaks is tried again', async () => {
+    const refused = createFakeEngine({ due: SHARE }, 'refused');
+    const clock = new ShareClock(refused.engine, { now: () => 5_000 });
+    await clock.fireDue();
+    await clock.fireDue();
+    expect(refused.sent).toHaveLength(1);
+    const broken = createFakeEngine({ due: SHARE }, 'broken');
+    const retried = new ShareClock(broken.engine, { now: () => 5_000 });
+    await retried.fireDue();
+    await retried.fireDue();
+    expect(broken.sent).toHaveLength(2);
   });
 });

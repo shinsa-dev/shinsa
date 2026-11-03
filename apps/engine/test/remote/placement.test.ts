@@ -54,4 +54,9 @@ describe('choosing a machine by its policies, projects and room', () => {
     const stray = createPlacementAsker(<T>() => Promise.resolve({ machine: 'laptop', reason: 'x' } as T));
     await expect(stray(QUESTION)).rejects.toThrow('Claude named none of your machines.');
   });
+
+  test('a classifier that fails passes its failure on', async () => {
+    const broken = createPlacementAsker(() => Promise.reject(new Error('classifier down')));
+    await expect(broken(QUESTION)).rejects.toThrow('classifier down');
+  });
 });

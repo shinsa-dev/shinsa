@@ -19,7 +19,6 @@ import {
   type TeamTask,
 } from '@shinsa/core';
 import { NotFound } from '@shinsa/core/remote/errors';
-import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
 import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { EgressGate } from '../../src/remote/egress/service.ts';
@@ -35,6 +34,7 @@ import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots.ts';
 import { TEAM_VIEWS_DIR, TeamViews } from '../../src/remote/team-views.ts';
 import { TEAM_REFUSALS, Teams } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
 
@@ -274,6 +274,7 @@ describe('watching teammates’ machines', () => {
     expect(feeds.listTasks({ teamId: 'other' })).toEqual([]);
     expect(changes.length).toBeGreaterThan(1);
     unsubscribe();
+    expect(feeds.subscribeHeld(() => undefined)()).toBe(true);
     const heard = changes.length;
     feeds.sync();
     expect(changes).toHaveLength(heard);
@@ -635,15 +636,16 @@ describe('keeping a teammate’s last list', () => {
   });
 
   test('logs a teammate’s kept lists it cannot read, and keeps the teammate’s own list', async () => {
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const ungated = spyOn(EgressGate, 'serializeView').mockImplementation((view) => JSON.stringify(view));
     const { feeds } = setUp({ held: [null as unknown as TeamSnapshot] });
     feeds.start();
-    await until('the garbled list is logged', () =>
-      warn.mock.calls.some(([message]) => message === '[Teams] Could not check a teammate’s kept snapshots')
+    await until(
+      'the garbled list is logged',
+      () => logs.fieldsOf('[Teams] Could not check a teammate’s kept snapshots').length > 0
     );
     expect(feeds.snapshot().tasks).toHaveLength(2);
-    warn.mockRestore();
+    logs.restore();
     ungated.mockRestore();
     feeds.stop();
   });
@@ -758,6 +760,21 @@ describe('keeping a teammate’s full tasks', () => {
     feeds.stop();
   });
 
+  test('closes the pages it serves from kept views when it stops', async () => {
+    const { feeds, laptop, viewWaits } = setUp({ live: createFullLive() });
+    feeds.start();
+    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    viewWaits.shift()?.();
+    await until('the views are kept', () => readKeptViews(laptop).list().length === 2);
+    laptop.store.recordTeams([createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] })]);
+    laptop.publish();
+    const peer = createPeer();
+    feeds.openRelay(peer, TARGET_TASK);
+    expect(peer.messages.length).toBeGreaterThan(0);
+    feeds.stop();
+    expect(peer.closed).toBe(TEAM_FEED_OFFLINE);
+  });
+
   test('keeps the view of a task opened live, and nothing of a fetch that ran out of time before its view came', async () => {
     const { feeds, laptop, viewWaits } = setUp({ live: createFullLive(() => new Promise(() => undefined)) });
     feeds.start();
@@ -836,6 +853,20 @@ describe('relaying a teammate’s task to the local app', () => {
     sockets[1]?.drop();
     await until('the relay ends', () => peer.closed !== null);
     expect(peer.messages.at(-1)).toEqual({ t: 'closed', reason: TEAM_FEED_OFFLINE });
+    feeds.stop();
+  });
+
+  test('closes the page when remote access ends', async () => {
+    const { feeds, laptop } = setUp();
+    feeds.start();
+    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    const peer = createPeer();
+    const relay = feeds.openRelay(peer, TARGET);
+    await until('the view arrives', () => peer.messages.length === 1);
+    laptop.access.end();
+    expect(peer.closed).toBe(TEAM_FEED_OFFLINE);
+    expect(peer.messages.at(-1)).toEqual({ t: 'closed', reason: TEAM_FEED_OFFLINE });
+    relay.close();
     feeds.stop();
   });
 
@@ -935,6 +966,50 @@ describe('a teammate’s machine that cannot be trusted or read', () => {
     const twice = openScripted(async (_hello, emit) => emit('message', '{"type":"nonsense"}'));
     await until('it ends', () => twice.ends.length === 1);
     expect(twice.ends).toEqual([{ reason: TEAM_FEED_OFFLINE, gone: false }]);
+  });
+
+  test('hands each message of a stream to its handler', async () => {
+    const { feeds } = setUp();
+    const messages: ShareMessage[] = [];
+    const stop = feeds.openStream(TARGET, {
+      onMessage: (message) => messages.push(message),
+      onEnd: () => undefined,
+    });
+    await until('the list arrives', () => messages.length === 1);
+    expect(messages[0]?.t).toBe('view');
+    stop();
+  });
+
+  test('ends offline when the socket cannot be made', async () => {
+    const { laptop } = setUp();
+    const logs = captureLogs();
+    const feeds = new TeamFeeds({
+      remote: laptop,
+      createSocket: () => {
+        throw new Error('no socket');
+      },
+    });
+    const ends: { reason: string; gone: boolean }[] = [];
+    feeds.openStream(TARGET, { onMessage: () => undefined, onEnd: (end) => ends.push(end) });
+    await until('it ends', () => ends.length === 1);
+    logs.restore();
+    expect(ends).toEqual([{ reason: TEAM_FEED_OFFLINE, gone: false }]);
+    expect(logs.fieldsOf('[Teams] Could not reach a teammate’s machine')).toEqual([
+      { teamId: 'team1', instanceId: 'inst1', error: 'no socket' },
+    ]);
+  });
+
+  test('stops a stream before it ends without telling its handlers', async () => {
+    const { plane, laptop } = setUp();
+    const feeds = new TeamFeeds({ remote: laptop });
+    const ends: { reason: string; gone: boolean }[] = [];
+    const stop = feeds.openStream(TARGET, { onMessage: () => undefined, onEnd: (end) => ends.push(end) });
+    stop();
+    await until(
+      'the connect call was not made',
+      () => !plane.calls.some((call) => call.path === CONNECT_PATH)
+    );
+    expect(ends).toEqual([]);
   });
 
   test('is refused once this machine is no longer paired', async () => {

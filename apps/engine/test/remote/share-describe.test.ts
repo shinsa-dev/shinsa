@@ -35,4 +35,9 @@ describe('describing a shared task', () => {
     expect(await createShareDescriber(createAsk({ description: 4 }).ask)(TASK)).toBeNull();
     expect(await createShareDescriber(createAsk({ description: 'x'.repeat(401) }).ask)(TASK)).toBeNull();
   });
+
+  test('a writer that fails passes its failure on', async () => {
+    const describer = createShareDescriber(() => Promise.reject(new Error('writer down')));
+    await expect(describer(TASK)).rejects.toThrow('writer down');
+  });
 });

@@ -1,34 +1,21 @@
-import {
-  DomainError,
-  NO_PLACEMENT_MACHINE,
-  PLACEMENT_SCHEMA,
-  PLACEMENT_SYSTEM,
-  type PlacementAnswer,
-  type PlacementQuestion,
-  parsePlacementAnswer,
-  serializePlacementPrompt,
-} from '@shinsa/core';
+import { Effect } from 'effect';
 import type { QuickJson } from '../agents/quick/index.ts';
+import { describeError } from '../log/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
+import { type PlacementAsker, PlacementAskFailed } from './placement/schema.ts';
+import { makePlacementAsker } from './placement/service.ts';
 
-export type PlacementAsker = (question: PlacementQuestion) => Promise<PlacementAnswer | null>;
-
-function isNoMachineAnswer(value: unknown) {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { machine?: unknown }).machine === NO_PLACEMENT_MACHINE
-  );
-}
+export type { PlacementAsker } from './placement/schema.ts';
 
 export function createPlacementAsker(ask: QuickJson): PlacementAsker {
-  return async (question) => {
-    const said = await ask<unknown>(PLACEMENT_SYSTEM, serializePlacementPrompt(question), PLACEMENT_SCHEMA);
-    if (said === null)
-      throw new DomainError({ code: 'placement_unavailable', message: 'Claude did not answer. Try again.' });
-    if (isNoMachineAnswer(said)) return null;
-    const answer = parsePlacementAnswer(question, said);
-    if (!answer)
-      throw new DomainError({ code: 'placement_unreadable', message: 'Claude named none of your machines.' });
-    return answer;
-  };
+  const place = edgeRuntime.runSync(
+    makePlacementAsker({
+      ask: (system, prompt, schema) =>
+        Effect.tryPromise({
+          try: () => ask<unknown>(system, prompt, schema),
+          catch: (error) => new PlacementAskFailed({ message: describeError(error) }),
+        }),
+    })
+  );
+  return (question) => edgeRuntime.runPromise(place(question));
 }

@@ -18,8 +18,6 @@ import { Pairings } from '../pairing/service.ts';
 import { RELAY_FAILED_CODE, RemoteOrigin } from './schema.ts';
 import { RemoteClient } from './service.ts';
 
-export type { PairedMachine } from '../pairing/schema.ts';
-
 export interface RemoteControlOptions {
   origin?: string;
   fetch?: typeof globalThis.fetch;

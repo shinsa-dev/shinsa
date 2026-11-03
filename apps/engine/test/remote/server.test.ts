@@ -801,7 +801,7 @@ describe('pairing this machine', () => {
   });
 
   test('ends a pairing that expired or was cancelled without pairing, and survives a browser that will not open', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const { remote, local, plane } = await start({
       paired: false,
       openUrl: () => Promise.reject(new Error('no browser')),
@@ -818,8 +818,11 @@ describe('pairing this machine', () => {
     expect(remote.snapshot().pairing).not.toBeNull();
     await local('/api/remote/pair/cancel', {});
     await until('pairing ended', () => remote.snapshot().pairing === null);
-    expect(warn).toHaveBeenCalledWith('[Remote] Could not open the pairing page', expect.anything());
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Remote] Could not open the pairing page')).toEqual([
+      { error: 'no browser' },
+      { error: 'no browser' },
+    ]);
   });
 });
 
@@ -1475,12 +1478,12 @@ describe('handing off a task', () => {
 
   test('turning off a link nobody took retires it at Shinsa Cloud, even when Shinsa Cloud does not answer', async () => {
     const { remote, plane, handoffs, taskId } = await startHandoff();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     plane.answers.set(REMOTE_PATHS.machineHandoffRemove, () => new Response('', { status: 500 }));
     await handoffs.revoke(taskId, null);
+    logs.restore();
     expect(remote.store.file.handoffs).toEqual([]);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    expect(logs.fieldsOf('[Remote] Shinsa Cloud did not turn off a hand-off link')).toHaveLength(1);
   });
 
   test('a guest still handed another task keeps their place at Shinsa Cloud', async () => {
@@ -1545,15 +1548,40 @@ describe('handing off a task', () => {
       ...file,
       handoffs: [{ taskId, secret, invite: 'handoff-token', createdAt: 1 }],
     }));
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const dispatch = spyOn(engine, 'dispatch').mockImplementation(() =>
       Promise.reject(new Error('disk full'))
     );
-    expect(
-      await settleChannel(openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id }))
-    ).toContain('could not hand the task to you');
-    dispatch.mockRestore();
-    warn.mockRestore();
+    try {
+      expect(
+        await settleChannel(
+          openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id })
+        )
+      ).toContain('could not hand the task to you');
+      expect(logs.fieldsOf('[Handoff] Could not record a claim')).toEqual([{ taskId, error: 'disk full' }]);
+    } finally {
+      dispatch.mockRestore();
+      logs.restore();
+    }
+  });
+
+  test('a claim that breaks closes the channel and logs why', async () => {
+    const { remote, engine, port, taskId, machine } = await startHandoff();
+    const secret = readClaim(engine, taskId)?.secret ?? '';
+    remote.handleClaims(() => Promise.reject(new Error('claim broke')));
+    const logs = captureLogs();
+    try {
+      expect(
+        await settleChannel(
+          openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id })
+        )
+      ).toBe('The channel closed.');
+      expect(logs.fieldsOf('[Remote] Closing a remote channel')).toEqual([
+        { reason: 'The channel broke.', error: 'claim broke' },
+      ]);
+    } finally {
+      logs.restore();
+    }
   });
 
   test('a heartbeat keeps the devices of the guests it lists and forgets the rest', async () => {
@@ -1631,19 +1659,21 @@ describe('handing off a task', () => {
     const { remote, engine, plane, taskId } = await startHandoff();
     await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
     remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const dispatch = spyOn(engine, 'dispatch').mockImplementation(() =>
       Promise.reject(new Error('disk full'))
     );
-    plane.answers.set(REMOTE_PATHS.heartbeat, () =>
-      Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
-    );
-    remote.start();
-    await until('logged', () =>
-      warn.mock.calls.some((call) => call[0] === '[Handoff] Could not give a task back')
-    );
-    dispatch.mockRestore();
-    warn.mockRestore();
+    try {
+      plane.answers.set(REMOTE_PATHS.heartbeat, () =>
+        Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
+      );
+      remote.start();
+      await until('logged', () => logs.fieldsOf('[Handoff] Could not give a task back').length > 0);
+      expect(logs.fieldsOf('[Handoff] Could not give a task back')).toEqual([{ taskId, error: 'disk full' }]);
+    } finally {
+      dispatch.mockRestore();
+      logs.restore();
+    }
   });
 });
 

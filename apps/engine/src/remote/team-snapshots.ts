@@ -1,79 +1,37 @@
-import { createHash } from 'node:crypto';
-import { rmSync } from 'node:fs';
-import { readTeamSnapshot, type TeamSnapshot, type TeamTask } from '@shinsa/core';
-import { readJsonFile, writeJsonFile } from '../files/index.ts';
-import { describeError, log } from '../log/index.ts';
-import { TeamSnapshotsFile } from './schema.ts';
+import { Effect } from 'effect';
+import { edgeRuntime } from '../runtime/edge.ts';
+import type { HeldTeamList, TeamSnapshotsHandle } from './team-snapshots/schema.ts';
+import { makeTeamSnapshots } from './team-snapshots/service.ts';
 
-export const TEAM_SNAPSHOTS_FILE = 'team-snapshots.json';
-
-export interface HeldTeamList {
-  teamId: string;
-  instanceId: string;
-  keyDigest: string;
-  tasks: TeamTask[];
-  updatedAt: number;
-  snapshot: TeamSnapshot | null;
-}
-
-export function resolveKeyDigest(key: string) {
-  return createHash('sha256').update(key).digest('hex');
-}
+export { resolveKeyDigest } from './team-snapshots/digest.ts';
+export { type HeldTeamList, TEAM_SNAPSHOTS_FILE } from './team-snapshots/schema.ts';
 
 export function readTeamSnapshotsFile(path: string): HeldTeamList[] {
-  const { value, problem } = readJsonFile(path, TeamSnapshotsFile);
-  if (problem !== null) {
-    log.warn('[Teams] Could not read the kept team snapshots', { path, error: problem });
-    return [];
-  }
-  return (value?.lists ?? []).map(({ tasks, snapshot, ...list }) => ({
-    ...list,
-    tasks: tasks as TeamTask[],
-    snapshot: readTeamSnapshot(snapshot),
-  }));
-}
-
-function resolveListKey(teamId: string, instanceId: string) {
-  return `${teamId} ${instanceId}`;
+  return edgeRuntime.runSync(Effect.flatMap(makeTeamSnapshots({ path }), (held) => held.list));
 }
 
 export class TeamSnapshots {
   readonly path: string;
-  readonly #lists = new Map<string, HeldTeamList>();
+  readonly #handle: TeamSnapshotsHandle;
 
   constructor(path: string) {
     this.path = path;
-    for (const held of readTeamSnapshotsFile(path))
-      this.#lists.set(resolveListKey(held.teamId, held.instanceId), held);
+    this.#handle = edgeRuntime.runSync(makeTeamSnapshots({ path }));
   }
 
   list() {
-    return [...this.#lists.values()];
+    return edgeRuntime.runSync(this.#handle.list);
   }
 
   select(teamId: string, instanceId: string) {
-    return this.#lists.get(resolveListKey(teamId, instanceId)) ?? null;
+    return edgeRuntime.runSync(this.#handle.select(teamId, instanceId));
   }
 
   write(held: HeldTeamList) {
-    this.#lists.set(resolveListKey(held.teamId, held.instanceId), held);
-    this.#save();
+    edgeRuntime.runSync(this.#handle.write(held));
   }
 
   remove(teamId: string, instanceId: string) {
-    if (!this.#lists.delete(resolveListKey(teamId, instanceId))) return;
-    this.#save();
-  }
-
-  #save() {
-    try {
-      if (this.#lists.size === 0) {
-        rmSync(this.path, { force: true });
-        return;
-      }
-      writeJsonFile(this.path, { version: 1, lists: this.list() });
-    } catch (error) {
-      log.warn('[Teams] Could not keep the team snapshots', { path: this.path, error: describeError(error) });
-    }
+    edgeRuntime.runSync(this.#handle.remove(teamId, instanceId));
   }
 }

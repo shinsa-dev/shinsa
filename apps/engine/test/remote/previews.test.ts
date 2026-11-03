@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -23,7 +23,6 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
 import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
@@ -39,6 +38,7 @@ import {
 } from '../../src/remote/previews.ts';
 import { EffectFailed } from '../../src/runtime/failures/schema.ts';
 import { createTempDir, until } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
 
@@ -309,15 +309,18 @@ describe('making a preview link', () => {
       },
     });
     stub.reject((command) => command.type === 'preview.fail', new Error('log closed'));
-    const logged = spyOn(log, 'error').mockImplementation(() => undefined);
+    const logs = captureLogs();
     await remote.disable();
     expect(stub.dispatched).toEqual([]);
     await remote.remove();
-    await until('the lost link is reported', () => logged.mock.calls.length === 1);
+    const lost = () => logs.fieldsOf('[Preview] Could not mark a link as lost');
+    await until('the lost link is reported', () => lost().length === 1);
+    logs.restore();
     expect(stub.dispatched).toEqual([
       { type: 'preview.fail', taskId: 'task-1', serviceId: 'web', detail: PREVIEW_LINK_LOST },
     ]);
-    logged.mockRestore();
+    expect(lost()).toEqual([{ taskId: 'task-1', serviceId: 'web', error: 'log closed' }]);
+    expect(logs.entries.find((entry) => entry.message.startsWith('[Preview]'))?.level).toBe('error');
   });
 });
 
@@ -403,13 +406,15 @@ describe('answering a preview request', () => {
     const closedPort = refused.port as number;
     await refused.stop(true);
     snapshot.terminals[0] = createRun({ port: closedPort });
-    const warned = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const down = readResponse(await ask(previews, '/'));
+    logs.restore();
     expect(down.status).toBe(502);
     expect(down.headers.get(PREVIEW_PAGE_HEADER)).toBe('1');
     expect(await down.text()).toContain(PREVIEW_STOPPED);
-    expect(warned).toHaveBeenCalledTimes(1);
-    warned.mockRestore();
+    expect(logs.fieldsOf('[Preview] Could not reach the service')).toEqual([
+      { target: `http://localhost:${closedPort}/`, error: expect.any(String) },
+    ]);
   });
 });
 
@@ -569,13 +574,19 @@ describe('a private address for every running service', () => {
     expect(setUp({ paired: false }).previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
   });
 
-  test('a connect key that cannot sign makes no address, and says so once', async () => {
-    const warned = spyOn(log, 'warn').mockImplementation(() => undefined);
+  test('a connect key that cannot sign makes no address, says so once, and lets no one in', async () => {
+    const logs = captureLogs();
     const { previews } = setUp({ preview: null, connectKey: '!!' });
     expect(previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
-    await until('the failure is logged', () => warned.mock.calls.length === 1);
-    expect(warned.mock.calls[0]?.[0]).toBe('[Preview] Could not make a private address');
-    warned.mockRestore();
+    await until('the failure is logged', () =>
+      logs.entries.some((entry) => entry.message.startsWith('[Preview]'))
+    );
+    logs.restore();
+    expect(logs.fieldsOf('[Preview] Could not make a private address')).toEqual([
+      { serviceId: 'web', taskId: 'task-1', error: expect.any(String) },
+    ]);
+    const access = await createAccess(PREVIEW_ID, OWNER.id);
+    expect(readResponse(await askPrivately(previews, PREVIEW_ID, '/', { access })).status).toBe(404);
   });
 
   test('the owner and a member get in with their access; anyone else, a forged, stale or missing one do not', async () => {

@@ -1,9 +1,15 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { log } from '../../src/log/index.ts';
-import { RemoteStore, readRemoteFile, readTeams, resolveOwnerProfile } from '../../src/remote/store.ts';
+import {
+  listTeamEntries,
+  RemoteStore,
+  readRemoteFile,
+  readTeams,
+  resolveOwnerProfile,
+} from '../../src/remote/store.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 
 const CREDENTIALS = {
   instanceId: 'k3x9',
@@ -21,12 +27,13 @@ describe('remote.json', () => {
   test('reads as not paired when it is missing, broken or not an object', () => {
     const path = createPath();
     expect(readRemoteFile(path).credentials).toBeNull();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     writeFileSync(path, '{');
     expect(readRemoteFile(path).enabled).toBe(false);
     writeFileSync(path, '[]');
     expect(readRemoteFile(path).devices).toEqual([]);
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Remote] remote.json could not be read; remote access is off')).toHaveLength(1);
   });
 
   test('reads a paired file and drops what it cannot use, a device with no account included', () => {
@@ -124,7 +131,7 @@ describe('remote.json', () => {
 
   test('reads a file missing part of its credentials as not paired, and never enabled', () => {
     const path = createPath();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     writeFileSync(
       path,
       JSON.stringify({
@@ -137,7 +144,9 @@ describe('remote.json', () => {
     expect(file.credentials).toBeNull();
     expect(file.enabled).toBe(false);
     expect(file.machine).toBeNull();
-    expect(warn).toHaveBeenCalled();
+    expect(
+      logs.fieldsOf('[Remote] remote.json is missing part of its credentials; pair this machine again')
+    ).toHaveLength(1);
     writeFileSync(
       path,
       JSON.stringify({
@@ -156,7 +165,7 @@ describe('remote.json', () => {
       owner: { id: '1', login: 'mona', name: null, avatarUrl: null },
       members: [],
     });
-    warn.mockRestore();
+    logs.restore();
   });
 });
 
@@ -221,6 +230,13 @@ describe('the remote store', () => {
     const again = await new RemoteStore(path).resolveMachineKey();
     expect(again.publicKey).toBe(first.publicKey);
     expect(readFileSync(path, 'utf8')).toContain(first.publicKey);
+  });
+
+  test('makes one machine key when two callers ask for it at once', async () => {
+    const store = new RemoteStore(createPath());
+    const [first, second] = await Promise.all([store.resolveMachineKey(), store.resolveMachineKey()]);
+    expect(second.publicKey).toBe(first.publicKey);
+    expect(store.file.machine?.publicKey).toBe(first.publicKey);
   });
 
   test('makes a new machine key when the stored one cannot be read', async () => {
@@ -301,5 +317,46 @@ describe('readTeams', () => {
       ['team-2', 'member', []],
     ]);
     expect(readTeams('none')).toBeNull();
+  });
+});
+
+describe('the team keys', () => {
+  const owner = { id: '1', login: 'mona', name: null, avatarUrl: null };
+  const team = {
+    id: 'team-1',
+    name: 'Platform',
+    owner,
+    role: 'owner' as const,
+    members: [],
+    requests: [],
+    machines: [],
+    createdAt: 1,
+  };
+  const key = 'A'.repeat(43);
+
+  test('keeps a key per team, renames it with its team, and lists asked teams as requested', () => {
+    const store = new RemoteStore(createPath());
+    store.upsertTeamKey({ teamId: 'team-1', name: 'Old', key, invite: 'join', addedAt: 1 });
+    store.upsertTeamKey({ teamId: 'team-2', name: 'Asked', key, invite: null, addedAt: 2 });
+    expect(store.recordTeams([team])).toBe(true);
+    expect(store.recordTeams([team])).toBe(false);
+    expect(store.selectTeam('team-1')?.name).toBe('Platform');
+    expect(store.selectTeam('team-9')).toBeNull();
+    expect(store.selectTeamKey('team-1')?.name).toBe('Platform');
+    expect(new RemoteStore(store.path).file.teamKeys.map((stored) => stored.teamId)).toEqual([
+      'team-1',
+      'team-2',
+    ]);
+    expect(listTeamEntries(store.file).map((entry) => [entry.id, entry.status, entry.invite])).toEqual([
+      ['team-1', 'member', true],
+      ['team-2', 'requested', false],
+    ]);
+    store.removeTeam('team-1');
+    expect(store.selectTeam('team-1')).toBeNull();
+    expect(store.selectTeamKey('team-1')).toBeNull();
+    expect(store.recordTeams([team])).toBe(true);
+    expect(store.recordTeams([])).toBe(true);
+    expect(store.file.teamKeys.map((stored) => stored.teamId)).toEqual(['team-2']);
+    expect(store.update((file) => ({ ...file, owner: 'mona' })).owner).toBe('mona');
   });
 });

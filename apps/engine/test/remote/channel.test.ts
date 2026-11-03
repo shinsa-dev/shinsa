@@ -11,6 +11,7 @@ import {
   serializeBase64Url,
   serializePublicKey,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { HubSocket } from '../../src/http/socket.ts';
 import { type AccessAnswer, type ChannelHost, RemoteChannel } from '../../src/remote/channel.ts';
 import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
@@ -190,7 +191,10 @@ describe('the sealed channel', () => {
     const decided = new Promise<boolean>((resolve) => {
       decide = resolve;
     });
-    return { answer: { kind: 'waiting', decided } satisfies AccessAnswer, decide };
+    return {
+      answer: { kind: 'waiting', decided: Effect.promise(() => decided) } satisfies AccessAnswer,
+      decide,
+    };
   }
 
   test('a new device with a link proof asks for access, waits, and is let in once accepted', async () => {
@@ -419,6 +423,24 @@ describe('the sealed channel', () => {
     await harness.channel.receive(await session.seal({ t: 'abort', id: 's' }));
     const messages = await readFrom(harness, session, 2);
     expect(messages.map((message) => message.t)).toEqual(['response', 'body']);
+  });
+
+  test('answers nothing for a request that failed after the browser aborted it', async () => {
+    const harness = await createHarness(
+      (request) =>
+        new Promise((_resolve, reject) => {
+          request.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        })
+    );
+    const { session } = await connect(harness);
+    await harness.channel.receive(
+      await session.seal({ t: 'request', id: 'q', method: 'GET', path: '/api/slow', headers: [] })
+    );
+    await harness.channel.receive(await session.seal({ t: 'end', id: 'q' }));
+    await until(() => harness.requests.length === 1);
+    await harness.channel.receive(await session.seal({ t: 'abort', id: 'q' }));
+    await Bun.sleep(5);
+    expect(harness.sent).toHaveLength(2);
   });
 
   test('fails a handshake that lost a race with close', async () => {

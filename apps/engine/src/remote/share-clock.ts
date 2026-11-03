@@ -1,42 +1,35 @@
-import type { ShinsaCommand, ShinsaState } from '@shinsa/core';
+import { DomainError, type ShinsaState } from '@shinsa/core';
+import { Effect } from 'effect';
+import { describeError } from '../log/index.ts';
 import { type ClockEntry, StateClock, type StateClockOptions } from '../runtime/clock.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import type { Engine } from '../runtime/engine.ts';
+import { SHARE_CLOCK_DEFAULTS, ShareExpireFailed, type ShareClockTick } from './share-clock/schema.ts';
+import { makeShareClock } from './share-clock/service.ts';
 
 export class ShareClock extends StateClock {
+  readonly #listTicks: (state: ShinsaState) => ShareClockTick[];
+
   constructor(engine: Engine, options: StateClockOptions = {}) {
-    super(
-      engine,
-      { area: 'Share', failure: 'Could not end a share that ran out', minDelayMs: 1_000 },
-      options
+    super(engine, SHARE_CLOCK_DEFAULTS, options);
+    this.#listTicks = edgeRuntime.runSync(
+      makeShareClock({
+        dispatch: (command, id) =>
+          Effect.tryPromise({
+            try: () => engine.dispatch(command, { id }),
+            catch: (error) =>
+              error instanceof DomainError ? error : new ShareExpireFailed({ message: describeError(error) }),
+          }),
+        refuse: (id) => Effect.sync(() => this.refuse(id)),
+      })
     );
   }
 
   protected listEntries(state: ShinsaState): ClockEntry[] {
-    return Object.values(state.tasks).flatMap((task) => {
-      const entries: ClockEntry[] = [];
-      const shareEndsAt = task.share?.endsAt ?? null;
-      if (shareEndsAt !== null)
-        entries.push(
-          this.#createEntry(`share:${task.id}:${shareEndsAt}`, shareEndsAt, {
-            type: 'share.expire',
-            taskId: task.id,
-          })
-        );
-      for (const preview of task.previews ?? []) {
-        if (preview.endsAt === null) continue;
-        const id = `preview:${task.id}:${preview.serviceId}:${preview.endsAt}`;
-        const command = { type: 'preview.expire', taskId: task.id, serviceId: preview.serviceId } as const;
-        entries.push(this.#createEntry(id, preview.endsAt, command));
-      }
-      return entries;
-    });
-  }
-
-  #createEntry(id: string, dueAt: number, command: ShinsaCommand): ClockEntry {
-    const fire = async () => {
-      const events = await this.engine.dispatch(command, { id });
-      if (events.length === 0) this.refuse(id);
-    };
-    return { id, dueAt, fire };
+    return this.#listTicks(state).map((tick) => ({
+      id: tick.id,
+      dueAt: tick.dueAt,
+      fire: () => edgeRuntime.runPromise(tick.fire),
+    }));
   }
 }

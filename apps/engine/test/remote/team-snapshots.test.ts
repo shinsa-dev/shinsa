@@ -1,9 +1,9 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { log } from '../../src/log/index.ts';
 import { readTeamSnapshotsFile, resolveKeyDigest, TeamSnapshots } from '../../src/remote/team-snapshots.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 
 const HELD = {
   teamId: 'team1',
@@ -32,13 +32,15 @@ describe('the kept team snapshots', () => {
 
   test('reads leniently: a missing file, bad JSON and entries out of shape give nothing', () => {
     const dir = createTempDir();
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     expect(readTeamSnapshotsFile(join(dir, 'none.json'))).toEqual([]);
     const broken = join(dir, 'broken.json');
     writeFileSync(broken, '{');
     expect(readTeamSnapshotsFile(broken)).toEqual([]);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Teams] Could not read the kept team snapshots')).toEqual([
+      { path: broken, error: expect.any(String) },
+    ]);
     const odd = join(dir, 'odd.json');
     writeFileSync(
       odd,
@@ -57,10 +59,15 @@ describe('the kept team snapshots', () => {
     const dir = createTempDir();
     const path = join(dir, 'taken');
     mkdirSync(join(path, 'inside'), { recursive: true });
-    const warn = spyOn(log, 'warn');
-    new TeamSnapshots(path).write(HELD);
-    expect(warn).toHaveBeenCalledWith('[Teams] Could not keep the team snapshots', expect.anything());
-    warn.mockRestore();
+    const logs = captureLogs();
+    const store = new TeamSnapshots(path);
+    store.write(HELD);
+    store.remove('team1', 'inst1');
+    logs.restore();
+    expect(logs.fieldsOf('[Teams] Could not keep the team snapshots')).toEqual([
+      { path, error: expect.any(String) },
+      { path, error: expect.any(String) },
+    ]);
   });
 
   test('keeps a digest of the team key, never the key', () => {

@@ -1,10 +1,10 @@
-import { describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { describe, expect, test } from 'bun:test';
+import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ShareMessage } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
 import { TEAM_VIEWS_LIMIT, TeamViewRecorder, TeamViews } from '../../src/remote/team-views.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 
 function view(updatedAt: number, files: Record<string, string> = {}): ShareMessage {
   const listed = Object.fromEntries(
@@ -89,12 +89,19 @@ describe('keeping teammates’ task views on disk', () => {
     const [kept] = readdirSync(dir).filter((name) => name !== 'index.json');
     writeFileSync(join(dir, String(kept)), '5');
     expect(views.select('team1', 'inst1', 'task1')).toBeNull();
+    writeFileSync(join(dir, String(kept)), '{');
+    const logs = captureLogs();
+    expect(views.select('team1', 'inst1', 'task1')).toBeNull();
+    logs.restore();
+    expect(logs.fieldsOf('[Teams] Could not read a kept team task view')).toEqual([
+      { taskId: 'task1', error: expect.any(String) },
+    ]);
   });
 
   test('reads a broken index or view as nothing kept, and logs what it could not write', () => {
     const dir = join(createTempDir(), 'team-views');
     mkdirSync(dir, { recursive: true });
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     writeFileSync(join(dir, 'index.json'), '{');
     expect(new TeamViews(dir).list()).toEqual([]);
     writeFileSync(
@@ -113,12 +120,34 @@ describe('keeping teammates’ task views on disk', () => {
     const taken = join(createTempDir(), 'taken');
     writeFileSync(taken, 'a file where the folder goes');
     new TeamViews(taken).write({ ...ENTRY, messages: [view(5)] });
-    expect(warn).toHaveBeenCalledWith('[Teams] Could not keep a team task view', expect.anything());
+    expect(logs.fieldsOf('[Teams] Could not keep a team task view')).toEqual([
+      { dir: taken, error: expect.any(String) },
+    ]);
     const blocked = join(createTempDir(), 'blocked');
     mkdirSync(join(blocked, 'index.json', 'inside'), { recursive: true });
     new TeamViews(blocked).write({ ...ENTRY, messages: [view(5)] });
-    expect(warn).toHaveBeenCalledWith('[Teams] Could not keep the team task views', expect.anything());
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Teams] Could not keep the team task views')).toEqual([
+      { dir: blocked, error: expect.any(String) },
+    ]);
+    expect(logs.fieldsOf('[Teams] Could not read the kept team task views')).toHaveLength(2);
+    expect(logs.fieldsOf('[Teams] Could not read a kept team task view')).toHaveLength(1);
+  });
+
+  test('logs a folder it could not remove', () => {
+    const parent = createTempDir();
+    const dir = join(parent, 'team-views');
+    const views = new TeamViews(dir);
+    views.write({ ...ENTRY, messages: [view(5)] });
+    chmodSync(parent, 0o555);
+    const logs = captureLogs();
+    views.removeWhere(() => true);
+    logs.restore();
+    chmodSync(parent, 0o755);
+    expect(views.list()).toEqual([]);
+    expect(logs.fieldsOf('[Teams] Could not keep the team task views')).toEqual([
+      { dir, error: expect.any(String) },
+    ]);
   });
 
   test('keeps every view under one size limit, emptying the least recently updated first', () => {
