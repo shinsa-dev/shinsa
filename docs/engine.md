@@ -1246,8 +1246,8 @@ wait into the stack.
   until every task it stacks on is ready or has its merge gate open, or is merged or done
   (`listPendingStackParents`). It then records their branches as its bases (`Task.stackBases`, `task.stack_based`,
   in the order of `stacksOn`, leaving out a parent that merged or left). `resolveRoundBase` returns the first when no
-  round of its own is stacked, and `resolveRoundBases` all of them. Its worktree branches off the first and merges the
-  others in (`Checkout.mergeBranches`; a worktree left from before, of a task stacked while it planned, is reset onto
+  round of its own is stacked, and `resolveRoundBases` all of them. Its branch, in a worktree or in your main checkout,
+  starts from the first and merges the others in (`Checkout.mergeBranches`; a worktree left from before, of a task stacked while it planned, is reset onto
   the first, `refreshWorktree`, and merged the same way). A branch that conflicts there is left out, so the agent
   starts on a clean tree, and the push brings it in (Conflicts, below). Its pull request targets the first base, so
   GitHub shows the stack. Its prompts say where it sits in the bundle, each task it stacks on with its pull request.

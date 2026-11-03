@@ -1,4 +1,10 @@
-import { type ConfigProblem, type Repo, resolveRoundBase, type Task, type WorkspaceMode } from '@shinsa/core';
+import {
+  type ConfigProblem,
+  type Repo,
+  resolveRoundBases,
+  type Task,
+  type WorkspaceMode,
+} from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { Checkout } from '../../git/checkout/service.ts';
 import { decodeRefName } from '../../git/ref-name.ts';
@@ -115,11 +121,13 @@ export class MainCheckoutWorkspace extends Context.Service<
           return { path: repo.path, branch: task.branch } satisfies WorkspaceCheckout;
         }
         const returnBranch = yield* resolveCurrentBranch(repo.path, signal);
-        const base = yield* checkout.resolveStartPoint(repo, resolveRoundBase(task), signal);
+        const [first = null, ...others] = resolveRoundBases(task);
+        const base = yield* checkout.resolveStartPoint(repo, first, signal);
         const branch = yield* checkout.resolveFreeBranch(repo, wanted, signal);
         yield* git.run(['checkout', '--quiet', '--no-track', '-b', branch, base, '--'], repo.path, {
           signal,
         });
+        yield* checkout.mergeBranches(repo.path, branch, others, signal);
         return {
           path: repo.path,
           branch,
