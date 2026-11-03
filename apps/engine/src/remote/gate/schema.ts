@@ -1,6 +1,4 @@
 import {
-  type ChatEntry,
-  type GuestActor,
   PREVIEW_TUNNEL_PREFIX,
   REMOTE_CHANNEL_PATH,
   REMOTE_ENGINE_HOOK_PREFIX,
@@ -72,15 +70,6 @@ export const GUEST_HEALTH_PATH = '/api/health';
 export const OWNER_ONLY_MESSAGE = 'Only this machine’s owner can join a team from it.';
 
 export const CONNECT_REFUSED_MESSAGE = 'The connect token is missing, wrong or expired.';
-
-export interface RunEntryReader {
-  listEntries(runId: string): ChatEntry[];
-}
-
-export interface ChannelPrincipal {
-  readonly userId: string | null;
-  readonly guest: GuestActor | null;
-}
 
 export interface GateRequest {
   readonly method: string;

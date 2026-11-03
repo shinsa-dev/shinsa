@@ -232,13 +232,13 @@ const SharedTask = Schema.Struct({
   code: Data,
 });
 
-export const ShareView = Schema.Struct({
+const ShareView = Schema.Struct({
   shared: SharedTask,
   files: Schema.Record(Schema.String, Schema.Struct({ version: Data, type: Data })),
   updatedAt: Data,
 });
 
-export const TeamTask = Schema.Struct({
+const TeamTask = Schema.Struct({
   task: SharedTaskRecord,
   gates: Schema.Array(SharedGate),
   project: Schema.NullOr(SharedProject),
@@ -250,7 +250,7 @@ export const TeamTask = Schema.Struct({
 
 const TeamSnapshot = Schema.Struct({ body: Data, signature: Data });
 
-export const TeamListView = Schema.Struct({
+const TeamListView = Schema.Struct({
   tasks: Schema.Array(TeamTask),
   machineKey: Data,
   grant: Schema.optionalKey(Data),
