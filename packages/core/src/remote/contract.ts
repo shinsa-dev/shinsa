@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import { isSigningPublicKey } from './keys.ts';
 
 export const REMOTE_APP_ORIGIN = 'https://app.shinsa.dev';
@@ -134,10 +134,20 @@ export const MachineCredentials = Schema.Struct({
 
 export type MachineCredentials = typeof MachineCredentials.Type;
 
+const decodeMachineCredentials = Schema.decodeUnknownOption(Schema.fromJsonString(MachineCredentials));
+
+export function parseMachineCredentials(text: string): MachineCredentials | null {
+  return Option.getOrNull(decodeMachineCredentials(text));
+}
+
 export const PairPollResponse = Schema.Union([
   Schema.Struct({ status: Schema.Literal('pending') }),
   Schema.Struct({ status: Schema.Literal('expired') }),
-  Schema.Struct({ status: Schema.Literal('claimed'), credentials: MachineCredentials, owner: Schema.String }),
+  Schema.Struct({
+    status: Schema.Literal('claimed'),
+    sealedCredentials: Schema.String,
+    owner: Schema.String,
+  }),
 ]);
 
 export type PairPollResponse = typeof PairPollResponse.Type;

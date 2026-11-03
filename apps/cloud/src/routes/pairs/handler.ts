@@ -55,7 +55,8 @@ export const PairsHandlers = HttpApiBuilder.group(
         tunnelHost,
         connectKey: Redacted.value(connectKey),
       };
-      yield* pairings.recordClaim(pairing.claimCode, credentials);
+      const sealed = yield* crypto.sealCredentials(pairing.publicKey, credentials);
+      yield* pairings.recordClaim(pairing.claimCode, sealed);
       return instanceId;
     });
 

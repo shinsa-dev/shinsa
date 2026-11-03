@@ -1,13 +1,13 @@
-import type { PairStartResponse } from '@shinsa/core';
+import { openPairingCredentials, type PairPollResponse, type PairStartResponse } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Option, Schedule } from 'effect';
 import { describeError } from '../../log/redact.ts';
 import { RemoteClient } from '../client/service.ts';
-import { PairPollInterval, type PairingEnd } from './schema.ts';
+import { type MachineKeyPair, PairPollInterval, type PairingEnd } from './schema.ts';
 
 export class Pairings extends Context.Service<
   Pairings,
   {
-    await(start: PairStartResponse): Effect.Effect<PairingEnd>;
+    await(start: PairStartResponse, machine: MachineKeyPair): Effect.Effect<PairingEnd>;
   }
 >()('shinsa/engine/remote/pairing/Pairings') {
   static readonly layer = Layer.effect(
@@ -17,7 +17,20 @@ export class Pairings extends Context.Service<
       const interval = yield* PairPollInterval;
       const pollSchedule = Schedule.spaced(interval);
 
-      const poll = Effect.fn('Pairings.poll')(function* (start: PairStartResponse) {
+      const openClaim = Effect.fn('Pairings.openClaim')(function* (
+        machine: MachineKeyPair,
+        claimed: Extract<PairPollResponse, { status: 'claimed' }>
+      ) {
+        const credentials = yield* Effect.promise(() =>
+          openPairingCredentials(machine, claimed.sealedCredentials)
+        );
+        if (credentials)
+          return { status: 'claimed', machine: { credentials, owner: claimed.owner } } as const;
+        yield* Effect.logError('[Remote] The pairing credentials did not open with this machine key');
+        return { status: 'expired' } as const;
+      });
+
+      const poll = Effect.fn('Pairings.poll')(function* (start: PairStartResponse, machine: MachineKeyPair) {
         const now = yield* Clock.currentTimeMillis;
         if (now >= start.expiresAt) return Option.some<PairingEnd>({ status: 'expired' });
         const answer = yield* client.pairing
@@ -31,21 +44,20 @@ export class Pairings extends Context.Service<
               )
             )
           );
-        return Option.flatMap(answer, (polled): Option.Option<PairingEnd> => {
-          if (polled.status === 'claimed')
-            return Option.some({
-              status: 'claimed',
-              machine: { credentials: polled.credentials, owner: polled.owner },
-            });
-          if (polled.status === 'expired') return Option.some({ status: 'expired' });
-          return Option.none();
-        });
+        if (Option.isNone(answer)) return Option.none<PairingEnd>();
+        const polled = answer.value;
+        if (polled.status === 'claimed') return Option.some<PairingEnd>(yield* openClaim(machine, polled));
+        if (polled.status === 'expired') return Option.some<PairingEnd>({ status: 'expired' });
+        return Option.none<PairingEnd>();
       });
 
       return Pairings.of({
-        await: Effect.fn('Pairings.await')(function* (start) {
+        await: Effect.fn('Pairings.await')(function* (start, machine) {
           yield* Effect.sleep(interval);
-          const end = yield* Effect.repeat(poll(start), { schedule: pollSchedule, until: Option.isSome });
+          const end = yield* Effect.repeat(poll(start, machine), {
+            schedule: pollSchedule,
+            until: Option.isSome,
+          });
           return Option.getOrThrow(end);
         }),
       });

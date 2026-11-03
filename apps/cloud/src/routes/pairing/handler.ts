@@ -65,7 +65,7 @@ export const PairingHandlers = HttpApiBuilder.group(
           const { credentials, owner, expiresAt } = pairing.value;
           if (credentials && owner) {
             yield* pairings.remove(claimCode.value);
-            return { status: 'claimed', credentials, owner } satisfies PairPollResponse;
+            return { status: 'claimed', sealedCredentials: credentials, owner } satisfies PairPollResponse;
           }
           if (expiresAt > (yield* Clock.currentTimeMillis))
             return { status: 'pending' } satisfies PairPollResponse;

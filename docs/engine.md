@@ -2885,8 +2885,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   makes the machine's key if it has none, asks app.shinsa.dev for a claim code with the machine's name (its host name
   without `.local`, an all-capitals one such as `MAC` written `Mac`), its public key and the engine's version, and opens the pairing page in your browser (`open`),
   where you sign in with GitHub and approve. The engine polls every 2 seconds (`PairPollInterval`, a forked fiber cancelled with the pairing) with a poll secret that never leaves it,
-  through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
-  `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
+  through failed polls, until the instance is claimed (the credentials arrive sealed to the machine's own key, which
+  only it opens (`openPairingCredentials`; a seal that does not open ends the pairing as expired and is logged), and
+  with the GitHub login are written to `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
   (`remote_paired`): remove it first.
 - **The invite link and access requests** (`Remote.createLink`, `removeLink`, `acceptRequest`, `declineRequest`):
   a machine has one link, for your own devices and for other people alike, since nobody gets in until you accept

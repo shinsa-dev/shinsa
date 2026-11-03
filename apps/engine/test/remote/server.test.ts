@@ -51,7 +51,7 @@ import {
 } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
-import { refuse, startFakeControlPlane } from './control-plane.ts';
+import { type FakeControlPlane, refuse, sealCredentials, startFakeControlPlane } from './control-plane.ts';
 
 const CONNECT_KEY = serializeBase64Url(new Uint8Array(32).fill(9));
 
@@ -751,6 +751,10 @@ async function readSnapshot(response: Response) {
   return (await response.json()) as RemoteSnapshot;
 }
 
+function startBody(plane: FakeControlPlane) {
+  return plane.calls.find((call) => call.path === REMOTE_PATHS.pairStart)?.body as { publicKey: string };
+}
+
 async function readError(response: Response) {
   return ((await response.json()) as { error: { code: string } }).error.code;
 }
@@ -770,7 +774,10 @@ describe('pairing this machine', () => {
     plane.answers.set(REMOTE_PATHS.pairPoll, () => {
       polls += 1;
       if (polls < 3) return Response.json({ status: 'pending' });
-      return Response.json({ status: 'claimed', credentials: CREDENTIALS, owner: 'mona' });
+      const { publicKey } = startBody(plane);
+      return sealCredentials(publicKey, CREDENTIALS).then((sealedCredentials) =>
+        Response.json({ status: 'claimed', sealedCredentials, owner: 'mona' })
+      );
     });
     const started = await readSnapshot(await local('/api/remote/pair', {}));
     expect(started.pairing).toEqual({

@@ -9,8 +9,10 @@ export const BODILESS_METHODS = new Set(['GET', 'HEAD']);
 
 export const FORWARDED_AWAY = new Set(['cookie']);
 
+const HookSegment = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,128}$/));
+
 export const HookParams = Schema.Struct({
   instanceId: InstanceId,
-  scheduleId: Schema.String,
-  token: Schema.String,
+  scheduleId: HookSegment,
+  token: HookSegment,
 });

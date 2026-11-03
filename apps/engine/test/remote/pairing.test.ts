@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { REMOTE_PATHS } from '@shinsa/core';
+import { REMOTE_KEY_ALGORITHM, REMOTE_PATHS, serializePublicKey } from '@shinsa/core';
 import { RemoteControl } from '../../src/remote/client/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
-import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
+import { type FakeControlPlane, sealCredentials, startFakeControlPlane } from './control-plane.ts';
 
 const START = {
   claimCode: 'K7PQ',
@@ -19,6 +19,12 @@ const CREDENTIALS = {
   connectKey: 'c',
 };
 
+const PAIR = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
+
+const MACHINE = { publicKey: await serializePublicKey(PAIR.publicKey), privateKey: PAIR.privateKey };
+
+const SEALED = await sealCredentials(MACHINE.publicKey, CREDENTIALS);
+
 const planes: FakeControlPlane[] = [];
 
 afterEach(async () => {
@@ -29,7 +35,7 @@ function startPairing(start = START) {
   const plane = startFakeControlPlane();
   planes.push(plane);
   const control = new RemoteControl({ origin: plane.origin, pairPollMs: 1 });
-  return { plane, pairing: control.startPairing(start) };
+  return { plane, pairing: control.startPairing(start, MACHINE) };
 }
 
 function answerPolls(fake: FakeControlPlane, ...bodies: unknown[]) {
@@ -47,7 +53,7 @@ describe('pairing', () => {
     const { plane: fake, pairing } = startPairing();
     answerPolls(fake, { status: 'pending' }, 500, {
       status: 'claimed',
-      credentials: CREDENTIALS,
+      sealedCredentials: SEALED,
       owner: 'mona',
     });
     expect(await pairing.done).toEqual({
@@ -72,11 +78,31 @@ describe('pairing', () => {
     expect(timed.plane.calls).toHaveLength(0);
   });
 
+  test('ends without pairing when the credentials were not sealed to this machine’s key', async () => {
+    const logs = captureLogs();
+    const other = await sealCredentials(
+      await serializePublicKey(
+        ((await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair)
+          .publicKey
+      ),
+      CREDENTIALS
+    );
+    for (const sealedCredentials of [other, 'not-sealed']) {
+      const { plane: fake, pairing } = startPairing();
+      answerPolls(fake, { status: 'claimed', sealedCredentials, owner: 'mona' });
+      expect(await pairing.done).toEqual({ status: 'expired' });
+    }
+    logs.restore();
+    expect(logs.fieldsOf('[Remote] The pairing credentials did not open with this machine key')).toHaveLength(
+      2
+    );
+  });
+
   test('stops when cancelled, even with a poll on its way', async () => {
     const { plane: fake, pairing } = startPairing();
     fake.answers.set(REMOTE_PATHS.pairPoll, () => {
       pairing.cancel();
-      return Response.json({ status: 'claimed', credentials: CREDENTIALS, owner: 'mona' });
+      return Response.json({ status: 'claimed', sealedCredentials: SEALED, owner: 'mona' });
     });
     expect(await pairing.done).toEqual({ status: 'cancelled' });
     pairing.cancel();

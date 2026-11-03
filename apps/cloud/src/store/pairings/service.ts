@@ -1,4 +1,4 @@
-import { ClaimCode, MachineCredentials } from '@shinsa/core';
+import { ClaimCode } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Option, Schema } from 'effect';
 import { SqlClient, SqlSchema } from 'effect/sql';
 import { Count } from '../shared/schema.ts';
@@ -14,7 +14,7 @@ export class Pairings extends Context.Service<
     select(claimCode: ClaimCode): Effect.Effect<Option.Option<Pairing>>;
     reserve(claimCode: ClaimCode, ownerLogin: string): Effect.Effect<boolean>;
     release(claimCode: ClaimCode): Effect.Effect<void>;
-    recordClaim(claimCode: ClaimCode, credentials: MachineCredentials): Effect.Effect<void>;
+    recordClaim(claimCode: ClaimCode, sealedCredentials: string): Effect.Effect<void>;
     remove(claimCode: ClaimCode): Effect.Effect<void>;
   }
 >()('shinsa/cloud/store/Pairings') {
@@ -57,7 +57,7 @@ export class Pairings extends Context.Service<
       const claim = SqlSchema.void({
         Request: Schema.Struct({
           claimCode: ClaimCode,
-          credentials: Schema.fromJsonString(MachineCredentials),
+          credentials: Schema.String,
         }),
         execute: (row) =>
           sql`UPDATE pair_sessions SET credentials = ${row.credentials} WHERE claim_code = ${row.claimCode}`,
@@ -85,7 +85,8 @@ export class Pairings extends Context.Service<
         ),
         release: Effect.fn('Pairings.release')((code: ClaimCode) => release(code), Effect.orDie),
         recordClaim: Effect.fn('Pairings.recordClaim')(
-          (claimCode: ClaimCode, credentials: MachineCredentials) => claim({ claimCode, credentials }),
+          (claimCode: ClaimCode, sealedCredentials: string) =>
+            claim({ claimCode, credentials: sealedCredentials }),
           Effect.orDie
         ),
         remove: Effect.fn('Pairings.remove')((code: ClaimCode) => removal(code), Effect.orDie),

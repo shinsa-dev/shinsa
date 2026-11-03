@@ -36,13 +36,16 @@ src/
 │                    the Worker instead of falling back
 ├── crypto/          CloudCrypto (service.ts): random tokens (Redacted), claim codes and the instance and team ids,
 │                    PKCE challenges, the bot tokens sealed with AES-GCM under SLACK_TOKEN_KEY (imported once),
+│                    a pairing's credentials sealed to the machine's key (sealCredentials: the ephemeral key and IV
+│                    for core's sealPairingCredentials),
 │                    Slack's request signature (none without a signing secret, so an empty key cannot be forged);
 │                    schema.ts: TokenHash (the only shape a table keeps a token in), CryptoFailed, the alphabets
 ├── http/            The edge. ingress/ (Ingress: a preview host goes to PreviewHost before any route; a route that
 │                    is not there is the app's page for a GET, 404 under /__remote/ and 405 otherwise; every failure
 │                    becomes its { error: { code, message } } through core's serializeRemoteFailure, anything
 │                    unexpected the plain server_error, logged; the security headers on all but /hooks/*), gate/
-│                    (RequestGate: application/json, the endpoint's BodyLimit, 16 KB unless it says more, and a body
+│                    (RequestGate: application/json, the endpoint's BodyLimit in bytes, 16 KB unless it says more,
+│                    refused from its Content-Length before it is read, and a body
 │                    or path id its schema refuses as body_invalid or not_found; every failure of 500 or more
 │                    logged); the edge's own modules: cookies.ts (the one cookie format: Path=/, Max-Age,
 │                    HttpOnly, Secure, SameSite=Lax), responses.ts (redirects with their cookies, a failure as JSON,
@@ -97,7 +100,11 @@ src/
 migrations/          D1's schema (wrangler d1 migrations), applied in order
 slack-manifest.json  The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts
                      keeps its scopes, redirects and events in step with the code
-test/                One file per route group, against harness.ts: makeCloudHandler on a SQLite file with every
+test/                gates.test.ts reads every RemoteApi route with HttpApi.reflect and proves each sign-in gate:
+                     the routes open to anyone are a fixed list, every signed-in route refuses no session, a machine
+                     token and a cross-site cookie, every machine route refuses no token and a page session, and a
+                     machine's and a team's routes answer each role (owner, member, guest, teammate, stranger) as
+                     they should. One file per route group, against harness.ts: makeCloudHandler on a SQLite file with every
                      migration in a temporary folder test/preload.ts removes (it also gives every test 30 s, since CI runs every workspace at once; harness.db.sqlite reads the same rows), a clock a test moves
                      (harness.clock.now), the configuration a test may change (harness.world.config, which builds
                      the handler again), waitUntil collected for settle(), and GitHub, the Cloudflare API, Slack and
@@ -125,7 +132,8 @@ test/                One file per route group, against harness.ts: makeCloudHand
   those open only to a browser the machine enrolled, so a stranger signed in sees an empty list and can reach nothing.
   Each sign-in keeps the account's GitHub login, name and avatar (`users`), which is how an owner and a member show
   everywhere (`RemoteUser`: id, login, name, avatar). The return path is parsed against
-  this origin and kept only when it stays on it (a tab, a newline or a backslash cannot turn it into `//elsewhere`).
+  this origin and kept only when it stays on it and its path does not start with `//` once parsed (a tab, a newline, a
+  backslash or a dot segment such as `/.//elsewhere` cannot turn it into `//elsewhere`).
   A failed callback sends you to `/?sign_in_error=<code>`, which the sign-in page says in words.
 - **Native sign-in.** The iPhone app has no cookie jar of its own, so `/__remote/sign-in?client=native` also takes a
   `redirect` (only `shinsa:` or `shinsa-dev:`, 200 characters at most, else 400 `invalid_redirect`) and the app's own
@@ -142,8 +150,11 @@ test/                One file per route group, against harness.ts: makeCloudHand
   and approve (`…/approve`), which first reserves the code in one conditional update so two approvals at once pair
   it only once (a failed approval releases it): the Worker makes the tunnel `shinsa-<instance>`, its ingress to `http://127.0.0.1:7446`
   with a 404 for anything else, its token and the proxied CNAME `t-<instance>.shinsa.dev`, then the instance with
-  the hash of a new machine token and a new connect key. A failed step removes the half-made tunnel. The machine's
-  next poll with the right secret collects the credentials once; the row is then gone. At most 5 machines per account, and at most `MAX_INSTANCES` (50 by default, a
+  the hash of a new machine token and a new connect key. A failed step removes the half-made tunnel. The credentials
+  (machine token, tunnel token, connect key) are sealed to the machine's own public key from `pair/start` before
+  they are stored (`CloudCrypto.sealCredentials`, core's `pairing-seal.ts`), so the waiting row in D1 holds nothing the
+  Worker or a copy of D1 can open. The machine's next poll with the right secret collects them once as
+  `sealedCredentials`, opens them with its private key, and the row is then gone. At most 5 machines per account, and at most `MAX_INSTANCES` (50 by default, a
   variable in `wrangler.jsonc`) on the whole service, each one a tunnel and a DNS record on our Cloudflare account; past
   it an approval is 503 `service_full`.
 - **Machines.** A heartbeat (machine token as bearer) marks the instance online and, when the machine's loopback
@@ -248,7 +259,9 @@ test/                One file per route group, against harness.ts: makeCloudHand
   the machine checks the token, the run and the member list on every request. Any `x-shinsa-preview-key` or
   `x-shinsa-preview-access` a browser sends is dropped before forwarding, and the preview cookies never reach the dev
   server. An expired or forged token is the not-shared page.
-- **Webhooks.** `/hooks/<instance>/<schedule>/<token>` is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
+- **Webhooks.** `/hooks/<instance>/<schedule>/<token>`, the schedule and the token each 1 to 128 characters of
+  `A-Z a-z 0-9 _ -` (anything else, an encoded slash, `?` or dot segment included, is 404 before the tunnel is
+  called, so a hook never reaches another path of the machine), is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with
   `Retry-After: 60`.

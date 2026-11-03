@@ -40,6 +40,7 @@ export {
   MAX_OWNED_TEAMS,
   MAX_TEAM_MEMBERS,
   MachineCredentials,
+  parseMachineCredentials,
   MemberRequest,
   NativeSignInTokenRequest,
   NativeSignInTokenResponse,
@@ -130,6 +131,12 @@ export {
   serializePrivateKey,
   serializePublicKey,
 } from './keys.ts';
+export {
+  openPairingCredentials,
+  PAIRING_SEAL_IV_BYTES,
+  type PairingSealInput,
+  sealPairingCredentials,
+} from './pairing-seal.ts';
 export {
   isLocalOnlyCommand,
   LOCAL_ONLY_CODE,

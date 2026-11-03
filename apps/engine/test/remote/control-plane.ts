@@ -1,4 +1,10 @@
-import { REMOTE_PATHS } from '@shinsa/core';
+import {
+  type MachineCredentials,
+  PAIRING_SEAL_IV_BYTES,
+  REMOTE_KEY_ALGORITHM,
+  REMOTE_PATHS,
+  sealPairingCredentials,
+} from '@shinsa/core';
 
 interface ControlCall {
   path: string;
@@ -11,6 +17,14 @@ export interface FakeControlPlane {
   calls: ControlCall[];
   answers: Map<string, () => Response | Promise<Response>>;
   stop: () => Promise<void>;
+}
+
+export async function sealCredentials(machineKey: string, credentials: MachineCredentials) {
+  const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
+    'deriveBits',
+  ])) as CryptoKeyPair;
+  const iv = crypto.getRandomValues(new Uint8Array(PAIRING_SEAL_IV_BYTES));
+  return sealPairingCredentials({ machineKey, ephemeral, iv }, credentials);
 }
 
 export function refuse(failure: { readonly code: string; readonly status: number }, message = 'Refused.') {

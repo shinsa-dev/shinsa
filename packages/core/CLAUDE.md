@@ -320,7 +320,7 @@ src/
 │                    (keys.ts: P-256 ECDH, fingerprints), the handshake (handshake.ts: the hellos, ee/es/se ECDH and
 │                    HKDF into one AES-GCM key per direction, the enrollment proof), sealed frames (frames.ts: a
 │                    counter nonce, in order, closed after one bad frame), the channel's messages (channel.ts: the app
-│                    socket and HTTP requests and responses in chunks), connect tokens (connect-token.ts: labelled, bound to one channel, a nonce the engine spends once) and what stays
+│                    socket and HTTP requests and responses in chunks), connect tokens (connect-token.ts: labelled, bound to one channel, a nonce the engine spends once), a pairing's credentials sealed to the machine's key (pairing-seal.ts: ECDH with the caller's ephemeral key, HKDF, AES-GCM bound to the machine key) and what stays
 │                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), what the guest a task was
 │                    handed to sees and may send (scope.ts: resolveScopedState, resolveScopedRefusal, SCOPED_COMMANDS;
 │                    decide refuses the rest when its context names a guest), and which machine a new task

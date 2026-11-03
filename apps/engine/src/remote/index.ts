@@ -202,7 +202,7 @@ export class Remote {
     });
     const pairing = {
       view: { claimCode: start.claimCode, url: start.url, expiresAt: start.expiresAt },
-      run: this.control.startPairing(start),
+      run: this.control.startPairing(start, machine),
     };
     this.#pairing = pairing;
     this.#publish();

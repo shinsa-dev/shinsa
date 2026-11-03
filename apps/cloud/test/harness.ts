@@ -6,6 +6,7 @@ import { SqliteClient } from '@effect/sql-sqlite-bun';
 import {
   encodeText,
   type MachineCredentials,
+  openPairingCredentials,
   type PairPollResponse,
   type PairStartResponse,
   REMOTE_APP_ORIGIN,
@@ -367,8 +368,15 @@ export async function pairMachine(
   const claimed = await readJson<PairPollResponse>(
     await harness.post(REMOTE_PATHS.pairPoll, { claimCode: start.claimCode, pollSecret: start.pollSecret })
   );
+  return openClaimed(pair, claimed);
+}
+
+export async function openClaimed(pair: CryptoKeyPair, claimed: PairPollResponse) {
   if (claimed.status !== 'claimed') throw new Error('Pairing was not claimed.');
-  return claimed.credentials;
+  const machine = { publicKey: await serializePublicKey(pair.publicKey), privateKey: pair.privateKey };
+  const credentials = await openPairingCredentials(machine, claimed.sealedCredentials);
+  if (!credentials) throw new Error('The credentials did not open with the machine key.');
+  return credentials;
 }
 
 export function heartbeat(

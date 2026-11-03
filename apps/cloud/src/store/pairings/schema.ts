@@ -1,4 +1,4 @@
-import { ClaimCode, MachineCredentials } from '@shinsa/core';
+import { ClaimCode } from '@shinsa/core';
 import { Schema } from 'effect';
 import { TokenHash } from '../../crypto/schema.ts';
 
@@ -15,7 +15,7 @@ export type NewPairing = typeof NewPairing.Type;
 
 export const Pairing = Schema.Struct({
   ...NewPairing.fields,
-  credentials: Schema.NullOr(Schema.fromJsonString(MachineCredentials)),
+  credentials: Schema.NullOr(Schema.String),
   owner: Schema.NullOr(Schema.String),
 });
 
