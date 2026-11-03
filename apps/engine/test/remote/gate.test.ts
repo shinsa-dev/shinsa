@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type ChatEntry, createState, type GuestActor, type ShinsaState } from '@shinsa/core';
+import { type ChatEntry, createState, type ScopedActor, type ShinsaState } from '@shinsa/core';
 import { GuestRoute, LocalOnlyRoute, OwnerOnlyRoute } from '@shinsa/core/engine-api/schema';
 import { Context, Effect, Layer, Result } from 'effect';
 import type { ServerConfig } from '../../src/config/index.ts';
@@ -135,9 +135,15 @@ function refusalOf<A, E extends { readonly _tag: string }>(result: Result.Result
   return Result.isFailure(result) ? result.failure._tag : null;
 }
 
-const GUEST: GuestActor = { taskId: 't1' } as GuestActor;
+const GUEST: ScopedActor = {
+  id: 'u-kai',
+  login: 'kai',
+  name: null,
+  avatarUrl: null,
+  scope: { kind: 'task', taskId: 't1' },
+};
 
-function channelSource(userId: string | null, guest: GuestActor | null = null): RequestSourceShape {
+function channelSource(userId: string | null, guest: ScopedActor | null = null): RequestSourceShape {
   return { via: 'channel', guest, userId };
 }
 

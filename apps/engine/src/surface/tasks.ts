@@ -24,6 +24,7 @@ import {
   type TaskView,
 } from './resolve.ts';
 import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
+import { findTeamId, findTeamUser, LOGIN_FIELD, TEAM_FIELD } from './teams.ts';
 
 export const TASK_FIELD: FieldSpec = {
   name: 'task',
@@ -515,6 +516,54 @@ export const TASK_SPECS: SurfaceSpec[] = [
       taskId: await findTaskId(client, readValue(values, 'task')),
     }),
     done: () => 'Taken back.',
+  }),
+  defineCommand({
+    path: ['tasks', 'hand-to-teammate'],
+    summary:
+      'Hand a task to someone in a team that sees its project. It is theirs to steer at once, with no link.',
+    command: 'task.hand_to_teammate',
+    humanOnly: true,
+    fields: [TASK_FIELD, { ...TEAM_FIELD, positional: undefined }, LOGIN_FIELD],
+    build: async (values, client) => {
+      const teamId = await findTeamId(client, readValue(values, 'team'));
+      const { id, login, name, avatarUrl } = await findTeamUser(
+        client,
+        teamId,
+        readValue(values, 'login'),
+        'teammates'
+      );
+      return {
+        type: 'task.hand_to_teammate',
+        taskId: await findTaskId(client, readValue(values, 'task')),
+        teamId,
+        teammate: { id, login, name, avatarUrl },
+      };
+    },
+    done: () => 'Handed over. Take it back with `shinsa tasks hand-off-remove`.',
+  }),
+  defineCommand({
+    path: ['tasks', 'take-over'],
+    summary: 'Take over a teammate’s task from the team’s tasks in Shinsa Cloud, so it is yours to steer.',
+    command: 'task.take_over',
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.take_over',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'It is yours to steer now.',
+  }),
+  defineCommand({
+    path: ['tasks', 'give-back'],
+    summary: 'Give a task you took over back to the teammate who owns it.',
+    command: 'task.give_back',
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: async (values, client) => ({
+      type: 'task.give_back',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+    }),
+    done: () => 'Given back.',
   }),
   defineCommand({
     path: ['tasks', 'duplicate'],

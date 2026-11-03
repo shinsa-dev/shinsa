@@ -12,7 +12,7 @@ import {
   type ConnectChannel,
   type ConnectClaim,
   DomainError,
-  type GuestActor,
+  type ScopedActor,
   MACHINE_FEATURES,
   type HandshakeKeys,
   MAX_INSTANCE_GUESTS,
@@ -75,7 +75,7 @@ export interface RemoteOptions {
 interface ChannelParts {
   readonly hub: ChannelHost['hub'];
   readonly terminals: ChannelHost['terminals'];
-  readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Promise<Response>;
+  readonly respond: (request: Request, guest: ScopedActor | null, userId: string) => Promise<Response>;
 }
 
 export type HandoffClaimer = (taskId: string, guest: TaskGuest) => Promise<string | null>;
@@ -443,17 +443,18 @@ export class Remote {
     this.#updateGuests((current) => current.filter((guest) => guest.user.id !== guestId));
   }
 
-  #selectLogin(userId: string) {
+  #selectPerson(userId: string): TaskGuest {
     const { access, guests } = this.store.file;
     const users = [access?.owner, ...(access?.members ?? []).map((member) => member.user)];
     const known = [...users, ...guests.map((guest) => guest.user)].find((user) => user?.id === userId);
-    return known?.login ?? GUEST_FALLBACK_LOGIN;
+    return known ?? { id: userId, login: GUEST_FALLBACK_LOGIN, name: null, avatarUrl: null };
   }
 
-  #resolveGuest(device: string): GuestActor | null {
+  #resolveGuest(device: string): ScopedActor | null {
     const enrolled = this.store.selectDevice(device);
     if (!enrolled?.taskId) return null;
-    return { taskId: enrolled.taskId, login: this.#selectLogin(enrolled.userId) };
+    const { id, login, name, avatarUrl } = this.#selectPerson(enrolled.userId);
+    return { id, login, name, avatarUrl, scope: { kind: 'task', taskId: enrolled.taskId } };
   }
 
   async #resolveRequester(userId: string): Promise<RemoteUser | string> {

@@ -843,7 +843,7 @@ describe('a machine that handed you one task', () => {
     const LEE = { id: 'u1', login: 'lee', name: 'Lee Park', avatarUrl: null };
     const fleet = new Fleet([{ ...handed.member, guest: true, handedBy: LEE }, own.member]);
     const handedTask = createTask({ id: 'task-handed', title: 'Handed over' });
-    handed.connection.engine = resolveScopedEngineInfo('1.2.0');
+    handed.connection.engine = resolveScopedEngineInfo('1.2.0', { kind: 'task', taskId: 'handed' });
     handed.connection.push({
       state: createWire(2, { tasks: { [handedTask.id]: handedTask } }),
       status: 'open',

@@ -1,4 +1,4 @@
-import type { AttentionPlace, GuestActor, RequestOrigin } from '@shinsa/core';
+import type { AttentionPlace, ScopedActor, RequestOrigin } from '@shinsa/core';
 
 export const ATTENTION_IDLE_MS = 5 * 60 * 1000;
 
@@ -8,7 +8,7 @@ export interface AttentionClock {
 }
 
 interface AttentionMember {
-  data: { origin: RequestOrigin; guest: GuestActor | null };
+  data: { origin: RequestOrigin; guest: ScopedActor | null };
 }
 
 const SYSTEM_CLOCK: AttentionClock = {

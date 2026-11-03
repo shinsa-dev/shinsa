@@ -282,7 +282,13 @@ describe('routing a command through the classifier', () => {
   test('a guest’s message is classified and routed at once, never through the inbox, under their login', async () => {
     const { engine, taskId } = await openEngine();
     const classify = using(() => Promise.resolve({ kind: 'feedback', title: null, why: null, shape: 'fix' }));
-    const guest = { taskId, login: 'kai' };
+    const guest = {
+      id: 'u-kai',
+      login: 'kai',
+      name: null,
+      avatarUrl: null,
+      scope: { kind: 'task' as const, taskId },
+    };
     const events = await routeUserCommand(engine, message(taskId, 'Use tabs'), 'guest:1', classify, {
       guest,
     });

@@ -4,6 +4,8 @@ import { createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts
 import { REMOTE_PROTOCOL_VERSION } from '../../src/remote/handshake.ts';
 import { SIGNING_KEY_ALGORITHM, serializePublicKey } from '../../src/remote/keys.ts';
 import {
+  DEFAULT_TEAM_PERMISSIONS,
+  resolveTeamPermissions,
   createTeamHello,
   createTeamWelcome,
   deriveTeamSessionKey,
@@ -191,5 +193,29 @@ describe('a signed team snapshot', () => {
     expect(readTeamSnapshot(null)).toBeNull();
     expect(readTeamSnapshot({ body: 1, signature: 'x' })).toBeNull();
     expect(readTeamSnapshot({ body: '{}', signature: 'x' })).toEqual({ body: '{}', signature: 'x' });
+  });
+});
+
+describe('resolveTeamPermissions', () => {
+  test('lets teammates act, take over, share and open services, but not message agents, by default', () => {
+    expect(resolveTeamPermissions(null)).toEqual(DEFAULT_TEAM_PERMISSIONS);
+    expect(DEFAULT_TEAM_PERMISSIONS).toEqual({
+      act: true,
+      takeOver: true,
+      share: true,
+      services: true,
+      message: false,
+    });
+  });
+
+  test('a team’s choice changes the default, and one person’s choice wins over the team’s', () => {
+    const team = { message: true, share: false };
+    expect(resolveTeamPermissions(team)).toMatchObject({ message: true, share: false, act: true });
+    expect(resolveTeamPermissions(team, { share: true, act: false })).toMatchObject({
+      message: true,
+      share: true,
+      act: false,
+    });
+    expect(resolveTeamPermissions(undefined, { services: false }).services).toBe(false);
   });
 });

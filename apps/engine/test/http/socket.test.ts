@@ -392,7 +392,13 @@ describe('the socket hub', () => {
     const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
     const { settled } = await createSettledTask(engine);
     const guest = createSocket();
-    guest.socket.data.guest = { taskId: settled, login: 'kai' };
+    guest.socket.data.guest = {
+      id: 'u-kai',
+      login: 'kai',
+      name: null,
+      avatarUrl: null,
+      scope: { kind: 'task', taskId: settled },
+    };
     hub.open(guest.socket);
     const connected = guest.sent.find((message) => message.type === 'state');
     expect(connected?.type === 'state' && Object.keys(connected.state.tasks)).toEqual([settled]);

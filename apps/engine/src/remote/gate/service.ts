@@ -156,7 +156,9 @@ export class TunnelGate extends Context.Service<
         const access = Context.get(annotations, GuestRoute);
         const admitsGuest =
           access === 'any' ||
-          (access !== 'none' && source.guest !== null && isGuestRoute(source.guest.taskId, request));
+          (access !== 'none' &&
+            source.guest?.scope.kind === 'task' &&
+            isGuestRoute(source.guest.scope.taskId, request));
         if (source.guest && !admitsGuest) return yield* new ScopeRefused({ message: SCOPE_MESSAGES.task });
         if (Context.get(annotations, LocalOnlyRoute))
           return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });

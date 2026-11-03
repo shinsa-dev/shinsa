@@ -637,6 +637,7 @@ export interface TaskHandoff {
   failure?: string | null;
   guest: TaskGuest | null;
   claimedAt: number | null;
+  teamId?: string | null;
 }
 
 export interface InboxMessage {

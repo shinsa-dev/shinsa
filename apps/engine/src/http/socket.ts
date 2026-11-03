@@ -2,11 +2,12 @@ import {
   type ChatEntry,
   type ParsedClientMessage,
   DEVELOPMENT_VERSION,
-  type GuestActor,
+  type ScopedActor,
   listSummarizedTasks,
   parseClientMessage,
   type RequestOrigin,
   resolveEngineInfo,
+  isTaskInScope,
   resolveScopedEngineInfo,
   resolveScopedPatch,
   resolveScopedState,
@@ -38,7 +39,7 @@ export interface SocketData {
   transcripts: Map<string, () => void>;
   surface: Surface | null;
   origin: RequestOrigin;
-  guest: GuestActor | null;
+  guest: ScopedActor | null;
 }
 
 export interface HubSocket {
@@ -82,7 +83,6 @@ export function createSocketHub(
   const sockets = new Set<Socket>();
   const views = new WeakMap<SocketData, ReadonlySet<string>>();
   const engineInfo = resolveEngineInfo(version);
-  const scopedEngineInfo = resolveScopedEngineInfo(version);
   let desktopConnected = false;
   let unsubscribeResources: (() => void) | null = null;
   const attention = new AttentionTracker<Socket>(
@@ -97,7 +97,7 @@ export function createSocketHub(
 
   function isVisibleRun(socket: Socket, runId: string) {
     const { guest } = socket.data;
-    return !guest || engine.state.runs[runId]?.taskId === guest.taskId;
+    return !guest || isTaskInScope(engine.state, guest.scope, engine.state.runs[runId]?.taskId ?? null);
   }
 
   function selectView(socket: Socket): ReadonlySet<string> {
@@ -107,7 +107,7 @@ export function createSocketHub(
   function sendState(socket: Socket) {
     const { guest } = socket.data;
     if (guest) {
-      send(socket, { type: 'state', state: serializeState(resolveScopedState(engine.state, guest.taskId)) });
+      send(socket, { type: 'state', state: serializeState(resolveScopedState(engine.state, guest.scope)) });
       return;
     }
     const summarized = listSummarizedTasks(engine.state);
@@ -163,7 +163,7 @@ export function createSocketHub(
       if (guest) {
         send(socket, {
           type: 'state.patch',
-          patch: resolveScopedPatch(previous, state, changes, guest.taskId),
+          patch: resolveScopedPatch(previous, state, changes, guest.scope),
         });
         continue;
       }
@@ -256,7 +256,7 @@ export function createSocketHub(
       sockets.add(socket);
       send(socket, { type: 'surfaces', desktop: desktopConnected });
       if (socket.data.guest) {
-        send(socket, { type: 'engine', engine: scopedEngineInfo });
+        send(socket, { type: 'engine', engine: resolveScopedEngineInfo(version, socket.data.guest.scope) });
         sendState(socket);
         return;
       }

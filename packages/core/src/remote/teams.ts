@@ -2,7 +2,14 @@ import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
 import type { TeamTask } from '../share/teams.ts';
 import { encodeText, hasBytes, parseBase64Url, serializeBase64Url, URL_SAFE_SEGMENT } from './bytes.ts';
-import { REMOTE_APP_ORIGIN, REMOTE_CONNECT_PARAM, REMOTE_PATHS, type TeamAction } from './contract.ts';
+import {
+  REMOTE_APP_ORIGIN,
+  REMOTE_CONNECT_PARAM,
+  REMOTE_PATHS,
+  type TeamAction,
+  type TeamPermissions,
+  type TeamPermissionsPatch,
+} from './contract.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parseSigningPublicKey, serializePublicKey } from './keys.ts';
 import { deriveChannelSessionKey, signChannelProof, verifyChannelProof } from './share-channel.ts';
@@ -26,6 +33,25 @@ export const TEAM_CHANNEL_PATH = '/team';
 export const TEAM_TASKS_PATH = '/api/teams/tasks';
 
 export const TEAM_VIEW_PATH = '/api/teams/view';
+
+export const TEAM_PERMISSION_NAMES = ['act', 'takeOver', 'share', 'services', 'message'] as const;
+
+export type TeamPermission = (typeof TEAM_PERMISSION_NAMES)[number];
+
+export const DEFAULT_TEAM_PERMISSIONS: TeamPermissions = {
+  act: true,
+  takeOver: true,
+  share: true,
+  services: true,
+  message: false,
+};
+
+export function resolveTeamPermissions(
+  team: TeamPermissionsPatch | null | undefined,
+  member: TeamPermissionsPatch | null | undefined = null
+): TeamPermissions {
+  return { ...DEFAULT_TEAM_PERMISSIONS, ...team, ...member };
+}
 
 export interface TeamJoinFragment {
   teamId: string;

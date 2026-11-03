@@ -10,7 +10,7 @@ import {
   decodeText,
   deriveServerSession,
   encodeText,
-  type GuestActor,
+  type ScopedActor,
   type HandshakeKeys,
   MAX_TERMINAL_STREAMS,
   parseBase64Url,
@@ -81,7 +81,7 @@ export type AccessAnswer =
 export interface ChannelHost {
   resolveMachineKey: () => Promise<{ publicKey: string; privateKey: CryptoKey }>;
   isEnrolled: (device: string) => boolean;
-  resolveGuest: (device: string) => GuestActor | null;
+  resolveGuest: (device: string) => ScopedActor | null;
   isOwner: () => boolean;
   requestAccess: (
     proof: string,
@@ -92,7 +92,7 @@ export interface ChannelHost {
   recordSeen: (device: string) => void;
   hub: ChannelHub;
   terminals: ChannelTerminals | null;
-  respond: (request: Request, guest: GuestActor | null) => Promise<Response>;
+  respond: (request: Request, guest: ScopedActor | null) => Promise<Response>;
   maxBodyBytes: number;
 }
 
@@ -104,7 +104,7 @@ interface OpenRequest {
   size: number;
   controller: AbortController;
   sent: boolean;
-  guest: GuestActor | null;
+  guest: ScopedActor | null;
 }
 
 type ChannelState =
@@ -112,7 +112,7 @@ type ChannelState =
   | {
       kind: 'open';
       device: string;
-      guest: GuestActor | null;
+      guest: ScopedActor | null;
       seal: (plain: Bytes) => Promise<Bytes>;
       open: (frame: Bytes) => Promise<Bytes>;
       socket: HubSocket | null;
@@ -309,7 +309,7 @@ export class RemoteChannel {
     }
   }
 
-  #openTerminal(id: string, terminalId: string, guest: GuestActor | null) {
+  #openTerminal(id: string, terminalId: string, guest: ScopedActor | null) {
     if (this.#streams.has(id) || id.length > MAX_STREAM_ID_LENGTH) {
       this.fail('A terminal stream was not valid.');
       return;
@@ -380,7 +380,7 @@ export class RemoteChannel {
       this.#host.terminals?.select(stream.terminalId)?.drain(stream.viewer);
   }
 
-  #createSocket(guest: GuestActor | null): HubSocket {
+  #createSocket(guest: ScopedActor | null): HubSocket {
     const host = this.#host;
     return {
       data: {
@@ -396,7 +396,7 @@ export class RemoteChannel {
     };
   }
 
-  #startRequest(message: Extract<ChannelMessage, { t: 'request' }>, guest: GuestActor | null) {
+  #startRequest(message: Extract<ChannelMessage, { t: 'request' }>, guest: ScopedActor | null) {
     if (this.#requests.has(message.id) || !isSafePath(message.path)) {
       this.fail('A request was not valid.');
       return;

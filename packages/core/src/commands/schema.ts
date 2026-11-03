@@ -47,6 +47,17 @@ import { CoverageSetting } from '../test-coverage/schema.ts';
 
 const FEEDBACK_LIMIT = 20_000;
 
+const Teammate = Strict(
+  {
+    id: Id(),
+    login: Id(),
+    name: OrNull(Text(ID_LIMIT), FIELD_MESSAGES.text),
+    avatarUrl: OrNull(Text(), FIELD_MESSAGES.text),
+  },
+  'A teammate',
+  'teammate'
+);
+
 const RepoPatch = Strict(
   {
     name: Schema.optionalKey(Id()),
@@ -231,6 +242,9 @@ export const UserCommand = Schema.Union([
   Command('preview.unshare', { taskId: TaskId, serviceId: ServiceId }),
   Command('task.hand_off', { taskId: TaskId }),
   Command('handoff.remove', { taskId: TaskId }),
+  Command('task.hand_to_teammate', { taskId: TaskId, teamId: IdText, teammate: Teammate }),
+  Command('task.take_over', { taskId: TaskId }),
+  Command('task.give_back', { taskId: TaskId }),
 ]);
 
 export type ParsedUserCommand = typeof UserCommand.Type;

@@ -5,7 +5,7 @@ import type { SurfaceClient } from './client.ts';
 import type { FieldSpec } from './fields.ts';
 import { defineAction, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
-const TEAM_FIELD: FieldSpec = {
+export const TEAM_FIELD: FieldSpec = {
   name: 'team',
   kind: 'text',
   positional: 'one',
@@ -13,7 +13,7 @@ const TEAM_FIELD: FieldSpec = {
   description: 'The team’s name or id, from `shinsa teams list`.',
 };
 
-const LOGIN_FIELD: FieldSpec = {
+export const LOGIN_FIELD: FieldSpec = {
   name: 'login',
   kind: 'text',
   required: true,
@@ -61,7 +61,7 @@ export async function findTeamId(client: SurfaceClient, ref: string) {
 
 type Among = 'members' | 'requests' | 'teammates';
 
-async function findUserId(client: SurfaceClient, teamId: string, login: string, among: Among) {
+export async function findTeamUser(client: SurfaceClient, teamId: string, login: string, among: Among) {
   const snapshot = await client.api.remote.snapshot();
   const team = snapshot.teams.find((entry) => entry.id === teamId)?.team;
   const wanted = login.replace(/^@/, '').toLowerCase();
@@ -74,7 +74,7 @@ async function findUserId(client: SurfaceClient, teamId: string, login: string, 
       message: `${wanted} ${where}. See the team with \`shinsa teams list\`.`,
     });
   }
-  return found.user.id;
+  return found.user;
 }
 
 type TeamRoute = (api: EngineCalls, payload: { teamId: string }) => Promise<unknown>;
@@ -109,7 +109,7 @@ function defineMemberAction(
     fields: [TEAM_FIELD, LOGIN_FIELD],
     act: async (client, values) => {
       const teamId = await findTeamId(client, readValue(values, 'team'));
-      const userId = await findUserId(client, teamId, readValue(values, 'login'), among);
+      const { id: userId } = await findTeamUser(client, teamId, readValue(values, 'login'), among);
       const data = await route(client.api, { teamId, userId });
       return { data, text: done };
     },

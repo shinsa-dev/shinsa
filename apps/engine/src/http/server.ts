@@ -1,4 +1,4 @@
-import { type GuestActor, parseTeamViewTarget, TEAM_VIEW_PATH } from '@shinsa/core';
+import { type ScopedActor, parseTeamViewTarget, TEAM_VIEW_PATH } from '@shinsa/core';
 import { serializeEngineFailure } from '@shinsa/core/engine-api/errors';
 import {
   ENGINE_BODY_LIMIT_BYTES,
@@ -216,7 +216,7 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
     return yield* TunnelGate;
   }).pipe(Effect.provide(TunnelGate.layer.pipe(Layer.provide(HttpServices.layer(context)))));
 
-  function respondInsideChannel(request: Request, guest: GuestActor | null, userId: string) {
+  function respondInsideChannel(request: Request, guest: ScopedActor | null, userId: string) {
     return handle(request, Context.make(RequestSource, { via: 'channel', guest, userId }));
   }
 

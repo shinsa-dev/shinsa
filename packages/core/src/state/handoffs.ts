@@ -12,7 +12,9 @@ type HandoffEvent = Extract<
       | 'handoff.failed'
       | 'handoff.claimed'
       | 'handoff.removed'
-      | 'handoff.left';
+      | 'handoff.left'
+      | 'task.handed_to_teammate'
+      | 'task.taken_over';
   }
 >;
 
@@ -52,6 +54,27 @@ function applyClaimed(state: ShinsaState, event: EventOf<'handoff.claimed'>) {
     actor: 'shinsa',
     kind: 'stage',
     text: `Handed this task to ${resolveFirstName(event.guest)}`,
+    person: resolvePerson(event.guest),
+  });
+}
+
+function applyTeammateHolds(
+  state: ShinsaState,
+  event: EventOf<'task.handed_to_teammate'> | EventOf<'task.taken_over'>
+) {
+  const handoff: TaskHandoff = {
+    at: event.at,
+    url: null,
+    guest: event.guest,
+    claimedAt: event.at,
+    teamId: event.teamId,
+  };
+  updateTask(state, event.taskId, event.at, { handoff });
+  const name = resolveFirstName(event.guest);
+  record(state, event.taskId, event.at, {
+    actor: event.type === 'task.taken_over' ? 'shinsa' : 'you',
+    kind: 'stage',
+    text: event.type === 'task.taken_over' ? `${name} took this task over` : `Handed this task to ${name}`,
     person: resolvePerson(event.guest),
   });
 }
@@ -103,6 +126,10 @@ export function applyHandoffEvent(state: ShinsaState, event: HandoffEvent) {
       return;
     case 'handoff.left':
       applyLeft(state, event);
+      return;
+    case 'task.handed_to_teammate':
+    case 'task.taken_over':
+      applyTeammateHolds(state, event);
       return;
   }
 }

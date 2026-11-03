@@ -20,6 +20,9 @@ type HumanOnlyType =
   | 'preview.unshare'
   | 'task.hand_off'
   | 'handoff.remove'
+  | 'task.hand_to_teammate'
+  | 'task.take_over'
+  | 'task.give_back'
   | 'away.record';
 
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
@@ -38,6 +41,9 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'preview.unshare',
   'task.hand_off',
   'handoff.remove',
+  'task.hand_to_teammate',
+  'task.take_over',
+  'task.give_back',
   'away.record',
 ]);
 

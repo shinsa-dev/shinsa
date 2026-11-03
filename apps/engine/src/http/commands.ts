@@ -1,6 +1,6 @@
 import {
   DomainError,
-  type GuestActor,
+  type ScopedActor,
   OWNER_ONLY_CODE,
   parseUserCommand,
   type RequestOrigin,
@@ -20,7 +20,7 @@ export interface UserCommandSource {
   readonly clientId: string | null;
   readonly classify: Classifier | null;
   readonly origin: RequestOrigin;
-  readonly guest: GuestActor | null;
+  readonly guest: ScopedActor | null;
 }
 
 export function resolveRequestOrigin(
@@ -45,7 +45,7 @@ export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: OWNER_ONLY_CODE, message: refusal }))
     );
-  const outside = source.guest ? resolveScopedRefusal(engine.state, source.guest.taskId, command) : null;
+  const outside = source.guest ? resolveScopedRefusal(engine.state, source.guest, command) : null;
   if (outside)
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: SCOPE_REFUSAL_CODE, message: outside }))

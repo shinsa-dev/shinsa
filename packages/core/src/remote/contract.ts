@@ -229,6 +229,26 @@ export const TEAM_ACTIONS = [
 
 export type TeamAction = (typeof TEAM_ACTIONS)[number];
 
+export const TeamPermissions = Schema.Struct({
+  act: Schema.Boolean,
+  takeOver: Schema.Boolean,
+  share: Schema.Boolean,
+  services: Schema.Boolean,
+  message: Schema.Boolean,
+});
+
+export type TeamPermissions = typeof TeamPermissions.Type;
+
+export const TeamPermissionsPatch = Schema.Struct({
+  act: Schema.optionalKey(Schema.Boolean),
+  takeOver: Schema.optionalKey(Schema.Boolean),
+  share: Schema.optionalKey(Schema.Boolean),
+  services: Schema.optionalKey(Schema.Boolean),
+  message: Schema.optionalKey(Schema.Boolean),
+});
+
+export type TeamPermissionsPatch = typeof TeamPermissionsPatch.Type;
+
 export const TeamMachine = Schema.Struct({
   id: Schema.String,
   name: Schema.String,

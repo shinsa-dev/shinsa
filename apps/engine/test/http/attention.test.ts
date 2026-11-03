@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import type { AttentionPlace, GuestActor, RequestOrigin } from '@shinsa/core';
+import type { AttentionPlace, ScopedActor, RequestOrigin } from '@shinsa/core';
 import { ATTENTION_IDLE_MS, AttentionTracker } from '../../src/http/attention.ts';
 
 interface Page {
   name: string;
-  data: { origin: RequestOrigin; guest: GuestActor | null };
+  data: { origin: RequestOrigin; guest: ScopedActor | null };
 }
 
 function createClock() {
@@ -33,7 +33,7 @@ function createClock() {
   };
 }
 
-function createPage(name: string, origin: RequestOrigin, guest: GuestActor | null = null): Page {
+function createPage(name: string, origin: RequestOrigin, guest: ScopedActor | null = null): Page {
   return { name, data: { origin, guest } };
 }
 
@@ -108,7 +108,13 @@ describe('the attention tracker', () => {
     const { tracker, told } = createTracker();
     const app = createPage('app', 'local');
     const member = createPage('member', 'remote');
-    const guest = createPage('guest', 'remote', { taskId: 't-1' } as GuestActor);
+    const guest = createPage('guest', 'remote', {
+      id: 'u-kai',
+      login: 'kai',
+      name: null,
+      avatarUrl: null,
+      scope: { kind: 'task', taskId: 't-1' },
+    });
     tracker.report(app, true);
     tracker.report(member, true);
     tracker.report(guest, true);

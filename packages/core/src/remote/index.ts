@@ -102,6 +102,8 @@ export {
   TeamJoinResponse,
   TeamJoinStatus,
   TeamMachine,
+  TeamPermissions,
+  TeamPermissionsPatch,
   TeamPreviewResponse,
 } from './contract.ts';
 export {
@@ -223,6 +225,13 @@ export {
   type TaskResources,
 } from './resources.ts';
 export {
+  type ActorScope,
+  isHeldBy,
+  isTaskInScope,
+  listScopedTasks,
+  type ScopedActor,
+  TEAM_COMMANDS,
+  TEAM_SCOPE_MESSAGES,
   resolveScopedEngineInfo,
   resolveScopedPatch,
   resolveScopedRefusal,
@@ -277,6 +286,10 @@ export type {
   TunnelStatus,
 } from './status.ts';
 export {
+  DEFAULT_TEAM_PERMISSIONS,
+  resolveTeamPermissions,
+  TEAM_PERMISSION_NAMES,
+  type TeamPermission,
   createTeamHello,
   createTeamWelcome,
   deriveTeamSessionKey,

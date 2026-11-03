@@ -6,7 +6,7 @@ import {
   type ChannelCompression,
   type ChannelMessage,
   encodeText,
-  type GuestActor,
+  type ScopedActor,
   MAX_TERMINAL_STREAMS,
   parseBodyChunk,
   REMOTE_KEY_ALGORITHM,
@@ -57,7 +57,7 @@ function createFakeTerminal(): FakeTerminal & TerminalSession {
 
 interface Harness {
   terminals: Map<string, FakeTerminal & TerminalSession>;
-  guest: GuestActor | null;
+  guest: ScopedActor | null;
   channel: RemoteChannel;
   sent: (string | Bytes)[];
   dropping: boolean;
@@ -487,7 +487,7 @@ describe('the sealed channel', () => {
 });
 
 describe('terminal streams in the sealed channel', () => {
-  async function connectAs(owner: boolean, guest: GuestActor | null = null) {
+  async function connectAs(owner: boolean, guest: ScopedActor | null = null) {
     const harness = await createHarness();
     harness.owner = owner;
     harness.guest = guest;
@@ -564,7 +564,13 @@ describe('terminal streams in the sealed channel', () => {
       },
     ]);
     expect(member.terminal.attached).toHaveLength(0);
-    const guest = await connectAs(true, { taskId: 'task-1', login: 'kai' });
+    const guest = await connectAs(true, {
+      id: 'u-kai',
+      login: 'kai',
+      name: null,
+      avatarUrl: null,
+      scope: { kind: 'task', taskId: 'task-1' },
+    });
     await guest.send({ t: 'terminal-open', id: 's', terminal: 'term-1' });
     expect((await guest.next(1))[0]).toMatchObject({ code: TERMINAL_STREAM_CLOSE.refused });
     expect(guest.terminal.attached).toHaveLength(0);

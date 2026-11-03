@@ -32,6 +32,7 @@ import { resolveMemoryTold } from '../prompts/memory.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
 import { resolveProjectContext } from '../prompts/project.ts';
 import { listTaskBases, needsRoundBrief, resolveRoundBrief } from '../prompts/root.ts';
+import type { ScopedActor } from '../remote/scope.ts';
 import { listChildRuns, listLiveChildRuns } from '../state/delegations.ts';
 import { createDraft, type StateChanges } from '../state/draft.ts';
 import { applyEvent, type ShinsaState } from '../state/project.ts';
@@ -44,12 +45,7 @@ export interface DecideContext {
   newId: () => string;
   onBehalf?: boolean;
   byTask?: string | null;
-  guest?: GuestActor | null;
-}
-
-export interface GuestActor {
-  taskId: string;
-  login: string;
+  guest?: ScopedActor | null;
 }
 
 export interface Decision {
