@@ -159,6 +159,13 @@ export function resolveRoundBase(task: RoundSource) {
   return task.stackBases?.[0] ?? null;
 }
 
+export function resolveRoundBases(task: RoundSource) {
+  const base = resolveRoundBase(task);
+  if (base === null) return [];
+  const bases = task.stackBases ?? [];
+  return bases[0] === base ? [...bases] : [base];
+}
+
 export function listStackedPullRequests(task: RoundSource) {
   const current = task.pullRequest?.number ?? null;
   const seen = new Set<number>(current === null ? [] : [current]);

@@ -11,6 +11,7 @@ import {
   resolveBundleLead,
   resolveBundleMembers,
   resolveRoundBase,
+  resolveRoundBases,
 } from '../../src/index.ts';
 import {
   approve,
@@ -678,6 +679,7 @@ describe('a bundle that branches and joins', () => {
     expect(harness.task(f).stage).toBe('triage');
     expect(harness.task(f).stackBases).toEqual([`fix/${b}`, `fix/${c}`, `fix/${d}`]);
     expect(resolveRoundBase(harness.task(f))).toBe(`fix/${b}`);
+    expect(resolveRoundBases(harness.task(f))).toEqual([`fix/${b}`, `fix/${c}`, `fix/${d}`]);
   });
 
   test('the bundle is every connected task, parents first, and its earliest root leads it', () => {

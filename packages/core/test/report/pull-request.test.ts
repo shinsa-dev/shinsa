@@ -107,6 +107,30 @@ describe('serializePullRequestMarkdown', () => {
     expect(markdown).not.toContain('<h3>How it works</h3>');
   });
 
+  test('a pull request stacked on several branches says GitHub shows the other parents’ work too', () => {
+    const task = builtTask();
+    const one = serializePullRequestMarkdown({
+      task: { ...task, stackBases: ['fix/b'] },
+      evidence: [],
+      notes: {},
+    });
+    expect(one).not.toContain('stacks on several branches');
+    const two = serializePullRequestMarkdown({
+      task: { ...task, stackBases: ['fix/b', 'fix/c'] },
+      evidence: [],
+      notes: {},
+    });
+    expect(two).toContain(
+      'This pull request stacks on several branches: `fix/b`, `fix/c`. GitHub compares it with `fix/b` only, so until `fix/c` merges, their changes show here too.'
+    );
+    const three = serializePullRequestMarkdown({
+      task: { ...task, stackBases: ['fix/b', 'fix/c', 'fix/d'] },
+      evidence: [],
+      notes: {},
+    });
+    expect(three).toContain('so until `fix/c`, `fix/d` merge, their changes');
+  });
+
   test('marks failing and skipped checks, escapes pipes and gives the changed-line coverage', () => {
     const task: Task = {
       ...builtTask(),

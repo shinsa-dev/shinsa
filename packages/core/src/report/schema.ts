@@ -871,6 +871,7 @@ export const CourierTaskInput = HandOverRecord({
   this_task_waits: Flag,
   after_this: Flag,
   stack_on_this: Flag,
+  stack_on: TextList(DELEGATION_LIMITS.stackOn, DELEGATION_LIMITS.name),
   backlog: Flag,
 });
 

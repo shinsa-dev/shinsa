@@ -42,9 +42,9 @@ function renameProject(name: string, to: string): LogMigration {
 const TWO_MIGRATIONS = [renameProject('rename-b', 'b'), renameProject('rename-c', 'c')];
 
 describe('event log migrations', () => {
-  test('the shipped list is empty, so the log version is the baseline', () => {
-    expect(LOG_MIGRATIONS).toEqual([]);
-    expect(resolveLogVersion()).toBe(LOG_BASELINE);
+  test('the shipped list turns stacks into lists, one version past the baseline', () => {
+    expect(LOG_MIGRATIONS.map((migration) => migration.name)).toEqual(['stack-lists']);
+    expect(resolveLogVersion()).toBe(LOG_BASELINE + 1);
     expect(resolveLogVersion(TWO_MIGRATIONS)).toBe(LOG_BASELINE + 2);
   });
 
@@ -54,7 +54,7 @@ describe('event log migrations', () => {
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 1);
   });
 
   test('a log that already holds events is never stamped on open', () => {
@@ -128,6 +128,41 @@ describe('event log migrations', () => {
     );
     log.close();
     expect(readVersion(path)).toBe(LOG_BASELINE);
+  });
+
+  test('stack-lists turns one task stacked on and one base into lists, and leaves lists as they are', () => {
+    const path = createLogPath();
+    writeLog(path, LOG_BASELINE);
+    const db = new Database(path);
+    const rows = [
+      { type: 'task.stack_changed', taskId: 't1', stacksOn: 'p1', by: 'you' },
+      { type: 'task.stack_changed', taskId: 't1', stacksOn: null },
+      { type: 'task.stack_changed', taskId: 't2', stacksOn: ['p1', 'p2'] },
+      { type: 'task.stack_based', taskId: 't1', base: 'fix/p1' },
+      { type: 'task.stack_based', taskId: 't1', base: null },
+      { type: 'task.stack_based', taskId: 't2', bases: ['fix/p1', 'fix/p2'] },
+    ];
+    for (const [index, row] of rows.entries()) {
+      db.run('INSERT INTO events (seq, at, type, payload) VALUES (?, ?, ?, ?)', [
+        index + 2,
+        1,
+        row.type,
+        JSON.stringify(row),
+      ]);
+    }
+    db.close();
+    const log = new EventLog(path);
+    expect(log.migrate()).toEqual(['stack-lists']);
+    expect(log.readEvents().events.slice(1)).toEqual([
+      { type: 'task.stack_changed', taskId: 't1', stacksOn: ['p1'], by: 'you', seq: 2, at: 1 },
+      { type: 'task.stack_changed', taskId: 't1', stacksOn: [], seq: 3, at: 1 },
+      { type: 'task.stack_changed', taskId: 't2', stacksOn: ['p1', 'p2'], seq: 4, at: 1 },
+      { type: 'task.stack_based', taskId: 't1', bases: ['fix/p1'], seq: 5, at: 1 },
+      { type: 'task.stack_based', taskId: 't1', bases: [], seq: 6, at: 1 },
+      { type: 'task.stack_based', taskId: 't2', bases: ['fix/p1', 'fix/p2'], seq: 7, at: 1 },
+    ]);
+    log.close();
+    expect(readVersion(path)).toBe(LOG_BASELINE + 1);
   });
 
   test('a log a newer Shinsa wrote opens as it is', () => {

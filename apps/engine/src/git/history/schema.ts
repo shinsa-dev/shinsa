@@ -43,3 +43,14 @@ export const DIFF_TIMEOUT = Duration.seconds(30);
 export const NAMED_LIMITS = { fileBytes: CODE_LIMITS.blobBytes, totalBytes: 2 * CODE_LIMITS.blobBytes };
 
 export const SCRATCH_PREFIX = 'shinsa-diff-';
+
+export const COMBINED_BASE_ENV = {
+  GIT_AUTHOR_NAME: 'Shinsa',
+  GIT_AUTHOR_EMAIL: 'shinsa@localhost',
+  GIT_AUTHOR_DATE: '@0 +0000',
+  GIT_COMMITTER_NAME: 'Shinsa',
+  GIT_COMMITTER_EMAIL: 'shinsa@localhost',
+  GIT_COMMITTER_DATE: '@0 +0000',
+};
+
+export const COMBINED_BASE_MESSAGE = 'Shinsa: the branches this task stacks on, merged';
