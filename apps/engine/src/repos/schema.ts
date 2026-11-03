@@ -1,3 +1,4 @@
+import type { Repo } from '@shinsa/core';
 import { Duration, Schema } from 'effect';
 
 export const LocalRepo = Schema.Struct({
@@ -43,6 +44,17 @@ export class RepoNotRegistered extends Schema.TaggedError<
   RepoNotRegistered,
   { readonly brand: unique symbol }
 >()('RepoNotRegistered', { path: Schema.String, message: Schema.String }) {}
+
+export class RepoNotCreated extends Schema.TaggedError<RepoNotCreated, { readonly brand: unique symbol }>()(
+  'RepoNotCreated',
+  { path: Schema.String, message: Schema.String }
+) {}
+
+export type SetupTarget = Pick<Repo, 'path' | 'defaultBranch'>;
+
+export const REPOSITORY_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export const FALLBACK_DEFAULT_BRANCH = 'main';
 
 export const PRIVATE_HOME_DIRS = new Set(['Desktop', 'Documents', 'Downloads']);
 

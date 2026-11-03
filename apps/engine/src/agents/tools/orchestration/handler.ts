@@ -1,4 +1,5 @@
 import {
+  type CourierRequest,
   type DelegatedRun,
   type DelegateRole,
   isDelegatedRun,
@@ -6,6 +7,7 @@ import {
   listLiveChildRuns,
   type Run,
   resolveDelegationStatus,
+  resolveTaskProject,
   type ShinsaState,
   serializeReference,
   type Task,
@@ -157,16 +159,67 @@ async function answerDelegation(input: Record<string, unknown>, call: Orchestrat
   return 'Answered. The agent carries on, and its result arrives here when it finishes.';
 }
 
-async function resolveRepoId(call: OrchestrationCall, task: Task, name: string | null) {
-  if (!name) return null;
+function findProjectId(state: ShinsaState, reference: string) {
+  const lower = reference.trim().toLowerCase();
+  const projects = Object.values(state.projects);
+  const project = projects.find(
+    (candidate) =>
+      candidate.id === reference ||
+      candidate.key.toLowerCase() === lower ||
+      candidate.name.toLowerCase() === lower
+  );
+  if (project) return project.id;
+  const known = projects.map((candidate) => `${candidate.name} (${candidate.key})`);
+  throw new Error(`There is no project "${reference}". Known: ${known.join(', ') || 'none'}.`);
+}
+
+function selectKnownRepo(state: ShinsaState, name: string, projectId: string | null, named: boolean) {
+  return (
+    Object.values(state.repos).find(
+      (candidate) => candidate.name === name && (!named || candidate.projectId === projectId)
+    ) ?? null
+  );
+}
+
+async function createNewRepo(call: OrchestrationCall, projectId: string | null, name: string) {
+  if (!projectId) {
+    throw new Error(
+      'This task belongs to no project, so there is no folder to create the repository in. Name one with project.'
+    );
+  }
+  return await call.createRepo(projectId, name);
+}
+
+async function resolveRepo(
+  call: OrchestrationCall,
+  request: CourierRequest,
+  name: string,
+  projectId: string | null
+) {
+  const found =
+    selectKnownRepo(call.state(), name, projectId, request.project !== null) ??
+    (await call.registerRepo(projectId, name));
+  if (found || !request.newRepository) return found;
+  return await createNewRepo(call, projectId, name);
+}
+
+async function resolveRepoId(
+  call: OrchestrationCall,
+  task: Task,
+  request: CourierRequest,
+  projectId: string | null
+) {
+  const name = request.repository;
+  if (!name) {
+    if (request.newRepository) throw new Error('Set repository to the name of the repository to create.');
+    return null;
+  }
   const state = call.state();
-  const repo =
-    Object.values(state.repos).find((candidate) => candidate.name === name) ??
-    (await call.registerRepo(task, name));
+  const repo = await resolveRepo(call, request, name, projectId);
   if (!repo) {
     const known = Object.values(state.repos).map((candidate) => candidate.name);
     throw new Error(
-      `There is no repository "${name}" in Shinsa or in the project's folders. Known: ${known.join(', ') || 'none'}.`
+      `There is no repository "${name}" in Shinsa or in the project's folders. Known: ${known.join(', ') || 'none'}. Set new_repository to create it.`
     );
   }
   return repo.id === task.repoId ? null : repo.id;
@@ -193,7 +246,10 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
   const request = assertProtocol(validateCourierTask(input));
   const source = findTaskOf(call, findParent(call));
   const requestKey = request.requestKey ?? call.requestKey;
-  const repoId = await resolveRepoId(call, source, request.repository);
+  const projectId = request.project
+    ? findProjectId(call.state(), request.project)
+    : resolveTaskProject(call.state(), source);
+  const repoId = await resolveRepoId(call, source, request, projectId);
   await call.dispatch(
     {
       type: 'agent.create_task',
@@ -202,6 +258,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       requestKey,
       request: request.request,
       repoId,
+      ...(request.project && projectId ? { projectId } : {}),
       ...resolveForkOf(call.state(), request.forkFrom),
       thisWaits: request.thisTaskWaits,
       afterThis: request.afterThis,

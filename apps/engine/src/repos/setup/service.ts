@@ -1,14 +1,23 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import type { ConfigProblem, Repo, RepoStart } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { decodeRefName } from '../../git/ref-name.ts';
 import { Git } from '../../git/service.ts';
-import { FIRST_COMMIT_MESSAGE, SETUP_FETCH_TIMEOUT, SETUP_PUSH_TIMEOUT, type SetupScope } from '../schema.ts';
+import {
+  FALLBACK_DEFAULT_BRANCH,
+  FIRST_COMMIT_MESSAGE,
+  RepoNotCreated,
+  SETUP_FETCH_TIMEOUT,
+  SETUP_PUSH_TIMEOUT,
+  type SetupScope,
+  type SetupTarget,
+} from '../schema.ts';
 
 export class RepoSetup extends Context.Service<
   RepoSetup,
   {
-    prepare(repo: Repo, signal?: AbortSignal): Effect.Effect<RepoStart | null>;
+    prepare(target: SetupTarget, signal?: AbortSignal): Effect.Effect<RepoStart | null>;
+    create(path: string): Effect.Effect<RepoStart, RepoNotCreated>;
     verify(repo: Repo, scope: SetupScope, signal?: AbortSignal): Effect.Effect<ConfigProblem[]>;
   }
 >()('shinsa/engine/repos/setup/RepoSetup') {
@@ -127,20 +136,48 @@ export class RepoSetup extends Context.Service<
         return { branch, initialized, pushed: push.ok } satisfies RepoStart;
       });
 
-      const prepare = Effect.fn('RepoSetup.prepare')(function* (repo: Repo, signal?: AbortSignal) {
-        const decoded = yield* Effect.result(decodeRefName(repo.defaultBranch));
+      const prepare = Effect.fn('RepoSetup.prepare')(function* (target: SetupTarget, signal?: AbortSignal) {
+        const decoded = yield* Effect.result(decodeRefName(target.defaultBranch));
         if (decoded._tag === 'Failure') return null;
         const branch = decoded.success;
-        if (yield* isEmptyFolder(repo.path)) {
-          const init = yield* git.attempt(['init', '--quiet', `--initial-branch=${branch}`], repo.path);
+        if (yield* isEmptyFolder(target.path)) {
+          const init = yield* git.attempt(['init', '--quiet', `--initial-branch=${branch}`], target.path);
           if (!init.ok) return null;
-          return yield* startRepo(repo.path, branch, true, signal);
+          return yield* startRepo(target.path, branch, true, signal);
         }
-        if (!(yield* isGitRepo(repo.path)) || (yield* hasCommits(repo.path))) return null;
-        return yield* startRepo(repo.path, branch, false, signal);
+        if (!(yield* isGitRepo(target.path)) || (yield* hasCommits(target.path))) return null;
+        return yield* startRepo(target.path, branch, false, signal);
       });
 
-      return RepoSetup.of({ prepare, verify });
+      const makeFolder = (path: string) =>
+        Effect.try({
+          try: () => {
+            if (existsSync(path) && readdirSync(path).length > 0) {
+              throw new Error(`${path} already exists and is not empty.`);
+            }
+            mkdirSync(path, { recursive: true });
+          },
+          catch: (error) =>
+            new RepoNotCreated({ path, message: error instanceof Error ? error.message : String(error) }),
+        });
+
+      const resolveInitialBranch = Effect.fn('RepoSetup.resolveInitialBranch')(function* (path: string) {
+        const configured = yield* git.attempt(['config', '--get', 'init.defaultBranch'], path);
+        return configured.ok && configured.stdout ? configured.stdout : FALLBACK_DEFAULT_BRANCH;
+      });
+
+      const create = Effect.fn('RepoSetup.create')(function* (path: string) {
+        yield* makeFolder(path);
+        const defaultBranch = yield* resolveInitialBranch(path);
+        const started = yield* prepare({ path, defaultBranch });
+        if (started) return started;
+        return yield* new RepoNotCreated({
+          path,
+          message: `Made the folder ${path}, but git could not start a repository with a first commit on “${defaultBranch}” there.`,
+        });
+      });
+
+      return RepoSetup.of({ prepare, create, verify });
     })
   );
 }

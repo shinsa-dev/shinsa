@@ -662,8 +662,19 @@ them in the order they need:
   repository's name or, failing that, the folder name of a git repository directly inside one of the task's project
   folders (`upsertProjectFolderRepo` in `repos/index.ts`, through `OrchestrationCall.registerRepo`): it is registered
   into that project the way triage registers one (`upsertRepo`), and the new task works there. A name found in
-  neither is refused with the repositories Shinsa knows. The guide sits in the brief, the user turn, so the session's cached prefix
+  neither is refused with the repositories Shinsa knows, unless the call sets `new_repository`. The guide sits in the brief, the user turn, so the session's cached prefix
   does not change (Caching).
+- **A new repository is created when asked.** `create_task` with `new_repository` and a `repository` name nothing
+  matches creates `<folder>/<name>` (`createProjectRepository` in `repos/index.ts`, through
+  `OrchestrationCall.createRepo`): the folder is the project's first folder or, with none, the folder that holds the
+  project's first repository; with neither the call is refused and points at `projects_add_folder`. `RepoSetup.create`
+  makes the folder (refused when it already holds files, or when the name is more than letters, digits, `.`, `-` and
+  `_`), starts it on git's `init.defaultBranch` (`main` when unset) with the empty first commit setup makes (Setup
+  verification), and registers it into the project. A name that already matches is used as it is, so a repeated call
+  creates nothing. The repository has no remote, so its task cannot open a pull request until you add one.
+- **Another project.** `create_task`'s `project` (a key, name or id) files the task in that project (`projectId` on
+  `agent.create_task`): `repository` is then looked up among that project's repositories and folders, and without one
+  the new task leaves its repository to triage in that project instead of taking this task's.
 - **The order is a wait.** `this_task_waits` makes this task wait on the new one (this task needs the other part
   merged first); only a building or fixing run may set it, since a planning task that starts waiting stops planning
   (`cannot_wait`, whose message points a planner at its first phase or at `after_this`). `after_this` makes the new

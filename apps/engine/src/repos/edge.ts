@@ -2,7 +2,7 @@ import type { Repo } from '@shinsa/core';
 import { edgeRuntime } from '../runtime/edge.ts';
 import { RepoFolders } from './folders/service.ts';
 import { GitHubLogins } from './login/service.ts';
-import type { DiscoveryOptions, LoginResolver, SetupScope } from './schema.ts';
+import type { DiscoveryOptions, LoginResolver, SetupScope, SetupTarget } from './schema.ts';
 import { RepoSetup } from './setup/service.ts';
 
 export function discoverRoots(home: string, options: DiscoveryOptions = {}) {
@@ -25,8 +25,12 @@ export function readOriginRemote(repo: string) {
   return edgeRuntime.runSync(RepoFolders.use((folders) => folders.readOrigin(repo)));
 }
 
-export function prepareSetup(repo: Repo, signal?: AbortSignal) {
-  return edgeRuntime.runPromise(RepoSetup.use((setup) => setup.prepare(repo, signal)));
+export function prepareSetup(target: SetupTarget, signal?: AbortSignal) {
+  return edgeRuntime.runPromise(RepoSetup.use((setup) => setup.prepare(target, signal)));
+}
+
+export function createRepoFolder(path: string) {
+  return edgeRuntime.runPromise(RepoSetup.use((setup) => setup.create(path)));
 }
 
 export function verifySetup(repo: Repo, scope: SetupScope, signal?: AbortSignal) {

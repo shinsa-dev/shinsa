@@ -23,6 +23,7 @@ export type DelegationAgentCommand =
       requestKey: string;
       request: string;
       repoId: string | null;
+      projectId?: string;
       thisWaits: boolean;
       afterThis?: boolean;
       stackOnThis?: boolean;

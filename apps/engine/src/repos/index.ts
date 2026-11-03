@@ -1,8 +1,15 @@
-import { type Repo, resolveTaskProject, type Task } from '@shinsa/core';
+import { dirname, join } from 'node:path';
+import type { Repo, ShinsaState } from '@shinsa/core';
 import { inspectRepo, resolveRepoRemote } from '../git/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
-import { listLocalRepos } from './edge.ts';
-import { type LocalRepo, type LoginResolver, RepoNotRegistered } from './schema.ts';
+import { createRepoFolder, listLocalRepos } from './edge.ts';
+import {
+  type LocalRepo,
+  type LoginResolver,
+  REPOSITORY_NAME,
+  RepoNotCreated,
+  RepoNotRegistered,
+} from './schema.ts';
 
 function titleCase(text: string) {
   return text
@@ -73,13 +80,42 @@ export async function upsertRepo(
   return registered;
 }
 
-export async function upsertProjectFolderRepo(engine: Engine, task: Task, name: string) {
-  const projectId = resolveTaskProject(engine.state, task);
+export async function upsertProjectFolderRepo(engine: Engine, projectId: string | null, name: string) {
   const project = projectId ? engine.state.projects[projectId] : undefined;
   if (!project) return null;
   const local = listLocalRepos(project.folders).find((repo) => repo.name === name);
   if (!local) return null;
   return await upsertRepo(engine, local.path, null, project.id);
+}
+
+export function resolveNewRepoParent(state: Pick<ShinsaState, 'projects' | 'repos'>, projectId: string) {
+  const folder = state.projects[projectId]?.folders[0];
+  if (folder) return folder;
+  const sibling = Object.values(state.repos).find((repo) => repo.projectId === projectId);
+  return sibling ? dirname(sibling.path) : null;
+}
+
+export async function createRepository(engine: Engine, parent: string, name: string, projectId: string) {
+  const path = join(parent, name);
+  if (!REPOSITORY_NAME.test(name) || name.endsWith('.git')) {
+    throw new RepoNotCreated({
+      path,
+      message: `"${name}" is not a folder name Shinsa will create: use letters, digits, dots, dashes and underscores, starting with a letter or digit.`,
+    });
+  }
+  await createRepoFolder(path);
+  return await upsertRepo(engine, path, null, projectId);
+}
+
+export async function createProjectRepository(engine: Engine, projectId: string, name: string) {
+  const parent = resolveNewRepoParent(engine.state, projectId);
+  if (!parent) {
+    throw new RepoNotCreated({
+      path: name,
+      message: `The project has no folder to create "${name}" in. Add one with \`projects_add_folder\`, then try again.`,
+    });
+  }
+  return await createRepository(engine, parent, name, projectId);
 }
 
 export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {
@@ -90,6 +126,7 @@ export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {
 export {
   createDiscoverer,
   createLoginResolver,
+  createRepoFolder,
   discoverRoots,
   listCandidateRepos,
   listLocalRepos,
