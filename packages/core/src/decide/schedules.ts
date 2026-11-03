@@ -17,8 +17,7 @@ import {
   type Task,
 } from '../domain/index.ts';
 import { isTimeZone, parseTimeOfDay, resolveFirstRun, resolveNextRun } from '../schedules/time.ts';
-import { findRepo } from '../state/queries.ts';
-import { listActiveRuns } from '../state/queries.ts';
+import { findRepo, listActiveRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
 import {

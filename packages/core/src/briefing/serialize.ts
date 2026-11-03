@@ -1,5 +1,4 @@
-import { quoteTitle } from '../chat/text.ts';
-import { describeList, lowerFirst } from '../chat/text.ts';
+import { describeList, lowerFirst, quoteTitle } from '../chat/text.ts';
 import type { Gate } from '../domain/index.ts';
 import type { Queue } from '../queue/types.ts';
 import type { ShinsaState } from '../state/project.ts';

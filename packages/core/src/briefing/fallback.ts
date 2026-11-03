@@ -1,5 +1,4 @@
-import { quoteTitle } from '../chat/text.ts';
-import { describeCount, describeList } from '../chat/text.ts';
+import { describeCount, describeList, quoteTitle } from '../chat/text.ts';
 import { DAY_MS, isPausingGate, type TaskStage } from '../domain/index.ts';
 import { resolveGateWords } from '../queue/reasons.ts';
 import type { Queue, QueuedGate } from '../queue/types.ts';

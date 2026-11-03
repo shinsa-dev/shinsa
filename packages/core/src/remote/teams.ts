@@ -1,4 +1,4 @@
-import { parseJsonRecord } from '../domain/records.ts';
+import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
 import type { TeamTask } from '../share/teams.ts';
 import { encodeText, hasBytes, parseBase64Url, serializeBase64Url, URL_SAFE_SEGMENT } from './bytes.ts';
@@ -170,11 +170,10 @@ function serializeTeamView(view: TeamView) {
 }
 
 function readTeamView(value: unknown): TeamView | null {
-  if (value === null || typeof value !== 'object') return null;
-  const fields = value as Record<string, unknown>;
-  if (fields.kind === 'list') return { kind: 'list' };
-  if (fields.kind === 'task' && typeof fields.taskId === 'string' && URL_SAFE_SEGMENT.test(fields.taskId))
-    return { kind: 'task', taskId: fields.taskId };
+  if (!isRecord(value)) return null;
+  if (value.kind === 'list') return { kind: 'list' };
+  if (value.kind === 'task' && typeof value.taskId === 'string' && URL_SAFE_SEGMENT.test(value.taskId))
+    return { kind: 'task', taskId: value.taskId };
   return null;
 }
 
@@ -260,8 +259,8 @@ export function isTeamSnapshotExpired(updatedAt: number, now: number) {
 }
 
 export function readTeamSnapshot(value: unknown): TeamSnapshot | null {
-  if (value === null || typeof value !== 'object') return null;
-  const { body, signature } = value as Record<string, unknown>;
+  if (!isRecord(value)) return null;
+  const { body, signature } = value;
   return typeof body === 'string' && typeof signature === 'string' ? { body, signature } : null;
 }
 

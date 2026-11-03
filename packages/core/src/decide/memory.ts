@@ -7,8 +7,7 @@ import {
   resolveMemoryText,
 } from '../domain/index.ts';
 import { listMemory } from '../state/memory.ts';
-import { findProject } from '../state/queries.ts';
-import { resolveTaskProject } from '../state/queries.ts';
+import { findProject, resolveTaskProject } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { findCurrentRun } from './runs.ts';
 
