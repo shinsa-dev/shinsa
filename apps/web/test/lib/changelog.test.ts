@@ -108,6 +108,22 @@ describe('useWhatsNew', () => {
     expect(requests.map((request) => request.path)).toEqual(['/api/changelog', '/api/changelog']);
   });
 
+  it('reads a refused changelog once on its own and again only when you open it', async () => {
+    localStorage.setItem(CHANGELOG_SEEN_KEY, '1.1.0');
+    spyOnEngine(resolveEngineInfo('1.3.0'));
+    const requests = answerFetch(() =>
+      Response.json({ error: { code: 'busy', message: 'The engine is busy.' } }, { status: 503 })
+    );
+    const { result, rerender } = renderHook(() => useWhatsNew());
+    await waitFor(() => expect(selectChangelogView().failure).not.toBeNull());
+    for (let tick = 0; tick < 5; tick += 1) await act(async () => rerender());
+    expect(result.current.releases).toEqual([]);
+    expect(requests).toHaveLength(1);
+
+    act(() => openChangelog('1.1.0'));
+    await waitFor(() => expect(requests).toHaveLength(2));
+  });
+
   it('reads nothing while the version you saw is the one running', async () => {
     localStorage.setItem(CHANGELOG_SEEN_KEY, '1.3.0');
     spyOnEngine(resolveEngineInfo('1.3.0'));

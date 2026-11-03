@@ -52,8 +52,14 @@ const read = createSharedRun(
   Effect.gen(function* () {
     const engine = yield* EngineClient;
     const readFor = selectEngineVersion();
-    publish({ changelog: yield* engine.changelog.list(), readFor, failure: null });
-  }).pipe(Effect.catch((error) => Effect.sync(() => publish({ failure: describeFailure(error) }))))
+    const answer = yield* engine.changelog.list().pipe(
+      Effect.match({
+        onFailure: (error) => ({ failure: describeFailure(error) }),
+        onSuccess: (changelog) => ({ changelog, failure: null }),
+      })
+    );
+    publish({ ...answer, readFor });
+  })
 );
 
 function selectEngineVersion() {
@@ -151,8 +157,8 @@ export function useWhatsNew() {
   React.useEffect(() => {
     if (!known) return;
     if (seen === null) recordSeenVersion(version);
-    else if (isChangelogStale(version) && resolveVersionOrder(version, seen) === 1) void read.run();
-  }, [known, version, seen, shown]);
+    else if (view.readFor !== version && resolveVersionOrder(version, seen) === 1) void read.run();
+  }, [known, version, seen]);
   if (!known) return { releases: [], seen };
   return { releases: resolveWhatsNew(shown.changelog, version, seen), seen };
 }
