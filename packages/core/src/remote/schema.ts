@@ -89,3 +89,11 @@ export const PlacementReply = Schema.Struct({
   machine: Schema.String,
   reason: Salvaged(Schema.String, () => ''),
 });
+
+export const CONNECT_CHANNELS = ['remote', 'team'] as const;
+
+export const ConnectChannel = Schema.Literals(CONNECT_CHANNELS);
+
+export type ConnectChannel = typeof ConnectChannel.Type;
+
+export const CONNECT_NONCE_PATTERN = /^[A-Za-z0-9_-]{22,64}$/;

@@ -1,5 +1,6 @@
 import {
   type ChatEntry,
+  type ConnectChannel,
   LOCAL_ONLY_MESSAGE,
   REMOTE_CONNECT_PARAM,
   SCOPE_MESSAGES,
@@ -173,10 +174,20 @@ export class TunnelGate extends Context.Service<
         return Effect.fail(new RequestForbidden({ message: `The remote channel only opens from ${host}.` }));
       };
 
-      const findConnectUser = Effect.fn('TunnelGate.findConnectUser')(function* (url: URL) {
+      const isSocketUpgrade = (request: Request) =>
+        request.headers.get('upgrade')?.toLowerCase() === 'websocket';
+
+      const findConnectUser = Effect.fn('TunnelGate.findConnectUser')(function* (
+        request: Request,
+        url: URL,
+        channel: ConnectChannel
+      ) {
         const token = url.searchParams.get(REMOTE_CONNECT_PARAM);
-        const claim = remote ? yield* Effect.promise(() => remote.verifyConnect(token)) : null;
-        if (!claim) return yield* new ConnectRefused({ message: CONNECT_REFUSED_MESSAGE });
+        const claim = remote ? yield* Effect.promise(() => remote.verifyConnect(token, channel)) : null;
+        if (!(remote && claim)) return yield* new ConnectRefused({ message: CONNECT_REFUSED_MESSAGE });
+        if (!isSocketUpgrade(request)) return yield* notFound();
+        if (!remote.spendConnect(claim))
+          return yield* new ConnectRefused({ message: CONNECT_REFUSED_MESSAGE });
         return claim.userId;
       });
 
@@ -197,16 +208,16 @@ export class TunnelGate extends Context.Service<
           if (!shares) return yield* notFound();
           yield* assertAppOrigin(request);
           const shareId = url.searchParams.get(SHARE_CHANNEL_PARAM) ?? '';
-          if (!shares.acceptsShare(shareId)) return yield* notFound();
+          if (!(shares.acceptsShare(shareId) && isSocketUpgrade(request))) return yield* notFound();
           return { route: 'share', shareId };
         }
         if (route === 'team') {
           if (!teams?.acceptsViewer()) return yield* notFound();
           yield* assertAppOrigin(request);
-          return { route: 'team', userId: yield* findConnectUser(url) };
+          return { route: 'team', userId: yield* findConnectUser(request, url, 'team') };
         }
         yield* assertAppOrigin(request);
-        return { route: 'channel', userId: yield* findConnectUser(url) };
+        return { route: 'channel', userId: yield* findConnectUser(request, url, 'remote') };
       });
 
       return TunnelGate.of({ isTunnel, resolveRoute, admitRequest, admitEndpoint, admitUpgrade });

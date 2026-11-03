@@ -19,6 +19,7 @@ export {
 } from './channel.ts';
 export {
   CONNECT_TOKEN_TTL_MS,
+  type ConnectAudience,
   type ConnectClaim,
   createConnectToken,
   verifyConnectToken,
@@ -303,6 +304,8 @@ export {
   verifyTeamWelcome,
 } from './teams.ts';
 export {
+  CONNECT_CHANNELS,
+  ConnectChannel,
   PLACEMENT_LIMITS,
   PLACEMENT_POLICY_LIMITS,
   type PlacementCandidate,

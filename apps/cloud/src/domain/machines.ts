@@ -1,4 +1,5 @@
 import {
+  type ConnectChannel,
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,
   createConnectToken,
@@ -12,12 +13,13 @@ import {
 } from '@shinsa/core';
 import { NotFound } from '@shinsa/core/remote/errors';
 import { Clock, Duration, Effect, Option, Redacted } from 'effect';
+import { CloudCrypto } from '../crypto/service.ts';
 import { Cloudflare } from '../integrations/cloudflare/service.ts';
 import { MachineAccess } from '../store/access/service.ts';
 import { Accounts } from '../store/accounts/service.ts';
 import type { Machine, SharedMachine } from '../store/machines/schema.ts';
 import { Machines } from '../store/machines/service.ts';
-import { type ChannelKind, ONLINE_WINDOW } from './schema.ts';
+import { CONNECT_NONCE_BYTES, ONLINE_WINDOW } from './schema.ts';
 
 export function isMachineOnline(machine: Machine, now: number) {
   return (
@@ -47,11 +49,19 @@ export function serializeInstance({ machine, owner, role }: SharedMachine, now: 
 export const createConnectAnswer = Effect.fn('createConnectAnswer')(function* (
   machine: Machine,
   userId: string,
-  channel: ChannelKind = 'remote'
+  channel: ConnectChannel = 'remote'
 ) {
+  const crypto = yield* CloudCrypto;
   const expiresAt = (yield* Clock.currentTimeMillis) + CONNECT_TOKEN_TTL_MS;
+  const nonce = Redacted.value(yield* crypto.createToken(CONNECT_NONCE_BYTES));
   const token = yield* Effect.promise(() =>
-    createConnectToken(Redacted.value(machine.connectKey), { instanceId: machine.id, userId, expiresAt })
+    createConnectToken(Redacted.value(machine.connectKey), {
+      instanceId: machine.id,
+      userId,
+      channel,
+      nonce,
+      expiresAt,
+    })
   );
   const tunnel = resolveTunnelUrl(machine);
   const url =

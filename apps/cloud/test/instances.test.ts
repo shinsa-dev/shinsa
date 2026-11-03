@@ -110,8 +110,21 @@ describe('instances', () => {
       `wss://t-${studio.instanceId}.shinsa.dev/remote`
     );
     const token = url.searchParams.get('token') ?? '';
-    const claim = await verifyConnectToken(studio.connectKey, token, studio.instanceId, harness.clock.now);
-    expect(claim).toEqual({ instanceId: studio.instanceId, userId: '7', expiresAt: answer.expiresAt });
+    const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
+    const claim = await verifyConnectToken(studio.connectKey, token, remote, harness.clock.now);
+    expect(claim).toEqual({
+      instanceId: studio.instanceId,
+      userId: '7',
+      channel: 'remote',
+      nonce: expect.stringMatching(/^[A-Za-z0-9_-]{22,}$/),
+      expiresAt: answer.expiresAt,
+    });
+    const again = await readJson<ConnectResponse>(
+      await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session })
+    );
+    const next = new URL(again.url).searchParams.get('token') ?? '';
+    const nextClaim = await verifyConnectToken(studio.connectKey, next, remote, harness.clock.now);
+    expect(nextClaim?.nonce).not.toBe(claim?.nonce);
   });
 
   test('never mints a token for someone else’s machine or from another site', async () => {

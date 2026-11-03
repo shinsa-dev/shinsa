@@ -205,8 +205,13 @@ async function start(
   return { remote, engine, base, tunnel, local, port: http.server.port, plane, connectors, opened };
 }
 
-async function createToken(expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS, userId = OWNER.id) {
-  return createConnectToken(CONNECT_KEY, { instanceId: 'k3x9', userId, expiresAt });
+async function createToken(
+  expiresAt = Date.now() + CONNECT_TOKEN_TTL_MS,
+  userId = OWNER.id,
+  channel: 'remote' | 'team' = 'remote'
+) {
+  const nonce = serializeBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+  return createConnectToken(CONNECT_KEY, { instanceId: 'k3x9', userId, channel, nonce, expiresAt });
 }
 
 interface OpenChannel {
@@ -351,7 +356,36 @@ describe('the tunnel entry point', () => {
     expect((await tunnel('/remote', { headers: origin })).status).toBe(401);
     const expired = encodeURIComponent(await createToken(Date.now() - 1));
     expect((await tunnel(`/remote?token=${expired}`, { headers: origin })).status).toBe(401);
-    expect((await tunnel(`/remote?token=${good}`, { headers: origin })).status).toBe(400);
+    expect((await tunnel(`/remote?token=${good}`, { headers: origin })).status).toBe(404);
+  });
+
+  test('a connect token opens only the channel it was made for, and only once', async () => {
+    const { tunnel, port, remote } = await start();
+    const asSocket = { origin: remote.appOrigin, upgrade: 'websocket' };
+    const team = encodeURIComponent(await createToken(undefined, OWNER.id, 'team'));
+    expect((await tunnel(`/remote?token=${team}`, { headers: asSocket })).status).toBe(401);
+    const token = encodeURIComponent(await createToken());
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/remote?token=${token}`, {
+      headers: { origin: remote.appOrigin, 'cf-connecting-ip': '203.0.113.9' },
+    } as unknown as string[]);
+    await new Promise((resolve) => socket.addEventListener('open', resolve, { once: true }));
+    expect((await tunnel(`/remote?token=${token}`, { headers: asSocket })).status).toBe(401);
+    const ended = new Promise((resolve) => socket.addEventListener('close', resolve, { once: true }));
+    socket.close();
+    await ended;
+  });
+
+  test('spends a connect token’s nonce until it expires, and never one already expired', async () => {
+    const { remote } = await start();
+    const claim = { instanceId: 'k3x9', userId: OWNER.id, channel: 'remote' as const, nonce: 'n'.repeat(22) };
+    expect(remote.spendConnect({ ...claim, expiresAt: Date.now() - 1 })).toBe(false);
+    const soon = { ...claim, nonce: 's'.repeat(22), expiresAt: Date.now() + 5 };
+    expect(remote.spendConnect(soon)).toBe(true);
+    expect(remote.spendConnect(soon)).toBe(false);
+    await Bun.sleep(10);
+    const later = { ...claim, expiresAt: Date.now() + CONNECT_TOKEN_TTL_MS };
+    expect(remote.spendConnect(later)).toBe(true);
+    expect(remote.spendConnect(later)).toBe(false);
   });
 
   test('opens a share link only from app.shinsa.dev and only for a task that is shared, and the machine closes it', async () => {
@@ -379,7 +413,7 @@ describe('the tunnel entry point', () => {
     expect((await tunnel('/share?id=s1')).status).toBe(403);
     expect((await tunnel('/share?id=nope', { headers: { origin: plane.origin } })).status).toBe(404);
     expect((await tunnel('/share', { headers: { origin: plane.origin } })).status).toBe(404);
-    expect((await tunnel('/share?id=s1', { headers: { origin: plane.origin } })).status).toBe(400);
+    expect((await tunnel('/share?id=s1', { headers: { origin: plane.origin } })).status).toBe(404);
     const socket = new WebSocket(`ws://127.0.0.1:${port}/share?id=s1`, {
       headers: { origin: plane.origin, 'cf-connecting-ip': '203.0.113.9' },
     } as unknown as string[]);
@@ -403,8 +437,8 @@ describe('the tunnel entry point', () => {
     remote.store.upsertTeamKey({ teamId: 'team1', name: 'Platform', key, invite: 'invite-1', addedAt: 1 });
     expect((await tunnel('/team')).status).toBe(403);
     expect((await tunnel('/team', { headers: { origin: plane.origin } })).status).toBe(401);
-    const token = encodeURIComponent(await createToken(undefined, KAI.id));
-    expect((await tunnel(`/team?token=${token}`, { headers: { origin: plane.origin } })).status).toBe(400);
+    const token = encodeURIComponent(await createToken(undefined, KAI.id, 'team'));
+    expect((await tunnel(`/team?token=${token}`, { headers: { origin: plane.origin } })).status).toBe(404);
     const socket = new WebSocket(`ws://127.0.0.1:${port}/team?token=${token}`, {
       headers: { origin: plane.origin, 'cf-connecting-ip': '203.0.113.9' },
     } as unknown as string[]);
@@ -697,7 +731,7 @@ describe('the remote service', () => {
       owner: 'mona',
     });
     expect(remote.tunnelHost).toBe('t-k3x9.shinsa.dev');
-    expect(await remote.verifyConnect(null)).toBeNull();
+    expect(await remote.verifyConnect(null, 'remote')).toBeNull();
     plane.answers.set('/__remote/machine/heartbeat', () => refuse(Revoked));
     remote.start();
     const deadline = performance.now() + 2_000;

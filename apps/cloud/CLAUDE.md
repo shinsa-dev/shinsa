@@ -60,7 +60,7 @@ src/
 │                    a connect token's answer for the /remote or /team channel, a machine's owner, members and
 │                    guests, removeMachine: its tunnel, then its row), teams.ts (a RemoteTeam with its machines and,
 │                    for its owner, the requests; a user's teams; an invite replaced, a team found by its invite,
-│                    joining, leaving and a team connect token), schema.ts (ONLINE_WINDOW, ChannelKind)
+│                    joining, leaving and a team connect token), schema.ts (ONLINE_WINDOW, CONNECT_NONCE_BYTES)
 ├── routes/          One folder per group of the API and per set of plain routes, each a handler.ts and, when it has
 │                    shapes of its own, a schema.ts: session/, sign-in/ (GitHub OAuth, the native app's code and
 │                    token), pairing/ (pair start and poll, the machine's), pairs/ (the pair view and approval,

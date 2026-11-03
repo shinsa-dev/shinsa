@@ -273,8 +273,11 @@ describe('team connect tokens', () => {
     expect(url.host).toBe(`t-${studio.instanceId}.shinsa.dev`);
     expect(url.pathname).toBe('/team');
     const token = url.searchParams.get('token') ?? '';
-    const claim = await verifyConnectToken(studio.connectKey, token, studio.instanceId, harness.clock.now);
+    const teamChannel = { instanceId: studio.instanceId, channel: 'team' } as const;
+    const claim = await verifyConnectToken(studio.connectKey, token, teamChannel, harness.clock.now);
     expect(claim?.userId).toBe(KAI.id);
+    const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
+    expect(await verifyConnectToken(studio.connectKey, token, remote, harness.clock.now)).toBeNull();
   });
 
   test('a machine gets a token for its owner, as the local app watches through it', async () => {
@@ -283,7 +286,12 @@ describe('team connect tokens', () => {
       await act(harness, laptop, team.id, 'connect', { instanceId: studio.instanceId })
     );
     const token = new URL(answer.url).searchParams.get('token') ?? '';
-    const claim = await verifyConnectToken(studio.connectKey, token, studio.instanceId, harness.clock.now);
+    const claim = await verifyConnectToken(
+      studio.connectKey,
+      token,
+      { instanceId: studio.instanceId, channel: 'team' },
+      harness.clock.now
+    );
     expect(claim?.userId).toBe(KAI.id);
   });
 

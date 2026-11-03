@@ -9,6 +9,7 @@ import type {
   TaskGuest,
 } from '@shinsa/core';
 import {
+  type ConnectChannel,
   type ConnectClaim,
   DomainError,
   type GuestActor,
@@ -112,6 +113,7 @@ export class Remote {
   readonly #options: RemoteOptions;
   readonly #now: () => number;
   readonly #channels = new Map<RemoteChannel, () => void>();
+  readonly #spentConnects = new Map<string, number>();
   readonly #listeners = new Set<() => void>();
   readonly #waiters = new Map<string, ((approved: boolean) => void)[]>();
   #pairing: { view: PairingView; run: PairingRun } | null = null;
@@ -707,10 +709,20 @@ export class Remote {
     this.#publish();
   }
 
-  verifyConnect(token: string | null): Promise<ConnectClaim | null> {
+  verifyConnect(token: string | null, channel: ConnectChannel): Promise<ConnectClaim | null> {
     const credentials = this.store.file.credentials;
     if (!(token && credentials && this.isEnabled)) return Promise.resolve(null);
-    return verifyConnectToken(credentials.connectKey, token, credentials.instanceId, this.#now());
+    const audience = { instanceId: credentials.instanceId, channel };
+    return verifyConnectToken(credentials.connectKey, token, audience, this.#now());
+  }
+
+  spendConnect(claim: ConnectClaim) {
+    const now = this.#now();
+    for (const [nonce, expiresAt] of this.#spentConnects)
+      if (expiresAt <= now) this.#spentConnects.delete(nonce);
+    if (claim.expiresAt <= now || this.#spentConnects.has(claim.nonce)) return false;
+    this.#spentConnects.set(claim.nonce, claim.expiresAt);
+    return true;
   }
 
   openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string) {

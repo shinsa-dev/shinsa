@@ -78,7 +78,12 @@ describe('machine members', () => {
     const accepted = await readJson<InviteAcceptResponse>(await acceptInvite(harness, kai, invite.token));
     expect(accepted).toMatchObject({ instanceId: studio.instanceId, name: 'Studio', owner: MONA, user: KAI });
     const token = new URL(accepted.connect.url).searchParams.get('token') ?? '';
-    const claim = await verifyConnectToken(studio.connectKey, token, studio.instanceId, harness.clock.now);
+    const claim = await verifyConnectToken(
+      studio.connectKey,
+      token,
+      { instanceId: studio.instanceId, channel: 'remote' },
+      harness.clock.now
+    );
     expect(claim?.userId).toBe(KAI.id);
     expect(await listInstances(harness, kai)).toEqual([]);
     expect((await readHeartbeat(harness, studio)).members).toEqual([]);

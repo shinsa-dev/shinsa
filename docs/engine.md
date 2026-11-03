@@ -2841,9 +2841,13 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   access is off, is 404 before any handler runs. Sockets open only as an upgrade in `http/server.ts`, which asks
   `admitUpgrade` and opens what it answers; a plain request to a socket path is 404 (`admitRequest`). `/remote`,
   `/share` and `/team` need an Origin of app.shinsa.dev (403); `/remote` and `/team` need a valid connect token in
-  `?token=` (401): an HMAC with the connect key over the instance, the GitHub user and an expiry at most 60 seconds
-  out, minted by app.shinsa.dev, and the user it names is the channel's principal. The token only keeps random traffic
-  off the endpoint; trust rests on the handshake. Webhooks and Slack are refused in inspect mode, and `/health` and
+  `?token=` (401): an HMAC with the connect key over the label `shinsa-connect-v1`, the instance, the GitHub user, the
+  channel it opens (`remote` or `team`), a random 16-byte nonce and an expiry at most 60 seconds out, minted by
+  app.shinsa.dev, and the user it names is the channel's principal. A token opens only its own channel, so a team
+  token never opens `/remote`, and only once: the gate checks the token, refuses a request that is not a WebSocket
+  upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
+  token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
+  rests on the handshake. Webhooks and Slack are refused in inspect mode, and `/health` and
   Slack's paths do not exist on the local address.
 - **Inside the channel** the same gate decides every request (`admitRequest` in `Ingress`, `admitEndpoint` in
   `EngineGate`), from the request's principal (`RequestSource`: the channel's user and, for a guest, the task handed
@@ -2989,9 +2993,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
   sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
-  its connection's retry opens a fresh channel, with the connect token it already holds while that token has more than
-  20 seconds left (`CONNECT_TOKEN_MARGIN_MS`; a token is good for 60), else a new one, and a channel that fails to
-  open drops the token it used. The page builds the hello's keys while Shinsa Cloud's connect call runs
+  its connection's retry opens a fresh channel with a new connect token, since a token opens one channel once. The page builds the hello's keys while Shinsa Cloud's connect call runs
   (`openRemoteChannel` takes the URL as a promise). `bun scripts/perf/remote.ts` times each leg (Shinsa Cloud's
   connect call, cloudflared, the handshake, the first state, `/api` requests through the channel) on a copy of your
   log in a scratch home with a test device of its own, over loopback and Cloudflare quick tunnels on QUIC and HTTP/2
@@ -3376,7 +3378,7 @@ online, and the last list of it their own machine kept while it is not (Offline 
   `remote/teams.ts`, `Teams`). A viewer asks app.shinsa.dev for a team connect token
   (`POST /__remote/teams/<team>/connect { instanceId }`, signed in, from a page; `/__remote/machine/teams/<team>/connect`
   with the machine token, from your engine), which it answers only for a member or the owner and a machine of the
-  team, signed with that machine's connect key for the viewer's GitHub id (60 seconds), as `wss://t-<machine>.shinsa.dev/team?token=…`.
+  team, signed with that machine's connect key for the viewer's GitHub id and the `team` channel (60 seconds, once), as `wss://t-<machine>.shinsa.dev/team?token=…`.
   The machine upgrades it only while remote access is on and the token checks out (`verifyConnect`; 404 or 401
   otherwise). The viewer's first and only message is a team hello: the team, the view it asks for (the team's task
   list, `{ kind: 'list' }`, or one task, `{ kind: 'task', taskId }`), a fresh P-256 key and an HMAC with the team key

@@ -69,13 +69,30 @@ const OWNER_ID = 'u-owner';
 
 const GOOD_TOKEN = 'good';
 
+const TEAM_TOKEN = 'good-team';
+
+function createConnects() {
+  const spent = new Set<string>();
+  return {
+    verifyConnect: (token: string | null, channel: 'remote' | 'team') => {
+      const kind = token === GOOD_TOKEN ? 'remote' : token === TEAM_TOKEN ? 'team' : null;
+      if (kind !== channel) return Promise.resolve(null);
+      return Promise.resolve({ userId: 'u-member', instanceId: 'i', channel, nonce: token, expiresAt: 0 });
+    },
+    spendConnect: (claim: { nonce: string }) => {
+      if (spent.has(claim.nonce)) return false;
+      spent.add(claim.nonce);
+      return true;
+    },
+  };
+}
+
 function createRemote(overrides: Record<string, unknown> = {}) {
   return {
     isEnabled: true,
     tunnelHost: 't-k3x9.shinsa.dev',
     appOrigin: APP,
-    verifyConnect: (token: string | null) =>
-      Promise.resolve(token === GOOD_TOKEN ? { userId: 'u-member', instanceId: 'i', exp: 0 } : null),
+    ...createConnects(),
     store: { file: { access: { owner: { id: OWNER_ID }, members: [] } } },
     ...overrides,
   } as unknown as HttpContext['remote'];
@@ -158,8 +175,9 @@ async function upgrade(
   headers: Record<string, string> = { origin: APP },
   context = createGateContext()
 ) {
+  const sent = { upgrade: 'websocket', ...headers };
   const result = await runGate(
-    (gate) => gate.admitUpgrade(request(path, { headers }), new URL(`http://x${path}`)),
+    (gate) => gate.admitUpgrade(request(path, { headers: sent }), new URL(`http://x${path}`)),
     context
   );
   return Result.isSuccess(result) ? result.success : result.failure._tag;
@@ -325,20 +343,51 @@ describe('a socket over the tunnel', () => {
     expect(await upgrade('/share?id=s1')).toBe('RouteNotFound');
   });
 
+  test('a connect token opens only the channel it was made for, and only once', async () => {
+    const context = full();
+    expect(await upgrade(`/remote?token=${TEAM_TOKEN}`, { origin: APP }, context)).toBe('ConnectRefused');
+    expect(await upgrade(`/team?token=${GOOD_TOKEN}`, { origin: APP }, context)).toBe('ConnectRefused');
+    expect(await upgrade(`/remote?token=${GOOD_TOKEN}`, { origin: APP }, context)).toEqual({
+      route: 'channel',
+      userId: 'u-member',
+    });
+    expect(await upgrade(`/remote?token=${GOOD_TOKEN}`, { origin: APP }, context)).toBe('ConnectRefused');
+    expect(await upgrade(`/team?token=${TEAM_TOKEN}`, { origin: APP }, context)).toEqual({
+      route: 'team',
+      userId: 'u-member',
+    });
+    expect(await upgrade(`/team?token=${TEAM_TOKEN}`, { origin: APP }, context)).toBe('ConnectRefused');
+  });
+
+  test('a plain request to a channel is not a route, and does not use up its connect token', async () => {
+    const context = full();
+    expect(await upgrade(`/remote?token=${GOOD_TOKEN}`, { origin: APP, upgrade: '' }, context)).toBe(
+      'RouteNotFound'
+    );
+    expect(await upgrade(`/team?token=${TEAM_TOKEN}`, { origin: APP, upgrade: 'h2c' }, context)).toBe(
+      'RouteNotFound'
+    );
+    expect(await upgrade('/share?id=s1', { origin: APP, upgrade: '' }, context)).toBe('RouteNotFound');
+    expect(await upgrade(`/remote?token=${GOOD_TOKEN}`, { origin: APP }, context)).toEqual({
+      route: 'channel',
+      userId: 'u-member',
+    });
+  });
+
   test('opens a team view only for a machine in a team, from app.shinsa.dev, with a connect token', async () => {
-    expect(await upgrade(`/team?token=${GOOD_TOKEN}`, { origin: APP }, full())).toEqual({
+    expect(await upgrade(`/team?token=${TEAM_TOKEN}`, { origin: APP }, full())).toEqual({
       route: 'team',
       userId: 'u-member',
     });
     expect(await upgrade('/team?token=bad', { origin: APP }, full())).toBe('ConnectRefused');
-    expect(await upgrade(`/team?token=${GOOD_TOKEN}`, { origin: 'https://evil.dev' }, full())).toBe(
+    expect(await upgrade(`/team?token=${TEAM_TOKEN}`, { origin: 'https://evil.dev' }, full())).toBe(
       'RequestForbidden'
     );
     const lonely = createGateContext({
       teams: { acceptsViewer: () => false } as unknown as HttpContext['teams'],
     });
-    expect(await upgrade(`/team?token=${GOOD_TOKEN}`, { origin: APP }, lonely)).toBe('RouteNotFound');
-    expect(await upgrade(`/team?token=${GOOD_TOKEN}`)).toBe('RouteNotFound');
+    expect(await upgrade(`/team?token=${TEAM_TOKEN}`, { origin: APP }, lonely)).toBe('RouteNotFound');
+    expect(await upgrade(`/team?token=${TEAM_TOKEN}`)).toBe('RouteNotFound');
   });
 
   test('sends a preview to the previews only when there are some, and plain routes to the handler', async () => {

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
+import { concatBytes, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
+  type ConnectClaim,
   createConnectToken,
   verifyConnectToken,
 } from '../../src/remote/connect-token.ts';
@@ -10,9 +11,21 @@ const KEY = serializeBase64Url(new Uint8Array(32).fill(3));
 
 const NOW = 1_800_000_000_000;
 
-const CLAIM = { instanceId: 'abc', userId: '42', expiresAt: NOW + CONNECT_TOKEN_TTL_MS };
+const NONCE = serializeBase64Url(new Uint8Array(16).fill(9));
 
-async function signRaw(payload: Uint8Array<ArrayBuffer>) {
+const CLAIM: ConnectClaim = {
+  instanceId: 'abc',
+  userId: '42',
+  channel: 'remote',
+  nonce: NONCE,
+  expiresAt: NOW + CONNECT_TOKEN_TTL_MS,
+};
+
+const REMOTE = { instanceId: 'abc', channel: 'remote' } as const;
+
+const TEAM = { instanceId: 'abc', channel: 'team' } as const;
+
+async function signRaw(payload: Uint8Array<ArrayBuffer>, label = 'shinsa-connect-v1\n') {
   const key = await crypto.subtle.importKey(
     'raw',
     new Uint8Array(32).fill(3),
@@ -20,43 +33,71 @@ async function signRaw(payload: Uint8Array<ArrayBuffer>) {
     false,
     ['sign']
   );
-  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, payload));
+  const signed = concatBytes(encodeText(label), payload);
+  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, signed));
   return `${serializeBase64Url(payload)}.${serializeBase64Url(signature)}`;
 }
 
+function encodeClaim(fields: Record<string, unknown>) {
+  return encodeText(JSON.stringify(fields));
+}
+
 describe('connect tokens', () => {
-  test('verify for their instance until they expire', async () => {
+  test('verify for their instance and channel until they expire', async () => {
     const token = await createConnectToken(KEY, CLAIM);
-    expect(await verifyConnectToken(KEY, token, 'abc', NOW)).toEqual(CLAIM);
-    expect(await verifyConnectToken(KEY, token, 'abc', CLAIM.expiresAt)).toBeNull();
-    expect(await verifyConnectToken(KEY, token, 'other', NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, token, REMOTE, NOW)).toEqual(CLAIM);
+    expect(await verifyConnectToken(KEY, token, REMOTE, CLAIM.expiresAt)).toBeNull();
+    expect(await verifyConnectToken(KEY, token, { ...REMOTE, instanceId: 'other' }, NOW)).toBeNull();
+  });
+
+  test('a token for the team channel does not open the machine channel, nor the other way', async () => {
+    const team = await createConnectToken(KEY, { ...CLAIM, channel: 'team' });
+    expect(await verifyConnectToken(KEY, team, REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, team, TEAM, NOW)).toEqual({ ...CLAIM, channel: 'team' });
+    const remote = await createConnectToken(KEY, CLAIM);
+    expect(await verifyConnectToken(KEY, remote, TEAM, NOW)).toBeNull();
   });
 
   test('refuse one that lives longer than a connect token may', async () => {
     const token = await createConnectToken(KEY, { ...CLAIM, expiresAt: NOW + CONNECT_TOKEN_TTL_MS + 1 });
-    expect(await verifyConnectToken(KEY, token, 'abc', NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, token, REMOTE, NOW)).toBeNull();
   });
 
   test('refuse another key, a changed payload or a broken token', async () => {
     const token = await createConnectToken(KEY, CLAIM);
     const other = serializeBase64Url(new Uint8Array(32).fill(4));
-    expect(await verifyConnectToken(other, token, 'abc', NOW)).toBeNull();
+    expect(await verifyConnectToken(other, token, REMOTE, NOW)).toBeNull();
     const [, signature] = token.split('.');
-    const forged = `${serializeBase64Url(encodeText(JSON.stringify({ i: 'abc', u: '1', e: CLAIM.expiresAt })))}.${signature}`;
-    expect(await verifyConnectToken(KEY, forged, 'abc', NOW)).toBeNull();
-    expect(await verifyConnectToken(KEY, 'one-part', 'abc', NOW)).toBeNull();
-    expect(await verifyConnectToken(KEY, `${token}.extra`, 'abc', NOW)).toBeNull();
-    expect(await verifyConnectToken(KEY, '!.!', 'abc', NOW)).toBeNull();
-    expect(await verifyConnectToken('', token, 'abc', NOW)).toBeNull();
+    const forged = `${serializeBase64Url(encodeClaim({ i: 'abc', u: '1', c: 'remote', n: NONCE, e: CLAIM.expiresAt }))}.${signature}`;
+    expect(await verifyConnectToken(KEY, forged, REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, 'one-part', REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, `${token}.extra`, REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, '!.!', REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken('', token, REMOTE, NOW)).toBeNull();
   });
 
-  test('refuse a signed payload that is not a claim', async () => {
-    expect(await verifyConnectToken(KEY, await signRaw(new Uint8Array([0xff])), 'abc', NOW)).toBeNull();
-    expect(await verifyConnectToken(KEY, await signRaw(encodeText('{')), 'abc', NOW)).toBeNull();
-    expect(await verifyConnectToken(KEY, await signRaw(encodeText('{"i":"abc"}')), 'abc', NOW)).toBeNull();
+  test('refuse a claim signed without the connect label, as another of the key’s tokens would be', async () => {
+    const fields = { i: 'abc', u: '42', c: 'remote', n: NONCE, e: CLAIM.expiresAt };
+    expect(await verifyConnectToken(KEY, await signRaw(encodeClaim(fields), ''), REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, await signRaw(encodeClaim(fields)), REMOTE, NOW)).toEqual(CLAIM);
   });
 
-  test('cannot be made without a key', async () => {
+  test('refuse a signed payload that is not a whole claim', async () => {
+    const whole = { i: 'abc', u: '42', c: 'remote', n: NONCE, e: CLAIM.expiresAt };
+    expect(await verifyConnectToken(KEY, await signRaw(new Uint8Array([0xff])), REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, await signRaw(encodeText('{')), REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, await signRaw(encodeText('[]')), REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, await signRaw(encodeText('{"i":"abc"}')), REMOTE, NOW)).toBeNull();
+    const { n: _nonce, ...withoutNonce } = whole;
+    expect(await verifyConnectToken(KEY, await signRaw(encodeClaim(withoutNonce)), REMOTE, NOW)).toBeNull();
+    const short = { ...whole, n: 'abc' };
+    expect(await verifyConnectToken(KEY, await signRaw(encodeClaim(short)), REMOTE, NOW)).toBeNull();
+    const unknown = { ...whole, c: 'share' };
+    expect(await verifyConnectToken(KEY, await signRaw(encodeClaim(unknown)), REMOTE, NOW)).toBeNull();
+  });
+
+  test('cannot be made without a key or a nonce', async () => {
     await expect(createConnectToken('', CLAIM)).rejects.toThrow('not valid');
+    await expect(createConnectToken(KEY, { ...CLAIM, nonce: 'abc' })).rejects.toThrow('nonce');
   });
 });
