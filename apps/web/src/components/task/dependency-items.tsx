@@ -76,7 +76,7 @@ function StackItems({ state, task }: { state: ShinsaState; task: Task }) {
               return (
                 <DropdownMenuCheckboxItem
                   key={choice.id}
-                  checked={task.stacksOn === choice.id}
+                  checked={task.stacksOn?.includes(choice.id) ?? false}
                   onCheckedChange={() => void toggleStack(task, choice)}
                 >
                   <Icon name={icon.name} className={icon.className} />
@@ -87,7 +87,7 @@ function StackItems({ state, task }: { state: ShinsaState; task: Task }) {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       )}
-      {task.stacksOn && canChangeStack(task) && (
+      {(task.stacksOn?.length ?? 0) > 0 && canChangeStack(task) && (
         <DropdownMenuItem icon='IconCrossMedium' onClick={() => void unstackTask(task)}>
           Take out of the bundle
         </DropdownMenuItem>

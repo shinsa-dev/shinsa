@@ -19,7 +19,7 @@ import {
   type MergeStepView,
 } from '../report/merge-steps.ts';
 import { listChangedIds } from '../state/draft.ts';
-import { listBundleAbove, listOpenGates } from '../state/queries.ts';
+import { listBundleFollowers, listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 
 function describeEarly(task: Task, step: MergeStepView) {
@@ -70,7 +70,7 @@ export function assertMergeStepsDone(decider: Decider, gate: Gate, decision: Gat
       message: `Tick the ${describeCount(open.length, 'pre-merge step')} first.`,
     });
   }
-  for (const above of listBundleAbove(decider.state, task)) {
+  for (const above of listBundleFollowers(decider.state, task)) {
     const steps = listOpenMergeSteps(above, 'pre_merge');
     if (steps.length === 0) continue;
     throw new DomainError({

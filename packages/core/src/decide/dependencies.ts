@@ -10,11 +10,11 @@ import {
 import {
   canChangeStack,
   isDependencyOf,
-  isStackPending,
   isTriaged,
   listOpenGates,
   listPendingDependencies,
-  selectStackParent,
+  listPendingStackParents,
+  listStackParents,
   selectStackRefusal,
 } from '../state/queries.ts';
 import { type Decider, describeWaiting, quoteTitles } from './decider.ts';
@@ -25,7 +25,7 @@ import { holdForCheckout } from './workspaces.ts';
 export function resolveDependencies(decider: Decider, task: Task | null, ids: string[]) {
   const kept: string[] = [];
   for (const id of new Set(ids)) {
-    if (id === task?.id || id === task?.stacksOn) continue;
+    if (id === task?.id || task?.stacksOn?.includes(id)) continue;
     const dependency = decider.task(id);
     if (task?.waitsOn.includes(id)) {
       kept.push(id);
@@ -90,28 +90,37 @@ export function changeDependencies(
   }
 }
 
-export function resolveStackParent(
+export function resolveStackParents(
   decider: Decider,
   task: Task | null,
-  id: string,
+  ids: string[],
   repoId = task?.repoId ?? null
 ) {
-  const refusal = selectStackRefusal(decider.state, task, decider.task(id), repoId);
-  if (refusal) throw refusal;
-  return id;
+  const parents = [...new Set(ids)].map((id) => decider.task(id));
+  const shared = repoId ?? parents.find((parent) => parent.repoId)?.repoId ?? null;
+  for (const parent of parents) {
+    const refusal = selectStackRefusal(decider.state, task, parent, shared);
+    if (refusal) throw refusal;
+  }
+  return parents.map((parent) => parent.id);
 }
 
-function resolveStackBase(decider: Decider, task: Task) {
-  const parent = selectStackParent(decider.state, task);
-  if (!parent || isTaskComplete(parent) || parent.repoId !== task.repoId) return null;
-  return resolveCurrentRound(parent).branch ?? parent.branch;
+function resolveStackBases(decider: Decider, task: Task) {
+  return listStackParents(decider.state, task)
+    .filter((parent) => !isTaskComplete(parent) && parent.repoId === task.repoId)
+    .map((parent) => resolveCurrentRound(parent).branch ?? parent.branch)
+    .filter((branch) => branch !== null);
 }
 
-export function syncStackBase(decider: Decider, taskId: string) {
+function isSameOrder(a: readonly string[], b: readonly string[]) {
+  return a.length === b.length && a.every((id, index) => b[index] === id);
+}
+
+export function syncStackBases(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
-  const base = resolveStackBase(decider, task);
-  if (base === (task.stackBase ?? null)) return;
-  decider.emit({ type: 'task.stack_based', taskId, base });
+  const bases = resolveStackBases(decider, task);
+  if (isSameOrder(bases, task.stackBases ?? [])) return;
+  decider.emit({ type: 'task.stack_based', taskId, bases });
 }
 
 function restartForStack(decider: Decider, taskId: string) {
@@ -128,28 +137,27 @@ function restartForStack(decider: Decider, taskId: string) {
       startWork(decider, taskId);
       return;
     default: {
-      const parent = selectStackParent(decider.state, task);
-      if (!parent || !isStackPending(decider.state, parent)) syncStackBase(decider, taskId);
+      if (listPendingStackParents(decider.state, task).length === 0) syncStackBases(decider, taskId);
       else if (isTriaged(task) && listOpenGates(decider.state, taskId).length === 0)
         startWork(decider, taskId);
     }
   }
 }
 
-export function changeStack(decider: Decider, taskId: string, stacksOn: string | null, by: 'you' | 'shinsa') {
+export function changeStack(decider: Decider, taskId: string, stacksOn: string[], by: 'you' | 'shinsa') {
   const task = decider.task(taskId);
   decider.emit({ type: 'task.stack_changed', taskId, stacksOn, by });
-  if (stacksOn && task.waitsOn.includes(stacksOn)) {
-    const waitsOn = task.waitsOn.filter((id) => id !== stacksOn);
+  const waitsOn = task.waitsOn.filter((id) => !stacksOn.includes(id));
+  if (waitsOn.length !== task.waitsOn.length) {
     decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
   }
 }
 
-export function stackOnTask(decider: Decider, command: CommandOf<'task.stack_on'>) {
+export function stackOnTasks(decider: Decider, command: CommandOf<'task.stack_on_tasks'>) {
   const task = decider.task(command.taskId);
   if (isTaskSettled(task)) throw new DomainError({ code: 'task_settled', message: 'This task is finished.' });
-  const stacksOn = command.stacksOn === null ? null : resolveStackParent(decider, task, command.stacksOn);
-  if ((task.stacksOn ?? null) === stacksOn) return;
+  const stacksOn = resolveStackParents(decider, task, command.stacksOn);
+  if (isSameOrder(task.stacksOn ?? [], stacksOn)) return;
   if (!canChangeStack(task)) {
     throw new DomainError({
       code: 'stack_started',
@@ -193,7 +201,7 @@ export function releaseWaiting(decider: Decider) {
       continue;
     }
     if (pending.length > 0) {
-      decider.stage(task.id, 'waiting_on_tasks', describeWaiting(decider.state, task, pending));
+      decider.stage(task.id, 'waiting_on_tasks', describeWaiting(task, pending));
       continue;
     }
     if (holdForCheckout(decider, task.id)) continue;

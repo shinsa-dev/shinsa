@@ -44,7 +44,7 @@ interface SpawnOptions {
   projectId?: string;
   forkOf?: string;
   waitsOn?: string[];
-  stacksOn?: string;
+  stacksOn?: string[];
   backlog?: boolean;
 }
 
@@ -100,7 +100,7 @@ export function createCourierTask(decider: Decider, command: CommandOf<'agent.cr
       ...(command.projectId ? { projectId: command.projectId } : {}),
       ...(command.forkOf ? { forkOf: command.forkOf } : {}),
       ...(command.afterThis ? { waitsOn: [task.id] } : {}),
-      ...(command.stackOnThis ? { stacksOn: task.id } : {}),
+      ...(command.stackOnThis ? { stacksOn: [task.id] } : {}),
       ...(command.backlog ? { backlog: true } : {}),
     }
   );

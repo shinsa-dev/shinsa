@@ -221,7 +221,7 @@ describe('a courier task', () => {
     const { harness, taskId } = building();
     const runId = harness.activeRun(taskId).id;
     const [task] = courier(harness, runId, { stackOnThis: true });
-    expect(task).toMatchObject({ stacksOn: taskId, waitsOn: [] });
+    expect(task).toMatchObject({ stacksOn: [taskId], waitsOn: [] });
     for (const order of [{ afterThis: true }, { thisWaits: true }]) {
       expect(() => courier(harness, runId, { key: 'other', stackOnThis: true, ...order })).toThrow(
         'Set stack_on_this alone'

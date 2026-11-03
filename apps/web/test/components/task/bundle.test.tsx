@@ -29,7 +29,7 @@ const top = createTask({
   handle: 'SW-2',
   title: 'Add the screen',
   repoId: 'app',
-  stacksOn: 'root',
+  stacksOn: ['root'],
 });
 const state = createShinsaState({ tasks: [root, top], repos: [createRepo({ id: 'app' })] });
 

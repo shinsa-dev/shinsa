@@ -34,14 +34,14 @@ function createBundle() {
     title: 'Add the API',
     repoId: 'app',
     stage: 'building',
-    stacksOn: 'root',
+    stacksOn: ['root'],
   });
   const top = createTask({
     id: 'top',
     title: 'Add the screen',
     repoId: 'app',
     stage: 'waiting_on_tasks',
-    stacksOn: 'middle',
+    stacksOn: ['middle'],
   });
   return { root, middle, top };
 }
@@ -72,8 +72,8 @@ describe('the members of a bundle', () => {
 
   it('reads each state a member can be in', () => {
     const parent = createTask({ id: 'p', stage: 'awaiting_merge' });
-    const child = createTask({ id: 'c', stage: 'awaiting_merge', stacksOn: 'p' });
-    const gated = createTask({ id: 'g', stage: 'awaiting_merge', stacksOn: 'c' });
+    const child = createTask({ id: 'c', stage: 'awaiting_merge', stacksOn: ['p'] });
+    const gated = createTask({ id: 'g', stage: 'awaiting_merge', stacksOn: ['c'] });
     const state = createShinsaState({
       tasks: [parent, child, gated],
       gates: [createGate({ id: 'm', taskId: 'g', type: 'merge' })],
@@ -90,7 +90,7 @@ describe('the members of a bundle', () => {
 
   it('says the bundle merged once nothing in it is left open, on the default branch when it has no repository', () => {
     const root = createTask({ id: 'root', stage: 'merged' });
-    const top = createTask({ id: 'top', stage: 'merged', stacksOn: 'root' });
+    const top = createTask({ id: 'top', stage: 'merged', stacksOn: ['root'] });
     const state = createShinsaState({ tasks: [root, top] });
     expect(describeBundleNote(state, listBundleRows(state, top))).toBe(
       'The bundle merged into the default branch.'
@@ -116,7 +116,7 @@ describe('listStackChoices', () => {
     expect(listStackChoices(state, subject)).toEqual([]);
   });
 
-  it('offers open tasks in the same repository that open a pull request and have nothing stacked on them', () => {
+  it('offers open tasks in the same repository that open a pull request, even ones others stack on', () => {
     const subject = createTask({ id: 'self', repoId: 'app', stage: 'planning' });
     const state = createShinsaState({
       tasks: [
@@ -127,7 +127,7 @@ describe('listStackChoices', () => {
         createTask({ id: 'question', repoId: 'app', pipeline: ['answer'] }),
         createTask({ id: 'merged', repoId: 'app', stage: 'merged' }),
         createTask({ id: 'taken', repoId: 'app' }),
-        createTask({ id: 'on-taken', repoId: 'app', stage: 'triage', stacksOn: 'taken' }),
+        createTask({ id: 'on-taken', repoId: 'app', stage: 'triage', stacksOn: ['taken'] }),
         createTask({ id: 'dependent', repoId: 'app', stage: 'waiting_on_tasks', waitsOn: ['self'] }),
       ],
     });
@@ -135,16 +135,16 @@ describe('listStackChoices', () => {
       listStackChoices(state, subject)
         .map((task) => task.id)
         .sort()
-    ).toEqual(['no-repo', 'on-taken', 'open']);
+    ).toEqual(['no-repo', 'on-taken', 'open', 'taken']);
   });
 
-  it('keeps the task it already stacks on, and offers a new task only what nothing stacks on yet', () => {
-    const subject = createTask({ id: 'self', stage: 'triage', stacksOn: 'parent' });
+  it('lists the task it already stacks on first, and offers a new task every open one', () => {
+    const subject = createTask({ id: 'self', stage: 'triage', stacksOn: ['parent'] });
     const parent = createTask({ id: 'parent' });
     const urgent = createTask({ id: 'urgent', priority: 'urgent' });
     const state = createShinsaState({ tasks: [subject, urgent, parent] });
     expect(listStackChoices(state, subject).map((task) => task.id)).toEqual(['parent', 'urgent']);
-    expect(listStackChoices(state, null).map((task) => task.id)).toEqual(['urgent', 'self']);
+    expect(listStackChoices(state, null).map((task) => task.id)).toEqual(['urgent', 'self', 'parent']);
   });
 
   it('offers nothing once the task has started building', () => {
@@ -173,25 +173,25 @@ describe('stack commands', () => {
     const task = createTask({ id: 't', stage: 'triage' });
     await stackOnTask(task, parent);
     expect(spies.sent).toHaveBeenCalledWith(
-      { type: 'task.stack_on', taskId: 't', stacksOn: 'p' },
+      { type: 'task.stack_on_tasks', taskId: 't', stacksOn: ['p'] },
       'Stacked on “Add the schema”.'
     );
     await unstackTask(task);
     expect(spies.sent).toHaveBeenCalledWith(
-      { type: 'task.stack_on', taskId: 't', stacksOn: null },
+      { type: 'task.stack_on_tasks', taskId: 't', stacksOn: [] },
       'Taken out of the bundle.'
     );
   });
 
   it('toggles: picking the task it stacks on takes it out', async () => {
-    await toggleStack(createTask({ id: 't', stacksOn: 'p' }), parent);
+    await toggleStack(createTask({ id: 't', stacksOn: ['p'] }), parent);
     expect(spies.sent).toHaveBeenLastCalledWith(
-      { type: 'task.stack_on', taskId: 't', stacksOn: null },
+      { type: 'task.stack_on_tasks', taskId: 't', stacksOn: [] },
       'Taken out of the bundle.'
     );
     await toggleStack(createTask({ id: 't' }), parent);
     expect(spies.sent).toHaveBeenLastCalledWith(
-      { type: 'task.stack_on', taskId: 't', stacksOn: 'p' },
+      { type: 'task.stack_on_tasks', taskId: 't', stacksOn: ['p'] },
       'Stacked on “Add the schema”.'
     );
   });
@@ -200,7 +200,7 @@ describe('stack commands', () => {
 describe('describeBundleWait', () => {
   it('says what a ready task above waits for: the root getting ready, then your approval on it, then the merge', () => {
     const root = createTask({ id: 'root', title: 'Add the schema', stage: 'fixing' });
-    const top = createTask({ id: 'top', stage: 'shipping', stacksOn: 'root', bundleReady: READY });
+    const top = createTask({ id: 'top', stage: 'shipping', stacksOn: ['root'], bundleReady: READY });
     const working = createShinsaState({ tasks: [root, top] });
     expect(describeBundleWait(working, top)).toBe('Merges with its bundle once “Add the schema” is ready');
     const gated = createShinsaState({
@@ -208,7 +208,7 @@ describe('describeBundleWait', () => {
       gates: [createGate({ id: 'm', taskId: 'root', type: 'merge' })],
     });
     expect(describeBundleWait(gated, top)).toBe('Merges when you approve the bundle on “Add the schema”');
-    const mergingTop = createTask({ id: 'top', stage: 'awaiting_merge', stacksOn: 'root' });
+    const mergingTop = createTask({ id: 'top', stage: 'awaiting_merge', stacksOn: ['root'] });
     const merging = createShinsaState({ tasks: [{ ...root, stage: 'awaiting_merge' }, mergingTop] });
     expect(describeBundleWait(merging, mergingTop)).toBe('Merging with its bundle');
     expect(describeBundleWait(working, { ...root, bundleReady: READY })).toBeNull();

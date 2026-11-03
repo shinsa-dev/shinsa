@@ -338,7 +338,7 @@ export function createSampleBundle(now: number): Task[] {
       title: 'Serve the login over the API',
       stage: 'fixing',
       stageReason: 'fixing a failing check',
-      stacksOn: 'sample-bundle-schema',
+      stacksOn: ['sample-bundle-schema'],
       pullRequest: {
         ...SAMPLE_PULL_REQUEST,
         number: 42,
@@ -351,7 +351,7 @@ export function createSampleBundle(now: number): Task[] {
       title: 'Add the login screen',
       stage: 'waiting_on_tasks',
       stageReason: 'waiting for “Serve the login over the API” to be ready to merge',
-      stacksOn: 'sample-bundle-api',
+      stacksOn: ['sample-bundle-api'],
     }),
   ];
 }

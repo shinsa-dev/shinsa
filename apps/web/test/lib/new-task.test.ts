@@ -210,7 +210,7 @@ describe('the composer’s choices', () => {
         type: 'task.create',
         request: 'Add the screen',
         repoId: null,
-        stacksOn: 'a',
+        stacksOn: ['a'],
       }
     );
     expect(createNewTaskCommand('Add it', { ...AUTO_CHOICES, start: 'stack', after: [] })).toEqual({

@@ -460,8 +460,8 @@ export interface Task {
   pullRequestWatch?: PullRequestWatch | null;
   pullRequestReadFailures?: number;
   waitsOn: string[];
-  stacksOn?: string | null;
-  stackBase?: string | null;
+  stacksOn?: string[];
+  stackBases?: string[];
   bundleReady?: BundleReady | null;
   bundleConflict?: BundleConflict | null;
   note: string | null;

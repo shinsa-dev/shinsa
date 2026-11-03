@@ -3,8 +3,8 @@ import type { SeedTask } from './seed-kit.ts';
 
 function stack(taskId: string, stacksOn: string, base: string | null): ShinsaEventInput[] {
   return [
-    { type: 'task.stack_changed', taskId, stacksOn, by: 'you' },
-    ...(base ? [{ type: 'task.stack_based' as const, taskId, base }] : []),
+    { type: 'task.stack_changed', taskId, stacksOn: [stacksOn], by: 'you' },
+    ...(base ? [{ type: 'task.stack_based' as const, taskId, bases: [base] }] : []),
   ];
 }
 

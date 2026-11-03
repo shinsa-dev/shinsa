@@ -371,7 +371,7 @@ describe('NewTaskForm', () => {
     fireEvent.change(field(), { target: { value: 'Add the screen on the new schema' } });
     await send('Add');
     expect(listSentCommands()).toEqual([
-      { type: 'task.create', request: 'Add the screen on the new schema', repoId: null, stacksOn: 'base' },
+      { type: 'task.create', request: 'Add the screen on the new schema', repoId: null, stacksOn: ['base'] },
     ]);
   });
 

@@ -490,7 +490,7 @@ describe('describeTaskCounts', () => {
 describe('the tasks of a bundle in All tasks', () => {
   it('lists a ready task with the root of its bundle, each one nested under the one below', () => {
     const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });
-    const top = createTask({ id: 'top', stage: 'building', stacksOn: 'root', priority: 'urgent' });
+    const top = createTask({ id: 'top', stage: 'building', stacksOn: ['root'], priority: 'urgent' });
     const other = createTask({ id: 'other', stage: 'building', priority: 'high' });
     const state = createShinsaState({ tasks: [root, top, other] });
     expect(resolveTaskGroup(state, root)).toBe('working');
@@ -503,8 +503,8 @@ describe('the tasks of a bundle in All tasks', () => {
   it('lists a bundle at its merge gate from its root, the tasks above nested in order', () => {
     const root = createTask({ id: 'root', stage: 'awaiting_merge' });
     const ready = { commit: 'a' };
-    const middle = createTask({ id: 'middle', stage: 'shipping', stacksOn: 'root', bundleReady: ready });
-    const top = createTask({ id: 'top', stage: 'shipping', stacksOn: 'middle', bundleReady: ready });
+    const middle = createTask({ id: 'middle', stage: 'shipping', stacksOn: ['root'], bundleReady: ready });
+    const top = createTask({ id: 'top', stage: 'shipping', stacksOn: ['middle'], bundleReady: ready });
     const state = createShinsaState({
       tasks: [top, middle, root],
       gates: [createGate({ id: 'm', taskId: 'root', type: 'merge' })],
@@ -520,7 +520,7 @@ describe('the tasks of a bundle in All tasks', () => {
   it('keeps a ready task on its own when nothing open is above it', () => {
     const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });
     const state = createShinsaState({
-      tasks: [root, createTask({ id: 'top', stage: 'cancelled', stacksOn: 'root' })],
+      tasks: [root, createTask({ id: 'top', stage: 'cancelled', stacksOn: ['root'] })],
     });
     expect(resolveTaskGroup(state, root)).toBe('working');
   });

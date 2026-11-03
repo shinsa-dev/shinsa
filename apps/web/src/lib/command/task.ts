@@ -88,7 +88,7 @@ function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
 
 function listStackCommands(state: ShinsaState, task: Task): Command[] {
   const id = `task.${task.id}.stack`;
-  const parent = task.stacksOn ? state.tasks[task.stacksOn] : undefined;
+  const parent = task.stacksOn?.[0] ? state.tasks[task.stacksOn[0]] : undefined;
   const hint = parent ? { hint: parent.title } : {};
   const choices = listStackChoices(state, task);
   const commands: Command[] = [];
@@ -101,7 +101,7 @@ function listStackCommands(state: ShinsaState, task: Task): Command[] {
       icon: BUNDLE_ICON,
       keywords: ['stack', 'bundle', 'stacked pull request', 'depends', 'builds on'],
       heading: 'Stacks on',
-      value: task.stacksOn ? [task.stacksOn] : [],
+      value: task.stacksOn ?? [],
       options: choices.map((choice) => ({
         value: choice.id,
         label: choice.title,
@@ -114,7 +114,7 @@ function listStackCommands(state: ShinsaState, task: Task): Command[] {
       },
     });
   }
-  if (task.stacksOn && canChangeStack(task)) {
+  if ((task.stacksOn?.length ?? 0) > 0 && canChangeStack(task)) {
     commands.push({
       kind: 'run',
       id: `${id}.off`,

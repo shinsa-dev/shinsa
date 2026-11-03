@@ -107,7 +107,7 @@ function resolveProjectId(project: string) {
 function resolveStartFields(start: NewTaskStart, after: string[]) {
   if (start === 'now') return { waitsOn: [] };
   if (start === 'after') return { waitsOn: after };
-  if (start === 'stack') return after[0] ? { stacksOn: after[0] } : {};
+  if (start === 'stack') return after[0] ? { stacksOn: [after[0]] } : {};
   if (start === 'backlog') return { backlog: true };
   return {};
 }

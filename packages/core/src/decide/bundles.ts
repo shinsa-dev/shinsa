@@ -7,14 +7,14 @@ import {
 } from '../domain/index.ts';
 import {
   listActiveRuns,
-  listBundleAbove,
-  listBundleBelow,
+  listBundleFollowers,
   listOpenGates,
-  resolveBundleRoot,
-  selectStackParent,
+  listStackParents,
+  resolveBundleLead,
+  resolveBundleMembers,
 } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
-import { syncStackBase } from './dependencies.ts';
+import { syncStackBases } from './dependencies.ts';
 
 const READY_REASON = 'ready, merges with its bundle';
 
@@ -28,6 +28,12 @@ function selectMergeGate(decider: Decider, taskId: string) {
   return listOpenGates(decider.state, taskId).find((gate) => gate.type === 'merge') ?? null;
 }
 
+function resolveBundlePlace(decider: Decider, task: Task) {
+  const [lead, ...followers] = resolveBundleMembers(decider.state, task);
+  const leads = lead?.id === task.id;
+  return { follows: !leads, leads: leads && followers.length > 0, lead: lead ?? task };
+}
+
 function isBundleMerging(decider: Decider, task: Task) {
   return task.stage === 'awaiting_merge' && listOpenGates(decider.state, task.id).length === 0;
 }
@@ -37,12 +43,12 @@ export function clearBundleReady(decider: Decider, taskId: string) {
   decider.emit({ type: 'task.bundle_ready', taskId, ready: null });
 }
 
-function nudgeBundleRoot(decider: Decider, task: Task) {
-  const root = resolveBundleRoot(decider.state, task);
-  if (root.id === task.id || root.stage !== 'shipping' || root.pushPending) return;
-  if (root.pullRequest?.state !== 'open' || listActiveRuns(decider.state, root.id).length > 0) return;
-  if (!listBundleAbove(decider.state, root).every((above) => above.bundleReady)) return;
-  decider.run({ kind: 'pull_request.watch', taskId: root.id });
+function nudgeBundleLead(decider: Decider, task: Task) {
+  const lead = resolveBundleLead(decider.state, task);
+  if (lead.id === task.id || lead.stage !== 'shipping' || lead.pushPending) return;
+  if (lead.pullRequest?.state !== 'open' || listActiveRuns(decider.state, lead.id).length > 0) return;
+  if (!listBundleFollowers(decider.state, lead).every((follower) => follower.bundleReady)) return;
+  decider.run({ kind: 'pull_request.watch', taskId: lead.id });
 }
 
 function markBundleReady(decider: Decider, taskId: string, commit: string | null) {
@@ -60,8 +66,8 @@ function describeConflictHold(decider: Decider, conflict: BundleConflict) {
   return behind ? `${what}; updating “${behind.title}” first` : what;
 }
 
-function holdBundleRoot(decider: Decider, task: Task) {
-  const waiting = listBundleAbove(decider.state, task).filter((above) => !above.bundleReady);
+function holdBundleLead(decider: Decider, task: Task) {
+  const waiting = listBundleFollowers(decider.state, task).filter((follower) => !follower.bundleReady);
   const conflict = task.bundleConflict ?? null;
   if (waiting.length === 0 && !conflict) return false;
   decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
@@ -73,16 +79,16 @@ function holdBundleRoot(decider: Decider, task: Task) {
 }
 
 export function holdInBundle(decider: Decider, task: Task, commit: string | null) {
-  const hasBelow = listBundleBelow(decider.state, task).length > 0;
-  const hasAbove = listBundleAbove(decider.state, task).length > 0;
-  if (!hasBelow && !hasAbove) return false;
+  const { follows, leads } = resolveBundlePlace(decider, task);
+  if (!follows && !leads) return false;
   markBundleReady(decider, task.id, commit);
-  if (hasBelow) {
+  if (follows) {
+    decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
     decider.stage(task.id, 'shipping', READY_REASON);
-    nudgeBundleRoot(decider, decider.task(task.id));
+    nudgeBundleLead(decider, decider.task(task.id));
     return true;
   }
-  return holdBundleRoot(decider, decider.task(task.id));
+  return holdBundleLead(decider, decider.task(task.id));
 }
 
 export function keepsBundleReady(task: Task, commit: string | null, clean: boolean) {
@@ -91,21 +97,21 @@ export function keepsBundleReady(task: Task, commit: string | null, clean: boole
 }
 
 export function describeBundleMerge(state: Decider['state'], task: Task) {
-  const above = listBundleAbove(state, task);
-  if (above.length === 0) return null;
-  const pullRequests = [task, ...above]
+  const followers = listBundleFollowers(state, task);
+  if (followers.length === 0) return null;
+  const pullRequests = [task, ...followers]
     .map((member) => (member.pullRequest ? `#${member.pullRequest.number} “${member.title}”` : null))
     .filter(Boolean)
     .join(', ');
-  return `Approving merges the whole bundle as one, from the last pull request back to this one: ${pullRequests}.`;
+  return `Approving merges the whole bundle as one, each pull request into its base from the top of the bundle down and this one last: ${pullRequests}.`;
 }
 
 export function startBundleMerge(decider: Decider, taskId: string): BundlePullRequest[] {
   const bundle: BundlePullRequest[] = [];
-  for (const above of listBundleAbove(decider.state, decider.task(taskId)).reverse()) {
-    if (!above.pullRequest) continue;
-    decider.stage(above.id, 'awaiting_merge', MERGING_REASON);
-    bundle.push({ taskId: above.id, number: above.pullRequest.number });
+  for (const follower of listBundleFollowers(decider.state, decider.task(taskId)).reverse()) {
+    if (!follower.pullRequest) continue;
+    decider.stage(follower.id, 'awaiting_merge', MERGING_REASON);
+    bundle.push({ taskId: follower.id, number: follower.pullRequest.number });
   }
   return bundle;
 }
@@ -133,13 +139,12 @@ function recheck(decider: Decider, taskId: string) {
 }
 
 function reviewReadiness(decider: Decider, task: Task) {
-  const hasBelow = listBundleBelow(decider.state, task).length > 0;
-  const hasAbove = listBundleAbove(decider.state, task).length > 0;
+  const { follows, leads, lead } = resolveBundlePlace(decider, task);
   const gate = selectMergeGate(decider, task.id);
-  if (task.bundleConflict && (!hasAbove || hasBelow || !SHIPPED.has(task.stage))) {
+  if (task.bundleConflict && (!leads || !SHIPPED.has(task.stage))) {
     decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict: null });
   }
-  if (gate && hasAbove) {
+  if (gate && (leads || follows)) {
     holdInBundle(decider, task, gate.commit ?? null);
     return;
   }
@@ -147,51 +152,60 @@ function reviewReadiness(decider: Decider, task: Task) {
     clearBundleReady(decider, task.id);
     return;
   }
-  if (!hasBelow && !hasAbove && task.bundleReady && task.stage === 'shipping') {
+  if (!follows && !leads && task.bundleReady && task.stage === 'shipping') {
     clearBundleReady(decider, task.id);
     recheck(decider, task.id);
     return;
   }
-  const root = resolveBundleRoot(decider.state, task);
-  if (hasBelow && isBundleMerging(decider, task) && !isBundleMerging(decider, root)) {
+  if (follows && isBundleMerging(decider, task) && !isBundleMerging(decider, lead)) {
     decider.stage(task.id, 'shipping', READY_REASON);
   }
 }
 
-function reviewStackParent(decider: Decider, task: Task) {
+function describeCancelledParent(rest: Task[]) {
+  const choice =
+    rest.length > 0
+      ? `Retry to keep it stacked on ${quoteTitles(rest)} only`
+      : 'Retry to take it out of the bundle and base its pull request on the default branch';
+  return `This task was stacked on it as a bundle. ${choice}, or cancel this one.`;
+}
+
+function reviewStackParents(decider: Decider, task: Task) {
   if (NOT_STARTED.has(task.stage)) return;
-  const parent = selectStackParent(decider.state, task);
-  if (parent?.stage === 'cancelled') {
+  const parents = listStackParents(decider.state, task);
+  const cancelled = parents.find((parent) => parent.stage === 'cancelled');
+  if (cancelled) {
     if (listOpenGates(decider.state, task.id).length > 0) return;
-    decider.fail(
-      task.id,
-      `“${parent.title}” was cancelled`,
-      'This task was stacked on it as a bundle. Retry to take it out of the bundle and base its pull request on the default branch, or cancel this one.'
-    );
+    const rest = parents.filter((parent) => parent.stage !== 'cancelled');
+    decider.fail(task.id, `“${cancelled.title}” was cancelled`, describeCancelledParent(rest));
     return;
   }
-  if (!task.stackBase) return;
-  const base = task.stackBase;
-  syncStackBase(decider, task.id);
+  const bases = task.stackBases ?? [];
+  if (bases.length === 0) return;
+  syncStackBases(decider, task.id);
   const moved = decider.task(task.id);
-  if (moved.stackBase !== base && SHIPPED.has(moved.stage) && moved.pullRequest) {
+  if (moved.stackBases?.[0] !== bases[0] && SHIPPED.has(moved.stage) && moved.pullRequest) {
     decider.run({ kind: 'pull_request.watch', taskId: task.id });
   }
 }
 
 function isBundled(task: Task, parents: ReadonlySet<string>) {
   return Boolean(
-    task.stacksOn || task.stackBase || task.bundleReady || task.bundleConflict || parents.has(task.id)
+    (task.stacksOn?.length ?? 0) > 0 ||
+    (task.stackBases?.length ?? 0) > 0 ||
+    task.bundleReady ||
+    task.bundleConflict ||
+    parents.has(task.id)
   );
 }
 
 export function reviewBundles(decider: Decider) {
   const tasks = Object.values(decider.state.tasks);
-  const parents = new Set(tasks.flatMap((task) => (task.stacksOn ? [task.stacksOn] : [])));
+  const parents = new Set(tasks.flatMap((task) => task.stacksOn ?? []));
   for (const { id } of tasks) {
     const task = decider.task(id);
     if (isTaskSettled(task) || !isBundled(task, parents)) continue;
     reviewReadiness(decider, task);
-    reviewStackParent(decider, decider.task(id));
+    reviewStackParents(decider, decider.task(id));
   }
 }

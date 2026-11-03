@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  listBundleAbove,
-  listBundleBelow,
+  isBundleFollower,
+  listBundleFollowers,
   listOpenGates,
+  listStackChildren,
+  listStackParents,
   listWaitsOn,
   type PullRequest,
   resolveBundle,
+  resolveBundleLead,
+  resolveBundleMembers,
   resolveRoundBase,
 } from '../../src/index.ts';
 import {
@@ -49,8 +53,8 @@ function recordMerged(harness: Harness, taskId: string, number: number) {
 
 function createBundle(harness: Harness) {
   const root = createTask(harness, { request: 'Root' });
-  const middle = createTask(harness, { request: 'Middle', stacksOn: root });
-  const top = createTask(harness, { request: 'Top', stacksOn: middle });
+  const middle = createTask(harness, { request: 'Middle', stacksOn: [root] });
+  const top = createTask(harness, { request: 'Top', stacksOn: [middle] });
   reachReady(harness, root, 1);
   readyWorktree(harness, middle);
   reachReady(harness, middle, 2);
@@ -74,16 +78,16 @@ function recordCheck(
 
 const READY = 'ready, merges with its bundle';
 
-function stackOn(harness: Harness, taskId: string, stacksOn: string | null) {
-  harness.send({ type: 'task.stack_on', taskId, stacksOn });
+function stackOn(harness: Harness, taskId: string, stacksOn: string[]) {
+  harness.send({ type: 'task.stack_on_tasks', taskId, stacksOn });
 }
 
 describe('stacking a task on another', () => {
   test('a stacked task waits until the task below is ready to merge, then branches off it', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Run the chat on MCP v2' });
-    const child = createTask(harness, { request: 'Embed the chat', stacksOn: parent });
-    expect(harness.task(child).stacksOn).toBe(parent);
+    const child = createTask(harness, { request: 'Embed the chat', stacksOn: [parent] });
+    expect(harness.task(child).stacksOn).toEqual([parent]);
     expect(harness.task(child).auto.start).toBe(false);
     expect(harness.task(child).stage).toBe('waiting_on_tasks');
     expect(harness.task(child).stageReason).toBe('waiting for “Run the chat on MCP v2” to be ready to merge');
@@ -97,7 +101,7 @@ describe('stacking a task on another', () => {
 
     reachReady(harness, parent);
     expect(harness.task(child).stage).toBe('triage');
-    expect(harness.task(child).stackBase).toBe(`fix/${parent}`);
+    expect(harness.task(child).stackBases).toEqual([`fix/${parent}`]);
     expect(resolveRoundBase(harness.task(child))).toBe(`fix/${parent}`);
     readyWorktree(harness, child);
     expect(harness.task(child).stage).toBe('planning');
@@ -107,18 +111,18 @@ describe('stacking a task on another', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
     reachReady(harness, parent);
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     expect(harness.task(child).stage).toBe('planning');
-    expect(harness.task(child).stackBase).toBe(`fix/${parent}`);
+    expect(harness.task(child).stackBases).toEqual([`fix/${parent}`]);
   });
 
   test('a task below that finishes without a pull request releases the stacked one onto the default branch', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     harness.send({ type: 'task.complete', taskId: parent });
     expect(harness.task(child).stage).toBe('triage');
-    expect(harness.task(child).stackBase ?? null).toBeNull();
+    expect(harness.task(child).stackBases ?? []).toEqual([]);
     expect(resolveRoundBase(harness.task(child))).toBeNull();
   });
 
@@ -126,7 +130,7 @@ describe('stacking a task on another', () => {
     const harness = createHarness();
     const api = createTask(harness, { request: 'Ship the API' });
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', waitsOn: [api, parent], stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', waitsOn: [api, parent], stacksOn: [parent] });
     expect(harness.task(child).waitsOn).toEqual([api]);
     expect(harness.task(child).stageReason).toBe(
       'waiting for “Ship the API” to finish and “Parent” to be ready to merge'
@@ -139,11 +143,11 @@ describe('stacking a task on another', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
     const child = createTask(harness, { request: 'Child', waitsOn: [parent] });
-    stackOn(harness, child, parent);
+    stackOn(harness, child, [parent]);
     expect(harness.task(child).waitsOn).toEqual([]);
-    expect(harness.task(child).stacksOn).toBe(parent);
+    expect(harness.task(child).stacksOn).toEqual([parent]);
     expect(harness.task(child).stage).toBe('waiting_on_tasks');
-    stackOn(harness, child, parent);
+    stackOn(harness, child, [parent]);
     expect(harness.events.filter((event) => event.type === 'task.stack_changed')).toHaveLength(1);
   });
 
@@ -152,12 +156,12 @@ describe('stacking a task on another', () => {
     const parent = createTask(harness, { request: 'Parent' });
     const child = createTask(harness, { request: 'Child' });
     const planning = harness.activeRun(child).id;
-    stackOn(harness, child, parent);
+    stackOn(harness, child, [parent]);
     expect(harness.state.runs[planning]?.outcome).toBe('cancelled');
     expect(harness.task(child).stage).toBe('waiting_on_tasks');
 
-    stackOn(harness, child, null);
-    expect(harness.task(child).stacksOn).toBeNull();
+    stackOn(harness, child, []);
+    expect(harness.task(child).stacksOn).toEqual([]);
     expect(harness.task(child).activity.map((entry) => entry.text)).toContain('Left its bundle');
     expect(harness.task(child).stage).toBe('triage');
   });
@@ -169,10 +173,10 @@ describe('stacking a task on another', () => {
     const child = createTask(harness, { request: 'Child', planFirst: true });
     proposePlan(harness, child);
     expect(harness.openGate(child).type).toBe('plan');
-    stackOn(harness, child, parent);
+    stackOn(harness, child, [parent]);
     expect(listOpenGates(harness.state, child)).toHaveLength(0);
     expect(harness.task(child).stage).toBe('triage');
-    expect(harness.task(child).stackBase).toBe(`fix/${parent}`);
+    expect(harness.task(child).stackBases).toEqual([`fix/${parent}`]);
     expect(harness.lastEffect('config.verify').taskId).toBe(child);
   });
 
@@ -184,11 +188,11 @@ describe('stacking a task on another', () => {
     reachReady(harness, ready);
     harness.send({ type: 'task.create', request: 'Unsorted', repoId });
     const unsorted = Object.values(harness.state.tasks).find((task) => task.request === 'Unsorted')?.id ?? '';
-    stackOn(harness, unsorted, parent);
+    stackOn(harness, unsorted, [parent]);
     expect(harness.task(unsorted).stage).toBe('triage');
-    expect(harness.task(unsorted).stackBase ?? null).toBeNull();
-    stackOn(harness, unsorted, ready);
-    expect(harness.task(unsorted).stackBase).toBe(`fix/${ready}`);
+    expect(harness.task(unsorted).stackBases ?? []).toEqual([]);
+    stackOn(harness, unsorted, [ready]);
+    expect(harness.task(unsorted).stackBases).toEqual([`fix/${ready}`]);
 
     harness.send({
       type: 'task.triage',
@@ -201,70 +205,76 @@ describe('stacking a task on another', () => {
     });
     expect(harness.task(unsorted).waitsOn).toEqual([]);
     expect(harness.task(unsorted).stage).toBe('triage');
-    stackOn(harness, unsorted, parent);
+    stackOn(harness, unsorted, [parent]);
     expect(harness.task(unsorted).stage).toBe('waiting_on_tasks');
   });
 
   test('a cancelled task below pauses the stacked one, and Retry takes it out of the bundle', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     harness.send({ type: 'task.cancel', taskId: parent });
     expect(harness.openGate(child).type).toBe('failure');
     harness.send({ type: 'task.retry', taskId: child });
-    expect(harness.task(child).stacksOn).toBeNull();
+    expect(harness.task(child).stacksOn).toEqual([]);
     expect(harness.task(child).stage).toBe('triage');
-    expect(harness.task(child).stackBase ?? null).toBeNull();
+    expect(harness.task(child).stackBases ?? []).toEqual([]);
   });
 
   test('a task paused by a cancelled task below can stack on another one instead', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
     const other = createTask(harness, { request: 'Other' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     harness.send({ type: 'task.cancel', taskId: parent });
     expect(harness.openGate(child).type).toBe('failure');
-    stackOn(harness, child, other);
+    stackOn(harness, child, [other]);
     expect(listOpenGates(harness.state, child)).toHaveLength(0);
     expect(harness.task(child).stageReason).toBe('waiting for “Other” to be ready to merge');
   });
 
-  test('a bundle is one line in one repository, without cycles, and only before building', () => {
+  test('a bundle is in one repository, without cycles, and only before building', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     const other = createTask(harness, { request: 'Other' });
     const refusals: [() => unknown, string][] = [
-      [() => stackOn(harness, other, other), 'A task cannot stack on itself.'],
-      [() => stackOn(harness, other, parent), '“Child” is already stacked on that task.'],
-      [() => stackOn(harness, parent, child), 'That task already waits on this one.'],
+      [() => stackOn(harness, other, [other]), 'A task cannot stack on itself.'],
+      [() => stackOn(harness, parent, [child]), 'That task already waits on this one.'],
     ];
     const cancelled = createTask(harness, { request: 'Cancelled' });
     harness.send({ type: 'task.cancel', taskId: cancelled });
-    refusals.push([() => stackOn(harness, other, cancelled), 'That task was cancelled.']);
+    refusals.push([() => stackOn(harness, other, [cancelled]), 'That task was cancelled.']);
     const done = createTask(harness, { request: 'Done' });
     harness.send({ type: 'task.complete', taskId: done });
     refusals.push([
-      () => stackOn(harness, other, done),
+      () => stackOn(harness, other, [done]),
       'That task is finished, so there is nothing to stack on.',
     ]);
-    refusals.push([() => stackOn(harness, done, parent), 'This task is finished.']);
+    refusals.push([() => stackOn(harness, done, [parent]), 'This task is finished.']);
     harness.send({ type: 'task.create', request: 'Why is it slow?', repoId: null, mode: 'ask' });
     const question = Object.values(harness.state.tasks).find((task) => task.mode === 'ask')?.id ?? '';
-    refusals.push([() => stackOn(harness, other, question), 'That task opens no pull request to stack on.']);
+    refusals.push([
+      () => stackOn(harness, other, [question]),
+      'That task opens no pull request to stack on.',
+    ]);
     const elsewhere = createTask(harness, { request: 'Elsewhere', repoId: registerRepo(harness, 'other') });
     refusals.push([
-      () => stackOn(harness, elsewhere, other),
+      () => stackOn(harness, elsewhere, [other]),
       'The tasks of a bundle work in one repository.',
     ]);
     const shipping = createTask(harness, { request: 'Shipping' });
     reachShipping(harness, shipping);
     refusals.push([
-      () => stackOn(harness, shipping, other),
+      () => stackOn(harness, shipping, [other]),
       'This task has started building, so its bundle can no longer change.',
     ]);
     for (const [refused, message] of refusals) expect(refused).toThrow(message);
-    expect(() => stackOn(harness, child, parent)).not.toThrow();
+    expect(() => stackOn(harness, child, [parent])).not.toThrow();
+    expect(() => stackOn(harness, other, [parent])).not.toThrow();
+    expect(() => stackOn(harness, elsewhere, [parent, other])).toThrow(
+      'The tasks of a bundle work in one repository.'
+    );
   });
 });
 
@@ -272,7 +282,7 @@ describe('a bundle on its way to the merge', () => {
   test('the root holds its merge gate until the task stacked on it is ready', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     reachReady(harness, parent);
     expect(listOpenGates(harness.state, parent)).toHaveLength(0);
     expect(harness.task(parent).stage).toBe('shipping');
@@ -288,7 +298,7 @@ describe('a bundle on its way to the merge', () => {
   test('a ready task starts another round at once and stops being ready until that round ships', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    createTask(harness, { request: 'Child', stacksOn: parent });
+    createTask(harness, { request: 'Child', stacksOn: [parent] });
     reachReady(harness, parent);
     harness.send({
       type: 'task.message',
@@ -306,7 +316,7 @@ describe('a bundle on its way to the merge', () => {
     const parent = createTask(harness, { request: 'Parent' });
     reachReady(harness, parent);
     expect(harness.openGate(parent).type).toBe('merge');
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     expect(listOpenGates(harness.state, parent)).toHaveLength(0);
     expect(harness.task(parent).stageReason).toBe('waiting for “Child” to be ready to merge');
     expect(harness.task(child).stage).toBe('planning');
@@ -318,12 +328,16 @@ describe('a bundle on its way to the merge', () => {
     const gate = harness.openGate(root);
     expect(gate.type).toBe('merge');
     expect(gate.body).toContain(
-      'Approving merges the whole bundle as one, from the last pull request back to this one: #1 “Root”, #2 “Middle”, #3 “Top”.'
+      'Approving merges the whole bundle as one, each pull request into its base from the top of the bundle down and this one last: #1 “Root”, #2 “Middle”, #3 “Top”.'
     );
     expect(listOpenGates(harness.state, top)).toHaveLength(0);
     expect(harness.task(top).stageReason).toBe(READY);
-    expect(listBundleAbove(harness.state, harness.task(root)).map((task) => task.id)).toEqual([middle, top]);
-    expect(listBundleBelow(harness.state, harness.task(top)).map((task) => task.id)).toEqual([middle, root]);
+    expect(listBundleFollowers(harness.state, harness.task(root)).map((task) => task.id)).toEqual([
+      middle,
+      top,
+    ]);
+    expect(listBundleFollowers(harness.state, harness.task(top))).toEqual([]);
+    expect(isBundleFollower(harness.state, harness.task(top))).toBe(true);
 
     recordClean(harness, top, 3, { checks: 'failing' });
     expect(harness.task(top).bundleReady).toBeNull();
@@ -348,7 +362,7 @@ describe('a bundle on its way to the merge', () => {
   test('a task above that turns clean before the root waits for it, ready', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     reachReady(harness, parent, 1);
     readyWorktree(harness, child);
     reachShipping(harness, child);
@@ -422,7 +436,7 @@ describe('a bundle on its way to the merge', () => {
   test('a task below that merges outside Shinsa moves the one above onto the default branch', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     reachReady(harness, parent, 1);
     readyWorktree(harness, child);
     reachShipping(harness, child);
@@ -430,7 +444,7 @@ describe('a bundle on its way to the merge', () => {
     recordClean(harness, child, 2, { checks: 'pending' });
     const watches = harness.effectsOf('pull_request.watch').length;
     recordMerged(harness, parent, 1);
-    expect(harness.task(child).stackBase).toBeNull();
+    expect(harness.task(child).stackBases).toEqual([]);
     expect(resolveRoundBase(harness.task(child))).toBeNull();
     expect(
       harness
@@ -446,7 +460,7 @@ describe('a bundle on its way to the merge', () => {
     const harness = createHarness();
     const { root, middle } = createBundle(harness);
     recordMerged(harness, root, 1);
-    expect(harness.task(middle).stackBase).toBeNull();
+    expect(harness.task(middle).stackBases).toEqual([]);
     recordClean(harness, middle, 2);
     const gate = harness.openGate(middle);
     expect(gate.type).toBe('merge');
@@ -456,31 +470,31 @@ describe('a bundle on its way to the merge', () => {
   test('a cancelled task below pauses the started one above, and Retry takes it out of the bundle', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     reachReady(harness, parent, 1);
     readyWorktree(harness, child);
     expect(harness.task(child).stage).toBe('planning');
     harness.send({ type: 'task.cancel', taskId: parent });
     const gate = harness.openGate(child);
     expect(gate.title).toBe('“Parent” was cancelled');
-    expect(harness.task(child).stackBase).toBe(`fix/${parent}`);
+    expect(harness.task(child).stackBases).toEqual([`fix/${parent}`]);
     approve(harness, child);
-    expect(harness.task(child).stacksOn).toBeNull();
-    expect(harness.task(child).stackBase).toBeNull();
+    expect(harness.task(child).stacksOn).toEqual([]);
+    expect(harness.task(child).stackBases).toEqual([]);
     expect(harness.task(child).stage).toBe('planning');
   });
 
   test('taking a planning task out of its bundle replans it from the default branch', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     reachReady(harness, parent, 1);
     readyWorktree(harness, child);
-    expect(harness.task(child).stackBase).toBe(`fix/${parent}`);
+    expect(harness.task(child).stackBases).toEqual([`fix/${parent}`]);
     const creates = harness.effectsOf('worktree.create').length;
-    stackOn(harness, child, null);
-    expect(harness.task(child).stacksOn).toBeNull();
-    expect(harness.task(child).stackBase).toBeNull();
+    stackOn(harness, child, []);
+    expect(harness.task(child).stacksOn).toEqual([]);
+    expect(harness.task(child).stackBases).toEqual([]);
     expect(resolveRoundBase(harness.task(child))).toBeNull();
     verifySetup(harness, child);
     expect(harness.effectsOf('worktree.create').length).toBe(creates + 1);
@@ -490,16 +504,16 @@ describe('a bundle on its way to the merge', () => {
   test('the root gets its own merge gate once nothing is stacked on it any more', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    const child = createTask(harness, { request: 'Child', stacksOn: parent });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
     reachReady(harness, parent, 1);
-    harness.send({ type: 'task.stack_on', taskId: child, stacksOn: null });
+    stackOn(harness, child, []);
     expect(harness.task(parent).bundleReady).toBeNull();
     expect(harness.task(parent).stageReason).toBe('checking the pull request');
     expect(harness.lastEffect('pull_request.watch').taskId).toBe(parent);
     recordClean(harness, parent, 1);
     expect(harness.openGate(parent).type).toBe('merge');
 
-    const other = createTask(harness, { request: 'Other', stacksOn: parent });
+    const other = createTask(harness, { request: 'Other', stacksOn: [parent] });
     expect(listOpenGates(harness.state, parent)).toHaveLength(0);
     harness.send({ type: 'task.cancel', taskId: other });
     recordClean(harness, parent, 1);
@@ -509,7 +523,7 @@ describe('a bundle on its way to the merge', () => {
   test('a ready task that waits on another task to merge stops being ready', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
-    createTask(harness, { request: 'Child', stacksOn: parent });
+    createTask(harness, { request: 'Child', stacksOn: [parent] });
     const api = createTask(harness, { request: 'Ship the API' });
     reachReady(harness, parent, 1);
     harness.send({ type: 'task.wait_on', taskId: parent, waitsOn: [api] });
@@ -525,7 +539,7 @@ describe('a bundle on its way to the merge', () => {
       request: 'Why is it slow?',
       repoId: null,
       mode: 'ask',
-      stacksOn: parent,
+      stacksOn: [parent],
     });
     reachReady(harness, parent);
     expect(harness.openGate(parent).type).toBe('merge');
@@ -535,8 +549,8 @@ describe('a bundle on its way to the merge', () => {
     const harness = createHarness();
     const loose = createTask(harness, { request: 'Loose' });
     expect(resolveBundle(harness.state, harness.task(loose))).toEqual([]);
-    expect(listBundleBelow(harness.state, harness.task(loose))).toEqual([]);
-    expect(listBundleAbove(harness.state, harness.task(loose))).toEqual([]);
+    expect(isBundleFollower(harness.state, harness.task(loose))).toBe(false);
+    expect(listBundleFollowers(harness.state, harness.task(loose))).toEqual([]);
   });
 });
 
@@ -608,5 +622,207 @@ describe('a bundle that conflicts with the default branch', () => {
     harness.send({ type: 'task.cancel', taskId: top });
     harness.send({ type: 'task.cancel', taskId: middle });
     expect(harness.task(root).bundleConflict).toBeNull();
+  });
+});
+
+function createDiamond(harness: Harness) {
+  const a = createTask(harness, { request: 'A' });
+  const b = createTask(harness, { request: 'B', stacksOn: [a] });
+  const c = createTask(harness, { request: 'C', stacksOn: [a] });
+  const d = createTask(harness, { request: 'D', stacksOn: [a] });
+  const f = createTask(harness, { request: 'F', stacksOn: [b, c, d] });
+  const e = createTask(harness, { request: 'E', stacksOn: [f] });
+  return { a, b, c, d, f, e };
+}
+
+function readyDiamond(harness: Harness) {
+  const tasks = createDiamond(harness);
+  const { a, b, c, d, f, e } = tasks;
+  reachReady(harness, a, 1);
+  for (const [id, number] of [
+    [b, 2],
+    [c, 3],
+    [d, 4],
+  ] as const) {
+    readyWorktree(harness, id);
+    reachReady(harness, id, number);
+  }
+  readyWorktree(harness, f);
+  reachReady(harness, f, 5);
+  readyWorktree(harness, e);
+  reachReady(harness, e, 6);
+  recordClean(harness, a, 1);
+  return tasks;
+}
+
+describe('a bundle that branches and joins', () => {
+  test('a task stacked on several tasks waits for every one of them, then branches off the first', () => {
+    const harness = createHarness();
+    const { a, b, c, d, f } = createDiamond(harness);
+    expect(harness.task(f).stacksOn).toEqual([b, c, d]);
+    expect(harness.task(f).activity.map((entry) => entry.text)).toContain(
+      'Stacked on “B”, “C” and “D” as a bundle'
+    );
+    reachReady(harness, a, 1);
+    expect(harness.task(f).stageReason).toBe('waiting for “B”, “C”, “D” to be ready to merge');
+    for (const [id, number] of [
+      [b, 2],
+      [c, 3],
+    ] as const) {
+      readyWorktree(harness, id);
+      reachReady(harness, id, number);
+    }
+    expect(harness.task(f).stageReason).toBe('waiting for “D” to be ready to merge');
+    readyWorktree(harness, d);
+    reachReady(harness, d, 4);
+    expect(harness.task(f).stage).toBe('triage');
+    expect(harness.task(f).stackBases).toEqual([`fix/${b}`, `fix/${c}`, `fix/${d}`]);
+    expect(resolveRoundBase(harness.task(f))).toBe(`fix/${b}`);
+  });
+
+  test('the bundle is every connected task, parents first, and its earliest root leads it', () => {
+    const harness = createHarness();
+    const { a, b, c, d, f, e } = createDiamond(harness);
+    const order = [a, b, c, d, f, e];
+    for (const id of order) {
+      expect(resolveBundleMembers(harness.state, harness.task(id)).map((task) => task.id)).toEqual(order);
+      expect(resolveBundleLead(harness.state, harness.task(id)).id).toBe(a);
+    }
+    expect(listBundleFollowers(harness.state, harness.task(a)).map((task) => task.id)).toEqual([
+      b,
+      c,
+      d,
+      f,
+      e,
+    ]);
+    expect(resolveBundle(harness.state, harness.task(c)).map((task) => task.id)).toEqual(order);
+    expect(listStackParents(harness.state, harness.task(f)).map((task) => task.id)).toEqual([b, c, d]);
+    expect(listStackChildren(harness.state, a).map((task) => task.id)).toEqual([b, c, d]);
+  });
+
+  test('the lead holds one merge gate, and approving it merges from the top down', () => {
+    const harness = createHarness();
+    const { a, b, c, d, f, e } = readyDiamond(harness);
+    const gate = harness.openGate(a);
+    expect(gate.type).toBe('merge');
+    expect(gate.body).toContain('#1 “A”, #2 “B”, #3 “C”, #4 “D”, #5 “F”, #6 “E”.');
+    for (const id of [b, c, d, f, e]) {
+      expect(listOpenGates(harness.state, id)).toHaveLength(0);
+      expect(harness.task(id).stageReason).toBe(READY);
+    }
+    approve(harness, a);
+    expect(harness.lastEffect('pull_request.merge').bundle).toEqual([
+      { taskId: e, number: 6 },
+      { taskId: f, number: 5 },
+      { taskId: d, number: 4 },
+      { taskId: c, number: 3 },
+      { taskId: b, number: 2 },
+    ]);
+    for (const [id, number] of [
+      [e, 6],
+      [f, 5],
+      [d, 4],
+      [c, 3],
+      [b, 2],
+      [a, 1],
+    ] as const) {
+      recordMerged(harness, id, number);
+    }
+    expect([a, b, c, d, f, e].map((id) => harness.task(id).stage)).toEqual(Array(6).fill('merged'));
+  });
+
+  test('a task stacked on several waits as ready while one of them is still busy', () => {
+    const harness = createHarness();
+    const { a, c, f } = readyDiamond(harness);
+    recordClean(harness, c, 3, { checks: 'failing' });
+    expect(harness.task(c).stage).toBe('fixing');
+    expect(listOpenGates(harness.state, a)).toHaveLength(0);
+    expect(harness.task(a).stageReason).toBe('waiting for “C” to be ready to merge');
+    expect(harness.task(f).stageReason).toBe(READY);
+  });
+
+  test('a first parent that merges outside Shinsa moves the pull request onto the next one', () => {
+    const harness = createHarness();
+    const { b, c, d, f } = readyDiamond(harness);
+    const watches = harness.effectsOf('pull_request.watch').length;
+    recordMerged(harness, b, 2);
+    expect(harness.task(f).stackBases).toEqual([`fix/${c}`, `fix/${d}`]);
+    expect(resolveRoundBase(harness.task(f))).toBe(`fix/${c}`);
+    expect(
+      harness
+        .effectsOf('pull_request.watch')
+        .slice(watches)
+        .map((effect) => effect.taskId)
+    ).toContain(f);
+  });
+
+  test('a cancelled parent pauses the task stacked on it, and Retry keeps the others', () => {
+    const harness = createHarness();
+    const { b, c, d, f } = readyDiamond(harness);
+    harness.send({ type: 'task.cancel', taskId: c });
+    const gate = harness.openGate(f);
+    expect(gate.title).toBe('“C” was cancelled');
+    expect(gate.body).toContain('Retry to keep it stacked on “B”, “D” only, or cancel this one.');
+    approve(harness, f);
+    expect(harness.task(f).stacksOn).toEqual([b, d]);
+    expect(harness.task(f).stackBases).toEqual([`fix/${b}`, `fix/${d}`]);
+  });
+
+  test('a waiting task with a cancelled parent keeps waiting on the rest after Retry', () => {
+    const harness = createHarness();
+    const { b, c, d, f } = createDiamond(harness);
+    harness.send({ type: 'task.cancel', taskId: c });
+    expect(harness.openGate(f).type).toBe('failure');
+    harness.send({ type: 'task.retry', taskId: f });
+    expect(harness.task(f).stacksOn).toEqual([b, d]);
+    expect(harness.task(f).stage).toBe('waiting_on_tasks');
+  });
+
+  test('a bundle with two roots leads from the earlier one, and the later root waits as ready', () => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First root' });
+    const second = createTask(harness, { request: 'Second root' });
+    const join = createTask(harness, { request: 'Join', stacksOn: [first, second] });
+    reachReady(harness, second, 2);
+    expect(listOpenGates(harness.state, second)).toHaveLength(0);
+    expect(harness.task(second).stageReason).toBe(READY);
+    reachReady(harness, first, 1);
+    readyWorktree(harness, join);
+    reachReady(harness, join, 3);
+    recordClean(harness, first, 1);
+    expect(harness.openGate(first).type).toBe('merge');
+    approve(harness, first);
+    expect(harness.lastEffect('pull_request.merge').bundle).toEqual([
+      { taskId: join, number: 3 },
+      { taskId: second, number: 2 },
+    ]);
+  });
+
+  test('a task at its merge gate that joins a bundle behind an earlier root gives its gate up', () => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First root' });
+    const later = createTask(harness, { request: 'Later root' });
+    reachReady(harness, later, 2);
+    expect(harness.openGate(later).type).toBe('merge');
+    createTask(harness, { request: 'Join', stacksOn: [first, later] });
+    expect(listOpenGates(harness.state, later)).toHaveLength(0);
+    expect(harness.task(later).stageReason).toBe(READY);
+    expect(resolveBundleLead(harness.state, harness.task(later)).id).toBe(first);
+  });
+
+  test('stacking keeps the order of the tasks given, and the same list again changes nothing', () => {
+    const harness = createHarness();
+    const one = createTask(harness, { request: 'One' });
+    const two = createTask(harness, { request: 'Two' });
+    const child = createTask(harness, { request: 'Child', waitsOn: [two] });
+    stackOn(harness, child, [two, one, two]);
+    expect(harness.task(child).stacksOn).toEqual([two, one]);
+    expect(harness.task(child).waitsOn).toEqual([]);
+    stackOn(harness, child, [two, one]);
+    stackOn(harness, child, [one, two]);
+    expect(harness.events.filter((event) => event.type === 'task.stack_changed')).toHaveLength(2);
+    expect(harness.task(child).activity.map((entry) => entry.text)).toContain(
+      'Stacked on “Two” and “One” as a bundle'
+    );
   });
 });

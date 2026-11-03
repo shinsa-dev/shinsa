@@ -1,6 +1,6 @@
 import {
-  listBundleAbove,
-  listBundleBelow,
+  isBundleFollower,
+  listBundleFollowers,
   type PullRequest,
   type Repo,
   type RepoCi,
@@ -59,8 +59,8 @@ export class PullRequestSync extends Context.Service<
         root: Task
       ) {
         const state = yield* world.state;
-        const above = listBundleAbove(state, root);
-        if (listBundleBelow(state, root).length > 0 || above.length === 0 || !root.branch) return [];
+        const above = listBundleFollowers(state, root);
+        if (isBundleFollower(state, root) || above.length === 0 || !root.branch) return [];
         if (!above.every((member) => member.bundleReady && member.branch)) return [];
         const branches: BundleBranch[] = [
           { taskId: root.id, branch: root.branch, base: repo.defaultBranch },

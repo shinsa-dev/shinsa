@@ -75,15 +75,13 @@ export function listOpenBlockers(state: ShinsaState, task: Task) {
   return listDependencies(state, task).filter((dependency) => !isTaskSettled(dependency));
 }
 
-export function selectStackParent(state: Pick<ShinsaState, 'tasks'>, task: Task) {
-  return task.stacksOn ? (state.tasks[task.stacksOn] ?? null) : null;
+export function listStackParents(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  return (task.stacksOn ?? []).map((id) => state.tasks[id]).filter((parent) => parent !== undefined);
 }
 
-export function selectStackedOnThis(state: Pick<ShinsaState, 'tasks'>, taskId: string) {
-  return (
-    Object.values(state.tasks).find(
-      (task) => task.stacksOn === taskId && !isTaskSettled(task) && hasStep(task, 'pull_request')
-    ) ?? null
+export function listStackChildren(state: Pick<ShinsaState, 'tasks'>, taskId: string) {
+  return Object.values(state.tasks).filter(
+    (task) => task.stacksOn?.includes(taskId) && !isTaskSettled(task) && hasStep(task, 'pull_request')
   );
 }
 
@@ -126,13 +124,6 @@ export function selectStackRefusal(
       message: 'The tasks of a bundle work in one repository.',
     });
   }
-  const taken = selectStackedOnThis(state, parent.id);
-  if (taken && taken.id !== task?.id) {
-    return new DomainError({
-      code: 'stack_taken',
-      message: `“${taken.title}” is already stacked on that task.`,
-    });
-  }
   if (task && isDependencyOf(state, task.id, parent.id)) {
     return new DomainError({ code: 'dependency_cycle', message: 'That task already waits on this one.' });
   }
@@ -149,47 +140,92 @@ function isInBundle(task: Task) {
   return !isTaskComplete(task) && task.stage !== 'cancelled';
 }
 
-export function listBundleBelow(state: Pick<ShinsaState, 'tasks'>, task: Task) {
-  const below: Task[] = [];
-  let parent = selectStackParent(state, task);
-  while (parent && isInBundle(parent) && !below.includes(parent)) {
-    below.push(parent);
-    parent = selectStackParent(state, parent);
+interface StackEdges {
+  parent: (task: Task) => boolean;
+  child: (task: Task) => boolean;
+}
+
+const OPEN_EDGES: StackEdges = {
+  parent: isInBundle,
+  child: (task) => !isTaskSettled(task) && hasStep(task, 'pull_request'),
+};
+
+const ALL_EDGES: StackEdges = {
+  parent: () => true,
+  child: (task) => task.stage !== 'cancelled',
+};
+
+function indexStackChildren(state: Pick<ShinsaState, 'tasks'>, edges: StackEdges) {
+  const children = new Map<string, Task[]>();
+  for (const task of Object.values(state.tasks)) {
+    if (!task.stacksOn?.length || !edges.child(task)) continue;
+    for (const id of task.stacksOn) {
+      const siblings = children.get(id);
+      if (siblings) siblings.push(task);
+      else children.set(id, [task]);
+    }
   }
-  return below;
+  return children;
 }
 
-export function listBundleAbove(state: Pick<ShinsaState, 'tasks'>, task: Task) {
-  const above: Task[] = [];
-  let child = selectStackedOnThis(state, task.id);
-  while (child && child.id !== task.id && !above.includes(child)) {
-    above.push(child);
-    child = selectStackedOnThis(state, child.id);
+function compareCreated(a: Task, b: Task) {
+  return a.createdAt - b.createdAt || a.id.localeCompare(b.id);
+}
+
+function sortParentsFirst(members: Map<string, Task>, children: Map<string, Task[]>) {
+  const waiting = new Map(
+    [...members.values()].map((member) => [
+      member.id,
+      (member.stacksOn ?? []).filter((id) => members.has(id)).length,
+    ])
+  );
+  const sorted: Task[] = [];
+  const ready = [...members.values()].filter((member) => waiting.get(member.id) === 0);
+  for (let next = ready.sort(compareCreated).shift(); next; next = ready.sort(compareCreated).shift()) {
+    sorted.push(next);
+    for (const child of children.get(next.id) ?? []) {
+      const left = (waiting.get(child.id) ?? 0) - 1;
+      waiting.set(child.id, left);
+      if (left === 0 && members.has(child.id)) ready.push(child);
+    }
   }
-  return above;
+  return sorted;
 }
 
-export function resolveBundleRoot(state: Pick<ShinsaState, 'tasks'>, task: Task) {
-  return listBundleBelow(state, task).at(-1) ?? task;
+function collectBundle(state: Pick<ShinsaState, 'tasks'>, task: Task, edges: StackEdges) {
+  const children = indexStackChildren(state, edges);
+  const members = new Map<string, Task>([[task.id, task]]);
+  const pending = [task];
+  for (let member = pending.pop(); member !== undefined; member = pending.pop()) {
+    const parents = listStackParents(state, member).filter(edges.parent);
+    for (const next of [...parents, ...(children.get(member.id) ?? [])]) {
+      if (members.has(next.id)) continue;
+      members.set(next.id, next);
+      pending.push(next);
+    }
+  }
+  return sortParentsFirst(members, children);
 }
 
-function selectStackedChild(state: Pick<ShinsaState, 'tasks'>, task: Task) {
-  const children = Object.values(state.tasks).filter((child) => child.stacksOn === task.id);
-  return children.find((child) => !isTaskSettled(child)) ?? children.find(isTaskComplete) ?? null;
+export function resolveBundleMembers(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  return collectBundle(state, task, OPEN_EDGES);
+}
+
+export function resolveBundleLead(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  return resolveBundleMembers(state, task)[0] ?? task;
+}
+
+export function listBundleFollowers(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  const [lead, ...followers] = resolveBundleMembers(state, task);
+  return lead?.id === task.id ? followers : [];
+}
+
+export function isBundleFollower(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  return resolveBundleLead(state, task).id !== task.id;
 }
 
 export function resolveBundle(state: Pick<ShinsaState, 'tasks'>, task: Task) {
-  const bundle: Task[] = [task];
-  let parent = selectStackParent(state, task);
-  while (parent && !bundle.includes(parent)) {
-    bundle.unshift(parent);
-    parent = selectStackParent(state, parent);
-  }
-  let child = selectStackedChild(state, task);
-  while (child && !bundle.includes(child)) {
-    bundle.push(child);
-    child = selectStackedChild(state, child);
-  }
+  const bundle = collectBundle(state, task, ALL_EDGES);
   return bundle.length > 1 ? bundle : [];
 }
 
@@ -197,11 +233,14 @@ export function isStackPending(state: ShinsaState, parent: Task) {
   return !isTaskComplete(parent) && !isReadyToStackOn(state, parent);
 }
 
+export function listPendingStackParents(state: ShinsaState, task: Task) {
+  return listStackParents(state, task).filter((parent) => isStackPending(state, parent));
+}
+
 export function listPendingDependencies(state: ShinsaState, task: Task) {
   const pending = listDependencies(state, task).filter((dependency) => !isTaskComplete(dependency));
-  const parent = selectStackParent(state, task);
-  if (!parent || !isStackPending(state, parent) || pending.includes(parent)) return pending;
-  return [...pending, parent];
+  const parents = listPendingStackParents(state, task).filter((parent) => !pending.includes(parent));
+  return [...pending, ...parents];
 }
 
 export function resolveTaskWorkspace(state: ShinsaState, task: Task): WorkspaceMode {
@@ -241,7 +280,7 @@ export function isDependencyOf(state: ShinsaState, taskId: string, candidateId: 
     if (seen.has(id)) continue;
     seen.add(id);
     const task = state.tasks[id];
-    pending.push(...(task?.waitsOn ?? []), ...(task?.stacksOn ? [task.stacksOn] : []));
+    pending.push(...(task?.waitsOn ?? []), ...(task?.stacksOn ?? []));
   }
   return false;
 }

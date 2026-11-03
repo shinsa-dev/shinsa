@@ -5,9 +5,9 @@ import {
   isTaskSettled,
   isWatchHome,
   listOpenGates,
+  listStackChildren,
   resolveBundle,
   type ShinsaState,
-  selectStackedOnThis,
   selectStackRefusal,
   type Task,
   type TaskStage,
@@ -51,7 +51,7 @@ function hasMergeGate(state: ShinsaState, task: Task) {
 export function isMergingWithBundle(state: ShinsaState, task: Task) {
   return (
     task.stage === 'awaiting_merge' &&
-    Boolean(task.stacksOn || selectStackedOnThis(state, task.id)) &&
+    ((task.stacksOn?.length ?? 0) > 0 || listStackChildren(state, task.id).length > 0) &&
     listOpenGates(state, task.id).length === 0
   );
 }
@@ -90,7 +90,11 @@ export function selectBundleRoot(state: ShinsaState, task: Task) {
 }
 
 function isStackSpoken(task: Task) {
-  return selectEngineCommands(connection.selectEngine(task.id)).has('task.stack_on');
+  return selectEngineCommands(connection.selectEngine(task.id)).has('task.stack_on_tasks');
+}
+
+function isStackedOn(task: Task | null, parent: Task) {
+  return task?.stacksOn?.includes(parent.id) ?? false;
 }
 
 export function listStackChoices(state: ShinsaState, task: Task | null) {
@@ -99,25 +103,25 @@ export function listStackChoices(state: ShinsaState, task: Task | null) {
     .filter((candidate) => candidate.id !== task?.id && !isWatchHome(candidate))
     .filter((candidate) => selectStackRefusal(state, task, candidate) === null)
     .filter((candidate) => isStackSpoken(candidate))
-    .sort((a, b) => Number(a.id !== task?.stacksOn) - Number(b.id !== task?.stacksOn) || compareTasks(a, b));
+    .sort((a, b) => Number(!isStackedOn(task, a)) - Number(!isStackedOn(task, b)) || compareTasks(a, b));
 }
 
 export function stackOnTask(task: Task, parent: Task) {
   return sendCommandWithToast(
-    { type: 'task.stack_on', taskId: task.id, stacksOn: parent.id },
+    { type: 'task.stack_on_tasks', taskId: task.id, stacksOn: [parent.id] },
     `Stacked on “${parent.title}”.`
   );
 }
 
 export function unstackTask(task: Task) {
   return sendCommandWithToast(
-    { type: 'task.stack_on', taskId: task.id, stacksOn: null },
+    { type: 'task.stack_on_tasks', taskId: task.id, stacksOn: [] },
     'Taken out of the bundle.'
   );
 }
 
 export function toggleStack(task: Task, parent: Task) {
-  return task.stacksOn === parent.id ? unstackTask(task) : stackOnTask(task, parent);
+  return isStackedOn(task, parent) ? unstackTask(task) : stackOnTask(task, parent);
 }
 
 function resolveBundleBranch(state: ShinsaState, rows: BundleRow[]) {

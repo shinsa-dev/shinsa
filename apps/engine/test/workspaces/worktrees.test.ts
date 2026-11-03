@@ -82,7 +82,7 @@ describe('worktrees', () => {
       createTask({ id: 'below', branch: below.branch, worktreePath: below.path }),
       'feat: below'
     );
-    await strategy.prepare(repo, { ...task, stackBase: below.branch });
+    await strategy.prepare(repo, { ...task, stackBases: [below.branch] });
     expect(existsSync(join(checkout.path, 'below.txt'))).toBe(true);
   });
 

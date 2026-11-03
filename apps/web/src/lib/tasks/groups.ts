@@ -10,7 +10,7 @@ import {
   listWaitsOn,
   type ShinsaState,
   selectLeadGate,
-  selectStackParent,
+  listStackParents,
   type Task,
   type TeamFeedTask,
 } from '@shinsa/core';
@@ -145,9 +145,10 @@ export function describeWaitsOn(waitsOn: Task[]) {
 
 function listChainParents(state: ShinsaState, task: Task) {
   const parents = listWaitsOn(state, task);
-  const below = selectStackParent(state, task);
-  if (!below || isTaskSettled(below) || parents.includes(below)) return parents;
-  return [...parents, below];
+  const below = listStackParents(state, task).filter(
+    (parent) => !isTaskSettled(parent) && !parents.includes(parent)
+  );
+  return [...parents, ...below];
 }
 
 function createChainLevels(state: ShinsaState, tasks: Task[]) {

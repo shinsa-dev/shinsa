@@ -12,9 +12,9 @@ import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
 import { restartWatchCheck } from './watchdogs.ts';
 
 function dropCancelledStack(decider: Decider, taskId: string) {
-  const { stacksOn } = decider.task(taskId);
-  if (stacksOn && decider.state.tasks[stacksOn]?.stage === 'cancelled')
-    changeStack(decider, taskId, null, 'you');
+  const stacksOn = decider.task(taskId).stacksOn ?? [];
+  const kept = stacksOn.filter((id) => decider.state.tasks[id]?.stage !== 'cancelled');
+  if (kept.length < stacksOn.length) changeStack(decider, taskId, kept, 'you');
 }
 
 function dropCancelledDependencies(decider: Decider, taskId: string) {

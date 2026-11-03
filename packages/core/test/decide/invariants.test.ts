@@ -11,15 +11,14 @@ import {
   decide,
   type Gate,
   type GateDecision,
-  hasStep,
   isAgentQuestion,
   isDecisionGate,
   isDependencyOf,
   isOverBudget,
   isTaskSettled,
   listActiveRuns,
-  listBundleAbove,
-  listBundleBelow,
+  isBundleFollower,
+  listBundleFollowers,
   listMissingEvidence,
   listOpenBlockers,
   listOpenGates,
@@ -1128,8 +1127,8 @@ function resolveCommandTask(state: ShinsaState, command: ShinsaCommand) {
 }
 
 function listBundleDrives(state: ShinsaState, open: Task[], random: Random): ShinsaCommand[] {
-  const parents = new Set(open.flatMap((task) => (task.stacksOn ? [task.stacksOn] : [])));
-  const members = open.filter((task) => task.stacksOn || parents.has(task.id));
+  const parents = new Set(open.flatMap((task) => task.stacksOn ?? []));
+  const members = open.filter((task) => (task.stacksOn?.length ?? 0) > 0 || parents.has(task.id));
   const ids = new Set(members.map((task) => task.id));
   const reads: ShinsaCommand[] = members
     .filter((task) => task.stage === 'shipping' || task.stage === 'awaiting_merge')
@@ -1145,7 +1144,7 @@ function listBundleDrives(state: ShinsaState, open: Task[], random: Random): Shi
       };
     });
   const checks: ShinsaCommand[] = members
-    .filter((task) => !task.stacksOn && chance(random, 0.1))
+    .filter((task) => !isBundleFollower(state, task) && chance(random, 0.1))
     .map((task) => ({
       type: 'bundle.record_check',
       taskId: task.id,
@@ -1166,8 +1165,15 @@ function selectBundleCommand(state: ShinsaState, random: Random): ShinsaCommand 
   const open = Object.values(state.tasks).filter((task) => !isTaskSettled(task));
   const drives = listBundleDrives(state, open, random);
   if (drives.length > 0 && chance(random, 0.8)) return pick(random, drives) ?? null;
-  const later = open.filter((task) => BUNDLE_PARENT_STAGES.has(task.stage) && !task.stacksOn);
+  const later = open.filter(
+    (task) => BUNDLE_PARENT_STAGES.has(task.stage) && (task.stacksOn?.length ?? 0) === 0
+  );
   const parent = pick(random, later.length > 0 && chance(random, 0.9) ? later : open)?.id;
+  const second = pick(
+    random,
+    (later.length > 1 ? later : open).filter((task) => task.id !== parent)
+  )?.id;
+  const parents = parent && second && chance(random, 0.4) ? [parent, second] : parent ? [parent] : [];
   const child = pick(
     random,
     open.filter(
@@ -1175,10 +1181,12 @@ function selectBundleCommand(state: ShinsaState, random: Random): ShinsaCommand 
     )
   )?.id;
   const commands: ShinsaCommand[] = [];
-  if (parent && chance(random, 0.2))
-    commands.push({ type: 'task.create', request: 'Build on it', repoId: 'repo', stacksOn: parent });
-  if (parent && child) commands.push({ type: 'task.stack_on', taskId: child, stacksOn: parent });
-  if (child && chance(random, 0.1)) commands.push({ type: 'task.stack_on', taskId: child, stacksOn: null });
+  if (parents.length > 0 && chance(random, 0.2))
+    commands.push({ type: 'task.create', request: 'Build on it', repoId: 'repo', stacksOn: parents });
+  if (parents.length > 0 && child)
+    commands.push({ type: 'task.stack_on_tasks', taskId: child, stacksOn: parents });
+  if (child && chance(random, 0.1))
+    commands.push({ type: 'task.stack_on_tasks', taskId: child, stacksOn: [] });
   return pick(random, commands) ?? null;
 }
 
@@ -1186,22 +1194,21 @@ function listBundleMarks(state: ShinsaState) {
   return Object.values(state.tasks).flatMap((task) => [
     task.bundleReady && task.stage === 'shipping' ? 'ready in its bundle' : null,
     task.stage === 'merged' && task.bundleReady ? 'merged while ready' : null,
-    task.stackBase ? 'based on the task below' : null,
+    (task.stackBases?.length ?? 0) > 0 ? 'based on the task below' : null,
+    (task.stackBases?.length ?? 0) > 1 ? 'based on several tasks' : null,
   ]);
 }
 
 function assertBundleInvariants(state: ShinsaState, task: Task, gates: Gate[], context: string) {
   if (isTaskSettled(task)) return;
-  const stacked = Object.values(state.tasks).filter(
-    (child) => child.stacksOn === task.id && !isTaskSettled(child) && hasStep(child, 'pull_request')
-  );
-  expect(stacked.length, context).toBeLessThanOrEqual(1);
-  if (task.stacksOn) expect(isDependencyOf(state, task.id, task.stacksOn), context).toBe(false);
+  for (const parent of task.stacksOn ?? []) {
+    expect(isDependencyOf(state, task.id, parent), context).toBe(false);
+  }
   const merge = gates.some((gate) => gate.type === 'merge');
-  if (listBundleBelow(state, task).length > 0) expect(merge, context).toBe(false);
+  if (isBundleFollower(state, task)) expect(merge, context).toBe(false);
   if (merge) {
     expect(
-      listBundleAbove(state, task).every((above) => above.bundleReady),
+      listBundleFollowers(state, task).every((follower) => follower.bundleReady),
       context
     ).toBe(true);
     expect(task.bundleConflict ?? null, context).toBeNull();
@@ -1734,6 +1741,7 @@ describe('decide under random command sequences', () => {
       };
       for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'bundles', collect);
       expect([...reached].sort()).toEqual([
+        'based on several tasks',
         'based on the task below',
         'merged while ready',
         'ready in its bundle',

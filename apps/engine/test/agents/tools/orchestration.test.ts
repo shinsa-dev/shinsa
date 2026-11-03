@@ -444,7 +444,7 @@ describe('create_task and split_task', () => {
       call
     );
     const created = Object.values(core.state.tasks).find((task) => task.createdBy?.taskId === taskId);
-    expect(created).toMatchObject({ stacksOn: taskId, waitsOn: [] });
+    expect(created).toMatchObject({ stacksOn: [taskId], waitsOn: [] });
   });
 
   test('create_task refuses a repository Shinsa does not know, naming the ones it does', async () => {

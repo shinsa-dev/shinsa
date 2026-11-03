@@ -603,7 +603,7 @@ describe('waiting on other tasks', () => {
 
   it('stacks the task on another as a bundle and takes it out again', () => {
     const { state, task } = setup(
-      createTask({ id: 't1', stage: 'planning', stacksOn: 't2' }),
+      createTask({ id: 't1', stage: 'planning', stacksOn: ['t2'] }),
       [],
       [createTask({ id: 't2', title: 'Add the API' }), createTask({ id: 't3', title: 'Write the schema' })]
     );
@@ -616,14 +616,14 @@ describe('waiting on other tasks', () => {
     pick(stack, 'gone');
     run(find(all, 'task.t1.stack.off'));
     expect(spies.sent.mock.calls).toEqual([
-      [{ type: 'task.stack_on', taskId: 't1', stacksOn: 't3' }, 'Stacked on “Write the schema”.'],
-      [{ type: 'task.stack_on', taskId: 't1', stacksOn: null }, 'Taken out of the bundle.'],
+      [{ type: 'task.stack_on_tasks', taskId: 't1', stacksOn: ['t3'] }, 'Stacked on “Write the schema”.'],
+      [{ type: 'task.stack_on_tasks', taskId: 't1', stacksOn: [] }, 'Taken out of the bundle.'],
     ] as never);
   });
 
   it('offers no stacking once the task builds', () => {
     const { state, task } = setup(
-      createTask({ id: 't1', stage: 'building', stacksOn: 'gone' }),
+      createTask({ id: 't1', stage: 'building', stacksOn: ['gone'] }),
       [],
       [createTask({ id: 't2' })]
     );

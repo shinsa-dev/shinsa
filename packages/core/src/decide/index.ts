@@ -33,7 +33,7 @@ import { recordConfig } from './config.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
-import { releaseWaiting, stackOnTask } from './dependencies.ts';
+import { releaseWaiting, stackOnTasks } from './dependencies.ts';
 import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
 import {
@@ -208,8 +208,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return prioritizeTask(decider, command);
     case 'task.wait_on':
       return waitOnTasks(decider, command);
-    case 'task.stack_on':
-      return stackOnTask(decider, command);
+    case 'task.stack_on_tasks':
+      return stackOnTasks(decider, command);
     case 'task.move_to_backlog':
       return moveToBacklog(decider, command);
     case 'task.remove_from_backlog':

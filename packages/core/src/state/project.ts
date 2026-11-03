@@ -359,16 +359,16 @@ function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_c
 
 function applyStackChanged(state: ShinsaState, event: EventOf<'task.stack_changed'>) {
   updateTask(state, event.taskId, event.at, { stacksOn: event.stacksOn });
-  const parent = event.stacksOn === null ? null : (state.tasks[event.stacksOn]?.title ?? 'another task');
+  const parents = event.stacksOn.map((id) => state.tasks[id]?.title ?? 'another task');
   record(state, event.taskId, event.at, {
     actor: event.by ?? 'you',
     kind: 'stage',
-    text: describeStack(parent),
+    text: describeStack(parents),
   });
 }
 
 function applyStackBased(state: ShinsaState, event: EventOf<'task.stack_based'>) {
-  updateTask(state, event.taskId, event.at, { stackBase: event.base });
+  updateTask(state, event.taskId, event.at, { stackBases: event.bases });
 }
 
 function applyBundleReady(state: ShinsaState, event: EventOf<'task.bundle_ready'>) {

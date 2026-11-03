@@ -608,7 +608,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
     path: ['tasks', 'stack-on'],
     summary:
       'Stack a task on another as a bundle: it starts once that task is ready to merge, builds on its branch, and the bundle merges as one.',
-    command: 'task.stack_on',
+    command: 'task.stack_on_tasks',
     fields: [
       TASK_FIELD,
       {
@@ -620,21 +620,21 @@ export const TASK_SPECS: SurfaceSpec[] = [
       },
     ],
     build: async (values, client) => ({
-      type: 'task.stack_on',
+      type: 'task.stack_on_tasks',
       taskId: await findTaskId(client, readValue(values, 'task')),
-      stacksOn: await findTaskId(client, readValue(values, 'below')),
+      stacksOn: [await findTaskId(client, readValue(values, 'below'))],
     }),
     done: () => 'Stacked. It starts once the task below is ready to merge.',
   }),
   defineCommand({
     path: ['tasks', 'unstack'],
     summary: 'Take a task out of its bundle before it starts: it no longer waits for the task below.',
-    command: 'task.stack_on',
+    command: 'task.stack_on_tasks',
     fields: [TASK_FIELD],
     build: async (values, client) => ({
-      type: 'task.stack_on',
+      type: 'task.stack_on_tasks',
       taskId: await findTaskId(client, readValue(values, 'task')),
-      stacksOn: null,
+      stacksOn: [],
     }),
     done: () => 'It is no longer in a bundle.',
   }),

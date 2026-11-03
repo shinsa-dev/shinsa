@@ -1850,8 +1850,8 @@ describe('merging a bundle of tasks', () => {
         title: 'Middle',
         branch: 'feat/middle',
         stage,
-        stacksOn: 'task-1',
-        stackBase: 'feat/root',
+        stacksOn: ['task-1'],
+        stackBases: ['feat/root'],
         bundleReady: ready,
         pullRequest: { ...PULL, number: 8, base: 'feat/root' },
       });
@@ -1860,8 +1860,8 @@ describe('merging a bundle of tasks', () => {
         title: 'Top',
         branch: 'feat/top',
         stage,
-        stacksOn: 'task-2',
-        stackBase: 'feat/middle',
+        stacksOn: ['task-2'],
+        stackBases: ['feat/middle'],
         bundleReady: ready,
         pullRequest: { ...PULL, number: 9, base: 'feat/middle' },
       });
