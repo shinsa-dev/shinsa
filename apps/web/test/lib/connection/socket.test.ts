@@ -39,6 +39,7 @@ import {
   useTranscript,
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
+import { isPageActive } from '@/lib/notifications/presence.ts';
 import { createSocketTransport, type PendingRetry } from '../../support/engine-socket.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createMachineResources } from '../../support/resources.ts';
@@ -641,6 +642,64 @@ describe('Connection surfaces', () => {
     latest().receive({ type: 'surfaces', desktop: false });
     expect(subject.isDesktopConnected()).toBe(false);
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Connection attention', () => {
+  const presences = (socket: FakeSocket) => socket.sent.filter((message) => message.type === 'presence');
+
+  it('says whether this page is in use once the engine routes attention, and every time you use it after', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    subject.reportPresence();
+    expect(presences(latest())).toEqual([]);
+    latest().receive({ type: 'engine', engine: { ...resolveEngineInfo('1.2.0'), features: [] } });
+    expect(presences(latest())).toEqual([]);
+    latest().receive({ type: 'engine', engine: resolveEngineInfo('1.2.0') });
+    const active = isPageActive();
+    expect(presences(latest())).toEqual([{ type: 'presence', active }]);
+    subject.reportPresence();
+    expect(presences(latest())).toEqual([
+      { type: 'presence', active },
+      { type: 'presence', active: true },
+    ]);
+  });
+
+  it('asks the page whether it is in use when it is given a check', () => {
+    const sockets: FakeSocket[] = [];
+    const subject = new Connection({
+      transport: createSocketTransport(() => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      }),
+      isActive: () => true,
+    });
+    subject.start();
+    sockets[0]?.open();
+    sockets[0]?.receive({ type: 'engine', engine: resolveEngineInfo('1.2.0') });
+    expect(sockets[0]?.sent.at(-1)).toEqual({ type: 'presence', active: true });
+  });
+
+  it('follows where the engine says you are, and forgets it when the socket closes or the page resets', () => {
+    const { subject, retries, latest } = setup();
+    const listener = mock(() => {});
+    subject.subscribeSurfaces(listener);
+    subject.start();
+    latest().open();
+    expect(subject.selectAttention()).toBe('nowhere');
+    latest().receive({ type: 'attention', where: 'elsewhere' });
+    expect(subject.selectAttention('any-task')).toBe('elsewhere');
+    expect(listener).toHaveBeenCalledTimes(1);
+    latest().close();
+    expect(subject.selectAttention()).toBe('nowhere');
+    retries.at(-1)?.reconnect();
+    latest().open();
+    latest().receive({ type: 'attention', where: 'here' });
+    expect(subject.selectAttention()).toBe('here');
+    subject.reset();
+    expect(subject.selectAttention()).toBe('nowhere');
   });
 });
 

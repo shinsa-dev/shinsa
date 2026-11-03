@@ -454,6 +454,13 @@ export class Fleet implements ShinsaConnection {
 
   isDesktopConnected = () => this.#entries.some((entry) => entry.member.connection.isDesktopConnected());
 
+  reportPresence = () => {
+    for (const entry of this.#entries) entry.member.connection.reportPresence();
+  };
+
+  selectAttention = (taskId?: string | null) =>
+    this.#memberOf(taskId ? this.#ownerOf(taskId) : null)?.connection.selectAttention() ?? 'nowhere';
+
   subscribeTerminals = (listener: () => void) => this.#terminalsSignal.subscribe(listener);
 
   #mergeTerminals() {

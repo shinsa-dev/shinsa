@@ -26,14 +26,16 @@ afterEach(() => {
 function setUp(preferences: Partial<NotificationPreferences>) {
   const plays: [string, number][] = [];
   const notices: DecisionNotice[] = [];
-  const page = { quiet: false };
+  const dismissed: string[] = [];
+  const page = { quiet: false, quietTasks: new Set<string>() };
   const watcher = new AttentionWatcher({
     preferences: () => ({ ...DEFAULT_PREFERENCES, ...preferences }),
     play: (soundId, count) => plays.push([soundId, count]),
     notify: (notice) => notices.push(notice),
-    quiet: () => page.quiet,
+    dismiss: (gateId) => dismissed.push(gateId),
+    quiet: (notice) => page.quiet || page.quietTasks.has(notice.taskId),
   });
-  return { watcher, plays, notices, page };
+  return { watcher, plays, notices, dismissed, page };
 }
 
 function state(gateIds: string[], patch = {}) {
@@ -68,6 +70,30 @@ describe('a quiet page', () => {
     expect(notices).toEqual([]);
     watcher.observe(state(['g-1', 'g-2']));
     expect(notices.map((notice) => notice.gateId)).toEqual(['g-2']);
+  });
+});
+
+describe('a page quiet for some tasks only', () => {
+  it('notifies about the decisions of the machines it is the one you use on, and chimes once for them', () => {
+    const { watcher, plays, notices, page } = setUp({ sound: 'always', notify: 'always' });
+    page.quietTasks.add('t-2');
+    watcher.observe(state([]));
+    watcher.observe(state(['g-1', 'far-1']));
+    expect(notices.map((notice) => notice.gateId)).toEqual(['g-1']);
+    expect(plays).toEqual([['chime', 1]]);
+    watcher.observe(state(['g-1', 'far-1', 'far-2']));
+    expect(plays).toHaveLength(1);
+  });
+});
+
+describe('dismissing', () => {
+  it('closes the notification of a decision once it no longer needs you, wherever it was answered', () => {
+    const { watcher, dismissed } = setUp({ notify: 'always' });
+    watcher.observe(state(['g-1', 'g-2']));
+    watcher.observe(state(['g-2']));
+    expect(dismissed).toEqual(['g-1']);
+    watcher.observe(state(['g-2']));
+    expect(dismissed).toEqual(['g-1']);
   });
 });
 

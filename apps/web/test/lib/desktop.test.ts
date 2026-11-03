@@ -5,6 +5,7 @@ import {
   applyDesktopChannel,
   checkDesktopUpdates,
   installDesktopUpdate,
+  isAlertQuiet,
   isDesktop,
   isPageQuiet,
   notifyDesktop,
@@ -48,6 +49,13 @@ describe('in a browser', () => {
 
   it('on Shinsa Cloud never defers to a desktop app, which notifies only at its own machine', () => {
     expect(isPageQuiet(true, true)).toBe(false);
+  });
+
+  it('alerts when it is the page you use, stays quiet when you use another, and falls back to the app rule otherwise', () => {
+    expect(isAlertQuiet('here', true)).toBe(false);
+    expect(isAlertQuiet('elsewhere', false, true)).toBe(true);
+    expect(isAlertQuiet('nowhere', true)).toBe(true);
+    expect(isAlertQuiet('nowhere', true, true)).toBe(false);
   });
 });
 

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import {
+  dismissDecisionNotification,
   readNotificationPermission,
   requestNotificationPermission,
   showDecisionNotification,
@@ -14,14 +15,19 @@ const NOTICE = { gateId: 'g-1', taskId: 't-1', title: 'Paint it', body: 'Which c
 
 function createWorker() {
   const shown: { title: string; options: NotificationOptions }[] = [];
+  const closed: string[] = [];
   const registration = {
     showNotification: (title: string, options: NotificationOptions) => {
       shown.push({ title, options });
       return Promise.resolve();
     },
+    getNotifications: ({ tag }: { tag: string }) =>
+      Promise.resolve(
+        shown.filter((notice) => notice.options.tag === tag).map(() => ({ close: () => closed.push(tag) }))
+      ),
   } as unknown as ServiceWorkerRegistration;
   const container = { controller: {}, ready: Promise.resolve(registration) } as NotificationWorker;
-  return { container, shown };
+  return { container, shown, closed };
 }
 
 let fake: ReturnType<typeof installNotifications> | null = null;
@@ -97,6 +103,27 @@ describe('browser notifications', () => {
         options: { body: TEST_NOTIFICATION.body, tag: 'shinsa-test', data: { path: null } },
       },
     ]);
+  });
+
+  it('closes a decision’s notification once it no longer needs you, and leaves the others', async () => {
+    fake = installNotifications('granted');
+    showDecisionNotification(NOTICE, '/tasks/SW-1', () => undefined);
+    showDecisionNotification({ ...NOTICE, gateId: 'g-2' }, '/tasks/SW-1', () => undefined);
+    dismissDecisionNotification('g-1', null);
+    dismissDecisionNotification('g-1', null);
+    expect(fake.shown.map((notice) => notice.closed)).toEqual([true, false]);
+    fake.shown[1]?.click();
+    dismissDecisionNotification('g-2', null);
+
+    const worker = createWorker();
+    showDecisionNotification(NOTICE, '/tasks/SW-1', () => undefined, worker.container);
+    await worker.container.ready;
+    dismissDecisionNotification('g-1', worker.container);
+    dismissDecisionNotification('g-9', worker.container);
+    await worker.container.ready;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(worker.closed).toEqual(['g-1']);
   });
 
   it('shows nothing once the browser said no', () => {

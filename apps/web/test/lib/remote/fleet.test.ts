@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 import type {
   AccountsSnapshot,
+  AttentionPlace,
   ChatEntry,
   EngineInfo,
   MachineResources,
@@ -89,6 +90,12 @@ class FakeConnection implements ShinsaConnection {
   };
   subscribeSurfaces = (listener: () => void) => this.signal.subscribe(listener);
   isDesktopConnected = () => this.desktop;
+  attention: AttentionPlace = 'nowhere';
+  presences = 0;
+  reportPresence = () => {
+    this.presences += 1;
+  };
+  selectAttention = () => this.attention;
   subscribeTerminals = (listener: () => void) => this.signal.subscribe(listener);
   selectTerminals = () => this.terminals;
   replaceTerminals = (terminals: TerminalsSnapshot) => {
@@ -169,6 +176,20 @@ function createFleet() {
   });
   return { fleet, studio, laptop };
 }
+
+describe('which device you use', () => {
+  it('tells every machine you use this page, and answers for a task as the machine that runs it', () => {
+    const { fleet, studio, laptop } = createFleet();
+    fleet.reportPresence();
+    expect([studio.connection.presences, laptop.connection.presences]).toEqual([1, 1]);
+    laptop.connection.attention = 'elsewhere';
+    studio.connection.attention = 'here';
+    expect(fleet.selectAttention('task-laptop')).toBe('elsewhere');
+    expect(fleet.selectAttention('task-studio')).toBe('here');
+    expect(fleet.selectAttention()).toBe('here');
+    expect(new Fleet([]).selectAttention('task-laptop')).toBe('nowhere');
+  });
+});
 
 describe('what each machine’s engine speaks', () => {
   it('answers for the engine of the machine that owns a task, and the first machine’s otherwise', () => {

@@ -192,6 +192,8 @@ export type {
   VersionsSnapshot,
 } from './versions.ts';
 export {
+  ATTENTION_PLACES,
+  type AttentionPlace,
   ClientMessage,
   CommandRefusal,
   DEVELOPMENT_VERSION,

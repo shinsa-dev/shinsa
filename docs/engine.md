@@ -6701,7 +6701,24 @@ and `browser` anywhere else, Floaty included. The server keeps each socket's sur
 changes (a desktop says hello, or the last one closes). A page that is not the desktop stays quiet while one is
 (`isQuietSurface`): it plays no sound and shows no notification, so a decision never rings twice, and keeps its
 count in the title and Floaty's tags (`docs/design.md`, 31); Shinsa Cloud's dashboard never stays quiet, since a
-machine's app notifies only at that machine. A message the
+machine's app notifies only at that machine.
+
+**The device you use notifies** (`AttentionTracker`, `apps/engine/src/http/attention.ts`). Each page of the
+owner's (a local socket, the Mac app's included, or a sealed channel whose account owns the machine) says when you
+use it with `presence { active: true }`: when it comes forward (focus, or the tab shown again) and at most every 15 s
+while you click, type, scroll or move the pointer in it. The tracker keeps when each one was last used and answers
+every page that asked with `attention { where }`: `here` for the page used last, `elsewhere` for the owner's others,
+and `nowhere` once that page has been idle for five minutes (`ATTENTION_IDLE_MS`, a timer that fires then), when it
+closes and none other was used in that time, or always for a member's page and never for a share link's. A page
+that hears `here` plays the sound and shows the notification, one that hears `elsewhere` stays quiet, and one that
+hears `nowhere` falls back to the rule above (`isAlertQuiet`): with no device in use every open page alerts as
+before, and a browser on the machine defers to the Mac app. The dashboard asks each machine for the task's own
+answer (`Fleet.selectAttention`), so switching between the Mac app and Shinsa Cloud on a laptop moves the
+notifications with you within a click, and a decision answered anywhere closes its notification on every page
+that showed one (`dismissDecisionNotification`; the Mac app's own stay until clicked). An engine announces it as
+`attention`; a page never sends `presence` to one that does not.
+
+A message the
 server does not recognise, including a `hello` with an unknown surface, is logged and ignored; a socket that never
 says hello counts as no desktop.
 

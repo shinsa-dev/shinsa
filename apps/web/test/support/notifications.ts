@@ -19,6 +19,7 @@ export function installNotifications(
       return Promise.resolve(answer);
     }
     onclick: (() => void) | null = null;
+    onclose: (() => void) | null = null;
     constructor(title: string, options: NotificationOptions) {
       const record: FakeNotificationRecord = {
         title,
@@ -29,6 +30,7 @@ export function installNotifications(
       shown.push(record);
       this.close = () => {
         record.closed = true;
+        this.onclose?.();
       };
     }
     close: () => void;

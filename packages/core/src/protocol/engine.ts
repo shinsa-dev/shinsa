@@ -11,6 +11,7 @@ export const ENGINE_FEATURES = [
   'review.approve_after_fix',
   'changelog',
   'remote.terminals',
+  'attention',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

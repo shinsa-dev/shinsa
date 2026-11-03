@@ -462,7 +462,11 @@ print the whole document.
   (`isPageQuiet`): `useAttention` plays no sound and shows no notification, but keeps the count and status in the
   title and Floaty's tags, which Floaty reads; Settings → Notifications says the app handles them. Anything new that
   alerts goes through that check (`docs/design.md`, 31). The remote build is never quiet (a machine's app notifies
-  only at that machine), and a page a service worker controls shows its notifications through the worker
+  only at that machine). That rule is the fallback: each page tells its machine when you use it
+  (`lib/notifications/presence.ts`, `connection.reportPresence`), and the machine answers `attention { where }`, which
+  `isAlertQuiet` reads per decision through `connection.selectAttention(taskId)`: `here` alerts, `elsewhere` stays quiet,
+  `nowhere` leaves it to `isPageQuiet`. A decision that leaves the queue closes its notification
+  (`dismissDecisionNotification`). A page a service worker controls shows its notifications through the worker
   (`lib/notifications/worker.ts`), whose click opens the task in the dashboard.
 - **A render error stays in its region** (`docs/design.md`, 38). The app root, every routed page (keyed by its
   route, so going there again recovers), every task tab's content and every shell widget that reads live state (the

@@ -127,6 +127,7 @@ const FEATURE_ROUTES = {
   'review.approve_after_fix': [],
   changelog: ['GET /api/changelog'],
   'remote.terminals': [],
+  attention: [],
 };
 
 const LOCAL_ONLY = [

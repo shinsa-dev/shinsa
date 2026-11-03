@@ -1,4 +1,4 @@
-import { isQuietSurface, type ShinsaBuild, type Surface } from '@shinsa/core';
+import { type AttentionPlace, isQuietSurface, type ShinsaBuild, type Surface } from '@shinsa/core';
 import { createContext } from 'react';
 import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
@@ -68,6 +68,12 @@ export function resolveSurface(): Surface {
 
 export function isPageQuiet(desktopConnected: boolean, remote = isRemoteBuild()) {
   return !remote && isQuietSurface(resolveSurface(), desktopConnected);
+}
+
+export function isAlertQuiet(where: AttentionPlace, desktopConnected: boolean, remote = isRemoteBuild()) {
+  if (where === 'here') return false;
+  if (where === 'elsewhere') return true;
+  return isPageQuiet(desktopConnected, remote);
 }
 
 export function applyDesktop(navigate: (path: string) => void) {
