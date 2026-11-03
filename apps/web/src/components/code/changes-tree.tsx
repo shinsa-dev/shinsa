@@ -1,4 +1,4 @@
-import type { DiffFile, TaskDiff } from '@shinsa/core';
+import { describeCount, type DiffFile, type TaskDiff } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Checkbox } from '@shinsa/ui/components/checkbox';
 import { TooltipLabel } from '@shinsa/ui/components/tooltip';
@@ -24,7 +24,6 @@ import {
   resolveFolderViewed,
   sumChanges,
 } from '@/lib/code/tree.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { useHideViewed } from '@/lib/preferences/code.ts';
 import { type DisclosureId, useDisclosureSet } from '@/lib/preferences/disclosure.ts';
 
@@ -100,7 +99,7 @@ function FileEnd({
     <span className='flex shrink-0 items-center gap-1.5'>
       <RiskDot file={file} muted={muted} />
       {comments > 0 && (
-        <Hint label={`${formatCount(comments, 'comment', 'comments')} from you`}>
+        <Hint label={`${describeCount(comments, 'comment', 'comments')} from you`}>
           <span
             className={cn(
               'inline-flex w-fit text-2xs tabular-nums',
@@ -298,7 +297,7 @@ export function ChangesTree({
     <div className={TREE_LIST}>
       <div className='flex h-5.5 items-center gap-2 ps-1 text-2xs text-fg-2'>
         <span className='flex-1'>
-          {formatCount(diff.files.length, 'file', 'files')} ·{' '}
+          {describeCount(diff.files.length, 'file', 'files')} ·{' '}
           {hideViewed && hiddenCount > 0 ? `${hiddenCount} viewed hidden` : `${seen} viewed`}
         </span>
         <DiffStats added={totals.added} removed={totals.removed} />

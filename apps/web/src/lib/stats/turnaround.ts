@@ -1,5 +1,5 @@
-import type { Turnaround, TurnaroundMedian } from '@shinsa/core';
-import { formatCount, formatPercent } from '@/lib/format/count.ts';
+import { describeCount, type Turnaround, type TurnaroundMedian } from '@shinsa/core';
+import { formatPercent } from '@/lib/format/count.ts';
 import { formatTurnaround } from '@/lib/format/time.ts';
 import type { ShippingTile } from './shipping.ts';
 
@@ -13,7 +13,7 @@ function formatMedian(median: TurnaroundMedian) {
 }
 
 function describeRounds(median: TurnaroundMedian) {
-  return median.count === 0 ? 'No finished rounds' : `Over ${formatCount(median.count, 'round', 'rounds')}`;
+  return median.count === 0 ? 'No finished rounds' : `Over ${describeCount(median.count, 'round', 'rounds')}`;
 }
 
 export function listTurnaroundTiles(turnaround: Turnaround): ShippingTile[] {
@@ -32,7 +32,7 @@ export function listTurnaroundTiles(turnaround: Turnaround): ShippingTile[] {
       detail:
         yourTurnaround.count === 0
           ? 'No answered waits'
-          : `Over ${formatCount(yourTurnaround.count, 'wait', 'waits')}`,
+          : `Over ${describeCount(yourTurnaround.count, 'wait', 'waits')}`,
     },
     {
       key: 'agent-time',

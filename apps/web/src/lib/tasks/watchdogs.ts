@@ -1,4 +1,5 @@
 import {
+  describeCount,
   describeList,
   isTaskClosed,
   listActiveWatchdogs,
@@ -9,7 +10,6 @@ import {
   type WatchSource,
 } from '@shinsa/core';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { formatMinuteSpan, formatTimeLeft, formatWholeHours } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
@@ -30,7 +30,7 @@ export function describeWatchdogSchedule(watchdog: Watchdog) {
 }
 
 export function describeWatchdogMeta(watchdog: Watchdog, now: number) {
-  const checks = formatCount(watchdog.checks.length, 'check', 'checks');
+  const checks = describeCount(watchdog.checks.length, 'check', 'checks');
   switch (watchdog.status) {
     case 'needs_source':
     case 'awaiting_production':
@@ -79,7 +79,7 @@ export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, 
       return `${last ?? 'Found an issue.'}${filedText}${linkedText}`;
     }
     case 'stopped':
-      return `Stopped after ${formatCount(watchdog.checks.length, 'check', 'checks')}.`;
+      return `Stopped after ${describeCount(watchdog.checks.length, 'check', 'checks')}.`;
   }
 }
 
@@ -91,7 +91,7 @@ export function resolveWatchingReason(task: Task, now: number) {
   if (isTaskClosed(task)) return null;
   const active = listActiveWatchdogs(task);
   if (active.length === 0) return null;
-  const count = formatCount(active.length, 'watchdog', 'watchdogs');
+  const count = describeCount(active.length, 'watchdog', 'watchdogs');
   const ends = active.map((watchdog) => watchdog.endsAt).filter((at): at is number => at !== null);
   if (ends.length === 0) {
     const waiting = active.some((watchdog) => watchdog.status === 'awaiting_production');

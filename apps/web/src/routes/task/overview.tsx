@@ -1,4 +1,4 @@
-import { type Gate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
+import { describeCount, type Gate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -23,7 +23,6 @@ import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useOnHide } from '@/hooks/use-on-hide.ts';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
 import { selectShownReply } from '@/lib/overview/exchanges.ts';
 import { type NowTarget, resolveNowKind, resolveResultPlace } from '@/lib/overview/now.ts';
@@ -143,7 +142,7 @@ function ActivityPanel({
           className='self-start'
           onClick={() => setLimit(limit + ACTIVITY_PAGE)}
         >
-          {`Show ${formatCount(Math.min(older, ACTIVITY_PAGE), 'older entry', 'older entries')}`}
+          {`Show ${describeCount(Math.min(older, ACTIVITY_PAGE), 'older entry', 'older entries')}`}
         </Button>
       )}
     </Panel>

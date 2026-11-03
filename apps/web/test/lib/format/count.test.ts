@@ -3,21 +3,15 @@ import {
   endSentence,
   flattenWhitespace,
   formatBytes,
-  formatCount,
   formatLineRange,
   formatNumber,
   formatPercent,
   formatSteps,
 } from '@/lib/format/count.ts';
 
-describe('formatCount', () => {
+describe('formatSteps', () => {
   it('agrees the noun with the number', () => {
-    expect(formatCount(0, 'task', 'tasks')).toBe('0 tasks');
-    expect(formatCount(1, 'task', 'tasks')).toBe('1 task');
-    expect(formatCount(2, 'task', 'tasks')).toBe('2 tasks');
-  });
-
-  it('counts steps the same way', () => {
+    expect(formatSteps(0)).toBe('0 steps');
     expect(formatSteps(1)).toBe('1 step');
     expect(formatSteps(3)).toBe('3 steps');
   });

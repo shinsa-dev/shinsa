@@ -1,6 +1,12 @@
-import type { ShinsaState, Task, TeamFeedSnapshot, TeamFeedTask, TeammateOwner } from '@shinsa/core';
+import {
+  describeCount,
+  type ShinsaState,
+  type Task,
+  type TeamFeedSnapshot,
+  type TeamFeedTask,
+  type TeammateOwner,
+} from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { formatCount } from '@/lib/format/count.ts';
 import { formatMoment, formatSince } from '@/lib/format/time.ts';
 import { resolveSourceTaskId } from '@/lib/share/view.ts';
 import { resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
@@ -16,7 +22,7 @@ export function describePullRequestFact(pullRequest: NonNullable<Task['pullReque
   if (pullRequest.state !== 'open') notes.push({ text: pullRequest.state, tone: 'neutral' });
   else if (pullRequest.checks === 'failing') notes.push({ text: 'checks failing', tone: 'red' });
   if (pullRequest.unresolvedComments > 0) {
-    notes.push({ text: formatCount(pullRequest.unresolvedComments, 'comment', 'comments'), tone: 'amber' });
+    notes.push({ text: describeCount(pullRequest.unresolvedComments, 'comment', 'comments'), tone: 'amber' });
   }
   return notes;
 }

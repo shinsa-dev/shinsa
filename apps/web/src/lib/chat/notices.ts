@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type LoadedExtension,
   type LoadedExtensions,
   resolveProviderLabel,
@@ -8,7 +9,6 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { SWITCH_REASON } from '@/lib/accounts/account.ts';
 import type { QuietNoticeKind, TimelineItemOf } from '@/lib/chat/timeline.ts';
 import { formatTokenEstimate, resolveTokenText } from '@/lib/extensions.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { formatClock } from '@/lib/format/time.ts';
 
 interface NoticeGroupLine {
@@ -87,7 +87,7 @@ function resolveExtensionsLine(loaded: LoadedExtensions): NoticeLineView {
   }
   const total = sumLoadedTokens(loaded);
   const counts = present
-    .map((group) => formatCount(loaded[group.key].length, group.one, group.many))
+    .map((group) => describeCount(loaded[group.key].length, group.one, group.many))
     .join(', ');
   return {
     icon: 'IconBlocks',

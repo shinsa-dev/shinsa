@@ -1,5 +1,11 @@
-import type { FindingVerdict, FindingVerdictKind, Gate, ReviewEscalation, ReviewFinding } from '@shinsa/core';
-import { formatCount } from '@/lib/format/count.ts';
+import {
+  describeCount,
+  type FindingVerdict,
+  type FindingVerdictKind,
+  type Gate,
+  type ReviewEscalation,
+  type ReviewFinding,
+} from '@shinsa/core';
 import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
 import { SEVERITY_VERDICT } from '@/lib/review/findings.ts';
 import type { AnswerExtras, GateReply } from '@/lib/tasks/gates.ts';
@@ -48,7 +54,7 @@ export function resolveVerdictAction(
   if (fixes === 0) {
     return { reply: 'approveChanges', label: 'Approve changes' };
   }
-  const label = `Fix ${formatCount(fixes, 'finding', 'findings')}`;
+  const label = `Fix ${describeCount(fixes, 'finding', 'findings')}`;
   return thenApprove
     ? { reply: 'fixFindingsAndApprove', label: `${label} and approve` }
     : { reply: 'fixFindings', label };
@@ -79,7 +85,7 @@ function describeEscalationTitle(escalation: ReviewEscalation) {
 }
 
 export function describeEscalationBody(escalation: ReviewEscalation) {
-  const rounds = formatCount(escalation.rounds, 'fix round', 'fix rounds');
+  const rounds = describeCount(escalation.rounds, 'fix round', 'fix rounds');
   if (escalation.reason === 'stalled') {
     return 'Shinsa stopped instead of trying again. Decide on each finding: keep the ones to fix, dismiss the rest.';
   }

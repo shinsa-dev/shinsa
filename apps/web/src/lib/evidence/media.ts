@@ -1,4 +1,4 @@
-import { type Evidence, resolveCurrentRound, type ShinsaState, type Task } from '@shinsa/core';
+import { type Evidence, isOfCurrentRound, type ShinsaState, type Task } from '@shinsa/core';
 
 export type EvidenceMedia = 'image' | 'video' | 'text' | 'file' | 'link';
 
@@ -35,8 +35,7 @@ export function resolveEvidenceMedia(uri: string, kind?: Evidence['kind']): Evid
 }
 
 export function listRoundEvidence(evidence: ShinsaState['evidence'], task: Task): Evidence[] {
-  const round = resolveCurrentRound(task).number;
   return Object.values(evidence)
-    .filter((item) => item.taskId === task.id && (item.round ?? 1) === round)
+    .filter((item) => item.taskId === task.id && isOfCurrentRound(task, item))
     .sort((a, b) => a.attachedAt - b.attachedAt);
 }

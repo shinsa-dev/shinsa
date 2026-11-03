@@ -1,4 +1,5 @@
 import {
+  describeCount,
   resolveModelLabel,
   type Stats,
   type StatsBreakdown,
@@ -10,7 +11,7 @@ import {
   UNKNOWN_MODEL,
 } from '@shinsa/core';
 import { RUN_ROLE } from '@/lib/chat/run-role.ts';
-import { formatCount, formatNumber, formatPercent } from '@/lib/format/count.ts';
+import { formatNumber, formatPercent } from '@/lib/format/count.ts';
 import { formatCompactUsd, formatTokenCount } from '@/lib/format/money.ts';
 import { resolveChartMax } from './chart.ts';
 import { formatShortDay } from './days.ts';
@@ -87,7 +88,7 @@ export function listUsageTiles(stats: Stats): ShippingTile[] {
       key: 'cost',
       label: 'Known cost',
       value: formatCompactUsd(usage.knownUsd),
-      detail: formatCount(usage.runs, 'agent run', 'agent runs'),
+      detail: describeCount(usage.runs, 'agent run', 'agent runs'),
     },
     {
       key: 'cache',

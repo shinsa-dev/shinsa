@@ -1,6 +1,5 @@
-import type { SearchMatch, SearchResult } from '@shinsa/core';
+import { describeCount, type SearchMatch, type SearchResult } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { formatCount } from '@/lib/format/count.ts';
 
 export interface MatchGroup {
   path: string;
@@ -38,7 +37,7 @@ export function describeSearchResult(result: SearchResult) {
   if (result.matches.length === 0)
     return result.timedOut ? 'The search took too long and was stopped.' : 'No results.';
   const files = new Set(result.matches.map((match) => match.path)).size;
-  const summary = `${formatCount(result.matches.length, 'result', 'results')} in ${formatCount(files, 'file', 'files')}`;
+  const summary = `${describeCount(result.matches.length, 'result', 'results')} in ${describeCount(files, 'file', 'files')}`;
   if (result.timedOut) return `${summary}. The search took too long, so these are the first it found.`;
   if (result.truncated) return `${summary}. There are more; narrow the search to see them.`;
   return `${summary}.`;

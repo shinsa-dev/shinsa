@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type Attention,
   type ChatToolArgs,
   FINDING_SEVERITIES,
@@ -6,7 +7,6 @@ import {
   type ReviewFinding,
 } from '@shinsa/core';
 import { readList, readString, resolveShortPath } from '@/lib/chat/tool-describe.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
 export type FindingPlace = Pick<ReviewFinding, 'file' | 'line' | 'end'>;
@@ -80,7 +80,7 @@ export function readReportedFindings(args: ChatToolArgs): ReviewFinding[] {
 export function describeReportedFindings(findings: ReviewFinding[]) {
   if (findings.length === 0) return { title: 'Reported no findings', meta: null };
   return {
-    title: `Reported ${formatCount(findings.length, 'finding', 'findings')}`,
+    title: `Reported ${describeCount(findings.length, 'finding', 'findings')}`,
     meta: listSeverityCounts(findings).join(', '),
   };
 }

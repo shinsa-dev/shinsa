@@ -1,8 +1,14 @@
-import { isDelegatedRun, listChildRuns, type Run, type ShinsaState, type Task } from '@shinsa/core';
+import {
+  describeCount,
+  isDelegatedRun,
+  listChildRuns,
+  type Run,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { listTaskRuns } from '@/lib/chat/runs.ts';
-import { formatCount } from '@/lib/format/count.ts';
 
 export interface AgentNode {
   key: string;
@@ -36,7 +42,7 @@ function groupByRole(runs: Run[]) {
 }
 
 function describeGroup(runs: Run[]) {
-  const count = formatCount(runs.length, 'run', 'runs');
+  const count = describeCount(runs.length, 'run', 'runs');
   return runs.some((run) => run.endedAt === null) ? `${count} · working now` : count;
 }
 
@@ -80,5 +86,5 @@ export function listTaskAgents(state: ShinsaState, task: Task): AgentNode[] {
 }
 
 export function describeAgentCount(nodes: AgentNode[]) {
-  return formatCount(nodes.length, 'agent', 'agents');
+  return describeCount(nodes.length, 'agent', 'agents');
 }

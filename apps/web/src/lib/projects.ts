@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type CoverageSetting,
   lowerFirst,
   PROJECT_COLORS,
@@ -26,7 +27,7 @@ import {
 } from '@/lib/connection/projects.ts';
 import { sendCommand } from '@/lib/connection/socket.ts';
 import { changeCoverage } from '@/lib/coverage.ts';
-import { formatCount, formatNumber } from '@/lib/format/count.ts';
+import { formatNumber } from '@/lib/format/count.ts';
 import { changeWorkspace } from '@/lib/workspaces.ts';
 
 export type ProjectField = 'name' | 'key' | 'description';
@@ -258,7 +259,7 @@ export function listRepoChoiceGroups(
 }
 
 export function describeProjectRemoval(project: Project, repoCount: number) {
-  const repos = formatCount(repoCount, 'repository', 'repositories');
+  const repos = describeCount(repoCount, 'repository', 'repositories');
   return {
     title: `Remove ${project.name}?`,
     body:

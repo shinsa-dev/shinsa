@@ -3,6 +3,7 @@ import {
   type Gate,
   type GateType,
   isHeldInBacklog,
+  isPausingGate,
   listActiveRuns,
   type ShinsaState,
   selectLeadGate,
@@ -10,6 +11,7 @@ import {
   type TaskStage,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
 import { GATE, STAGE_ICON, STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { describePostMergeStatus, describePreMergeStatus } from '@/lib/review/merge-steps.ts';
@@ -57,7 +59,7 @@ export const ATTENTION: Record<Attention, Status> = {
 };
 
 export function resolvePauseGlyph(type: GateType | undefined) {
-  return type === 'configuration' || type === 'sign_in' || type === 'failure' ? resolveGlyph(type) : null;
+  return type && isPausingGate({ type }) ? resolveGlyph(type) : null;
 }
 
 export function resolveGateGlyph(gate: Gate): Glyph {
@@ -79,7 +81,7 @@ function isWaitingForDelegations(state: ShinsaState, task: Task) {
   );
 }
 
-export function isResolvingConflicts(task: Task) {
+export function isResolvingConflicts(task: Pick<Task, 'stage' | 'fixFor'>) {
   return task.stage === 'fixing' && (task.fixFor === 'conflict' || task.fixFor === 'update');
 }
 
@@ -100,7 +102,7 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (task.duplicate) return DUPLICATE;
   if (isWatchedTask(task)) return WATCHING;
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
-  if (task.usageWait?.status === 'armed') return WAITING_FOR_USAGE;
+  if (isUsageWaitArmed(task)) return WAITING_FOR_USAGE;
   if (isWaitingForDelegations(state, task)) return WAITING_FOR_DELEGATIONS;
   if (task.stage !== 'waiting_on_tasks' && isHeldByTasks(state, task)) {
     return { label: 'Waiting on another task', tone: 'neutral' };
@@ -147,7 +149,7 @@ export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName 
   if (task.duplicate) return TASK_GROUP.duplicate.icon;
   if (isWatchedTask(task)) return 'IconRadar';
   if (task.monitor?.status === 'armed') return 'IconClockSnooze';
-  if (task.usageWait?.status === 'armed') return 'IconGauge';
+  if (isUsageWaitArmed(task)) return 'IconGauge';
   if (isWaitingForDelegations(state, task)) return 'IconAgents';
   if (task.stage !== 'waiting_on_tasks' && isHeldByTasks(state, task)) return 'IconHourglass';
   return STAGE_STATUS_ICON[task.stage];

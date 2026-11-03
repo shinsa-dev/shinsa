@@ -1,5 +1,5 @@
-import type { Stats, StatsDay } from '@shinsa/core';
-import { formatCount, formatNumber } from '@/lib/format/count.ts';
+import { describeCount, type Stats, type StatsDay } from '@shinsa/core';
+import { formatNumber } from '@/lib/format/count.ts';
 import { formatShortDay, parseDayKey } from './days.ts';
 
 export type ShippingLevel = 0 | 1 | 2 | 3 | 4;
@@ -62,11 +62,11 @@ export function resolveShippingGrid(days: StatsDay[]): ShippingGrid {
 }
 
 export function formatPullRequests(count: number) {
-  return count === 0 ? 'No pull requests' : formatCount(count, 'pull request', 'pull requests');
+  return count === 0 ? 'No pull requests' : describeCount(count, 'pull request', 'pull requests');
 }
 
 export function describeShippingYear(stats: Stats) {
-  return `${formatCount(stats.total.pullRequests, 'pull request', 'pull requests')} merged in the last year`;
+  return `${describeCount(stats.total.pullRequests, 'pull request', 'pull requests')} merged in the last year`;
 }
 
 export function listShippingPoints(days: StatsDay[]): ShippingPoint[] {
@@ -108,7 +108,7 @@ export function listShippingTiles(stats: Stats, year: Stats): ShippingTile[] {
     },
     {
       key: 'lines',
-      label: `Lines merged in ${formatCount(total.changedFiles, 'file', 'files')}`,
+      label: `Lines merged in ${describeCount(total.changedFiles, 'file', 'files')}`,
       value: formatNumber(total.additions + total.deletions),
       detail: null,
       changes: { added: total.additions, removed: total.deletions },
@@ -116,8 +116,8 @@ export function listShippingTiles(stats: Stats, year: Stats): ShippingTile[] {
     {
       key: 'streak',
       label: 'Shipping streak',
-      value: formatCount(streak.current, 'day', 'days'),
-      detail: `Longest ${formatCount(streak.longest, 'day', 'days')}`,
+      value: describeCount(streak.current, 'day', 'days'),
+      detail: `Longest ${describeCount(streak.longest, 'day', 'days')}`,
     },
   ];
 }
