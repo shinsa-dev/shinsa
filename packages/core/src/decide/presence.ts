@@ -2,7 +2,7 @@ import type { CommandOf } from '../commands/index.ts';
 import { DAY_MS, DomainError } from '../domain/index.ts';
 import type { Decider } from './decider.ts';
 
-export const AWAY_SPAN_LIMIT_MS = 30 * DAY_MS;
+const AWAY_SPAN_LIMIT_MS = 30 * DAY_MS;
 
 export function recordAway(decider: Decider, command: CommandOf<'away.record'>) {
   if (decider.context.onBehalf) {
