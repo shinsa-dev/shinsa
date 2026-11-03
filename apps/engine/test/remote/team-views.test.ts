@@ -82,6 +82,15 @@ describe('keeping teammates’ task views on disk', () => {
     expect(existsSync(dir)).toBe(false);
   });
 
+  test('reads a kept view that is not an object as no view', () => {
+    const dir = join(createTempDir(), 'team-views');
+    const views = new TeamViews(dir);
+    views.write({ ...ENTRY, messages: [view(5)] });
+    const [kept] = readdirSync(dir).filter((name) => name !== 'index.json');
+    writeFileSync(join(dir, String(kept)), '5');
+    expect(views.select('team1', 'inst1', 'task1')).toBeNull();
+  });
+
   test('reads a broken index or view as nothing kept, and logs what it could not write', () => {
     const dir = join(createTempDir(), 'team-views');
     mkdirSync(dir, { recursive: true });
@@ -96,6 +105,8 @@ describe('keeping teammates’ task views on disk', () => {
     expect(views.list()).toEqual([{ ...ENTRY, size: 1 }]);
     expect(views.select('team1', 'inst1', 'task1')).toBeNull();
     writeFileSync(join(dir, 'index.json'), JSON.stringify({ entries: 'none' }));
+    expect(new TeamViews(dir).list()).toEqual([]);
+    writeFileSync(join(dir, 'index.json'), '[]');
     expect(new TeamViews(dir).list()).toEqual([]);
     views.write({ ...ENTRY, messages: [] });
     expect(views.select('team1', 'inst1', 'task1')).toBeNull();

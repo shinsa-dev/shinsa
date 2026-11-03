@@ -8,6 +8,7 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
+import { resolveServiceRunIn } from './places.ts';
 import {
   pickFreePort,
   readForegroundProgram,
@@ -17,7 +18,6 @@ import {
   resolveTerminalEnv,
   spawnTerminalProcess,
 } from './pty.ts';
-import { resolveServiceRunIn } from './routes.ts';
 import {
   NOTIFY_MS,
   type RemoteUrlSource,
@@ -457,6 +457,13 @@ export class Terminals {
 }
 
 export { ServiceRefiner } from './refine.ts';
-export type { RemoteUrlSource, ServiceInput, ServiceRun, TerminalStart, TerminalsOptions } from './schema.ts';
-export { createTerminalSockets, readTerminalSocketId, type TerminalSocketData } from './routes.ts';
+export type {
+  RemoteUrlSource,
+  ServiceInput,
+  ServiceRun,
+  TerminalSocketData,
+  TerminalStart,
+  TerminalsOptions,
+} from './schema.ts';
+export { createTerminalSockets, readTerminalSocketId } from './sockets.ts';
 export type { TerminalViewer } from './session.ts';

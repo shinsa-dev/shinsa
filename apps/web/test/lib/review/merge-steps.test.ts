@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { listMergeSteps, type MergeStep, resolveMergeStepKey, type Task } from '@shinsa/core';
 import {
-  countOpenSteps,
+  listMergeSteps,
+  listOpenMergeSteps,
+  type MergeStep,
+  resolveMergeStepKey,
+  type Task,
+} from '@shinsa/core';
+import {
   describeMergeBlock,
   describePostMergeStatus,
   describePostMergeTitle,
@@ -74,8 +79,8 @@ describe('the steps around the merge', () => {
       ['Set A', true],
       ['Set B', false],
     ]);
-    expect(countOpenSteps(task, 'pre_merge')).toBe(1);
-    expect(countOpenSteps(task, 'post_merge')).toBe(1);
+    expect(listOpenMergeSteps(task, 'pre_merge').length).toBe(1);
+    expect(listOpenMergeSteps(task, 'post_merge').length).toBe(1);
     expect(MERGE_STEP_KIND.migration.label).toBe('Migration');
   });
 

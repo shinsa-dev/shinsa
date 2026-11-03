@@ -6,6 +6,7 @@ import {
   selectFolderProject,
   type Task,
 } from '@shinsa/core';
+import { isInside } from '../files/paths.ts';
 import { inspectRepo, resolveRepoRemote } from '../git/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
 import { createRepoFolder, listLocalRepos } from './edge.ts';
@@ -152,7 +153,7 @@ export function resolveTaskRepoTarget(
 
 export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {
   if (!path) return null;
-  return repos.find((repo) => path === repo.path || path.startsWith(`${repo.path}/`)) ?? null;
+  return repos.find((repo) => isInside(repo.path, path)) ?? null;
 }
 
 export {

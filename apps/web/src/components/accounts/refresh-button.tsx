@@ -1,6 +1,5 @@
-import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
-import { Hint } from '@/components/overlays/hint.tsx';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 
 export function RefreshButton({ label, onRefresh }: { label: string; onRefresh: () => Promise<unknown> }) {
   const [busy, setBusy] = React.useState(false);
@@ -12,15 +11,12 @@ export function RefreshButton({ label, onRefresh }: { label: string; onRefresh: 
   }
 
   return (
-    <Hint label={label}>
-      <Button
-        variant='secondary'
-        size='icon-sm'
-        icon='IconArrowRotateClockwise'
-        aria-label={label}
-        loading={busy}
-        onClick={() => void refresh()}
-      />
-    </Hint>
+    <HintButton
+      label={label}
+      size='icon-sm'
+      icon='IconArrowRotateClockwise'
+      loading={busy}
+      onClick={() => void refresh()}
+    />
   );
 }

@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type AccountSummary,
   describeList,
   type Gate,
@@ -19,7 +20,6 @@ import {
   type TerminalInfo,
 } from '@shinsa/core';
 import { describeProviderLogin } from '@/lib/accounts/providers.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { type Route, resolveTaskPath } from '@/router.ts';
 
 interface FolderRow {
@@ -53,7 +53,7 @@ export function listFolderSuggestions(status: OnboardingStatus, suggestions: Roo
   return suggestions.map((suggestion): FolderSuggestion => ({
     path: suggestion.path,
     label: resolveDisplayPath(suggestion.path, status.paths.userHome),
-    detail: formatCount(suggestion.repoCount, 'repository', 'repositories'),
+    detail: describeCount(suggestion.repoCount, 'repository', 'repositories'),
     chosen: chosen.has(suggestion.path),
   }));
 }

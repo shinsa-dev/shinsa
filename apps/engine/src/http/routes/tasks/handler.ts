@@ -9,11 +9,13 @@ import {
   ROUTE_NOT_FOUND_MESSAGE,
   WorktreeMissing,
 } from '@shinsa/core/engine-api/schema';
-import { Effect, Predicate, Schema } from 'effect';
+import { Effect, Layer, Predicate, Schema } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { runCommand, runCommandOrThrow } from '../../../shell/index.ts';
-import { requestPromise, requestSync } from '../../failures.ts';
-import { assertRepoPath, resolveInside, resolveWritableInside } from '../../paths.ts';
+import { assertRepoPath, resolveInside, resolveWritableInside } from '../../../files/paths.ts';
+import { GitCommands } from '../../../git/layers.ts';
+import { Git } from '../../../git/service.ts';
+import { runCommand } from '../../../shell/index.ts';
+import { requestPromise, requestSync, resolveRequestFailure } from '../../failures.ts';
 import { BODY_INVALID } from '../../schema.ts';
 import { HttpServices } from '../../services/service.ts';
 import { findTaskByRef } from '../../task-lookup.ts';
@@ -48,6 +50,7 @@ export const TasksHandlers = HttpApiBuilder.group(
   'tasks',
   Effect.fn('TasksHandlers')(function* (handlers) {
     const { engine, config, transcripts, workspaces, launch = runCommand } = yield* HttpServices;
+    const git = yield* Git;
     const decodeFilter = Schema.decodeUnknownEffect(TaskFilter);
     const decodeLimit = Schema.decodeUnknownEffect(ListLimit);
     const decodeKinds = Schema.decodeUnknownEffect(ChatKinds);
@@ -185,11 +188,11 @@ export const TasksHandlers = HttpApiBuilder.group(
               message: `${path} changed on disk since the editor read it.`,
               content: disk.current,
             });
-          const status = yield* requestPromise(() =>
-            runCommandOrThrow(['git', 'status', '--porcelain=v1', '-z', '--', path], root, {
+          const status = yield* git
+            .run(['status', '--porcelain=v1', '-z', '--', path], root, {
               env: { GIT_LITERAL_PATHSPECS: '1' },
             })
-          );
+            .pipe(Effect.mapError(resolveRequestFailure));
           const changed = status.length > 0;
           const key = Bun.hash(`${base ?? ''}\0${content}`).toString(36);
           yield* requestPromise(() =>
@@ -202,4 +205,4 @@ export const TasksHandlers = HttpApiBuilder.group(
         })
       );
   })
-);
+).pipe(Layer.provide(GitCommands));

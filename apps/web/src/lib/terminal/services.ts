@@ -1,4 +1,5 @@
 import {
+  describeCount,
   isServiceActive,
   isServiceEnvKey,
   isServicePreviewUrl,
@@ -22,7 +23,6 @@ import {
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { formatCount } from '@/lib/format/count.ts';
 import { formatDuration } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -170,11 +170,11 @@ export function describeServicesTrigger(views: ServiceView[]): { label: string; 
 
 export function describeTaskServicesFact(views: ServiceView[]): { label: string; tone: Tone } {
   const { running, starting, failed } = resolveServicesSummary(views);
-  if (failed > 0) return { label: `${formatCount(failed, 'service', 'services')} failed`, tone: 'red' };
+  if (failed > 0) return { label: `${describeCount(failed, 'service', 'services')} failed`, tone: 'red' };
   if (starting > 0)
-    return { label: `${formatCount(starting, 'service', 'services')} starting`, tone: 'blue' };
+    return { label: `${describeCount(starting, 'service', 'services')} starting`, tone: 'blue' };
   if (running > 0)
-    return { label: `${formatCount(running, 'service', 'services')} running`, tone: 'neutral' };
+    return { label: `${describeCount(running, 'service', 'services')} running`, tone: 'neutral' };
   return { label: 'Services', tone: 'neutral' };
 }
 

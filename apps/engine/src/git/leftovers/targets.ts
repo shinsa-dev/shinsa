@@ -1,17 +1,13 @@
-import { sep } from 'node:path';
+import { isInside } from '../../files/paths.ts';
 import { listDescendants } from '../../shell/processes.ts';
 import { ORPHAN_PARENT } from './schema.ts';
-
-function isInside(path: string, root: string) {
-  return path === root || path.startsWith(`${root}${sep}`);
-}
 
 export function listWorkingFolderPids(output: string, root: string) {
   const found = new Set<number>();
   let pid: number | null = null;
   for (const line of output.split('\n')) {
     if (line.startsWith('p')) pid = Number(line.slice(1));
-    else if (line.startsWith('n') && pid && isInside(line.slice(1), root)) found.add(pid);
+    else if (line.startsWith('n') && pid && isInside(root, line.slice(1))) found.add(pid);
   }
   return [...found];
 }

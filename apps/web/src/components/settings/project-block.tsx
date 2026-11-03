@@ -8,6 +8,7 @@ import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { SuggestedSourceWatchRow } from '@/components/automations/suggested-watch.tsx';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
@@ -30,14 +31,6 @@ import { PathRow, SETTING_ROW, SettingsBlock, SettingsEmpty } from './group.tsx'
 import { ProjectDialog } from './project-dialog.tsx';
 import { AddMenu, type ProjectDialogValue, ProjectMenu } from './project-menu.tsx';
 import { WorkspaceSelect } from './workspace-select.tsx';
-
-function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Hint label={label}>
-      <Button variant='secondary' size='icon-sm' icon='IconCrossSmall' aria-label={label} onClick={onClick} />
-    </Hint>
-  );
-}
 
 function RepoRow({ repo, action }: { repo: Repo; action?: React.ReactNode }) {
   return (
@@ -221,7 +214,9 @@ function ProjectFolderRow({ project, folder, actions }: Omit<ProjectProps, 'stat
       title={name}
       path={folder}
       action={
-        <RemoveButton
+        <HintButton
+          size='icon-sm'
+          icon='IconCrossSmall'
           label={`Remove the ${name} folder`}
           onClick={() => void actions.removeFolder(project, folder)}
         />
@@ -259,7 +254,9 @@ export function ProjectBlock({
           action={
             <>
               <RepoSettings repo={repo} actions={actions} detected={detected} />
-              <RemoveButton
+              <HintButton
+                size='icon-sm'
+                icon='IconCrossSmall'
                 label={`Remove ${repo.name} from the project`}
                 onClick={() => void actions.removeRepo(repo)}
               />
@@ -281,7 +278,9 @@ export function ProjectBlock({
               title={source.server}
               path={describeWatchSource(state, source)}
               action={
-                <RemoveButton
+                <HintButton
+                  size='icon-sm'
+                  icon='IconCrossSmall'
                   label={`Remove ${source.server} from the project`}
                   onClick={() => void removeWatchSource(project.id, source.server)}
                 />

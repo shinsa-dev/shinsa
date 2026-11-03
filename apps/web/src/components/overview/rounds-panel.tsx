@@ -1,4 +1,11 @@
-import type { Round, RoundShipping, Run, ShinsaState, Task } from '@shinsa/core';
+import {
+  listQueuedRounds,
+  type Round,
+  type RoundShipping,
+  type Run,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { Panel } from '@/components/layout/surface/panel.tsx';
@@ -11,13 +18,7 @@ import {
   resolveTaskDisclosureId,
   useDisclosure,
 } from '@/lib/preferences/disclosure.ts';
-import {
-  listEarlierRounds,
-  listWaitingRounds,
-  ROUND_ICON,
-  resolveRoundSummary,
-  selectRoundRun,
-} from '@/lib/tasks/rounds.ts';
+import { listEarlierRounds, ROUND_ICON, resolveRoundSummary, selectRoundRun } from '@/lib/tasks/rounds.ts';
 
 type ShippingChanger = (round: Round, shipping: RoundShipping) => Promise<unknown>;
 
@@ -97,7 +98,7 @@ export function RoundsPanel({
 }) {
   const runs = React.useMemo(() => listTaskRuns(state.runs, task.id), [state.runs, task.id]);
   const earlier = listEarlierRounds(task);
-  const waiting = listWaitingRounds(task);
+  const waiting = listQueuedRounds(task);
   if (earlier.length + waiting.length === 0) return null;
   const row = (round: Round, changer?: ShippingChanger) => (
     <RoundRow

@@ -1,4 +1,5 @@
 import { Layer } from 'effect';
+import { ShellLayer } from '../shell/layers.ts';
 import { Checkout } from './checkout/service.ts';
 import { History } from './history/service.ts';
 import { LeftoverProcesses } from './leftovers/service.ts';
@@ -10,3 +11,5 @@ export const GitLayer = Layer.mergeAll(Checkout.layer, Remote.layer, History.lay
   Layer.provideMerge(Git.layer),
   Layer.merge(LeftoverProcesses.layer)
 );
+
+export const GitCommands = Git.layer.pipe(Layer.provide(ShellLayer));

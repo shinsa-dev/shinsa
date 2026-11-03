@@ -1,8 +1,11 @@
-import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findManifestFile } from '../../../files/manifest.ts';
+import { PACKAGE_MANIFEST } from '../../../files/schema.ts';
 import { BUNDLE, type ShinsaBundle } from '../../../instance/bundle.ts';
+import { SDK_PACKAGE } from '../../../versions/schema.ts';
 import { compareVersions, type LocateDeps, locateProgram, readProgramVersion } from '../versions.ts';
+import { SdkManifestText } from './schema.ts';
 
 const CLAUDE_EXECUTABLE_ENV = 'CLAUDE_EXECUTABLE';
 
@@ -17,20 +20,13 @@ export interface ExecutableDeps extends LocateDeps {
   minimumVersion?: string;
 }
 
-function readVersionField(value: unknown) {
-  return typeof value === 'string' ? value : '0.0.0';
-}
-
 export function resolveSdkPackage(packagePath?: string, bundle: ShinsaBundle | null = BUNDLE) {
   if (bundle && !packagePath) return bundle.sdk;
-  const fields = JSON.parse(readFileSync(packagePath ?? resolveSdkPackagePath(), 'utf8')) as {
-    version?: unknown;
-    claudeCodeVersion?: unknown;
-  };
-  return {
-    version: readVersionField(fields.version),
-    claudeCodeVersion: readVersionField(fields.claudeCodeVersion),
-  };
+  const { version, claudeCodeVersion } = findManifestFile(
+    packagePath ?? resolveSdkPackagePath(),
+    SdkManifestText
+  );
+  return { version, claudeCodeVersion };
 }
 
 export function resolveSdkClaudeVersion(packagePath?: string) {
@@ -38,7 +34,7 @@ export function resolveSdkClaudeVersion(packagePath?: string) {
 }
 
 function resolveSdkPackagePath() {
-  return join(dirname(fileURLToPath(import.meta.resolve('@anthropic-ai/claude-agent-sdk'))), 'package.json');
+  return join(dirname(fileURLToPath(import.meta.resolve(SDK_PACKAGE))), PACKAGE_MANIFEST);
 }
 
 export function parseClaudeVersion(output: string) {

@@ -15,7 +15,7 @@ import {
   type GitHubError,
   MergeMethodInvalid,
   NO_ATTACHMENT_ADDRESS,
-  NO_PULL_REQUEST,
+  NO_PULL_REQUEST_FOUND,
   PULL_REQUEST_FIELDS,
   PullRequestBody,
   PullRequestBranchMissing,
@@ -143,7 +143,7 @@ export class PullRequests extends Context.Service<
           .json(PullRequestView, ['pr', 'view', ref, '--json', PULL_REQUEST_FIELDS], repo.path, { signal })
           .pipe(
             Effect.catchTag('GitHubFailed', (failed) =>
-              NO_PULL_REQUEST.test(failed.message) ? Effect.succeed(null) : Effect.fail(failed)
+              NO_PULL_REQUEST_FOUND.test(failed.message) ? Effect.succeed(null) : Effect.fail(failed)
             )
           );
       });

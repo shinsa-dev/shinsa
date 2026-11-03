@@ -10,7 +10,7 @@ import {
   RATE_WINDOW_MS,
   WEBHOOK_MAX_BODY_BYTES,
   WEBHOOK_RATE_LIMIT_PER_MINUTE,
-  WEBHOOK_ROUTE,
+  WEBHOOK_PATH,
   WEBHOOK_ROUTE_PREFIX,
   type WebhookOutcome,
   type WebhookReceiverOptions,
@@ -95,7 +95,7 @@ export class WebhookReceiver {
   }
 
   #selectHook(path: string) {
-    const match = WEBHOOK_ROUTE.exec(path);
+    const match = WEBHOOK_PATH.exec(path);
     const scheduleId = decodeSegment(match?.[1]);
     const token = decodeSegment(match?.[2]);
     if (scheduleId === null || token === null) return null;

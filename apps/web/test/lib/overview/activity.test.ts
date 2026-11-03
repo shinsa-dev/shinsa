@@ -263,4 +263,29 @@ describe('activity marks', () => {
       tone: 'orange',
     });
   });
+
+  it('keeps the entry’s own tile for a gate that does not pause the task', () => {
+    const entry = {
+      at: 1,
+      actor: 'shinsa',
+      kind: 'decision',
+      text: 'x',
+      detail: null,
+      evidenceId: null,
+    } as const;
+    const own = resolveActivityGlyph(entry);
+    for (const gateType of [
+      'plan',
+      'review',
+      'merge',
+      'question',
+      'secret',
+      'proposal',
+      'operation',
+      'post_merge',
+      'result',
+    ] as const) {
+      expect(resolveActivityGlyph({ ...entry, gateType })).toEqual(own);
+    }
+  });
 });

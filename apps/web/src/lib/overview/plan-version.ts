@@ -1,5 +1,4 @@
-import type { PlanChange, PlanRevision, Task } from '@shinsa/core';
-import { formatCount } from '@/lib/format/count.ts';
+import { describeCount, type PlanChange, type PlanRevision, type Task } from '@shinsa/core';
 
 export function resolvePlanChanges(task: Task): PlanChange[] {
   const plan = task.plan;
@@ -26,6 +25,6 @@ export function selectPlanRevision(
 
 export function describePlanEyebrow(task: Task) {
   const version = task.plan?.version ?? 1;
-  const phases = formatCount(task.plan?.document?.phases.length ?? 0, 'phase', 'phases');
+  const phases = describeCount(task.plan?.document?.phases.length ?? 0, 'phase', 'phases');
   return version > 1 ? `Version ${version} · ${phases}` : phases;
 }

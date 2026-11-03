@@ -850,11 +850,13 @@ describe('a share by preset', () => {
     const viewer = await openViewer(publisher);
     await until('the viewer reads both pages', () => 'transcript-run-1-1' in viewer.files());
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
-    await until('the viewer reads the last page again', () =>
-      viewer.messages.some(
-        (message) =>
-          message.t === 'file' && message.id === 'transcript-run-1-1' && message.version === 'agents:2'
-      )
+    await until(
+      'the viewer reads the last page again',
+      () =>
+        viewer.messages.some(
+          (message) =>
+            message.t === 'file' && message.id === 'transcript-run-1-1' && message.version === 'agents:2'
+        ) && (viewer.files()['transcript-run-1-1'] ?? '').includes('Done.')
     );
     const sends = viewer.messages.filter(
       (message) => message.t === 'file' && message.id === 'transcript-run-1-0'

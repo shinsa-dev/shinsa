@@ -1,9 +1,19 @@
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { DomainError } from '@shinsa/core';
+import { PATH_LIMIT } from './schema.ts';
 
-function isInside(root: string, path: string) {
-  return path === root || path.startsWith(`${root}${sep}`);
+export function isFolder(path: string) {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function isInside(root: string, path: string) {
+  const base = root.replace(/\/+$/, '');
+  return path === root || path === base || path.startsWith(`${base}${sep}`);
 }
 
 export function resolveInside(root: string, relative: string): string | null {
@@ -26,15 +36,13 @@ export function resolveWritableInside(root: string, relative: string): string | 
   return isInside(base, realpathSync(resolveExistingAncestor(dirname(target)))) ? target : null;
 }
 
-const MAX_PATH_LENGTH = 4096;
-
 export function assertRepoPath(value: string | null, options: { root?: boolean } = {}) {
   const path = (value ?? '').replace(/\/+$/, '');
   if (path === '' && options.root) return '';
   const segments = path.split('/');
   const invalid =
     path === '' ||
-    path.length > MAX_PATH_LENGTH ||
+    path.length > PATH_LIMIT ||
     path.includes('\0') ||
     path.startsWith('/') ||
     segments.some((segment) => segment === '' || segment === '.' || segment === '..');

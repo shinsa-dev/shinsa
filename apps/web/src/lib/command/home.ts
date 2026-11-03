@@ -1,4 +1,5 @@
 import { briefingKey, reconcileBriefing, resolveQueue, type ShinsaState } from '@shinsa/core';
+import { resolveRepoName } from '@/lib/command/menu.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { resolveTaskPath } from '@/router.ts';
@@ -19,7 +20,7 @@ export function listHomeSections(state: ShinsaState): CommandSection[] {
       heading: 'Needs you',
       rank: RANK.context,
       commands: tasks.map((task): Command => {
-        const repo = task.repoId ? (state.repos[task.repoId]?.name ?? '') : '';
+        const repo = resolveRepoName(state, task);
         const status = resolveTaskStatus(state, task).label;
         return {
           kind: 'go',

@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Deferred, Effect, Fiber, Layer, Option, Schedule, Stream } from 'effect';
-import { EngineCore } from '../../src/runtime/engine/service.ts';
-import { EffectFailed } from '../../src/runtime/failures/schema.ts';
-import { Outbox } from '../../src/store/outbox/service.ts';
-import { runTest } from '../harness.ts';
+import { EngineCore } from '../../../src/runtime/engine/service.ts';
+import { EffectFailed } from '../../../src/runtime/failures/schema.ts';
+import { Outbox } from '../../../src/store/outbox/service.ts';
+import { runTest } from '../../harness.ts';
 
 const EngineLayer = EngineCore.layer();
 

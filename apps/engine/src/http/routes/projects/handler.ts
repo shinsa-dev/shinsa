@@ -2,7 +2,7 @@ import { EngineApi } from '@shinsa/core/engine-api';
 import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
 import { Effect } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { createProjectChanges, listLocalRepoViews } from '../../../projects/routes.ts';
+import { createProjectChanges, listLocalRepoViews } from '../../../projects/changes.ts';
 import { createLoginResolver } from '../../../repos/index.ts';
 import { listCoverageDetections } from '../../../test-coverage/index.ts';
 import { requestPromise } from '../../failures.ts';

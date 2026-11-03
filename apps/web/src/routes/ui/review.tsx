@@ -1,6 +1,6 @@
 import type { FindingVerdictKind, WorkReport } from '@shinsa/core';
 import * as React from 'react';
-import { ReviewNote } from '@/components/review/note.tsx';
+import { RemoveNoteButton, ReviewNote } from '@/components/review/note.tsx';
 import { VerdictChoice } from '@/components/review/verdict-choice.tsx';
 import { createVerdictDraft, resolveVerdict } from '@/lib/overview/verdicts.ts';
 import { createDisclosureId, notPersisted } from '@/lib/preferences/disclosure.ts';
@@ -58,15 +58,7 @@ const POINTS = ITEMS.filter((item) => !isFindingItem(item));
 const FINDINGS = ITEMS.filter(isFindingItem);
 
 function Remove() {
-  return (
-    <button
-      type='button'
-      className='cursor-pointer text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
-      onClick={() => void acknowledgeSample()}
-    >
-      Remove
-    </button>
-  );
+  return <RemoveNoteButton onRemove={() => void acknowledgeSample()} />;
 }
 
 function SampleVerdict({ item }: { item: ReviewItem }) {

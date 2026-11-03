@@ -1,6 +1,13 @@
-import { type Gate, listOpenGates, type Run, type Schedule, type ShinsaState, type Task } from '@shinsa/core';
+import {
+  describeCount,
+  type Gate,
+  listOpenGates,
+  type Run,
+  type Schedule,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { formatCount } from '@/lib/format/count.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { resolveProjectInk } from '@/lib/projects.ts';
 import {
@@ -59,7 +66,7 @@ function describeRead(run: Run, server: string, filed: number): ReadLook {
     return { icon: 'IconExclamationTriangle', tone: 'amber', title: 'The read did not finish' };
   }
   if (filed === 0) return { icon: 'IconCheckCircle2', tone: 'neutral', title: 'No new reports' };
-  return { icon: 'IconListBullets', tone: 'green', title: `Filed ${formatCount(filed, 'task', 'tasks')}` };
+  return { icon: 'IconListBullets', tone: 'green', title: `Filed ${describeCount(filed, 'task', 'tasks')}` };
 }
 
 function describeReadDetail(run: Run, server: string) {
@@ -189,7 +196,7 @@ function selectAutomationProject(state: ShinsaState, schedule: Schedule) {
 }
 
 function describeFiledCount(count: number) {
-  return count === 0 ? 'Nothing filed yet' : `${formatCount(count, 'task', 'tasks')} filed`;
+  return count === 0 ? 'Nothing filed yet' : `${describeCount(count, 'task', 'tasks')} filed`;
 }
 
 export function listAutomationFacts(state: ShinsaState, schedule: Schedule): AutomationFact[] {

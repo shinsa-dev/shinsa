@@ -15,8 +15,10 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
+import { isInside } from '../files/paths.ts';
 import type { ServiceInput, ServiceRun } from '../terminals/index.ts';
-import { readServiceInput, resolveServiceRunIn } from '../terminals/routes.ts';
+import { readServiceInput } from '../terminals/input.ts';
+import { resolveServiceRunIn } from '../terminals/places.ts';
 import { readString } from './handover.ts';
 
 export const SERVICE_OUTPUT_LINES = 60;
@@ -146,7 +148,7 @@ async function runService(input: Record<string, unknown>, context: ServiceToolCo
 function resolveServiceFolder(repoPath: string, input: Record<string, unknown>) {
   const path = readString(input, 'path')?.trim() ?? '.';
   const relative = normalize(path).replace(/\/+$/, '');
-  if (isAbsolute(relative) || relative === '..' || relative.startsWith('../'))
+  if (isAbsolute(relative) || !isInside(repoPath, join(repoPath, relative)))
     throw new Error('path must be a folder inside this task’s repository, relative to its root.');
   return {
     relative: relative === '.' ? '' : relative,
