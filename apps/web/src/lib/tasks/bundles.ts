@@ -91,9 +91,16 @@ export function listBundleRows(state: ShinsaState, task: Task): BundleRow[] {
   });
 }
 
+function describeBuildsOn(names: string[]) {
+  return `Builds on ${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
 export function describeBundleParents(parents: Task[]) {
-  const titles = parents.map((parent) => `“${parent.title}”`);
-  return `Builds on ${titles.slice(0, -1).join(', ')} and ${titles.at(-1)}`;
+  return describeBuildsOn(parents.map((parent) => `“${parent.title}”`));
+}
+
+export function describeBundleParentHandles(parents: Task[]) {
+  return describeBuildsOn(parents.map((parent) => parent.handle ?? `“${parent.title}”`));
 }
 
 function countReady(rows: BundleRow[]) {

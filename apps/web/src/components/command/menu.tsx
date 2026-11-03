@@ -159,6 +159,9 @@ function ChoiceRows({
       )}
       {!flat && <DepthMark depth={option.depth ?? 0} />}
       <Truncate className='min-w-0'>{option.label}</Truncate>
+      {!option.disabled && option.hint && (
+        <CommandHint className='shrink-0 tabular-nums'>{option.hint}</CommandHint>
+      )}
       {option.disabled ? (
         <CommandHint className='min-w-12 shrink-[4]'>{option.disabled}</CommandHint>
       ) : (

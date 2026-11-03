@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { canChangeStack, ENGINE_BASELINE_COMMANDS, resolveEngineInfo } from '@shinsa/core';
 import {
   describeBundleNote,
+  describeBundleParentHandles,
   describeBundleParents,
   describeBundleProgress,
   describeBundleWait,
@@ -88,6 +89,7 @@ describe('the members of a bundle', () => {
     ]);
     expect(describeBundleParents(rows[4]?.parents ?? [])).toBe('Builds on “B”, “C” and “D”');
     expect(describeBundleParents(rows[6]?.parents ?? [])).toBe('Builds on “G” and “E”');
+    expect(describeBundleParentHandles([{ ...b, handle: 'SW-2' }, c])).toBe('Builds on SW-2 and “C”');
     expect(selectBundleRoot(state, h)?.id).toBe('a');
   });
 

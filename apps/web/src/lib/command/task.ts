@@ -54,8 +54,9 @@ function listTaskOptions(state: ShinsaState, choices: Task[]): ChoiceOption[] {
   return orderChains(state, choices).map(({ task: choice, depth }) => ({
     value: choice.id,
     label: choice.title,
+    ...(choice.handle ? { hint: choice.handle } : {}),
     icon: resolveTaskMenuIcon(state, choice),
-    keywords: [choice.branch ?? ''],
+    keywords: [choice.handle ?? '', choice.branch ?? ''],
     depth,
   }));
 }

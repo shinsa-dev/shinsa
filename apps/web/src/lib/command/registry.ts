@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useSyncExternalStore } from 'react';
 export interface ChoiceOption {
   value: string;
   label: string;
+  hint?: string;
   icon?: MenuItemIcon;
   dot?: string;
   keywords?: string[];

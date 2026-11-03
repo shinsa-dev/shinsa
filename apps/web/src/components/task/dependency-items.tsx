@@ -48,6 +48,7 @@ function TaskChoiceItems({
           {depth > 0 && <Icon name='IconArrowCornerDownRight' className='text-fg-2' />}
           <DepthMark depth={depth} />
           <Icon name={icon.name} className={icon.className} />
+          {choice.handle && <span className='shrink-0 text-fg-2 tabular-nums'>{choice.handle}</span>}
           <Truncate>{choice.title}</Truncate>
         </span>
       </DropdownMenuCheckboxItem>

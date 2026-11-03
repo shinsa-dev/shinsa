@@ -50,11 +50,15 @@ describe('the Bundle item in the task toolbar', () => {
     expect(await screen.findByText('Bundle · 1 of 2 ready')).toBeTruthy();
     const items = within(screen.getByRole('list', { name: 'Tasks in the bundle' })).getAllByRole('listitem');
     expect(items.map((item) => item.textContent)).toEqual([
-      'Add the schemaReady41',
-      'Add the screenThis taskWorking',
+      'SW-1Add the schemaReady41',
+      'SW-2Add the screenThis taskWorking',
     ]);
-    expect(items[0]?.querySelector('a')?.previousElementSibling).toBeNull();
-    expect(items[1]?.querySelector('a')?.previousElementSibling?.getAttribute('data-slot')).toBe('icon');
+    const leading = (item: Element | undefined) =>
+      Array.from(item?.querySelector('a')?.parentElement?.children ?? []).map((child) =>
+        child.tagName === 'A' ? 'link' : (child.getAttribute('data-slot') ?? child.textContent)
+      );
+    expect(leading(items[0])).toEqual(['icon', 'SW-1', 'link']);
+    expect(leading(items[1])).toEqual(['icon', 'icon', 'SW-2', 'link', 'This task']);
     expect(
       within(items[0] as HTMLElement)
         .getByRole('link', { name: 'Add the schema' })
@@ -64,7 +68,13 @@ describe('the Bundle item in the task toolbar', () => {
   });
 
   it('names every task a task builds on when it builds on several', async () => {
-    const side = createTask({ id: 'side', title: 'Add the cache', repoId: 'app', stage: 'building' });
+    const side = createTask({
+      id: 'side',
+      handle: 'SW-3',
+      title: 'Add the cache',
+      repoId: 'app',
+      stage: 'building',
+    });
     const join = createTask({ id: 'join', title: 'Join them', repoId: 'app', stacksOn: ['root', 'side'] });
     render(
       <TooltipProvider>
@@ -79,7 +89,8 @@ describe('the Bundle item in the task toolbar', () => {
       fireEvent.mouseMove(trigger);
     });
     const list = await screen.findByRole('list', { name: 'Tasks in the bundle' });
-    expect(within(list).getByText('Builds on “Add the schema” and “Add the cache”')).toBeTruthy();
+    const parents = within(list).getByText('Builds on SW-1 and SW-3');
+    expect(await findTooltipText(parents)).toBe('Builds on “Add the schema” and “Add the cache”');
   });
 
   it('shows nothing for a task outside any bundle', () => {

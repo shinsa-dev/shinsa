@@ -15,19 +15,24 @@ import {
   type BundleRow,
   describeBundleCount,
   describeBundleNote,
+  describeBundleParentHandles,
   describeBundleParents,
   describeBundleProgress,
   listBundleRows,
 } from '@/lib/tasks/bundles.ts';
+import { resolveTaskMenuIcon } from '@/lib/tasks/status.ts';
 import { resolveTaskPath } from '@/router.ts';
 
-function BundleMember({ row }: { row: BundleRow }) {
+function BundleMember({ state, row }: { state: ShinsaState; row: BundleRow }) {
   const status = BUNDLE_MEMBER[row.state];
+  const icon = resolveTaskMenuIcon(state, row.task);
   return (
     <li className='flex min-w-0 items-center gap-2 px-3 py-1.5 text-xs'>
       <span className={cn('flex min-w-0 flex-1 items-center gap-1.5', resolveDepthIndent(row.depth))}>
         {row.depth > 0 && <Icon size='sm' name='IconArrowCornerDownRight' className='shrink-0 text-fg-2' />}
         <DepthMark depth={row.depth} />
+        <Icon size='sm' name={icon.name} className={cn('shrink-0', icon.className)} />
+        {row.task.handle && <span className='shrink-0 text-fg-2 tabular-nums'>{row.task.handle}</span>}
         <InAppLink
           path={resolveTaskPath(row.task)}
           className='min-w-0 font-medium text-fg-4 no-underline outline-none hover:underline active:underline'
@@ -38,7 +43,7 @@ function BundleMember({ row }: { row: BundleRow }) {
         {row.parents.length > 0 && (
           <Hint label={describeBundleParents(row.parents)}>
             <span className='min-w-12 shrink-[4] truncate text-fg-2'>
-              {describeBundleParents(row.parents)}
+              {describeBundleParentHandles(row.parents)}
             </span>
           </Hint>
         )}
@@ -64,7 +69,7 @@ export function BundleFact({ state, task }: { state: ShinsaState; task: Task }) 
           <span className='tabular-nums'>{describeBundleCount(rows)}</span>
         </>
       }
-      className='w-120 max-w-[calc(100vw-2rem)]'
+      className='w-140 max-w-[calc(100vw-2rem)]'
     >
       <InfoHeader
         title={`Bundle · ${describeBundleProgress(rows)}`}
@@ -73,7 +78,7 @@ export function BundleFact({ state, task }: { state: ShinsaState; task: Task }) 
       <InfoSection>
         <ul aria-label='Tasks in the bundle' className='flex flex-col'>
           {rows.map((row) => (
-            <BundleMember key={row.task.id} row={row} />
+            <BundleMember key={row.task.id} state={state} row={row} />
           ))}
         </ul>
       </InfoSection>

@@ -389,8 +389,8 @@ describe('disabled commands and options', () => {
             heading: 'Lane',
             value: 'fast',
             options: [
-              { value: 'fast', label: 'Fast lane', disabled: 'Closed today' },
-              { value: 'slow', label: 'Slow lane' },
+              { value: 'fast', label: 'Fast lane', hint: 'L-1', disabled: 'Closed today' },
+              { value: 'slow', label: 'Slow lane', hint: 'L-2' },
             ],
             pick,
           },
@@ -425,14 +425,14 @@ describe('disabled commands and options', () => {
     const flat = screen.getByRole('option', { name: /^Fast lane/ });
     expect(flat.getAttribute('aria-disabled')).toBe('true');
     expect(flat.textContent).toBe('Fast laneClosed today');
-    expect(screen.getByRole('option', { name: /^Slow lane/ }).textContent).toBe('Slow laneLane');
+    expect(screen.getByRole('option', { name: /^Slow lane/ }).textContent).toBe('Slow laneL-2Lane');
     await choose(/^Pick a lane/);
     const fast = screen.getByRole('option', { name: /^Fast lane/ });
     expect(fast.getAttribute('aria-disabled')).toBe('true');
     expect(fast.textContent).toBe('Fast laneClosed today');
-    await waitFor(() => expect(selectedOption()).toBe('Slow lane'));
+    await waitFor(() => expect(selectedOption()).toBe('Slow laneL-2'));
     press('ArrowUp');
-    expect(selectedOption()).toBe('Slow lane');
+    expect(selectedOption()).toBe('Slow laneL-2');
     fireEvent.click(fast);
     expect(pick).not.toHaveBeenCalled();
     press('Enter');

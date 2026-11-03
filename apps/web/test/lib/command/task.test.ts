@@ -607,7 +607,7 @@ describe('waiting on other tasks', () => {
       [],
       [
         createTask({ id: 't2', title: 'Add the API' }),
-        createTask({ id: 't3', title: 'Write the schema', stacksOn: ['t2'] }),
+        createTask({ id: 't3', handle: 'SW-3', title: 'Write the schema', stacksOn: ['t2'] }),
       ]
     );
     const all = sections(state, task);
@@ -618,6 +618,8 @@ describe('waiting on other tasks', () => {
       ['t2', 0],
       ['t3', 1],
     ]);
+    expect(stack.options.map((option) => option.hint)).toEqual([undefined, 'SW-3']);
+    expect(stack.options[1]?.keywords).toContain('SW-3');
     pick(stack, 't3');
     pick(stack, 'gone');
     run(find(all, 'task.t1.stack.off'));
