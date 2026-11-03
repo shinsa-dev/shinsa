@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { join, normalize, resolve } from 'node:path';
+import { isAbsolute, join, normalize } from 'node:path';
 import {
   isServiceActive,
   listTaskServices,
@@ -148,7 +148,7 @@ async function runService(input: Record<string, unknown>, context: ServiceToolCo
 function resolveServiceFolder(repoPath: string, input: Record<string, unknown>) {
   const path = readString(input, 'path')?.trim() ?? '.';
   const relative = normalize(path).replace(/\/+$/, '');
-  if (!isInside(repoPath, resolve(repoPath, relative)))
+  if (isAbsolute(relative) || !isInside(repoPath, join(repoPath, relative)))
     throw new Error('path must be a folder inside this task’s repository, relative to its root.');
   return {
     relative: relative === '.' ? '' : relative,

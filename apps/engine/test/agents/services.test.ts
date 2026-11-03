@@ -193,13 +193,16 @@ describe('the service tools', () => {
   });
 
   test('refuses a folder outside the repository or not in its checkout, and what the Services form refuses', async () => {
-    const { call } = setup();
+    const { call, repoPath } = setup();
     expect(call('add_service', { name: 'web', path: '../other', command: 'x' })).rejects.toThrow(
       'path must be a folder inside this task’s repository'
     );
     expect(call('add_service', { name: 'web', path: '/etc', command: 'x' })).rejects.toThrow(
       'path must be a folder inside this task’s repository'
     );
+    expect(
+      call('add_service', { name: 'web', path: join(repoPath, 'apps/web'), command: 'x' })
+    ).rejects.toThrow('path must be a folder inside this task’s repository');
     expect(call('add_service', { name: 'web', path: 'apps/web', command: 'x' })).rejects.toThrow(
       '`apps/web` is not in the repository’s own checkout yet.'
     );
