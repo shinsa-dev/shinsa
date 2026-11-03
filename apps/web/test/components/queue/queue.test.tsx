@@ -305,6 +305,9 @@ describe('a row’s summary line', () => {
       }),
     });
     expect(row(/Build the export/).textContent).toContain('Building 1/2');
+    const count = within(row(/Build the export/)).getByText('1/2');
+    expect(count.className).toContain('text-fg-2');
+    expect(count.previousElementSibling?.textContent).toBe('Building');
   });
 
   it('counts the phases beside the stage when no agent runs, and nothing when there is one', () => {
