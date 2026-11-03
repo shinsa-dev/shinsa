@@ -9,6 +9,7 @@ import { writePageAttention } from '@/lib/notifications/page.ts';
 import { showNotifyBlocked } from '@/lib/notifications/settings.ts';
 import { playSound } from '@/lib/notifications/sounds.ts';
 import { AttentionWatcher } from '@/lib/notifications/watcher.ts';
+import { showNotificationWelcome } from '@/lib/notifications/welcome.ts';
 import { readNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { navigate, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
@@ -40,6 +41,9 @@ export function useAttention(state: ShinsaState, taskReference: string | null = 
     watcher.observe(state);
   }, [watcher, state]);
   React.useEffect(() => subscribeDesktopNotifyFailed(showNotifyBlocked), []);
+  React.useEffect(() => {
+    showNotificationWelcome();
+  }, []);
   React.useLayoutEffect(() => {
     writePageAttention({ status, badge }, subject);
   }, [status, badge, subject]);
