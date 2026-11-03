@@ -2062,6 +2062,20 @@ describe('steering windows', () => {
     await Promise.all([first, second]);
   });
 
+  test('a note from Shinsa that no running turn takes is never sent as your message', async () => {
+    const sessions = createSessions({ refuseSteer: true });
+    const { supervisor, dispatched } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+    });
+    const running = supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    await supervisor.steer('run-1', 'Another task changes a.ts.', undefined, 'shinsa');
+    sessions.started[0]?.finish();
+    await running;
+    await supervisor.steer('run-1', 'Another task changes b.ts.', undefined, 'shinsa');
+    expect(dispatched.filter((command) => command.type === 'message.deliver')).toEqual([]);
+  });
+
   test('a queued message the session will not take, and steers it never answered, come back as the next turn', async () => {
     const sessions = createSessions({ refuseSteer: true });
     const { supervisor, dispatched } = setup(

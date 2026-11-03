@@ -70,6 +70,12 @@ export const steerRun = Effect.fn('RunSupervisor.steer')(function* (
     }
     if (active.session.steer(text, from)) return;
   }
+  if (from) {
+    yield* Effect.logInfo('[Runs] A note of Shinsa’s reached no running turn').pipe(
+      Effect.annotateLogs({ runId })
+    );
+    return;
+  }
   yield* world.dispatch(
     { type: 'message.deliver', taskId: run.taskId, text },
     cause === undefined ? {} : { id: `${cause}:message.deliver` }
