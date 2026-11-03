@@ -135,7 +135,7 @@ const FAKE_RUN: CommandRunner = (command) =>
 export function createTestOnboarding(engine: Engine, config: ServerConfig, run: CommandRunner = FAKE_RUN) {
   const store = new ConfigStore(config.configPath);
   const roots = new Roots(config.roots, store, config.userHome, () =>
-    Promise.resolve({ candidates: [], truncated: false })
+    Promise.resolve({ candidates: [], truncated: false, refused: [] })
   );
   return {
     store,

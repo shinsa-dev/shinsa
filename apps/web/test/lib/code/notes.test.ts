@@ -6,6 +6,7 @@ import {
   listFindingNotes,
   listSpotMarks,
   resolveCommentRange,
+  resolveEditComposer,
 } from '@/lib/code/notes.ts';
 import type { LineComment } from '@/lib/review/draft.ts';
 import type { ReviewTarget } from '@/lib/review/targets.ts';
@@ -89,9 +90,39 @@ describe('listFileNotes', () => {
       composer: { side: 'old', line: 3, endLine: 6 },
     });
     expect(notes).toEqual([
-      { kind: 'composer', key: 'composer', side: 'old', line: 6, start: 3, endLine: 6 },
+      { kind: 'composer', key: 'composer', side: 'old', line: 6, start: 3, endLine: 6, editing: null },
     ]);
     expect(listFileNotes({ path: 'a.ts', ref: 'h', findings: [], comments: [], composer: null })).toEqual([]);
+  });
+
+  it('opens the box in place of the comment it edits', () => {
+    const edited: LineComment = {
+      id: '1',
+      path: 'a.ts',
+      side: 'new',
+      line: 2,
+      endLine: 4,
+      ref: null,
+      text: 'Rename.',
+    };
+    const kept: LineComment = { ...edited, id: '2', line: 8, endLine: null, text: 'Guard.' };
+    const notes = listFileNotes({
+      path: 'a.ts',
+      ref: 'h',
+      findings: [],
+      comments: [edited, kept],
+      composer: resolveEditComposer(edited),
+    });
+    expect(notes.map((note) => note.key)).toEqual(['comment:2', 'composer']);
+    expect(notes[1]).toEqual({
+      kind: 'composer',
+      key: 'composer',
+      side: 'new',
+      line: 4,
+      start: 2,
+      endLine: 4,
+      editing: edited,
+    });
   });
 });
 

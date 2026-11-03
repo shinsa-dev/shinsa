@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { resolveServiceView } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import { useServiceActions } from '@/components/services/use-service-actions.ts';
+import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 import { closePreviewShareDialog, usePreviewShareDialog } from '@/lib/share/previews.ts';
 import { readFetchCall } from '../../support/fetch.ts';
 import { createProject, createShinsaState, createTask, NOW } from '../../support/state.ts';
@@ -12,6 +13,7 @@ const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
   closePreviewShareDialog();
+  replaceConnection(null);
 });
 
 const SHOP = createProject({ id: 'shop', name: 'Shop', key: 'SH' });
@@ -98,6 +100,7 @@ describe('useServiceActions', () => {
   });
 
   it('offers Share preview only on an engine that says it shares previews', () => {
+    replaceConnection({ ...connection, selectEngine: () => null } as never);
     const { result } = renderHook(() => useServiceActions({ state: createShinsaState({}) }));
     const view = resolveServiceView(createService({ id: 'web' }), null, NOW, 'fix');
     expect(result.current.handlers.canShare?.(view)).toBe(false);

@@ -188,7 +188,7 @@ export async function startMachine(id: string, name: string, dataDir: string) {
   const engine = new Engine(new EventLog(config.databasePath));
   const store = new ConfigStore(config.configPath);
   const roots = new Roots(config.roots, store, config.userHome, () =>
-    Promise.resolve({ candidates: [], truncated: false })
+    Promise.resolve({ candidates: [], truncated: false, refused: [] })
   );
   const remote = new Remote({
     path: join(dataDir, REMOTE_FILE),

@@ -144,7 +144,8 @@ describe('a preview link', () => {
   test('says the machine is offline when it stopped beating, the tunnel fails or does not answer', async () => {
     const harness = createHarness();
     const { origin } = await shareMachine(harness);
-    const logged = spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const errors = spyOn(console, 'error').mockImplementation(() => undefined);
     harness.handlers.push((call) => {
       if (call.url.endsWith('/down')) return new Response('bad gateway', { status: 530 });
       if (call.url.endsWith('/throw')) throw new Error('no route');
@@ -155,16 +156,26 @@ describe('a preview link', () => {
     expect(down.headers.get('retry-after')).toBe('30');
     expect(await down.text()).toContain('offline');
     expect((await visit(harness, `${origin}/throw`, withKey())).status).toBe(503);
+    expect(logged.mock.calls.map(([, fields]) => fields)).toEqual([
+      expect.objectContaining({ surface: 'preview', reason: 'status', status: 530 }),
+      expect.objectContaining({
+        surface: 'preview',
+        reason: 'unreachable',
+        error: expect.stringContaining('no route'),
+      }),
+    ]);
     expect(logged.mock.calls.map(([message]) => message)).toEqual([
-      '[Preview] The tunnel did not answer',
-      '[Preview] Could not reach the tunnel',
+      '[Cloud] Machine offline',
+      '[Cloud] Machine offline',
     ]);
     harness.clock.now += 10 * 60 * 1000;
     const stale = await visit(harness, `${origin}/`, withKey());
     expect(stale.status).toBe(503);
     expect(await stale.text()).toContain(PREVIEW_OFFLINE.slice(0, 40));
     expect(logged).toHaveBeenCalledTimes(2);
+    expect(errors).not.toHaveBeenCalled();
     logged.mockRestore();
+    errors.mockRestore();
   });
 
   test('passes on the machine’s own page for a stopped service, not the offline page', async () => {

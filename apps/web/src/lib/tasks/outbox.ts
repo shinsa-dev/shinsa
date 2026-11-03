@@ -1,3 +1,4 @@
+import type { ReviewComment } from '@shinsa/core';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
 
 interface OutboxMessage extends HumanMessage {
@@ -27,13 +28,26 @@ export function listOutboxMessages(taskId: string) {
   const cached = byTask.get(taskId);
   if (cached) return cached;
   const messages = outbox.filter((message) => message.taskId === taskId);
-  const listed = messages.length === 0 ? NONE : messages.map(({ at, text }) => ({ at, text }));
+  const listed =
+    messages.length === 0
+      ? NONE
+      : messages.map(({ at, text, comments }) => ({ at, text, ...(comments ? { comments } : {}) }));
   byTask.set(taskId, listed);
   return listed;
 }
 
-export async function sendThroughOutbox<T>(taskId: string, text: string, send: () => Promise<T>) {
-  const message: OutboxMessage = { taskId, text, at: Date.now() };
+export async function sendThroughOutbox<T>(
+  taskId: string,
+  text: string,
+  send: () => Promise<T>,
+  comments: ReviewComment[] = []
+) {
+  const message: OutboxMessage = {
+    taskId,
+    text,
+    at: Date.now(),
+    ...(comments.length > 0 ? { comments } : {}),
+  };
   replaceOutbox([...outbox, message]);
   try {
     return await send();

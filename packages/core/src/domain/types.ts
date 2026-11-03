@@ -390,6 +390,7 @@ export interface UntoldMessage {
   at: number;
   text: string;
   sender: 'agent' | 'schedule';
+  comments?: ReviewComment[];
 }
 
 export interface UndeliveredMessage {

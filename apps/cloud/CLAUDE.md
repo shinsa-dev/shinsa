@@ -53,8 +53,9 @@ src/
 │                    redirect to sign in and back, respondSignInRedirect, a failure as JSON,
 │                    text, a header on an API answer), request.ts (the request's URL and a cookie), forward.ts (what
 │                    never reaches a machine: hop-by-hop, Cloudflare's and proxies' headers; the tunnel statuses that
-│                    mean offline), worker.ts (WorkerContext and deferWork, Assets, WorkerLogger: Workers Logs'
-│                    console, errors to console.error)
+│                    mean offline; requestOnlineMachine and recordMachineOffline, the one warn line
+│                    `[Cloud] Machine offline`), worker.ts (WorkerContext and deferWork, Assets, WorkerLogger: Workers
+│                    Logs' console, errors to console.error, warnings to console.warn)
 ├── auth/            page-session/ (PageSession: the bearer, or the session cookie with the same-origin check on a
 │                    POST and never when a bearer was sent), machine-session/ (MachineSession: the machine token),
 │                    tokens.ts (the session's steps: selectSessionToken, selectRequestUser for the routes that work
@@ -253,8 +254,8 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   cookie, a malformed key or an unknown instance is "This preview is not shared" (404); an instance offline or
   a tunnel that does not answer (a network error, 502, 503, 504, 530 without the machine's
   `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`), and a tunnel
-  that fails for an online instance is logged as `[Preview] Could not reach the tunnel` or `[Preview] The tunnel did
-  not answer`; the machine's own
+  that fails for an online instance is logged as the warn line `[Cloud] Machine offline` with `surface: preview`
+  (below); the machine's own
   pages, such as a stopped service's, pass through with the mark removed. Every answer carries `X-Robots-Tag: noindex, nofollow, noarchive`, the Worker's own error page included.
   Traffic is plain to the Worker: unlike a task's share, a preview is not sealed end to end, and nothing of it is kept.
 - **Private service addresses.** Every running service of a machine with remote access has a private address on
@@ -273,7 +274,14 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   called, so a hook never reaches another path of the machine), is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with
-  `Retry-After: 60`.
+  `Retry-After: 60`, so the sender tries again.
+- **An offline machine is a warning, not an error.** A webhook, a Slack mention or a preview whose tunnel does not
+  answer writes one warn line, `[Cloud] Machine offline` (`recordMachineOffline` in `http/forward.ts`), with
+  `surface` (`webhook`, `slack` or `preview`), `instanceId` and `reason`: `unreachable` with the fetch's `error`, or
+  `status` with the tunnel's status. A machine asleep or off its network is expected, so a watch counts this line
+  on its own. Workers Logs still marks the webhook's 503 request itself as error level, as it does any 5xx, with no
+  `console.error` behind it, so a watch on the Worker's errors must leave out a 503 on `/hooks/` (and on a preview
+  host) that comes with this warn line, and count the warn line apart.
 - **The Slack bot** (`docs/engine.md` → Slack). One Slack app for everyone, on the Events API at `/slack/events`.
   Connecting (`/slack/connect?instance=<id>`, signed in with GitHub, the machine one you own, never one shared with you, else the one you own seen last)
   signs you in with Slack (OpenID Connect, `openid profile`), and when the workspace has no Shinsa yet, or its bot

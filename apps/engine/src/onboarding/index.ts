@@ -156,13 +156,13 @@ export class Onboarding {
   }
 
   async listSuggestions(refresh: boolean): Promise<RootSuggestions> {
-    const { candidates, truncated } = await this.#context.roots.discover(refresh);
+    const { candidates, truncated, refused } = await this.#context.roots.discover(refresh);
     const chosen = new Set(this.#context.roots.configured);
     const suggestions = candidates.map((candidate) => ({
       ...candidate,
       chosen: chosen.has(candidate.path),
     }));
-    return { suggestions, truncated };
+    return { suggestions, truncated, refused };
   }
 
   async applySetup(fields: JsonObject, commandId?: string) {

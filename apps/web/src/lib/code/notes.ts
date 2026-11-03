@@ -8,7 +8,15 @@ import { ATTENTION } from '@/lib/tasks/status.ts';
 export type CodeNote =
   | { kind: 'finding'; key: string; side: CommentSide; line: number; item: ReviewItem }
   | { kind: 'comment'; key: string; side: CommentSide; line: number; comment: LineComment }
-  | { kind: 'composer'; key: string; side: CommentSide; line: number; start: number; endLine: number | null };
+  | {
+      kind: 'composer';
+      key: string;
+      side: CommentSide;
+      line: number;
+      start: number;
+      endLine: number | null;
+      editing: LineComment | null;
+    };
 
 export interface CodeSpotMark {
   key: string;
@@ -23,6 +31,11 @@ export interface Composer {
   side: CommentSide;
   line: number;
   endLine: number | null;
+  editing?: LineComment | null;
+}
+
+export function resolveEditComposer(comment: LineComment): Composer {
+  return { side: comment.side, line: comment.line, endLine: comment.endLine, editing: comment };
 }
 
 export function listFindingNotes(findings: readonly ReviewFinding[], path: string): CodeNote[] {
@@ -63,9 +76,11 @@ export function listFileNotes(input: {
   comments: readonly LineComment[];
   composer: Composer | null;
 }): CodeNote[] {
+  const editing = input.composer?.editing ?? null;
+  const comments = editing ? input.comments.filter((comment) => comment.id !== editing.id) : input.comments;
   const notes = [
     ...listFindingNotes(input.findings, input.path),
-    ...listCommentNotes(input.comments, input.path, input.ref),
+    ...listCommentNotes(comments, input.path, input.ref),
   ];
   if (input.composer) {
     notes.push({
@@ -75,6 +90,7 @@ export function listFileNotes(input: {
       line: input.composer.endLine ?? input.composer.line,
       start: input.composer.line,
       endLine: input.composer.endLine,
+      editing,
     });
   }
   return notes;
