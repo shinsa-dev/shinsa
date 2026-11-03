@@ -3021,7 +3021,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   (`MAX_TERMINAL_STREAMS`). Closing the channel detaches them all. On the page, `ChannelTerminalSocket`
   (`lib/remote/link.ts`) stands in for the WebSocket, and the fleet opens it on the machine that runs the terminal,
   only for one you own whose engine announces `remote.terminals` (`Fleet.resolveTerminalTransport`,
-  `canOpenTerminals`); on another machine's project the Terminal page says terminals are for the machine's owner.
+  `canOpenTerminals`); on another machine's project the Terminal page says terminals are for the machine's owner
+  and lists the project's services with Start, Stop, Restart and Start all (`ProjectServices`), which members may use.
 - **What stays at the keyboard.** Refused to everyone off the machine with `local_only` ("Do this on the machine
   Shinsa runs on.", `LocalOnlyRoute`): pairing, cancelling a pairing, pausing, resuming and removing remote access
   (each ends or replaces the channel you are using), an MCP's OAuth sign-in (the provider sends you back to the machine's own address), installing the command
