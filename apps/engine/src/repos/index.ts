@@ -1,5 +1,11 @@
 import { dirname, join } from 'node:path';
-import type { Repo, ShinsaState } from '@shinsa/core';
+import {
+  type Repo,
+  resolveTaskProject,
+  type ShinsaState,
+  selectFolderProject,
+  type Task,
+} from '@shinsa/core';
 import { inspectRepo, resolveRepoRemote } from '../git/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
 import { createRepoFolder, listLocalRepos } from './edge.ts';
@@ -95,7 +101,18 @@ export function resolveNewRepoParent(state: Pick<ShinsaState, 'projects' | 'repo
   return sibling ? dirname(sibling.path) : null;
 }
 
-export async function createRepository(engine: Engine, parent: string, name: string, projectId: string) {
+interface CreateOptions {
+  resolveLogin?: LoginResolver | null;
+  from?: DispatchOptions;
+}
+
+export async function createRepository(
+  engine: Engine,
+  parent: string,
+  name: string,
+  projectId: string | null,
+  options: CreateOptions = {}
+) {
   const path = join(parent, name);
   if (!REPOSITORY_NAME.test(name) || name.endsWith('.git')) {
     throw new RepoNotCreated({
@@ -103,8 +120,10 @@ export async function createRepository(engine: Engine, parent: string, name: str
       message: `"${name}" is not a folder name Shinsa will create: use letters, digits, dots, dashes and underscores, starting with a letter or digit.`,
     });
   }
+  const known = selectRepoByPath(engine, path);
+  if (known) return known;
   await createRepoFolder(path);
-  return await upsertRepo(engine, path, null, projectId);
+  return await upsertRepo(engine, path, options.resolveLogin ?? null, projectId, options.from);
 }
 
 export async function createProjectRepository(engine: Engine, projectId: string, name: string) {
@@ -116,6 +135,19 @@ export async function createProjectRepository(engine: Engine, projectId: string,
     });
   }
   return await createRepository(engine, parent, name, projectId);
+}
+
+export function resolveTaskRepoTarget(
+  state: ShinsaState,
+  task: Task,
+  name: string,
+  roots: readonly string[]
+) {
+  const projectId = resolveTaskProject(state, task);
+  const parent = (projectId ? resolveNewRepoParent(state, projectId) : null) ?? roots[0] ?? null;
+  if (!parent) return null;
+  const folder = selectFolderProject(Object.values(state.projects), join(parent, name));
+  return { parent, projectId: projectId ?? folder?.id ?? null };
 }
 
 export function resolveContainingRepo(path: string | null, repos: LocalRepo[]) {
@@ -135,4 +167,5 @@ export {
   verifySetup,
 } from './edge.ts';
 export { Roots } from './roots.ts';
+export { REPOSITORY_NAME } from './schema.ts';
 export type { Discoverer, LocalRepo, LoginResolver, RootSource } from './schema.ts';

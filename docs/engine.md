@@ -474,6 +474,16 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   bound; the task keeps its own project, and its agents' brief says the task works in a repository outside it.
   Without the model the task binds none, unless it was created with a repository or from inside one. `task.triage`
   then carries `repoId: null` and nothing is registered.
+- **Triage may start a new repository.** When the task has no repository pinned, the classifier also answers
+  `new_repo`: empty, unless the request asks to start a repository or project that is not listed ("start a new app
+  called native-islands"), when it names the folder and answers `repo` none. A name that is listed binds that
+  repository, and an unsafe one (`..`, a slash, a leading dot, `.git` at the end) starts nothing
+  (`parseNewRepoAnswer`). Before `task.triage`, `TaskSetup` creates it with `createRepository`, the function
+  `create_task` uses: in the project's first folder, else beside the project's first repository, else in the first
+  folder Shinsa looks in (`resolveTaskRepoTarget`), registered under `<effect key>:repo.register` into the task's
+  project (a task in none gets the project registering gives it, Projects and task identity). With no folder, or a
+  folder that already holds files, it logs a warning and the task is triaged without a repository, so the setup gate
+  asks. Like a repository `create_task` makes, it has no remote until you add one.
 - **It runs without one.** An answer or research with no repository skips the setup step entirely (`startWork`:
   no `config.verify`, no "verifying the setup", no Find the repository step in the strip) and runs read-only in a
   scratch folder of its own, `data/scratch/<task id>` (`RunSupervisor`, made again before every run), never a
