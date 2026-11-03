@@ -2852,7 +2852,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   <engine URL>` as a scoped process with the tunnel token in `TUNNEL_TOKEN`, never in its arguments (a process list
   shows arguments), and counts it up once it prints `Registered tunnel connection`; one that has not within
   `ConnectTimeout` (30 s, an `Effect.timeout`) is stopped and fails as `TunnelConnectFailed`, and closing its scope
-  stops the process.
+  stops the process. Both failures end with the last line `cloudflared` printed (it keeps the last 2,000 characters
+  of its output, `OUTPUT_TAIL_CHARS`), so a run of failed connects in the log says why: a DNS error, a blocked QUIC
+  path, a refused token.
 - **The supervisor** (`TunnelSupervisor`, `remote/tunnel/`, Kanna's timings): connect, heartbeat with the engine's URL
   and version, ping `https://<tunnel host>/health` (`TunnelHealth`) on `PING_SCHEDULE`, every 30 seconds, and
   heartbeat every fourth ping; three failed pings in a row, or `cloudflared` exiting, restart it on `RESTART_SCHEDULE`:
