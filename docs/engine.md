@@ -1978,7 +1978,7 @@ checks it ran.
 
 ### Silent runs
 
-- `SilenceWatch` (`apps/engine/src/agents/silence.ts`) watches transcripts. A running run with no
+- `watchSilence` (`apps/engine/src/agents/silence.ts`), scoped to the engine's work, watches transcripts. A running run with no
   output for five minutes is marked (`run.silence` with the time of its last output); output
   clears the mark. `resolveSilenceLevel`: suspicious from 5 minutes, critical from 15, nothing
   for a queued or finished run or a waiting one (`isRunWaiting` in core, which the watch uses too):
@@ -2460,8 +2460,8 @@ remote channel ──► the same handler, the request marked `channel`
 - **The client.** `EngineClient` (`apps/engine/src/cli/client/service.ts`) is `HttpApiClient.makeWith(EngineApi)`:
   every call typed from the declaration. A request that does not connect wakes the engine once (below, When the
   engine is down) and is sent again; an error answer becomes a `DomainError` with the engine's code (`request_failed`
-  when it gave none). `createEngineCalls` gives the same calls as promises; the command line, the surface specs and
-  the agents' management tools call it, and so will the web and desktop apps.
+  when it gave none). `createEngineCalls` gives the same calls as Effects failing with `EngineFailure`; the command line, the
+  surface specs and the agents' management tools call it.
 - **Features.** `ENGINE_FEATURE_ROUTES` (`http/features.ts`) is read from the annotations (`resolveEngineFeatureRoutes`,
   core's `engine-api/routes.ts`), and the frozen baseline is checked against `listEngineRoutes` (Remote access → What
   each machine speaks).
@@ -3145,7 +3145,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   machine (`ShinsaConnection.command`'s machine).
 - **How busy each machine is** (`apps/engine/src/resources/`, core's `remote/resources.ts`). While a page has a socket
   open, each engine samples its machine every 5 s, on a fiber repeated with `Schedule.spaced` that the last socket
-  closing interrupts (`resources/poller.ts`), and pushes `resources` (`docs/protocol.md` → The socket); with no
+  closing interrupts (`resources/monitor/service.ts`), and pushes `resources` (`docs/protocol.md` → The socket); with no
   page, it samples nothing. One `ps` table gives each process's parent, group, memory and cumulative CPU time; CPU
   is the change in that time between two samples (Linux's `%cpu` is a lifetime average), and the machine's CPU the
   change in `os.cpus()` times, so the first reading comes about a second after a page connects. Memory used is total
@@ -5510,7 +5510,7 @@ ratio from its usage and retries once after a prompt-too-long error. Thread stat
 JSON file per thread, keyed `<session id>-<first turn>`, read through `JsonFile` and decoded by the `StoredThread`
 schema, a damaged one read as empty, and written atomically) and every request is one line of
 `data/eunoe/requests.jsonl`. The forwarder's server is acquired in a scope the `EunoeServer` owns
-(`eunoe/forwarder.ts`), which `stop()` closes.
+(`eunoe/server/service.ts`), which `stop()` closes.
 Rotation needs nothing: auth headers pass through, and a session resumed on another account keeps its thread.
 Shutdown stops the forwarder after the effects, once no `claude` can still talk to it.
 
@@ -6097,8 +6097,8 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
 - **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
   terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' files, the npm
-  registry, Eunoe's forwarder and threads, the resource poller, triage's timeout and the briefing's
-  debounce run the services through `edgeRuntime`, a `ManagedRuntime` of the logger, the shell, `JsonFile`, git's,
+  registry, Eunoe's server and threads, the resource monitor, triage's timeout and the briefings
+  run the services through `edgeRuntime`, a `ManagedRuntime` of the logger, the shell, `JsonFile`, git's,
   GitHub's, the repositories', the workspaces', the checks', the terminals', the extensions', the accounts', the
   secrets' and the versions' services for the process; `Extensions`, `Versions`, `ResourceMonitor` and
   `EunoeServer` stay the objects their callers hold; `Accounts`, its
@@ -6385,7 +6385,7 @@ without the app, with no window: you reach it from your other devices through re
 - **By hand.** `shinsa stop` is `systemctl --user stop --no-block shinsa` (then `kill --signal=SIGKILL` after 40 s,
   which systemd does not answer with a fresh engine), `shinsa restart` is `systemctl --user restart shinsa`, and the
   wake before a command that needs the engine is `systemctl --user start shinsa`, only once the unit exists. Both
-  managers sit behind one `EngineService` (`instance/service.ts`; launchd's is `cli/launchd.ts`), and both refuse
+  managers sit behind one `EngineService` (`instance/service/schema.ts`; launchd's is `cli/launchd.ts`), and both refuse
   with `engine_not_installed` before the service exists. A bundled engine under systemd writes `data/engine.log` like
   one under launchd, so `shinsa logs` reads the same file. To take the service away:
   `systemctl --user disable --now shinsa`, then delete the unit file.

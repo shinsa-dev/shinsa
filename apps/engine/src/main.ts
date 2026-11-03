@@ -1,4 +1,12 @@
 #!/usr/bin/env bun
-import { runCli } from './cli/index.ts';
+import { Effect } from 'effect';
+import { executeCli } from './cli/index.ts';
+import { edgeRuntime } from './runtime/edge.ts';
 
-process.exitCode = await runCli(Bun.argv.slice(2));
+edgeRuntime.runFork(
+  Effect.tap(executeCli(Bun.argv.slice(2)), (code) =>
+    Effect.sync(() => {
+      process.exitCode = code;
+    })
+  )
+);

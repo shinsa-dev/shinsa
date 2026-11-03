@@ -85,7 +85,9 @@ export class Onboarding {
         listAccounts: attempt(context.accounts),
         terminals: context.terminals ?? null,
         upsertRepo: (projectId, path, id) =>
-          Effect.asVoid(attempt(() => changes.upsertRepo(projectId, path, { id }))),
+          changes
+            .upsertRepo(projectId, path, { id })
+            .pipe(Effect.mapError(resolveOnboardingFailure), Effect.asVoid),
         refreshInstallFolders: Effect.sync(() => refreshInstallFolders(Bun.env, config.userHome)),
         newId: Effect.sync(() => Bun.randomUUIDv7()),
       })

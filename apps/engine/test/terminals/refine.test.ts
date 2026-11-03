@@ -185,6 +185,23 @@ describe('the service refiner', () => {
     expect(calls).toHaveLength(2);
   });
 
+  test('fails when the call breaks, and asks again next time', async () => {
+    const { web } = createProject();
+    let calls = 0;
+    const ask = (() => {
+      calls += 1;
+      return calls === 1 ? Promise.reject(new Error('quick call broke')) : Promise.resolve({ services: [] });
+    }) as QuickJson;
+    const refiner = new ServiceRefiner(ask);
+    const candidates = [suggest('web', web)];
+    await expect(refiner.refine('p1', candidates)).rejects.toMatchObject({
+      _tag: 'ServiceRefineFailed',
+      message: 'quick call broke',
+    });
+    expect(await refiner.refine('p1', candidates)).toEqual({ suggestions: candidates, refined: true });
+    expect(calls).toBe(2);
+  });
+
   test('asks nothing when there is nothing to refine', async () => {
     const { ask, calls } = createAsk([]);
     expect(await new ServiceRefiner(ask).refine('p1', [])).toEqual({ suggestions: [], refined: false });

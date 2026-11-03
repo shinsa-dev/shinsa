@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { Effect } from 'effect';
 import {
   describeDuration,
   ENGINE_STOPPED,
@@ -12,10 +13,16 @@ import {
 } from '../../src/cli/engine.ts';
 import { createLaunchdService, type LaunchdOptions } from '../../src/cli/launchd.ts';
 import { type EngineService, resolveBundle } from '../../src/instance/index.ts';
+import { edgeRuntime } from '../../src/runtime/edge.ts';
+import type { Shell } from '../../src/shell/service.ts';
 import { NO_PROGRESS, PLAIN_DISPLAY } from '../../src/terminal/index.ts';
 import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
 
 const COLOR = { style: createStyle({ color: true, symbols: UNICODE_SYMBOLS }), width: 80 };
+
+function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
+  return edgeRuntime.runPromise(effect);
+}
 
 const TARGET = 'gui/501/studio.overclock.shinsa.engine';
 
@@ -82,10 +89,10 @@ function createEngineIo(base: string, engine: FakeEngine | null, overrides: Engi
       launchctl ??
       ((args) => {
         calls.push(args);
-        if (args[0] === 'print') return Promise.resolve({ ok: true, output: 'state = running' });
+        if (args[0] === 'print') return Effect.succeed({ ok: true, output: 'state = running' });
         if (engine && args[0] === 'kickstart') engine.pid = args[1] === '-k' ? (engine.pid ?? 0) + 1 : 200;
         if (engine && args[0] === 'kill') engine.pid = null;
-        return Promise.resolve({ ok: true, output: '' });
+        return Effect.succeed({ ok: true, output: '' });
       }),
   });
   const io: EngineIo = {
@@ -107,10 +114,10 @@ function createEngineIo(base: string, engine: FakeEngine | null, overrides: Engi
 describe('reading the engine', () => {
   test('answers the health of a running engine, and null for one that is down or failing', async () => {
     const { base } = startFakeEngine();
-    expect((await readHealth(base))?.pid).toBe(100);
+    expect((await run(readHealth(base)))?.pid).toBe(100);
     const stopped = startFakeEngine({ pid: null });
-    expect(await readHealth(stopped.base)).toBeNull();
-    expect(await readHealth('http://127.0.0.1:1')).toBeNull();
+    expect(await run(readHealth(stopped.base))).toBeNull();
+    expect(await run(readHealth('http://127.0.0.1:1'))).toBeNull();
   });
 });
 
@@ -118,7 +125,7 @@ describe('shinsa start', () => {
   test('asks launchd to start the job and waits until the engine answers', async () => {
     const { engine, base } = startFakeEngine({ pid: null });
     const { io, out, calls, progress } = createEngineIo(base, engine);
-    await startEngine(io);
+    await run(startEngine(io));
     expect(calls).toEqual([
       ['print', TARGET],
       ['kickstart', TARGET],
@@ -132,7 +139,7 @@ describe('shinsa start', () => {
   test('in a terminal the result is one line with a check mark and the details dimmed', async () => {
     const { engine, base } = startFakeEngine({ pid: null });
     const { io, out } = createEngineIo(base, engine, { display: COLOR, startProgress: () => NO_PROGRESS });
-    await startEngine(io);
+    await run(startEngine(io));
     expect(out).toHaveLength(1);
     expect(out[0]).toStartWith('\u001b[32m✔\u001b[39m Started the engine in ');
     expect(out[0]).toEndWith('. \u001b[2mShinsa 0.0.0, pid 200.\u001b[22m');
@@ -141,20 +148,20 @@ describe('shinsa start', () => {
   test('a running engine is left alone', async () => {
     const { engine, base } = startFakeEngine();
     const { io, out, calls } = createEngineIo(base, engine, { bundled: false });
-    await startEngine(io);
+    await run(startEngine(io));
     expect(calls).toEqual([]);
     expect(out).toEqual(['The engine is already running. Shinsa 0.0.0, pid 100.']);
   });
 
   test('refuses a shinsa outside the app, or an app that never set the engine up', async () => {
     const { base } = startFakeEngine({ pid: null });
-    await expect(startEngine(createEngineIo(base, null, { bundled: false }).io)).rejects.toThrow(
+    await expect(run(startEngine(createEngineIo(base, null, { bundled: false }).io))).rejects.toThrow(
       'This shinsa runs from source, so it does not start or stop the engine. `bun dev` runs the engine and Ctrl-C stops it.'
     );
     const missing = createEngineIo(base, null, {
-      launchctl: () => Promise.resolve({ ok: false, output: 'Could not find service' }),
+      launchctl: () => Effect.succeed({ ok: false, output: 'Could not find service' }),
     });
-    await expect(startEngine(missing.io)).rejects.toThrow(
+    await expect(run(startEngine(missing.io))).rejects.toThrow(
       'The engine is not set up yet. Open the Shinsa app once and it sets it up.'
     );
   });
@@ -168,11 +175,11 @@ describe('shinsa start', () => {
     );
     const message =
       'This shinsa is not the one inside the Shinsa app that runs your engine, so it leaves that engine alone. Use `shinsa` from your PATH, which the app keeps pointing at itself.';
-    await expect(stopEngine(other.io)).rejects.toThrow(message);
-    await expect(restartEngine(other.io, false)).rejects.toThrow(message);
+    await expect(run(stopEngine(other.io))).rejects.toThrow(message);
+    await expect(run(restartEngine(other.io, false))).rejects.toThrow(message);
     const stopped = startFakeEngine({ pid: null });
     const elsewhere = createEngineIo(stopped.base, null, { ownsJob: () => false });
-    await expect(startEngine(elsewhere.io)).rejects.toThrow(message);
+    await expect(run(startEngine(elsewhere.io))).rejects.toThrow(message);
     expect([...other.calls, ...elsewhere.calls].every((call) => call[0] === 'print')).toBe(true);
   });
 
@@ -180,11 +187,11 @@ describe('shinsa start', () => {
     const { base } = startFakeEngine({ pid: null });
     const refusing = createEngineIo(base, null, {
       launchctl: (args) =>
-        Promise.resolve({ ok: args[0] === 'print', output: args[0] === 'print' ? '' : '  ' }),
+        Effect.succeed({ ok: args[0] === 'print', output: args[0] === 'print' ? '' : '  ' }),
     });
-    await expect(startEngine(refusing.io)).rejects.toThrow('launchctl kickstart failed: no output');
+    await expect(run(startEngine(refusing.io))).rejects.toThrow('launchctl kickstart failed: no output');
     const silent = createEngineIo(base, null, { waitMs: 1000 });
-    await expect(startEngine(silent.io)).rejects.toThrow(
+    await expect(run(startEngine(silent.io))).rejects.toThrow(
       'The engine did not answer within 1 second. `shinsa logs` shows why.'
     );
     expect(silent.progress).toEqual(['Starting the engine', 'stopped']);
@@ -196,30 +203,26 @@ function createSystemdLike(engine: FakeEngine, note: string | null) {
   const service: EngineService = {
     manager: 'systemd',
     revivesKilled: false,
-    prepare: () => {
+    prepare: Effect.sync(() => {
       calls.push('prepare');
-      return Promise.resolve(note);
-    },
-    assertInstalled: () => {
+      return note;
+    }),
+    assertInstalled: Effect.sync(() => {
       calls.push('assertInstalled');
-      return Promise.resolve();
-    },
-    start: () => {
+    }),
+    start: Effect.sync(() => {
       calls.push('start');
       engine.pid = 200;
-      return Promise.resolve();
-    },
-    stop: () => {
+    }),
+    stop: Effect.sync(() => {
       calls.push('stop');
-      return Promise.resolve();
-    },
-    kill: () => {
+    }),
+    kill: Effect.sync(() => {
       calls.push('kill');
       engine.pid = null;
-      return Promise.resolve();
-    },
-    restart: () => Promise.resolve(),
-    kick: () => Promise.resolve(false),
+    }),
+    restart: Effect.void,
+    kick: Effect.succeed(false),
   };
   return { service, calls };
 }
@@ -229,7 +232,7 @@ describe('under systemd', () => {
     const { engine, base } = startFakeEngine({ pid: null });
     const { service, calls } = createSystemdLike(engine, 'It stops when you log out.');
     const { io, out } = createEngineIo(base, engine, { service });
-    await startEngine(io);
+    await run(startEngine(io));
     expect(calls).toEqual(['prepare', 'start']);
     expect(out).toEqual([
       expect.stringMatching(/^Started the engine in .+\. Shinsa 0\.0\.0, pid 200\.$/),
@@ -241,7 +244,7 @@ describe('under systemd', () => {
     const { engine, base } = startFakeEngine();
     const { service, calls } = createSystemdLike(engine, null);
     const { io, out } = createEngineIo(base, engine, { service, waitMs: 600 });
-    await stopEngine(io);
+    await run(stopEngine(io));
     expect(calls).toEqual(['assertInstalled', 'stop', 'kill']);
     expect(out).toEqual([
       expect.stringMatching(
@@ -255,7 +258,7 @@ describe('shinsa stop', () => {
   test('stops the job cleanly and waits until the engine is gone', async () => {
     const { engine, base } = startFakeEngine();
     const { io, out, calls } = createEngineIo(base, engine);
-    await stopEngine(io);
+    await run(stopEngine(io));
     expect(calls).toEqual([
       ['print', TARGET],
       ['kill', 'SIGTERM', TARGET],
@@ -270,11 +273,11 @@ describe('shinsa stop', () => {
   test('an engine that is not running needs nothing, and one that will not stop is reported', async () => {
     const { base } = startFakeEngine({ pid: null });
     const idle = createEngineIo(base, null);
-    await stopEngine(idle.io);
+    await run(stopEngine(idle.io));
     expect(idle.out).toEqual(['The engine is not running.']);
     const running = startFakeEngine();
     const stuck = createEngineIo(running.base, null, { waitMs: 600 });
-    await expect(stopEngine(stuck.io)).rejects.toThrow(
+    await expect(run(stopEngine(stuck.io))).rejects.toThrow(
       'The engine is still running after 1 second and a forced stop. `shinsa logs` shows why.'
     );
     expect(stuck.calls.slice(1)).toEqual([
@@ -290,10 +293,10 @@ describe('shinsa stop', () => {
       launchctl: (args) => {
         calls.push(args);
         if (args[1] === 'SIGTERM') engine.pid = 200;
-        return Promise.resolve({ ok: true, output: args[0] === 'print' ? 'state = running' : '' });
+        return Effect.succeed({ ok: true, output: args[0] === 'print' ? 'state = running' : '' });
       },
     });
-    await stopEngine(io);
+    await run(stopEngine(io));
     expect(calls).toEqual([
       ['print', TARGET],
       ['kill', 'SIGTERM', TARGET],
@@ -312,10 +315,10 @@ describe('shinsa stop', () => {
       launchctl: (args) => {
         calls.push(args);
         if (args[1] === 'SIGKILL') engine.pid = 300;
-        return Promise.resolve({ ok: true, output: args[0] === 'print' ? 'state = running' : '' });
+        return Effect.succeed({ ok: true, output: args[0] === 'print' ? 'state = running' : '' });
       },
     });
-    await stopEngine(io);
+    await run(stopEngine(io));
     expect(calls).toEqual([
       ['print', TARGET],
       ['kill', 'SIGTERM', TARGET],
@@ -333,7 +336,7 @@ describe('shinsa restart', () => {
   test('restarts the job and waits for the new engine', async () => {
     const { engine, base } = startFakeEngine();
     const { io, out, calls } = createEngineIo(base, engine);
-    await restartEngine(io, false);
+    await run(restartEngine(io, false));
     expect(calls).toEqual([
       ['print', TARGET],
       ['kickstart', '-k', TARGET],
@@ -346,17 +349,19 @@ describe('shinsa restart', () => {
   test('with --when-idle the engine restarts itself once no agent is mid-turn', async () => {
     const busy = startFakeEngine();
     const waiting = createEngineIo(busy.base, busy.engine);
-    await restartEngine(waiting.io, true);
+    await run(restartEngine(waiting.io, true));
     expect(waiting.out).toEqual(['The engine restarts once no agent is mid-turn.']);
     const idle = startFakeEngine({ restartWhenIdle: true });
     const now = createEngineIo(idle.base, idle.engine);
-    await restartEngine(now.io, true);
+    await run(restartEngine(now.io, true));
     expect(now.calls).toEqual([['print', TARGET]]);
     expect(now.out).toEqual([
       expect.stringMatching(/^Restarted the engine in \d+(?:ms|\.\ds)\. Shinsa 0\.0\.0, pid 101\.$/),
     ]);
     const stopped = startFakeEngine({ pid: null });
-    await expect(restartEngine(createEngineIo(stopped.base, null).io, true)).rejects.toThrow(ENGINE_STOPPED);
+    await expect(run(restartEngine(createEngineIo(stopped.base, null).io, true))).rejects.toThrow(
+      ENGINE_STOPPED
+    );
   });
 });
 
@@ -364,13 +369,13 @@ describe('shinsa version', () => {
   test('names this command’s version and the engine’s, or that the engine is not running', async () => {
     const { base } = startFakeEngine();
     const running = createEngineIo(base, null, { bundled: false });
-    await printVersion(running.io, false);
+    await run(printVersion(running.io, false));
     expect(running.out).toEqual(['Command  0.0.0', 'Engine   0.0.0, pid 100, protocol 3']);
     const down = createEngineIo('http://127.0.0.1:1', null);
-    await printVersion(down.io, false);
+    await run(printVersion(down.io, false));
     expect(down.out).toEqual(['Command  0.0.0', 'Engine   Not running']);
     const colored = createEngineIo('http://127.0.0.1:1', null, { display: COLOR });
-    await printVersion(colored.io, false);
+    await run(printVersion(colored.io, false));
     expect(colored.out).toEqual([
       '\u001b[2mCommand\u001b[22m  0.0.0',
       '\u001b[2mEngine\u001b[22m   \u001b[31m●\u001b[39m Not running',
@@ -395,7 +400,7 @@ describe('shinsa version', () => {
     expect(resolveCommandVersion()).toEqual({ version: '0.0.0', commit: null });
     const { base } = startFakeEngine({ version: '0.4.2' });
     const behind = createEngineIo(base, null);
-    await printVersion(behind.io, false, bundle);
+    await run(printVersion(behind.io, false, bundle));
     expect(behind.out).toEqual([
       'Command  0.5.0 (bbbbbbb)',
       'Engine   0.4.2, pid 100, protocol 3',
@@ -403,7 +408,7 @@ describe('shinsa version', () => {
       'The engine runs another version than the app carries. `shinsa restart` starts the app’s.',
     ]);
     const json = createEngineIo(base, null);
-    await printVersion(json.io, true, bundle);
+    await run(printVersion(json.io, true, bundle));
     expect(JSON.parse(json.out[0] ?? '')).toMatchObject({
       command: { version: '0.5.0' },
       engine: { version: '0.4.2', pid: 100 },

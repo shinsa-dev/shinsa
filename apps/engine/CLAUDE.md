@@ -18,8 +18,10 @@ src/
 ├── serve/               service.ts (Serve: takes the data directory's lock as the scoped ServeLock layer, not in
 │                        inspect mode, which is read-only and starts nothing; opens the log, wires the pieces, listens,
 │                        recovers in-flight work; each step a finalizer, so closing the scope runs the shutdown order
-│                        below in reverse of the start), wiring.ts (the pieces not moved to Effect yet: createServices,
-│                        startHttp, startWork, stopWork), schema.ts (ShinsaOptions, Shinsa)
+│                        below in reverse of the start), wiring.ts (the steps it runs, each an Effect.fn: createServices
+│                        builds every piece, startHttp holds the server for the scope, startWork starts the work and
+│                        the silence watch in the scope and forks the accounts check, stopWork and disposeRuntime the
+│                        shutdown), schema.ts (ShinsaOptions, Shinsa, AccountsCheckFailed)
 ├── cli/                 The command line (docs/cli.md: why it is shaped like Tailscale's and Docker's).
 │                        index.ts routes the commands (`engine`, hidden from the help, runs the engine: it reads
 │                        the login shell's environment first unless started from a terminal, exits 0 when its
@@ -31,17 +33,21 @@ src/
 │                        describeHelpAll), each command's --help and docs/cli.md's generated half
 │                        (replaceReference) come from; commands.ts open
 │                        (the app, a task, or a folder's project) / do / status; engine.ts start / stop /
-│                        restart / version through the platform's EngineService (EngineControl, readHealth,
-│                        HUMAN_ONLY_ENGINE_COMMANDS); launchd.ts the Mac's EngineService on the app's launchd job
+│                        restart / version through the platform's EngineService, each an Effect.fn (readHealth,
+│                        waitFor on ENGINE_POLL_SCHEDULE); schema.ts the CLI's io shapes (CliIo, EngineIo,
+│                        CommandIo, each seam an Effect run on edgeRuntime), CliFailed and the constants
+│                        (HUMAN_ONLY_ENGINE_COMMANDS, ENGINE_STOPPED); args.ts parseArgs, pure; index.ts's
+│                        executeCli is the one program main.ts forks on edgeRuntime, runCli its promise for
+│                        tests and scripts/engine-main.ts; launchd.ts the Mac's EngineService on the app's launchd job
 │                        (createLaunchdService); logs.ts `shinsa logs`; app.ts the app's bundle id, the
 │                        engine's label and `shinsa://` links; surface.ts every `shinsa <group> <action>` (help,
 │                        --json, the idempotency key); client/ (EngineClient in service.ts: HttpApiClient.makeWith(EngineApi),
 │                        every call typed from core's EngineApi; a request that does not connect wakes the engine
 │                        once and is sent again, else EngineNotRunning (NOT_RUNNING); an error answer becomes a
 │                        DomainError with the engine's code, or request_failed, and one without JSON
-│                        EngineAnswerInvalid; index.ts createEngineCalls, the same calls as promises, the
-│                        client the web and desktop apps move to); api.ts (createSurfaceClient and
-│                        createApiClient over those calls)
+│                        EngineAnswerInvalid; index.ts createEngineCalls, the same calls as Effects failing with
+│                        EngineFailure); api.ts (createSurfaceClient and createApiClient over those calls, each
+│                        an Effect)
 ├── terminal/            How the command line draws (docs/cli.md → How it looks): style.ts (when there is colour and
 │                        which symbols: TTY, NO_COLOR, FORCE_COLOR, TERM; the 16-colour tones; code in backticks),
 │                        text.ts (visible width, wrapping, truncation, ~ for home, splitHint for an error's hint),
@@ -58,19 +64,24 @@ src/
 │                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
 │                        versions a compiled engine carries, and where its plugin and web folders are; null from
 │                        source), targets.ts (ENGINE_TARGETS, the darwin and Linux builds scripts/build-engine.ts
-│                        accepts, and each one's dist folder), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1`
+│                        accepts, and each one's dist folder), service/ (schema.ts: SERVICE_MARKER, the `SHINSA_SERVICE=1`
 │                        the launchd job and the systemd unit set; EngineService, what start, stop, restart and
-│                        waking need from either), systemd.ts (createSystemdService: the `shinsa.service` user
+│                        waking need from either as Effects on Shell, ServiceCommandFailed; index.ts:
+│                        isStartedByService, runServiceCommand), current.ts (resolveServerInstance: the
+│                        checkout's HEAD through Git), systemd.ts (createSystemdService: the `shinsa.service` user
 │                        unit with Restart=on-failure, written or refreshed on Linux by the start command and driven
 │                        through `systemctl --user`), restart.ts (EngineRestarter, createServiceRestarter: stop
 │                        cleanly and exit 75 for the service to start it again, now or after draining: new runs
-│                        held until the working ones hand over, 15 minutes at most)
+│                        held until the working ones hand over, 15 minutes at most; the edge over restart/:
+│                        makeEngineRestarter in service.ts, its state in a Ref and the deadline a fiber;
+│                        stopWithin an Effect under Effect.timeoutOrElse; isEngineBusy in busy.ts)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
 │                        (argv, MCP schemas and tool input), spec.ts (defineCommand / defineRead / defineAction),
-│                        resolve.ts (task, account, repository and project references), client.ts (SurfaceClient,
-│                        the seam the command line and the management tools both run through: `calls`, the
-│                        EngineApi calls a spec makes, never a path), one file per group
+│                        resolve.ts (task, account, repository and project references, each an Effect), schema.ts
+│                        (SurfaceClient, the seam the command line and the management tools both run through:
+│                        `api`, the EngineApi calls a spec makes as Effects, never a path; SurfaceSpec, whose run
+│                        is an Effect failing with SurfaceFailure, and SurfaceCallFailed), one file per group
 │                        (tasks, gates, work, schedules, config: projects and focus, extensions: mcp, skills and
 │                        plugins, services, remote, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
@@ -87,7 +98,7 @@ src/
 │                        resolveConfig, resolveServerAddress, prepareDataDir). The port defaults to core's
 │                        APP_IDENTITY: 7446; package.json's dev and start scripts pin 5180 so a checkout never meets
 │                        the Mac app's engine; every SHINSA_* variable is read here, except SHINSA_QUICK and
-│                        SHINSA_SERVICE (instance/service.ts) and the SHINSA_BUILD_* a compiled engine carries
+│                        SHINSA_SERVICE (instance/service/schema.ts) and the SHINSA_BUILD_* a compiled engine carries
 │                        (instance/bundle.ts). A secret added later is Config.Redacted
 ├── log/                 service.ts (JsonLogger: Effect's Logger writing one JSON line per entry, `at`, `level`,
 │                        `message` and the log's annotations, errors on stderr, the whole line through
@@ -189,8 +200,9 @@ src/
 │   │                    out of a turn (deliveries/service.ts: makeDeliveries, deliveries.ts its edge; delegations/delivery.ts), the account seam: leases and rejections
 │   │                    (accounts.ts), idle compaction (compaction.ts, the edge over compaction/: makeIdleCompaction,
 │   │                    the wait and the running compaction as fibers per task, the window in window.ts; stopping
-│   │                    one aborts it and waits for it), quiet runs (silence.ts, the edge over
-│   │                    silence/: makeSilenceWatch, the check a fiber on its interval), hand-over checks and evidence
+│   │                    one aborts it and waits for it), quiet runs (silence.ts: watchSilence, the
+│   │                    scoped watch over silence/'s makeSilenceWatch, its check a fiber on its interval and the
+│   │                    transcripts' output heard while the scope is open), hand-over checks and evidence
 │   │                    (handover.ts), RunClock (clock.ts, the edge over clock/:
 │   │                    makeRunClock, a countdown fiber paused by interruption; ClockTimers become an Effect
 │   │                    Clock), the commands no agent may run (policy.ts: also the
@@ -275,9 +287,10 @@ src/
 │                        patch.ts (an account's settings from the API), resume.ts (the usage-wait clock), index.ts (the Accounts service: sign-ins, snapshot, notices, the weekly
 │                        reading a run is charged against); its routes are http/routes/accounts
 ├── eunoe/               Eunoe's core (`@chroxify/eunoe`) served inside the engine for its Claude sessions: server.ts
-│                        (EunoeServer: the forwarder on a loopback port of its own, started on first use; the request
-│                        log in data/eunoe; compaction notices and the stuck signal per session), forwarder.ts (the
-│                        server acquired in a scope stop() closes; ForwarderUnavailable), threads.ts (thread state in
+│                        (the EunoeServer edge over server/: makeEunoeServer, the forwarder on a loopback port of its
+│                        own, started on first use and acquired in a scope stop() closes, ForwarderUnavailable; the
+│                        request log in data/eunoe; compaction notices and the stuck signal per session, notices.ts
+│                        reading them from a request's entry), threads.ts (thread state in
 │                        data/eunoe/threads on JsonFile, decoded by StoredThread), schema.ts
 ├── schedules/           Schedules: the clock (clock.ts over clock/), the agent tools (tools.ts over tools/), the
 │                        webhook receiver (webhook.ts over webhook/: the rate windows in a Ref), signature checks (verify.ts), the prompt template and redaction (template.ts:
@@ -424,8 +437,10 @@ src/
 │                        isolation.ts, push.ts, update.ts, bundle.ts, repo.ts, task-refs.ts, changed-files.ts,
 │                        diff.ts, files.ts and processes.ts, each failure the error it threw before (a DomainError
 │                        for the Code tab's reads). blobs.ts (CatFile, CatFilePool: one long-lived
-│                        `git cat-file --batch-command` per repository) and objects.ts (ObjectCache, the 64 MB cache
-│                        of what a commit addresses) stay as they were: only http/routes/code holds them
+│                        `git cat-file --batch-command` per repository, over blobs/: makeCatFile, the process, its
+│                        waiting reads, each a Deferred, and its idle and answer timers as fibers) and objects.ts
+│                        (ObjectCache, the 64 MB cache of what a commit addresses, over objects/: makeObjectCache,
+│                        one read in flight per key); only http/routes/code holds them
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one Workspace of effects per mode
 │                        (schema.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
 │                        before a push; TaskCheckoutMissing, CheckoutDirty, CheckoutOffBranch),
@@ -474,9 +489,10 @@ src/
 │                        index.ts the edge (measureTaskCoverage; listCoverageDetections for GET /api/repos/coverage)
 │                        (docs/engine.md → Test coverage of the change)
 ├── resources/           How busy this machine is (docs/engine.md → Remote access, How busy each machine is): index.ts
-│                        (ResourceMonitor: samples every 5 s while a socket listens, df and du every 10 minutes, the
-│                        memory reader per platform), poller.ts (the sampling fiber on Schedule.spaced, interrupted
-│                        when the last socket closes), sample.ts (the ps table, CPU from deltas of CPU time, vm_stat,
+│                        (the ResourceMonitor edge), monitor/ (makeResourceMonitor in service.ts: samples every 5 s
+│                        while a socket listens, on a fiber repeated with Schedule.spaced that the last socket closing
+│                        interrupts, df and du every 10 minutes, one sample and one disk reading at a time;
+│                        ResourceReadFailed in schema.ts), memory.ts (the memory reader per platform), sample.ts (the ps table, CPU from deltas of CPU time, vm_stat,
 │                        /proc/meminfo, df, du, each task's use), ledger.ts (ProcessLedger: each task's agent, check
 │                        and service processes), schema.ts (the shapes and each interval as a Duration)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
@@ -507,8 +523,10 @@ src/
 │                        DomainError is OnboardingCallFailed (failures.ts); schema.ts also holds the revision of the
 │                        suggested projects, the prerequisite shapes and PREREQUISITE_TIMEOUT
 ├── projects/            changes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
-│                        folders, registered or not) and createProjectChanges, which http/routes/projects and
-│                        the management client share; folders.ts
+│                        folders, registered or not) and createProjectChanges, the ProjectChanges handle of
+│                        changes/service.ts (makeProjectChanges: upsertRepo and upsertFolder as Effects failing
+│                        with a DomainError or ProjectChangeFailed, changes/schema.ts), which http/routes/projects,
+│                        onboarding and the management client share; folders.ts
 │                        (resolving a folder you add)
 ├── triage/              Title, repository (or none), size, branch and dependencies for a new task, and the parts the human left
 │                        to Shinsa (Auto): its shape, priority and dependencies, each with a reason. A task in a
@@ -532,25 +550,30 @@ src/
 │                        which classifies before it dispatches; a new round or a kept suggestion that names no kind
 │                        of task is shaped first (resolveRoundShape); resolveRoundRepository finds the repository a
 │                        task with none needs once its work needs one (the setup check calls it)
-├── briefing/            The Home guide, written beside the log through Engine.writeBriefing; debounce.ts waits
-│                        BRIEFING_DEBOUNCE (schema.ts) on a fiber that each new request interrupts and stop() cancels
+├── briefing/            The Home guide, written beside the log through Engine.writeBriefing: service.ts (makeBriefings:
+│                        waits BRIEFING_DEBOUNCE, schema.ts, on a fiber in a FiberHandle that each new request
+│                        interrupts and stop() cancels), resolve.ts (the writer's answer or the ranked fallback),
+│                        prompt.ts (the prompt and the answer's schema); index.ts the Briefings edge
 ├── terminals/           Your terminals (docs/engine.md → Terminals): pty/ (TerminalPty: your login shell in Bun's PTY as
 │                        a scoped resource, hung up and killed after HANG_UP_GRACE; the program in front of a shell
 │                        through Shell; a free port on PORT_RETRY, PortUnavailable), pty.ts its edge (the shell, its
-│                        environment, spawnTerminalProcess, readForegroundProgram, pickFreePort), mirror.ts (the
+│                        environment, spawnTerminalProcess, pickFreePort), mirror.ts (the
 │                        headless xterm.js copy of the screen, the answers to a program's questions), session.ts
-│                        (TerminalSession: viewers, batching, back-pressure, exit, typing a command at the prompt),
+│                        (TerminalSession: viewers, batching, back-pressure, exit, typing a command at the prompt; its timers
+│                        fibers, its screen, output and stop Effects),
 │                        xterm-types.d.ts (the add-ons' `@xterm/xterm` types mapped to `@xterm/headless` in tsconfig,
 │                        so the DOM types never reach the engine), store/ (TerminalFiles: data/terminals/, the
 │                        terminals, their screens and services.json on JsonFile, each entry decoded by StoredTerminal
 │                        or StoredService), store.ts its edge (TerminalStore, parseStoredTerminal, parseStoredService),
 │                        detect.ts (the services found in a project's folders: workspace scripts, Deno, bin/dev and
-│                        Procfile lines, each Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the
+│                        Procfile lines, each Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner, the edge over refine/'s
+│                        makeServiceRefiner, the pure steps in refine/suggestions.ts: the
 │                        quick call that names them, adds a port flag and a preview URL, cached per project; its answer
 │                        decoded in answer.ts), input.ts (what http/routes/terminals and services read from a body),
 │                        places.ts (where a terminal opens and a service runs: resolveTerminalStart,
 │                        resolveServicePlace, resolveServiceRunIn, the suggestions a project does not have yet),
-│                        sockets.ts (the /ws/terminals/<id> socket, createTerminalSockets), index.ts (Terminals: the list, create, rename,
+│                        sockets.ts (the /ws/terminals/<id> socket, createTerminalSockets), index.ts (Terminals, the edge over service.ts's
+│                        makeTerminals: its state in Refs, the notify and screen timers as fibers; the list, create, rename,
 │                        reorder, restart, run, close, stop, and the services: add, update, remove, start, stop,
 │                        restart, a run per task, closing a task's runs, resume after a restart), schema.ts,
 │                        layers.ts (TerminalsLayer)
@@ -613,14 +636,14 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `SecretFiles` (`secrets/files/service.ts`) | `SecretFiles.layer`, needs `JsonFile` | secrets.json decoded, a file without a salt kept aside |
   | `TerminalFiles`, `TerminalPty` (`terminals/`) | `TerminalsLayer` (`terminals/layers.ts`), needs `JsonFile` and `Shell` | data/terminals/ decoded by schemas; the PTY as a scoped resource, the foreground program, a free port (`PortUnavailable`) |
   | `HttpServices` (`http/services/service.ts`) | `makeEngineHandler(services)` (`http/app.ts`), scoped | what every `EngineApi` handler calls; the handler is `HttpRouter.toWebHandler` over the groups, `Ingress` and `EngineGateLive` |
-  | `EngineClient` (`cli/client/service.ts`) | `EngineClient.layer({ base, wake, fetch })` | `HttpApiClient` over core's `EngineApi`, waking the engine once; `createEngineCalls` the same calls as promises |
+  | `EngineClient` (`cli/client/service.ts`) | `EngineClient.layer({ base, wake, fetch })` | `HttpApiClient` over core's `EngineApi`, waking the engine once; `createEngineCalls` the same calls as Effects |
   | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order; fails with the lock's `ServerRunning` or `LockContended`, which `startShinsa` turns into its `DomainError` |
 
   Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
   terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' stores, the npm
-  registry, Eunoe's forwarder and threads, the resource poller, the
-  briefing's debounce and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config,
+  registry, Eunoe's server and threads, the resource monitor, the
+  briefings and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config,
   `runPromise` for processes); `Extensions`, `Versions`, `ResourceMonitor`, `EunoeServer`, `Accounts` and
   `Terminals` stay the objects their callers hold;
   `EventLog`, `EvidenceStore` and `AttachmentStore` each own a `ManagedRuntime` over their layer and `runSync` it;

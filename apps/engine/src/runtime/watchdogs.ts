@@ -1,31 +1,37 @@
-import { isWatchdogScheduled, type ShinsaState } from '@shinsa/core';
+import { DomainError, type ShinsaState } from '@shinsa/core';
+import { Effect } from 'effect';
+import { describeError } from '../log/index.ts';
 import { type ClockEntry, StateClock, type StateClockOptions } from './clock.ts';
+import { edgeRuntime } from './edge.ts';
 import type { Engine } from './engine.ts';
+import { WATCHDOG_CLOCK_DEFAULTS, WatchdogFireFailed, type WatchdogClockTick } from './watchdogs/schema.ts';
+import { makeWatchdogClock } from './watchdogs/service.ts';
 
 export class WatchdogClock extends StateClock {
+  readonly #listTicks: (state: ShinsaState) => WatchdogClockTick[];
+
   constructor(engine: Engine, options: StateClockOptions = {}) {
-    super(
-      engine,
-      { area: 'Watchdogs', failure: 'Could not run a watchdog check', minDelayMs: 1_000 },
-      options
+    super(engine, WATCHDOG_CLOCK_DEFAULTS, options);
+    this.#listTicks = edgeRuntime.runSync(
+      makeWatchdogClock({
+        dispatch: (command, id) =>
+          Effect.tryPromise({
+            try: () => engine.dispatch(command, { id }),
+            catch: (error) =>
+              error instanceof DomainError
+                ? error
+                : new WatchdogFireFailed({ message: describeError(error) }),
+          }),
+        refuse: (id) => Effect.sync(() => this.refuse(id)),
+      })
     );
   }
 
   protected listEntries(state: ShinsaState): ClockEntry[] {
-    return Object.values(state.tasks).flatMap((task) =>
-      (task.watchdogs ?? []).flatMap((watchdog) => {
-        const dueAt = watchdog.nextCheckAt;
-        if (!isWatchdogScheduled(watchdog) || watchdog.runId !== null || dueAt === null) return [];
-        const id = `watchdog:${watchdog.id}:${dueAt}`;
-        const fire = async () => {
-          const events = await this.engine.dispatch(
-            { type: 'watchdog.fire', taskId: task.id, watchdogId: watchdog.id, dueAt },
-            { id }
-          );
-          if (events.length === 0) this.refuse(id);
-        };
-        return [{ id, dueAt, fire }];
-      })
-    );
+    return this.#listTicks(state).map((tick) => ({
+      id: tick.id,
+      dueAt: tick.dueAt,
+      fire: () => edgeRuntime.runPromise(tick.fire),
+    }));
   }
 }

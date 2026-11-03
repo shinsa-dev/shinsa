@@ -1,39 +1,19 @@
-import { CODE_LIMITS } from '@shinsa/core';
-import { NEWLINE } from '../files/schema.ts';
-import { killProcessGroup } from '../shell/index.ts';
+import { Duration, Effect, Scope } from 'effect';
+import { edgeRuntime } from '../runtime/edge.ts';
+import {
+  BATCH_IDLE,
+  BATCH_TIMEOUT,
+  type BatchChild,
+  type CatFileHandle,
+  type CatFileOptions,
+} from './blobs/schema.ts';
+import { makeCatFile } from './blobs/service.ts';
 import { READ_ENV } from './schema.ts';
-import { parseInfoLine } from './tree/entries.ts';
 import type { ObjectInfo } from './tree/schema.ts';
 
 export { isBatchName, parseInfoLine } from './tree/entries.ts';
 export type { ObjectInfo } from './tree/schema.ts';
-
-type Reply = { kind: 'info'; info: ObjectInfo | null } | { kind: 'contents'; bytes: Uint8Array };
-
-interface Waiting {
-  kind: Reply['kind'];
-  resolve: (reply: Reply) => void;
-  reject: (error: Error) => void;
-}
-
-export interface BatchChild {
-  pid: number;
-  stdin: { write: (text: string) => unknown; flush: () => unknown };
-  stdout: ReadableStream<Uint8Array>;
-  exited: Promise<number>;
-}
-
-const IDLE_MS = 30_000;
-
-const DECODER = new TextDecoder();
-
-function joinBytes(a: Uint8Array, b: Uint8Array) {
-  if (a.length === 0) return b;
-  const joined = new Uint8Array(a.length + b.length);
-  joined.set(a);
-  joined.set(b, a.length);
-  return joined;
-}
+export type { BatchChild, CatFileOptions } from './blobs/schema.ts';
 
 function spawnBatch(repoPath: string): BatchChild {
   return Bun.spawn(['git', 'cat-file', '--batch-command'], {
@@ -46,123 +26,42 @@ function spawnBatch(repoPath: string): BatchChild {
   });
 }
 
-export interface CatFileOptions {
-  idleMs?: number;
-  timeoutMs?: number;
-  spawn?: (repoPath: string) => BatchChild;
-}
-
 export class CatFile {
-  readonly #repoPath: string;
-  readonly #idleMs: number;
-  readonly #timeoutMs: number;
-  readonly #spawn: (repoPath: string) => BatchChild;
-  #child: BatchChild | null = null;
-  #buffer: Uint8Array = new Uint8Array();
-  #waiting: Waiting[] = [];
-  #idle: ReturnType<typeof setTimeout> | null = null;
-  #timer: ReturnType<typeof setTimeout> | null = null;
+  readonly handle: CatFileHandle;
 
   constructor(repoPath: string, options: CatFileOptions = {}) {
-    this.#repoPath = repoPath;
-    this.#idleMs = options.idleMs ?? IDLE_MS;
-    this.#timeoutMs = options.timeoutMs ?? CODE_LIMITS.readMs;
-    this.#spawn = options.spawn ?? spawnBatch;
-  }
-
-  get running() {
-    return this.#child !== null;
-  }
-
-  info(name: string): Promise<ObjectInfo | null> {
-    return this.#send(`info ${name}\n`, 'info').then((reply) => (reply.kind === 'info' ? reply.info : null));
-  }
-
-  contents(object: string): Promise<Uint8Array> {
-    return this.#send(`contents ${object}\n`, 'contents').then((reply) =>
-      reply.kind === 'contents' ? reply.bytes : new Uint8Array()
+    this.handle = edgeRuntime.runSync(
+      makeCatFile({
+        repoPath,
+        idle: options.idleMs === undefined ? BATCH_IDLE : Duration.millis(options.idleMs),
+        timeout: options.timeoutMs === undefined ? BATCH_TIMEOUT : Duration.millis(options.timeoutMs),
+        spawn: options.spawn ?? spawnBatch,
+      }).pipe(Scope.provide(edgeRuntime.runSync(Scope.make())))
     );
   }
 
+  get running() {
+    return edgeRuntime.runSync(this.handle.running);
+  }
+
+  info(name: string): Promise<ObjectInfo | null> {
+    return edgeRuntime.runPromise(this.handle.info(name));
+  }
+
+  contents(object: string): Promise<Uint8Array> {
+    return edgeRuntime.runPromise(this.handle.contents(object));
+  }
+
   close() {
-    const child = this.#child;
-    this.#child = null;
-    this.#buffer = new Uint8Array();
-    if (this.#idle) clearTimeout(this.#idle);
-    if (this.#timer) clearTimeout(this.#timer);
-    this.#idle = null;
-    this.#timer = null;
-    const waiting = this.#waiting;
-    this.#waiting = [];
-    for (const each of waiting) each.reject(new Error('The object reader stopped.'));
-    if (child) killProcessGroup(child.pid);
-  }
-
-  #send(command: string, kind: Reply['kind']) {
-    return new Promise<Reply>((resolve, reject) => {
-      const child = this.#start();
-      this.#waiting.push({ kind, resolve, reject });
-      if (this.#idle) clearTimeout(this.#idle);
-      this.#idle = null;
-      this.#timer ??= setTimeout(() => this.close(), this.#timeoutMs);
-      child.stdin.write(command);
-      child.stdin.flush();
-    });
-  }
-
-  #start() {
-    if (this.#child) return this.#child;
-    const child = this.#spawn(this.#repoPath);
-    this.#child = child;
-    void this.#read(child);
-    void child.exited.then(() => {
-      if (this.#child === child) this.close();
-    });
-    return child;
-  }
-
-  async #read(child: BatchChild) {
-    for await (const chunk of child.stdout) {
-      if (this.#child !== child) return;
-      this.#buffer = joinBytes(this.#buffer, chunk);
-      this.#drain();
-    }
-  }
-
-  #drain() {
-    for (let next = this.#waiting[0]; next; next = this.#waiting[0]) {
-      const end = this.#buffer.indexOf(NEWLINE);
-      if (end < 0) return;
-      const line = DECODER.decode(this.#buffer.subarray(0, end));
-      const info = parseInfoLine(line);
-      if (next.kind === 'info' || !info) {
-        this.#buffer = this.#buffer.subarray(end + 1);
-        this.#settle({ kind: 'info', info });
-        continue;
-      }
-      const start = end + 1;
-      if (this.#buffer.length < start + info.size + 1) return;
-      const bytes = this.#buffer.slice(start, start + info.size);
-      this.#buffer = this.#buffer.subarray(start + info.size + 1);
-      this.#settle({ kind: 'contents', bytes });
-    }
-  }
-
-  #settle(reply: Reply) {
-    const waiting = this.#waiting.shift();
-    waiting?.resolve(reply);
-    if (this.#waiting.length > 0) return;
-    if (this.#timer) clearTimeout(this.#timer);
-    this.#timer = null;
-    this.#idle = setTimeout(() => this.close(), this.#idleMs);
+    edgeRuntime.runSync(this.handle.close);
   }
 }
 
 export class CatFilePool {
   readonly #readers = new Map<string, CatFile>();
-  readonly #idleMs: number;
+  readonly #idleMs: number | undefined;
 
-  constructor(idleMs = IDLE_MS) {
+  constructor(idleMs?: number) {
     this.#idleMs = idleMs;
   }
 

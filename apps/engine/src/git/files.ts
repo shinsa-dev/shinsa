@@ -1,4 +1,5 @@
 import { CODE_LIMITS, type FileContent, type RepoTree, type SearchMatch } from '@shinsa/core';
+import { Effect } from 'effect';
 import { edgeRuntime } from '../runtime/edge.ts';
 import type { ObjectCache } from './objects.ts';
 import { runCodeRead } from './tree/edge.ts';
@@ -31,7 +32,7 @@ export function listCommitTree(
   return runCodeRead(CodeFiles.use((files) => files.listCommitTree(repoPath, sha, dir, signal, reader)));
 }
 
-export async function readCommitFile(
+export function readCommitFile(
   repoPath: string,
   sha: string,
   path: string,
@@ -39,31 +40,37 @@ export async function readCommitFile(
   signal?: AbortSignal,
   reader?: BatchReader
 ): Promise<FileContent> {
-  const blob = await runCodeRead(
-    CodeFiles.use((files) => files.selectBlob(repoPath, sha, path, signal, reader))
+  return runCodeRead(
+    Effect.gen(function* () {
+      const files = yield* CodeFiles;
+      const blob = yield* files.selectBlob(repoPath, sha, path, signal, reader);
+      if (!blob) return describeAbsent(sha, path, 0, false);
+      if (blob.size > CODE_LIMITS.blobBytes) return describeAbsent(sha, path, blob.size, true);
+      const bytes = yield* cache.handle.read(
+        `${repoPath}\0blob\0${blob.object}`,
+        files.readObject(repoPath, blob.object, signal, reader),
+        (value) => value.length
+      );
+      return describeBytes(sha, path, bytes, blob.size);
+    })
   );
-  if (!blob) return describeAbsent(sha, path, 0, false);
-  if (blob.size > CODE_LIMITS.blobBytes) return describeAbsent(sha, path, blob.size, true);
-  const bytes = await cache.read(
-    `${repoPath}\0blob\0${blob.object}`,
-    () => runCodeRead(CodeFiles.use((files) => files.readObject(repoPath, blob.object, signal, reader))),
-    (value) => value.length
-  );
-  return describeBytes(sha, path, bytes, blob.size);
 }
 
-export async function readCommitBytes(
+export function readCommitBytes(
   repoPath: string,
   sha: string,
   path: string,
   signal?: AbortSignal,
   reader?: BatchReader
 ) {
-  const blob = await runCodeRead(
-    CodeFiles.use((files) => files.selectBlob(repoPath, sha, path, signal, reader))
+  return runCodeRead(
+    Effect.gen(function* () {
+      const files = yield* CodeFiles;
+      const blob = yield* files.selectBlob(repoPath, sha, path, signal, reader);
+      if (!blob || blob.size > CODE_LIMITS.blobBytes) return null;
+      return yield* files.readObject(repoPath, blob.object, signal, reader);
+    })
   );
-  if (!blob || blob.size > CODE_LIMITS.blobBytes) return null;
-  return runCodeRead(CodeFiles.use((files) => files.readObject(repoPath, blob.object, signal, reader)));
 }
 
 export function readWorkingBytes(absolute: string) {

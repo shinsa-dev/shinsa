@@ -2,9 +2,11 @@ import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
+import { Cause, Effect } from 'effect';
 import { resolveKeychainAccount } from '../accounts/paths.ts';
-import { resolveConfig, resolveServerAddress } from '../config/index.ts';
-import { resolveRepoRoot } from '../git/index.ts';
+import { resolveServerAddress } from '../config/index.ts';
+import { EngineConfig } from '../config/service.ts';
+import { Remote } from '../git/remote/service.ts';
 import { resolveServerUrl } from '../http/index.ts';
 import {
   BUNDLE,
@@ -18,60 +20,43 @@ import {
   type ShinsaBundle,
   stopWithin,
 } from '../instance/index.ts';
-import { describeError, log } from '../log/index.ts';
-import { type Shinsa, startShinsa } from '../serve.ts';
+import { describeError } from '../log/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
+import { startShinsa } from '../serve.ts';
 import { resolveBrowserCommand } from '../shell/browser.ts';
-import { describeFailure, runCommand } from '../shell/index.ts';
+import { describeFailure } from '../shell/index.ts';
 import {
   applyLoginEnv,
   createLoginEnvReader,
   isStartedFromTerminal,
   mergePathLists,
 } from '../shell/login.ts';
+import { type Argv, COMMAND_TIMEOUT, type CommandResult, NOT_STARTED_EXIT_CODE } from '../shell/schema.ts';
+import { Shell } from '../shell/service.ts';
 import { listSectionGroups } from '../surface/index.ts';
-import {
-  describeInline,
-  resolveTerminal,
-  selectClosest,
-  splitHint,
-  type Terminal,
-} from '../terminal/index.ts';
+import { describeInline, resolveTerminal, selectClosest, splitHint } from '../terminal/index.ts';
 import { createApiClient } from './api.ts';
 import { APP_BUNDLE_ID, isInsideApp, isPathArgument, ownsEngineJob, resolveLinkPage } from './app.ts';
-import { type CommandIo, createTask, openApp, parseArgs, printStatus } from './commands.ts';
-import {
-  type EngineControl,
-  type EngineIo,
-  printVersion,
-  readHealth,
-  restartEngine,
-  startEngine,
-  stopEngine,
-} from './engine.ts';
+import { createTask, openApp, printStatus, readArgs } from './commands.ts';
+import { printVersion, restartEngine, startEngine, stopEngine, waitFor, readHealth } from './engine.ts';
 import { CLI_COMMANDS, describeCliUsage, describeHelp, describeHelpAll, selectCliCommand } from './help.ts';
 import { createLaunchdService } from './launchd.ts';
 import { ENGINE_LOG, printLogs } from './logs.ts';
+import {
+  CliFailed,
+  type CliFailure,
+  type CliIo,
+  type CliServices,
+  type CommandIo,
+  ENGINE_LOG_MAX_BYTES,
+  type EngineIo,
+  type OpenAppOptions,
+  type ProcessOptions,
+  type WakeOptions,
+} from './schema.ts';
 import { isSurfaceGroup, runSurface } from './surface.ts';
 
-export interface CliIo {
-  env: Record<string, string | undefined>;
-  cwd: string;
-  write: (line?: string) => void;
-  writeError: (line: string) => void;
-  openApp: (link: string) => Promise<void>;
-  readRepoRoot: (dir: string) => Promise<string | null>;
-  wakeEngine: () => Promise<boolean>;
-  engine: EngineControl;
-  runEngine: (env: Record<string, string | undefined>) => Promise<Shinsa>;
-  onShutdown: (stop: () => Promise<void>) => void;
-  terminal: Terminal;
-}
-
-const ENGINE_LOG_MAX_BYTES = 8 * 1024 * 1024;
-
-const WAKE_WAIT_MS = 20_000;
-
-const WAKE_POLL_MS = 250;
+export type { CliIo, OpenAppOptions, WakeOptions } from './schema.ts';
 
 const MANAGED_PLATFORMS: string[] = ['darwin', 'linux'];
 
@@ -79,43 +64,56 @@ const IS_BUNDLED = Boolean(BUNDLE) && MANAGED_PLATFORMS.includes(process.platfor
 
 const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 
-async function runOrThrow(command: string[]) {
-  const result = await runCommand(command, process.cwd());
-  if (!result.ok) throw new Error(describeFailure(command, result));
-  return result.stdout;
+function toCliFailure(error: unknown) {
+  return error instanceof DomainError ? error : new CliFailed({ message: describeError(error) });
 }
 
-export interface OpenAppOptions {
-  write: (line: string) => void;
-  inApp?: boolean;
-  platform?: string;
-  env?: Record<string, string | undefined>;
-}
+const runProgram = Effect.fn('Cli.runProgram')(function* (argv: Argv) {
+  const shell = yield* Shell;
+  return yield* shell.run({ argv, cwd: process.cwd(), timeout: COMMAND_TIMEOUT }).pipe(
+    Effect.catchTag('CommandNotFound', (missing) =>
+      Effect.succeed<CommandResult>({
+        ok: false,
+        code: NOT_STARTED_EXIT_CODE,
+        stdout: '',
+        stderr: missing.message,
+        timedOut: false,
+      })
+    )
+  );
+});
+
+const runOrFail = Effect.fn('Cli.runOrFail')(function* (argv: Argv) {
+  const result = yield* runProgram(argv);
+  if (result.ok) return result.stdout;
+  return yield* new CliFailed({ message: describeFailure([...argv], result) });
+});
 
 export function createOpenApp(base: string, options: OpenAppOptions) {
   const platform = options.platform ?? process.platform;
   const inApp = (options.inApp ?? (Boolean(BUNDLE) && isInsideApp())) && platform === 'darwin';
-  return async (link: string) => {
+  return Effect.fn('Cli.openApp')(function* (link: string) {
     if (inApp) {
-      await runOrThrow(['open', '-b', APP_BUNDLE_ID, link]);
+      yield* runOrFail(['open', '-b', APP_BUNDLE_ID, link]);
       return;
     }
     const url = `${base}${resolveLinkPage(link)}`;
-    const command = resolveBrowserCommand(url, platform, options.env ?? Bun.env);
-    if (command) await runOrThrow(command);
+    const [program, ...args] = resolveBrowserCommand(url, platform, options.env ?? Bun.env) ?? [];
+    if (program) yield* runOrFail([program, ...args]);
     else options.write(`No display here, so open ${url} in a browser that reaches this machine.`);
-  };
+  });
 }
 
-async function readRepoRoot(dir: string) {
-  return (await resolveRepoRoot(dir)) || null;
+function readRepoRoot(dir: string) {
+  return Remote.use((remote) => remote.resolveRoot(dir)).pipe(Effect.map((root) => root || null));
 }
 
-function createServiceRunner(tool: string[]): ServiceRunner {
-  return async (args) => {
-    const result = await runCommand([...tool, ...args], process.cwd());
-    return { ok: result.ok, output: `${result.stdout}${result.stderr}` };
-  };
+function createServiceRunner(tool: Argv): ServiceRunner {
+  return (args) =>
+    Effect.map(runProgram([...tool, ...args]), (result) => ({
+      ok: result.ok,
+      output: `${result.stdout}${result.stderr}`,
+    }));
 }
 
 export function createPlatformService(
@@ -144,93 +142,98 @@ export function createPlatformService(
 
 const PLATFORM_SERVICE = createPlatformService();
 
-export interface WakeOptions {
-  bundled: boolean;
-  kick: () => Promise<boolean>;
-  waitMs?: number;
-}
-
 export function createWakeEngine(
   base: string,
   options: WakeOptions = { bundled: IS_BUNDLED, kick: PLATFORM_SERVICE.kick }
 ) {
-  return async () => {
-    if (!options.bundled || !(await options.kick())) return false;
-    const deadline = Date.now() + (options.waitMs ?? WAKE_WAIT_MS);
-    while (Date.now() < deadline) {
-      if (await readHealth(base)) return true;
-      await Bun.sleep(WAKE_POLL_MS);
-    }
-    return false;
-  };
+  const wake = Effect.gen(function* () {
+    if (!options.bundled || !(yield* options.kick)) return false;
+    const health = yield* waitFor(options, readHealth(base));
+    return health !== null;
+  });
+  return () => edgeRuntime.runPromise(wake);
 }
 
-export async function stopForSignal(
+export const stopForSignal = Effect.fn('Cli.stopForSignal')(function* (
   signal: string,
   stop: () => Promise<void>,
   exit: (code: number) => void = (code) => process.exit(code),
   deadlineMs?: number
 ) {
-  log.info('[Serve] Stopping', { signal });
-  const outcome = await stopWithin(stop, deadlineMs);
-  exit(outcome === 'failed' ? 1 : 0);
-}
+  yield* Effect.logInfo('[Serve] Stopping').pipe(Effect.annotateLogs({ signal }));
+  const outcome = yield* stopWithin(stop, deadlineMs);
+  yield* Effect.sync(() => exit(outcome === 'failed' ? 1 : 0));
+});
 
 function stopOnSignal(stop: () => Promise<void>) {
-  for (const signal of SHUTDOWN_SIGNALS) process.once(signal, () => void stopForSignal(signal, stop));
-}
-
-export function trimEngineLog(path: string, maxBytes = ENGINE_LOG_MAX_BYTES) {
-  try {
-    if (statSync(path).size <= maxBytes) return;
-    const text = readFileSync(path);
-    writeFileSync(path, text.subarray(text.length - Math.floor(maxBytes / 2)));
-  } catch {
-    return;
+  for (const signal of SHUTDOWN_SIGNALS) {
+    process.once(signal, () => edgeRuntime.runFork(stopForSignal(signal, stop)));
   }
 }
 
-export function writeOutputTo(
+export const trimEngineLog = Effect.fn('Cli.trimEngineLog')(function* (
+  path: string,
+  maxBytes: number = ENGINE_LOG_MAX_BYTES
+) {
+  yield* Effect.try({
+    try: () => {
+      if (statSync(path).size <= maxBytes) return;
+      const text = readFileSync(path);
+      writeFileSync(path, text.subarray(text.length - Math.floor(maxBytes / 2)));
+    },
+    catch: (error) => new CliFailed({ message: describeError(error) }),
+  }).pipe(Effect.ignore);
+});
+
+export const writeOutputTo = Effect.fn('Cli.writeOutputTo')(function* (
   path: string,
   streams: NodeJS.WriteStream[] = [process.stdout, process.stderr]
 ) {
-  trimEngineLog(path);
-  const fd = openSync(path, 'a');
-  for (const stream of streams) {
-    stream.write = ((chunk: string | Uint8Array) => {
-      writeSync(fd, typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-      return true;
-    }) as typeof stream.write;
-  }
-  return () => closeSync(fd);
-}
+  yield* trimEngineLog(path);
+  return yield* Effect.sync(() => {
+    const fd = openSync(path, 'a');
+    for (const stream of streams) {
+      stream.write = ((chunk: string | Uint8Array) => {
+        writeSync(fd, typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+        return true;
+      }) as typeof stream.write;
+    }
+    return () => closeSync(fd);
+  });
+});
 
-interface ProcessOptions {
-  isTerminal?: () => boolean;
-  bundle?: ShinsaBundle | null;
-}
-
-async function runEngineWithLoginEnv(
+const startEngineProcess = Effect.fn('Cli.startEngineProcess')(function* (
   env: Record<string, string | undefined>,
   isTerminal: () => boolean,
   bundle: ShinsaBundle | null
 ) {
   const byService = isStartedByService(env);
-  delete Bun.env[SERVICE_MARKER];
-  const config = resolveConfig(env, bundle);
+  yield* Effect.sync(() => {
+    delete Bun.env[SERVICE_MARKER];
+  });
+  const config = yield* Effect.orDie(Effect.provide(EngineConfig, EngineConfig.layer(env, bundle)));
   if (byService && bundle) {
-    mkdirSync(config.dataDir, { recursive: true });
-    writeOutputTo(join(config.dataDir, ENGINE_LOG));
+    yield* Effect.sync(() => mkdirSync(config.dataDir, { recursive: true }));
+    yield* writeOutputTo(join(config.dataDir, ENGINE_LOG));
   }
   if (isTerminal()) {
-    log.info('[Serve] Started from a terminal, so the login shell environment is not read');
+    yield* Effect.logInfo('[Serve] Started from a terminal, so the login shell environment is not read');
   } else {
-    const added = await applyLoginEnv(Bun.env, createLoginEnvReader(Bun.env));
-    log.info('[Serve] Read the login shell environment', { added: added.length });
+    const added = yield* Effect.tryPromise({
+      try: () => applyLoginEnv(Bun.env, createLoginEnvReader(Bun.env)),
+      catch: toCliFailure,
+    });
+    yield* Effect.logInfo('[Serve] Read the login shell environment').pipe(
+      Effect.annotateLogs({ added: added.length })
+    );
   }
-  if (bundle) Bun.env.PATH = mergePathLists(bundle.bin, Bun.env.PATH ?? '');
-  return startShinsa(config, { byService });
-}
+  if (bundle) {
+    yield* Effect.sync(() => {
+      Bun.env.PATH = mergePathLists(bundle.bin, Bun.env.PATH ?? '');
+    });
+  }
+  return yield* Effect.tryPromise({ try: () => startShinsa(config, { byService }), catch: toCliFailure });
+});
 
 function resolveBase(env: Record<string, string | undefined>) {
   const address = resolveServerAddress(env);
@@ -241,16 +244,17 @@ export function createProcessIo(options: ProcessOptions = {}): CliIo {
   const isTerminal = options.isTerminal ?? isStartedFromTerminal;
   const bundle = options.bundle === undefined ? BUNDLE : options.bundle;
   const base = resolveBase(Bun.env);
+  const write = (line = '') => process.stdout.write(`${line}\n`);
   return {
     env: Bun.env,
     cwd: process.cwd(),
-    write: (line = '') => process.stdout.write(`${line}\n`),
+    write,
     writeError: (line) => process.stderr.write(`${line}\n`),
-    openApp: createOpenApp(base, { write: (line) => process.stdout.write(`${line}\n`) }),
+    openApp: createOpenApp(base, { write }),
     readRepoRoot,
     wakeEngine: createWakeEngine(base),
     engine: { bundled: IS_BUNDLED, service: PLATFORM_SERVICE },
-    runEngine: (env) => runEngineWithLoginEnv(env, isTerminal, bundle),
+    runEngine: (env) => startEngineProcess(env, isTerminal, bundle),
     onShutdown: stopOnSignal,
     terminal: resolveTerminal(Bun.env, process.stdout, process.stderr),
   };
@@ -268,23 +272,28 @@ function createCommandIo(io: CliIo): CommandIo {
   };
 }
 
-async function runEngine(io: CliIo) {
+const runEngine = Effect.fn('Cli.runEngine')(function* (io: CliIo) {
   const byService = isStartedByService(io.env);
-  try {
-    const shinsa = await io.runEngine(io.env);
-    io.onShutdown(shinsa.stop);
-    return 0;
-  } catch (error) {
-    if (!byService || !(error instanceof ServerRunningError)) throw error;
-    log.warn('[Serve] Another Shinsa holds this data directory, so the service stays stopped', {
-      dataDir: error.dataDir,
-      pid: error.holder.pid,
-      url: error.holder.url,
-      version: describeVersion(error.holder),
-    });
-    return 0;
-  }
-}
+  return yield* io.runEngine(io.env).pipe(
+    Effect.tap((shinsa) => Effect.sync(() => io.onShutdown(shinsa.stop))),
+    Effect.as(0),
+    Effect.catchIf(
+      (error): error is ServerRunningError => byService && error instanceof ServerRunningError,
+      (error) =>
+        Effect.logWarning(
+          '[Serve] Another Shinsa holds this data directory, so the service stays stopped'
+        ).pipe(
+          Effect.annotateLogs({
+            dataDir: error.dataDir,
+            pid: error.holder.pid,
+            url: error.holder.url,
+            version: describeVersion(error.holder),
+          }),
+          Effect.as(0)
+        )
+    )
+  );
+});
 
 function createEngineIo(io: CliIo): EngineIo {
   return {
@@ -300,7 +309,7 @@ function isHelp(args: string[]) {
   return args.includes('--help') || args.includes('-h');
 }
 
-function printHelp(args: string[], io: CliIo) {
+const printHelp = Effect.fn('Cli.printHelp')(function* (args: string[], io: CliIo) {
   const [topic] = args;
   const { display } = io.terminal;
   if (!topic) {
@@ -316,63 +325,36 @@ function printHelp(args: string[], io: CliIo) {
     io.write(describeCliUsage(command, display));
     return 0;
   }
-  return routeCommand(topic, ['--help'], io);
-}
+  return yield* routeCommand(topic, ['--help'], io);
+});
 
-async function routeTopLevel(command: string, args: string[], io: CliIo) {
+const routeTopLevel = Effect.fn('Cli.routeTopLevel')(function* (command: string, args: string[], io: CliIo) {
   switch (command) {
     case 'do':
-      await createTask(args, createCommandIo(io));
+      yield* createTask(args, createCommandIo(io));
       return 0;
     case 'status':
-      return printStatus(args, createCommandIo(io));
+      return yield* printStatus(args, createCommandIo(io));
     case 'open':
-      await openApp(args, createCommandIo(io));
+      yield* openApp(args, createCommandIo(io));
       return 0;
     case 'start':
-      await startEngine(createEngineIo(io));
+      yield* startEngine(createEngineIo(io));
       return 0;
     case 'stop':
-      await stopEngine(createEngineIo(io));
+      yield* stopEngine(createEngineIo(io));
       return 0;
     case 'restart':
-      await restartEngine(createEngineIo(io), parseArgs(args).flags.has('--when-idle'));
+      yield* restartEngine(createEngineIo(io), (yield* readArgs(args)).flags.has('--when-idle'));
       return 0;
     case 'logs':
       printLogs(args, { env: io.env, display: io.terminal.display, write: io.write });
       return 0;
     default:
-      await printVersion(createEngineIo(io), parseArgs(args).flags.has('--json'));
+      yield* printVersion(createEngineIo(io), (yield* readArgs(args)).flags.has('--json'));
       return 0;
   }
-}
-
-async function routeCommand(command: string, args: string[], io: CliIo): Promise<number> {
-  if (command === 'engine') return runEngine(io);
-  if (command === 'help' || command === '--help' || command === '-h') return printHelp(args, io);
-  if (command === '--version' || command === '-v') return routeTopLevel('version', args, io);
-  const known = selectCliCommand(command);
-  if (known && known.name !== '.') {
-    if (isHelp(args)) {
-      io.write(describeCliUsage(known, io.terminal.display));
-      return 0;
-    }
-    return routeTopLevel(command, args, io);
-  }
-  if (isPathArgument(command)) {
-    await openApp([command], createCommandIo(io));
-    return 0;
-  }
-  if (isSurfaceGroup(command)) {
-    return runSurface([command, ...args], {
-      base: resolveBase(io.env),
-      display: io.terminal.display,
-      write: io.write,
-      wake: io.wakeEngine,
-    });
-  }
-  throw new DomainError({ code: 'command_unknown', message: describeUnknown(command) });
-}
+});
 
 const TOP_LEVEL_WORDS = [
   ...CLI_COMMANDS.map((command) => command.name).filter((name) => name !== '.'),
@@ -386,6 +368,45 @@ function describeUnknown(command: string) {
   return `No command shinsa ${command}.${hint} Run \`shinsa help\` for the list.`;
 }
 
+const routeCommand: (
+  command: string,
+  args: string[],
+  io: CliIo
+) => Effect.Effect<number, CliFailure, CliServices> = Effect.fn('Cli.routeCommand')(function* (
+  command: string,
+  args: string[],
+  io: CliIo
+) {
+  if (command === 'engine') return yield* runEngine(io);
+  if (command === 'help' || command === '--help' || command === '-h') return yield* printHelp(args, io);
+  if (command === '--version' || command === '-v') return yield* routeTopLevel('version', args, io);
+  const known = selectCliCommand(command);
+  if (known && known.name !== '.') {
+    if (isHelp(args)) {
+      io.write(describeCliUsage(known, io.terminal.display));
+      return 0;
+    }
+    return yield* routeTopLevel(command, args, io);
+  }
+  if (isPathArgument(command)) {
+    yield* openApp([command], createCommandIo(io));
+    return 0;
+  }
+  if (isSurfaceGroup(command)) {
+    return yield* Effect.tryPromise({
+      try: () =>
+        runSurface([command, ...args], {
+          base: resolveBase(io.env),
+          display: io.terminal.display,
+          write: io.write,
+          wake: io.wakeEngine,
+        }),
+      catch: toCliFailure,
+    });
+  }
+  return yield* new DomainError({ code: 'command_unknown', message: describeUnknown(command) });
+});
+
 function writeFailure(io: CliIo, error: unknown) {
   const style = io.terminal.errorStyle;
   const { message, hint } = splitHint(describeError(error));
@@ -393,12 +414,18 @@ function writeFailure(io: CliIo, error: unknown) {
   if (hint) io.writeError(style.dim(describeInline(style, hint)));
 }
 
-export async function runCli(args: string[], io: CliIo = createProcessIo()): Promise<number> {
+export const executeCli = Effect.fn('Cli.execute')(function* (args: string[], io: CliIo = createProcessIo()) {
   const [command = 'open', ...rest] = args;
-  try {
-    return await routeCommand(command, rest, io);
-  } catch (error) {
-    writeFailure(io, error);
-    return 1;
-  }
+  return yield* routeCommand(command, rest, io).pipe(
+    Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        writeFailure(io, Cause.squash(cause));
+        return 1;
+      })
+    )
+  );
+});
+
+export function runCli(args: string[], io?: CliIo) {
+  return edgeRuntime.runPromise(executeCli(args, io));
 }

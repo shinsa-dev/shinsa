@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createState, type ShinsaCommand, type Watchdog } from '@shinsa/core';
+import { createState, DomainError, type ShinsaCommand, type Watchdog } from '@shinsa/core';
 import type { Engine } from '../../src/runtime/engine.ts';
 import { WatchdogClock } from '../../src/runtime/index.ts';
 import { createTask } from '../helpers/state.ts';
@@ -32,7 +32,7 @@ function createWatchdog(overrides: Partial<Watchdog> = {}): Watchdog {
   };
 }
 
-function createFakeEngine(watchdogs: Watchdog[], answer: 'events' | 'nothing') {
+function createFakeEngine(watchdogs: Watchdog[], answer: 'events' | 'nothing' | 'failure' | 'refusal') {
   const state = createState();
   state.tasks['task-1'] = createTask({ watchdogs });
   const sent: { command: ShinsaCommand; id: string | undefined }[] = [];
@@ -41,6 +41,9 @@ function createFakeEngine(watchdogs: Watchdog[], answer: 'events' | 'nothing') {
     subscribe: () => () => undefined,
     dispatch: (command: ShinsaCommand, options: { id?: string } = {}) => {
       sent.push({ command, id: options.id });
+      if (answer === 'failure') return Promise.reject(new Error('log full'));
+      if (answer === 'refusal')
+        return Promise.reject(new DomainError({ code: 'watchdog_stale', message: 'That check is not due.' }));
       return Promise.resolve(answer === 'events' ? [{ ...command, type: 'watchdog.checking' }] : []);
     },
   };
@@ -74,5 +77,18 @@ describe('the watchdog clock', () => {
     await clock.fireDue();
     await clock.fireDue();
     expect(fake.sent).toHaveLength(1);
+  });
+
+  test('a fire that fails is tried again, and one core refuses is not', async () => {
+    const failing = createFakeEngine([createWatchdog()], 'failure');
+    const retried = new WatchdogClock(failing.engine, { now: () => 5_000 });
+    await retried.fireDue();
+    await retried.fireDue();
+    expect(failing.sent).toHaveLength(2);
+    const refusing = createFakeEngine([createWatchdog()], 'refusal');
+    const refused = new WatchdogClock(refusing.engine, { now: () => 5_000 });
+    await refused.fireDue();
+    await refused.fireDue();
+    expect(refusing.sent).toHaveLength(1);
   });
 });

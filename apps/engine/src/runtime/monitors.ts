@@ -1,30 +1,35 @@
-import type { Monitor, ShinsaState } from '@shinsa/core';
+import { DomainError, type ShinsaState } from '@shinsa/core';
+import { Effect } from 'effect';
+import { describeError } from '../log/index.ts';
 import { type ClockEntry, StateClock, type StateClockOptions } from './clock.ts';
+import { edgeRuntime } from './edge.ts';
 import type { Engine } from './engine.ts';
-
-function resolveDueAt(monitor: Monitor) {
-  return Math.min(monitor.nextCheckAt, monitor.timeoutAt);
-}
+import { MONITOR_CLOCK_DEFAULTS, MonitorFireFailed, type MonitorClockTick } from './monitors/schema.ts';
+import { makeMonitorClock } from './monitors/service.ts';
 
 export class MonitorClock extends StateClock {
+  readonly #listTicks: (state: ShinsaState) => MonitorClockTick[];
+
   constructor(engine: Engine, options: StateClockOptions = {}) {
-    super(engine, { area: 'Monitors', failure: 'Could not wake a waiting task', minDelayMs: 1_000 }, options);
+    super(engine, MONITOR_CLOCK_DEFAULTS, options);
+    this.#listTicks = edgeRuntime.runSync(
+      makeMonitorClock({
+        dispatch: (command, id) =>
+          Effect.tryPromise({
+            try: () => engine.dispatch(command, { id }),
+            catch: (error) =>
+              error instanceof DomainError ? error : new MonitorFireFailed({ message: describeError(error) }),
+          }),
+        refuse: (id) => Effect.sync(() => this.refuse(id)),
+      })
+    );
   }
 
   protected listEntries(state: ShinsaState): ClockEntry[] {
-    return Object.values(state.tasks).flatMap((task) => {
-      const monitor = task.monitor;
-      if (monitor?.status !== 'armed') return [];
-      const attempt = monitor.attempts + 1;
-      const id = `monitor:${monitor.id}:${attempt}`;
-      const fire = async () => {
-        const events = await this.engine.dispatch(
-          { type: 'monitor.fire', taskId: task.id, monitorId: monitor.id, attempt },
-          { id }
-        );
-        if (events.length === 0) this.refuse(id);
-      };
-      return [{ id, dueAt: resolveDueAt(monitor), fire }];
-    });
+    return this.#listTicks(state).map((tick) => ({
+      id: tick.id,
+      dueAt: tick.dueAt,
+      fire: () => edgeRuntime.runPromise(tick.fire),
+    }));
   }
 }

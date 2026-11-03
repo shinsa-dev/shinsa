@@ -5,7 +5,7 @@ import { HttpApiBuilder } from 'effect/http-api';
 import { createProjectChanges, listLocalRepoViews } from '../../../projects/changes.ts';
 import { createLoginResolver } from '../../../repos/index.ts';
 import { listCoverageDetections } from '../../../test-coverage/index.ts';
-import { requestPromise } from '../../failures.ts';
+import { requestPromise, resolveRequestFailure } from '../../failures.ts';
 import { HttpServices } from '../../services/service.ts';
 
 export const ProjectsHandlers = HttpApiBuilder.group(
@@ -37,13 +37,13 @@ export const ProjectsHandlers = HttpApiBuilder.group(
       .handle('addRepo', ({ params, payload }) =>
         Effect.andThen(
           roots,
-          requestPromise(() => changes.upsertRepo(params.projectId, payload.path))
+          changes.upsertRepo(params.projectId, payload.path).pipe(Effect.mapError(resolveRequestFailure))
         )
       )
       .handle('addFolder', ({ params, payload }) =>
         Effect.andThen(
           roots,
-          requestPromise(() => changes.upsertFolder(params.projectId, payload.path))
+          changes.upsertFolder(params.projectId, payload.path).pipe(Effect.mapError(resolveRequestFailure))
         )
       );
   })

@@ -1,4 +1,6 @@
 import type { TerminalColors, TerminalInfo, TerminalServerFrame } from '@shinsa/core';
+import { Duration, Effect, Fiber } from 'effect';
+import { edgeRuntime } from '../runtime/edge.ts';
 import { TerminalMirror } from './mirror.ts';
 import type { TerminalProcess, TerminalSpawner } from './pty.ts';
 
@@ -62,7 +64,7 @@ export class TerminalSession {
   #process: TerminalProcess | null = null;
   #batch: Uint8Array[] = [];
   #batchBytes = 0;
-  #batchTimer: ReturnType<typeof setTimeout> | null = null;
+  #batchFiber: Fiber.Fiber<void> | null = null;
   #stopping = false;
   #lastOutputAt: number | null = null;
   #disposed = false;
@@ -111,7 +113,13 @@ export class TerminalSession {
       onData: (data) => this.#receive(data),
     });
     this.#process = process;
-    void process.exited.then((code) => this.#end(process, code));
+    edgeRuntime.runFork(
+      Effect.promise(() => process.exited).pipe(Effect.map((code) => this.#end(process, code)))
+    );
+  }
+
+  #later(ms: number, run: () => void) {
+    return edgeRuntime.runFork(Effect.sleep(Duration.millis(ms)).pipe(Effect.andThen(Effect.sync(run))));
   }
 
   #end(process: TerminalProcess, code: number | null) {
@@ -146,12 +154,20 @@ export class TerminalSession {
     this.#batch.push(data);
     this.#batchBytes += data.length;
     if (this.#batchBytes >= FLOW_LIMITS.batchBytes) this.#flushBatch();
-    else this.#batchTimer ??= setTimeout(() => this.#flushBatch(), FLOW_LIMITS.batchMs);
+    else
+      this.#batchFiber ??= this.#later(FLOW_LIMITS.batchMs, () => {
+        this.#batchFiber = null;
+        this.#flushBatch();
+      });
+  }
+
+  #cancelBatch() {
+    if (this.#batchFiber) edgeRuntime.runFork(Fiber.interrupt(this.#batchFiber));
+    this.#batchFiber = null;
   }
 
   #flushBatch() {
-    if (this.#batchTimer) clearTimeout(this.#batchTimer);
-    this.#batchTimer = null;
+    this.#cancelBatch();
     if (this.#batch.length === 0) return;
     const frame = joinChunks(this.#batch);
     this.#batch = [];
@@ -194,23 +210,29 @@ export class TerminalSession {
     this.#process?.write(data);
   }
 
-  type(command: string) {
-    const deadline = performance.now() + TYPE_LIMITS.waitMs;
-    const attempt = () => {
+  #typeWhenSettled(command: string, deadline: number): Effect.Effect<void> {
+    return Effect.suspend(() => {
       const process = this.#process;
-      if (!process || this.#disposed) return;
+      if (!process || this.#disposed) return Effect.void;
       const settled =
         this.#lastOutputAt !== null && performance.now() - this.#lastOutputAt >= TYPE_LIMITS.settleMs;
-      if (!settled && performance.now() < deadline) {
-        setTimeout(attempt, TYPE_LIMITS.settleMs);
-        return;
-      }
+      if (!settled && performance.now() < deadline)
+        return Effect.sleep(Duration.millis(TYPE_LIMITS.settleMs)).pipe(
+          Effect.andThen(this.#typeWhenSettled(command, deadline))
+        );
       process.write(command);
-      setTimeout(() => {
-        if (this.#process === process) process.write(ENTER);
-      }, TYPE_LIMITS.keyGapMs);
-    };
-    attempt();
+      return Effect.sleep(Duration.millis(TYPE_LIMITS.keyGapMs)).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            if (this.#process === process) process.write(ENTER);
+          })
+        )
+      );
+    });
+  }
+
+  type(command: string) {
+    edgeRuntime.runFork(this.#typeWhenSettled(command, performance.now() + TYPE_LIMITS.waitMs));
   }
 
   resize(cols: number, rows: number) {
@@ -228,14 +250,12 @@ export class TerminalSession {
     this.#mirror.replaceColors(colors);
   }
 
-  async serializeScreen() {
-    await this.#mirror.flush();
-    return this.#mirror.serializeSaved();
+  serializeScreen() {
+    return this.#mirror.flushed.pipe(Effect.map(() => this.#mirror.serializeSaved()));
   }
 
-  async readOutput(lines: number) {
-    await this.#mirror.flush();
-    return this.#mirror.readLines(lines);
+  readOutput(lines: number) {
+    return this.#mirror.flushed.pipe(Effect.map(() => this.#mirror.readLines(lines)));
   }
 
   hangUp() {
@@ -243,16 +263,19 @@ export class TerminalSession {
   }
 
   stop() {
-    this.#stopping = true;
-    const process = this.#process;
-    process?.hangUp();
-    return process?.exited;
+    return Effect.suspend(() => {
+      this.#stopping = true;
+      const process = this.#process;
+      if (!process) return Effect.void;
+      process.hangUp();
+      return Effect.promise(() => process.exited).pipe(Effect.map((code) => this.#end(process, code)));
+    });
   }
 
   dispose() {
     this.#disposed = true;
     for (const viewer of this.#viewers.keys()) viewer.end();
-    if (this.#batchTimer) clearTimeout(this.#batchTimer);
+    this.#cancelBatch();
     this.#viewers.clear();
     this.#mirror.dispose();
   }

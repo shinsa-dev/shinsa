@@ -1,14 +1,34 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  fileFeedbackIssue,
-  listFeedbackIssueStates,
-  parseIssueStates,
-  parseIssueUrl,
-  serializeFeedbackBody,
-} from '../../src/feedback/file.ts';
+import { Effect } from 'effect';
+import { parseIssueStates, parseIssueUrl, serializeFeedbackBody } from '../../src/feedback/answers.ts';
+import { FeedbackIssues } from '../../src/feedback/issues/service.ts';
+import type { FeedbackIssueInput } from '../../src/feedback/schema.ts';
+import { edgeRuntime } from '../../src/runtime/edge.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
+
+function fileFeedbackIssue(input: FeedbackIssueInput, cwd: string) {
+  return edgeRuntime.runPromise(
+    FeedbackIssues.use((issues) => issues.file(input, cwd)).pipe(
+      Effect.match({
+        onFailure: (error) => ({ ok: false as const, detail: error.message }),
+        onSuccess: (issue) => ({ ok: true as const, issue }),
+      })
+    )
+  );
+}
+
+function listFeedbackIssueStates(cwd: string) {
+  return edgeRuntime.runPromise(
+    FeedbackIssues.use((issues) => issues.listStates(cwd)).pipe(
+      Effect.match({
+        onFailure: (error) => ({ ok: false as const, detail: error.message }),
+        onSuccess: (states) => ({ ok: true as const, states }),
+      })
+    )
+  );
+}
 
 let restore: (() => void) | null = null;
 

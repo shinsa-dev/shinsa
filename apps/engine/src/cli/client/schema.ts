@@ -1,5 +1,6 @@
+import type { DomainError } from '@shinsa/core';
 import type { EngineApi } from '@shinsa/core/engine-api';
-import { Schema } from 'effect';
+import { type Effect, Schema } from 'effect';
 import type { HttpApi, HttpApiClient, HttpApiEndpoint, HttpApiGroup } from 'effect/http-api';
 
 export const NOT_RUNNING =
@@ -27,6 +28,8 @@ export const EngineErrorBody = Schema.Struct({
   error: Schema.Struct({ code: Schema.optionalKey(Schema.String), message: Schema.String }),
 });
 
+export type EngineFailure = DomainError | EngineNotRunning | EngineAnswerInvalid;
+
 type EngineGroups = typeof EngineApi extends HttpApi.HttpApi<string, infer Groups> ? Groups : never;
 
 type EngineCall<Endpoint extends HttpApiEndpoint.ConstraintRequest> = (
@@ -37,7 +40,7 @@ type EngineCall<Endpoint extends HttpApiEndpoint.ConstraintRequest> = (
     Endpoint['~Headers'],
     'decoded-only'
   >
-) => Promise<HttpApiClient.SuccessType<Endpoint['~Success']>>;
+) => Effect.Effect<HttpApiClient.SuccessType<Endpoint['~Success']>, EngineFailure>;
 
 export type EngineCalls = {
   readonly [Group in EngineGroups as HttpApiGroup.Identifier<Group>]: {

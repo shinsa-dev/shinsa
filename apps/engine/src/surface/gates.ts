@@ -1,4 +1,11 @@
-import type { FindingVerdict, GateDecision, GateType, UserCommand } from '@shinsa/core';
+import {
+  DomainError,
+  type FindingVerdict,
+  type GateDecision,
+  type GateType,
+  type UserCommand,
+} from '@shinsa/core';
+import { Effect } from 'effect';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findMergeStep, findOpenGate } from './resolve.ts';
@@ -45,27 +52,28 @@ const DONE_TEXT: Record<GateDecision, string> = {
   reply: 'Answered. The agent carries on.',
 };
 
-async function answerGate(
+const answerGate = Effect.fn('Surface.answerGate')(function* (
   client: SurfaceClient,
   values: Values,
   target: GateTarget,
   decision: GateDecision,
   response: string | null
-): Promise<UserCommand> {
-  const gate = await findOpenGate(
+) {
+  const gate = yield* findOpenGate(
     client,
     readValue(values, 'task'),
     target.describe,
     (candidate) => candidate.type === target.type
   );
-  return {
+  const command: Extract<UserCommand, { type: 'gate.answer' }> = {
     type: 'gate.answer',
     gateId: gate.id,
     decision,
     response,
     ...(gate.planVersion === undefined ? {} : { planVersion: gate.planVersion }),
   };
-}
+  return command;
+});
 
 function defineGateShortcut(
   path: readonly string[],
@@ -106,20 +114,26 @@ function defineWordsShortcut(
 }
 
 function readIndexes(values: Values, name: string) {
-  return ((values[name] as string[] | undefined) ?? []).map((raw) => {
+  return Effect.forEach((values[name] as string[] | undefined) ?? [], (raw) => {
     const index = Number(raw);
-    if (!Number.isInteger(index) || index < 0) throw new Error(`${raw} is not a finding number.`);
-    return index;
+    return Number.isInteger(index) && index >= 0
+      ? Effect.succeed(index)
+      : Effect.fail(
+          new DomainError({ code: 'arguments_invalid', message: `${raw} is not a finding number.` })
+        );
   });
 }
 
-function buildVerdicts(values: Values): FindingVerdict[] {
+const buildVerdicts = Effect.fn('Surface.buildVerdicts')(function* (values: Values) {
   const note = readValue(values, 'note') || null;
-  return [
-    ...readIndexes(values, 'fix').map((index) => ({ index, verdict: 'fix' as const, note })),
-    ...readIndexes(values, 'dismiss').map((index) => ({ index, verdict: 'dismiss' as const, note: null })),
+  const fixes = yield* readIndexes(values, 'fix');
+  const dismissals = yield* readIndexes(values, 'dismiss');
+  const verdicts: FindingVerdict[] = [
+    ...fixes.map((index) => ({ index, verdict: 'fix' as const, note })),
+    ...dismissals.map((index) => ({ index, verdict: 'dismiss' as const, note: null })),
   ];
-}
+  return verdicts;
+});
 
 export const GATE_SPECS: SurfaceSpec[] = [
   defineCommand({
@@ -182,12 +196,13 @@ export const GATE_SPECS: SurfaceSpec[] = [
       { name: 'dismiss', kind: 'list', description: 'Finding numbers to dismiss (from 0).' },
       { name: 'note', kind: 'text', description: 'A note for the agent.' },
     ],
-    build: async (values, client) => {
-      const verdicts = buildVerdicts(values);
+    build: Effect.fn('Surface.reviewVerdicts')(function* (values, client) {
+      const verdicts = yield* buildVerdicts(values);
       const fixes = verdicts.some((verdict) => verdict.verdict === 'fix');
-      const command = await answerGate(client, values, REVIEW, fixes ? 'revise' : 'approve', null);
-      return { ...command, verdicts };
-    },
+      const command = yield* answerGate(client, values, REVIEW, fixes ? 'revise' : 'approve', null);
+      const answered: UserCommand = { ...command, verdicts };
+      return answered;
+    }),
     done: () => 'Saved the verdicts.',
   }),
   defineGateShortcut(['merges', 'approve'], 'Merge the pull request of a task.', MERGE, 'approve'),
@@ -209,15 +224,16 @@ export const GATE_SPECS: SurfaceSpec[] = [
       },
       { name: 'undo', kind: 'boolean', description: 'Untick it instead.' },
     ],
-    build: async (values, client) => {
-      const found = await findMergeStep(client, readValue(values, 'task'), readValue(values, 'step'));
-      return {
+    build: Effect.fn('Surface.mergeStepTick')(function* (values, client) {
+      const found = yield* findMergeStep(client, readValue(values, 'task'), readValue(values, 'step'));
+      const command: UserCommand = {
         type: 'merge_step.tick',
         taskId: found.taskId,
         key: found.step.key,
         done: values.undo !== true,
       };
-    },
+      return command;
+    }),
     done: (values) => (values.undo === true ? 'Unticked the step.' : 'Ticked the step.'),
   }),
   defineCommand({
@@ -254,25 +270,27 @@ export const GATE_SPECS: SurfaceSpec[] = [
       GATE_FIELD,
       { name: 'value', kind: 'text', positional: 'one', required: true, description: 'The secret.' },
     ],
-    act: async (client, values) => {
-      const data = await client.api.secrets.answer({
-        params: { gateId: readValue(values, 'gate') },
-        payload: { value: readValue(values, 'value') },
-      });
-      return { data, text: 'Saved. The agent gets a reference, never the value.' };
-    },
+    act: (client, values) =>
+      Effect.map(
+        client.api.secrets.answer({
+          params: { gateId: readValue(values, 'gate') },
+          payload: { value: readValue(values, 'value') },
+        }),
+        (data) => ({ data, text: 'Saved. The agent gets a reference, never the value.' })
+      ),
   }),
   defineAction({
     path: ['gates', 'decline-secret'],
     summary: 'Decline to give an agent the secret it asked for.',
     humanOnly: true,
     fields: [GATE_FIELD],
-    act: async (client, values) => {
-      const data = await client.api.secrets.answer({
-        params: { gateId: readValue(values, 'gate') },
-        payload: { decline: true },
-      });
-      return { data, text: 'Declined.' };
-    },
+    act: (client, values) =>
+      Effect.map(
+        client.api.secrets.answer({
+          params: { gateId: readValue(values, 'gate') },
+          payload: { decline: true },
+        }),
+        (data) => ({ data, text: 'Declined.' })
+      ),
   }),
 ];

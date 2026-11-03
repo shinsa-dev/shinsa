@@ -1,10 +1,10 @@
-import { describe, expect, jest, spyOn, test } from 'bun:test';
+import { describe, expect, jest, test } from 'bun:test';
 import type { GateType, Queue, QueuedGate, ShinsaState, Task } from '@shinsa/core';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import { Briefings, describeBriefingPrompt, resolveBriefing } from '../../src/briefing/index.ts';
-import { log } from '../../src/log/index.ts';
 import { until } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { createGate, createStubEngine, createTask } from '../helpers/state.ts';
 
 const NOW = 5 * 24 * 60 * 60 * 1000;
@@ -86,6 +86,11 @@ describe('describeBriefingPrompt', () => {
 });
 
 describe('resolveBriefing', () => {
+  test('fails with the reason when the writer cannot be reached', async () => {
+    const offline: QuickJson = () => Promise.reject(new Error('writer offline'));
+    await expect(resolveBriefing(state, queue, NOW, offline)).rejects.toThrow('writer offline');
+  });
+
   test('falls back to the ranked queue when the model is unavailable', async () => {
     const briefing = await resolveBriefing(state, queue, NOW, silent);
     expect(briefing.now?.taskId).toBe('t-chat');
@@ -289,14 +294,15 @@ describe('Briefings', () => {
       draft.tasks['task-1'] = createTask({ id: 'task-1' });
       draft.gates['gate-1'] = createGate();
     });
-    const dropped = spyOn(log, 'info');
+    const logs = captureLogs();
     const briefings = new Briefings(engine, { ask, debounceMs: 1 });
     briefings.schedule();
     await until('the model to be asked', () => answers.length === 1);
     briefings.stop();
     answers[0]?.(null);
-    await until('the write to be dropped', () => dropped.mock.calls.length > 0);
-    dropped.mockRestore();
+    const dropped = '[Briefing] Dropped a briefing that was written after the server stopped';
+    await until('the write to be dropped', () => logs.fieldsOf(dropped).length > 0);
+    logs.restore();
     expect(briefed).toEqual([]);
   });
 

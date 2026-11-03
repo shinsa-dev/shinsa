@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { Effect } from 'effect';
 import { FLOW_LIMITS, TerminalSession } from '../../src/terminals/session.ts';
 import { until } from '../helpers/index.ts';
 import { createFakeSpawner, createFakeViewer, createInfo } from './fakes.ts';
@@ -116,7 +117,7 @@ describe('TerminalSession', () => {
     const { session, process } = createSession();
     process.emit('old line\r\nprompt $ ');
     session.clear();
-    const screen = await session.serializeScreen();
+    const screen = await Effect.runPromise(session.serializeScreen());
     expect(screen).not.toContain('old line');
     expect(screen).toContain('prompt $');
     session.dispose();
@@ -141,7 +142,7 @@ describe('TerminalSession', () => {
     process.emit('\u001b]0;bun dev\u0007');
     await until('the title changes', () => session.info.title === 'bun dev');
     process.emit('\u001b]0;bun dev\u0007');
-    await session.serializeScreen();
+    await Effect.runPromise(session.serializeScreen());
     expect(changes).toEqual(['running']);
     process.emit('\u001b]0;\u0007');
     await until('an empty title clears it', () => session.info.title === null);
@@ -160,23 +161,24 @@ describe('TerminalSession', () => {
     session.input('ignored');
     session.start({ command: ['/bin/fish', '-l'], env: {}, spawn: fake.spawn, now: 60 });
     expect(session.info).toMatchObject({ status: 'running', exitCode: null, startedAt: 60, endedAt: null });
-    expect(await session.serializeScreen()).toContain('done');
+    expect(await Effect.runPromise(session.serializeScreen())).toContain('done');
     session.dispose();
   });
 
   it('marks the shell stopped, not exited, when Shinsa stops', async () => {
     const { session, process } = createSession();
-    await session.stop();
+    await Effect.runPromise(session.stop());
     expect(process.hungUp).toBe(true);
     expect(session.info).toMatchObject({ status: 'stopped', exitCode: null });
-    expect(session.stop()).toBeUndefined();
+    await Effect.runPromise(session.stop());
+    expect(process.hungUp).toBe(true);
     session.hangUp();
     session.dispose();
   });
 
   it('shows the screen it saved, and ends its viewers and ignores late output once disposed', async () => {
     const { session, process, screens } = createSession('saved line');
-    expect(await session.serializeScreen()).toContain('saved line');
+    expect(await Effect.runPromise(session.serializeScreen())).toContain('saved line');
     const viewer = createFakeViewer();
     session.attach(viewer);
     session.hangUp();

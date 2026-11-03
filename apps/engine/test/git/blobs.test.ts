@@ -97,6 +97,31 @@ describe('CatFile', () => {
   });
 });
 
+describe('CatFile failures', () => {
+  test('fails a read when its git cannot start, and starts again on the next one', async () => {
+    const reader = new CatFile('/nowhere', {
+      spawn: () => {
+        throw new Error('no git here');
+      },
+    });
+    await expect(reader.info('x:y')).rejects.toThrow('no git here');
+    expect(reader.running).toBe(false);
+    await expect(reader.contents('x')).rejects.toThrow('no git here');
+  });
+
+  test('stops when its git output breaks, failing what waited on it', async () => {
+    const child = createSilentChild();
+    const broken = {
+      ...child,
+      stdout: new ReadableStream<Uint8Array>({ start: (controller) => controller.error(new Error('pipe')) }),
+    };
+    const reader = new CatFile('/nowhere', { timeoutMs: 10, spawn: () => broken });
+    await expect(reader.info('x:y')).rejects.toThrow('The object reader stopped.');
+    expect(reader.running).toBe(false);
+    child.finish();
+  });
+});
+
 describe('CatFilePool', () => {
   test('keeps one reader per repository and closes them all', async () => {
     const { path, sha } = await createRepo();

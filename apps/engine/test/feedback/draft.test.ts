@@ -67,4 +67,9 @@ describe('drafting feedback as a public issue', () => {
     expect(await draft({ title: 'Title', body: 'x'.repeat(FEEDBACK_LIMITS.draft + 1) })).toBeNull();
     expect(await draft({ title: 'Title', body: 7 })).toBeNull();
   });
+
+  test('fails with the reason when the writer cannot be reached', async () => {
+    const ask = () => Promise.reject(new Error('writer offline'));
+    await expect(createFeedbackDrafter(ask)(INPUT)).rejects.toThrow('writer offline');
+  });
 });

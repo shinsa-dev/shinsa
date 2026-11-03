@@ -50,10 +50,7 @@ export const Ingress = HttpRouter.middleware(
     };
 
     const respondPage = (pathname: string) =>
-      Effect.map(
-        Effect.promise(() => serveStatic(config.webDir, pathname)),
-        HttpServerResponse.raw
-      );
+      Effect.map(serveStatic(config.webDir, pathname), HttpServerResponse.raw);
 
     const respondMissing = Effect.fn('Ingress.respondMissing')(function* (
       web: Request,

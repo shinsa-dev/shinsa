@@ -1,9 +1,8 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ChatNotice } from '@shinsa/core';
 import { createFileStore, EunoeServer, isStuck, resolveCompactionNotice } from '../../src/eunoe/server.ts';
-import { log } from '../../src/log/index.ts';
 import {
   createMessagesBody,
   type FakeAnthropic,
@@ -11,6 +10,7 @@ import {
   startFakeAnthropic,
 } from '../helpers/anthropic.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 
 const SMALL_WINDOW = () => Promise.resolve(4_000);
 
@@ -166,10 +166,10 @@ describe('EunoeServer', () => {
     const side = { ...createMessagesBody([4_000, 4_000]), tools: [] };
     await (await sendMessages(url, 'session-1', side)).text();
     expect(upstream.received[0]?.body.messages).toEqual(side.messages);
-    const info = spyOn(log, 'info');
+    const logs = captureLogs();
     await (await sendMessages(url, 'session-1', createMessagesBody([], 'Prompt 0'))).text();
-    expect(info).toHaveBeenCalledWith('[Eunoe] Nothing to fold before this turn yet', expect.any(Object));
-    info.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Eunoe] Nothing to fold before this turn yet')).toHaveLength(1);
     const real = createMessagesBody([4_000, 4_000, 4_000], 'Now build phase 1.');
     await (await sendMessages(url, 'session-1', real)).text();
     expect(upstream.received[2]?.body.messages).toHaveLength(real.messages.length - 5);
@@ -204,31 +204,48 @@ describe('EunoeServer', () => {
   test('a step whose history is too small to be worth a fold keeps its cache and drops the fold', async () => {
     const { server, upstream } = openServer({ foldFloor: 5_000 });
     const url = await ensureUrl(server);
-    const info = spyOn(log, 'info');
+    const logs = captureLogs();
     const body = createMessagesBody([1_000, 1_000]);
     server.fold('session-1', true);
     await (await sendMessages(url, 'session-1', body)).text();
-    expect(info).toHaveBeenCalledWith(
-      '[Eunoe] Too little before this turn to be worth a fold',
-      expect.any(Object)
-    );
+    logs.restore();
+    expect(logs.fieldsOf('[Eunoe] Too little before this turn to be worth a fold')).toHaveLength(1);
     expect(upstream.received[0]?.body.messages).toEqual(body.messages);
     server.fold('session-1', true);
     await (await sendMessages(url, 'session-1', createMessagesBody([1_000, 20_000]))).text();
     expect(upstream.received[1]?.body.messages).not.toEqual(createMessagesBody([1_000, 20_000]).messages);
-    info.mockRestore();
   });
 
   test('a request log it cannot write is logged and the request still goes through', async () => {
     const { server, upstream, dir } = openServer();
     const url = await ensureUrl(server);
     mkdirSync(join(dir, 'requests.jsonl'));
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const response = await sendMessages(url, 'session-1', createMessagesBody([4_000, 4_000, 4_000]));
+    logs.restore();
     expect(response.status).toBe(200);
     expect(upstream.received).toHaveLength(1);
-    expect(warn).toHaveBeenCalledWith('[Eunoe] Could not write the request log', expect.any(Object));
-    warn.mockRestore();
+    expect(logs.fieldsOf('[Eunoe] Could not write the request log')).toHaveLength(1);
+  });
+
+  test('a window it cannot look up passes the request on untouched', async () => {
+    const { server, upstream } = openServer({ window: () => Promise.reject(new Error('no window')) });
+    const url = await ensureUrl(server);
+    const body = createMessagesBody([4_000, 4_000, 4_000]);
+    await (await sendMessages(url, 'session-1', body)).text();
+    expect(upstream.received.map((request) => request.body.messages)).toEqual([body.messages]);
+  });
+
+  test('a session watched twice keeps telling the watcher that stays', async () => {
+    const { server } = openServer();
+    const url = await ensureUrl(server);
+    const kept = watchSession(server, 'session-1');
+    const dropped = watchSession(server, 'session-1');
+    dropped.stop();
+    await (await sendMessages(url, 'session-1', createMessagesBody([10]))).text();
+    await (await sendMessages(url, 'session-1', createMessagesBody([100], 'y'.repeat(40_000)))).text();
+    expect(kept.stuck).toEqual(['session-1']);
+    expect(dropped.stuck).toEqual([]);
   });
 
   test('a port it cannot take leaves runs to talk to Claude directly, and a stopped server never starts again', async () => {

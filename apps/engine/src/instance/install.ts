@@ -1,7 +1,6 @@
 import { resolve } from 'node:path';
 import { ENGINE_PROTOCOL } from '@shinsa/core';
 import enginePackage from '../../package.json' with { type: 'json' };
-import { selectHead } from '../git/index.ts';
 import { BUNDLE, type ShinsaBundle } from './bundle.ts';
 
 export interface ServerInstance {
@@ -70,15 +69,6 @@ export function createServerInstance(
     pid: process.pid,
     startedAt: now,
   };
-}
-
-export async function resolveServerInstance(
-  installPath = INSTALL_PATH,
-  bundle: ShinsaBundle | null = BUNDLE
-): Promise<ServerInstance> {
-  if (bundle) return createServerInstance(bundle.commit, Date.now(), bundle);
-  const head = await selectHead(installPath);
-  return createServerInstance(head && /^[0-9a-f]{40}$/.test(head) ? head : null);
 }
 
 export function describeVersion(instance: Pick<ServerInstance, 'version' | 'commit'>) {

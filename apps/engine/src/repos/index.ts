@@ -1,141 +1,84 @@
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import {
+  DomainError,
   type Repo,
   resolveTaskProject,
   type ShinsaState,
   selectFolderProject,
   type Task,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { isInside } from '../files/paths.ts';
-import { inspectRepo, resolveRepoRemote } from '../git/index.ts';
+import { describeError } from '../log/redact.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
-import { createRepoFolder, listLocalRepos } from './edge.ts';
-import {
-  type LocalRepo,
-  type LoginResolver,
-  REPOSITORY_NAME,
-  RepoNotCreated,
-  RepoNotRegistered,
-} from './schema.ts';
+import { resolveNewRepoParent } from './parent.ts';
+import { resolveOwnerProjectName } from './project-name.ts';
+import { type LoginLookup, RepoDispatchFailed } from './registry/schema.ts';
+import { makeRepoRegistry } from './registry/service.ts';
+import type { LocalRepo, LoginResolver } from './schema.ts';
 
-function titleCase(text: string) {
-  return text
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
-    .join(' ');
-}
-
-export async function resolveProjectName(remote: string | null, resolveLogin: LoginResolver | null) {
-  const owner = remote?.split('/')[1]?.toLowerCase();
-  if (!owner) return 'Local';
-  if (owner === (await resolveLogin?.())) return 'Personal';
-  return titleCase(owner);
-}
-
-async function resolveFallbackProjectName(
+function runRegistry<A, E>(
   engine: Engine,
-  remote: string | null,
-  resolveLogin: LoginResolver | null,
-  projectId: string | null
+  use: (registry: Effect.Success<ReturnType<typeof makeRepoRegistry>>) => Effect.Effect<A, E>
 ) {
-  if (projectId && engine.state.projects[projectId]) return null;
-  return await resolveProjectName(remote, resolveLogin);
+  const registry = makeRepoRegistry({
+    state: Effect.sync(() => engine.state),
+    dispatch: (command, options) =>
+      Effect.tryPromise({
+        try: () => engine.dispatch(command, options),
+        catch: (error) =>
+          error instanceof DomainError ? error : new RepoDispatchFailed({ message: describeError(error) }),
+      }),
+  });
+  return edgeRuntime.runPromise(Effect.flatMap(registry, use));
 }
 
-async function recordRepoRemote(engine: Engine, repo: Repo, remote: string) {
-  await engine.dispatch({ type: 'repo.update', repoId: repo.id, patch: { remote } });
-  return engine.state.repos[repo.id] ?? repo;
+function resolveLoginLookup(resolveLogin: LoginResolver | null | undefined): LoginLookup | null {
+  return resolveLogin ? Effect.promise(resolveLogin) : null;
 }
 
-export async function syncRepoRemote(engine: Engine, repo: Repo) {
-  if (repo.remote) return repo;
-  const remote = await resolveRepoRemote(repo.path);
-  if (!remote) return repo;
-  return recordRepoRemote(engine, repo, remote);
+export function resolveProjectName(remote: string | null, resolveLogin: LoginResolver | null) {
+  return edgeRuntime.runPromise(resolveOwnerProjectName(remote, resolveLoginLookup(resolveLogin)));
 }
 
-function selectRepoByPath(engine: Engine, path: string) {
-  return Object.values(engine.state.repos).find((repo) => repo.path === path) ?? null;
+export function syncRepoRemote(engine: Engine, repo: Repo) {
+  return runRegistry(engine, (registry) => registry.syncRemote(repo));
 }
 
-export async function upsertRepo(
+export function upsertRepo(
   engine: Engine,
   path: string,
   resolveLogin: LoginResolver | null,
   projectId: string | null = null,
   from: DispatchOptions = {}
 ): Promise<Repo> {
-  const candidate = await inspectRepo(path);
-  const known = selectRepoByPath(engine, candidate.path);
-  if (known && !known.remote && candidate.remote) return recordRepoRemote(engine, known, candidate.remote);
-  if (known) return known;
-  const projectName = await resolveFallbackProjectName(engine, candidate.remote, resolveLogin, projectId);
-  await engine.dispatch(
-    {
-      type: 'repo.register',
-      repo: { ...candidate, checkCommands: [] },
-      projectName,
-      projectId,
-    },
-    { ...from, id: from.id ?? `repo:${candidate.path}:${engine.state.seq}` }
+  return runRegistry(engine, (registry) =>
+    registry.upsert(path, resolveLoginLookup(resolveLogin), projectId, from)
   );
-  const registered = selectRepoByPath(engine, candidate.path);
-  if (!registered) {
-    throw new RepoNotRegistered({ path: candidate.path, message: `Could not register ${candidate.name}.` });
-  }
-  return registered;
 }
 
-export async function upsertProjectFolderRepo(engine: Engine, projectId: string | null, name: string) {
-  const project = projectId ? engine.state.projects[projectId] : undefined;
-  if (!project) return null;
-  const local = listLocalRepos(project.folders).find((repo) => repo.name === name);
-  if (!local) return null;
-  return await upsertRepo(engine, local.path, null, project.id);
+export function upsertProjectFolderRepo(engine: Engine, projectId: string | null, name: string) {
+  return runRegistry(engine, (registry) => registry.upsertProjectFolder(projectId, name));
 }
 
-function resolveNewRepoParent(state: Pick<ShinsaState, 'projects' | 'repos'>, projectId: string) {
-  const folder = state.projects[projectId]?.folders[0];
-  if (folder) return folder;
-  const sibling = Object.values(state.repos).find((repo) => repo.projectId === projectId);
-  return sibling ? dirname(sibling.path) : null;
-}
-
-interface CreateOptions {
-  resolveLogin?: LoginResolver | null;
-  from?: DispatchOptions;
-}
-
-export async function createRepository(
+export function createRepository(
   engine: Engine,
   parent: string,
   name: string,
   projectId: string | null,
-  options: CreateOptions = {}
+  options: { resolveLogin?: LoginResolver | null; from?: DispatchOptions } = {}
 ) {
-  const path = join(parent, name);
-  if (!REPOSITORY_NAME.test(name) || name.endsWith('.git')) {
-    throw new RepoNotCreated({
-      path,
-      message: `"${name}" is not a folder name Shinsa will create: use letters, digits, dots, dashes and underscores, starting with a letter or digit.`,
-    });
-  }
-  const known = selectRepoByPath(engine, path);
-  if (known) return known;
-  await createRepoFolder(path);
-  return await upsertRepo(engine, path, options.resolveLogin ?? null, projectId, options.from);
+  return runRegistry(engine, (registry) =>
+    registry.create(parent, name, projectId, {
+      login: resolveLoginLookup(options.resolveLogin),
+      from: options.from,
+    })
+  );
 }
 
-export async function createProjectRepository(engine: Engine, projectId: string, name: string) {
-  const parent = resolveNewRepoParent(engine.state, projectId);
-  if (!parent) {
-    throw new RepoNotCreated({
-      path: name,
-      message: `The project has no folder to create "${name}" in. Add one with \`projects_add_folder\`, then try again.`,
-    });
-  }
-  return await createRepository(engine, parent, name, projectId);
+export function createProjectRepository(engine: Engine, projectId: string, name: string) {
+  return runRegistry(engine, (registry) => registry.createInProject(projectId, name));
 }
 
 export function resolveTaskRepoTarget(

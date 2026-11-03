@@ -281,6 +281,21 @@ describe('tasks create', () => {
     expect(fake.sent).toEqual([{ type: 'task.create', request: 'add search', repoId: null, backlog: true }]);
   });
 
+  test('--project files it in the project it names, and none files it in no project', async () => {
+    const fake = createFakeClient({
+      '/api/projects': {
+        projects: [{ id: 'project-1', name: 'Work', key: 'WK', repos: [], folders: [] }],
+        focus: { projectId: null, until: null },
+      },
+    });
+    await runSpec(fake, ['tasks', 'create', 'add search', '--project', 'WK']);
+    await runSpec(fake, ['tasks', 'create', 'add search', '--project', 'none']);
+    expect(fake.sent).toEqual([
+      { type: 'task.create', request: 'add search', repoId: null, projectId: 'project-1' },
+      { type: 'task.create', request: 'add search', repoId: null, projectId: null },
+    ]);
+  });
+
   test('an unknown repository or account is refused before anything is sent', async () => {
     const fake = createFakeClient(TASKS);
     await expect(runSpec(fake, ['tasks', 'create', 'x', '--repo', 'web'])).rejects.toThrow(

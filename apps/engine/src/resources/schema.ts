@@ -1,6 +1,6 @@
 import type { MachineResources, ResourceUse, ShinsaState } from '@shinsa/core';
 import { Duration } from 'effect';
-import type { CommandResult } from '../shell/schema.ts';
+import type { Argv, CommandResult } from '../shell/schema.ts';
 
 type ProcessKind = 'agent' | 'services' | 'checks';
 
@@ -90,7 +90,7 @@ const RESOURCE_COMMAND_TIMEOUT = Duration.minutes(1);
 
 export const RESOURCE_COMMAND_TIMEOUT_MS = Duration.toMillis(RESOURCE_COMMAND_TIMEOUT);
 
-export const PROCESS_TABLE = ['ps', '-A', '-o', 'pid=,ppid=,pgid=,rss=,time='];
+export const PROCESS_TABLE: Argv = ['ps', '-A', '-o', 'pid=,ppid=,pgid=,rss=,time='];
 
 export const KILOBYTE = 1024;
 

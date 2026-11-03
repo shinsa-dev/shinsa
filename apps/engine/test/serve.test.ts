@@ -558,7 +558,7 @@ describe('startShinsa with Claude accounts', () => {
   test('stopping waits for the account check, so it never reaches a released engine', async () => {
     const root = createTempDir();
     const config = createTestConfig(root, { roots: [createTempDir()] });
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const shinsa = await startShinsa(config, {
       models,
       triage: () => Promise.resolve(null),
@@ -584,20 +584,16 @@ describe('startShinsa with Claude accounts', () => {
     try {
       await shinsa.stop();
       await Bun.sleep(300);
-      expect(
-        warn.mock.calls.filter(([, fields]) =>
-          String((fields as { error?: string } | undefined)?.error).includes('disposed')
-        )
-      ).toEqual([]);
+      expect(logs.entries.filter((entry) => String(entry.error).includes('disposed'))).toEqual([]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 
   test('serves the accounts and pushes them over the socket, even when checking them failed', async () => {
     const root = createTempDir();
     const config = createTestConfig(root, { roots: [createTempDir()] });
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const shinsa = await startShinsa(config, {
       models,
       triage: () => Promise.resolve(null),
@@ -612,10 +608,11 @@ describe('startShinsa with Claude accounts', () => {
       },
     });
     started.push(shinsa);
-    await until('the failed check to be logged', () =>
-      warn.mock.calls.some(([message]) => message === '[Serve] Could not check the Claude accounts')
+    await until(
+      'the failed check to be logged',
+      () => logs.fieldsOf('[Serve] Could not check the Claude accounts').length > 0
     );
-    warn.mockRestore();
+    logs.restore();
     expect(await (await fetch(`${shinsa.url}/api/accounts`)).json()).toMatchObject({
       accounts: [],
       login: null,

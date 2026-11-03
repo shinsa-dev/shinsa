@@ -2,14 +2,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DomainError } from '@shinsa/core';
-import { STOP_DEADLINE_MS } from './restart.ts';
+import { Effect } from 'effect';
+import { STOP_DEADLINE_MS } from './restart/schema.ts';
 import {
   type EngineService,
-  runServiceOrThrow,
+  runServiceCommand,
   SERVICE_CARRIED_ENV,
   SERVICE_MARKER,
   type ServiceRunner,
-} from './service.ts';
+} from './service/index.ts';
 
 type Env = Record<string, string | undefined>;
 
@@ -59,56 +60,64 @@ export function resolveUnit(program: string, env: Env) {
   ].join('\n');
 }
 
-function readUnit(path: string) {
-  return existsSync(path) ? readFileSync(path, 'utf8') : null;
-}
-
 export function createSystemdService(options: SystemdOptions): EngineService {
   const { systemctl, loginctl, user } = options;
   const path = resolveUnitPath(options.env);
-  const run = (args: string[]) => runServiceOrThrow('systemctl', systemctl, args);
+  const run = (args: string[]) => runServiceCommand('systemctl', systemctl, args);
+  const isInstalled = Effect.sync(() => existsSync(path));
 
-  const assertInstalled = () => {
-    if (existsSync(path)) return Promise.resolve();
-    return Promise.reject(
-      new DomainError({
-        code: 'engine_not_installed',
-        message: 'The engine is not set up as a service yet. `shinsa start` sets it up.',
-      })
-    );
-  };
+  const assertInstalled = Effect.gen(function* () {
+    if (yield* isInstalled) return;
+    return yield* new DomainError({
+      code: 'engine_not_installed',
+      message: 'The engine is not set up as a service yet. `shinsa start` sets it up.',
+    });
+  });
 
-  const readLingerHint = async () => {
-    const linger = await loginctl(['show-user', user, '--property=Linger', '--value']);
+  const readLingerHint = Effect.gen(function* () {
+    const linger = yield* loginctl(['show-user', user, '--property=Linger', '--value']);
     if (!linger.ok || linger.output.trim() !== 'no') return null;
     return `It stops when you log out. To keep it running and start it at boot, turn on lingering: \`sudo loginctl enable-linger ${user}\`.`;
-  };
+  });
+
+  const writeUnit = Effect.gen(function* () {
+    const unit = resolveUnit(options.program, options.env);
+    const written = yield* Effect.sync(() => (existsSync(path) ? readFileSync(path, 'utf8') : null));
+    if (written === unit) return;
+    yield* Effect.sync(() => {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, unit);
+    });
+    yield* run(['daemon-reload']);
+  });
+
+  const prepare = Effect.gen(function* () {
+    if (!(yield* systemctl(['show-environment'])).ok) {
+      return yield* new DomainError({
+        code: 'engine_no_systemd',
+        message:
+          'This machine has no systemd user manager to keep the engine running. Log in as this user over SSH rather than with `su`, or run `shinsa engine` under a process manager of your own.',
+      });
+    }
+    yield* writeUnit;
+    yield* run(['enable', SYSTEMD_UNIT]);
+    return yield* readLingerHint;
+  });
+
+  const kick = Effect.gen(function* () {
+    if (!(yield* isInstalled)) return false;
+    return (yield* systemctl(['start', SYSTEMD_UNIT])).ok;
+  });
 
   return {
     manager: 'systemd',
     revivesKilled: false,
-    prepare: async () => {
-      if (!(await systemctl(['show-environment'])).ok) {
-        throw new DomainError({
-          code: 'engine_no_systemd',
-          message:
-            'This machine has no systemd user manager to keep the engine running. Log in as this user over SSH rather than with `su`, or run `shinsa engine` under a process manager of your own.',
-        });
-      }
-      const unit = resolveUnit(options.program, options.env);
-      if (readUnit(path) !== unit) {
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, unit);
-        await run(['daemon-reload']);
-      }
-      await run(['enable', SYSTEMD_UNIT]);
-      return readLingerHint();
-    },
+    prepare,
     assertInstalled,
-    start: () => run(['start', SYSTEMD_UNIT]),
-    stop: () => run(['stop', '--no-block', SYSTEMD_UNIT]),
-    kill: () => run(['kill', '--signal=SIGKILL', SYSTEMD_UNIT]),
-    restart: () => run(['restart', SYSTEMD_UNIT]),
-    kick: async () => existsSync(path) && (await systemctl(['start', SYSTEMD_UNIT])).ok,
+    start: run(['start', SYSTEMD_UNIT]),
+    stop: run(['stop', '--no-block', SYSTEMD_UNIT]),
+    kill: run(['kill', '--signal=SIGKILL', SYSTEMD_UNIT]),
+    restart: run(['restart', SYSTEMD_UNIT]),
+    kick,
   };
 }

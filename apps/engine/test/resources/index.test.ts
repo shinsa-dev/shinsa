@@ -227,6 +227,7 @@ describe('reading the machine’s own numbers', () => {
     const dataDir = createTempDir();
     await Bun.write(join(dataDir, 'note.txt'), 'hello');
     expect(await readTextFile(join(dataDir, 'note.txt'))).toBe('hello');
+    await expect(readTextFile(join(dataDir, 'missing.txt'))).rejects.toThrow();
     const ledger = new ProcessLedger();
     ledger.track('task-a', 'agent', process.pid);
     const monitor = new ResourceMonitor({

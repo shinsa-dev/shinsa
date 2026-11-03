@@ -3,6 +3,7 @@ import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { HOUR_MS, PROJECT_COLORS } from '@shinsa/core';
+import { Effect } from 'effect';
 import { createTempDir } from '../helpers/index.ts';
 import { createFakeClient, findSpec, runSpec } from './fixtures.ts';
 
@@ -256,8 +257,8 @@ describe('projects and focus', () => {
     const fake = createFakeClient({ '/api/projects': PROJECTS });
     const changed: string[] = [];
     fake.client.projects = {
-      upsertRepo: (projectId, path) => Promise.resolve(changed.push(`repo ${projectId} ${path}`)),
-      upsertFolder: (projectId, path) => Promise.resolve(changed.push(`folder ${projectId} ${path}`)),
+      upsertRepo: (projectId, path) => Effect.sync(() => changed.push(`repo ${projectId} ${path}`)),
+      upsertFolder: (projectId, path) => Effect.sync(() => changed.push(`folder ${projectId} ${path}`)),
     };
     await runSpec(fake, ['projects', 'add-repo', 'WK', '~/code/server']);
     await runSpec(fake, ['projects', 'add-folder', 'Work', '/code/basket']);

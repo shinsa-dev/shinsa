@@ -8,10 +8,6 @@ export function resolveRepoRoot(path: string) {
   return edgeRuntime.runPromise(Remote.use((remote) => remote.resolveRoot(path)));
 }
 
-export function resolveRepoRemote(root: string) {
-  return edgeRuntime.runPromise(Remote.use((remote) => remote.resolveOrigin(root)));
-}
-
 export function inspectRepo(path: string): Promise<RepoCandidate> {
   return edgeRuntime.runPromise(Remote.use((remote) => remote.inspect(path)));
 }

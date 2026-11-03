@@ -1,4 +1,5 @@
 export { BUNDLE, resolveBundle, resolveBundlePath, type ShinsaBundle } from './bundle.ts';
+export { resolveServerInstance } from './current.ts';
 export { createReadOnlyError, INSPECT_MESSAGE } from './inspect.ts';
 export {
   createServerInstance,
@@ -6,7 +7,6 @@ export {
   ENGINE_ENTRY,
   INSTALL_PATH,
   resolveHealth,
-  resolveServerInstance,
   type ServerHealth,
   type ServerInstance,
 } from './install.ts';
@@ -33,10 +33,11 @@ export {
 export {
   type EngineService,
   isStartedByService,
-  runServiceOrThrow,
+  runServiceCommand,
   SERVICE_CARRIED_ENV,
   SERVICE_MARKER,
+  ServiceCommandFailed,
   type ServiceResult,
   type ServiceRunner,
-} from './service.ts';
+} from './service/index.ts';
 export { createSystemdService, resolveUnit, resolveUnitPath, SYSTEMD_UNIT } from './systemd.ts';

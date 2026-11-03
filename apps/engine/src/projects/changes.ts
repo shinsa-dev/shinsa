@@ -1,8 +1,13 @@
-import { DomainError, type Project, type Repo, selectFolderProject } from '@shinsa/core';
-import { resolveRepoRoot } from '../git/index.ts';
+import { DomainError, selectFolderProject } from '@shinsa/core';
+import { Effect, Schema } from 'effect';
+import { describeError } from '../log/redact.ts';
 import { type LoginResolver, listLocalRepos, upsertRepo } from '../repos/index.ts';
-import type { DispatchOptions, Engine } from '../runtime/engine.ts';
-import { resolveProjectFolder } from './folders.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
+import type { Engine } from '../runtime/engine.ts';
+import { type LocalRepoView, ProjectChangeFailed } from './changes/schema.ts';
+import { makeProjectChanges } from './changes/service.ts';
+
+export type { ProjectChanges } from './changes/schema.ts';
 
 interface ProjectChangesContext {
   engine: Engine;
@@ -10,22 +15,10 @@ interface ProjectChangesContext {
   userHome: string;
 }
 
-export interface ProjectChanges {
-  upsertRepo: (projectId: string, path: string, from?: DispatchOptions) => Promise<{ repo: Repo }>;
-  upsertFolder: (projectId: string, path: string, from?: DispatchOptions) => Promise<{ project: Project }>;
-}
+const isDomainError = Schema.is(DomainError);
 
-interface LocalRepoView {
-  path: string;
-  name: string;
-  repoId: string | null;
-  projectId: string | null;
-}
-
-function findProject(engine: Engine, projectId: string) {
-  const project = engine.state.projects[projectId];
-  if (!project) throw new DomainError({ code: 'project_not_found', message: `No project ${projectId}.` });
-  return project;
+function resolveFailure(error: unknown) {
+  return isDomainError(error) ? error : new ProjectChangeFailed({ message: describeError(error) });
 }
 
 export function listLocalRepoViews(engine: Engine, roots: string[]): LocalRepoView[] {
@@ -45,33 +38,20 @@ export function listLocalRepoViews(engine: Engine, roots: string[]): LocalRepoVi
   return [...views.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function createProjectChanges({
-  engine,
-  resolveLogin,
-  userHome,
-}: ProjectChangesContext): ProjectChanges {
-  return {
-    upsertRepo: async (projectId, raw, from = {}) => {
-      findProject(engine, projectId);
-      const path = resolveProjectFolder(raw, userHome);
-      if (!(await resolveRepoRoot(path))) {
-        throw new DomainError({ code: 'repo_invalid', message: `${path} is not a git repository.` });
-      }
-      const repo = await upsertRepo(engine, path, resolveLogin, projectId, from);
-      if (repo.projectId !== projectId) {
-        await engine.dispatch({ type: 'repo.update', repoId: repo.id, patch: { projectId } }, from);
-      }
-      return { repo: engine.state.repos[repo.id] ?? repo };
-    },
-    upsertFolder: async (projectId, raw, from = {}) => {
-      const project = findProject(engine, projectId);
-      const folder = resolveProjectFolder(raw, userHome);
-      if (project.folders.includes(folder)) return { project };
-      await engine.dispatch(
-        { type: 'project.write', project: { ...project, folders: [...project.folders, folder] } },
-        from
-      );
-      return { project: engine.state.projects[projectId] ?? project };
-    },
-  };
+export function createProjectChanges({ engine, resolveLogin, userHome }: ProjectChangesContext) {
+  return edgeRuntime.runSync(
+    makeProjectChanges({
+      state: Effect.sync(() => engine.state),
+      userHome,
+      dispatch: (command, from) =>
+        Effect.tryPromise({ try: () => engine.dispatch(command, from), catch: resolveFailure }).pipe(
+          Effect.asVoid
+        ),
+      registerRepo: (path, projectId, from) =>
+        Effect.tryPromise({
+          try: () => upsertRepo(engine, path, resolveLogin, projectId, from),
+          catch: resolveFailure,
+        }),
+    })
+  );
 }

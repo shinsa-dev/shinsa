@@ -29,24 +29,21 @@ export class Serve extends Context.Service<Serve, { readonly url: string; readon
           Effect.sync(() => new EventLog(config.databasePath)),
           (log) => Effect.sync(() => log.close())
         );
-        const services = yield* Effect.sync(() => createServices(config, options, instance, eventLog));
-        yield* Effect.addFinalizer(() => Effect.promise(() => disposeRuntime(services)));
-        const http = yield* Effect.acquireRelease(
-          Effect.sync(() => startHttp(services, options, instance, stop)),
-          (server) => Effect.promise(() => server.stop())
-        );
+        const services = yield* createServices(config, options, instance, eventLog);
+        yield* Effect.addFinalizer(() => disposeRuntime(services));
+        const http = yield* startHttp(services, options, instance, stop);
         if (Option.isSome(lock)) {
           yield* lock.value.update({ port: http.server.port ?? config.port, url: http.url });
         }
         services.address.url = http.url;
         yield* Effect.addFinalizer(() => Effect.promise(() => services.eunoe.stop()));
-        yield* Effect.addFinalizer(() => Effect.promise(() => stopWork(services)));
+        yield* Effect.addFinalizer(() => stopWork(services));
         if (config.inspect) {
           yield* Effect.logInfo('[Serve] Inspect mode: agents, pull request sync and recovery are off').pipe(
             Effect.annotateLogs({ dataDir: config.dataDir })
           );
         } else {
-          yield* Effect.promise(() => startWork(services));
+          yield* startWork(services);
         }
         return Serve.of({ url: http.url, engine: services.engine });
       })

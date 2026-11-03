@@ -10,7 +10,7 @@ import {
   stripStyles,
   type Tone,
 } from '../terminal/index.ts';
-import { parseArgs } from './commands.ts';
+import { parseArgs } from './args.ts';
 
 export const ENGINE_LOG = 'engine.log';
 

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, jest, spyOn, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
   createServiceRestarter,
   EngineRestarter,
@@ -8,12 +8,9 @@ import {
   resolveEngineActivity,
   stopWithin,
 } from '../../src/instance/index.ts';
-import { log } from '../../src/log/index.ts';
+import { edgeRuntime } from '../../src/runtime/edge.ts';
+import { captureLogs, until } from '../helpers/index.ts';
 import { createRun, createStubEngine } from '../helpers/state.ts';
-
-afterEach(() => {
-  jest.useRealTimers();
-});
 
 function createDrain() {
   const held = new Set<string>();
@@ -30,7 +27,9 @@ function createDrain() {
   return { drain, held, calls, onHeld };
 }
 
-function createRestarter(options: { service?: boolean; fail?: boolean; drain?: RestartDrain } = {}) {
+function createRestarter(
+  options: { service?: boolean; fail?: boolean; drain?: RestartDrain; drainMs?: number } = {}
+) {
   const stub = createStubEngine();
   let restarts = 0;
   const scheduled: (() => void)[] = [];
@@ -41,7 +40,7 @@ function createRestarter(options: { service?: boolean; fail?: boolean; drain?: R
       return options.fail ? Promise.reject(new Error('launchctl said no')) : Promise.resolve();
     },
     drain: options.drain,
-    drainMs: 60_000,
+    drainMs: options.drainMs ?? 60_000,
     now: () => 1_000,
     schedule: (run) => scheduled.push(run),
   });
@@ -72,7 +71,6 @@ describe('isEngineBusy', () => {
 
 describe('resolveEngineActivity', () => {
   test('counts the working agents, leaving out held ones, and says when a restart comes at the latest', async () => {
-    jest.useFakeTimers();
     const { drain, held } = createDrain();
     const { stub, restarter } = createRestarter({ drain });
     stub.update((state) => {
@@ -98,16 +96,15 @@ describe('resolveEngineActivity', () => {
 
 describe('draining before a restart', () => {
   test('holds new runs, ignores the held ones and restarts once the working ones hand over', async () => {
-    jest.useFakeTimers();
     const { drain, held, calls } = createDrain();
-    const { stub, restarter, flush, restarts } = createRestarter({ drain });
+    const { stub, restarter, flush, restarts } = createRestarter({ drain, drainMs: 30 });
     stub.update((state) => {
       state.runs.live = createRun({ id: 'live' });
     });
     expect(await restarter.request('idle')).toEqual({ restarting: false });
     expect(await restarter.request('idle')).toEqual({ restarting: false });
     expect(calls).toEqual(['hold']);
-    expect(restarter.deadlineAt).toBe(61_000);
+    expect(restarter.deadlineAt).toBe(1_030);
     stub.update((state) => {
       state.runs.next = createRun({ id: 'next' });
     });
@@ -119,13 +116,12 @@ describe('draining before a restart', () => {
     await flush();
     expect(restarts()).toBe(1);
     expect(restarter.deadlineAt).toBeNull();
-    jest.advanceTimersByTime(60_000);
+    await Bun.sleep(80);
     await flush();
     expect(restarts()).toBe(1);
   });
 
   test('a run held after the last state change still lets the engine restart', async () => {
-    jest.useFakeTimers();
     const { drain, held, onHeld } = createDrain();
     const { stub, restarter, flush, restarts } = createRestarter({ drain });
     stub.update((state) => {
@@ -142,40 +138,46 @@ describe('draining before a restart', () => {
   });
 
   test('restarts at the deadline with agents still working, since their runs resume after it', async () => {
-    jest.useFakeTimers();
-    const infos = spyOn(log, 'info').mockImplementation(() => undefined);
-    const { stub, restarter, flush, restarts } = createRestarter();
-    stub.update((state) => {
-      state.runs.live = createRun({ id: 'live' });
-    });
-    await restarter.request('idle');
-    jest.advanceTimersByTime(59_999);
-    await flush();
-    expect(restarts()).toBe(0);
-    jest.advanceTimersByTime(1);
-    await flush();
-    expect(restarts()).toBe(1);
-    expect(infos).toHaveBeenCalledWith(
-      '[Engine] Agents still work past the restart deadline; their runs resume after it'
-    );
-    infos.mockRestore();
+    const logs = captureLogs();
+    try {
+      const { stub, restarter, flush, restarts } = createRestarter({ drainMs: 50 });
+      stub.update((state) => {
+        state.runs.live = createRun({ id: 'live' });
+      });
+      const asked = performance.now();
+      await restarter.request('idle');
+      await flush();
+      expect(restarts()).toBe(0);
+      await until('the deadline to pass', async () => {
+        await flush();
+        return restarts() === 1;
+      });
+      expect(performance.now() - asked).toBeGreaterThanOrEqual(45);
+      expect(
+        logs.fieldsOf('[Engine] Agents still work past the restart deadline; their runs resume after it')
+      ).toEqual([{}]);
+    } finally {
+      logs.restore();
+    }
   });
 
   test('a restart that fails releases the held runs so work goes on', async () => {
-    jest.useFakeTimers();
-    const errors = spyOn(log, 'error').mockImplementation(() => undefined);
-    const { drain, calls } = createDrain();
-    const { stub, restarter, flush } = createRestarter({ drain, fail: true });
-    stub.update((state) => {
-      state.runs.live = createRun({ id: 'live' });
-    });
-    await restarter.request('idle');
-    await restarter.request('now');
-    await flush();
-    await Promise.resolve();
-    expect(calls).toEqual(['hold', 'release']);
-    expect(restarter.pending).toBeNull();
-    errors.mockRestore();
+    const logs = captureLogs();
+    try {
+      const { drain, calls } = createDrain();
+      const { stub, restarter, flush } = createRestarter({ drain, fail: true });
+      stub.update((state) => {
+        state.runs.live = createRun({ id: 'live' });
+      });
+      await restarter.request('idle');
+      await restarter.request('now');
+      await flush();
+      await until('the held runs to be released', () => calls.length === 2);
+      expect(calls).toEqual(['hold', 'release']);
+      expect(restarter.pending).toBeNull();
+    } finally {
+      logs.restore();
+    }
   });
 });
 
@@ -183,6 +185,18 @@ describe('EngineRestarter', () => {
   test('refuses when the engine does not run in the background', async () => {
     const { restarter } = createRestarter({ service: false });
     await expect(restarter.request('now')).rejects.toMatchObject({ code: 'restart_unsupported' });
+  });
+
+  test('says why when it cannot tell whether a service runs it', async () => {
+    const stub = createStubEngine();
+    const restarter = new EngineRestarter(stub.engine, {
+      isService: () => Promise.reject(new Error('launchctl is gone')),
+      restart: () => Promise.resolve(),
+    });
+    await expect(restarter.request('now')).rejects.toMatchObject({
+      _tag: 'RestartFailed',
+      message: 'launchctl is gone',
+    });
   });
 
   test('restarts now even with agents mid-turn, once, since runs resume after it', async () => {
@@ -223,40 +237,46 @@ describe('EngineRestarter', () => {
   });
 
   test('restarts a moment after answering, so the app hears that it will', async () => {
-    jest.useFakeTimers();
-    const stub = createStubEngine();
-    let restarted = false;
-    const restarter = new EngineRestarter(stub.engine, {
-      isService: () => Promise.resolve(true),
-      restart: () => {
-        restarted = true;
-        return Promise.resolve();
-      },
-    });
-    await restarter.request('now');
-    jest.advanceTimersByTime(249);
-    expect(restarted).toBe(false);
-    jest.advanceTimersByTime(1);
-    expect(restarted).toBe(true);
+    const logs = captureLogs();
+    try {
+      const stub = createStubEngine();
+      let restartedAt: number | null = null;
+      const restarter = new EngineRestarter(stub.engine, {
+        isService: () => Promise.resolve(true),
+        restart: () => {
+          restartedAt = performance.now();
+          return Promise.resolve();
+        },
+      });
+      const asked = performance.now();
+      await restarter.request('now');
+      expect(restartedAt).toBeNull();
+      await until('the restart', () => restartedAt !== null);
+      expect((restartedAt ?? 0) - asked).toBeGreaterThanOrEqual(245);
+    } finally {
+      logs.restore();
+    }
   });
 
   test('logs a failed restart and can be asked again', async () => {
-    const errors = spyOn(log, 'error').mockImplementation(() => undefined);
-    const { restarter, flush, restarts } = createRestarter({ fail: true });
-    await restarter.request('now');
-    await flush();
-    await Promise.resolve();
-    expect(errors).toHaveBeenCalledWith('[Engine] Could not restart', { error: 'launchctl said no' });
-    await restarter.request('now');
-    await flush();
-    expect(restarts()).toBe(2);
-    errors.mockRestore();
+    const logs = captureLogs();
+    try {
+      const { restarter, flush, restarts } = createRestarter({ fail: true });
+      await restarter.request('now');
+      await flush();
+      await until('the failure to be logged', () => logs.fieldsOf('[Engine] Could not restart').length === 1);
+      expect(logs.fieldsOf('[Engine] Could not restart')).toEqual([{ error: 'launchctl said no' }]);
+      await restarter.request('now');
+      await flush();
+      expect(restarts()).toBe(2);
+    } finally {
+      logs.restore();
+    }
   });
 });
 
 describe('createServiceRestarter', () => {
   test('restarts by stopping cleanly and exiting with the restart code, so launchd starts it again', async () => {
-    jest.useFakeTimers();
     const stub = createStubEngine();
     const steps: string[] = [];
     const exited = Promise.withResolvers<void>();
@@ -272,7 +292,6 @@ describe('createServiceRestarter', () => {
       },
     });
     await restarter.request('now');
-    jest.advanceTimersByTime(250);
     await exited.promise;
     expect(steps).toEqual(['stop', `exit ${EXIT_RESTART}`]);
   });
@@ -284,10 +303,8 @@ describe('createServiceRestarter', () => {
     const exited = Promise.withResolvers<void>();
     const exit = spyOn(process, 'exit').mockImplementation((() => exited.resolve()) as () => never);
     try {
-      jest.useFakeTimers();
       const service = createServiceRestarter(stub.engine, { byService: true, stop: () => Promise.resolve() });
       await service.request('now');
-      jest.advanceTimersByTime(250);
       await exited.promise;
       expect(exit).toHaveBeenCalledWith(EXIT_RESTART);
     } finally {
@@ -297,7 +314,7 @@ describe('createServiceRestarter', () => {
 
   test('a stop that hangs or fails still exits with the restart code, so launchd brings the engine back', async () => {
     const stub = createStubEngine();
-    const error = spyOn(log, 'error');
+    const logs = captureLogs();
     try {
       for (const stop of [
         () => new Promise<void>(() => undefined),
@@ -313,25 +330,27 @@ describe('createServiceRestarter', () => {
         await restarter.request('now');
         expect(await exited.promise).toBe(EXIT_RESTART);
       }
-      expect(error).toHaveBeenCalledWith('[Engine] Did not stop in time, so it exits anyway', {
-        deadlineMs: 20,
-      });
-      expect(error).toHaveBeenCalledWith('[Engine] Could not stop cleanly', { error: 'stuck' });
+      expect(logs.fieldsOf('[Engine] Did not stop in time, so it exits anyway')).toEqual([
+        { deadlineMs: 20 },
+      ]);
+      expect(logs.fieldsOf('[Engine] Could not stop cleanly')).toEqual([{ error: 'stuck' }]);
     } finally {
-      error.mockRestore();
+      logs.restore();
     }
   });
 });
 
 describe('stopWithin', () => {
   test('says whether the stop finished, failed or ran past its deadline', async () => {
-    const error = spyOn(log, 'error');
+    const logs = captureLogs();
+    const run = (stop: () => Promise<void>) => edgeRuntime.runPromise(stopWithin(stop, 20));
     try {
-      expect(await stopWithin(() => Promise.resolve(), 20)).toBe('stopped');
-      expect(await stopWithin(() => Promise.reject(new Error('no')), 20)).toBe('failed');
-      expect(await stopWithin(() => new Promise<void>(() => undefined), 20)).toBe('timed_out');
+      expect(await run(() => Promise.resolve())).toBe('stopped');
+      expect(await run(() => Promise.reject(new Error('no')))).toBe('failed');
+      expect(await run(() => new Promise<void>(() => undefined))).toBe('timed_out');
+      expect(logs.fieldsOf('[Engine] Could not stop cleanly')).toEqual([{ error: 'no' }]);
     } finally {
-      error.mockRestore();
+      logs.restore();
     }
   });
 });

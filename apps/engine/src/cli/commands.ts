@@ -1,5 +1,7 @@
 import type { TaskPriority } from '@shinsa/core';
+import { Effect } from 'effect';
 import { describeVersion, type ServerHealth } from '../instance/index.ts';
+import { describeError } from '../log/index.ts';
 import { type CommandReceipt, describeQueue, describeUptime, QUEUE_EMPTY } from '../surface/index.ts';
 import {
   type Display,
@@ -9,45 +11,19 @@ import {
   describeParagraph,
   shortenHome,
 } from '../terminal/index.ts';
-import type { ApiClient } from './api.ts';
 import { isPathArgument, resolveHomeLink, resolvePathArgument, resolveTaskLink } from './app.ts';
+import { parseArgs } from './args.ts';
 import { readHealth } from './engine.ts';
+import { CliFailed, type CommandIo } from './schema.ts';
 
-export interface CommandIo {
-  api: ApiClient;
-  display: Display;
-  home: string | undefined;
-  cwd: string;
-  write: (line?: string) => void;
-  openApp: (link: string) => Promise<void>;
-  readRepoRoot: (dir: string) => Promise<string | null>;
-}
+export type { CommandIo } from './schema.ts';
 
-interface ParsedArgs {
-  flags: Set<string>;
-  values: Map<string, string>;
-  positional: string[];
-}
-
-const VALUE_FLAGS = new Set(['--lines']);
-
-export function parseArgs(args: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { flags: new Set(), values: new Map(), positional: [] };
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index] ?? '';
-    if (VALUE_FLAGS.has(arg)) {
-      const value = args[index + 1];
-      if (!value) throw new Error(`${arg} needs a value.`);
-      parsed.values.set(arg, value);
-      index += 1;
-    } else if (arg.startsWith('--')) {
-      parsed.flags.add(arg);
-    } else {
-      parsed.positional.push(arg);
-    }
-  }
-  return parsed;
-}
+export const readArgs = Effect.fn('Cli.readArgs')(function* (args: string[]) {
+  return yield* Effect.try({
+    try: () => parseArgs(args),
+    catch: (error) => new CliFailed({ message: describeError(error) }),
+  });
+});
 
 function resolvePriority(flags: Set<string>): TaskPriority {
   if (flags.has('--urgent')) return 'urgent';
@@ -64,12 +40,15 @@ function writeDone(io: CommandIo, text: string) {
   io.write(describeMark(io.display.style, 'success', 'check', text));
 }
 
-export async function createTask(args: string[], io: CommandIo) {
-  const { flags, positional } = parseArgs(args);
+export const createTask = Effect.fn('Cli.createTask')(function* (args: string[], io: CommandIo) {
+  const { flags, positional } = yield* readArgs(args);
   const request = positional.join(' ').trim();
-  if (!request)
-    throw new Error('Say what should be done, such as `shinsa do "fix the scroll in tab groups"`.');
-  const result = await io.api.sendCommand({
+  if (!request) {
+    return yield* new CliFailed({
+      message: 'Say what should be done, such as `shinsa do "fix the scroll in tab groups"`.',
+    });
+  }
+  const result = yield* io.api.sendCommand({
     type: 'task.create',
     request,
     repoId: null,
@@ -85,7 +64,7 @@ export async function createTask(args: string[], io: CommandIo) {
       : 'Started. Shinsa brings it back when it needs a decision.'
   );
   writeTaskLink(io, result);
-}
+});
 
 function describeDamage(count: number) {
   return count === 1
@@ -137,15 +116,15 @@ function describeEngineBlock(health: ServerHealth, io: CommandIo) {
   ];
 }
 
-export async function printStatus(args: string[], io: CommandIo) {
-  const json = parseArgs(args).flags.has('--json');
-  const health = await readHealth(io.api.base);
+export const printStatus = Effect.fn('Cli.printStatus')(function* (args: string[], io: CommandIo) {
+  const json = (yield* readArgs(args)).flags.has('--json');
+  const health = yield* readHealth(io.api.base);
   if (!health) {
     if (json) io.write(JSON.stringify({ engine: null, queue: null }, null, 2));
     else for (const line of describeStopped(io.display)) io.write(line);
     return 1;
   }
-  const summary = await io.api.readQueue();
+  const summary = yield* io.api.readQueue();
   if (json) {
     io.write(JSON.stringify({ engine: health, queue: summary }, null, 2));
     return 0;
@@ -159,28 +138,28 @@ export async function printStatus(args: string[], io: CommandIo) {
   ];
   for (const line of lines) io.write(line);
   return 0;
-}
+});
 
-export async function openApp(args: string[], io: CommandIo) {
-  const [target] = parseArgs(args).positional;
-  if (!target) return io.openApp(resolveHomeLink());
-  if (!isPathArgument(target)) return io.openApp(resolveTaskLink(target));
-  await focusFolder(resolvePathArgument(target, io.cwd), io);
-  await io.openApp(resolveHomeLink());
-}
-
-async function focusFolder(dir: string, io: CommandIo) {
-  const root = await io.readRepoRoot(dir);
+const focusFolder = Effect.fn('Cli.focusFolder')(function* (dir: string, io: CommandIo) {
+  const root = yield* io.readRepoRoot(dir);
   if (!root) {
     io.write(`${dir} is not in a git repository, so Shinsa opens on Home.`);
     return;
   }
-  const { repos } = await io.api.readRepos();
+  const { repos } = yield* io.api.readRepos();
   const repo = repos.find((entry) => entry.path === root);
   if (!repo) {
     io.write(`Shinsa has not worked in ${root} yet. Ask for something there and it joins your projects.`);
     return;
   }
   if (!repo.projectId) return;
-  await io.api.sendCommand({ type: 'focus.change', projectId: repo.projectId, until: null });
-}
+  yield* io.api.sendCommand({ type: 'focus.change', projectId: repo.projectId, until: null });
+});
+
+export const openApp = Effect.fn('Cli.openApp')(function* (args: string[], io: CommandIo) {
+  const [target] = (yield* readArgs(args)).positional;
+  if (!target) return yield* io.openApp(resolveHomeLink());
+  if (!isPathArgument(target)) return yield* io.openApp(resolveTaskLink(target));
+  yield* focusFolder(resolvePathArgument(target, io.cwd), io);
+  yield* io.openApp(resolveHomeLink());
+});

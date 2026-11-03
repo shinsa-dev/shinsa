@@ -1,4 +1,5 @@
 import { type AccessRequest, DomainError, type RemoteUser } from '@shinsa/core';
+import { DateTime, Effect } from 'effect';
 import type { RemoteSnapshot } from '../remote/index.ts';
 import type { RemoteDevice } from '../remote/store.ts';
 import type { SurfaceClient } from './client.ts';
@@ -13,7 +14,7 @@ const STATUS_WORDS: Record<RemoteSnapshot['status'], string> = {
 };
 
 function describeSeen(at: number | null) {
-  return at === null ? 'never used' : `last used ${new Date(at).toISOString()}`;
+  return at === null ? 'never used' : `last used ${DateTime.formatIso(DateTime.makeUnsafe(at))}`;
 }
 
 function describeUser(user: RemoteUser) {
@@ -72,8 +73,8 @@ function formatLink(snapshot: RemoteSnapshot) {
   ].join('\n');
 }
 
-async function findRequestId(client: SurfaceClient, ref: string) {
-  const snapshot = await client.api.remote.snapshot();
+const findRequestId = Effect.fn('Surface.remoteRequest')(function* (client: SurfaceClient, ref: string) {
+  const snapshot = yield* client.api.remote.snapshot();
   const wanted = ref.replace(/^@/, '').toLowerCase();
   const matches = snapshot.requests.filter(
     (entry) => entry.id === ref || entry.user.login.toLowerCase() === wanted
@@ -84,11 +85,11 @@ async function findRequestId(client: SurfaceClient, ref: string) {
     matches.length > 1
       ? `${wanted} asked more than once; name the request by its id`
       : `No access request matches ${ref}`;
-  throw new DomainError({
+  return yield* new DomainError({
     code: 'request_not_found',
     message: `${problem}. See them with \`shinsa remote status\`.`,
   });
-}
+});
 
 const REQUEST_FIELD = {
   name: 'request',
@@ -98,17 +99,17 @@ const REQUEST_FIELD = {
   description: 'The request’s id, or the GitHub login that asked, from `shinsa remote status`.',
 } as const;
 
-async function findMemberId(client: SurfaceClient, login: string) {
-  const snapshot = await client.api.remote.snapshot();
+const findMemberId = Effect.fn('Surface.remoteMember')(function* (client: SurfaceClient, login: string) {
+  const snapshot = yield* client.api.remote.snapshot();
   const wanted = login.replace(/^@/, '').toLowerCase();
   const member = snapshot.access?.members.find((entry) => entry.user.login.toLowerCase() === wanted);
   if (!member)
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'member_not_found',
       message: `${wanted} has no access to this machine. See its members with \`shinsa remote status\`.`,
     });
   return member.user.id;
-}
+});
 
 export const REMOTE_SPECS: SurfaceSpec[] = [
   defineRead({
@@ -123,82 +124,73 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
     summary: 'Turn on remote access: sign in with GitHub in the browser to give this machine its tunnel.',
     humanOnly: true,
     fields: [],
-    act: async (client) => {
-      const data = await client.api.remote.pair({ payload: {} });
-      return { data, text: formatRemote(data) };
-    },
+    act: (client) =>
+      Effect.map(client.api.remote.pair({ payload: {} }), (data) => ({ data, text: formatRemote(data) })),
   }),
   defineAction({
     path: ['remote', 'enable'],
     summary: 'Start the tunnel again after pausing it.',
     humanOnly: true,
     fields: [],
-    act: async (client) => {
-      const data = await client.api.remote.enable({ payload: {} });
-      return { data, text: formatRemote(data) };
-    },
+    act: (client) =>
+      Effect.map(client.api.remote.enable({ payload: {} }), (data) => ({ data, text: formatRemote(data) })),
   }),
   defineAction({
     path: ['remote', 'disable'],
     summary: 'Pause remote access: stop the tunnel and close every open session.',
     humanOnly: true,
     fields: [],
-    act: async (client) => {
-      const data = await client.api.remote.disable({ payload: {} });
-      return { data, text: formatRemote(data) };
-    },
+    act: (client) =>
+      Effect.map(client.api.remote.disable({ payload: {} }), (data) => ({ data, text: formatRemote(data) })),
   }),
   defineAction({
     path: ['remote', 'remove'],
     summary: 'Remove this machine from Shinsa Cloud and forget its tunnel and devices.',
     humanOnly: true,
     fields: [],
-    act: async (client) => {
-      const data = await client.api.remote.remove({ payload: {} });
-      return { data, text: formatRemote(data) };
-    },
+    act: (client) =>
+      Effect.map(client.api.remote.remove({ payload: {} }), (data) => ({ data, text: formatRemote(data) })),
   }),
   defineAction({
     path: ['remote', 'link'],
     summary: 'Show the reusable invite link that asks for access to this machine, making it if it is off.',
     humanOnly: true,
     fields: [],
-    act: async (client) => {
-      const data = await client.api.remote.createLink({ payload: {} });
-      return { data, text: formatLink(data) };
-    },
+    act: (client) =>
+      Effect.map(client.api.remote.createLink({ payload: {} }), (data) => ({ data, text: formatLink(data) })),
   }),
   defineAction({
     path: ['remote', 'link-off'],
     summary: 'Turn the invite link off, so nobody can ask for access with it any more.',
     humanOnly: true,
     fields: [],
-    act: async (client) => {
-      const data = await client.api.remote.removeLink({ payload: {} });
-      return { data, text: formatRemote(data) };
-    },
+    act: (client) =>
+      Effect.map(client.api.remote.removeLink({ payload: {} }), (data) => ({
+        data,
+        text: formatRemote(data),
+      })),
   }),
   defineAction({
     path: ['remote', 'accept'],
     summary: 'Accept an access request: add its device, and make its account a member when it is not yours.',
     humanOnly: true,
     fields: [REQUEST_FIELD],
-    act: async (client, values) => {
-      const requestId = await findRequestId(client, readValue(values, 'request'));
-      const data = await client.api.remote.acceptRequest({ payload: { requestId } });
+    act: Effect.fn('Surface.remoteAccept')(function* (client, values) {
+      const requestId = yield* findRequestId(client, readValue(values, 'request'));
+      const data = yield* client.api.remote.acceptRequest({ payload: { requestId } });
       return { data, text: formatRemote(data) };
-    },
+    }),
   }),
   defineAction({
     path: ['remote', 'decline'],
     summary: 'Decline an access request and forget it.',
     humanOnly: true,
     fields: [REQUEST_FIELD],
-    act: async (client, values) => {
-      const requestId = await findRequestId(client, readValue(values, 'request'));
-      const data = await client.api.remote.declineRequest({ payload: { requestId } });
+    act: Effect.fn('Surface.remoteDecline')(function* (client, values) {
+      const requestId = yield* findRequestId(client, readValue(values, 'request'));
+      const data = yield* client.api.remote.declineRequest({ payload: { requestId } });
       return { data, text: formatRemote(data) };
-    },
+    }),
   }),
   defineAction({
     path: ['remote', 'remove-member'],
@@ -214,11 +206,11 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
         description: 'Their GitHub login, from `shinsa remote status`.',
       },
     ],
-    act: async (client, values) => {
-      const userId = await findMemberId(client, readValue(values, 'login'));
-      const data = await client.api.remote.removeMember({ payload: { userId } });
+    act: Effect.fn('Surface.remoteRemoveMember')(function* (client, values) {
+      const userId = yield* findMemberId(client, readValue(values, 'login'));
+      const data = yield* client.api.remote.removeMember({ payload: { userId } });
       return { data, text: formatRemote(data) };
-    },
+    }),
   }),
   defineAction({
     path: ['remote', 'forget-device'],
@@ -233,13 +225,13 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
         description: 'The device’s key, from `shinsa remote status`.',
       },
     ],
-    act: async (client, values) => {
-      const data = await client.api.remote.removeDevice({
+    act: Effect.fn('Surface.remoteForgetDevice')(function* (client, values) {
+      const data = yield* client.api.remote.removeDevice({
         payload: {
           publicKey: readValue(values, 'device'),
         },
       });
       return { data, text: formatRemote(data) };
-    },
+    }),
   }),
 ];

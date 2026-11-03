@@ -1,64 +1,64 @@
 import { DomainError } from '@shinsa/core';
+import { Duration, Effect, Schedule } from 'effect';
 import {
   BUNDLE,
   createServerInstance,
   describeVersion,
-  type EngineService,
   type ServerHealth,
   type ShinsaBundle,
   STOP_DEADLINE_MS,
 } from '../instance/index.ts';
-import {
-  type Display,
-  describeFields,
-  describeInline,
-  describeMark,
-  type Progress,
-  type Tone,
-} from '../terminal/index.ts';
+import { describeError } from '../log/index.ts';
+import { describeFields, describeInline, describeMark, type Tone } from '../terminal/index.ts';
 import { createSurfaceClient } from './api.ts';
+import {
+  CliFailed,
+  type CommandVersion,
+  ENGINE_POLL_SCHEDULE,
+  ENGINE_STOPPED,
+  ENGINE_WAIT_MS,
+  type EngineControl,
+  type EngineIo,
+  HEALTH_TIMEOUT_MS,
+} from './schema.ts';
 
-export interface EngineControl {
-  bundled: boolean;
-  service: EngineService;
-  waitMs?: number;
-}
-
-export interface EngineIo extends EngineControl {
-  base: string;
-  display: Display;
-  write: (line?: string) => void;
-  startProgress: (text: string) => Progress;
-}
-
-export interface CommandVersion {
-  version: string;
-  commit: string | null;
-}
-
-export const HUMAN_ONLY_ENGINE_COMMANDS = ['stop', 'restart', 'engine'] as const;
-
-const HEALTH_TIMEOUT_MS = 1000;
-
-const ENGINE_WAIT_MS = 20_000;
+export {
+  type CommandVersion,
+  ENGINE_STOPPED,
+  type EngineControl,
+  type EngineIo,
+  HUMAN_ONLY_ENGINE_COMMANDS,
+} from './schema.ts';
 
 const ENGINE_STOP_WAIT_MS = STOP_DEADLINE_MS + 10_000;
 
 type EngineStop = 'stopped' | 'replaced' | 'forced';
 
-const ENGINE_POLL_MS = 250;
+export const readHealth = Effect.fn('Cli.readHealth')(function* (base: string) {
+  return yield* Effect.tryPromise({
+    try: async (signal) => {
+      const response = await fetch(`${base}/api/health`, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(HEALTH_TIMEOUT_MS)]),
+      });
+      return response.ok ? ((await response.json()) as ServerHealth) : null;
+    },
+    catch: (error) => new CliFailed({ message: describeError(error) }),
+  }).pipe(Effect.catch(() => Effect.succeed(null)));
+});
 
-export const ENGINE_STOPPED =
-  'The engine is not running. `shinsa start` starts it, and so does opening the Shinsa app.';
-
-export async function readHealth(base: string): Promise<ServerHealth | null> {
-  try {
-    const response = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
-    if (!response.ok) return null;
-    return (await response.json()) as ServerHealth;
-  } catch {
-    return null;
-  }
+export function waitFor<T, E, R>(
+  io: { waitMs?: number },
+  check: Effect.Effect<T | null, E, R>,
+  fallbackMs = ENGINE_WAIT_MS
+) {
+  return check.pipe(
+    Effect.repeat({
+      schedule: ENGINE_POLL_SCHEDULE.pipe(
+        Schedule.upTo({ duration: Duration.millis(io.waitMs ?? fallbackMs) })
+      ),
+      until: (found) => found !== null,
+    })
+  );
 }
 
 function describeEngine(health: ServerHealth) {
@@ -75,15 +75,12 @@ function writeOutcome(io: EngineIo, tone: Tone, symbol: 'check' | 'dot', text: s
   io.write(describeMark(style, tone, symbol, `${text}${tail}`));
 }
 
-async function withProgress<T>(io: EngineIo, text: string, work: () => Promise<T>) {
-  const progress = io.startProgress(text);
-  const started = Date.now();
-  try {
-    const result = await work();
-    return { result, took: describeDuration(Date.now() - started) };
-  } finally {
-    progress.stop();
-  }
+function withProgress<A, E, R>(io: EngineIo, text: string, work: Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => io.startProgress(text)),
+    () => Effect.timed(work),
+    (progress) => Effect.sync(() => progress.stop())
+  ).pipe(Effect.map(([elapsed, result]) => ({ result, took: describeDuration(Duration.toMillis(elapsed)) })));
 }
 
 function describeWait(io: EngineControl, fallbackMs = ENGINE_WAIT_MS) {
@@ -91,80 +88,74 @@ function describeWait(io: EngineControl, fallbackMs = ENGINE_WAIT_MS) {
   return `${seconds} second${seconds === 1 ? '' : 's'}`;
 }
 
-async function waitFor<T>(io: EngineControl, check: () => Promise<T | null>, fallbackMs = ENGINE_WAIT_MS) {
-  const deadline = Date.now() + (io.waitMs ?? fallbackMs);
-  while (Date.now() < deadline) {
-    const found = await check();
-    if (found !== null) return found;
-    await Bun.sleep(ENGINE_POLL_MS);
-  }
-  return null;
-}
-
-async function waitForEngine(io: EngineIo, accept: (health: ServerHealth) => boolean) {
-  const health = await waitFor(io, async () => {
-    const answer = await readHealth(io.base);
-    return answer && accept(answer) ? answer : null;
+const waitForEngine = Effect.fn('Cli.waitForEngine')(function* (
+  io: EngineIo,
+  accept: (health: ServerHealth) => boolean
+) {
+  const health = yield* waitFor(
+    io,
+    Effect.map(readHealth(io.base), (answer) => (answer && accept(answer) ? answer : null))
+  );
+  if (health) return health;
+  return yield* new CliFailed({
+    message: `The engine did not answer within ${describeWait(io)}. \`shinsa logs\` shows why.`,
   });
-  if (!health) {
-    throw new Error(`The engine did not answer within ${describeWait(io)}. \`shinsa logs\` shows why.`);
-  }
-  return health;
-}
+});
 
-function assertManaged(io: EngineControl) {
+const assertManaged = Effect.fn('Cli.assertManaged')(function* (io: EngineControl) {
   if (io.bundled) return;
-  throw new DomainError({
+  return yield* new DomainError({
     code: 'engine_unmanaged',
     message:
       'This shinsa runs from source, so it does not start or stop the engine. `bun dev` runs the engine and Ctrl-C stops it.',
   });
-}
+});
 
-async function assertEngineJob(io: EngineControl) {
-  assertManaged(io);
-  await io.service.assertInstalled();
-}
+const assertEngineJob = Effect.fn('Cli.assertEngineJob')(function* (io: EngineControl) {
+  yield* assertManaged(io);
+  yield* io.service.assertInstalled;
+});
 
-export async function startEngine(io: EngineIo) {
-  const running = await readHealth(io.base);
+export const startEngine = Effect.fn('Cli.startEngine')(function* (io: EngineIo) {
+  const running = yield* readHealth(io.base);
   if (running) {
     writeOutcome(io, 'success', 'dot', 'The engine is already running.', `${describeEngine(running)}.`);
     return;
   }
-  assertManaged(io);
-  const note = await io.service.prepare();
-  const { result: health, took } = await withProgress(io, 'Starting the engine', async () => {
-    await io.service.start();
-    return waitForEngine(io, () => true);
-  });
+  yield* assertManaged(io);
+  const note = yield* io.service.prepare;
+  const { result: health, took } = yield* withProgress(
+    io,
+    'Starting the engine',
+    io.service.start.pipe(Effect.andThen(waitForEngine(io, () => true)))
+  );
   writeOutcome(io, 'success', 'check', `Started the engine in ${took}.`, `${describeEngine(health)}.`);
   if (note) writeOutcome(io, 'info', 'dot', note, '');
-}
+});
 
-export async function stopEngine(io: EngineIo) {
-  await assertEngineJob(io);
-  const before = await readHealth(io.base);
+export const stopEngine = Effect.fn('Cli.stopEngine')(function* (io: EngineIo) {
+  yield* assertEngineJob(io);
+  const before = yield* readHealth(io.base);
   if (!before) {
     writeOutcome(io, 'dim', 'dot', 'The engine is not running.', '');
     return;
   }
-  const readStop = async (): Promise<EngineStop | null> => {
-    const answer = await readHealth(io.base);
+  const readStop = Effect.map(readHealth(io.base), (answer): EngineStop | null => {
     if (!answer) return 'stopped';
     return answer.pid === before.pid ? null : 'replaced';
-  };
-  const { manager } = io.service;
-  const { result: stop, took } = await withProgress(io, 'Stopping the engine', async () => {
-    await io.service.stop();
-    const clean = await waitFor(io, readStop, ENGINE_STOP_WAIT_MS);
-    if (clean) return clean;
-    await io.service.kill();
-    if (await waitFor(io, readStop)) return 'forced';
-    throw new Error(
-      `The engine is still running after ${describeWait(io, ENGINE_STOP_WAIT_MS)} and a forced stop. \`shinsa logs\` shows why.`
-    );
   });
+  const { manager } = io.service;
+  const stopping = Effect.gen(function* () {
+    yield* io.service.stop;
+    const clean = yield* waitFor(io, readStop, ENGINE_STOP_WAIT_MS);
+    if (clean) return clean;
+    yield* io.service.kill;
+    if (yield* waitFor(io, readStop)) return 'forced' as const;
+    return yield* new CliFailed({
+      message: `The engine is still running after ${describeWait(io, ENGINE_STOP_WAIT_MS)} and a forced stop. \`shinsa logs\` shows why.`,
+    });
+  });
+  const { result: stop, took } = yield* withProgress(io, 'Stopping the engine', stopping);
   if (stop === 'replaced') {
     writeOutcome(
       io,
@@ -194,35 +185,41 @@ export async function stopEngine(io: EngineIo) {
     `Stopped the engine in ${took}.`,
     'Runs it cut off resume when it starts again: `shinsa start` or any command that needs it.'
   );
-}
+});
 
-export async function restartEngine(io: EngineIo, whenIdle: boolean) {
-  await assertEngineJob(io);
-  const before = await readHealth(io.base);
+export const restartEngine = Effect.fn('Cli.restartEngine')(function* (io: EngineIo, whenIdle: boolean) {
+  yield* assertEngineJob(io);
+  const before = yield* readHealth(io.base);
   if (whenIdle) {
-    if (!before) throw new DomainError({ code: 'engine_stopped', message: ENGINE_STOPPED });
+    if (!before) return yield* new DomainError({ code: 'engine_stopped', message: ENGINE_STOPPED });
     const client = createSurfaceClient(io.base, `cli:${Bun.randomUUIDv7()}`);
-    const answer = await client.api.server.restart({ payload: { when: 'idle' } });
+    const answer = yield* client.api.server.restart({ payload: { when: 'idle' } });
     if (!answer.restarting) {
       writeOutcome(io, 'info', 'dot', 'The engine restarts once no agent is mid-turn.', '');
       return;
     }
   }
-  const { result: health, took } = await withProgress(io, 'Restarting the engine', async () => {
-    if (!whenIdle) await io.service.restart();
-    return waitForEngine(io, (answer) => answer.pid !== before?.pid);
-  });
+  const restarting = whenIdle ? Effect.void : io.service.restart;
+  const { result: health, took } = yield* withProgress(
+    io,
+    'Restarting the engine',
+    restarting.pipe(Effect.andThen(waitForEngine(io, (answer) => answer.pid !== before?.pid)))
+  );
   writeOutcome(io, 'success', 'check', `Restarted the engine in ${took}.`, `${describeEngine(health)}.`);
-}
+});
 
 export function resolveCommandVersion(bundle: ShinsaBundle | null = BUNDLE): CommandVersion {
   const instance = createServerInstance(bundle?.commit ?? null, 0, bundle);
   return { version: instance.version, commit: instance.commit };
 }
 
-export async function printVersion(io: EngineIo, json: boolean, bundle: ShinsaBundle | null = BUNDLE) {
+export const printVersion = Effect.fn('Cli.printVersion')(function* (
+  io: EngineIo,
+  json: boolean,
+  bundle: ShinsaBundle | null = BUNDLE
+) {
   const command = resolveCommandVersion(bundle);
-  const engine = await readHealth(io.base);
+  const engine = yield* readHealth(io.base);
   if (json) {
     io.write(JSON.stringify({ command, engine }, null, 2));
     return;
@@ -255,4 +252,4 @@ export async function printVersion(io: EngineIo, json: boolean, bundle: ShinsaBu
       )
     );
   }
-}
+});

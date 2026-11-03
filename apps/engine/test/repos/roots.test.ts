@@ -1,4 +1,5 @@
 import { describe, expect, setSystemTime, test } from 'bun:test';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigStore } from '../../src/config/index.ts';
 import { type Discoverer, Roots } from '../../src/repos/index.ts';
@@ -57,5 +58,13 @@ describe('Roots', () => {
     expect(roots.configured).toEqual(['/code', '/env']);
     expect(roots.fromEnvironment).toEqual(['/env']);
     expect(calls()).toBe(0);
+  });
+
+  test('without a discoverer of its own it looks through the home folder', async () => {
+    const home = createTempDir();
+    mkdirSync(join(home, 'Developer', 'app', '.git'), { recursive: true });
+    const store = new ConfigStore(join(createTempDir(), 'config.json'));
+    const roots = new Roots([], store, home);
+    expect(await roots.listRoots()).toEqual([join(home, 'Developer')]);
   });
 });

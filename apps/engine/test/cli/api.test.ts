@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { DomainError, type UserCommand } from '@shinsa/core';
+import { Effect } from 'effect';
 import { createApiClient, createSurfaceClient, NOT_RUNNING } from '../../src/cli/api.ts';
 
 interface Seen {
@@ -41,12 +42,14 @@ describe('the surface client', () => {
   test('every command of one invocation carries the key, the second and later ones numbered', async () => {
     const { base, seen } = serve(() => Response.json({ ok: true, taskId: 'task-1' }));
     const client = createSurfaceClient(base, 'cli:abc');
-    expect(await client.send({ type: 'task.cancel', taskId: 'task-1' } as UserCommand)).toEqual({
+    expect(
+      await Effect.runPromise(client.send({ type: 'task.cancel', taskId: 'task-1' } as UserCommand))
+    ).toEqual({
       ok: true,
       taskId: 'task-1',
     });
-    await client.send({ type: 'task.complete', taskId: 'task-1' } as UserCommand);
-    await client.send({ type: 'task.complete', taskId: 'task-2' } as UserCommand);
+    await Effect.runPromise(client.send({ type: 'task.complete', taskId: 'task-1' } as UserCommand));
+    await Effect.runPromise(client.send({ type: 'task.complete', taskId: 'task-2' } as UserCommand));
     expect(seen.map((request) => [request.path, request.key, request.type])).toEqual([
       ['/api/commands', 'cli:abc', 'application/json'],
       ['/api/commands', 'cli:abc:1', 'application/json'],
@@ -59,8 +62,12 @@ describe('the surface client', () => {
   test('reads are plain GETs and posts send JSON without a key', async () => {
     const { base, seen } = serve(() => Response.json({ fine: true }));
     const client = createSurfaceClient(base, 'cli:abc');
-    expect<unknown>(await client.api.tasks.list({ query: { status: 'all' } })).toEqual({ fine: true });
-    expect<unknown>(await client.api.accounts.refresh({ payload: { scope: 'now' } })).toEqual({ fine: true });
+    expect<unknown>(await Effect.runPromise(client.api.tasks.list({ query: { status: 'all' } }))).toEqual({
+      fine: true,
+    });
+    expect<unknown>(
+      await Effect.runPromise(client.api.accounts.refresh({ payload: { scope: 'now' } }))
+    ).toEqual({ fine: true });
     expect(seen).toEqual([
       {
         method: 'GET',
@@ -86,10 +93,10 @@ describe('the surface client', () => {
         : Response.json({ error: { message: 'Something broke.' } }, { status: 500 })
     );
     const client = createSurfaceClient(base, 'cli:abc');
-    const coded = await client.api.server.queue().catch((error: unknown) => error);
+    const coded = await Effect.runPromise(Effect.flip(client.api.server.queue()));
     expect(coded).toBeInstanceOf(DomainError);
     expect(coded).toMatchObject({ code: 'task_not_found', message: 'No task x.' });
-    expect(await client.api.state.repos().catch((error: unknown) => error)).toMatchObject({
+    expect(await Effect.runPromise(Effect.flip(client.api.state.repos()))).toMatchObject({
       code: 'request_failed',
       message: 'Something broke.',
     });
@@ -97,14 +104,14 @@ describe('the surface client', () => {
 
   test('a server that is not running, or answers without JSON, is explained', async () => {
     const { base } = serve(() => new Response('down', { status: 502 }));
-    await expect(createSurfaceClient(base, 'k').api.server.queue()).rejects.toThrow(
+    await expect(Effect.runPromise(createSurfaceClient(base, 'k').api.server.queue())).rejects.toThrow(
       `Shinsa on ${base} answered 502 without JSON.`
     );
-    await expect(createSurfaceClient('http://127.0.0.1:1', 'k').api.server.queue()).rejects.toThrow(
-      NOT_RUNNING
-    );
+    await expect(
+      Effect.runPromise(createSurfaceClient('http://127.0.0.1:1', 'k').api.server.queue())
+    ).rejects.toThrow(NOT_RUNNING);
     const plain = serve(() => new Response('fine', { status: 200 }));
-    await expect(createSurfaceClient(plain.base, 'k').api.server.queue()).rejects.toThrow(
+    await expect(Effect.runPromise(createSurfaceClient(plain.base, 'k').api.server.queue())).rejects.toThrow(
       `Shinsa on ${plain.base} answered without JSON.`
     );
   });
@@ -118,9 +125,13 @@ describe('the surface client', () => {
       });
       return client;
     };
-    expect<unknown>(await wakeOnto(base).api.server.health()).toEqual({ ok: true });
-    await expect(wakeOnto('http://127.0.0.1:1').api.server.health()).rejects.toThrow(NOT_RUNNING);
-    await expect(wakeOnto('http://127.0.0.1:1').api.server.health()).rejects.toThrow(NOT_RUNNING);
+    expect<unknown>(await Effect.runPromise(wakeOnto(base).api.server.health())).toEqual({ ok: true });
+    await expect(Effect.runPromise(wakeOnto('http://127.0.0.1:1').api.server.health())).rejects.toThrow(
+      NOT_RUNNING
+    );
+    await expect(Effect.runPromise(wakeOnto('http://127.0.0.1:1').api.server.health())).rejects.toThrow(
+      NOT_RUNNING
+    );
     expect(wakes).toBe(2);
     expect(createApiClient(base, () => Promise.resolve(false)).base).toBe(base);
   });
@@ -130,10 +141,12 @@ describe('the api client', () => {
   test('reads the queue and sends commands under a fresh cli: key per client', async () => {
     const { base, seen } = serve(() => Response.json({ ok: true, taskId: null }));
     const first = createApiClient(base);
-    await first.readQueue();
-    await first.sendCommand({ type: 'task.cancel', taskId: 'task-1' } as UserCommand);
-    await first.readRepos();
-    await createApiClient(base).sendCommand({ type: 'task.cancel', taskId: 'task-1' } as UserCommand);
+    await Effect.runPromise(first.readQueue());
+    await Effect.runPromise(first.sendCommand({ type: 'task.cancel', taskId: 'task-1' } as UserCommand));
+    await Effect.runPromise(first.readRepos());
+    await Effect.runPromise(
+      createApiClient(base).sendCommand({ type: 'task.cancel', taskId: 'task-1' } as UserCommand)
+    );
     expect(seen.map((request) => request.path)).toEqual([
       '/api/queue',
       '/api/commands',

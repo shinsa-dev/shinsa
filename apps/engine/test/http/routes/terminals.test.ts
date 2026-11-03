@@ -2,6 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ServiceDefinition, ServiceSuggestion, TerminalInfo, TerminalsSnapshot } from '@shinsa/core';
+import { Effect } from 'effect';
 import { ServiceRefiner, Terminals } from '../../../src/terminals/index.ts';
 import { createTempDir, until } from '../../helpers/index.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
@@ -67,7 +68,7 @@ describe('terminals over HTTP', () => {
       status: 'running',
     });
     await until('the command ran', async () =>
-      (await terminals.find(created.terminal.id).serializeScreen()).includes('hi-42')
+      (await Effect.runPromise(terminals.find(created.terminal.id).serializeScreen())).includes('hi-42')
     );
     expect(await read(`/api/terminals/${created.terminal.id}/foreground`)).toEqual({ program: null });
     const second = (

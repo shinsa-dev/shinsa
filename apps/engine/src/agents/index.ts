@@ -14,6 +14,6 @@ export {
   ProviderRegistry,
   type SessionStarter,
 } from './providers/index.ts';
-export { SilenceWatch } from './silence.ts';
+export { watchSilence } from './silence.ts';
 export { type NoticeListener, RunSupervisor, type SupervisorOptions } from './supervisor.ts';
 export { Transcripts } from './transcripts/index.ts';

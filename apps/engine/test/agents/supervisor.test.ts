@@ -10,6 +10,7 @@ import {
   type ShinsaCommand,
   type ShinsaState,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import {
   type RunRejection,
   RunSupervisor,
@@ -2426,7 +2427,7 @@ describe('the process tools and what a run cost', () => {
       for (const run of runs) state.runs[run.id] = run;
     };
     const sessions = createSessions();
-    const unused = () => Promise.reject(new Error('Not in this test.'));
+    const unused = () => Effect.die(new Error('Not in this test.'));
     const manage = {
       baseUrl: () => 'http://x',
       projects: { upsertRepo: unused, upsertFolder: unused },

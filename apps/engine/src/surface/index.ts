@@ -1,4 +1,5 @@
 import { USER_COMMAND_TYPES, type UserCommand } from '@shinsa/core';
+import { Effect } from 'effect';
 import {
   type Display,
   describeHeading,
@@ -15,8 +16,9 @@ import { GATE_SPECS } from './gates.ts';
 import { MEMORY_SPECS } from './memory.ts';
 import { REMOTE_SPECS } from './remote.ts';
 import { SCHEDULE_SPECS } from './schedules.ts';
+import type { SurfaceSpec } from './schema.ts';
 import { SERVICE_SPECS } from './services.ts';
-import { describeTaskLink, type SurfaceSpec } from './spec.ts';
+import { describeTaskLink } from './spec.ts';
 import { SYSTEM_SPECS } from './system.ts';
 import { TASK_SPECS } from './tasks.ts';
 import { TEAM_SPECS } from './teams.ts';
@@ -30,7 +32,7 @@ export {
   type SurfaceHookSecrets,
 } from './client.ts';
 export { readArgv, readToolInput, resolveInputSchema, type Values } from './fields.ts';
-export type { SurfaceSpec } from './spec.ts';
+export { type SurfaceFailure, SurfaceCallFailed, type SurfaceResult, type SurfaceSpec } from './schema.ts';
 export { describeQueue, describeUptime, QUEUE_EMPTY } from './system.ts';
 
 const COMMAND_SPEC: SurfaceSpec = {
@@ -49,11 +51,11 @@ const COMMAND_SPEC: SurfaceSpec = {
     },
     { name: 'fields', kind: 'json', description: 'Its fields as a JSON object, such as {"taskId":"…"}.' },
   ],
-  run: async (client, values: Values) => {
-    const receipt = await client.send({ ...(values.fields as object), type: values.type } as UserCommand);
+  run: Effect.fn('Surface.command')(function* (client, values: Values) {
+    const receipt = yield* client.send({ ...(values.fields as object), type: values.type } as UserCommand);
     const link = describeTaskLink(client, receipt);
     return { data: receipt, text: link ? `Done.\n${link}` : 'Done.' };
-  },
+  }),
 };
 
 export const SURFACE: SurfaceSpec[] = [

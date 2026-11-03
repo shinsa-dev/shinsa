@@ -1,5 +1,5 @@
 import { describe, expect, setSystemTime, test } from 'bun:test';
-import { MINUTE_MS } from '@shinsa/core';
+import { DomainError, MINUTE_MS } from '@shinsa/core';
 import type { SurfaceHookSecrets } from '../../src/surface/index.ts';
 import { createFakeClient, createTaskDetail, findSpec, runSpec } from './fixtures.ts';
 
@@ -198,6 +198,33 @@ describe('writing a schedule', () => {
         hookSecrets
       )
     ).rejects.toThrow('secret_ref must be the secret-ref');
+  });
+
+  test('a signed webhook the agent’s secret check refuses is refused with that check’s failure', async () => {
+    const signed = ['--webhook', '--signature-header', 'x-sig', '--new-task'];
+    const refusing: SurfaceHookSecrets = {
+      assertSecret: () => {
+        throw new DomainError({
+          code: 'schedule_invalid',
+          message: 'A signature check needs the signing secret.',
+        });
+      },
+      writeSecret: () => null,
+    };
+    await expect(write(signed, refusing)).rejects.toMatchObject({
+      code: 'schedule_invalid',
+      message: 'A signature check needs the signing secret.',
+    });
+    const breaking: SurfaceHookSecrets = {
+      assertSecret: () => {
+        throw new Error('secrets.json is unreadable');
+      },
+      writeSecret: () => null,
+    };
+    await expect(write(signed, breaking)).rejects.toMatchObject({
+      _tag: 'SurfaceCallFailed',
+      message: 'Error: secrets.json is unreadable',
+    });
   });
 
   test('a trigger core refuses, or both targets at once, is refused before anything is sent', async () => {

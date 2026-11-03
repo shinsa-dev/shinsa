@@ -2,6 +2,7 @@ import type { TerminalColors } from '@shinsa/core';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { Terminal } from '@xterm/headless';
+import { Effect } from 'effect';
 
 const SCROLLBACK_LINES = 5_000;
 
@@ -99,8 +100,10 @@ export class TerminalMirror {
     return lines.slice(-count);
   }
 
-  flush() {
-    return new Promise<void>((resolve) => this.#terminal.write('', resolve));
+  get flushed() {
+    return Effect.callback<void>((resume) => {
+      this.#terminal.write('', () => resume(Effect.void));
+    });
   }
 
   dispose() {

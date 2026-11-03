@@ -127,6 +127,14 @@ describe('upsertRepo', () => {
       'Could not register app.'
     );
   });
+  test('a registration the log cannot take fails with the reason', async () => {
+    const { path } = await createGitRepo({ remote: false });
+    const { engine } = createStubEngine();
+    const broken = Object.assign(Object.create(engine), {
+      dispatch: () => Promise.reject(new Error('log full')),
+    }) as typeof engine;
+    await expect(upsertRepo(broken, path, () => Promise.resolve(null))).rejects.toThrow('log full');
+  });
 });
 
 describe('upsertProjectFolderRepo', () => {

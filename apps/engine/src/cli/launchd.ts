@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DomainError, resolveEngineLabel } from '@shinsa/core';
+import { Effect } from 'effect';
 import {
   type EngineService,
-  runServiceOrThrow,
+  runServiceCommand,
   SERVICE_CARRIED_ENV,
   SERVICE_MARKER,
   type ServiceRunner,
@@ -86,21 +87,18 @@ export function isAppJob(printed: string) {
   return job.bundleId !== null || Boolean(job.program?.includes('.app/Contents/'));
 }
 
-function readAgent(path: string) {
-  return existsSync(path) ? readFileSync(path, 'utf8') : null;
-}
-
 export function createLaunchdService(options: LaunchdOptions): EngineService {
   const { uid, launchctl, ownsJob, inApp = true, program = process.execPath, env = {} } = options;
   const target = resolveEngineTarget(uid);
   const label = resolveEngineLabel(APP_BUNDLE_ID);
   const path = resolveLaunchAgentPath(options.home ?? homedir(), label);
-  const run = (args: string[]) => runServiceOrThrow('launchctl', launchctl, args);
+  const run = (args: string[]) => runServiceCommand('launchctl', launchctl, args);
+  const printJob = Effect.suspend(() => launchctl(['print', target]));
 
-  const assertInstalled = async () => {
-    const printed = await launchctl(['print', target]);
+  const assertInstalled = Effect.gen(function* () {
+    const printed = yield* printJob;
     if (!printed.ok) {
-      throw new DomainError({
+      return yield* new DomainError({
         code: 'engine_not_installed',
         message: inApp
           ? 'The engine is not set up yet. Open the Shinsa app once and it sets it up.'
@@ -109,60 +107,62 @@ export function createLaunchdService(options: LaunchdOptions): EngineService {
     }
     if (ownsJob(printed.output)) return;
     if (inApp) {
-      throw new DomainError({
+      return yield* new DomainError({
         code: 'engine_not_this_app',
         message:
           'This shinsa is not the one inside the Shinsa app that runs your engine, so it leaves that engine alone. Use `shinsa` from your PATH, which the app keeps pointing at itself.',
       });
     }
     if (isAppJob(printed.output)) {
-      throw new DomainError({
+      return yield* new DomainError({
         code: 'engine_not_this_app',
         message:
           'The Shinsa app runs the engine on this Mac, so this shinsa leaves it alone. Use the app, or `shinsa` from your PATH, which the app keeps pointing at itself.',
       });
     }
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'engine_not_this_install',
       message:
         'Another shinsa set up the engine on this Mac, so this one leaves it alone. `shinsa start` from this one takes it over.',
     });
-  };
+  });
 
-  const writeAgent = async (printed: { ok: boolean; output: string }) => {
+  const writeAgent = Effect.gen(function* () {
+    const printed = yield* printJob;
     if (printed.ok && isAppJob(printed.output)) {
       if (ownsJob(printed.output)) return;
-      throw new DomainError({
+      return yield* new DomainError({
         code: 'engine_beside_app',
         message:
           'The Shinsa app runs the engine on this Mac, so this shinsa does not start a second one on the same port. Use the app, or quit and remove it to run this engine on its own.',
       });
     }
     const agent = resolveLaunchAgent(label, program, env);
-    if (printed.ok && readAgent(path) === agent) return;
-    if (printed.ok) await run(['bootout', target]);
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, agent);
-    await run(['bootstrap', `gui/${uid}`, path]);
-  };
+    const written = yield* Effect.sync(() => (existsSync(path) ? readFileSync(path, 'utf8') : null));
+    if (printed.ok && written === agent) return;
+    if (printed.ok) yield* run(['bootout', target]);
+    yield* Effect.sync(() => {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, agent);
+    });
+    yield* run(['bootstrap', `gui/${uid}`, path]);
+  });
+
+  const kick = Effect.gen(function* () {
+    const printed = yield* printJob;
+    if (!printed.ok || !ownsJob(printed.output)) return false;
+    return (yield* launchctl(['kickstart', target])).ok;
+  });
 
   return {
     manager: 'launchd',
     revivesKilled: true,
-    prepare: async () => {
-      if (inApp) await assertInstalled();
-      else await writeAgent(await launchctl(['print', target]));
-      return null;
-    },
+    prepare: Effect.as(inApp ? assertInstalled : writeAgent, null),
     assertInstalled,
-    start: () => run(['kickstart', target]),
-    stop: () => run(['kill', 'SIGTERM', target]),
-    kill: () => run(['kill', 'SIGKILL', target]),
-    restart: () => run(['kickstart', '-k', target]),
-    kick: async () => {
-      const printed = await launchctl(['print', target]);
-      if (!printed.ok || !ownsJob(printed.output)) return false;
-      return (await launchctl(['kickstart', target])).ok;
-    },
+    start: run(['kickstart', target]),
+    stop: run(['kill', 'SIGTERM', target]),
+    kill: run(['kill', 'SIGKILL', target]),
+    restart: run(['kickstart', '-k', target]),
+    kick,
   };
 }

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ServiceDefinition, ServiceSuggestion, TerminalInfo, TerminalsSnapshot } from '@shinsa/core';
+import { Effect } from 'effect';
 import { ServiceRefiner } from '../../../src/terminals/index.ts';
 import { resolveServicePlace, resolveServiceRunIn } from '../../../src/terminals/places.ts';
 import { until, writeFiles } from '../../helpers/index.ts';
@@ -153,7 +154,7 @@ describe('services over HTTP', () => {
     };
     expect(started.terminal).toMatchObject({ serviceId: service.id, status: 'running', port: 4100 });
     await until('it printed', async () =>
-      (await terminals.find(started.terminal.id).serializeScreen()).includes('up-4100')
+      (await Effect.runPromise(terminals.find(started.terminal.id).serializeScreen())).includes('up-4100')
     );
     await post(`/api/services/${service.id}/stop`, {}, null);
     expect(terminals.find(started.terminal.id).info.status).toBe('stopped');

@@ -8,9 +8,15 @@ import {
   type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
+import { Duration, Effect, Layer } from 'effect';
+import { JsonFile } from '../../src/files/service.ts';
 import { Terminals, type TerminalsOptions } from '../../src/terminals/index.ts';
+import { TerminalPty } from '../../src/terminals/pty/service.ts';
+import { PortUnavailable } from '../../src/terminals/schema.ts';
+import { makeTerminals } from '../../src/terminals/service.ts';
 import { TYPE_LIMITS } from '../../src/terminals/session.ts';
 import { parseStoredService, parseStoredTerminal } from '../../src/terminals/store.ts';
+import { TerminalFiles } from '../../src/terminals/store/service.ts';
 import { captureLogs, createTempDir, until } from '../helpers/index.ts';
 import { createFakeSpawner, createFakeViewer, createInfo } from './fakes.ts';
 
@@ -141,7 +147,7 @@ describe('Terminals', () => {
     const again = createTerminals({ dataDir }).terminals;
     const restored = again.find(terminal.id);
     expect(restored.info).toMatchObject({ status: 'stopped', endedAt: 100 });
-    expect(await restored.serializeScreen()).toContain('dev server on :3000');
+    expect(await Effect.runPromise(restored.serializeScreen())).toContain('dev server on :3000');
     expect(again.snapshot().terminals).toHaveLength(1);
   });
 
@@ -488,6 +494,47 @@ describe('Terminals services', () => {
     });
     expect(terminals.startService(picked.id, main('repository')).port).toBe(5001);
     expect(fake.spawned[2]?.options.env.PORT).toBe('5001');
+  });
+
+  it('says so when the machine has no free port for a task’s run', async () => {
+    const fake = createFakeSpawner();
+    const pty = Layer.succeed(
+      TerminalPty,
+      TerminalPty.of({
+        spawn: () => Effect.die('a run without a port never starts'),
+        readForeground: () => Effect.succeed(null),
+        pickPort: () => Effect.fail(new PortUnavailable({ message: 'No free port for the service.' })),
+      })
+    );
+    const run = Effect.gen(function* () {
+      const terminals = yield* makeTerminals({
+        dataDir: createTempDir(),
+        home: '/home/ada',
+        version: '1.0.0',
+        readOnly: false,
+        env: { SHELL: '/bin/fish' },
+        spawn: fake.spawn,
+        now: Effect.succeed(100),
+        newId: Effect.sync(() => Bun.randomUUIDv7()),
+        notifyMs: Duration.millis(1),
+        screenMs: Duration.millis(1),
+      });
+      const service = yield* terminals.addService('p1', {
+        ...SERVICE,
+        previewUrl: 'http://localhost:{port}',
+      });
+      return yield* Effect.flip(
+        terminals.startService(service.id, { cwd: '/wt/a', place: 'worktree', taskId: 'a' })
+      );
+    });
+    const failure = await Effect.runPromise(
+      run.pipe(Effect.provide(Layer.merge(TerminalFiles.layer.pipe(Layer.provide(JsonFile.layer)), pty)))
+    );
+    expect(failure).toMatchObject({
+      code: 'service_port_unavailable',
+      message: 'No free port for the service.',
+    });
+    expect(fake.spawned).toHaveLength(0);
   });
 
   it('refuses more services than the limit', () => {

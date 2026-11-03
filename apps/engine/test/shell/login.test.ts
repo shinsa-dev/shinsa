@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { log } from '../../src/log/index.ts';
 import type { CommandResult } from '../../src/shell/index.ts';
 import {
   applyLoginEnv,
@@ -14,6 +13,7 @@ import {
   resolveDefaultShell,
 } from '../../src/shell/login.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 
 const FAKE_SHELL = resolve(import.meta.dirname, '../helpers/bin/login-shell');
 
@@ -91,7 +91,7 @@ describe('the login shell environment', () => {
       FAKE_LOGIN_SHELL_EXEC_INTERACTIVE: '1',
       FAKE_LOGIN_SHELL_LOG: calls,
     });
-    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const env = await createLoginEnvReader({ SHELL: FAKE_SHELL, HOME: home }).read();
       expect(env).toMatchObject({ FAKE_LOGIN_VAR: 'from the login shell' });
@@ -100,7 +100,7 @@ describe('the login shell environment', () => {
         `-lic ${LOGIN_SCRIPT}`,
         `-lc ${LOGIN_SCRIPT}`,
       ]);
-      expect(info).toHaveBeenCalledWith('[Serve] Read the login shell environment without -i', {
+      expect(logs.fieldsOf('[Serve] Read the login shell environment without -i')).toContainEqual({
         shell: FAKE_SHELL,
         fish: null,
         attempts: [
@@ -109,7 +109,7 @@ describe('the login shell environment', () => {
         ],
       });
     } finally {
-      info.mockRestore();
+      logs.restore();
     }
   });
 
@@ -123,7 +123,7 @@ describe('the login shell environment', () => {
       FAKE_LOGIN_SHELL_LOG: calls,
       FAKE_FISH_LOG: calls,
     });
-    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const env = await createLoginEnvReader({ SHELL: FAKE_SHELL, HOME: home }).read();
       expect(env).toMatchObject({ FAKE_LOGIN_VAR: 'from the login shell', FAKE_FISH_VAR: 'from fish' });
@@ -139,12 +139,11 @@ describe('the login shell environment', () => {
         `-lc ${LOGIN_SCRIPT}`,
         `fish -lc ${LOGIN_SCRIPT}`,
       ]);
-      expect(info).toHaveBeenCalledWith(
-        '[Serve] Read the login shell environment without -i',
+      expect(logs.fieldsOf('[Serve] Read the login shell environment without -i')).toContainEqual(
         expect.objectContaining({ fish: join(FAKE_FISH_DIR, 'fish') })
       );
     } finally {
-      info.mockRestore();
+      logs.restore();
     }
   });
 
@@ -202,12 +201,12 @@ describe('the login shell environment', () => {
   });
 
   test('a shell that hangs, fails or is missing gives nothing, and says so', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       withShellEnv({ FAKE_LOGIN_SHELL_HANG: '1' });
       const hung = createLoginEnvReader({ SHELL: FAKE_SHELL, HOME: createTempDir() }, { timeoutMs: 200 });
       expect(await hung.read()).toBeNull();
-      expect(warn).toHaveBeenLastCalledWith('[Serve] Could not read the login shell environment', {
+      expect(logs.fieldsOf('[Serve] Could not read the login shell environment').at(-1)).toEqual({
         shell: FAKE_SHELL,
         fish: null,
         attempts: [
@@ -220,9 +219,9 @@ describe('the login shell environment', () => {
       expect(await createLoginEnvReader({ SHELL: FAKE_SHELL, HOME: createTempDir() }).read()).toBeNull();
       const missing = join(createTempDir(), 'no-such-shell');
       expect(await createLoginEnvReader({ SHELL: missing, HOME: createTempDir() }).read()).toBeNull();
-      expect(warn).toHaveBeenCalledTimes(3);
+      expect(logs.fieldsOf('[Serve] Could not read the login shell environment')).toHaveLength(3);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 });

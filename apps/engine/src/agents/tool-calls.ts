@@ -52,19 +52,21 @@ export class ToolCalls {
         readTask: (taskId) => Effect.sync(() => resolveTaskReading(engine.state, transcripts, taskId)),
         manage: manage
           ? ({ name, input, runId, attemptId, requestId, taskId }) =>
-              attempt(() => {
-                const call = readSurfaceToolCall(name, input);
-                const client = createManageClient({
-                  engine,
-                  base: manage.baseUrl(),
-                  key: requestId === undefined ? null : `agent:${runId}:${attemptId}:call:${requestId}`,
-                  byTask: taskId,
-                  projects: manage.projects,
-                  route: manage.route,
-                  ...(manage.hookSecrets ? { hookSecrets: manage.hookSecrets(taskId) } : {}),
-                });
-                return call.spec.run(client, call.values);
-              }).pipe(Effect.map(({ text }) => text))
+              Effect.try({ try: () => readSurfaceToolCall(name, input), catch: refuse }).pipe(
+                Effect.flatMap((call) => {
+                  const client = createManageClient({
+                    engine,
+                    base: manage.baseUrl(),
+                    key: requestId === undefined ? null : `agent:${runId}:${attemptId}:call:${requestId}`,
+                    byTask: taskId,
+                    projects: manage.projects,
+                    route: manage.route,
+                    ...(manage.hookSecrets ? { hookSecrets: manage.hookSecrets(taskId) } : {}),
+                  });
+                  return Effect.mapError(call.spec.run(client, call.values), refuse);
+                }),
+                Effect.map(({ text }) => text)
+              )
           : null,
         handleOther: (name, { runId, attemptId, input, signal, requestId }, helpers) => {
           const dispatch = (command: Parameters<typeof helpers.dispatch>[0], id?: string) =>

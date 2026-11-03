@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { DomainError } from '@shinsa/core';
+import { Effect } from 'effect';
 import { createProjectChanges } from '../../src/projects/changes.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
@@ -34,8 +36,12 @@ describe('a project’s repositories and folders', () => {
       resolveLogin: () => Promise.resolve(null),
       userHome: home,
     });
-    await changes.upsertFolder(projectId, '~/basket', { onBehalf: true, byTask: 'task-1' });
-    const again = await changes.upsertFolder(projectId, '~/basket', { onBehalf: true, byTask: 'task-1' });
+    await Effect.runPromise(
+      changes.upsertFolder(projectId, '~/basket', { onBehalf: true, byTask: 'task-1' })
+    );
+    const again = await Effect.runPromise(
+      changes.upsertFolder(projectId, '~/basket', { onBehalf: true, byTask: 'task-1' })
+    );
     expect(again.project.folders).toEqual([realpathSync(join(home, 'basket'))]);
     expect(engine.state.onBehalfActions?.map((action) => action.byTaskId)).toEqual(['task-1']);
   });
@@ -48,15 +54,51 @@ describe('a project’s repositories and folders', () => {
       resolveLogin: () => Promise.resolve(null),
       userHome: home,
     });
-    const { repo: added } = await changes.upsertRepo(projectId, repo.path, {
-      onBehalf: true,
-      byTask: 'task-1',
-    });
+    const { repo: added } = await Effect.runPromise(
+      changes.upsertRepo(projectId, repo.path, { onBehalf: true, byTask: 'task-1' })
+    );
     expect(added.projectId).toBe(projectId);
     expect(log.readEvents().events.find((event) => event.type === 'repo.registered')).toMatchObject({
       onBehalf: true,
       byTask: 'task-1',
     });
     expect(engine.state.onBehalfActions).toEqual([]);
+  });
+
+  test('a change the engine fails to record fails with its reason', async () => {
+    const { home, engine, projectId } = await setup();
+    mkdirSync(join(home, 'shelf'));
+    const broken = {
+      get state() {
+        return engine.state;
+      },
+      dispatch: () => Promise.reject(new Error('log closed')),
+    } as unknown as typeof engine;
+    const changes = createProjectChanges({
+      engine: broken,
+      resolveLogin: () => Promise.resolve(null),
+      userHome: home,
+    });
+    const failure = await Effect.runPromise(Effect.flip(changes.upsertFolder(projectId, '~/shelf')));
+    expect(failure).toMatchObject({ _tag: 'ProjectChangeFailed', message: 'log closed' });
+  });
+
+  test('a refusal from the engine passes through as its own error', async () => {
+    const { home, engine, projectId } = await setup();
+    mkdirSync(join(home, 'shelf'));
+    const refusing = {
+      get state() {
+        return engine.state;
+      },
+      dispatch: () =>
+        Promise.reject(new DomainError({ code: 'project_not_found', message: 'No such project.' })),
+    } as unknown as typeof engine;
+    const changes = createProjectChanges({
+      engine: refusing,
+      resolveLogin: () => Promise.resolve(null),
+      userHome: home,
+    });
+    const failure = await Effect.runPromise(Effect.flip(changes.upsertFolder(projectId, '~/shelf')));
+    expect(failure).toMatchObject({ _tag: 'DomainError', code: 'project_not_found' });
   });
 });

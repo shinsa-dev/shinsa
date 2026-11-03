@@ -55,10 +55,6 @@ export function pickFreePort(
   );
 }
 
-export function readForegroundProgram(pid: number) {
-  return edgeRuntime.runPromise(TerminalPty.use((pty) => pty.readForeground(pid)));
-}
-
 export function resolveTerminalEnv(env: Env, version: string): Record<string, string> {
   const next: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {

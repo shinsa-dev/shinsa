@@ -1,9 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect } from 'effect';
 import { createLaunchdService, isAppJob, resolveLaunchAgent } from '../../src/cli/launchd.ts';
 import type { ServiceRunner } from '../../src/instance/index.ts';
+import { edgeRuntime } from '../../src/runtime/edge.ts';
+import type { Shell } from '../../src/shell/service.ts';
 import { createTempDir } from '../helpers/index.ts';
+
+function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
+  return edgeRuntime.runPromise(effect);
+}
 
 const TARGET = 'gui/501/studio.overclock.shinsa.engine';
 
@@ -18,8 +25,8 @@ function createFakeLaunchctl(printed: string | null) {
   const calls: string[][] = [];
   const launchctl: ServiceRunner = (args) => {
     calls.push(args);
-    if (args[0] === 'print') return Promise.resolve({ ok: printed !== null, output: printed ?? '' });
-    return Promise.resolve({ ok: true, output: '' });
+    if (args[0] === 'print') return Effect.succeed({ ok: printed !== null, output: printed ?? '' });
+    return Effect.succeed({ ok: true, output: '' });
   };
   return { calls, launchctl };
 }
@@ -45,22 +52,22 @@ describe('the launchd service', () => {
     const calls: string[][] = [];
     const launchctl = (args: string[]) => {
       calls.push(args);
-      return Promise.resolve({ ok: true, output: 'program = /Applications/Shinsa.app/x' });
+      return Effect.succeed({ ok: true, output: 'program = /Applications/Shinsa.app/x' });
     };
-    expect(await createLaunchdService({ uid: 501, launchctl, ownsJob: () => false }).kick()).toBe(false);
+    expect(await run(createLaunchdService({ uid: 501, launchctl, ownsJob: () => false }).kick)).toBe(false);
     expect(calls).toEqual([['print', TARGET]]);
     const owned = createLaunchdService({ uid: 501, launchctl, ownsJob: () => true });
-    expect(await owned.kick()).toBe(true);
+    expect(await run(owned.kick)).toBe(true);
     expect(calls.slice(1)).toEqual([
       ['print', TARGET],
       ['kickstart', TARGET],
     ]);
     const missing = createLaunchdService({
       uid: 501,
-      launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      launchctl: () => Effect.succeed({ ok: false, output: '' }),
       ownsJob: () => true,
     });
-    expect(await missing.kick()).toBe(false);
+    expect(await run(missing.kick)).toBe(false);
     expect(owned.manager).toBe('launchd');
     expect(owned.revivesKilled).toBe(true);
   });
@@ -71,20 +78,20 @@ describe('the launchd service', () => {
       launchctl: createFakeLaunchctl(null).launchctl,
       ownsJob: () => true,
     });
-    await expect(missing.prepare()).rejects.toThrow('Open the Shinsa app once and it sets it up.');
+    await expect(run(missing.prepare)).rejects.toThrow('Open the Shinsa app once and it sets it up.');
     const fake = createFakeLaunchctl(APP_JOB);
     const set = createLaunchdService({ uid: 501, launchctl: fake.launchctl, ownsJob: () => true });
-    expect(await set.prepare()).toBeNull();
+    expect(await run(set.prepare)).toBeNull();
     expect(fake.calls).toEqual([['print', TARGET]]);
     const other = createLaunchdService({ uid: 501, launchctl: fake.launchctl, ownsJob: () => false });
-    await expect(other.assertInstalled()).rejects.toThrow('is not the one inside the Shinsa app');
+    await expect(run(other.assertInstalled)).rejects.toThrow('is not the one inside the Shinsa app');
   });
 });
 
 describe('the engine on a Mac without the app', () => {
   test('writes and loads its own agent under the app’s label, carrying where its data lives', async () => {
     const { service, calls, plist } = createStandalone(null);
-    expect(await service.prepare()).toBeNull();
+    expect(await run(service.prepare)).toBeNull();
     expect(calls).toEqual([
       ['print', TARGET],
       ['bootstrap', 'gui/501', plist],
@@ -106,13 +113,13 @@ describe('the engine on a Mac without the app', () => {
 
   test('leaves a loaded agent that is already current, and replaces a stale one', async () => {
     const current = createStandalone(`program = ${PROGRAM}`);
-    await current.service.prepare();
+    await run(current.service.prepare);
     const written = readFileSync(current.plist, 'utf8');
     current.calls.length = 0;
-    await current.service.prepare();
+    await run(current.service.prepare);
     expect(current.calls).toEqual([['print', TARGET]]);
     writeFileSync(current.plist, written.replace(PROGRAM, '/old/shinsa'));
-    await current.service.prepare();
+    await run(current.service.prepare);
     expect(current.calls.slice(1)).toEqual([
       ['print', TARGET],
       ['bootout', TARGET],
@@ -123,8 +130,10 @@ describe('the engine on a Mac without the app', () => {
 
   test('takes over the job another standalone shinsa set up', async () => {
     const { service, calls, plist } = createStandalone('program = /old/bin/shinsa');
-    await expect(service.assertInstalled()).rejects.toThrow('Another shinsa set up the engine on this Mac');
-    await service.prepare();
+    await expect(run(service.assertInstalled)).rejects.toThrow(
+      'Another shinsa set up the engine on this Mac'
+    );
+    await run(service.prepare);
     expect(calls.slice(1)).toEqual([
       ['print', TARGET],
       ['bootout', TARGET],
@@ -134,17 +143,17 @@ describe('the engine on a Mac without the app', () => {
 
   test('never starts a second engine beside the app’s', async () => {
     const { service, calls, plist } = createStandalone(APP_JOB);
-    await expect(service.prepare()).rejects.toThrow('does not start a second one on the same port');
-    await expect(service.assertInstalled()).rejects.toThrow('The Shinsa app runs the engine on this Mac');
+    await expect(run(service.prepare)).rejects.toThrow('does not start a second one on the same port');
+    await expect(run(service.assertInstalled)).rejects.toThrow('The Shinsa app runs the engine on this Mac');
     expect(calls.every(([verb]) => verb === 'print')).toBe(true);
     expect(existsSync(plist)).toBe(false);
     const owned = createStandalone(APP_JOB, () => true);
-    expect(await owned.service.prepare()).toBeNull();
+    expect(await run(owned.service.prepare)).toBeNull();
     expect(existsSync(owned.plist)).toBe(false);
   });
 
   test('says `shinsa start` sets it up when nothing is loaded', async () => {
-    await expect(createStandalone(null).service.assertInstalled()).rejects.toThrow(
+    await expect(run(createStandalone(null).service.assertInstalled)).rejects.toThrow(
       'The engine is not set up yet. `shinsa start` sets it up.'
     );
   });

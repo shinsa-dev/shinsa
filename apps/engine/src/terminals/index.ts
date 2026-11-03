@@ -1,85 +1,45 @@
-import {
-  DomainError,
-  SERVICE_LIMITS,
-  type ServiceDefinition,
-  type ShinsaState,
-  TERMINAL_LIMITS,
-  type TerminalForeground,
-  type TerminalInfo,
-  type TerminalsSnapshot,
-} from '@shinsa/core';
-import { resolveServiceRunIn } from './places.ts';
-import {
-  pickFreePort,
-  readForegroundProgram,
-  resolveLoginShell,
-  resolveServiceCommand,
-  resolveShellCommand,
-  resolveTerminalEnv,
-  spawnTerminalProcess,
-} from './pty.ts';
+import type { ShinsaState } from '@shinsa/core';
+import { Duration, Effect } from 'effect';
+import { edgeRuntime } from '../runtime/edge.ts';
 import {
   NOTIFY_MS,
   type RemoteUrlSource,
   SCREEN_MS,
   type ServiceInput,
   type ServiceRun,
+  type TerminalsHandle,
+  type TerminalsListener,
   type TerminalStart,
   type TerminalsOptions,
 } from './schema.ts';
-import { TerminalSession, type TerminalViewer } from './session.ts';
-import { TerminalStore } from './store.ts';
-
-type Listener = (snapshot: TerminalsSnapshot) => void;
-
-function normaliseName(name: string | null) {
-  const trimmed = name?.trim().slice(0, TERMINAL_LIMITS.name) ?? '';
-  return trimmed || null;
-}
+import { makeTerminals } from './service.ts';
+import type { TerminalViewer } from './session.ts';
 
 export class Terminals {
   readonly #options: TerminalsOptions;
-  readonly #store: TerminalStore;
-  readonly #sessions = new Map<string, TerminalSession>();
-  readonly #listeners = new Set<Listener>();
-  readonly #screenTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  readonly #now: () => number;
-  readonly #services = new Map<string, ServiceDefinition>();
-  readonly #resumable = new Set<string>();
-  readonly #runEnvs = new Map<string, Record<string, string>>();
-  #notifyTimer: ReturnType<typeof setTimeout> | null = null;
-  #stopped = false;
-  #remoteUrls: RemoteUrlSource | null = null;
+  readonly #handle: TerminalsHandle;
 
   constructor(options: TerminalsOptions) {
     this.#options = options;
-    this.#store = new TerminalStore(options.dataDir);
-    this.#now = options.now ?? Date.now;
-    for (const service of this.#store.readServices()) this.#services.set(service.id, service);
-    for (const saved of this.#store.readTerminals()) {
-      const known = saved.serviceId === null || this.#services.has(saved.serviceId);
-      const info: TerminalInfo = {
-        ...(saved.status === 'running' ? { ...saved, status: 'stopped', endedAt: this.#now() } : saved),
-        serviceId: known ? saved.serviceId : null,
-      };
-      if (saved.status === 'running' && info.serviceId) this.#resumable.add(info.id);
-      this.#sessions.set(info.id, this.#createSession(info, this.#store.readScreen(info.id)));
-    }
-  }
-
-  #createSession(info: TerminalInfo, saved: string | null) {
-    return new TerminalSession({
-      info,
-      saved,
-      now: this.#now,
-      onChange: () => this.#scheduleNotify(),
-      onScreen: (session) => this.#scheduleScreen(session),
-    });
-  }
-
-  #assertWritable() {
-    if (this.#options.readOnly)
-      throw new DomainError({ code: 'inspect_read_only', message: 'Terminals are off in inspect mode.' });
+    const { readForeground, pickPort, newId, spawn } = options;
+    this.#handle = edgeRuntime.runSync(
+      makeTerminals({
+        dataDir: options.dataDir,
+        home: options.home,
+        version: options.version,
+        readOnly: options.readOnly ?? false,
+        env: options.env ?? process.env,
+        ...(spawn ? { spawn } : {}),
+        ...(readForeground ? { readForeground: (pid) => Effect.promise(() => readForeground(pid)) } : {}),
+        ...(pickPort
+          ? { pickPort: (preferred, taken) => Effect.sync(() => pickPort(preferred, taken)) }
+          : {}),
+        now: Effect.sync(options.now ?? Date.now),
+        newId: Effect.sync(() => newId?.() ?? Bun.randomUUIDv7()),
+        notifyMs: Duration.millis(options.notifyMs ?? NOTIFY_MS),
+        screenMs: Duration.millis(options.screenMs ?? SCREEN_MS),
+      })
+    );
   }
 
   get home() {
@@ -91,368 +51,105 @@ export class Terminals {
   }
 
   find(id: string) {
-    const session = this.#sessions.get(id);
-    if (!session) throw new DomainError({ code: 'terminal_not_found', message: 'That terminal is closed.' });
-    return session;
+    return edgeRuntime.runSync(this.#handle.find(id));
   }
 
   select(id: string) {
-    return this.#sessions.get(id) ?? null;
+    return edgeRuntime.runSync(this.#handle.select(id));
   }
 
-  get #env() {
-    return this.#options.env ?? process.env;
-  }
-
-  snapshot(): TerminalsSnapshot {
-    return {
-      terminals: this.#listInfos().map((info) => this.#withRemoteUrl(info)),
-      services: [...this.#services.values()],
-      home: this.#options.home,
-    };
-  }
-
-  #listInfos() {
-    return [...this.#sessions.values()].map((session) => session.info);
-  }
-
-  #withRemoteUrl(info: TerminalInfo): TerminalInfo {
-    const service = info.serviceId ? this.#services.get(info.serviceId) : undefined;
-    if (!(this.#remoteUrls && service)) return info;
-    return { ...info, remoteUrl: this.#remoteUrls.resolveRemoteUrl(info, service) };
+  snapshot() {
+    return edgeRuntime.runSync(this.#handle.snapshot);
   }
 
   applyRemoteUrls(source: RemoteUrlSource) {
-    this.#remoteUrls = source;
-    source.subscribe(() => this.#scheduleNotify());
-    this.#scheduleNotify();
+    edgeRuntime.runSync(this.#handle.applyRemoteUrls(source));
   }
 
-  subscribe(listener: Listener) {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
-  }
-
-  #scheduleNotify() {
-    if (this.#notifyTimer || this.#stopped) return;
-    this.#notifyTimer = setTimeout(() => {
-      this.#notifyTimer = null;
-      this.#publish();
-    }, this.#options.notifyMs ?? NOTIFY_MS);
-  }
-
-  #publish() {
-    const snapshot = this.snapshot();
-    this.#store.writeTerminals(this.#listInfos());
-    for (const listener of this.#listeners) listener(snapshot);
-  }
-
-  #changed() {
-    if (this.#notifyTimer) clearTimeout(this.#notifyTimer);
-    this.#notifyTimer = null;
-    this.#publish();
-  }
-
-  #scheduleScreen(session: TerminalSession) {
-    const id = session.info.id;
-    if (this.#screenTimers.has(id) || this.#stopped || this.#sessions.get(id) !== session) return;
-    this.#screenTimers.set(
-      id,
-      setTimeout(() => {
-        this.#screenTimers.delete(id);
-        void this.#saveScreen(session);
-      }, this.#options.screenMs ?? SCREEN_MS)
-    );
-  }
-
-  async #saveScreen(session: TerminalSession) {
-    const screen = await session.serializeScreen();
-    if (this.#sessions.get(session.info.id) === session) this.#store.writeScreen(session.info.id, screen);
-  }
-
-  #takenPorts(session: TerminalSession) {
-    return new Set(
-      [...this.#sessions.values()]
-        .filter((each) => each !== session && each.running)
-        .flatMap((each) => (each.info.port === null ? [] : [each.info.port]))
-    );
-  }
-
-  #resolvePort(session: TerminalSession, service: ServiceDefinition) {
-    const yours = session.info.taskId === null;
-    if (yours && !service.previewUrl) return null;
-    const own = Number(service.env[service.portVariable]);
-    if (yours && Number.isInteger(own) && own > 0) return own;
-    return (this.#options.pickPort ?? pickFreePort)(session.info.port, this.#takenPorts(session));
-  }
-
-  #resolveServiceEnv(session: TerminalSession, service: ServiceDefinition, env: Record<string, string>) {
-    const port = this.#resolvePort(session, service);
-    session.info = { ...session.info, port };
-    const own = { ...env, ...this.#runEnvs.get(session.info.id), ...service.env };
-    if (port === null) return own;
-    return { ...own, [service.portVariable]: String(port) };
-  }
-
-  #start(session: TerminalSession) {
-    const env = resolveTerminalEnv(this.#env, this.#options.version);
-    const shell = resolveLoginShell(this.#env);
-    const service = session.info.serviceId ? this.#services.get(session.info.serviceId) : undefined;
-    session.start({
-      command: service ? resolveServiceCommand(shell, service.command) : resolveShellCommand(shell),
-      env: service ? this.#resolveServiceEnv(session, service, env) : env,
-      spawn: this.#options.spawn ?? spawnTerminalProcess,
-      now: this.#now(),
-    });
-  }
-
-  #newId() {
-    return this.#options.newId?.() ?? Bun.randomUUIDv7();
-  }
-
-  #open(start: TerminalStart, service: ServiceDefinition | null, env: Record<string, string> = {}) {
-    if (this.#sessions.size >= TERMINAL_LIMITS.terminals)
-      throw new DomainError({
-        code: 'terminal_limit',
-        message: `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most.`,
-      });
-    const info: TerminalInfo = {
-      id: this.#newId(),
-      ...start,
-      name: service?.name ?? null,
-      title: null,
-      serviceId: service?.id ?? null,
-      port: null,
-      status: 'running',
-      exitCode: null,
-      startedAt: this.#now(),
-      endedAt: null,
-    };
-    const session = this.#createSession(info, null);
-    this.#sessions.set(info.id, session);
-    this.#runEnvs.set(info.id, env);
-    this.#start(session);
-    this.#changed();
-    return session.info;
+  subscribe(listener: TerminalsListener) {
+    return edgeRuntime.runSync(this.#handle.subscribe(listener));
   }
 
   create(start: TerminalStart) {
-    this.#assertWritable();
-    return this.#open(start, null);
+    return edgeRuntime.runSync(this.#handle.create(start));
   }
 
   rename(id: string, name: string | null) {
-    this.#assertWritable();
-    const session = this.find(id);
-    session.info = { ...session.info, name: normaliseName(name) };
-    this.#changed();
+    edgeRuntime.runSync(this.#handle.rename(id, name));
   }
 
   reorder(projectId: string, ids: string[]) {
-    this.#assertWritable();
-    const all = [...this.#sessions.values()];
-    const project = all.filter((session) => session.info.projectId === projectId);
-    const ordered = [
-      ...ids.flatMap((id) => project.filter((session) => session.info.id === id)),
-      ...project.filter((session) => !ids.includes(session.info.id)),
-    ];
-    let next = 0;
-    const merged = all.map((session) => (session.info.projectId === projectId ? ordered[next++] : session));
-    this.#sessions.clear();
-    for (const session of merged) if (session) this.#sessions.set(session.info.id, session);
-    this.#changed();
+    edgeRuntime.runSync(this.#handle.reorder(projectId, ids));
   }
 
   restart(id: string) {
-    this.#assertWritable();
-    const session = this.find(id);
-    if (session.running) return session.info;
-    this.#start(session);
-    this.#changed();
-    return session.info;
+    return edgeRuntime.runSync(this.#handle.restart(id));
   }
 
   run(id: string, command: string) {
-    this.#assertWritable();
-    const session = this.find(id);
-    if (!session.running)
-      throw new DomainError({ code: 'terminal_ended', message: 'That terminal has ended.' });
-    session.type(command);
+    edgeRuntime.runSync(this.#handle.run(id, command));
   }
 
-  async readForeground(id: string): Promise<TerminalForeground> {
-    const session = this.find(id);
-    const { pid } = session;
-    if (pid === null) return { program: null };
-    if (session.info.serviceId) return { program: this.#services.get(session.info.serviceId)?.name ?? null };
-    return { program: await (this.#options.readForeground ?? readForegroundProgram)(pid) };
+  readForeground(id: string) {
+    return edgeRuntime.runPromise(this.#handle.readForeground(id));
   }
 
   close(id: string) {
-    this.#assertWritable();
-    this.#closeSession(this.find(id));
-    this.#changed();
-  }
-
-  #closeSession(session: TerminalSession) {
-    const { id } = session.info;
-    this.#sessions.delete(id);
-    this.#runEnvs.delete(id);
-    clearTimeout(this.#screenTimers.get(id));
-    this.#screenTimers.delete(id);
-    session.hangUp();
-    session.dispose();
-    this.#store.removeScreen(id);
+    edgeRuntime.runSync(this.#handle.close(id));
   }
 
   findService(id: string) {
-    const service = this.#services.get(id);
-    if (!service)
-      throw new DomainError({ code: 'service_not_found', message: 'That service is not there anymore.' });
-    return service;
-  }
-
-  #serviceSession(id: string, taskId: string | null) {
-    return (
-      [...this.#sessions.values()].find(
-        (session) => session.info.serviceId === id && session.info.taskId === taskId
-      ) ?? null
-    );
-  }
-
-  #serviceSessions(id: string) {
-    return [...this.#sessions.values()].filter((session) => session.info.serviceId === id);
-  }
-
-  #saveServices() {
-    this.#store.writeServices([...this.#services.values()]);
+    return edgeRuntime.runSync(this.#handle.findService(id));
   }
 
   addService(projectId: string, input: ServiceInput) {
-    this.#assertWritable();
-    if (this.#services.size >= SERVICE_LIMITS.services)
-      throw new DomainError({
-        code: 'service_limit',
-        message: `Shinsa keeps ${SERVICE_LIMITS.services} services at most.`,
-      });
-    const service: ServiceDefinition = { id: this.#newId(), projectId, ...input };
-    this.#services.set(service.id, service);
-    this.#saveServices();
-    this.#changed();
-    return service;
+    return edgeRuntime.runSync(this.#handle.addService(projectId, input));
   }
 
   updateService(id: string, input: ServiceInput) {
-    this.#assertWritable();
-    const service = { ...this.findService(id), ...input };
-    this.#services.set(id, service);
-    for (const session of this.#serviceSessions(id)) session.info = { ...session.info, name: service.name };
-    this.#saveServices();
-    this.#changed();
-    return service;
+    return edgeRuntime.runSync(this.#handle.updateService(id, input));
   }
 
   removeServices(ids: string[]) {
-    this.#assertWritable();
-    for (const id of ids) this.findService(id);
-    for (const id of ids) {
-      for (const session of this.#serviceSessions(id)) this.#closeSession(session);
-      this.#services.delete(id);
-    }
-    this.#saveServices();
-    this.#changed();
+    edgeRuntime.runSync(this.#handle.removeServices(ids));
   }
 
   startService(id: string, run: ServiceRun) {
-    this.#assertWritable();
-    const service = this.findService(id);
-    const { env = {}, ...start } = run;
-    const session = this.#serviceSession(id, run.taskId);
-    if (!session) return this.#open({ projectId: service.projectId, ...start }, service, env);
-    if (session.running) return session.info;
-    session.info = { ...session.info, cwd: run.cwd, place: run.place };
-    this.#runEnvs.set(session.info.id, env);
-    this.#start(session);
-    this.#changed();
-    return session.info;
+    return edgeRuntime.runSync(this.#handle.startService(id, run));
   }
 
-  async stopService(id: string, taskId: string | null) {
-    this.#assertWritable();
-    this.findService(id);
-    await this.#serviceSession(id, taskId)?.stop();
-    this.#changed();
+  stopService(id: string, taskId: string | null) {
+    return edgeRuntime.runPromise(this.#handle.stopService(id, taskId));
   }
 
-  async restartService(id: string, run: ServiceRun) {
-    await this.stopService(id, run.taskId);
-    return this.startService(id, run);
+  restartService(id: string, run: ServiceRun) {
+    return edgeRuntime.runPromise(this.#handle.restartService(id, run));
   }
 
-  async readServiceOutput(id: string, taskId: string | null, lines: number) {
-    return (await this.#serviceSession(id, taskId)?.readOutput(lines)) ?? [];
+  readServiceOutput(id: string, taskId: string | null, lines: number) {
+    return edgeRuntime.runPromise(this.#handle.readServiceOutput(id, taskId, lines));
   }
 
   closeTaskServices(taskId: string) {
-    const sessions = [...this.#sessions.values()].filter(
-      (session) => session.info.serviceId && session.info.taskId === taskId
-    );
-    if (sessions.length === 0) return;
-    for (const session of sessions) this.#closeSession(session);
-    this.#changed();
+    edgeRuntime.runSync(this.#handle.closeTaskServices(taskId));
   }
 
-  listServiceProcesses = () =>
-    [...this.#sessions.values()].flatMap((session) => {
-      const { serviceId, taskId } = session.info;
-      return serviceId && taskId && session.pid !== null ? [{ taskId, pid: session.pid }] : [];
-    });
+  listServiceProcesses = () => edgeRuntime.runSync(this.#handle.listServiceProcesses);
 
   listTerminalPids() {
-    return [...this.#sessions.values()].flatMap((session) =>
-      session.info.serviceId || session.pid === null ? [] : [session.pid]
-    );
+    return edgeRuntime.runSync(this.#handle.listTerminalPids);
   }
 
   resumeServices(state: ShinsaState) {
-    if (this.#options.readOnly) return;
-    for (const terminalId of this.#resumable) {
-      const info = this.#sessions.get(terminalId)?.info;
-      const service = this.#services.get(info?.serviceId ?? '');
-      const run = info && service ? resolveServiceRunIn(state, service, info.taskId, this) : null;
-      if (service && run) this.startService(service.id, run);
-    }
-    this.#resumable.clear();
+    edgeRuntime.runSync(this.#handle.resumeServices(state));
   }
 
   attach(id: string, viewer: TerminalViewer) {
-    this.find(id).attach(viewer);
+    edgeRuntime.runSync(this.#handle.attach(id, viewer));
   }
 
-  async stop() {
-    this.#stopped = true;
-    if (this.#notifyTimer) clearTimeout(this.#notifyTimer);
-    for (const timer of this.#screenTimers.values()) clearTimeout(timer);
-    this.#screenTimers.clear();
-    const sessions = [...this.#sessions.values()];
-    const resumable = new Set(
-      sessions
-        .filter((session) => session.running && session.info.serviceId)
-        .map((session) => session.info.id)
-    );
-    await Promise.all(sessions.map((session) => session.stop()));
-    for (const session of sessions) {
-      this.#store.writeScreen(session.info.id, await session.serializeScreen());
-      session.dispose();
-    }
-    this.#store.writeTerminals(
-      sessions.map((session) =>
-        resumable.has(session.info.id) ? { ...session.info, status: 'running', endedAt: null } : session.info
-      )
-    );
-    this.#listeners.clear();
+  stop() {
+    return edgeRuntime.runPromise(this.#handle.stop);
   }
 }
 

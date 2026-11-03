@@ -2,6 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { type MessageKind, resolveTaskRounds, type TaskShape } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { resolveCommandVerdict } from '../../src/agents/providers/claude/guard.ts';
@@ -68,18 +69,18 @@ async function shinsa(...args: string[]) {
     cwd: '/code/app',
     write: (line = '') => out.push(line),
     writeError: (line) => out.push(line),
-    openApp: () => Promise.resolve(),
-    readRepoRoot: () => Promise.resolve(null),
+    openApp: () => Effect.void,
+    readRepoRoot: () => Effect.succeed(null),
     wakeEngine: () => Promise.resolve(false),
     engine: {
       bundled: false,
       service: createLaunchdService({
         uid: 0,
         ownsJob: () => true,
-        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+        launchctl: () => Effect.succeed({ ok: false, output: '' }),
       }),
     },
-    runEngine: () => Promise.reject(new Error('not in this test')),
+    runEngine: () => Effect.die(new Error('not in this test')),
     onShutdown: () => undefined,
     terminal: createTestTerminal(),
   };

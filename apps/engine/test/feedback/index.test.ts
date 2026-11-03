@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DomainError } from '@shinsa/core';
 import type { FeedbackDrafter } from '../../src/feedback/draft.ts';
 import { FeedbackEffects, NO_DRAFT, STOPPED_WHILE_FILING } from '../../src/feedback/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
@@ -174,5 +175,36 @@ describe('feedback effects', () => {
       status: 'failed',
       failure: 'The writer is down.',
     });
+  });
+
+  test('a drafter or a log that fails passes its reason on', async () => {
+    const world = await createWorld(() => Promise.reject(new Error('writer offline')));
+    await expect(world.effects.draft(world.feedbackId, createContext().context)).rejects.toThrow(
+      'writer offline'
+    );
+    const broken = Object.assign(Object.create(world.engine), {
+      dispatch: () => Promise.reject(new Error('log full')),
+    }) as Engine;
+    const effects = new FeedbackEffects(
+      broken,
+      createTempDir(),
+      () => Promise.resolve(DRAFT),
+      () => []
+    );
+    await expect(effects.reportExhausted(world.feedbackId, 'Down.', 'effect')).rejects.toThrow('log full');
+    const refusing = Object.assign(Object.create(world.engine), {
+      dispatch: () =>
+        Promise.reject(new DomainError({ code: 'feedback_missing', message: 'No such feedback.' })),
+    }) as Engine;
+    const refused = new FeedbackEffects(
+      refusing,
+      createTempDir(),
+      () => Promise.resolve(DRAFT),
+      () => []
+    );
+    const failure = await refused
+      .reportExhausted(world.feedbackId, 'Down.', 'effect')
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(DomainError);
   });
 });

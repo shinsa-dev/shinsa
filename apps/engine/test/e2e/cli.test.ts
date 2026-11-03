@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { Effect } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
@@ -42,18 +43,18 @@ async function shinsa(port: string, ...args: string[]) {
     cwd: '/code/app',
     write: (line = '') => out.push(line),
     writeError: (line) => errors.push(line),
-    openApp: () => Promise.resolve(),
-    readRepoRoot: () => Promise.resolve(null),
+    openApp: () => Effect.void,
+    readRepoRoot: () => Effect.succeed(null),
     wakeEngine: () => Promise.resolve(false),
     engine: {
       bundled: false,
       service: createLaunchdService({
         uid: 0,
         ownsJob: () => true,
-        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+        launchctl: () => Effect.succeed({ ok: false, output: '' }),
       }),
     },
-    runEngine: () => Promise.reject(new Error('not in this test')),
+    runEngine: () => Effect.die(new Error('not in this test')),
     onShutdown: () => undefined,
     terminal: createTestTerminal(),
   };

@@ -1,30 +1,26 @@
+import { Effect } from 'effect';
 import type { ConfigStore } from '../config/index.ts';
-import { discoverRoots } from './edge.ts';
-import {
-  DISCOVERY_TTL_MS,
-  type Discoverer,
-  type Discovery,
-  type RootSource,
-  type RootSourceKind,
-} from './schema.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
+import type { RootsHandle } from './roots/schema.ts';
+import { makeRoots } from './roots/service.ts';
+import type { Discoverer, Discovery, RootSource, RootSourceKind } from './schema.ts';
 
 export class Roots implements RootSource {
   readonly #fromEnvironment: string[];
   readonly #store: ConfigStore;
-  readonly #userHome: string;
-  readonly #discover: Discoverer;
-  #discovery: { at: number; result: Promise<Discovery> } | null = null;
+  readonly #handle: RootsHandle;
 
-  constructor(
-    fromEnvironment: string[],
-    store: ConfigStore,
-    userHome: string,
-    discover: Discoverer = discoverRoots
-  ) {
+  constructor(fromEnvironment: string[], store: ConfigStore, userHome: string, discover?: Discoverer) {
     this.#fromEnvironment = fromEnvironment;
     this.#store = store;
-    this.#userHome = userHome;
-    this.#discover = discover;
+    this.#handle = edgeRuntime.runSync(
+      makeRoots({
+        fromEnvironment,
+        configured: Effect.sync(() => store.config.roots),
+        home: userHome,
+        discover: discover ? (home) => Effect.promise(() => discover(home)) : null,
+      })
+    );
   }
 
   get fromEnvironment() {
@@ -42,17 +38,10 @@ export class Roots implements RootSource {
   }
 
   discover(force = false): Promise<Discovery> {
-    const now = Date.now();
-    if (force || !this.#discovery || now - this.#discovery.at > DISCOVERY_TTL_MS) {
-      this.#discovery = { at: now, result: this.#discover(this.#userHome) };
-    }
-    return this.#discovery.result;
+    return edgeRuntime.runPromise(this.#handle.discover(force));
   }
 
-  async listRoots() {
-    const explicit = [...new Set([...this.#fromEnvironment, ...this.#store.config.roots])];
-    if (explicit.length > 0) return explicit;
-    const { candidates } = await this.discover();
-    return candidates.map((candidate) => candidate.path);
+  listRoots() {
+    return edgeRuntime.runPromise(this.#handle.listRoots);
   }
 }

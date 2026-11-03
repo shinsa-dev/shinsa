@@ -1,3 +1,4 @@
+import { Schema } from 'effect';
 import type { AccountsOptions } from '../accounts/index.ts';
 import type {
   IdleCompactionOptions,
@@ -51,3 +52,8 @@ export interface Shinsa {
   engine: Engine;
   stop: () => Promise<void>;
 }
+
+export class AccountsCheckFailed extends Schema.TaggedError<
+  AccountsCheckFailed,
+  { readonly brand: unique symbol }
+>()('AccountsCheckFailed', { message: Schema.String }) {}

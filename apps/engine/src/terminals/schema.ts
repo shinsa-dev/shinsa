@@ -1,15 +1,19 @@
 import {
+  type DomainError,
   isServiceEnvKey,
   isServicePreviewUrl,
   SERVICE_LIMITS,
   SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceSuggestion,
+  type ShinsaState,
+  type TerminalForeground,
   type TerminalInfo,
   type TerminalPlaceKind,
+  type TerminalsSnapshot,
 } from '@shinsa/core';
 import { Duration, Effect, Schedule, Schema } from 'effect';
-import type { TerminalViewer } from './session.ts';
+import type { TerminalSession, TerminalViewer } from './session.ts';
 
 export class PortUnavailable extends Schema.TaggedError<PortUnavailable, { readonly brand: unique symbol }>()(
   'PortUnavailable',
@@ -164,11 +168,6 @@ export interface FolderDigest {
   dependencies: string[];
 }
 
-export interface CachedRefinement {
-  fingerprint: string;
-  answer: Promise<ServiceSuggestion[] | null>;
-}
-
 export const TERMINALS_DIR = 'terminals';
 
 export const TERMINALS_FILE = 'terminals.json';
@@ -212,3 +211,49 @@ export interface TerminalSocketData {
 export const TERMINAL_SOCKET_PATH = /^\/ws\/terminals\/([A-Za-z0-9-]{1,64})$/;
 
 export const SOCKET_CLOSED = 4404;
+
+export type TerminalsListener = (snapshot: TerminalsSnapshot) => void;
+
+export interface TerminalsDefinition {
+  dataDir: string;
+  home: string;
+  version: string;
+  readOnly: boolean;
+  env: Env;
+  spawn?: TerminalSpawner;
+  readForeground?: (pid: number) => Effect.Effect<string | null>;
+  pickPort?: (preferred: number | null, taken: ReadonlySet<number>) => Effect.Effect<number>;
+  now: Effect.Effect<number>;
+  newId: Effect.Effect<string>;
+  notifyMs: Duration.Duration;
+  screenMs: Duration.Duration;
+}
+
+export interface TerminalsHandle {
+  find: (id: string) => Effect.Effect<TerminalSession, DomainError>;
+  select: (id: string) => Effect.Effect<TerminalSession | null>;
+  snapshot: Effect.Effect<TerminalsSnapshot>;
+  applyRemoteUrls: (source: RemoteUrlSource) => Effect.Effect<void>;
+  subscribe: (listener: TerminalsListener) => Effect.Effect<() => void>;
+  create: (start: TerminalStart) => Effect.Effect<TerminalInfo, DomainError>;
+  rename: (id: string, name: string | null) => Effect.Effect<void, DomainError>;
+  reorder: (projectId: string, ids: string[]) => Effect.Effect<void, DomainError>;
+  restart: (id: string) => Effect.Effect<TerminalInfo, DomainError>;
+  run: (id: string, command: string) => Effect.Effect<void, DomainError>;
+  readForeground: (id: string) => Effect.Effect<TerminalForeground, DomainError>;
+  close: (id: string) => Effect.Effect<void, DomainError>;
+  findService: (id: string) => Effect.Effect<ServiceDefinition, DomainError>;
+  addService: (projectId: string, input: ServiceInput) => Effect.Effect<ServiceDefinition, DomainError>;
+  updateService: (id: string, input: ServiceInput) => Effect.Effect<ServiceDefinition, DomainError>;
+  removeServices: (ids: string[]) => Effect.Effect<void, DomainError>;
+  startService: (id: string, run: ServiceRun) => Effect.Effect<TerminalInfo, DomainError>;
+  stopService: (id: string, taskId: string | null) => Effect.Effect<void, DomainError>;
+  restartService: (id: string, run: ServiceRun) => Effect.Effect<TerminalInfo, DomainError>;
+  readServiceOutput: (id: string, taskId: string | null, lines: number) => Effect.Effect<string[]>;
+  closeTaskServices: (taskId: string) => Effect.Effect<void>;
+  listServiceProcesses: Effect.Effect<{ taskId: string; pid: number }[]>;
+  listTerminalPids: Effect.Effect<number[]>;
+  resumeServices: (state: ShinsaState) => Effect.Effect<void>;
+  attach: (id: string, viewer: TerminalViewer) => Effect.Effect<void, DomainError>;
+  stop: Effect.Effect<void>;
+}

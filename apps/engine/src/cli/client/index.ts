@@ -3,7 +3,13 @@ import { FetchHttpClient, HttpClient } from 'effect/http';
 import { EngineAnswerInvalid, type EngineCalls, type EngineClientOptions } from './schema.ts';
 import { EngineClient } from './service.ts';
 
-export { type EngineCalls, type EngineClientOptions, type EngineWake, NOT_RUNNING } from './schema.ts';
+export {
+  type EngineCalls,
+  type EngineFailure,
+  type EngineClientOptions,
+  type EngineWake,
+  NOT_RUNNING,
+} from './schema.ts';
 
 const PASSED_FAILURES = ['DomainError', 'EngineNotRunning', 'EngineAnswerInvalid'];
 
@@ -19,10 +25,8 @@ export function createEngineCalls(options: EngineClientOptions): EngineCalls {
   );
   const invalid = new EngineAnswerInvalid({ message: `Shinsa on ${options.base} answered without JSON.` });
   const run = (call: Effect.Effect<unknown, Error>) =>
-    runtime.runPromise(
-      Effect.mapError(call, (error) =>
-        PASSED_FAILURES.some((tag) => Predicate.isTagged(error, tag)) ? error : invalid
-      )
+    Effect.mapError(call, (error) =>
+      PASSED_FAILURES.some((tag) => Predicate.isTagged(error, tag)) ? error : invalid
     );
   const client = runtime.runSync(EngineClient.use(Effect.succeed)) as unknown as Record<
     string,

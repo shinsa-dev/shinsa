@@ -1,11 +1,12 @@
 import { join } from 'node:path';
+import { Effect, Fiber, Ref } from 'effect';
 import { Accounts, createOnboardingAccounts, UsageResumeClock } from '../accounts/index.ts';
 import {
   listDefaultProviders,
   ProviderRegistry,
   RunSupervisor,
-  SilenceWatch,
   Transcripts,
+  watchSilence,
 } from '../agents/index.ts';
 import { createQuickCalls } from '../agents/quick/index.ts';
 import { Briefings } from '../briefing/index.ts';
@@ -16,7 +17,7 @@ import { Extensions } from '../extensions/index.ts';
 import { createFeedbackDrafter } from '../feedback/draft.ts';
 import { resolveServerUrl, startServer } from '../http/index.ts';
 import { BUNDLE, createServiceRestarter, INSTALL_PATH, type ServerInstance } from '../instance/index.ts';
-import { describeError, log } from '../log/index.ts';
+import { describeError } from '../log/redact.ts';
 import { Onboarding } from '../onboarding/index.ts';
 import { createProjectChanges } from '../projects/changes.ts';
 import { Handoffs } from '../remote/handoffs.ts';
@@ -54,18 +55,17 @@ import { resolveTriage } from '../triage/index.ts';
 import { createClassifier, createCommandRouter, resolveRoundRepository } from '../triage/message.ts';
 import { Versions } from '../versions/index.ts';
 
-import type { ShinsaOptions } from './schema.ts';
+import { AccountsCheckFailed, type ShinsaOptions } from './schema.ts';
 
-export type Services = ReturnType<typeof createServices>;
+export type Services = Effect.Success<ReturnType<typeof createServices>>;
 
-const ACCOUNT_CHECKS = new WeakMap<Services, Promise<void>>();
-
-export function createServices(
+export const createServices = Effect.fn('Serve.createServices')(function* (
   config: ServerConfig,
   options: ShinsaOptions,
   instance: ServerInstance,
   eventLog: EventLog
 ) {
+  const accountCheck = yield* Ref.make<Fiber.Fiber<void> | null>(null);
   const store = new ConfigStore(config.configPath, config.machine);
   const engine = new Engine(eventLog, {
     readOnly: config.inspect,
@@ -156,6 +156,7 @@ export function createServices(
   const inbox = new MessageInbox(engine, classify.message);
   const roots = new Roots(config.roots, store, config.userHome, options.discover);
   return {
+    accountCheck,
     config,
     store,
     roots,
@@ -189,7 +190,6 @@ export function createServices(
       new MonitorClock(engine),
       new WatchdogClock(engine),
       new UsageResumeClock(engine),
-      new SilenceWatch(engine, transcripts),
       new ShareClock(engine),
     ],
     effects: new EffectRunner(engine, config, runs, briefings, {
@@ -217,68 +217,70 @@ export function createServices(
       trackProcess: ledger.track,
     }),
   };
-}
+});
 
-export function startHttp(
+export const startHttp = Effect.fn('Serve.startHttp')(function* (
   services: Services,
   options: ShinsaOptions,
   instance: ServerInstance,
   stop: () => Promise<void>
 ) {
   const { engine, config, store, roots, models, accounts } = services;
-  return startServer({
-    engine,
-    config,
-    instance,
-    transcripts: services.transcripts,
-    terminals: services.terminals,
-    resources: services.resources,
-    refiner: new ServiceRefiner(services.quick.classify),
-    evidence: services.evidence,
-    models,
-    providers: services.providers,
-    onboarding: new Onboarding({
+  const serve = () =>
+    startServer({
       engine,
       config,
-      store,
+      instance,
+      transcripts: services.transcripts,
+      terminals: services.terminals,
+      resources: services.resources,
+      refiner: new ServiceRefiner(services.quick.classify),
+      evidence: services.evidence,
+      models,
+      providers: services.providers,
+      onboarding: new Onboarding({
+        engine,
+        config,
+        store,
+        roots,
+        resolveLogin: services.resolveLogin,
+        ask: services.quick.write,
+        models,
+        run: options.runPrerequisite,
+        accounts: options.accounts ?? createOnboardingAccounts(accounts),
+        terminals: services.terminals,
+      }),
+      accounts,
+      schedules: services.schedules,
+      extensions: services.extensions,
+      versions: services.versions,
+      changelog: resolveEngineChangelog({
+        built: process.env.SHINSA_BUILD_CHANGELOG,
+        root: BUNDLE ? null : INSTALL_PATH,
+      }),
       roots,
       resolveLogin: services.resolveLogin,
-      ask: services.quick.write,
-      models,
-      run: options.runPrerequisite,
-      accounts: options.accounts ?? createOnboardingAccounts(accounts),
-      terminals: services.terminals,
-    }),
-    accounts,
-    schedules: services.schedules,
-    extensions: services.extensions,
-    versions: services.versions,
-    changelog: resolveEngineChangelog({
-      built: process.env.SHINSA_BUILD_CHANGELOG,
-      root: BUNDLE ? null : INSTALL_PATH,
-    }),
-    roots,
-    resolveLogin: services.resolveLogin,
-    classify: services.classify,
-    place: options.place ?? createPlacementAsker(services.quick.classify),
-    workspaces: services.runs.workspaces,
-    remote: services.remote,
-    shares: services.shares,
-    teams: services.teams,
-    teamFeeds: services.teamFeeds,
-    previews: services.previews,
-    slack: services.slack,
-    restarter: createServiceRestarter(engine, {
-      byService: options.byService ?? false,
-      drain: services.runs,
-      stop,
-      exit: options.exit,
-    }),
-  });
-}
+      classify: services.classify,
+      place: options.place ?? createPlacementAsker(services.quick.classify),
+      workspaces: services.runs.workspaces,
+      remote: services.remote,
+      shares: services.shares,
+      teams: services.teams,
+      teamFeeds: services.teamFeeds,
+      previews: services.previews,
+      slack: services.slack,
+      restarter: createServiceRestarter(engine, {
+        byService: options.byService ?? false,
+        drain: services.runs,
+        stop,
+        exit: options.exit,
+      }),
+    });
+  return yield* Effect.acquireRelease(Effect.sync(serve), (server) => Effect.promise(() => server.stop()));
+});
 
-export async function startWork(services: Services) {
-  const { engine, effects } = services;
+export const startWork = Effect.fn('Serve.startWork')(function* (services: Services) {
+  const { engine, effects, accounts } = services;
   engine.onEffect((effect, context) => effects.apply(effect, context));
   engine.onEffectExhausted((effect, error, key) => effects.reportExhausted(effect, error, key));
   engine.onEffectRetry((effect, retry, key) => effects.reportRetry(effect, retry, key));
@@ -286,25 +288,35 @@ export async function startWork(services: Services) {
   effects.startWatching();
   services.schedules.start();
   for (const clock of services.clocks) clock.start();
-  ACCOUNT_CHECKS.set(
-    services,
-    services.accounts.start().catch((error: unknown) => {
-      log.warn('[Serve] Could not check the Claude accounts', { error: describeError(error) });
-    })
+  yield* watchSilence(engine, services.transcripts);
+  const checking = yield* Effect.forkDetach(
+    Effect.tryPromise({
+      try: () => accounts.start(),
+      catch: (error) => new AccountsCheckFailed({ message: describeError(error) }),
+    }).pipe(
+      Effect.catchTag('AccountsCheckFailed', (failure) =>
+        Effect.logWarning('[Serve] Could not check the Claude accounts').pipe(
+          Effect.annotateLogs({ error: failure.message })
+        )
+      )
+    )
   );
-  await services.runs.recover();
-  await effects.recover();
+  yield* Ref.set(services.accountCheck, checking);
+  yield* Effect.promise(() => services.runs.recover());
+  yield* Effect.promise(() => effects.recover());
   services.inbox.start();
   services.remote.start();
   services.teamFeeds.start();
   services.briefings.schedule();
   services.extensions.syncSnapshot();
-  void services.extensions.syncUsage();
-  log.info('[Serve] Ready', { dataDir: services.config.dataDir, events: engine.state.seq });
-}
+  yield* Effect.forkDetach(Effect.promise(() => services.extensions.syncUsage()));
+  yield* Effect.logInfo('[Serve] Ready').pipe(
+    Effect.annotateLogs({ dataDir: services.config.dataDir, events: engine.state.seq })
+  );
+});
 
-export async function stopWork(services: Services) {
-  await services.runs.interruptForShutdown();
+export const stopWork = Effect.fn('Serve.stopWork')(function* (services: Services) {
+  yield* Effect.promise(() => services.runs.interruptForShutdown());
   services.briefings.stop();
   services.inbox.stop();
   services.schedules.stop();
@@ -312,17 +324,18 @@ export async function stopWork(services: Services) {
   services.versions.stop();
   services.teamFeeds.stop();
   services.resources.stop();
-  await services.remote.stop();
-  await services.terminals.stop();
+  yield* Effect.promise(() => services.remote.stop());
+  yield* Effect.promise(() => services.terminals.stop());
   for (const clock of services.clocks) clock.stop();
-  await services.effects.stop();
-  await services.extensions.stop();
+  yield* Effect.promise(() => services.effects.stop());
+  yield* Effect.promise(() => services.extensions.stop());
   services.engine.stop();
-  await services.engine.settle();
-}
+  yield* Effect.promise(() => services.engine.settle());
+});
 
-export async function disposeRuntime(services: Services) {
-  await ACCOUNT_CHECKS.get(services);
-  await services.effects.dispose();
-  await services.engine.dispose();
-}
+export const disposeRuntime = Effect.fn('Serve.disposeRuntime')(function* (services: Services) {
+  const checking = yield* Ref.get(services.accountCheck);
+  if (checking) yield* Fiber.await(checking);
+  yield* Effect.promise(() => services.effects.dispose());
+  yield* Effect.promise(() => services.engine.dispose());
+});
