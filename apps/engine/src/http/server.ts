@@ -192,12 +192,16 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
   function upgrade(request: Request, bunServer: Bun.Server<ServerSocketData>, data: ServerSocketData) {
     const upgradeRefusal = resolveUpgradeRefusal(request);
     if (upgradeRefusal) return respondRefusal(RequestForbidden, upgradeRefusal);
-    if (bunServer.upgrade(request, { data })) return undefined;
-    return new Response('Upgrade failed', { status: 400 });
+    return upgradeAdmitted(request, bunServer, data);
   }
 
-  function upgradeLive(request: Request, bunServer: Bun.Server<ServerSocketData>, data: LiveSocketData) {
-    if (bunServer.upgrade(request, { data })) return undefined;
+  function upgradeAdmitted(
+    request: Request,
+    bunServer: Bun.Server<ServerSocketData>,
+    data: ServerSocketData,
+    headers?: Record<string, string>
+  ) {
+    if (bunServer.upgrade(request, { data, ...(headers ? { headers } : {}) })) return undefined;
     return new Response('Upgrade failed', { status: 400 });
   }
 
@@ -253,8 +257,7 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
     const [protocol] = answer.upgrade.protocols;
     const headers = protocol ? { 'Sec-WebSocket-Protocol': protocol } : undefined;
     const data: PreviewSocketData = { kind: 'preview', upgrade: answer.upgrade, relay: null };
-    if (bunServer.upgrade(request, { data, ...(headers ? { headers } : {}) })) return undefined;
-    return new Response('Upgrade failed', { status: 400 });
+    return upgradeAdmitted(request, bunServer, data, headers);
   });
 
   function openShareChannel(request: Request, bunServer: Bun.Server<ServerSocketData>, shareId: string) {
@@ -266,7 +269,7 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
         close: () => shares.closeChannel(channel),
       };
     };
-    return upgradeLive(request, bunServer, { kind: 'live', open, channel: null });
+    return upgradeAdmitted(request, bunServer, { kind: 'live', open, channel: null });
   }
 
   function openTeamChannel(request: Request, bunServer: Bun.Server<ServerSocketData>, userId: string) {
@@ -278,12 +281,11 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
         close: () => teams.closeChannel(channel),
       };
     };
-    return upgradeLive(request, bunServer, { kind: 'live', open, channel: null });
+    return upgradeAdmitted(request, bunServer, { kind: 'live', open, channel: null });
   }
 
   function openRemoteChannel(request: Request, bunServer: Bun.Server<ServerSocketData>, userId: string) {
-    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null, userId } })) return undefined;
-    return new Response('Upgrade failed', { status: 400 });
+    return upgradeAdmitted(request, bunServer, { kind: 'remote', channel: null, userId });
   }
 
   function respondTeamView(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
