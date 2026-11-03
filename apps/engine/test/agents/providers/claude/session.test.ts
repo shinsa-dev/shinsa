@@ -4,7 +4,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { ChatEvent, ChatNotice, RunRole } from '@shinsa/core';
-import { AsyncQueue } from '../../../../src/agents/providers/claude/async-queue.ts';
 import { appendStderr } from '../../../../src/agents/providers/claude/classify.ts';
 import type { ClaudeExecutable } from '../../../../src/agents/providers/claude/executable.ts';
 import type { EunoeLink, EunoeWatcher } from '../../../../src/agents/providers/claude/index.ts';
@@ -13,8 +12,9 @@ import { startClaudeSession } from '../../../../src/agents/providers/claude/sess
 import type { AgentSessionInput } from '../../../../src/agents/providers/index.ts';
 import { SHINSA_INSTRUCTIONS } from '../../../../src/agents/providers/instructions.ts';
 import { createShinsaTools } from '../../../../src/agents/tools/index.ts';
-import { log } from '../../../../src/log/index.ts';
+import { createMessageFeed } from '../../../helpers/feed.ts';
 import { overrideEnv, until } from '../../../helpers/index.ts';
+import { captureLogs } from '../../../helpers/logs.ts';
 import {
   createFakeQuery,
   createFakeRuntime,
@@ -57,7 +57,7 @@ interface ScriptOptions {
 }
 
 function startScripted(input: AgentSessionInput, options: ScriptOptions = {}) {
-  const messages = new AsyncQueue<SDKMessage>();
+  const messages = createMessageFeed<SDKMessage>();
   const prompts: SDKUserMessage[] = [];
   const fake = createFakeQuery((params) => {
     void (async () => {
@@ -209,7 +209,7 @@ describe('starting a session', () => {
 
   test('a missing or outdated claude fails the run as a setup failure before anything runs', async () => {
     const { input, entries } = createInput();
-    const fake = createFakeQuery(() => new AsyncQueue<SDKMessage>());
+    const fake = createFakeQuery(() => createMessageFeed<SDKMessage>());
     const session = startClaudeSession(input, {
       runtime: createFakeRuntime(fake.query, {
         ok: false,
@@ -235,7 +235,7 @@ describe('starting a session', () => {
   test('a cancel before the process starts closes it at once and ends as cancelled', async () => {
     let closed = 0;
     const executable = Promise.withResolvers<ClaudeExecutable>();
-    const fake = createFakeQuery(() => new AsyncQueue<SDKMessage>(), {
+    const fake = createFakeQuery(() => createMessageFeed<SDKMessage>(), {
       close: () => {
         closed += 1;
       },
@@ -589,7 +589,7 @@ function createFakeProcess(stderr = ''): FakeProcess {
 }
 
 function startWedged(controls: FakeQueryControls = {}, child = createFakeProcess()) {
-  const messages = new AsyncQueue<SDKMessage>();
+  const messages = createMessageFeed<SDKMessage>();
   const fake = createFakeQuery(() => messages, {
     close: () => messages.close(),
     ...controls,
@@ -608,19 +608,18 @@ function startWedged(controls: FakeQueryControls = {}, child = createFakeProcess
 
 describe('a process that outlives its turn', () => {
   test('a process still running after its turn ended is stopped, and the turn keeps its outcome', async () => {
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     try {
       const { session, messages, child } = startWedged();
       messages.push(init);
       messages.push(success('Handed over.'));
       expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Handed over.' });
       expect(child.terminated()).toBe(1);
-      expect(warn).toHaveBeenCalledWith(
-        '[Claude] The agent’s process did not exit after its turn, so Shinsa stopped it',
-        { cwd: '/work' }
-      );
+      expect(
+        logs.fieldsOf('[Claude] The agent’s process did not exit after its turn, so Shinsa stopped it')
+      ).toEqual([{ cwd: '/work' }]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 

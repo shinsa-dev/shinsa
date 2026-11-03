@@ -182,5 +182,3 @@ export function createClaudeRecorder(onEntry: (event: ChatEvent) => void, storeI
 
   return { record, flush, notify, takeUsage, window: () => contextWindow };
 }
-
-export type ClaudeRecorder = ReturnType<typeof createClaudeRecorder>;
