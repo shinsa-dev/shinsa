@@ -818,7 +818,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `preview.unshare` | stops sharing that run: its open pages and sockets end at once and the link stops working | `services unshare <service> --task` | **human** |
 | `task.hand_off` | hands it to someone by a link (`handoff.link` makes it): the first GitHub account to open it takes the task over; again on a failed link it asks for the link once more; an automation's home or a finished task is refused (`handoff_refused`) | `tasks hand-off` | **human** |
 | `handoff.remove` | takes it back: the link stops working, and whoever took it over loses access at once (`handoff.revoke`) | `tasks hand-off-remove` | **human** |
-| `task.mark_duplicate` | closes it as a duplicate of `duplicateOf`: `task.duplicated`, then the cancel's settle; refused for itself (`duplicate_of_itself`), a finished task (`task_settled`) or an original that is a duplicate (`duplicate_of_duplicate`) | `tasks duplicate --of` | agent |
+| `task.mark_duplicate` | closes it as a duplicate of `duplicateOf`: `task.duplicated`, then the cancel's settle; refused for itself (`duplicate_of_itself`), a finished task (`task_settled`), an original that is a duplicate (`duplicate_of_duplicate`) or one in another repository when both have one (`duplicate_other_repository`) | `tasks duplicate --of` | agent |
 | `task.clear_duplicate` | starts a duplicate again (`task.duplicate_cleared`): one that never ran an agent through `startWork`, as if triage had not closed it; one that did in a fresh round with the same request (`round.queued`, `round.started`); refused for a task that is no duplicate (`not_duplicate`) | `tasks not-duplicate` | agent |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
 | `watchdog.connect` | gives a watchdog that waits for a source its server (`server`, `data`), adds it to the project's sources for the repository, and starts its window | `watchdogs connect` | agent |
@@ -942,7 +942,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
 | `task.record_edit` | the file route after a save from the Code tab (`http/routes/tasks`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
 | `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
-| `task.record_overlaps` | an agent's `propose_plan`, `complete_phase` or `complete_fix`, before it dispatches (`agents/repository-work.ts`) | `overlaps`: the other open tasks of the repository and the files this task shares with each; `from`: the task whose hand-over compared them; records the ones not known yet (`task.overlapped`) and steers this task's Agent at work with them at once when `from` is another task, else they wait for its next turn |
+| `task.record_overlaps` | an agent's `propose_plan`, `complete_phase` or `complete_fix`, before it dispatches (`agents/repository-work/service.ts`) | `overlaps`: the other open tasks of the repository and the files this task shares with each; `from`: the task whose hand-over compared them; records the ones not known yet (`task.overlapped`) and steers this task's Agent at work with them at once when `from` is another task, else they wait for its next turn |
 | `checks.record` | `checks.run` effect | records a round of checks (`results: ReportCheck[]`), with `outputs?` (`CheckEvidence[]`, one per check run: the output the server stored, attached as Shinsa's own `check` evidence with its `checkId`) and `coverage?` (`Coverage`) when the run before review measured it; ignored outside `checking` or with no results |
 | `pull_request.record` | open, merge and watch effects | records a pull request read; `ci` says whether the repository has CI for its base (`RepoCi`: `none`, `workflows`, `required`, `unknown` when absent), read only when the head has no checks |
 | `share.record` | `share.link` effect | the link the engine made (`url`, null when it kept the one recorded); clears the last failure |
@@ -986,8 +986,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
-| `delegation.record_delivery`, `delegation.release` | `agents/deliveries.ts` | a delivery claim was taken, or released |
-| `delegation.wake_policy` | `agents/tools/orchestration.ts` | a `wait` call that timed out switches to waking |
+| `delegation.record_delivery`, `delegation.release` | `agents/deliveries/service.ts` | a delivery claim was taken, or released |
+| `delegation.wake_policy` | `agents/tools/orchestration/handler.ts` | a `wait` call that timed out switches to waking |
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |
 | `schedule.fire`, `schedule.fail` | `ScheduleClock`, the webhook | fires a slot, or records a failed one |
 | `schedule.deliver` | the webhook receiver | starts the schedule's work from a delivery |
@@ -1118,7 +1118,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 ## Effects
 
-`ShinsaEffect` (`effects/index.ts`), run by `EffectRunner` (`apps/engine/src/runtime/effects.ts`) from the outbox.
+`ShinsaEffect` (`effects/index.ts`), run by `EffectHandlers` (`apps/engine/src/runtime/effects/runner/service.ts`, a service per area beside it) from the outbox.
 `process_bound` effects are cancelled on boot; `replay_safe` ones are requeued and must be safe to run twice.
 
 | Effect | Recovery | Lane | Reports back with |
@@ -1597,7 +1597,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
 | State snapshots | `apps/engine/src/store/snapshot.ts`, `apps/engine/src/store/event-log.ts` |
 | Event log, receipts, outbox | `apps/engine/src/store/event-log.ts`, `apps/engine/src/runtime/engine.ts` |
-| Effect handlers | `apps/engine/src/runtime/effects.ts` |
+| Effect handlers | `apps/engine/src/runtime/effects/` (`runner/service.ts` routes each kind to its area's service) |
 | Agent tools (MCP) | `apps/engine/src/agents/tools/`; the loader tools `apps/engine/src/extensions/loader.ts` |
 | Management tools | `apps/engine/src/agents/manage/` |
 | Command surface and `humanOnly` | `apps/engine/src/surface/`, reference `docs/cli.md` |

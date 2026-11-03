@@ -1,11 +1,10 @@
 import { CODE_LIMITS } from '@shinsa/core';
 import { killProcessGroup } from '../shell/index.ts';
+import { parseInfoLine } from './tree/entries.ts';
+import type { ObjectInfo } from './tree/schema.ts';
 
-export interface ObjectInfo {
-  object: string;
-  type: string;
-  size: number;
-}
+export { isBatchName, parseInfoLine } from './tree/entries.ts';
+export type { ObjectInfo } from './tree/schema.ts';
 
 type Reply = { kind: 'info'; info: ObjectInfo | null } | { kind: 'contents'; bytes: Uint8Array };
 
@@ -36,16 +35,6 @@ function joinBytes(a: Uint8Array, b: Uint8Array) {
   joined.set(a);
   joined.set(b, a.length);
   return joined;
-}
-
-export function parseInfoLine(line: string): ObjectInfo | null {
-  const [object = '', type = '', size = ''] = line.split(' ');
-  if (!/^[0-9a-f]{40,64}$/.test(object) || !type || !/^\d+$/.test(size)) return null;
-  return { object, type, size: Number(size) };
-}
-
-export function isBatchName(name: string) {
-  return name.length > 0 && !name.includes('\n') && !name.includes('\0');
 }
 
 function spawnBatch(repoPath: string): BatchChild {

@@ -12,6 +12,8 @@ import type {
 import { DomainError } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { SecretStore } from '../secrets/store.ts';
+import { readCredentials } from './credentials.ts';
+import { type PendingSignIn, SIGN_IN_PENDING_MS, TOKEN_REFRESH_MARGIN_MS } from './schema.ts';
 
 type FetchLike = (url: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -21,25 +23,6 @@ interface McpOAuthOptions {
   fetch?: FetchLike;
   pendingMs?: number;
 }
-
-interface PendingSignIn {
-  serverId: string;
-  url: string;
-  expiresAt: number;
-}
-
-interface StoredCredentials {
-  client?: OAuthClientInformationMixed;
-  clientRedirect?: string;
-  tokens?: OAuthTokens;
-  savedAt?: number;
-  verifier?: string;
-  discovery?: OAuthDiscoveryState;
-}
-
-const PENDING_MS = 10 * 60 * 1000;
-
-const REFRESH_MARGIN_MS = 60_000;
 
 class StoredProvider implements OAuthClientProvider {
   readonly #store: SecretStore;
@@ -63,12 +46,12 @@ class StoredProvider implements OAuthClientProvider {
     this.#now = now;
   }
 
-  #read(): StoredCredentials {
-    return this.#store.selectMcpCredentials(this.#serverId) as StoredCredentials;
+  #read() {
+    return readCredentials(this.#store, this.#serverId);
   }
 
-  #update(patch: StoredCredentials) {
-    this.#store.updateMcpCredentials(this.#serverId, patch as Record<string, unknown>);
+  #update(patch: Record<string, unknown>) {
+    this.#store.updateMcpCredentials(this.#serverId, patch);
   }
 
   get redirectUrl() {
@@ -151,7 +134,7 @@ export class McpOAuth {
     this.#redirectUrl = options.redirectUrl;
     this.#now = options.now ?? Date.now;
     this.#fetch = options.fetch;
-    this.#pendingMs = options.pendingMs ?? PENDING_MS;
+    this.#pendingMs = options.pendingMs ?? SIGN_IN_PENDING_MS;
   }
 
   #provider(serverId: string, state: string | null = null) {
@@ -167,7 +150,7 @@ export class McpOAuth {
   }
 
   isSignedIn(serverId: string) {
-    return (this.#store.selectMcpCredentials(serverId) as StoredCredentials).tokens !== undefined;
+    return readCredentials(this.#store, serverId).tokens !== undefined;
   }
 
   async start(serverId: string, url: string) {
@@ -190,18 +173,18 @@ export class McpOAuth {
   }
 
   async resolveAccessToken(serverId: string, url: string) {
-    const stored = this.#store.selectMcpCredentials(serverId) as StoredCredentials;
+    const stored = readCredentials(this.#store, serverId);
     const tokens = stored.tokens;
     if (!tokens) return null;
     const expiresAt = tokens.expires_in && stored.savedAt ? stored.savedAt + tokens.expires_in * 1000 : null;
-    if (expiresAt !== null && expiresAt - REFRESH_MARGIN_MS < this.#now() && tokens.refresh_token) {
+    if (expiresAt !== null && expiresAt - TOKEN_REFRESH_MARGIN_MS < this.#now() && tokens.refresh_token) {
       try {
         await auth(this.#provider(serverId), this.#options(url));
       } catch (error) {
         log.warn('[Extensions] Could not refresh an MCP sign-in', { serverId, error: describeError(error) });
       }
     }
-    return (this.#store.selectMcpCredentials(serverId) as StoredCredentials).tokens?.access_token ?? null;
+    return readCredentials(this.#store, serverId).tokens?.access_token ?? null;
   }
 
   signOut(serverId: string) {

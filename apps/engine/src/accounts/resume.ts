@@ -2,6 +2,7 @@ import type { ShinsaState, UsageWait } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import { type ClockEntry, StateClock, type StateClockOptions } from '../runtime/clock.ts';
 import type { Engine } from '../runtime/engine.ts';
+import { USAGE_RESUME_GRACE_MS, USAGE_RESUME_RETRY_MS } from './schema.ts';
 
 export interface UsageResumeClockOptions extends StateClockOptions {
   graceMs?: number;
@@ -19,8 +20,8 @@ export class UsageResumeClock extends StateClock {
 
   constructor(engine: Engine, options: UsageResumeClockOptions = {}) {
     super(engine, { area: 'Accounts', failure: 'Could not resume a waiting task', minDelayMs: 0 }, options);
-    this.#graceMs = options.graceMs ?? 5_000;
-    this.#retryMs = options.retryMs ?? 60_000;
+    this.#graceMs = options.graceMs ?? USAGE_RESUME_GRACE_MS;
+    this.#retryMs = options.retryMs ?? USAGE_RESUME_RETRY_MS;
   }
 
   protected listEntries(state: ShinsaState): ClockEntry[] {

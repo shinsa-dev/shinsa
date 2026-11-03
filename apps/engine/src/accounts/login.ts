@@ -1,6 +1,8 @@
 import type { AccountLogin } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
+import { spawnTerminalProcess } from '../terminals/pty.ts';
 import type { Env } from './paths.ts';
+import { LOGIN_COLUMNS, LOGIN_ROWS, LOGIN_TIMERS } from './schema.ts';
 
 export interface LoginProcess {
   write: (data: string) => void;
@@ -44,8 +46,6 @@ export interface LoginStart {
   env: Env;
   email: string | null;
 }
-
-const TIMERS: LoginTimers = { menuFallbackMs: 5_000, urlTimeoutMs: 30_000, watchdogMs: 16 * 60_000 };
 
 const TRANSCRIPT_LIMIT = 16_384;
 
@@ -94,7 +94,7 @@ export class AccountLogins {
 
   constructor(options: AccountLoginsOptions) {
     this.#options = options;
-    this.#timers = { ...TIMERS, ...options.timers };
+    this.#timers = { ...LOGIN_TIMERS, ...options.timers };
   }
 
   current(): AccountLogin | null {
@@ -244,23 +244,12 @@ export class AccountLogins {
 
 export function spawnLoginTerminal(command: string[], options: LoginSpawnOptions): LoginProcess {
   const decoder = new TextDecoder();
-  const child = Bun.spawn(command, {
+  const child = spawnTerminalProcess(command, {
     cwd: options.cwd,
+    cols: LOGIN_COLUMNS,
+    rows: LOGIN_ROWS,
     env: { ...Bun.env, ...options.env, TERM: 'xterm-256color' },
-    terminal: {
-      cols: 200,
-      rows: 50,
-      name: 'xterm-256color',
-      data: (_terminal, data) => options.onData(decoder.decode(data, { stream: true })),
-    },
+    onData: (data) => options.onData(decoder.decode(data, { stream: true })),
   });
-  return {
-    write: (data) => {
-      child.terminal?.write(data);
-    },
-    kill: () => {
-      child.kill();
-    },
-    exited: child.exited,
-  };
+  return { write: child.write, kill: child.hangUp, exited: child.exited };
 }

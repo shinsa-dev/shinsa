@@ -154,7 +154,7 @@ app's `1.3.0` like any older engine.
 
 ## Channels and updates
 
-The app updates itself with electron-updater from `https://shinsa.dev/updates` (`apps/desktop/src/main/updater.ts`),
+The app updates itself with electron-updater from `https://shinsa.dev/updates` (`apps/desktop/src/updates/service.ts`),
 electron-updater's `generic` provider over the update files `scripts/release-upload.ts` writes to R2 (Downloads,
 below), not GitHub's release feed. GitHub's feed lists only the newest ten releases and tags, so reading it meant
 deleting old canaries to keep betas and stable releases on it; the files on shinsa.dev name one version per channel
@@ -167,7 +167,7 @@ and never run out.
 - **Canary** (`channel = canary`) reads `canary-mac.yml`: the newest canary, and only canaries. Nothing is missed: a
   canary's version is the patch above the newest beta or stable release (Versions, above), so the next merge after a
   release brings a canary above it.
-- All three read the same feed (`UPDATE_FEED` in `apps/desktop/src/lib/update-channel.ts`, `publish` in
+- All three read the same feed (`UPDATE_FEED` in `apps/desktop/src/updates/schema.ts`, `publish` in
   `electron-builder.shared.yml` and the bundled `resources/app-update.yml`, which `test/release/build.test.ts` keeps
   equal). `useMultipleRangeRequest` is false: R2 answers one byte range per request, so the updater fetches the parts
   of the zip a blockmap says changed one range at a time. Each file names its zip as

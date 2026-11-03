@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { log } from '../log/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
+import { parseStoredLogin } from './answers.ts';
+import { AccountFolders } from './folders/service.ts';
 import {
   type Env,
   resolveKeychainAccount,
@@ -10,13 +11,10 @@ import {
   resolveSharedConfigDir,
   selectConfiguredDir,
 } from './paths.ts';
+import { KEYCHAIN_COMMAND, KEYCHAIN_NOT_FOUND, KEYCHAIN_TIMEOUT_MS, type StoredLogin } from './schema.ts';
 
-export interface StoredLogin {
-  accessToken: string;
-  refreshToken: string | null;
-  expiresAt: number | null;
-  plan: string | null;
-}
+export { parseStoredLogin } from './answers.ts';
+export type { StoredLogin } from './schema.ts';
 
 export type SecretReader = (service: string, account: string) => Promise<string | null>;
 
@@ -26,12 +24,6 @@ export type SecretRunner = (
   options: { timeoutMs: number }
 ) => Promise<CommandResult>;
 
-const SECURITY = '/usr/bin/security';
-
-const KEYCHAIN_TIMEOUT_MS = 5_000;
-
-const NOT_FOUND = 44;
-
 export function createKeychainReader(
   run: SecretRunner = runCommand,
   platform = process.platform
@@ -39,49 +31,21 @@ export function createKeychainReader(
   return async (service, account) => {
     if (platform !== 'darwin') return null;
     const result = await run(
-      [SECURITY, 'find-generic-password', '-a', account, '-s', service, '-w'],
+      [KEYCHAIN_COMMAND, 'find-generic-password', '-a', account, '-s', service, '-w'],
       homedir(),
       {
         timeoutMs: KEYCHAIN_TIMEOUT_MS,
       }
     );
     if (result.ok) return result.stdout;
-    if (result.code !== NOT_FOUND)
+    if (result.code !== KEYCHAIN_NOT_FOUND)
       log.warn('[Accounts] The keychain did not answer', { service, code: result.code });
     return null;
   };
 }
 
-function parseSecretObject(raw: string | null): Record<string, unknown> {
-  if (raw === null) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-export function parseStoredLogin(raw: string): StoredLogin | null {
-  const oauth = parseSecretObject(raw).claudeAiOauth as Record<string, unknown> | undefined;
-  const accessToken = oauth?.accessToken;
-  if (typeof accessToken !== 'string' || accessToken.length === 0) return null;
-  return {
-    accessToken,
-    refreshToken: typeof oauth?.refreshToken === 'string' ? oauth.refreshToken : null,
-    expiresAt: typeof oauth?.expiresAt === 'number' ? oauth.expiresAt : null,
-    plan: typeof oauth?.subscriptionType === 'string' ? oauth.subscriptionType : null,
-  };
-}
-
 function readCredentialsFile(dir: string) {
-  try {
-    return readFileSync(join(dir, '.credentials.json'), 'utf8');
-  } catch {
-    return null;
-  }
+  return edgeRuntime.runSync(AccountFolders.use((folders) => folders.readCredentials(dir)));
 }
 
 export interface LoginQuery {

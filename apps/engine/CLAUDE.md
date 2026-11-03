@@ -132,29 +132,57 @@ src/
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way; AttachmentStore is its edge)
-├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger and Shell that code not yet
-│                        moved to Effect calls the foundation through), Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
-│                        receipt → decide → commit → adopt the decided state → listeners with the state before and
-│                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
-│                        effect pump, cancellation, settle, the retry policy an error carries and onEffectRetry),
-│                        EffectRunner (effects.ts: one handler per ShinsaEffect, the pull request watcher, the push's
-│                        steps, conflicts, hook rejections and reportRetry), failures.ts (EffectError with its retry
-│                        policy, ShippingError naming the push's step), StateClock (clock.ts: the
-│                        base of every timer that fires from state), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
+├── runtime/             edge.ts (edgeRuntime: the process's ManagedRuntime of JsonLogger, Shell, JsonFile, GitLayer, GitHubLayer, ReposLayer, WorkspacesLayer, ChecksLayer, TerminalsLayer, ExtensionsLayer, SecretFiles, AccountsLayer and VersionsLayer that code not yet
+│                        moved to Effect calls the foundation through), engine/ (EngineCore in service.ts: boot from
+│                        the snapshot and the events after it, dispatch serialised on a Semaphore → receipt → decide →
+│                        commit → adopt the decided state → listeners with the state before and what changed, and the
+│                        same update on the `updates` Stream; snapshots once quiet, the Home guide beside the log
+│                        (writeBriefing), the pump fiber, one fiber per running effect in a FiberMap, interrupted when
+│                        a decision cancels it or the engine stops; the shapes in schema.ts, receipt identities in
+│                        receipts.ts), engine.ts (the Engine class edge: the same methods as before over EngineCore's
+│                        own ManagedRuntime on the EventLog's services; a promise handler runs in Effect.tryPromise,
+│                        so an interrupt aborts its signal, and settle waits for it to return),
+│                        effects/ (one service per area, each handler an Effect.fn failing with EffectFailed or
+│                        ShippingFailed: setup/ TaskSetup (triage, setup check, worktree), checks/ CheckRuns,
+│                        shipping/ Shipping (the push's steps, conflicts, hook rejections as HookRejected),
+│                        merging/ Merging (merge, stacks, bundles, close), cleanup/ Cleanup, pull-requests/
+│                        PullRequestSync (the watch fiber, a sync soon after a push, one sync per task at a time on
+│                        a semaphore per task, pure reads in news.ts), edits/ EditCommits, reports/ EffectReports
+│                        (retries and failures for good), runner/ EffectHandlers (routes each kind), world/
+│                        EffectWorld (the engine, config and unmoved pieces they stand on, and bridge: a promise
+│                        API given the fiber's AbortSignal, waited for on interrupt); the shapes in schema.ts),
+│                        effects.ts (the EffectRunner class edge over them: apply settles quietly once its signal
+│                        aborts, stop interrupts the watch and the background syncs), failures/ (EffectFailed and ShippingFailed,
+│                        the push's step, in schema.ts with the EFFECT_RETRY schedule; resolveEffectFailure and
+│                        resolveShippingFailure in classify.ts; retry.ts steps the schedule), StateClock (clock.ts, the
+│                        edge every timer that fires from state extends, over clock/: makeStateClock in service.ts
+│                        keeps one timer fiber in a FiberHandle, ClockTickFailed in schema.ts), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
 │                        next check)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
-│   │                    config/paths.ts, removed by the scratch.remove effect once the task settles), the live state of a run (active.ts), resume or
+│   │                    config/paths.ts, removed by the scratch.remove effect once the task settles; supervisor/:
+│   │                    makeTaskScopes: a scope per task, a run's scope under its task's or, for a delegation, under
+│   │                    the scope of the run that delegated it, and an attempt's scope holding its session under
+│   │                    its run's; a run's scope outlives its attempt while a delegation under it runs, `run.cancel`
+│   │                    closes it (its delegations with it) and shutdown closes every task's; TaskScopes in
+│   │                    index.ts is its edge), the
+│   │                    live state of a run (active/: run.ts, its shape in schema.ts), resume or
 │   │                    hand over per turn, the house rules only to a session without them and the round's
-│   │                    whole brief to an agent session that may not hold the round (turns.ts), the
-│   │                    tool calls (tool-calls.ts), questions and their waiters (questions.ts), idle release
-│   │                    (idle.ts), delegated reports in and out of a turn (deliveries.ts, delegations.ts), the
-│   │                    account seam: leases and rejections (accounts.ts), idle
-│   │                    compaction (compaction.ts), quiet runs (silence.ts), hand-over checks and evidence
-│   │                    (handover.ts), RunClock (clock.ts), the commands no agent may run (policy.ts: also the
-│   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
+│   │                    whole brief to an agent session that may not hold the round (turns/plan.ts), the
+│   │                    tool calls (tool-calls/: ToolCallFailed, each call an Effect in service.ts), questions and their waiters (questions.ts; questions/: each
+│   │                    reply a Deferred, ReplyWaiters its edge), idle release (idle.ts, the edge over idle/:
+│   │                    makeIdleRelease, one timer fiber per waiting run in a FiberMap), delegated reports in and
+│   │                    out of a turn (deliveries/service.ts, delegations/delivery.ts), the account seam: leases and rejections
+│   │                    (accounts.ts), idle compaction (compaction.ts, the edge over compaction/: makeIdleCompaction,
+│   │                    the wait and the running compaction as fibers per task, the window in window.ts; stopping
+│   │                    one aborts it and waits for it), quiet runs (silence.ts, the edge over
+│   │                    silence/: makeSilenceWatch, the check a fiber on its interval), hand-over checks and evidence
+│   │                    (handover.ts), RunClock (clock.ts, the edge over clock/:
+│   │                    makeRunClock, a countdown fiber paused by interruption; ClockTimers become an Effect
+│   │                    Clock), the commands no agent may run (policy.ts: also the
+│   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading/task.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
-│   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
+│   │                    (repository-work/service.ts: `list_repository_work` and task.record_overlaps before a hand-over),
 │   │                    the task's own service runs and the services it adds and removes (services.ts: `list_services`,
 │   │                    `run_service`, `add_service`, `remove_service`),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
@@ -164,9 +192,11 @@ src/
 │   │                    the server's router on your behalf with byTask, so a message is classified; adding a
 │   │                    repository or folder to a project runs in process through the project changes);
 │   │                    ManageAccess ({ baseUrl, projects, route }) is what serve.ts hands the supervisor as `manage`
-│   ├── providers/       types.ts (AgentProvider, capabilities, AgentSession), index.ts (ProviderRegistry),
-│   │                    instructions.ts (what every session is told about Shinsa and its skills), versions.ts
-│   │                    (reading and comparing a program's version)
+│   ├── providers/       types.ts (AgentProvider, capabilities, AgentSession), registry/ (Providers: the registry as
+│   │                    a service, resolve failing with NoAgentProvider; index.ts's ProviderRegistry is its edge),
+│   │                    session/ (acquireAgentSession: a session as a scoped resource, closing its scope cancels
+│   │                    it and waits for it to end), instructions.ts (what every session is told about Shinsa
+│   │                    and its skills), versions.ts (reading and comparing a program's version)
 │   │   └── claude/      The Claude Agent SDK provider: the session (session.ts: prompt ids, steering), result
 │   │                    classification (classify.ts), the user's `claude` (executable.ts), the SDK runtime (sdk.ts),
 │   │                    session files (artifacts.ts), the PreToolUse guard (guard.ts), the recorder (recorder.ts: the
@@ -175,16 +205,19 @@ src/
 │   │                    catalog (models.ts), the prompt queue the SDK reads from (async-queue.ts), the MCP servers
 │   │                    and skills a run loads (extensions.ts), the route to the API per compaction setting: eunoe
 │   │                    or direct, and the fallback notice (route.ts)
-│   │   └── codex/       The `codex app-server` provider: the JSON-RPC client (client.ts), the session (session.ts:
+│   │   └── codex/       The `codex app-server` provider: the JSON-RPC client (client/: makeCodexClient, the
+│   │                    process a scoped resource, its stdout and stderr read as streams, each request a Deferred
+│   │                    failing with CodexRequestError, the process group killed when its scope closes; client.ts
+│   │                    is its edge), the session (session.ts:
 │   │                    turns, steering, the agents Codex starts, compaction), the chat mapping (map.ts), failure
 │   │                    classes (classify.ts), the HTTP MCP endpoint (mcp.ts), the price table and what a turn costs
 │   │                    (pricing.ts, meter.ts), usage windows read like CodexBar and fast mode credits (usage.ts),
 │   │                    one-shot calls (complete.ts), models, sign-in, executable, MCP servers and skills
 │   │                    (extensions.ts)
 │   ├── tools/           The `shinsa` MCP server (index.ts: an MCP `Server` each provider exposes its own way) and the
-│   │                    tool schemas (specs.ts, schema.ts): hand-over and process tools (process.ts), the hand-overs
+│   │                    tool schemas (specs.ts, schema.ts): hand-over and process tools (process/handler.ts), the hand-overs
 │   │                    of each task shape: answer, report_diagnosis, submit_report, report_outcome, reshape_task
-│   │                    (shapes.ts), delegation and couriers (orchestration.ts), schedules (schedules.ts). The plan
+│   │                    (shapes/handler.ts), delegation and couriers (orchestration/handler.ts), the one Effect step every call runs through (call.ts), schedules (schedules.ts). The plan
 │   │                    parameters in `propose_plan` (verification as checks, impact, evidence, approval), the
 │   │                    `check_changes` of `complete_phase` and `complete_fix`, the `checks` of `complete_fix`, a
 │   │                    linked check on `attach_evidence` (`check`) and the steps `reshape_task` offers are generated
@@ -197,23 +230,35 @@ src/
 │                        structured output with a fallback across the registry's providers, the default one
 │                        first (index.ts, createQuickCalls), the typed decision questions (decide.ts: choice and
 │                        choices) triage and the briefing answer
-├── accounts/            Claude accounts and usage limits: store.ts (accounts.json, one CLAUDE_CONFIG_DIR per
-│                        account, shared entries linked), paths.ts (folders, the Claude config dir and
-│                        resolveAccountEnv, the environment every command for an account runs with), login.ts
-│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder, read only),
-│                        usage.ts and limits.ts (reading and caching usage), rotation.ts (leases, the spent marks in
-│                        account-marks.json and the one retry budget; the picker itself is core's `pickAccount`),
-│                        renewal.ts (a login Claude could not refresh: read again, the Sign in gate's text,
-│                        noticing it works again),
-│                        imports.ts and cswap.ts (imports), patch.ts (an account's settings from the API),
-│                        resume.ts (the usage-wait clock), index.ts (the Accounts
-│                        service: sign-ins, snapshot, notices, the weekly reading a run is charged against)
+├── accounts/            Claude accounts and usage limits: schema.ts (every shape read from outside, decoded
+│                        leniently: accounts.json's accounts, `claude auth status`, the stored login, claude-swap's
+│                        list, Claude's usage answer, the usage caches and the spent marks; UsageReadFailed,
+│                        SharedEntryUnlinked; every interval and timeout a named Duration with its _MS), answers.ts (the
+│                        pure decoders: parseAuthStatus, parseStoredLogin, parseCswapList), registry/
+│                        (AccountRegistry: accounts.json, usage-limits.json, provider-usage.json and account-marks.json
+│                        on JsonFile), folders/ (AccountFolders: an account's CLAUDE_CONFIG_DIR made, seeded, linked to
+│                        the shared entries, written and removed, its .credentials.json read), usage/ (UsageApi: Claude's
+│                        usage over HttpClient; answer.ts the windows, fast mode and Retry-After), layers.ts
+│                        (AccountsLayer, in runtime/edge.ts). The edges keep their exports: store.ts (AccountStore),
+│                        paths.ts (folders, the Claude config dir and resolveAccountEnv, the environment every command
+│                        for an account runs with), login.ts (`claude auth login` on TerminalPty), status.ts,
+│                        credentials.ts (the keychain entry per folder, read only), usage.ts (requestUsage) and
+│                        limits.ts (UsageLimits), rotation.ts (leases, the spent marks and the one retry budget; the
+│                        picker itself is core's `pickAccount`), renewal.ts (a login Claude could not refresh: read
+│                        again, the Sign in gate's text, noticing it works again), imports.ts and cswap.ts (imports),
+│                        patch.ts (an account's settings from the API), resume.ts (the usage-wait clock), index.ts (the Accounts service: sign-ins, snapshot, notices, the weekly
+│                        reading a run is charged against); its routes are http/routes/accounts
 ├── eunoe/               Eunoe's core (`@chroxify/eunoe`) served inside the engine for its Claude sessions: server.ts
-│                        (EunoeServer: the forwarder on a loopback port of its own, started on first use; thread state
-│                        and the request log in data/eunoe; compaction notices and the stuck signal per session)
+│                        (EunoeServer: the forwarder on a loopback port of its own, started on first use; the request
+│                        log in data/eunoe; compaction notices and the stuck signal per session), forwarder.ts (the
+│                        server acquired in a scope stop() closes; ForwarderUnavailable), threads.ts (thread state in
+│                        data/eunoe/threads on JsonFile, decoded by StoredThread), schema.ts
 ├── schedules/           Schedules: the clock (clock.ts), the agent tools (tools.ts), the webhook receiver
-│                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts),
-│                        the Schedules service (index.ts); its routes are http/routes/secrets and webhooks
+│                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts:
+│                        a JSON body decoded by WebhookBodyText), the writer's wording of a suggested watch (suggest.ts,
+│                        its answer decoded by WatchAnswer in answer.ts), the Schedules service (index.ts; its routes
+│                        are http/routes/secrets and webhooks), schema.ts (the shapes, WebhookOutcome, the
+│                        limits and RATE_WINDOW)
 ├── remote/              Remote access (docs/engine.md → Remote access): store.ts (remote.json: the machine's key, the
 │                        credentials, the enrolled devices, who has access; the only place the keys live),
 │                        client/ (RemoteClient in service.ts: every call to app.shinsa.dev derived from core's
@@ -274,89 +319,141 @@ src/
 │                        /api/slack and POST /api/slack/disconnect); posts, reactions, the thread's status, links and
 │                        unlink go through RemoteClient's slackRelay group with the machine token, retried only
 │                        on SlackFailed or a retryable RemoteUnreachable (the relay down, busy or unreachable)
-├── secrets/             SecretStore (store.ts): secrets.json, webhook tokens and signing secrets, one-use secret refs,
-│                        MCP sign-ins
-├── extensions/          MCP servers, plugins and skills (docs/engine.md → MCP servers, plugins and skills): what
-│                        Claude Code, Codex, plugins and repositories set up (discover.ts, definitions.ts, skills.ts,
-│                        plugins.ts), one row per server however many places define it (catalog.ts),
-│                        extensions.json (store.ts), checking and redacting what you send (input.ts), health checks
-│                        and the MCP client (health.ts), sign-in (oauth.ts, and sign-in.ts: the callback page),
-│                        when agents last used each server and skill (usage.ts: Claude Code sessions and Shinsa's
-│                        transcripts, read incrementally), what a run loads and leaves out and what it is told about
-│                        it (session.ts), loading what the context optimizer left out mid-run, by any name
-│                        (loader.ts), the Extensions service (index.ts)
+├── secrets/             secrets.json: webhook tokens and signing secrets, one-use secret refs, MCP sign-ins. schema.ts
+│                        (each entry's schema, SECRET_REF_TTL), files/ (SecretFiles: read and written on JsonFile, a
+│                        file without a salt kept aside), store.ts the edge (SecretStore)
+├── extensions/          MCP servers, plugins and skills (docs/engine.md → MCP servers, plugins and skills): schema.ts
+│                        (every shape read from outside: Claude Code's and Codex's settings, plugin manifests, skill
+│                        front matter, extensions.json, extension-usage.json, transcript lines, stored OAuth
+│                        credentials, each decoded leniently; McpServerFailed; MCP_CHECK_TIMEOUT and the other
+│                        timeouts), discovery/ (ExtensionDiscovery: what Claude Code, Codex, plugins and repositories
+│                        set up, servers.ts and skills.ts its pure steps), store/ (ExtensionFiles: extensions.json and
+│                        the usage cache through JsonFile), health/ (McpClients: open, a scoped MCP client closed with
+│                        its scope; request, any MCP call under its timeout as McpServerFailed; check, a server's
+│                        health), usage/ (ExtensionUsage: when agents last used each server and skill, from Claude
+│                        Code sessions and Shinsa's transcripts read incrementally; names.ts), tools.ts (tool lists,
+│                        their tokens and what counts as unauthorized), credentials.ts (stored sign-ins decoded),
+│                        layers.ts (ExtensionsLayer, in runtime/edge.ts). The edges keep their exports: discover.ts,
+│                        definitions.ts, skills.ts, plugins.ts, store.ts, health.ts, usage.ts; one row per server
+│                        however many places define it (catalog.ts), checking and redacting what you send
+│                        (input.ts), sign-in (oauth.ts, and sign-in.ts: the callback page), what a run loads and
+│                        leaves out and what it is told about it (session.ts), loading what the context optimizer
+│                        left out mid-run, by any name (loader.ts), the Extensions service (index.ts; its routes are
+│                        http/routes/extensions and sign-in)
 ├── versions/            The agent programs' versions and their updates (docs/engine.md → Versions and updates):
-│                        the latest from the npm registry (registry.ts), each program's own updater, found from
-│                        where its binary lives (updaters.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
-├── git/                 refs (assertRefName, slugify), bundle.ts (checkBundleMerge: a bundle merged into the default
-│                        branch with git merge-tree, no working tree, and the lowest branch behind its base on a
-│                        conflict), conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
-│                        resolveCommitType from a branch, serializeConventionalSubject: the commit and pull request
-│                        subjects), repo, worktree, commit, diff, push.ts (runPush, pushBranch and
-│                        PushError: a failed push typed as hook, network, non_fast_forward or other by
-│                        classifyPushFailure; hasPrePushHook, core.hooksPath and husky's stubs followed; the output's
-│                        tail), update.ts (updateOntoBase: fetch the base, merge it in when the branch lacks it, or
-│                        list the conflicts and abort the merge), isolation.ts (detached
-│                        checkouts for isolated delegations), run.ts (git writes that wait out another process's
-│                        index.lock); the Code tab's reads: read.ts (readGit: raw bytes, a 5 s timeout, a byte or line cap,
-│                        each chunk as it comes, the request's abort, literal pathspecs), files.ts (paths, a folder, a file at a commit or in
-│                        the working copy, `git grep` with case folded into the pattern and its matches streamed), task-refs.ts (a task's head, base and commits, also once its
-│                        worktree is gone), objects.ts (ObjectCache, the 64 MB cache of what a commit addresses),
-│                        diff.ts (commit to commit, and the working copy against a base: the file list from
-│                        `--raw --numstat`, the patches of the small files only, or of the files named), changed-files.ts (the
-│                        files a task's branch committed since its base plus what its checkout has not committed)
-├── workspaces/          Where agents work (docs/engine.md → Where agents work): one WorkspaceStrategy per mode
-│                        (types.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
-│                        before a push), worktrees.ts, main-checkout.ts, index.ts (Workspaces.resolve, the setup
-│                        check's describeWorkspaceProblem)
-├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
-│                        checks, comments, threads, the reader and the merge queue), create with its body, retarget,
-│                        merge (only the approved head, `--match-head-commit`), the repository's numeric id,
-│                        a pull request's diff (`gh pr diff`) and a file at a commit (readRepoFile), what a shared
-│                        task's Code tab shows, a user
-│                        attachment upload and rewriting the description's block (writePullRequestBlock);
-│                        description.ts: PullRequestDescriptions (uploads the evidence GitHub cannot reach, reads
-│                        the notes, builds the body with core's serializePullRequestMarkdown); ci.ts: whether a
-│                        repository has CI for a base (readRepoCi: workflows, the base commit's checks, required
-│                        checks; RepoCiCache)
+│                        registry/ (NpmRegistry: the latest from the npm registry over HttpClient, decoded by
+│                        NpmLatest, NpmRegistryFailed), registry.ts its edge (requestLatestVersion), each program's own
+│                        updater, found from where its binary lives (updaters.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts),
+│                        schema.ts (the shapes, PROGRAMS, LATEST_TTL, UPDATE_TIMEOUT), program.ts (isProgramId),
+│                        layers.ts (VersionsLayer, in runtime/edge.ts)
+├── files/               service.ts (JsonFile: read(path, schema), a missing file Option.none and broken text or a
+│                        breaking value the typed JsonFileUnreadable; keepAside, the `<name>.unreadable-<time>` copy;
+│                        write, atomic through `<name>.writing-<pid>` and mode 600), schema.ts, index.ts (the edge:
+│                        writeJsonFile, keepJsonFileAside; config/file.ts re-exports writeJsonFile), manifest.ts (the
+│                        one reader of a checkout's package.json and deno.json, through the lenient PackageManifest
+│                        schema: a field that breaks its shape is dropped, the rest kept)
+├── git/                 service.ts (Git: attempt answers a CommandResult, run fails with GitFailed and retries a held
+│                        index.lock on LOCK_RETRY, read answers a command's raw bytes with its byte or line cap, a
+│                        5 s timeout, each chunk as it comes and the request's abort, literal pathspecs), schema.ts
+│                        (GitFailed, RefName and RefNameInvalid, GitRead, LOCK_RETRY), ref-name.ts (decodeRefName),
+│                        layers.ts (GitLayer: the services below on Git), and one folder per service with its
+│                        schema.ts: checkout/ (Checkout: commits, a merge's MERGE_HEAD, stashes, worktrees made,
+│                        refreshed and removed, a free branch name, the start point, delegations' detached
+│                        checkouts, installing dependencies; MergeUnresolved, CommitInvalid; paths.ts), remote/
+│                        (Remote: pushes and PushError typed as hook, network, non_fast_forward or other by
+│                        classifyPushFailure in output.ts, hasPrePushHook with core.hooksPath and husky's stubs
+│                        followed, the output's tail; updateOntoBase: fetch the base, merge it in when the branch
+│                        lacks it, or list the conflicts and abort the merge; checkBundleMerge: a bundle merged into
+│                        the default branch with git merge-tree, no working tree, and the lowest branch behind its
+│                        base on a conflict; a repository's root, origin and default branch), history/ (History: a
+│                        task's head, base and commits, also once its worktree is gone, CodeUnavailable; the files its
+│                        branch committed since its base plus what its checkout has not; diffs commit to commit and
+│                        the working copy against a base on a scratch index acquired and released in a scope, the
+│                        file list from `--raw --numstat`, the patches of the small files only or of the files named,
+│                        DiffFailed), tree/ (CodeFiles: the Code tab's paths, folders, files at a commit or in the
+│                        working copy, `git grep` with case folded into the pattern and its matches streamed, each
+│                        failure CodeReadFailed with its code; entries.ts the pure parsers), leftovers/
+│                        (LeftoverProcesses: the processes still working in a folder, stopped with a grace period
+│                        polled on STOP_POLL_SCHEDULE). conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
+│                        resolveCommitType, serializeConventionalSubject) and refs.ts (assertRefName, slugify) are
+│                        pure. The other files are the edges, the same exports as before for the folders not moved
+│                        yet: index.ts, run.ts (runGitOrThrow), read.ts (readGit), commit.ts, worktree.ts,
+│                        isolation.ts, push.ts, update.ts, bundle.ts, repo.ts, task-refs.ts, changed-files.ts,
+│                        diff.ts, files.ts and processes.ts, each failure the error it threw before (a DomainError
+│                        for the Code tab's reads). blobs.ts (CatFile, CatFilePool: one long-lived
+│                        `git cat-file --batch-command` per repository) and objects.ts (ObjectCache, the 64 MB cache
+│                        of what a commit addresses) stay as they were: only http/routes/code holds them
+├── workspaces/          Where agents work (docs/engine.md → Where agents work): one Workspace of effects per mode
+│                        (schema.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
+│                        before a push; TaskCheckoutMissing, CheckoutDirty, CheckoutOffBranch),
+│                        worktrees-mode/ (WorktreeWorkspaces: make(worktreesDir) and the commit both modes share),
+│                        main-checkout-mode/ (MainCheckoutWorkspace: the workspace and the setup check's
+│                        describeProblem); the edges: edge.ts (EdgeWorkspace, the WorkspaceStrategy of promises),
+│                        worktrees.ts, main-checkout.ts, index.ts (Workspaces.resolve, describeWorkspaceProblem)
+├── github/              `gh`, the one way the engine reaches GitHub: process/ (GitHubProcess: gh with GITHUB_TIMEOUT,
+│                        and layerTest, which plays gh in a test), service.ts (GitHubCli: run fails with
+│                        GitHubFailed, json decodes the answer with a schema or fails with GitHubAnswerInvalid),
+│                        slug.ts (resolveRepoSlug); pulls/ (PullRequests: read, the view with the merge commit, then
+│                        one GraphQL read for checks, comments, threads, the reader and the merge queue; create with
+│                        its body, retarget, merge only the approved head with `--match-head-commit`, the
+│                        repository's numeric id, a pull request's diff and a file at a commit for a shared task's
+│                        Code tab, a user attachment upload, rewriting the description's block; every answer's
+│                        schema in schema.ts; serialize.ts maps them onto core's PullRequest); description/
+│                        (PullRequestDescriber.make: the writer that uploads the evidence GitHub cannot reach,
+│                        reads the notes and builds the body with core's serializePullRequestMarkdown; link.ts the
+│                        review link); ci/ (RepoCiReader: whether a repository has CI for a base, from workflows,
+│                        the base commit's checks and required checks, and makeCache); layers.ts (GitHubLayer);
+│                        index.ts, ci.ts and description.ts are the edges (readPullRequest…, RepoCiCache,
+│                        PullRequestDescriptions)
 ├── checks/              The checks a `checks.run` effect names (the agent's and the repository's baseline; nothing is
 │                        guessed from package.json), all at once with no machine-wide limit: each through `sh -c` in the
 │                        task's checkout at low priority (`nice -n 10` where it exists) with CHECK_ENV, stopped after
-│                        CHECK_TIMEOUT_MS (15 minutes); a command named twice runs once (index.ts: runChecks). A
-│                        failure re-runs its failing test files alone once (reruns.ts; all pass: `passed_alone`), then
-│                        runs on the task's base commit in a kept detached checkout, cached per base commit and command
-│                        (base.ts: BaseCheckouts, compareWithBase), comparing the failures themselves (failures.ts:
+│                        CHECK_TIMEOUT_MS (15 minutes); a command named twice runs once. runner/ (CheckRunner:
+│                        command, run, confirm, runAll). A failure re-runs its failing test files alone once
+│                        (reruns.ts; all pass: `passed_alone`), then runs on the task's base commit in a kept detached
+│                        checkout, cached per base commit and command (base/: BaseCheckoutPools.make(dir), any failure
+│                        logged and answered as no comparison), comparing the failures themselves (failures.ts:
 │                        listCheckFailures reads failing tests by file and name, or tsc, Biome, ESLint, Prettier and
 │                        path:line diagnostics by file, code and message, never the line; resolveFailureDiff,
 │                        describeFailureDiff): none new is `fails_on_base`, not blocking; new ones block, named first;
 │                        output it cannot read, or a failing file or a path in the command missing on the base, is
-│                        never compared); evidence.ts writes each check's output
-│                        as one piece of Shinsa's `check` evidence with its id (serializeCheckOutput)
-│                        (docs/engine.md → Checks)
+│                        never compared); caches/ (SharedCaches: the turbo cache per repository); output.ts (the
+│                        output's tail and the failing files); evidence.ts writes each check's output as one piece of
+│                        Shinsa's `check` evidence with its id (serializeCheckOutput); install.ts the lockfile's
+│                        install command; schema.ts the shapes and limits; layers.ts (ChecksLayer, with
+│                        test-coverage's TaskCoverage); index.ts, base.ts and caches.ts are the edges (runChecks,
+│                        BaseCheckouts…) (docs/engine.md → Checks)
 ├── test-coverage/       Changed-line coverage, once before review, from the tests among the task's checks: detect.ts
 │                        (resolveCoverageRun: a test check's command run again with its runner's coverage report in a
-│                        temporary folder; resolveCoverageDetection for Settings), index.ts
-│                        (measureTaskCoverage: run each like a check, merge the reports, diff against the task's base, and
-│                        core's measureCoverage; listCoverageDetections for GET /api/repos/coverage)
+│                        temporary folder; resolveCoverageDetection for Settings), service.ts (TaskCoverage.measure:
+│                        run each like a check in a temporary folder released with its scope, merge the reports, diff
+│                        against the task's base, and core's measureCoverage; CoverageReportUnreadable), schema.ts,
+│                        index.ts the edge (measureTaskCoverage; listCoverageDetections for GET /api/repos/coverage)
 │                        (docs/engine.md → Test coverage of the change)
 ├── resources/           How busy this machine is (docs/engine.md → Remote access, How busy each machine is): index.ts
 │                        (ResourceMonitor: samples every 5 s while a socket listens, df and du every 10 minutes, the
-│                        memory reader per platform), sample.ts (the ps table, CPU from deltas of CPU time, vm_stat,
+│                        memory reader per platform), poller.ts (the sampling fiber on Schedule.spaced, interrupted
+│                        when the last socket closes), sample.ts (the ps table, CPU from deltas of CPU time, vm_stat,
 │                        /proc/meminfo, df, du, each task's use), ledger.ts (ProcessLedger: each task's agent, check
-│                        and service processes)
+│                        and service processes), schema.ts (the shapes and each interval as a Duration)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner, and fills in a missing remote from origin
-│                        (syncRepoRemote, upsertRepo) (index.ts); remote.ts (a repository's origin from .git/config,
-│                        without running git); discover.ts (scans the home folder for the folders that hold repositories),
-│                        roots.ts (chosen folders, SHINSA_ROOTS, or discovery until onboarding is done), setup.ts
-│                        (setup verification before a task's first agent)
+│                        (syncRepoRemote, upsertRepo) (index.ts); folders/ (RepoFolders: scanning the home folder
+│                        for the folders that hold repositories, the repositories in the chosen folders, a
+│                        repository's origin from .git/config without running git), setup/ (RepoSetup: setup
+│                        verification before a task's first agent), login/ (GitHubLogins: the GitHub login through
+│                        GitHubCli, kept once gh answers it), roots.ts (chosen folders, SHINSA_ROOTS, or discovery
+│                        until onboarding is done); edge.ts the functions the rest of the engine calls
 ├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts: the folders macOS keeps
 │                        private as PrivateFoldersError, and opening Full Disk Access), the prerequisite checks
 │                        (prerequisites.ts: git, gh, claude, bun when a repository uses it, Homebrew when a fix
 │                        needs it, and codex and its sign-in as optional, each with the command that fixes it;
 │                        install.ts: that command run in a terminal of your own), the setup steps: the fixed list, what each shows and saves
 │                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
-│                        back and its saved state (flow.ts), the accounts it lists (accounts.ts)
+│                        back (flow.ts), its saved state (drafts.ts: onboarding.json on JsonFile, decoded by
+│                        SetupDraft in schema.ts, a file it cannot read or did not write starting setup again), the
+│                        accounts it lists (accounts.ts); schema.ts also holds the revision of the suggested projects,
+│                        the prerequisite shapes and PREREQUISITE_TIMEOUT
 ├── projects/            routes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
 │                        folders, registered or not) and createProjectChanges, which http/routes/projects and
 │                        the management client share; folders.ts
@@ -376,28 +473,33 @@ src/
 │                        everything waiting in a task's inbox is classified together against the task as it is
 │                        then and routed as one (message.route with messageIds; not classified at a gate that
 │                        takes words, needsMessageKind), a classifier that does not
-│                        answer within 30 s routes it unclassified, and a route that breaks is dropped with a
+│                        answer within CLASSIFY_TIMEOUT (30 s, schema.ts; classify.ts runs the call with
+│                        Effect.timeoutOrElse, ClassifierFailed) routes it unclassified, and a route that breaks is dropped with a
 │                        reason, so no message waits for ever; the receipt is taken over the
 │                        command as sent; createCommandRouter, the same route for an agent's management commands,
 │                        which classifies before it dispatches; a new round or a kept suggestion that names no kind
 │                        of task is shaped first (resolveRoundShape); resolveRoundRepository finds the repository a
 │                        task with none needs once its work needs one (the setup check calls it)
-├── briefing/            The Home guide, debounced, written beside the log through Engine.writeBriefing
-├── terminals/           Your terminals (docs/engine.md → Terminals): pty.ts (your login shell in Bun's PTY, its
-│                        environment, hanging up), mirror.ts (the headless xterm.js copy of the screen, the answers to
-│                        a program's questions), session.ts (TerminalSession: viewers, batching, back-pressure, exit,
-│                        typing a command at the prompt), xterm-types.d.ts (the add-ons' `@xterm/xterm` types mapped to
-│                        `@xterm/headless` in tsconfig, so the DOM types never reach the engine),
-│                        store.ts (data/terminals/: the terminals, their screens and services.json), detect.ts (the
-│                        services found in a project's folders: workspace scripts, Deno, bin/dev and Procfile lines, each
-│                        Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the quick call
-│                        that names them, adds a port flag and a preview URL, cached per project),
-│                        routes.ts (what http/routes/terminals and services read from a body, and the
-│                        /ws/terminals/<id> socket, createTerminalSockets),
-│                        index.ts (Terminals: the list, create, rename, reorder, restart, run, close, stop, and the
-│                        services: add, update, remove, start, stop, restart, a run per task, closing a task's
-│                        runs, resume after a restart);
-│                        pty.ts also reads the program in front of a shell (readForegroundProgram)
+├── briefing/            The Home guide, written beside the log through Engine.writeBriefing; debounce.ts waits
+│                        BRIEFING_DEBOUNCE (schema.ts) on a fiber that each new request interrupts and stop() cancels
+├── terminals/           Your terminals (docs/engine.md → Terminals): pty/ (TerminalPty: your login shell in Bun's PTY as
+│                        a scoped resource, hung up and killed after HANG_UP_GRACE; the program in front of a shell
+│                        through Shell; a free port on PORT_RETRY, PortUnavailable), pty.ts its edge (the shell, its
+│                        environment, spawnTerminalProcess, readForegroundProgram, pickFreePort), mirror.ts (the
+│                        headless xterm.js copy of the screen, the answers to a program's questions), session.ts
+│                        (TerminalSession: viewers, batching, back-pressure, exit, typing a command at the prompt),
+│                        xterm-types.d.ts (the add-ons' `@xterm/xterm` types mapped to `@xterm/headless` in tsconfig,
+│                        so the DOM types never reach the engine), store/ (TerminalFiles: data/terminals/, the
+│                        terminals, their screens and services.json on JsonFile, each entry decoded by StoredTerminal
+│                        or StoredService), store.ts its edge (TerminalStore, parseStoredTerminal, parseStoredService),
+│                        detect.ts (the services found in a project's folders: workspace scripts, Deno, bin/dev and
+│                        Procfile lines, each Compose service, Cargo, Go, Django, make), refine.ts (ServiceRefiner: the
+│                        quick call that names them, adds a port flag and a preview URL, cached per project; its answer
+│                        decoded in answer.ts), routes.ts (what http/routes/terminals and services read from a body, and the
+│                        /ws/terminals/<id> socket, createTerminalSockets), index.ts (Terminals: the list, create, rename,
+│                        reorder, restart, run, close, stop, and the services: add, update, remove, start, stop,
+│                        restart, a run per task, closing a task's runs, resume after a restart), schema.ts,
+│                        layers.ts (TerminalsLayer)
 └── http/                Core's EngineApi served (docs/engine.md → The HTTP surface): server.ts (Bun.serve
                          listens and hands every request, and every request inside a remote channel, to the one
                          web handler; the sockets: the page's `/ws`, `/ws/terminals/<id>`, the remote, share,
@@ -443,12 +545,30 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `Events`, `Outbox`, `Receipts`, `Briefings`, `Snapshots`, `LogMigrator`, `CommandLog` (`store/`) | `StoreLayer(path)` | the event log's tables on one `SqlClient`, every row decoded |
   | `Evidence`, `Attachments` (`store/`) | `Evidence.layer(dir)`, `Attachments.layer(dir)` | the files beside the log |
   | `ServeLock` (`instance/lock/service.ts`) | `ServeLock.acquire(dataDir, owner)` in a scope, or `ServeLock.layer` | `data/serve.lock`, tried at most three times while a stopped holder's file is taken over (`TAKEOVER_SCHEDULE`), and given back when its scope closes; `ServerRunning`, `LockContended` |
+  | `JsonFile` (`files/service.ts`) | `JsonFile.layer` | the JSON files Shinsa keeps: `read(path, schema)` → `Option` or `JsonFileUnreadable`, `keepAside`, an atomic `write`; `JsonFileWriteFailed` |
+  | `Git` (`git/service.ts`) | `Git.layer`, needs `Shell` and `BunServices.layer` | `attempt`, `run` (`GitFailed`, `LOCK_RETRY` on a held index.lock), `read` (raw bytes, caps, timeout, abort) |
+  | `Checkout`, `Remote`, `History`, `CodeFiles`, `LeftoverProcesses` (`git/`) | `GitLayer` (`git/layers.ts`), needs `Shell` and `BunServices.layer` | worktrees and commits; pushes (`PushError`), the base and bundles; refs, changed files and diffs; the Code tab's reads (`CodeReadFailed`); processes left in a worktree |
+  | `GitHubProcess`, `GitHubCli`, `PullRequests`, `RepoCiReader`, `PullRequestDescriber` (`github/`) | `GitHubLayer` (`github/layers.ts`), needs `Shell`; a test gives `GitHubProcess.layerTest(answer)` instead | gh with its timeout, gh's answers decoded (`GitHubFailed`, `GitHubAnswerInvalid`), pull requests (`MergeMethodInvalid`, `NoGitHubRemote`), CI, the description |
+  | `FeedbackIssues` (`feedback/issues/service.ts`) | `FeedbackIssues.layer`, needs `GitHubLayer` | opening a feedback issue and reading your issues' states through `GitHubCli` (`FeedbackAnswerInvalid` for an answer without a link or a list) |
+  | `RepoFolders`, `RepoSetup`, `GitHubLogins` (`repos/`) | `ReposLayer` (`repos/layers.ts`), needs `GitLayer` and `GitHubLayer` | finding repositories and their origin, the setup check, the GitHub login |
+  | `WorktreeWorkspaces`, `MainCheckoutWorkspace` (`workspaces/`) | `WorkspacesLayer` (`workspaces/layers.ts`), needs `GitLayer` | the two places agents work (`TaskCheckoutMissing`, `CheckoutDirty`, `CheckoutOffBranch`) |
+  | `CheckRunner`, `BaseCheckoutPools`, `SharedCaches` (`checks/`), `TaskCoverage` (`test-coverage/`) | `ChecksLayer` (`checks/layers.ts`), needs `GitLayer` | checks, their re-runs and base comparison, the turbo cache, changed-line coverage (`CoverageReportUnreadable`) |
+  | `ExtensionDiscovery`, `ExtensionFiles`, `McpClients`, `ExtensionUsage` (`extensions/`) | `ExtensionsLayer` (`extensions/layers.ts`), needs `JsonFile` | what Claude Code, Codex, plugins and repositories set up, decoded; extensions.json and the usage cache; scoped MCP clients and timed calls (`McpServerFailed`); when each server and skill was last used |
+  | `AccountRegistry`, `AccountFolders`, `UsageApi` (`accounts/`) | `AccountsLayer` (`accounts/layers.ts`), needs `JsonFile` | the accounts' JSON files decoded, each account's Claude folder, Claude's usage over `HttpClient` (`UsageReadFailed`) |
+  | `NpmRegistry` (`versions/registry/service.ts`) | `VersionsLayer` (`versions/layers.ts`) | the latest version of a package, decoded (`NpmRegistryFailed`) |
+  | `SecretFiles` (`secrets/files/service.ts`) | `SecretFiles.layer`, needs `JsonFile` | secrets.json decoded, a file without a salt kept aside |
+  | `TerminalFiles`, `TerminalPty` (`terminals/`) | `TerminalsLayer` (`terminals/layers.ts`), needs `JsonFile` and `Shell` | data/terminals/ decoded by schemas; the PTY as a scoped resource, the foreground program, a free port (`PortUnavailable`) |
   | `HttpServices` (`http/services/service.ts`) | `makeEngineHandler(services)` (`http/app.ts`), scoped | what every `EngineApi` handler calls; the handler is `HttpRouter.toWebHandler` over the groups, `Ingress` and `EngineGateLive` |
   | `EngineClient` (`cli/client/service.ts`) | `EngineClient.layer({ base, wake, fetch })` | `HttpApiClient` over core's `EngineApi`, waking the engine once; `createEngineCalls` the same calls as promises |
   | `Serve` (`serve/service.ts`) | `Serve.layer(config, options, stop)`, scoped | one engine; its finalizers are the shutdown order; fails with the lock's `ServerRunning` or `LockContended`, which `startShinsa` turns into its `DomainError` |
 
-  Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand` and the kill
-  helpers run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config, `runPromise` for processes);
+  Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
+  helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
+  terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' stores, the npm
+  registry, Eunoe's forwarder and threads, the resource poller, the setup draft, triage's classifier timeout, the
+  briefing's debounce and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config,
+  `runPromise` for processes); `Extensions`, `Versions`, `ResourceMonitor`, `EunoeServer`, `Accounts` and
+  `Terminals` stay the objects their callers hold;
   `EventLog`, `EvidenceStore` and `AttachmentStore` each own a `ManagedRuntime` over their layer and `runSync` it;
   `acquireDataDirLock` builds `ServeLock` in a scope of its own. Each edge throws the errors and messages it threw
   before. A module that moves to Effect yields the service instead and stops calling its edge; once nothing calls an
@@ -459,20 +579,23 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   (`docs/engine.md` → Guarantees).
 - **A failure that is not the outside world's is not thrown.** A deterministic failure (a pre-push hook rejection, a
   conflict while updating onto the base) is reported as a command and the effect settles, so the outbox never
-  retries it; one that is never worth retrying throws an `EffectError` with `retryable: false`; and every retry of a
+  retries it; one that is never worth retrying fails with an `EffectFailed` with `retryable: false`; and every retry of a
   push is reported to its task (`reportRetry`). No push skips the repository's hooks (`docs/engine.md` → Pushing the
   branch).
 - **Every command the server sends gets a fixed id from its cause** (`Engine.dispatch(command, { id })`), unique for
   distinct causes and identical for a repeat, naming everything the decision depends on; the list is
   `docs/engine.md` → Command receipts → Deterministic server ids.
 - **Timers that fire from state extend `StateClock`** (`runtime/clock.ts`; `MonitorClock`, `ScheduleClock`,
-  `UsageResumeClock`). The subclass lists what is due (`listEntries`); the base keeps one timer for the earliest,
-  re-arms on every state change, fires each due entry once at a time, and skips an entry core refused with a
+  `UsageResumeClock`). The subclass lists what is due (`listEntries`); the base keeps one timer fiber for the
+  earliest (`runtime/clock/service.ts`), re-armed on every state change and kept when the earliest due time stays
+  the same, fires each due entry once at a time, and skips an entry core refused with a
   `DomainError`, or answered with no events (`refuse`), until it leaves `listEntries`, so a refused or no-op command
   is never sent again and again.
-- **Effects can be cancelled.** A running effect's `context.signal` aborts when a decision cancels it or the server
-  stops. A handler that does outside work checks the signal before the step it must not take after a cancel (a merge,
-  a push, opening a pull request) and passes it to the commands it runs (checks, `git push`, `gh`).
+- **Effects can be cancelled.** A running effect's fiber is interrupted when a decision cancels it or the server
+  stops, so it takes no step after the cancel (a merge, a push, opening a pull request). A handler calls code not yet
+  moved to Effect through `EffectWorld.bridge`, which passes the commands it runs (checks, the push, `gh`) an
+  `AbortSignal` the interrupt aborts; a pair of steps that must happen together (a commit and its record) is
+  `Effect.uninterruptible`.
 - **Effects that touch the outside world must be safe to run twice** (a worktree is reused, an open pull request is
   reused, a merge reads GitHub first): replay-safe effects run again after a crash (`docs/engine.md` → Recovery).
 - **Rounds share the task's worktree and push where their round says** (`docs/engine.md` → Rounds): a later round's
@@ -528,7 +651,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   and a read of a data source (purposes `watch` and `intake`) in the repository itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
   task's worktree. Edits a read-only run leaves (the agent's while it plans included) are set aside, never in the
   repository itself: that is the human's own checkout. Setup verification asks for a default branch only when the
-  pipeline needs a worktree, and never for check commands (`runtime/effects.ts`); a worktree reused
+  pipeline needs a worktree, and never for check commands (`runtime/effects/setup/service.ts`); a worktree reused
   before any phase report is reset, which is how an investigation's scratch edits are dropped before its fix is
   planned.
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the
@@ -550,7 +673,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   the pull request syncs, the clocks and every running effect, and waits for them and for every running effect
   handler (`Engine.settle`) before it closes
   the log, so no `claude`, check or `gh` outlives the server (`docs/engine.md` → The agent loop → Restart
-  continuation). Eunoe's forwarder stops after the effects, once no `claude` can still talk to it. Your terminals' shells
+  continuation). Eunoe's forwarder stops after the effects, once no `claude` can still talk to it. Once HTTP has
+  stopped, `disposeRuntime` (`serve/wiring.ts`) releases the `EffectRunner`'s and then the `Engine`'s own
+  `ManagedRuntime`, before the log closes, so no fiber of theirs outlives the engine. Your terminals' shells
   are hung up before the clocks stop, and their screens saved. Anything new that starts a process or a timer is
   stopped there too.
 - **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that

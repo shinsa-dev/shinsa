@@ -2,7 +2,6 @@ import {
   DomainError,
   ONBOARDING_REQUEST_LIMIT,
   type OnboardingProjectChoice,
-  type OnboardingProjectTurn,
   PROJECT_COLORS,
   PROJECT_LIMITS,
   type Project,
@@ -11,17 +10,7 @@ import {
 } from '@shinsa/core';
 import type { JsonSchema } from '../agents/providers/index.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
-
-interface RevisedProject {
-  name: string;
-  repos: string[];
-}
-
-export interface ProjectRevision {
-  projects: RevisedProject[];
-  seen: string[];
-  turns: OnboardingProjectTurn[];
-}
+import type { ProjectRevision, RevisedProject } from './schema.ts';
 
 interface RevisionAnswer {
   reply: string;

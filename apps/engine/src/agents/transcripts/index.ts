@@ -1,97 +1,20 @@
-import {
-  appendFileSync,
-  closeSync,
-  existsSync,
-  type FSWatcher,
-  openSync,
-  readSync,
-  statSync,
-  watch,
-} from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CHAT_PROTOCOL_VERSION, type ChatEntry, type ChatEvent, isChatEntry } from '@shinsa/core';
+import { CHAT_PROTOCOL_VERSION, type ChatEntry, type ChatEvent } from '@shinsa/core';
 import { describeError, log } from '../../log/index.ts';
+import { readRange, readSize, repeatEverySecond, watchFile } from './file.ts';
+import { parseLines } from './lines.ts';
+import {
+  CACHED_RUNS,
+  type CheckRepeater,
+  type FileWatcher,
+  type Follower,
+  type RunFile,
+  type TranscriptListener,
+  type TranscriptRead,
+} from './schema.ts';
 
-type TranscriptListener = (runId: string, entries: ChatEntry[], start: number | null) => void;
-
-interface Follower {
-  count: number;
-  watcher: FSWatcher | null;
-  stopChecking: (() => void) | null;
-}
-
-interface RunFile {
-  offset: number;
-  entries: ChatEntry[];
-}
-
-export interface TranscriptRead {
-  entries: ChatEntry[];
-  start: number;
-}
-
-const CHECK_MS = 1_000;
-
-const CACHED_RUNS = 8;
-
-export const UNREADABLE_LINE = 'Shinsa could not read one line of this transcript.';
-
-function createUnreadableEntry(id: string): ChatEntry {
-  return { v: CHAT_PROTOCOL_VERSION, id, at: 0, type: 'error', text: UNREADABLE_LINE };
-}
-
-function parseLine(line: string): unknown {
-  try {
-    return JSON.parse(line) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function parseLines(bytes: Buffer, offset: number): ChatEntry[] {
-  const entries: ChatEntry[] = [];
-  let start = 0;
-  while (start < bytes.length) {
-    const newline = bytes.indexOf(0x0a, start);
-    const end = newline < 0 ? bytes.length : newline;
-    const line = bytes.toString('utf8', start, end);
-    if (line.trim().length > 0) {
-      const parsed = parseLine(line);
-      entries.push(isChatEntry(parsed) ? parsed : createUnreadableEntry(`unreadable-${offset + start}`));
-    }
-    start = end + 1;
-  }
-  return entries;
-}
-
-function readRange(path: string, from: number, to: number) {
-  const bytes = Buffer.alloc(to - from);
-  const handle = openSync(path, 'r');
-  try {
-    readSync(handle, bytes, 0, bytes.length, from);
-  } finally {
-    closeSync(handle);
-  }
-  return bytes;
-}
-
-function readSize(path: string) {
-  return existsSync(path) ? statSync(path).size : -1;
-}
-
-type FileWatcher = (path: string, onChange: () => void) => FSWatcher;
-
-type CheckRepeater = (check: () => void) => () => void;
-
-function watchFile(path: string, onChange: () => void) {
-  return watch(path, onChange);
-}
-
-function repeatEverySecond(check: () => void) {
-  const timer = setInterval(check, CHECK_MS);
-  timer.unref();
-  return () => clearInterval(timer);
-}
+export { type TranscriptRead, UNREADABLE_LINE } from './schema.ts';
 
 export class Transcripts {
   readonly #dir: string;

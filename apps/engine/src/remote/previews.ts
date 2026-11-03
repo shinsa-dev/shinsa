@@ -23,7 +23,7 @@ import {
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
-import { EffectError } from '../runtime/failures.ts';
+import { EffectFailed } from '../runtime/failures/schema.ts';
 import type { Remote } from './index.ts';
 
 export const PREVIEW_NOT_PAIRED =
@@ -402,9 +402,11 @@ export class Previews implements PreviewEffects, PreviewLinks {
     const preview = this.#engine.state.tasks[taskId]?.previews?.find((each) => each.serviceId === serviceId);
     if (!preview) return;
     const credentials = this.#remote.store.file.credentials;
-    if (!credentials) throw new EffectError(PREVIEW_NOT_PAIRED, PREVIEW_NOT_PAIRED, FINAL);
+    if (!credentials)
+      throw new EffectFailed({ message: PREVIEW_NOT_PAIRED, detail: PREVIEW_NOT_PAIRED, ...FINAL });
     const service = this.#services.snapshot().services.find((each) => each.id === serviceId);
-    if (!service?.previewUrl) throw new EffectError(PREVIEW_NO_URL, PREVIEW_NO_URL, FINAL);
+    if (!service?.previewUrl)
+      throw new EffectFailed({ message: PREVIEW_NO_URL, detail: PREVIEW_NO_URL, ...FINAL });
     const current = parsePreviewUrl(preview.url, this.#origin);
     const url =
       current?.instanceId === credentials.instanceId

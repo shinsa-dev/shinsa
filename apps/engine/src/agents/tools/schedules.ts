@@ -1,5 +1,6 @@
 import { SCHEDULE_LIMITS, TASK_PRIORITIES } from '@shinsa/core';
-import { limitedText, type ToolSpec } from './schema.ts';
+import { limitedText } from './fields.ts';
+import type { ToolSpec } from './schema.ts';
 
 const L = SCHEDULE_LIMITS;
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   parseResetTime,
   parseUsageWindows,
+  readRetryAfter,
   requestUsage,
   resolveClaudeFastMode,
   USAGE_URL,
@@ -185,10 +186,10 @@ describe('requestUsage', () => {
     const read = await requestUsage('token-1', requestHttp);
     expect(read).toEqual({ ok: true, windows: parseUsageWindows(BODY), fastMode: 'needs_credits' });
     expect(calls[0]?.[0]).toBe(USAGE_URL);
-    expect(calls[0]?.[1].headers).toEqual({
-      Authorization: 'Bearer token-1',
+    expect(Object.fromEntries(new Headers(calls[0]?.[1].headers))).toEqual({
+      authorization: 'Bearer token-1',
       'anthropic-beta': 'oauth-2025-04-20',
-      'User-Agent': 'shinsa',
+      'user-agent': 'shinsa',
     });
     expect(calls[0]?.[1].signal).toBeInstanceOf(AbortSignal);
   });
@@ -218,6 +219,11 @@ describe('requestUsage', () => {
       );
       expect(read).toMatchObject({ reason: 'limited', retryAfterMs: null });
     }
+  });
+
+  test('Retry-After is read from any response, in milliseconds', () => {
+    expect(readRetryAfter(new Response('', { headers: { 'retry-after': '2' } }))).toBe(2_000);
+    expect(readRetryAfter(new Response(''))).toBeNull();
   });
 
   test('another error status names the status', async () => {

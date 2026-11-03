@@ -197,4 +197,17 @@ describe('worktrees', () => {
     expect(readFileSync(join(flaky, 'attempts'), 'utf8').trim().split('\n')).toHaveLength(2);
     expect(existsSync(join(flaky, 'installed'))).toBe(true);
   });
+
+  test('an installer that is not there is tried twice, then left to the agent', async () => {
+    const lonely = createTempDir();
+    writeFiles(lonely, { 'pnpm-lock.yaml': '' });
+    const path = process.env.PATH;
+    process.env.PATH = createTempDir();
+    try {
+      await prepareWorktree(lonely);
+    } finally {
+      process.env.PATH = path;
+    }
+    expect(existsSync(join(lonely, 'node_modules'))).toBe(false);
+  });
 });

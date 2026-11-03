@@ -11,11 +11,8 @@ import {
   type ShinsaState,
 } from '@shinsa/core';
 import { Result } from 'effect';
-import {
-  type DelegationOutcome,
-  handleOrchestrationTool,
-  type OrchestrationCall,
-} from '../../../src/agents/tools/orchestration.ts';
+import { handleOrchestrationTool } from '../../../src/agents/tools/orchestration/handler.ts';
+import type { DelegationOutcome, OrchestrationCall } from '../../../src/agents/tools/orchestration/schema.ts';
 
 const SPEC: PlanDocument = {
   goal: 'Ship it.',

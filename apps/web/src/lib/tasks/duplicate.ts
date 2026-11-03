@@ -1,4 +1,11 @@
-import { compareTasks, isTaskSettled, isWatchHome, type ShinsaState, type Task } from '@shinsa/core';
+import {
+  compareTasks,
+  isDuplicateRepositoryAllowed,
+  isTaskSettled,
+  isWatchHome,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import { useSyncExternalStore } from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { createSignal } from '@/lib/signal.ts';
@@ -28,7 +35,11 @@ export function useDuplicateDialog() {
 
 export function listDuplicateChoices(state: ShinsaState, task: Task) {
   const candidates = Object.values(state.tasks).filter(
-    (candidate) => candidate.id !== task.id && !candidate.duplicate && !isWatchHome(candidate)
+    (candidate) =>
+      candidate.id !== task.id &&
+      !candidate.duplicate &&
+      !isWatchHome(candidate) &&
+      isDuplicateRepositoryAllowed(task, candidate)
   );
   const open = candidates.filter((candidate) => !isTaskSettled(candidate)).sort(compareTasks);
   const settled = candidates

@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -149,20 +150,20 @@ describe('startShinsa', () => {
     };
     const first = await startShinsa(config, options);
     await first.engine.dispatch({ type: 'task.create', request: 'Keep me', repoId: null });
+    await first.engine.dispatch({ type: 'focus.change', projectId: null, until: 1 });
     const seq = first.engine.state.seq;
     await first.stop();
     const reader = new EventLog(config.databasePath);
     expect(reader.selectSnapshot(resolveStateVersion() ?? '')).toMatchObject({ ok: true, seq });
     reader.close();
-    const reads = spyOn(EventLog.prototype, 'readEvents');
-    try {
-      const second = await startShinsa(config, options);
-      started.push(second);
-      expect(reads.mock.calls[0]?.[0]).toBe(seq);
-      expect(Object.values(second.engine.state.tasks).map((task) => task.request)).toEqual(['Keep me']);
-    } finally {
-      reads.mockRestore();
-    }
+    expect(seq).toBeGreaterThan(1);
+    const db = new Database(config.databasePath);
+    db.run('UPDATE events SET payload = \'{"type":"task.cre\' WHERE seq < ?', [seq]);
+    db.close();
+    const second = await startShinsa(config, options);
+    started.push(second);
+    expect(second.engine.problems).toEqual([]);
+    expect(Object.values(second.engine.state.tasks).map((task) => task.request)).toEqual(['Keep me']);
   });
 
   test('a task with nowhere to work stops at the "Could not start the task" gate', async () => {
@@ -490,6 +491,40 @@ describe('one Shinsa per data directory', () => {
     expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
   });
 
+  test('stopping releases the engine’s and the effects’ runtimes after the server stops and before the log closes', async () => {
+    const config = createTestConfig(createTempDir());
+    const shinsa = await startShinsa(config, { models });
+    const order: string[] = [];
+    const { dispose: disposeEngine } = Engine.prototype;
+    const { dispose: disposeEffects } = EffectRunner.prototype;
+    const { close } = EventLog.prototype;
+    const isListening = () =>
+      fetch(`${shinsa.url}/api/health`).then(
+        () => true,
+        () => false
+      );
+    const spies = [
+      spyOn(EffectRunner.prototype, 'dispose').mockImplementation(async function (this: EffectRunner) {
+        order.push(`effects released while serving: ${await isListening()}`);
+        return disposeEffects.call(this);
+      }),
+      spyOn(Engine.prototype, 'dispose').mockImplementation(function (this: Engine) {
+        order.push('engine released');
+        return disposeEngine.call(this);
+      }),
+      spyOn(EventLog.prototype, 'close').mockImplementation(function (this: EventLog) {
+        order.push('log closed');
+        close.call(this);
+      }),
+    ];
+    try {
+      await shinsa.stop();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    expect(order).toEqual(['effects released while serving: false', 'engine released', 'log closed']);
+  });
+
   test('inspect mode takes no lock, so it reads the data of a Shinsa that is running', async () => {
     const config = createTestConfig(createTempDir());
     const live = await startShinsa(config, { models });
@@ -520,6 +555,45 @@ describe('one Shinsa per data directory', () => {
 });
 
 describe('startShinsa with Claude accounts', () => {
+  test('stopping waits for the account check, so it never reaches a released engine', async () => {
+    const root = createTempDir();
+    const config = createTestConfig(root, { roots: [createTempDir()] });
+    const warn = spyOn(log, 'warn');
+    const shinsa = await startShinsa(config, {
+      models,
+      triage: () => Promise.resolve(null),
+      resolveLogin: () => Promise.resolve(null),
+      accountOptions: {
+        env: { CLAUDE_CONFIG_DIR: join(root, 'claude') },
+        run: () =>
+          Bun.sleep(200).then(() => ({
+            ok: false,
+            code: 1,
+            stdout: '{"loggedIn": false}',
+            stderr: '',
+            timedOut: false,
+          })),
+        readSecret: () => Promise.resolve(null),
+        cswap: new Cswap({
+          run: () => Bun.sleep(200).then(() => Promise.reject(new Error('cswap broke'))),
+          which: () => '/bin/cswap',
+        }),
+        resolveClaude: () => Promise.resolve('claude'),
+      },
+    });
+    try {
+      await shinsa.stop();
+      await Bun.sleep(300);
+      expect(
+        warn.mock.calls.filter(([, fields]) =>
+          String((fields as { error?: string } | undefined)?.error).includes('disposed')
+        )
+      ).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test('serves the accounts and pushes them over the socket, even when checking them failed', async () => {
     const root = createTempDir();
     const config = createTestConfig(root, { roots: [createTempDir()] });

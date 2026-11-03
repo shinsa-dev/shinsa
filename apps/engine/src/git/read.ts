@@ -1,15 +1,10 @@
-import { CODE_LIMITS } from '@shinsa/core';
-import { describeError } from '../log/index.ts';
-import { killProcessGroup } from '../shell/index.ts';
+import { Duration, Effect } from 'effect';
+import { edgeRuntime } from '../runtime/edge.ts';
+import type { GitRead } from './schema.ts';
+import { Git } from './service.ts';
 
-export interface GitRead {
-  ok: boolean;
-  code: number;
-  bytes: Uint8Array;
-  stderr: string;
-  timedOut: boolean;
-  truncated: boolean;
-}
+export { decodeText, splitRecords } from './text.ts';
+export type { GitRead } from './schema.ts';
 
 export interface GitReadOptions {
   timeoutMs?: number;
@@ -21,98 +16,19 @@ export interface GitReadOptions {
   onData?: (chunk: Uint8Array) => void;
 }
 
-const READ_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_PAGER: 'cat' };
-
-const DECODER = new TextDecoder();
-
-const NEWLINE = 10;
-
-function countLines(chunk: Uint8Array) {
-  let lines = 0;
-  for (let index = chunk.indexOf(NEWLINE); index >= 0; index = chunk.indexOf(NEWLINE, index + 1)) lines += 1;
-  return lines;
-}
-
-function joinChunks(chunks: Uint8Array[], length: number) {
-  const bytes = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk.subarray(0, length - offset), offset);
-    offset += Math.min(chunk.length, length - offset);
-  }
-  return bytes;
-}
-
-function failed(stderr: string, code = 127): GitRead {
-  return { ok: false, code, bytes: new Uint8Array(), stderr, timedOut: false, truncated: false };
-}
-
-function spawnGit(args: string[], cwd: string, literal: boolean, extra: Record<string, string> = {}) {
-  try {
-    return Bun.spawn(['git', '-c', 'core.quotePath=false', ...args], {
-      cwd,
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe',
-      detached: true,
-      env: { ...Bun.env, ...READ_ENV, ...extra, GIT_LITERAL_PATHSPECS: literal ? '1' : '0' },
-    });
-  } catch (error) {
-    return describeError(error);
-  }
-}
-
-export async function readGit(args: string[], cwd: string, options: GitReadOptions = {}): Promise<GitRead> {
-  if (options.signal?.aborted) return failed('The read was cancelled.', 130);
-  const child = spawnGit(args, cwd, options.literal ?? true, options.env);
-  if (typeof child === 'string') return failed(child);
-  const limit = options.maxBytes ?? Number.POSITIVE_INFINITY;
-  let timedOut = false;
-  let truncated = false;
-  const stop = () => killProcessGroup(child.pid);
-  const timer = setTimeout(() => {
-    timedOut = true;
-    stop();
-  }, options.timeoutMs ?? CODE_LIMITS.readMs);
-  options.signal?.addEventListener('abort', stop, { once: true });
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  let lines = 0;
-  const lineLimit = options.maxLines ?? Number.POSITIVE_INFINITY;
-  try {
-    const stderr = new Response(child.stderr).text();
-    for await (const chunk of child.stdout) {
-      chunks.push(chunk);
-      length += chunk.length;
-      options.onData?.(chunk);
-      if (lineLimit !== Number.POSITIVE_INFINITY) lines += countLines(chunk);
-      if (length > limit || lines > lineLimit) {
-        truncated = true;
-        stop();
-        break;
-      }
-    }
-    const code = await child.exited;
-    return {
-      ok: (code === 0 || truncated) && !timedOut,
-      code,
-      bytes: joinChunks(chunks, Math.min(length, limit)),
-      stderr: (await stderr).trim(),
-      timedOut,
-      truncated,
-    };
-  } finally {
-    clearTimeout(timer);
-    options.signal?.removeEventListener('abort', stop);
-  }
-}
-
-export function decodeText(bytes: Uint8Array) {
-  return DECODER.decode(bytes);
-}
-
-export function splitRecords(bytes: Uint8Array) {
-  return decodeText(bytes)
-    .split('\0')
-    .filter((record) => record.length > 0);
+export function readGit(args: string[], cwd: string, options: GitReadOptions = {}): Promise<GitRead> {
+  const { onData } = options;
+  return edgeRuntime.runPromise(
+    Git.use((git) =>
+      git.read(args, cwd, {
+        timeout: options.timeoutMs === undefined ? undefined : Duration.millis(options.timeoutMs),
+        maxBytes: options.maxBytes,
+        maxLines: options.maxLines,
+        literal: options.literal,
+        env: options.env,
+        signal: options.signal,
+        onData: onData ? (chunk) => Effect.sync(() => onData(chunk)) : undefined,
+      })
+    )
+  );
 }

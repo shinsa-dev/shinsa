@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ChatNotice } from '@shinsa/core';
 import { createFileStore, EunoeServer, isStuck, resolveCompactionNotice } from '../../src/eunoe/server.ts';
@@ -250,6 +250,10 @@ describe('createFileStore', () => {
     store.save('session/1-abc', { keep: 2 });
     expect(existsSync(join(dir, 'session_1-abc.json'))).toBe(true);
     expect(store.read('session/1-abc')).toEqual({ keep: 2 });
+    writeFileSync(join(dir, 'damaged.json'), '{"keep":');
+    expect(store.read('damaged')).toEqual({});
+    writeFileSync(join(dir, 'odd.json'), JSON.stringify({ keep: 'two' }));
+    expect(store.read('odd')).toEqual({});
   });
 });
 

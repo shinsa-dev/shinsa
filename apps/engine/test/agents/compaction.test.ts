@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { createState, type ShinsaState } from '@shinsa/core';
 import {
   COMPACTION_NEAR_LIMIT,
@@ -6,8 +6,8 @@ import {
   resolveCompactionWindow,
 } from '../../src/agents/compaction.ts';
 import type { SessionContext } from '../../src/agents/providers/index.ts';
-import { log } from '../../src/log/index.ts';
 import { until } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { createGate, createRun, createTask } from '../helpers/state.ts';
 
 const NOW = 1_000_000;
@@ -262,7 +262,7 @@ describe('the compaction timer', () => {
 
   test('a failed compaction is logged', async () => {
     const state = idleState();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const compaction = new IdleCompaction(
       () => state,
       () => Promise.reject(new Error('cli gone')),
@@ -272,11 +272,9 @@ describe('the compaction timer', () => {
     );
     compaction.record('run-1', CONTEXT);
     compaction.schedule('task-1');
-    await until('the warning', () => warn.mock.calls.length > 0);
-    expect(warn).toHaveBeenCalledWith('[Compaction] An idle session could not be compacted', {
-      runId: 'run-1',
-      error: 'cli gone',
-    });
-    warn.mockRestore();
+    const message = '[Compaction] An idle session could not be compacted';
+    await until('the warning', () => logs.fieldsOf(message).length > 0);
+    expect(logs.fieldsOf(message)).toEqual([{ runId: 'run-1', error: 'cli gone' }]);
+    logs.restore();
   });
 });

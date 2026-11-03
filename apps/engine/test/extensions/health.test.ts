@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { McpDefinition } from '../../src/extensions/definitions.ts';
 import { createServerCheck } from '../../src/extensions/health.ts';
-import { log } from '../../src/log/index.ts';
+import { captureLogs } from '../helpers/index.ts';
 import { type FakeMcpHttp, startFakeMcpHttp } from '../helpers/mcp/http.ts';
 
 const STDIO_SERVER = join(import.meta.dirname, '..', 'helpers', 'mcp', 'stdio-server.ts');
@@ -63,15 +63,15 @@ describe('checking an MCP server', () => {
       await closeClient.call(this);
       throw new Error('already gone');
     });
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    const status = await createServerCheck()(stdio());
-    expect(status.state).toBe('connected');
-    expect(warn).toHaveBeenCalledWith('[Extensions] Could not close an MCP connection', {
-      transport: 'stdio',
-      error: 'already gone',
+    const logs = captureLogs();
+    const status = await createServerCheck()(stdio()).finally(() => {
+      close.mockRestore();
+      logs.restore();
     });
-    close.mockRestore();
-    warn.mockRestore();
+    expect(status.state).toBe('connected');
+    expect(logs.fieldsOf('[Extensions] Could not close an MCP connection')).toEqual([
+      { transport: 'stdio', error: 'already gone' },
+    ]);
   });
 
   test('a remote server that wants a token needs sign-in', async () => {
@@ -112,6 +112,12 @@ describe('checking an MCP server', () => {
     } finally {
       await silent.stop(true);
     }
+  });
+
+  test('a remote server whose address is not a URL is failing', async () => {
+    const status = await createServerCheck()(remote('not a url'));
+    expect(status.state).toBe('failing');
+    expect(status.error).toBeTruthy();
   });
 
   test('an SSE server that is not there is failing', async () => {

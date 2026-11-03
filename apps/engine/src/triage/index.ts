@@ -152,7 +152,7 @@ function resolveDuplicateQuestion(open: Task[], teammates: TeammateTask[]): Choi
   if (open.length === 0 && teammates.length === 0) return null;
   return {
     type: 'choice',
-    instructions: `Is this request the same work as an open task, so that doing both would do the work twice? Name a task only when it would deliver the same outcome. Related, overlapping, follow-up or partly the same work is "${NOT_A_DUPLICATE}"; so is anything you are unsure of. Usually "${NOT_A_DUPLICATE}".`,
+    instructions: `Is this request the same work as an open task, so that doing both would do the work twice? Name a task only when it would deliver the same outcome in the same repository: each task ships one pull request in its own repository, so a task in another repository is never the same work, however alike the requests read. Related, overlapping, follow-up or partly the same work is "${NOT_A_DUPLICATE}"; so is anything you are unsure of. Usually "${NOT_A_DUPLICATE}".`,
     criteria: {
       [NOT_A_DUPLICATE]: 'not the same work as any open task',
       ...Object.fromEntries(open.map((task) => [task.id, task.title])),
@@ -366,14 +366,14 @@ function describeOpenTask(state: ShinsaState, task: Task) {
 
 function describeTeammateTask(task: TeammateTask) {
   const plan = task.goal ? ` Plan: ${task.goal}` : '';
-  return `- ${task.key}: ${quoteDuplicateOriginal(task.original)} (${task.stage}). Request: ${task.request}${plan}`;
+  return `- ${task.key}: ${quoteDuplicateOriginal(task.original)} (${task.repoName}, ${task.stage}). Request: ${task.request}${plan}`;
 }
 
 function describeTeammateTasks(teammates: TeammateCheck | null) {
   if (!teammates || teammates.tasks.length === 0) return [];
   return [
     '',
-    'Teammates’ open tasks, on their own machines, each with its owner, stage, request and plan:',
+    'Teammates’ open tasks, on their own machines, each with its owner, repository, stage, request and plan:',
     ...teammates.tasks.map(describeTeammateTask),
   ];
 }
@@ -517,11 +517,18 @@ function resolveDuplicateWhy(answer: TriageAnswer, quoted: string) {
   return parseAnswerText(answer.duplicate_why, WHY_LIMIT) ?? `It asks for the same work as ${quoted}.`;
 }
 
+function isDuplicateAllowed(state: ShinsaState, candidate: Task, repoPath: string | null) {
+  if (repoPath === null || candidate.repoId === null) return false;
+  return state.repos[candidate.repoId]?.path === repoPath;
+}
+
 function parseDuplicate(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer, repoPath: string | null) {
   if (!plan.duplicateQuestion) return null;
   const named = parseDecisionAnswer(plan.duplicateQuestion, answer.duplicate_of);
   const teammate = plan.teammates?.tasks.find((candidate) => candidate.key === named);
   if (teammate) {
+    const repoName = plan.candidates.find((candidate) => candidate.path === repoPath)?.name;
+    if (teammate.repoName !== repoName) return null;
     const original = { ...teammate.original };
     return {
       duplicateOfTeammate: original,
@@ -529,7 +536,7 @@ function parseDuplicate(state: ShinsaState, plan: TriagePlan, answer: TriageAnsw
     };
   }
   const original = plan.open.find((candidate) => candidate.id === named);
-  if (!original || !isDependencyAllowed(state, plan, original, repoPath)) return null;
+  if (!original || !isDuplicateAllowed(state, original, repoPath)) return null;
   return { duplicateOf: original.id, why: resolveDuplicateWhy(answer, `“${original.title}”`) };
 }
 

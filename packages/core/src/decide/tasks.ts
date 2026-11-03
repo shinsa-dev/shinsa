@@ -165,7 +165,7 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
     decider.emit({ type: 'task.waits_on_changed', taskId: task.id, waitsOn: inferred, by: 'shinsa' });
   }
   const why = command.reasons?.duplicate ?? null;
-  const original = selectTriageDuplicate(decider, task, command.duplicateOf);
+  const original = selectTriageDuplicate(decider, task, command.repoId, command.duplicateOf);
   if (original) {
     closeTriageDuplicate(decider, decider.task(task.id), original, why);
     return;

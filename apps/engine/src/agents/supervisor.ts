@@ -10,6 +10,7 @@ import {
   type LoadedExtensions,
   listLiveRuns,
   type Repo,
+  MINUTE_MS,
   RUN_AGENT_ROLE,
   type Run,
   type RunAccount,
@@ -45,18 +46,19 @@ import {
   requestVerdict,
 } from './accounts.ts';
 import {
-  type ActiveRun,
   carryUndelivered,
   createActiveRun,
   isSteerable,
   resolveAttemptKey,
   stopActiveRun,
   waitToRetry,
-} from './active.ts';
-import { type ClockTimers, MINUTE_MS, RunClock } from './clock.ts';
+} from './active/run.ts';
+import { type ActiveRun } from './active/schema.ts';
+import { type ClockTimers, RunClock } from './clock.ts';
 import { IdleCompaction, type IdleCompactionOptions } from './compaction.ts';
-import { type Delivery, resolveDelegatedReply } from './delegations.ts';
-import { Deliveries } from './deliveries.ts';
+import { resolveDelegatedReply } from './delegations/delivery.ts';
+import { type Delivery } from './delegations/schema.ts';
+import { Deliveries } from './deliveries/service.ts';
 import { SessionExtensionSets } from './extension-sets.ts';
 import type { IdleReleaseOptions } from './idle.ts';
 import { listSurfaceToolSpecs, type ManageAccess } from './manage/index.ts';
@@ -71,7 +73,9 @@ import {
 } from './providers/index.ts';
 import { Questions } from './questions.ts';
 import type { TaskServiceRunner } from './services.ts';
-import { type ScheduleToolHandler, ToolCalls } from './tool-calls.ts';
+import { TaskScopes } from './supervisor/index.ts';
+import { type ScheduleToolHandler } from './tool-calls/schema.ts';
+import { ToolCalls } from './tool-calls/service.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
 import {
@@ -81,9 +85,8 @@ import {
   resolveTurnFold,
   resolveTurnPlan,
   resolveTurnPrompt,
-  type TurnContext,
-  type TurnPlan,
-} from './turns.ts';
+} from './turns/plan.ts';
+import { type TurnContext, type TurnPlan } from './turns/schema.ts';
 
 export type NoticeListener = (runId: string, notice: ChatNotice) => void;
 
@@ -198,6 +201,7 @@ export class RunSupervisor {
   readonly #manages: boolean;
   readonly #trackProcess: ProcessTracker | null;
   readonly #held = new Set<string>();
+  readonly #scopes = new TaskScopes();
   readonly workspaces: Workspaces;
   #shuttingDown = false;
   #holding: (() => void) | null = null;
@@ -685,16 +689,21 @@ export class RunSupervisor {
       },
       storeImage: (data, mediaType) => this.#storeImage(data, mediaType),
     });
+    const scoped = this.#scopes.acquire(
+      { taskId: run.taskId, runId: run.id, parentRunId: run.delegation?.parentRunId ?? null },
+      session
+    );
     active.session = session;
     loader?.attach(session);
-    await this.#steerWaiting(run.id, active, session);
     try {
-      const result = await session.done;
+      await this.#steerWaiting(run.id, active, session);
+      const result = await scoped.done;
       await this.#meterAttempt(turn, attemptId, sessionId, result, weeklyBefore);
       if (!account || !result.failure) return { attemptId, result };
       return { attemptId, result: { ...result, failure: { ...result.failure, account } } };
     } finally {
       active.session = null;
+      await scoped.close();
       for (const release of releases) release();
       await loader?.close();
     }
@@ -900,7 +909,7 @@ export class RunSupervisor {
     const active = this.#active.get(runId);
     if (!active) return;
     stopActiveRun(active);
-    await settleWithin(Promise.allSettled([active.session?.cancel()]), this.#stopMs);
+    await settleWithin(this.#scopes.cancel(runId), this.#stopMs);
   }
 
   holdNewRuns(onHeld: () => void) {
@@ -933,6 +942,7 @@ export class RunSupervisor {
     for (const [runId, active] of live) await this.#markInterrupted(runId, active.attemptId);
     for (const [, active] of live) stopActiveRun(active);
     await this.#stopWithin(live, Promise.allSettled([compacting, ...live.map(([, active]) => active.done)]));
+    await settleWithin(this.#scopes.closeAll(), this.#stopMs);
   }
 
   async #interruptHeld() {
@@ -1016,7 +1026,9 @@ export class RunSupervisor {
           this.#transcripts.record(runId, entry);
       },
     });
-    signal.addEventListener('abort', () => this.#cancelCompaction(runId, session), { once: true });
+    const cancel = () => this.#cancelCompaction(runId, session);
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) cancel();
     const result = await session.done;
     if (result.usage) await this.#meter(runId, sessionId, result.usage, `${id}:run.meter`);
   }

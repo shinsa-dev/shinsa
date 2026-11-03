@@ -1,30 +1,21 @@
-import {
-  type ConfigProblem,
-  DEFAULT_WORKSPACE_MODE,
-  type Repo,
-  type Task,
-  type WorkspaceMode,
-} from '@shinsa/core';
-import { describeDirtyCheckout, isCheckoutClean, MainCheckoutStrategy } from './main-checkout.ts';
-import type { WorkspaceStrategy } from './types.ts';
+import { DEFAULT_WORKSPACE_MODE, type Repo, type Task, type WorkspaceMode } from '@shinsa/core';
+import { edgeRuntime } from '../runtime/edge.ts';
+import { MainCheckoutWorkspace } from './main-checkout-mode/service.ts';
+import { MainCheckoutStrategy } from './main-checkout.ts';
+import type { WorkspaceStrategy, WorkspacesOptions } from './schema.ts';
 import { WorktreeStrategy } from './worktrees.ts';
 
-export type { WorkspaceStrategy } from './types.ts';
+export type { WorkspaceStrategy, WorkspacesOptions } from './schema.ts';
 
-export interface WorkspacesOptions {
-  worktreesDir: string;
-}
-
-export async function describeWorkspaceProblem(
+export function describeWorkspaceProblem(
   repo: Repo,
   mode: WorkspaceMode,
   holdsCheckout: boolean,
   signal?: AbortSignal
-): Promise<ConfigProblem | null> {
-  if (mode !== 'main_checkout' || holdsCheckout) return null;
-  if (!(await isCheckoutClean(repo.path, signal)))
-    return { kind: 'workspace', detail: describeDirtyCheckout(repo) };
-  return null;
+) {
+  return edgeRuntime.runPromise(
+    MainCheckoutWorkspace.use((main) => main.describeProblem(repo, mode, holdsCheckout, signal))
+  );
 }
 
 export class Workspaces {

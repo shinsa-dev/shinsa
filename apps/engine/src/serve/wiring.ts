@@ -57,6 +57,8 @@ import type { ShinsaOptions } from './schema.ts';
 
 export type Services = ReturnType<typeof createServices>;
 
+const ACCOUNT_CHECKS = new WeakMap<Services, Promise<void>>();
+
 export function createServices(
   config: ServerConfig,
   options: ShinsaOptions,
@@ -284,9 +286,12 @@ export async function startWork(services: Services) {
   effects.startWatching();
   services.schedules.start();
   for (const clock of services.clocks) clock.start();
-  services.accounts.start().catch((error: unknown) => {
-    log.warn('[Serve] Could not check the Claude accounts', { error: describeError(error) });
-  });
+  ACCOUNT_CHECKS.set(
+    services,
+    services.accounts.start().catch((error: unknown) => {
+      log.warn('[Serve] Could not check the Claude accounts', { error: describeError(error) });
+    })
+  );
   await services.runs.recover();
   await effects.recover();
   services.inbox.start();
@@ -314,4 +319,10 @@ export async function stopWork(services: Services) {
   await services.extensions.stop();
   services.engine.stop();
   await services.engine.settle();
+}
+
+export async function disposeRuntime(services: Services) {
+  await ACCOUNT_CHECKS.get(services);
+  await services.effects.dispose();
+  await services.engine.dispose();
 }

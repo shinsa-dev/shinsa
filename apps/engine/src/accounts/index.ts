@@ -40,6 +40,7 @@ import { parseAccountPatch } from './patch.ts';
 import { type Env, resolveAccountEnv, resolveSharedConfigDir, resolveSharedGlobalConfig } from './paths.ts';
 import { LoginRenewal, type RenewedLogin } from './renewal.ts';
 import { AccountRotation, type SignInState } from './rotation.ts';
+import { REFRESH_INTERVAL_MS } from './schema.ts';
 import { type AuthStatus, type ClaudeRunner, readAuthStatus, STATUS_TIMEOUT_MS } from './status.ts';
 import { AccountStore, isSharedLogin, type StoredAccount } from './store.ts';
 import { EXPIRED_READ, PROVIDER_WINDOWS, requestUsage, type UsageRequester } from './usage.ts';
@@ -68,8 +69,6 @@ interface ProviderIdentity {
   email: string | null;
   plan: string | null;
 }
-
-const REFRESH_INTERVAL_MS = 5 * 60_000;
 
 const SHARED_LOGIN_DETAIL: Record<Exclude<AccountOrigin, 'login'>, string> = {
   cswap:

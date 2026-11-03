@@ -1,32 +1,12 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  type RequestId,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { listToolNames, type RunRole } from '@shinsa/core';
-import { describeError } from '../../log/index.ts';
-import type { ToolSpec } from './schema.ts';
+import { edgeRuntime } from '../../runtime/edge.ts';
+import { callTool, refuseTool } from './call.ts';
+import type { ShinsaTools, ToolHandler, ToolServerOptions, ToolSpec } from './schema.ts';
 import { TOOL_SPECS } from './specs.ts';
 
-export type ToolHandler = (
-  name: string,
-  input: Record<string, unknown>,
-  signal: AbortSignal,
-  requestId?: RequestId
-) => Promise<string>;
-
-interface ToolServerOptions {
-  scope?: () => string;
-}
-
-export interface ShinsaTools {
-  name: 'shinsa';
-  role: RunRole;
-  server: Server;
-  handle: ToolHandler;
-  createServer: (options?: ToolServerOptions) => Server;
-}
+export type { ShinsaTools, ToolHandler } from './schema.ts';
 
 export function createToolSet(role: RunRole, specs: ToolSpec[], handle: ToolHandler): ShinsaTools {
   const allowed = new Set<string>(specs.map((spec) => spec.name));
@@ -37,22 +17,13 @@ export function createToolSet(role: RunRole, specs: ToolSpec[], handle: ToolHand
         tools: specs.map((spec) => ({ ...spec, _meta: { 'anthropic/alwaysLoad': true } })),
       })
     );
-    server.setRequestHandler(CallToolRequestSchema, async (call, extra) => {
+    server.setRequestHandler(CallToolRequestSchema, (call, extra) => {
       const name = call.params.name;
-      if (!allowed.has(name)) {
-        return {
-          content: [{ type: 'text' as const, text: `${name} is not available to the ${role}.` }],
-          isError: true,
-        };
-      }
+      if (!allowed.has(name)) return Promise.resolve(refuseTool(`${name} is not available to the ${role}.`));
       const requestId = options.scope ? `${options.scope()}.${extra.requestId}` : extra.requestId;
-      try {
-        const text = await handle(name, call.params.arguments ?? {}, extra.signal, requestId);
-        return { content: [{ type: 'text' as const, text }] };
-      } catch (error) {
-        const text = describeError(error);
-        return { content: [{ type: 'text' as const, text }], isError: true };
-      }
+      return edgeRuntime.runPromise(
+        callTool(handle, name, call.params.arguments ?? {}, extra.signal, requestId)
+      );
     });
     return server;
   };

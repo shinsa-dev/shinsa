@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs';
 import {
   type AccountCandidate,
   type AccountSignIn,
@@ -9,10 +8,12 @@ import {
   type ShinsaState,
 } from '@shinsa/core';
 import type { AccountLease, AccountLeaseRequest, RejectionVerdict, RunRejection } from '../agents/index.ts';
-import { writeJsonFile } from '../config/file.ts';
-import { describeError, log } from '../log/index.ts';
+import { log } from '../log/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import type { UsageLimits } from './limits.ts';
+import { AccountRegistry } from './registry/service.ts';
 import { describeExpiredLogin, isTokenFailure, type LoginRenewal } from './renewal.ts';
+import { type SpentMark, UNKNOWN_RESET_MS } from './schema.ts';
 import { type AccountStore, isSharedLogin, type StoredAccount } from './store.ts';
 
 export interface SignInState {
@@ -31,45 +32,7 @@ export interface AccountRotationOptions {
   marksPath: string;
 }
 
-interface SpentMark {
-  until: number | null;
-  at: number;
-}
-
 const MAX_ACCOUNTS_PER_EXECUTION = 3;
-
-const UNKNOWN_RESET_MS = 15 * 60_000;
-
-function isTime(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function isSpentMark(value: unknown): value is SpentMark {
-  if (typeof value !== 'object' || value === null) return false;
-  const mark = value as Record<string, unknown>;
-  return isTime(mark.at) && (mark.until === null || isTime(mark.until));
-}
-
-function resolveMarkEnd(mark: SpentMark) {
-  return mark.until ?? mark.at + UNKNOWN_RESET_MS;
-}
-
-function readMarks(path: string, now: number) {
-  const marks = new Map<string, SpentMark>();
-  if (!existsSync(path)) return marks;
-  try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { marks?: Record<string, unknown> };
-    for (const [accountId, mark] of Object.entries(parsed.marks ?? {})) {
-      if (isSpentMark(mark) && resolveMarkEnd(mark) > now) marks.set(accountId, mark);
-    }
-  } catch (error) {
-    log.warn('[Accounts] The spent accounts could not be read; starting without them', {
-      path,
-      error: describeError(error),
-    });
-  }
-  return marks;
-}
 
 export class AccountRotation {
   readonly #options: AccountRotationOptions;
@@ -77,7 +40,9 @@ export class AccountRotation {
 
   constructor(options: AccountRotationOptions) {
     this.#options = options;
-    this.#spent = readMarks(options.marksPath, options.now());
+    this.#spent = edgeRuntime.runSync(
+      AccountRegistry.use((registry) => registry.readMarks(options.marksPath, options.now()))
+    );
   }
 
   resolveSpentUntil(accountId: string, knownResets = false) {
@@ -97,11 +62,9 @@ export class AccountRotation {
   }
 
   #persist() {
-    try {
-      writeJsonFile(this.#options.marksPath, { version: 1, marks: Object.fromEntries(this.#spent) });
-    } catch (error) {
-      log.warn('[Accounts] Could not keep the spent accounts', { error: describeError(error) });
-    }
+    const { marksPath } = this.#options;
+    const spent = this.#spent;
+    edgeRuntime.runSync(AccountRegistry.use((registry) => registry.keepMarks(marksPath, spent)));
   }
 
   #listCandidates(knownResets: boolean): AccountCandidate[] {

@@ -1,61 +1,18 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync, utimesSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import {
-  CODE_LIMITS,
-  DIFF_PATCH_LIMITS,
-  type DiffFile,
-  DomainError,
-  mergeDiffPatches,
-  parseDiffSummary,
-  parseUnifiedDiff,
-  selectPatchedFiles,
-} from '@shinsa/core';
-import { runCommandOrThrow } from '../shell/index.ts';
-import { decodeText, readGit } from './read.ts';
+import { type DiffFile, DomainError } from '@shinsa/core';
+import { Effect } from 'effect';
+import { edgeRuntime } from '../runtime/edge.ts';
+import type { DiffFailed } from './history/schema.ts';
+import { History } from './history/service.ts';
+import type { GitFailed } from './schema.ts';
 
-const DIFF_ARGS = ['diff', '--no-color', '--no-ext-diff', '--find-renames'];
-
-const DIFF_BYTES = 64 * 1024 * 1024;
-
-const DIFF_TIMEOUT_MS = 30_000;
-
-const NAMED_LIMITS = { fileBytes: CODE_LIMITS.blobBytes, totalBytes: 2 * CODE_LIMITS.blobBytes };
-
-interface DiffSource {
-  cwd: string;
-  range: string[];
-  env?: Record<string, string>;
-  signal?: AbortSignal;
-}
-
-async function readDiffText(source: DiffSource, args: string[], paths: readonly string[]) {
-  const read = await readGit([...DIFF_ARGS, ...args, ...source.range, '--', ...paths], source.cwd, {
-    signal: source.signal,
-    maxBytes: DIFF_BYTES,
-    timeoutMs: DIFF_TIMEOUT_MS,
-    env: source.env,
-  });
-  if (!read.ok || read.truncated)
-    throw new DomainError({
-      code: 'diff_failed',
-      message: read.stderr || 'The change is too large to show.',
-    });
-  return decodeText(read.bytes);
-}
-
-function listPatchPaths(files: readonly DiffFile[]) {
-  return files.flatMap((file) => (file.previousPath ? [file.previousPath, file.path] : [file.path]));
-}
-
-async function readDiff(source: DiffSource, paths: readonly string[] | null): Promise<DiffFile[]> {
-  if (paths?.length === 0) return [];
-  const summary = parseDiffSummary(await readDiffText(source, ['--raw', '--numstat', '-z'], paths ?? []));
-  const chosen = paths ? summary.filter((file) => !file.binary) : selectPatchedFiles(summary);
-  if (chosen.length === 0) return mergeDiffPatches(summary, []);
-  const patched = parseUnifiedDiff(await readDiffText(source, [], listPatchPaths(chosen)));
-  return mergeDiffPatches(summary, patched, paths ? NAMED_LIMITS : DIFF_PATCH_LIMITS);
-}
+const runDiff = <A>(effect: Effect.Effect<A, DiffFailed | GitFailed, History>) =>
+  edgeRuntime.runPromise(
+    effect.pipe(
+      Effect.mapError((error) =>
+        error._tag === 'DiffFailed' ? new DomainError({ code: 'diff_failed', message: error.message }) : error
+      )
+    )
+  );
 
 export function resolveCommitDiff(
   repoPath: string,
@@ -64,27 +21,7 @@ export function resolveCommitDiff(
   signal?: AbortSignal,
   paths: readonly string[] | null = null
 ): Promise<DiffFile[]> {
-  return readDiff({ cwd: repoPath, range: [base, head], signal }, paths);
-}
-
-async function withScratchIndex<T>(worktree: string, read: (env: Record<string, string>) => Promise<T>) {
-  const index = await runCommandOrThrow(
-    ['git', 'rev-parse', '--path-format=absolute', '--git-path', 'index'],
-    worktree
-  );
-  const scratch = mkdtempSync(join(tmpdir(), 'shinsa-diff-'));
-  const env = { GIT_INDEX_FILE: join(scratch, 'index') };
-  try {
-    if (existsSync(index)) {
-      copyFileSync(index, env.GIT_INDEX_FILE);
-      const { atime, mtime } = statSync(index);
-      utimesSync(env.GIT_INDEX_FILE, atime, mtime);
-    }
-    await runCommandOrThrow(['git', 'add', '-A', '--intent-to-add'], worktree, { env });
-    return await read(env);
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
+  return runDiff(History.use((history) => history.commitDiff(repoPath, base, head, signal, paths)));
 }
 
 export function resolveWorkingDiff(
@@ -93,22 +30,9 @@ export function resolveWorkingDiff(
   paths: readonly string[] | null = null,
   signal?: AbortSignal
 ): Promise<DiffFile[]> {
-  return withScratchIndex(worktree, (env) => readDiff({ cwd: worktree, range: [base], env, signal }, paths));
-}
-
-export function readChangedLinesPatch(
-  worktree: string,
-  base: string,
-  signal?: AbortSignal,
-  paths: readonly string[] = []
-) {
-  return withScratchIndex(worktree, (env) =>
-    readDiffText({ cwd: worktree, range: [base], env, signal }, ['-U0'], paths)
-  );
+  return runDiff(History.use((history) => history.workingDiff(worktree, base, paths, signal)));
 }
 
 export function readWorkingPatch(worktree: string, base: string, signal?: AbortSignal) {
-  return withScratchIndex(worktree, (env) =>
-    readDiffText({ cwd: worktree, range: [base], env, signal }, [], [])
-  );
+  return runDiff(History.use((history) => history.workingPatch(worktree, base, signal)));
 }
