@@ -162,8 +162,9 @@ src/
     │                    browser's team keys in IndexedDB), join-machines.ts (the join page's projects from your own
     │                    machines, and joining and sharing them there through EngineClient over each machine's own Fetch), channel.ts (a team channel from the browser with its own
     │                    key, and the engine relay of one task; team-socket/ is its TeamSocket service, reconnecting on
-    │                    TEAM_RECONNECT: 1, 2, 5, 10, then every 30 s), schema.ts (the join's shapes and errors), feeds.ts (teammates' tasks for the focused team,
-    │                    merged from the machines and the browser, without machines the dashboard reaches);
+    │                    TEAM_RECONNECT: 1, 2, 5, 10, then every 30 s), schema.ts (the join's shapes and errors), feeds.ts (teammates' tasks from every team you are in,
+    │                    merged from the machines and the browser, without machines the dashboard reaches, and a
+    │                    refusal for each teammate machine that will not list its tasks);
     │                    components/teams/ (the new team dialog, the shared projects dropdown, a teammate's row on All tasks, among your own),
     │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
@@ -416,7 +417,8 @@ print the whole document.
   tab's whole workbench (`lib/code/location.ts`: `?mode=changes|files|search`, `file`, `diff`, `line`, `end`, `ref`,
   `spot`, `q`,
   `regex`, `case`, `word`, `glob`), focused run (`?run=`), the Settings tab (`?tab=agents`, `lib/settings-tabs.ts`) and the All tasks filters
-  (`?status=`, `?q=`) live in the URL, read with
+  (`?q=` and `?status=`, `owner`, `team`, `project`, `repo`, `kind`, `priority`, each a comma list; `lib/tasks/filters.ts`
+  reads them, scopes the rows to your focus and matches them) live in the URL, read with
   `useSearchParam` and written with `updateSearchParams`. Build task URLs only with `resolveTaskPath`: it uses the
   handle (`/tasks/SW-142`), and the id for a task triage has not given one yet.
 - **Logic lives in `lib/`, JSX in `components/` and `routes/`.** A `.tsx` file holds components and the small

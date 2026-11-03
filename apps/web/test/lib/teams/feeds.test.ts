@@ -14,12 +14,14 @@ import {
   describeTeamTaskPlace,
   HostedTeamFeeds,
   listHeldTeamMachines,
+  listTeamFeedRefusals,
   listTeamFeedTasks,
   mergeTeamFeeds,
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
   selectTeamTaskHeldAt,
+  TEAM_FEED_REFUSED,
 } from '@/lib/teams/feeds.ts';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
 import { createGate, createProject, createRepo, createTask } from '../../support/state.ts';
@@ -63,6 +65,38 @@ describe('teammates’ task lists', () => {
     expect(merged.machines).toEqual([newer]);
   });
 
+  it('notes each refused machine of your teams by name, leaving out live, offline, your own and other teams', () => {
+    const feed = {
+      machines: [
+        createMachine({ instanceId: 'live' }),
+        createMachine({ instanceId: 'dialing', status: 'connecting' }),
+        createMachine({
+          instanceId: 'away',
+          name: 'Attic',
+          status: 'offline',
+          reason: 'Offline.',
+          updatedAt: 30,
+        }),
+        createMachine({ instanceId: 'shut', name: 'Mac.lan', status: 'refused', reason: 'Not listed yet.' }),
+        createMachine({ instanceId: 'bare', name: 'Basement', status: 'refused', reason: null }),
+        createMachine({ instanceId: 'mine', status: 'refused', reason: 'Gone.' }),
+        createMachine({ teamId: 'team2', instanceId: 'other', status: 'offline', reason: 'Offline.' }),
+        createMachine({ teamId: 'unknown', instanceId: 'stray', status: 'offline', reason: 'Offline.' }),
+      ],
+      tasks: [],
+    };
+    const teams = [
+      { id: 'team1', name: 'Platform' },
+      { id: 'team2', name: 'Design' },
+    ];
+    const refusals = listTeamFeedRefusals(feed, teams, new Set(['mine']), null);
+    expect(refusals.map((refusal) => [refusal.machine, refusal.team, refusal.reason])).toEqual([
+      ['Basement', 'Platform', TEAM_FEED_REFUSED],
+      ['Mac.lan', 'Platform', 'Not listed yet.'],
+    ]);
+    expect(listTeamFeedRefusals(feed, teams, new Set(), 'team2')).toEqual([]);
+  });
+
   it('knows which tasks come from a snapshot, and since when', () => {
     const held = listHeldTeamMachines({
       machines: [
@@ -77,15 +111,27 @@ describe('teammates’ task lists', () => {
     expect(selectTeamTaskHeldAt(held, createTeamFeedTask({ instanceId: 'bare' }))).toBeNull();
   });
 
-  it('lists one team’s tasks, open ones first and the newest first, leaving out machines you reach with full control', () => {
+  it('lists the tasks of the teams asked for, open ones first and the newest first, leaving out machines you reach with full control', () => {
     const done = createTeamFeedTask({ task: createTask({ id: 'done', stage: 'merged', updatedAt: 50 }) });
     const recent = createTeamFeedTask({ task: createTask({ id: 'recent', updatedAt: 40 }) });
     const old = createTeamFeedTask({ task: createTask({ id: 'old', updatedAt: 5 }) });
     const otherTeam = createTeamFeedTask({ teamId: 'team2', task: createTask({ id: 'other' }) });
     const reachable = createTeamFeedTask({ instanceId: 'k3x9', task: createTask({ id: 'mine' }) });
     const feed = { machines: [], tasks: [old, done, otherTeam, reachable, recent] };
-    const listed = listTeamFeedTasks(feed, 'team1', new Set(['k3x9']));
+    const listed = listTeamFeedTasks(feed, new Set(['team1']), new Set(['k3x9']));
     expect(listed.map((entry) => entry.task.id)).toEqual(['recent', 'old', 'done']);
+    const both = listTeamFeedTasks(feed, new Set(['team1', 'team2']), new Set());
+    expect(both.map((entry) => entry.task.id)).toEqual(['other', 'mine', 'recent', 'old', 'done']);
+  });
+
+  it('lists a task once when two teams both share it', () => {
+    const task = createTask({ id: 'shared' });
+    const feed = {
+      machines: [],
+      tasks: [createTeamFeedTask({ task }), createTeamFeedTask({ teamId: 'team2', task })],
+    };
+    const listed = listTeamFeedTasks(feed, new Set(['team1', 'team2']), new Set());
+    expect(listed.map((entry) => `${entry.teamId}:${entry.task.id}`)).toEqual(['team1:shared']);
   });
 
   it('opens a teammate’s task at its own address and names whose it is', () => {

@@ -20,7 +20,7 @@ export function Hint({
   return useTooltipTrigger(children, {
     side,
     trackCursorAxis: followCursor ? 'y' : undefined,
-    className: detail ? 'flex-col items-start gap-px' : undefined,
+    className: detail ? 'flex-col items-start gap-0' : undefined,
     content: (
       <>
         {label}
