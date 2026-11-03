@@ -273,6 +273,13 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   inside each section. This is the page to open each day and work down. A task can be told to
   wait for others from here, from the task page and from ⌘K, and the new-task box's When to start offers
   Auto start, Start now, After another task… (a search over every open task, several at once) and Backlog.
+  It follows your focus: a focused project lists only that project's tasks (a teammate's when its repository has the same
+  remote as one of yours, or its project the same name, since each machine names its projects itself), a focused team only that team's,
+  yours and your teammates', and with no focus it lists yours and those of every team you are in. The Filter
+  button narrows it by status, owner, team, project, repository, kind and priority, several values each; every
+  filter shows as a chip you can remove, lives in the page's address so a link keeps it, and ⌘K offers the same
+  filters. A teammate task whose machine is offline carries an offline icon after its status, and one lock icon after the
+  heading's counts says which teammate machines refuse to list their tasks, and why.
 - **The backlog.** Work you want written down and planned now, but built later, waits in the backlog. It is
   triaged (a clean title, the repository, the kind of task, a priority) and planned, which costs a small share of a
   task, and then stops: its plan stays out of Needs you, the queue, the guide and the Dock badge, and shows in the
@@ -1191,7 +1198,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   teammate task it lists, so an offline task opens whole, marked as a copy; a teammate machine that never fetched it
   shows the title and status.
 - **Focus on a team.** The focus menu says Your work instead of All work, then your projects, then Teams. A focused
-  team's All tasks lists your teammates' tasks among yours, in the same groups, with an Owner column; Home stays
+  team's All tasks lists only that team's tasks, your teammates' among yours, in the same groups, with an Owner
+  column; with no focus it lists every team's, and the Owner and Team filters narrow it. Home stays
   yours alone. They never count towards Needs you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
   full control, never twice.
 - **For agents.** The engine serves the team's tasks at `GET /api/teams/tasks`, which triage's team-wide duplicate

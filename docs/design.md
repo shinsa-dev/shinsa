@@ -670,7 +670,7 @@ Only these, and they win over anything below:
         previous and next spot, send, comment on a line, remove ("Remove folder"), dismiss, stop a delegated task,
         the compact bar's queue and new-task buttons, the sidebar's resize handle (following the pointer down the
         edge), the error button. The tooltip repeats the `aria-label`. A `Hint` with a `detail` stacks a muted
-        second line under its label, as a time's tooltip does (a task's round, 12).
+        second line right under its label, with no gap, as a time's tooltip does (a task's round, 12).
       - **Keyboard-shortcut hints**: a `Hint` with a `shortcut` ("Home ⇧⌘H", "Search and actions ⌘K", "Search in
         files ⇧⌘F", the image viewer's close, previous and next with `Esc`, `←`, `→`), even on a labelled button,
         since the key is not on screen.
@@ -964,9 +964,10 @@ Only these, and they win over anything below:
     - **Composers**: the task composer, Home's new-task box and the question's answer box share
       `COMPOSER_FIELD` (text 12px in, 10px from the top) and `COMPOSER_FOOTER` (6px around a
       28px `sm` control, no divider).
-    - **Title over description is `gap-px`**, with no exceptions: page headings, card eyebrow over
+    - **Title over description is `gap-px`**: page headings, card eyebrow over
       title, list rows, activity rows, plan and phase steps, check rows, popover headers and
-      task rows, review findings, message links. A title next to its description on one line
+      task rows, review findings, message links. The one exception is a tooltip's label over its detail
+      (`Hint`), which sits flush (`gap-0`). A title next to its description on one line
       (⌘K rows, a section label and its count, "Waits on ‹task›") is 6px (`gap-1.5`).
     - **Numbered steps** are `StepNumber` (`components/layout/surface/step-number.tsx`): a 20px `bg-bg-a2` tile,
       `rounded-control-sm`, in the plan, What changed and the chat's plan card.
@@ -1020,17 +1021,51 @@ Only these, and they win over anything below:
     (`orderChains`, parents from `waitsOn` and `stacksOn`): each task appears once. Its depth is its longest path from
     a task outside the section, and it sits under the parent at the level above that comes last on screen, so in a
     diamond (B and C wait on A, D on B and C) D sits under whichever of B and C is shown second,
-    after both. Fan-out siblings sit side by side under their parent. The status column names
-    every parent, "Waits on ‹A›, ‹B›", each a link that opens it and truncates on its own, with
-    all of them, one per line, in the tooltip ("‹task› was cancelled" when one was). A nested
-    row's corner arrow sits under its parent's priority mark (26px per level) and is a 20px
+    after both. Fan-out siblings sit side by side under their parent. The status column reads
+    "Waits on LOC-143 +2" (`WaitsOnLinks`): the first parent's handle, a link that opens it (its title when it has
+    no handle), and how many more, with every parent, handle and title, one per line, in the tooltip ("LOC-143 was
+    cancelled" when one was). A nested
+    row's corner arrow sits under its parent's priority mark (16px per level) and is a 20px
     button: `bg-bg-a2` and `fg-4` on hover and pressed alike, the same while its menu is open,
-    "Waits on" and the parents in its tooltip; it opens the Waits on menu. Every row starts with
+    "Waits on" and the parents in its tooltip; it opens the Waits on menu. A task stacked on another is a bundle, not
+    a wait, and reads as one: its mark is `BUNDLE_ICON` (`IconLayersThree`), a link to the task below with "Stacked on",
+    that task and "Merges with its bundle" in its tooltip (when it also waits on other tasks, the same mark opens the
+    Waits on menu with every parent instead, its tooltip naming the task below and then the others), its status column says "Stacked on SW-32" while the task
+    below is still open, and once ready it says "Merges with its bundle" (`BUNDLE_READY_STATUS`). Every row starts with
     its priority mark, and its status column with its kind's icon in the status's tone (`SHAPE_ICON`, named
     for screen readers) whose tooltip lists the steps the task takes ("Investigation: find the
     repository, investigate, then your OK to change.", composed steps included, `describeTaskSteps` in `lib/tasks/shapes.ts`,
-    from core's `resolveTaskProgress` with a plan's phases as one build). Filter by status in
-    ⌘K offers the same sections with the same icons.
+    from core's `resolveTaskProgress` with a plan's phases as one build).
+    - **Scope and filters.** The rows are `listTaskRows` (`lib/tasks/filters.ts`): your tasks in focus
+      (`isListedInFocus`) and every member team's tasks in focus, each with its owner, teams, project and
+      repository. `filterTaskRows` applies the search and the filters read from the address (`?status=working,review`,
+      `owner`, `team`, `project`, `repo`, `kind`, `priority`; `resolveTaskFilters`), and the groups are drawn from what
+      is left. The filters are the kit's composable
+      filter bar (`@shinsa/ui/components/filter-bar`: `FilterMenu`, `FilterBar`, `FilterChip`, `FilterClear`, fields
+      and options as plain data, the selection owned by the page). The Filter button is icon only (`IconFilter1`,
+      `icon` size with the input's fill, so it matches the search field beside it; "Filter, 2 on" for a screen reader)
+      and opens a submenu per field with a checkbox and a count per value; a field shows only when it has two values
+      or is filtered, and its counts are over the rows in focus, not the filtered ones, so they hold still as you
+      tick. The button sits 6px from the search field. Each filtered field is a chip in the row just above the table (8px from it, closer than the 24px to the
+      heading): its icon and label, "is" or "is any of", the chosen values (their icons, or a person's avatar, two
+      names then "+N"), which open the same checkboxes to change it in place, and a cross that clears it. A plus after
+      the chips adds a field not filtered yet and closes once a value is picked, and Clear all follows once two are on;
+      both are secondary buttons, no fill until hovered. The Owner field shows each person's avatar (a `FilterOption`'s
+      `media`). ⌘K offers "Filter by …" for each field, several values at once, "Any …" and Clear filters, with the same
+      icons.
+    - **Width and columns.** The page keeps `PAGE_COLUMN`'s width with any focus, teammates' tasks included. Columns
+      sit `gap-3` apart: title, repository 7rem (6.5rem beside an owner), owner 5rem when any row is a teammate's,
+      status 9.5rem, pull request 4rem, age 3rem in its compact form ("5m", "2d"). The owner is a `UserTag`
+      (`YourOwnerMark`, `TeammateOwnerMark` in `components/tasks/owner.tsx`): the avatar and first name, "You" for your
+      own, the user card on hover with the machine it runs on ("On Kai’s MacBook, read-only"), their GitHub profile on
+      click. A machine whose owner never signed in shows the team icon and the machine's name.
+    - **Offline and refused machines** take no lines of their own, so the page stays the same however many machines
+      a team has. A teammate row from a machine that is offline keeps its kind icon and gets `IconCloudOff`
+      in `fg-2` after its status (`OfflineMark`), its hint "Their machine is offline" with when its copy was last
+      updated. Machines that refuse the list show no rows, so one `IconLock` in `fg-2` after the heading's counts
+      (`TeamFeedRefusals`) names them in its hint: "Mac.lan in Platform is not listing its tasks" and the owner
+      engine's reason ("That machine does not list you in this team yet."), or "2 teammate machines are not listing
+      their tasks" and each machine's reason.
     - **The pull request badge** (`PullRequestBadge`, the Pull request column) is the pull request's number on its
       tone's soft surface (`TONE_SURFACE`, one step stronger on hover), the same tint as a status tile.
     - **Change to approve** is its own section between Plan to approve and Needs your answer (`IconFileEdit`,
@@ -3460,7 +3495,7 @@ toasts are the inverse, a `border` and no shadow.
 
 ### Gaps
 
-A title over its description is `gap-px`. `gap-0.5` is banned in `apps/web/src`
+A title over its description is `gap-px`, but in a tooltip (`Hint`'s label over its detail), where it is 0. `gap-0.5` is banned in `apps/web/src`
 (the lint rejects it): the next step up is `gap-1`. The one 2px gap is between
 the buttons of a section header, and `SectionLabel` owns it.
 

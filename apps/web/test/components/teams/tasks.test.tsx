@@ -1,20 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { useFocusedTeamTasks } from '@/components/teams/tasks.tsx';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { connection } from '@/lib/connection/socket.ts';
 import { HomePage } from '@/routes/home.tsx';
 import { TasksPage } from '@/routes/tasks.tsx';
 import { createTeamFeedTask } from '../../lib/teams/machine.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { pushTeams, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createRepo, createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
 import { createTeamEntry } from '../../support/teams.ts';
 
+const TASKS = [
+  createTask({ id: 'mine', title: 'My own task', stage: 'building', projectId: 'shared' }),
+  createTask({ id: 'private', title: 'My private task', stage: 'building', projectId: 'solo' }),
+];
+
+const PROJECTS = [
+  createProject({ id: 'shared', name: 'Shared', teamIds: ['team1'] }),
+  createProject({ id: 'solo', name: 'Solo' }),
+];
+
 const FOCUSED = createShinsaState({
-  tasks: [createTask({ id: 'mine', title: 'My own task', stage: 'building' })],
+  tasks: TASKS,
+  projects: PROJECTS,
   patch: { focus: { projectId: null, teamId: 'team1', until: null } },
 });
+
+const UNFOCUSED = createShinsaState({ tasks: TASKS, projects: PROJECTS });
 
 const OPEN = createTeamFeedTask({
   task: createTask({
@@ -45,10 +57,10 @@ function visit(path: string) {
   dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function renderTasks() {
+function renderTasks(state = FOCUSED) {
   return render(
     <TooltipProvider>
-      <TasksPage state={FOCUSED} />
+      <TasksPage state={state} />
     </TooltipProvider>
   );
 }
@@ -62,10 +74,26 @@ describe('teammates’ tasks', () => {
     expect(working.textContent).toContain('My own task');
     expect(working.textContent).toContain('Add the billing page');
     expect(working.textContent).toContain('paywalls');
-    expect(working.textContent).toContain('kai');
-    expect(working.textContent).toContain('You');
+    expect(within(working).getByRole('link', { name: 'kai' }).getAttribute('href')).toBe(
+      'https://github.com/kai'
+    );
+    expect(within(working).getByText('You')).toBeDefined();
     fireEvent.click(screen.getByText('Add the billing page'));
     expect(location.pathname).toBe('/teams/team1/p7m2/kai-task');
+  });
+
+  it('shows each owner with their avatar in the Owner filter', async () => {
+    renderTasks();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+      await Bun.sleep(0);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Owner' }));
+      await Bun.sleep(0);
+    });
+    const kai = screen.getByRole('menuitemcheckbox', { name: /kai/ });
+    expect(kai.querySelector('[aria-hidden]')?.textContent).toBe('K');
   });
 
   it('puts a finished one under Done, and follows the search and the status filter like your own', () => {
@@ -103,16 +131,90 @@ describe('teammates’ tasks', () => {
     };
     pushTeams({ machines: [offline], tasks: [OPEN, MERGED] });
     renderTasks();
-    expect(screen.getAllByText('Offline')).toHaveLength(1);
+    expect(screen.getAllByRole('img', { name: 'Their machine is offline. Updated 2h ago.' })).toHaveLength(1);
     pushTeams({ machines: [{ ...offline, status: 'live', reason: null }], tasks: [OPEN, MERGED] });
-    expect(screen.queryByText('Offline')).toBeNull();
+    expect(screen.queryByRole('img', { name: /offline/ })).toBeNull();
   });
 
-  it('shows no Owner column while your own work is in focus', () => {
-    function Unfocused() {
-      return <p>{useFocusedTeamTasks(createShinsaState({})) === null ? 'Your work' : 'Team'}</p>;
-    }
-    render(<Unfocused />);
-    expect(screen.getByText('Your work')).toBeDefined();
+  it('says why a teammate’s machine lists nothing, and drops the note once it is live', () => {
+    const refused = {
+      teamId: 'team1',
+      instanceId: 'p7m2',
+      name: 'Mac.lan',
+      userId: '7',
+      status: 'refused' as const,
+      reason: 'That machine does not list you in this team yet.',
+    };
+    pushTeams({ machines: [refused], tasks: [] });
+    renderTasks();
+    expect(
+      screen.getByRole('img', {
+        name: 'Mac.lan in Platform is not listing its tasks. That machine does not list you in this team yet.',
+      })
+    ).toBeDefined();
+    pushTeams({ machines: [{ ...refused, status: 'live', reason: null }], tasks: [] });
+    expect(screen.queryByRole('img', { name: /not listing/ })).toBeNull();
+  });
+
+  it('counts the refusals in one mark when several machines refuse, naming each', () => {
+    const refused = {
+      teamId: 'team1',
+      userId: '7',
+      status: 'refused' as const,
+    };
+    pushTeams({
+      machines: [
+        { ...refused, instanceId: 'b', name: 'Basement', reason: null },
+        { ...refused, instanceId: 'a', name: 'Attic', reason: 'That machine is in no team.' },
+      ],
+      tasks: [],
+    });
+    renderTasks();
+    expect(
+      screen.getByRole('img', {
+        name: '2 teammate machines are not listing their tasks. Attic: That machine is in no team. Basement: It refused to list its tasks.',
+      })
+    ).toBeDefined();
+  });
+
+  it('keeps your tasks outside the focused team off the list', () => {
+    renderTasks();
+    expect(screen.getByText('My own task')).toBeDefined();
+    expect(screen.queryByText('My private task')).toBeNull();
+  });
+
+  it('lists every team’s tasks beside all of yours while nothing is in focus', () => {
+    renderTasks(UNFOCUSED);
+    expect(screen.getByText('My private task')).toBeDefined();
+    expect(screen.getByText('Add the billing page')).toBeDefined();
+    expect(screen.getByText('Owner')).toBeDefined();
+  });
+
+  it('lists only that project’s tasks, none of the team’s, while one of your projects is in focus', () => {
+    renderTasks(
+      createShinsaState({
+        tasks: TASKS,
+        projects: PROJECTS,
+        patch: { focus: { projectId: 'solo', teamId: null, until: null } },
+      })
+    );
+    expect(screen.getByText('My private task')).toBeDefined();
+    expect(screen.queryByText('My own task')).toBeNull();
+    expect(screen.queryByText('Add the billing page')).toBeNull();
+  });
+
+  it('keeps the default page width when teammates’ tasks are listed', () => {
+    const { container } = renderTasks();
+    expect(screen.getByText('Owner')).toBeDefined();
+    const page = container.firstElementChild as HTMLElement;
+    expect(page.className).toContain('max-w-3xl');
+    expect(page.className).not.toContain('max-w-4xl');
+  });
+
+  it('shows no Owner column when you belong to no team', () => {
+    act(() => connection.replaceRemote(createRemoteSnapshot({ teams: [] })));
+    renderTasks(UNFOCUSED);
+    expect(screen.getByText('My private task')).toBeDefined();
+    expect(screen.queryByText('Owner')).toBeNull();
   });
 });
