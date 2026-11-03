@@ -7,6 +7,7 @@ import {
   parseTaskHandle,
   resolveProjectKey,
   selectFolderProject,
+  selectProjectByReference,
 } from '../../src/index.ts';
 
 function project(id: string, folders: string[]): Project {
@@ -83,5 +84,17 @@ describe('project folders', () => {
     expect(selectFolderProject([code, sdk], '/code/basket/sdk/ios')?.id).toBe('sdk');
     expect(selectFolderProject([sdk, code], '/code/basket/app')?.id).toBe('code');
     expect(selectFolderProject([code, sdk], '/tmp/app')).toBeNull();
+  });
+});
+
+describe('project references', () => {
+  test('a project is named by its id, or by its key or name in any case', () => {
+    const shinsa = { ...project('p1', []), key: 'LOC', name: 'Shinsa' };
+    const other = project('p2', []);
+    expect(selectProjectByReference([other, shinsa], 'p1')?.id).toBe('p1');
+    expect(selectProjectByReference([other, shinsa], ' loc ')?.id).toBe('p1');
+    expect(selectProjectByReference([other, shinsa], 'SHINSA')?.id).toBe('p1');
+    expect(selectProjectByReference([other, shinsa], 'P1 ')).toBeNull();
+    expect(selectProjectByReference([other, shinsa], 'nothing')).toBeNull();
   });
 });

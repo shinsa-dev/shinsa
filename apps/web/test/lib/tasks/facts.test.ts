@@ -365,6 +365,30 @@ describe('resolveFiledByFact', () => {
     });
   });
 
+  it('shows a task its agent filed as a fork of itself as forked from that task, once', () => {
+    const other = createTask({ id: 'other', handle: 'LOC-9' });
+    const task = createTask({
+      id: 't',
+      forkOf: 'filer',
+      createdBy: { kind: 'courier', taskId: 'filer', runId: 'r', requestKey: 'k' },
+    });
+    const state = createShinsaState({ tasks: [filer, other, task] });
+    const filedBy = resolveFiledByFact(state, task);
+    expect(filedBy).toEqual({
+      icon: 'IconFork',
+      verb: 'Forked from',
+      handle: 'LOC-122',
+      name: 'Retry the export',
+      hint: 'The agent of LOC-122 filed this task and forked it from its own conversation.',
+      target: { kind: 'task', taskId: 'filer' },
+    });
+    expect(listForkSourcesBesides(state, task, filedBy)).toEqual([]);
+    const forkedElsewhere = { ...task, forkOf: 'other' };
+    const filedOnly = resolveFiledByFact(state, forkedElsewhere);
+    expect(filedOnly).toMatchObject({ icon: 'IconAgents', verb: 'Filed by', handle: 'LOC-122' });
+    expect(listForkSourcesBesides(state, forkedElsewhere, filedOnly)).toEqual([other]);
+  });
+
   it('names the task whose plan it was split from, quoting its title when it has no handle', () => {
     const unnamed = { ...filer, handle: undefined };
     const task = createTask({

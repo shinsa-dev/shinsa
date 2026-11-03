@@ -74,6 +74,7 @@ export function recordConfig(decider: Decider, command: CommandOf<'config.record
   const task = decider.state.tasks[command.taskId];
   if (task?.stage !== 'triage' || task.stageReason !== VERIFYING_SETUP) return;
   if (command.repoId) bindRepo(decider, task, command.repoId);
+  if (command.started) decider.emit({ type: 'task.repo_started', taskId: task.id, start: command.started });
   const problems = resolveProblems(decider.task(task.id), command.problems);
   if (!isSameValue(task.configProblems ?? [], problems)) {
     decider.emit({ type: 'config.verified', taskId: task.id, problems });

@@ -474,6 +474,16 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   bound; the task keeps its own project, and its agents' brief says the task works in a repository outside it.
   Without the model the task binds none, unless it was created with a repository or from inside one. `task.triage`
   then carries `repoId: null` and nothing is registered.
+- **Triage may start a new repository.** When the task has no repository pinned, the classifier also answers
+  `new_repo`: empty, unless the request asks to start a repository or project that is not listed ("start a new app
+  called native-islands"), when it names the folder and answers `repo` none. A name that is listed binds that
+  repository, and an unsafe one (`..`, a slash, a leading dot, `.git` at the end) starts nothing
+  (`parseNewRepoAnswer`). Before `task.triage`, `TaskSetup` creates it with `createRepository`, the function
+  `create_task` uses: in the project's first folder, else beside the project's first repository, else in the first
+  folder Shinsa looks in (`resolveTaskRepoTarget`), registered under `<effect key>:repo.register` into the task's
+  project (a task in none gets the project registering gives it, Projects and task identity). With no folder, or a
+  folder that already holds files, it logs a warning and the task is triaged without a repository, so the setup gate
+  asks. Like a repository `create_task` makes, it has no remote until you add one.
 - **It runs without one.** An answer or research with no repository skips the setup step entirely (`startWork`:
   no `config.verify`, no "verifying the setup", no Find the repository step in the strip) and runs read-only in a
   scratch folder of its own, `data/scratch/<task id>` (`RunSupervisor`, made again before every run), never a
@@ -662,8 +672,19 @@ them in the order they need:
   repository's name or, failing that, the folder name of a git repository directly inside one of the task's project
   folders (`upsertProjectFolderRepo` in `repos/index.ts`, through `OrchestrationCall.registerRepo`): it is registered
   into that project the way triage registers one (`upsertRepo`), and the new task works there. A name found in
-  neither is refused with the repositories Shinsa knows. The guide sits in the brief, the user turn, so the session's cached prefix
+  neither is refused with the repositories Shinsa knows, unless the call sets `new_repository`. The guide sits in the brief, the user turn, so the session's cached prefix
   does not change (Caching).
+- **A new repository is created when asked.** `create_task` with `new_repository` and a `repository` name nothing
+  matches creates `<folder>/<name>` (`createProjectRepository` in `repos/index.ts`, through
+  `OrchestrationCall.createRepo`): the folder is the project's first folder or, with none, the folder that holds the
+  project's first repository; with neither the call is refused and points at `projects_add_folder`. `RepoSetup.create`
+  makes the folder (refused when it already holds files, or when the name is more than letters, digits, `.`, `-` and
+  `_`), starts it on git's `init.defaultBranch` (`main` when unset) with the empty first commit setup makes (Setup
+  verification), and registers it into the project. A name that already matches is used as it is, so a repeated call
+  creates nothing. The repository has no remote, so its task cannot open a pull request until you add one.
+- **Another project.** `create_task`'s `project` (a key, name or id) files the task in that project (`projectId` on
+  `agent.create_task`): `repository` is then looked up among that project's repositories and folders, and without one
+  the new task leaves its repository to triage in that project instead of taking this task's.
 - **The order is a wait.** `this_task_waits` makes this task wait on the new one (this task needs the other part
   merged first); only a building or fixing run may set it, since a planning task that starts waiting stops planning
   (`cannot_wait`, whose message points a planner at its first phase or at `after_this`). `after_this` makes the new
@@ -2112,6 +2133,16 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   whose steps need one finds it first (A task without a repository, above), and the problem when none is found is
   `no_repository`. Checks are not part of it: a task's checks come from its plan, and a repository without its own
   commands runs nothing extra, so nothing about them can be missing (Checks, above).
+- **A new repository is started first.** When the task needs a worktree, `RepoSetup.prepare` runs before the
+  checks and acts only where nothing can be lost: a repository with no refs at all (no branch, tag or remote branch)
+  gets an empty first commit (`chore: start the repository`, written on git's empty tree without the index, so staged and untracked files stay as they were) on its
+  default branch, and an empty folder that is not a repository yet is `git init`ed on that branch first. With an
+  origin it acts only when `git ls-remote --heads origin` answers and lists no branch, then pushes the commit there; an
+  unreachable origin, or one with history, leaves the repository as it was for the checks to describe. A folder with
+  files that is not a repository, a repository with any ref, and a default branch git would read as an option are
+  never touched. What it did rides on `config.record` (`started`: the branch, `initialized`, `pushed`) and core records
+  it once (`task.repo_started`, "Started the repository with an empty first commit on main", "…, and pushed it to
+  origin"). Doing it again finds the commit and does nothing, so the effect stays replay safe.
 - Problems open their own `configuration` gate, not a failure: nothing ran. Its title names the problem ("The
   repository is missing", or "The setup has 2 problems") and its body lists what is wrong and how to fix each; the
   web labels the task "Setup incomplete". Verify again (`approve`) verifies the setup again; Cancel ends the task. A
