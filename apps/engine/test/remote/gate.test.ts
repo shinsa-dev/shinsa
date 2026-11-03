@@ -498,19 +498,33 @@ describe('the outbound gate', () => {
     expect(() => EgressGate.listTeamTasks([{ ...task, repo: createRepo() }])).toThrow();
   });
 
-  test('a preview answer carries only the headers a page needs, its redirects kept on the preview', () => {
+  test('a preview answer keeps the headers of the app but none that reveal the machine', () => {
     const headers = EgressGate.resolvePreviewHeaders(
       new Headers({
         'content-type': 'text/html',
         'set-cookie': 'sid=1',
         location: 'http://localhost:9/next',
+        'www-authenticate': 'Basic realm="app"',
+        'x-total-count': '42',
+        'x-nextjs-cache': 'HIT',
+        connection: 'keep-alive',
+        server: 'Werkzeug/3.0 Python/3.12',
         'x-powered-by': 'Express',
         'server-timing': 'db;desc="/Users/mona/app"',
         sourcemap: '/Users/mona/app/main.js.map',
+        'x-sourcemap': '/Users/mona/app/main.js.map',
+        'x-debug-token-link': 'http://localhost:9/_profiler/abc',
       }),
       ['http://localhost:9', 'http://127.0.0.1:9']
     );
-    expect([...headers.keys()].sort()).toEqual(['content-type', 'location', 'set-cookie']);
+    expect([...headers.keys()].sort()).toEqual([
+      'content-type',
+      'location',
+      'set-cookie',
+      'www-authenticate',
+      'x-nextjs-cache',
+      'x-total-count',
+    ]);
     expect(headers.get('location')).toBe('/next');
     const home = EgressGate.resolvePreviewHeaders(new Headers({ location: 'http://127.0.0.1:9' }), [
       'http://localhost:9',

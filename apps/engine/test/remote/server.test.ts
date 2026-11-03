@@ -787,7 +787,12 @@ describe('pairing this machine', () => {
     });
     expect(opened).toEqual(['https://app.shinsa.dev/pair?code=K7PQ']);
     const startCall = plane.calls.find((call) => call.path === REMOTE_PATHS.pairStart);
-    expect(startCall?.body).toEqual({ name: 'Studio', publicKey: started.machineKey, version: '1' });
+    expect(startCall?.body).toEqual({
+      name: 'Studio',
+      publicKey: started.machineKey,
+      version: '1',
+      features: ['bound-connect-tokens', 'sealed-pairing'],
+    });
     expect((await readSnapshot(await local('/api/remote/pair', {}))).pairing?.claimCode).toBe('K7PQ');
     await until('paired', () => remote.snapshot().paired);
     expect(remote.snapshot()).toMatchObject({ paired: true, enabled: true, owner: 'mona', pairing: null });

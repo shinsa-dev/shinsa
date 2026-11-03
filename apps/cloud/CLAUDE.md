@@ -154,10 +154,14 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   (machine token, tunnel token, connect key) are sealed to the machine's own public key from `pair/start` before
   they are stored (`CloudCrypto.sealCredentials`, core's `pairing-seal.ts`), so the waiting row in D1 holds nothing the
   Worker or a copy of D1 can open. The machine's next poll with the right secret collects them once as
-  `sealedCredentials`, opens them with its private key, and the row is then gone. At most 5 machines per account, and at most `MAX_INSTANCES` (50 by default, a
+  `sealedCredentials`, opens them with its private key, and the row is then gone. Only a machine whose `pair/start`
+  names `sealed-pairing` in `features` (kept in `pair_sessions.features` and then `instances.features`,
+  `0007_machine_features.sql`) is sealed to; an older engine that names nothing collects them in the clear as
+  `credentials`, as it always has. At most 5 machines per account, and at most `MAX_INSTANCES` (50 by default, a
   variable in `wrangler.jsonc`) on the whole service, each one a tunnel and a DNS record on our Cloudflare account; past
   it an approval is 503 `service_full`.
-- **Machines.** A heartbeat (machine token as bearer) marks the instance online and, when the machine's loopback
+- **Machines.** A heartbeat (machine token as bearer) records the `features` the engine names (`instances.features`)
+  and marks the instance online and, when the machine's loopback
   address changed, moves the tunnel's ingress there; any address but loopback is refused. Online means a heartbeat in
   the last 5 minutes and no offline call since. An unknown machine token is 401, which the machine reads as revoked.
   Removing an instance, from its owner's dashboard or by the machine, deletes its DNS record and tunnel, then the row
@@ -317,8 +321,15 @@ model. The Worker's part of it:
 - **What logs keep.** Failures of 500 or more with their cause, and the ids and statuses of what a machine or Slack
   refused (`WorkerLogger`); never a body, and every secret is `Redacted`, so a cause prints it as `<redacted>`.
   Workers Logs record each request's URL too, which for a webhook includes its token.
+- **Older engines.** A connect token is bound to its channel and nonce, and pairing credentials sealed, only for a
+  machine whose last heartbeat or pairing start named `bound-connect-tokens` or `sealed-pairing`
+  (`createConnectAnswer`, `domain/machines.ts`; the pairing routes). A machine that names nothing gets the old token
+  and clear credentials, so the Worker can deploy from `main` before every engine updates. A hardened engine accepts
+  only the new token and refuses clear credentials, so a forged empty heartbeat downgrades nothing it runs
+  (`test/instances.test.ts`, `test/pairing.test.ts`).
 - **Known limits.** Rate limits only on pairing start (10 waiting per address); expired session rows are not swept
-  (hashes only); signing out ends that one session, not every session of the account.
+  (hashes only); signing out ends that one session, not every session of the account; an older engine keeps the old
+  token and clear pairing credentials until it updates.
 
 ## Running and deploying
 

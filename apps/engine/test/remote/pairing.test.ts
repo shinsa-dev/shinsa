@@ -98,6 +98,17 @@ describe('pairing', () => {
     );
   });
 
+  test('refuses credentials sent in the clear, as app.shinsa.dev sends an older engine', async () => {
+    const logs = captureLogs();
+    const { plane: fake, pairing } = startPairing();
+    answerPolls(fake, { status: 'claimed', credentials: CREDENTIALS, owner: 'mona' });
+    expect(await pairing.done).toEqual({ status: 'expired' });
+    logs.restore();
+    expect(
+      logs.fieldsOf('[Remote] The pairing credentials arrived unsealed, so this machine refused them')
+    ).toHaveLength(1);
+  });
+
   test('stops when cancelled, even with a poll on its way', async () => {
     const { plane: fake, pairing } = startPairing();
     fake.answers.set(REMOTE_PATHS.pairPoll, () => {

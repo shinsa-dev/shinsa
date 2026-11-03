@@ -76,7 +76,10 @@ export const REMOTE_TEXT_LIMITS = {
   localUrl: 200,
   userId: 64,
   nativeCode: 200,
+  feature: 40,
 } as const;
+
+const REMOTE_FEATURES_LIMIT = 16;
 
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -100,10 +103,23 @@ export type ClaimCode = typeof ClaimCode.Type;
 
 export const RemoteOk = Schema.Struct({ ok: Schema.Literal(true) });
 
+export const MACHINE_FEATURES = ['bound-connect-tokens', 'sealed-pairing'] as const;
+
+export type MachineFeature = (typeof MACHINE_FEATURES)[number];
+
+export const MachineFeatures = Schema.Array(RemoteText(REMOTE_TEXT_LIMITS.feature)).check(
+  Schema.isMaxLength(REMOTE_FEATURES_LIMIT)
+);
+
+export function hasMachineFeature(features: readonly string[], feature: MachineFeature) {
+  return features.includes(feature);
+}
+
 export const PairStartRequest = Schema.Struct({
   name: RemoteText(REMOTE_TEXT_LIMITS.machineName),
   publicKey: RemoteText(REMOTE_TEXT_LIMITS.publicKey),
   version: RemoteText(REMOTE_TEXT_LIMITS.version),
+  features: Schema.optionalKey(MachineFeatures),
 });
 
 export type PairStartRequest = typeof PairStartRequest.Type;
@@ -148,6 +164,7 @@ export const PairPollResponse = Schema.Union([
     sealedCredentials: Schema.String,
     owner: Schema.String,
   }),
+  Schema.Struct({ status: Schema.Literal('claimed'), credentials: MachineCredentials, owner: Schema.String }),
 ]);
 
 export type PairPollResponse = typeof PairPollResponse.Type;
@@ -167,6 +184,7 @@ export const HeartbeatRequest = Schema.Struct({
     )
   ),
   version: Schema.optionalKey(Schema.String),
+  features: Schema.optionalKey(MachineFeatures),
   signingKey: Schema.optionalKey(
     Schema.String.check(
       Schema.makeFilter((value) => isSigningPublicKey(value) || 'The signing key must be a P-256 public key.')

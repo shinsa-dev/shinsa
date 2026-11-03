@@ -1,4 +1,10 @@
-import { ClaimCode, type MachineCredentials, resolveKeyFingerprint, resolveTunnelHost } from '@shinsa/core';
+import {
+  ClaimCode,
+  hasMachineFeature,
+  type MachineCredentials,
+  resolveKeyFingerprint,
+  resolveTunnelHost,
+} from '@shinsa/core';
 import { CurrentUser, RemoteApi } from '@shinsa/core/remote/api';
 import { InstancesFull, PairClaimed, PairExpired, ServiceFull } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
@@ -47,6 +53,7 @@ export const PairsHandlers = HttpApiBuilder.group(
         dnsRecordId: tunnel.dnsRecordId,
         machineTokenHash: yield* crypto.hashToken(machineToken),
         connectKey,
+        features: pairing.features,
       });
       const credentials: MachineCredentials = {
         instanceId,
@@ -55,8 +62,10 @@ export const PairsHandlers = HttpApiBuilder.group(
         tunnelHost,
         connectKey: Redacted.value(connectKey),
       };
-      const sealed = yield* crypto.sealCredentials(pairing.publicKey, credentials);
-      yield* pairings.recordClaim(pairing.claimCode, sealed);
+      const stored = hasMachineFeature(pairing.features, 'sealed-pairing')
+        ? yield* crypto.sealCredentials(pairing.publicKey, credentials)
+        : JSON.stringify(credentials);
+      yield* pairings.recordClaim(pairing.claimCode, stored);
       return instanceId;
     });
 

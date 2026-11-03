@@ -13,6 +13,7 @@ import {
   type ConnectClaim,
   DomainError,
   type GuestActor,
+  MACHINE_FEATURES,
   type HandshakeKeys,
   MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
@@ -199,6 +200,7 @@ export class Remote {
       name: this.#options.machineName,
       publicKey: machine.publicKey,
       version: this.#options.version,
+      features: [...MACHINE_FEATURES],
     });
     const pairing = {
       view: { claimCode: start.claimCode, url: start.url, expiresAt: start.expiresAt },

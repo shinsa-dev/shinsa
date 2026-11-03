@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { ClaimCode } from '@shinsa/core';
+import { ClaimCode, MACHINE_FEATURES } from '@shinsa/core';
 import { Effect, Option } from 'effect';
 import { TestClock } from 'effect/testing';
 import { Pairings } from '../../src/store/pairings/service.ts';
@@ -14,6 +14,7 @@ const PAIRING = {
   name: 'Studio',
   publicKey: 'public-key',
   version: '1',
+  features: [...MACHINE_FEATURES],
   expiresAt: TEST_NOW + 600_000,
 };
 

@@ -215,7 +215,7 @@ function startDevServer() {
           'x-powered-by': 'Express',
           'server-timing': 'db;desc="/Users/mona/app/db.sqlite"',
           sourcemap: '/Users/mona/app/src/main.ts.map',
-          'x-debug-path': '/Users/mona/app',
+          'x-total-count': '42',
         },
       });
     },
@@ -377,7 +377,8 @@ describe('answering a preview request', () => {
     expect(await response.text()).toBe('hello /api/save');
     expect(response.headers.get('set-cookie')).toBe('sid=1');
     expect(response.headers.has('connection')).toBe(false);
-    for (const name of ['x-powered-by', 'server-timing', 'sourcemap', 'x-debug-path'])
+    expect(response.headers.get('x-total-count')).toBe('42');
+    for (const name of ['x-powered-by', 'server-timing', 'sourcemap'])
       expect(response.headers.has(name)).toBe(false);
     const [request] = dev.seen;
     expect(request).toMatchObject({ method: 'POST', path: '/api/save?draft=1', body: 'saved' });

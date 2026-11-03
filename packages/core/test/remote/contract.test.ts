@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { Option, Result, Schema } from 'effect';
 import {
   ClaimCode,
+  hasMachineFeature,
   HeartbeatRequest,
+  MACHINE_FEATURES,
   InstanceId,
   PairPollResponse,
   PairStartRequest,
@@ -119,6 +121,37 @@ describe('the remote contract schemas', () => {
     expect(Option.isSome(decodePoll({ status: 'pending' }))).toBe(true);
     expect(Option.isNone(decodePoll({ status: 'claimed' }))).toBe(true);
     expect(Option.isNone(decodePoll({ status: 'lost' }))).toBe(true);
+  });
+
+  test('a machine names what it speaks, and an older one that names nothing is told apart', () => {
+    const features = [...MACHINE_FEATURES];
+    const beat = Schema.decodeUnknownSync(HeartbeatRequest)({ localUrl: 'http://127.0.0.1:7446', features });
+    expect(hasMachineFeature(beat.features ?? [], 'bound-connect-tokens')).toBe(true);
+    expect(hasMachineFeature([], 'sealed-pairing')).toBe(false);
+    const decodeHeartbeat = Schema.decodeUnknownOption(HeartbeatRequest);
+    const many = Array.from({ length: 17 }, (_, index) => `feature-${index}`);
+    expect(Option.isNone(decodeHeartbeat({ localUrl: 'http://127.0.0.1:7446', features: many }))).toBe(true);
+    expect(
+      Option.isNone(decodeHeartbeat({ localUrl: 'http://127.0.0.1:7446', features: ['x'.repeat(41)] }))
+    ).toBe(true);
+    const credentials = {
+      instanceId: 'studio000001',
+      machineToken: 'machine',
+      tunnelToken: 'tunnel',
+      tunnelHost: 't-studio000001.shinsa.dev',
+      connectKey: 'key',
+    };
+    const decodePoll = Schema.decodeUnknownSync(PairPollResponse);
+    expect(decodePoll({ status: 'claimed', sealedCredentials: 'sealed', owner: 'mona' })).toEqual({
+      status: 'claimed',
+      sealedCredentials: 'sealed',
+      owner: 'mona',
+    });
+    expect(decodePoll({ status: 'claimed', credentials, owner: 'mona' })).toEqual({
+      status: 'claimed',
+      credentials,
+      owner: 'mona',
+    });
   });
 
   test('an id in a path is one segment, branded so one kind is never passed for another', () => {

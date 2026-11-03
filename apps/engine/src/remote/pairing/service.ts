@@ -21,6 +21,12 @@ export class Pairings extends Context.Service<
         machine: MachineKeyPair,
         claimed: Extract<PairPollResponse, { status: 'claimed' }>
       ) {
+        if (!('sealedCredentials' in claimed)) {
+          yield* Effect.logError(
+            '[Remote] The pairing credentials arrived unsealed, so this machine refused them'
+          );
+          return { status: 'expired' } as const;
+        }
         const credentials = yield* Effect.promise(() =>
           openPairingCredentials(machine, claimed.sealedCredentials)
         );

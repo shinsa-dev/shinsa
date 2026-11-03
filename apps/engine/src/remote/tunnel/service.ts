@@ -1,4 +1,4 @@
-import type { MachineCredentials, TunnelStatus } from '@shinsa/core';
+import { MACHINE_FEATURES, type MachineCredentials, type TunnelStatus } from '@shinsa/core';
 import type { Revoked } from '@shinsa/core/remote/errors';
 import { Context, Effect, FiberHandle, Layer, Redacted, Ref } from 'effect';
 import { describeError } from '../../log/redact.ts';
@@ -49,6 +49,7 @@ export class TunnelSupervisor extends Context.Service<
           .heartbeat(Redacted.make(credentials.machineToken), {
             localUrl,
             version: machine.version,
+            features: [...MACHINE_FEATURES],
             ...(signingKey ? { signingKey } : {}),
           })
           .pipe(

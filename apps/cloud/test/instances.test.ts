@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   CONNECT_TOKEN_TTL_MS,
+  parseBase64Url,
   type ConnectResponse,
   REMOTE_PATHS,
   type RemoteInstance,
@@ -125,6 +126,45 @@ describe('instances', () => {
     const next = new URL(again.url).searchParams.get('token') ?? '';
     const nextClaim = await verifyConnectToken(studio.connectKey, next, remote, harness.clock.now);
     expect(nextClaim?.nonce).not.toBe(claim?.nonce);
+  });
+
+  test('mints the token an older engine checks until its heartbeat names bound connect tokens', async () => {
+    const harness = createHarness();
+    const session = await harness.signIn('mona', 7);
+    const studio = await pairMachine(harness, session);
+    const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
+    const mint = async () => {
+      const answer = await readJson<ConnectResponse>(
+        await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session })
+      );
+      return new URL(answer.url).searchParams.get('token') ?? '';
+    };
+    await heartbeat(harness, studio, 'http://127.0.0.1:7446', []);
+    const legacy = await mint();
+    const [encoded = '', signature = ''] = legacy.split('.');
+    const key = await crypto.subtle.importKey(
+      'raw',
+      parseBase64Url(studio.connectKey) ?? new Uint8Array(),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    const payload = parseBase64Url(encoded) ?? new Uint8Array();
+    expect(
+      await crypto.subtle.verify('HMAC', key, parseBase64Url(signature) ?? new Uint8Array(), payload)
+    ).toBe(true);
+    expect(JSON.parse(new TextDecoder().decode(payload))).toEqual({
+      i: studio.instanceId,
+      u: '7',
+      e: harness.clock.now + CONNECT_TOKEN_TTL_MS,
+    });
+    expect(await verifyConnectToken(studio.connectKey, legacy, remote, harness.clock.now)).toBeNull();
+    await heartbeat(harness, studio);
+    expect(
+      await verifyConnectToken(studio.connectKey, await mint(), remote, harness.clock.now)
+    ).toMatchObject({
+      channel: 'remote',
+    });
   });
 
   test('never mints a token for someone else’s machine or from another site', async () => {

@@ -14,7 +14,7 @@ export class Pairings extends Context.Service<
     select(claimCode: ClaimCode): Effect.Effect<Option.Option<Pairing>>;
     reserve(claimCode: ClaimCode, ownerLogin: string): Effect.Effect<boolean>;
     release(claimCode: ClaimCode): Effect.Effect<void>;
-    recordClaim(claimCode: ClaimCode, sealedCredentials: string): Effect.Effect<void>;
+    recordClaim(claimCode: ClaimCode, credentials: string): Effect.Effect<void>;
     remove(claimCode: ClaimCode): Effect.Effect<void>;
   }
 >()('shinsa/cloud/store/Pairings') {
@@ -26,7 +26,7 @@ export class Pairings extends Context.Service<
       const insert = SqlSchema.void({
         Request: Schema.Struct({ ...NewPairing.fields, clientIp: Schema.String }),
         execute: (row) =>
-          sql`INSERT INTO pair_sessions (claim_code, poll_secret_hash, name, public_key, version, client_ip, expires_at) VALUES (${row.claimCode}, ${row.pollSecretHash}, ${row.name}, ${row.publicKey}, ${row.version}, ${row.clientIp}, ${row.expiresAt})`,
+          sql`INSERT INTO pair_sessions (claim_code, poll_secret_hash, name, public_key, version, features, client_ip, expires_at) VALUES (${row.claimCode}, ${row.pollSecretHash}, ${row.name}, ${row.publicKey}, ${row.version}, ${row.features}, ${row.clientIp}, ${row.expiresAt})`,
       });
       const expiredRemoval = SqlSchema.void({
         Request: Schema.Number,
@@ -41,7 +41,7 @@ export class Pairings extends Context.Service<
         Request: ClaimCode,
         Result: Pairing,
         execute: (code) =>
-          sql`SELECT claim_code, poll_secret_hash, name, public_key, version, expires_at, credentials, owner FROM pair_sessions WHERE claim_code = ${code}`,
+          sql`SELECT claim_code, poll_secret_hash, name, public_key, version, features, expires_at, credentials, owner FROM pair_sessions WHERE claim_code = ${code}`,
       });
       const reservation = SqlSchema.findOneOption({
         Request: Schema.Struct({ claimCode: ClaimCode, owner: Schema.String }),
@@ -85,8 +85,7 @@ export class Pairings extends Context.Service<
         ),
         release: Effect.fn('Pairings.release')((code: ClaimCode) => release(code), Effect.orDie),
         recordClaim: Effect.fn('Pairings.recordClaim')(
-          (claimCode: ClaimCode, sealedCredentials: string) =>
-            claim({ claimCode, credentials: sealedCredentials }),
+          (claimCode: ClaimCode, credentials: string) => claim({ claimCode, credentials }),
           Effect.orDie
         ),
         remove: Effect.fn('Pairings.remove')((code: ClaimCode) => removal(code), Effect.orDie),

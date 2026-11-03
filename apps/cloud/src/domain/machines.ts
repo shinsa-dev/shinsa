@@ -3,6 +3,8 @@ import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectResponse,
   createConnectToken,
+  createLegacyConnectToken,
+  hasMachineFeature,
   REMOTE_CHANNEL_PATH,
   REMOTE_CONNECT_PARAM,
   type RemoteInstance,
@@ -53,15 +55,12 @@ export const createConnectAnswer = Effect.fn('createConnectAnswer')(function* (
 ) {
   const crypto = yield* CloudCrypto;
   const expiresAt = (yield* Clock.currentTimeMillis) + CONNECT_TOKEN_TTL_MS;
+  const connectKey = Redacted.value(machine.connectKey);
   const nonce = Redacted.value(yield* crypto.createToken(CONNECT_NONCE_BYTES));
   const token = yield* Effect.promise(() =>
-    createConnectToken(Redacted.value(machine.connectKey), {
-      instanceId: machine.id,
-      userId,
-      channel,
-      nonce,
-      expiresAt,
-    })
+    hasMachineFeature(machine.features, 'bound-connect-tokens')
+      ? createConnectToken(connectKey, { instanceId: machine.id, userId, channel, nonce, expiresAt })
+      : createLegacyConnectToken(connectKey, { instanceId: machine.id, userId, expiresAt })
   );
   const tunnel = resolveTunnelUrl(machine);
   const url =

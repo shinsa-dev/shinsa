@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { SqliteClient } from '@effect/sql-sqlite-bun';
 import {
   encodeText,
+  MACHINE_FEATURES,
   type MachineCredentials,
   openPairingCredentials,
   type PairPollResponse,
@@ -362,7 +363,12 @@ export async function pairMachine(
   const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
   const publicKey = await serializePublicKey(pair.publicKey);
   const start = await readJson<PairStartResponse>(
-    await harness.post(REMOTE_PATHS.pairStart, { name, publicKey, version: '1' })
+    await harness.post(REMOTE_PATHS.pairStart, {
+      name,
+      publicKey,
+      version: '1',
+      features: [...MACHINE_FEATURES],
+    })
   );
   await harness.post(resolvePairApprovePath(start.claimCode), {}, auth);
   const claimed = await readJson<PairPollResponse>(
@@ -372,7 +378,8 @@ export async function pairMachine(
 }
 
 export async function openClaimed(pair: CryptoKeyPair, claimed: PairPollResponse) {
-  if (claimed.status !== 'claimed') throw new Error('Pairing was not claimed.');
+  if (claimed.status !== 'claimed' || !('sealedCredentials' in claimed))
+    throw new Error('Pairing was not claimed with sealed credentials.');
   const machine = { publicKey: await serializePublicKey(pair.publicKey), privateKey: pair.privateKey };
   const credentials = await openPairingCredentials(machine, claimed.sealedCredentials);
   if (!credentials) throw new Error('The credentials did not open with the machine key.');
@@ -382,11 +389,12 @@ export async function openClaimed(pair: CryptoKeyPair, claimed: PairPollResponse
 export function heartbeat(
   harness: Harness,
   credentials: MachineCredentials,
-  localUrl = 'http://127.0.0.1:7446'
+  localUrl = 'http://127.0.0.1:7446',
+  features: readonly string[] = MACHINE_FEATURES
 ) {
   return harness.post(
     REMOTE_PATHS.heartbeat,
-    { localUrl, version: '1' },
+    { localUrl, version: '1', features },
     { bearer: credentials.machineToken, sameOrigin: false }
   );
 }

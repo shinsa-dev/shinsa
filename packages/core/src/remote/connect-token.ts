@@ -66,6 +66,20 @@ export async function createConnectToken(connectKey: string, claim: ConnectClaim
   return `${serializeBase64Url(payload)}.${serializeBase64Url(signature)}`;
 }
 
+export interface LegacyConnectClaim {
+  instanceId: string;
+  userId: string;
+  expiresAt: number;
+}
+
+export async function createLegacyConnectToken(connectKey: string, claim: LegacyConnectClaim) {
+  const key = await importConnectKey(connectKey);
+  if (!key) throw new Error('The connect key is not valid.');
+  const payload = encodeText(JSON.stringify({ i: claim.instanceId, u: claim.userId, e: claim.expiresAt }));
+  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, payload));
+  return `${serializeBase64Url(payload)}.${serializeBase64Url(signature)}`;
+}
+
 export async function verifyConnectToken(
   connectKey: string,
   token: string,

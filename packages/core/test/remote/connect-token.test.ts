@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { concatBytes, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
+import { decodeText, parseBase64Url } from '../../src/remote/bytes.ts';
 import {
   CONNECT_TOKEN_TTL_MS,
   type ConnectClaim,
   createConnectToken,
+  createLegacyConnectToken,
   verifyConnectToken,
 } from '../../src/remote/connect-token.ts';
 
@@ -99,5 +101,30 @@ describe('connect tokens', () => {
   test('cannot be made without a key or a nonce', async () => {
     await expect(createConnectToken('', CLAIM)).rejects.toThrow('not valid');
     await expect(createConnectToken(KEY, { ...CLAIM, nonce: 'abc' })).rejects.toThrow('nonce');
+  });
+
+  test('a legacy token is what an older engine checks, and this engine refuses it on every channel', async () => {
+    const token = await createLegacyConnectToken(KEY, {
+      instanceId: 'abc',
+      userId: '42',
+      expiresAt: CLAIM.expiresAt,
+    });
+    const [encoded = '', encodedSignature = ''] = token.split('.');
+    const payload = parseBase64Url(encoded) ?? new Uint8Array();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new Uint8Array(32).fill(3),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    const signature = parseBase64Url(encodedSignature) ?? new Uint8Array();
+    expect(await crypto.subtle.verify('HMAC', key, signature, payload)).toBe(true);
+    expect(JSON.parse(decodeText(payload))).toEqual({ i: 'abc', u: '42', e: CLAIM.expiresAt });
+    expect(await verifyConnectToken(KEY, token, REMOTE, NOW)).toBeNull();
+    expect(await verifyConnectToken(KEY, token, TEAM, NOW)).toBeNull();
+    await expect(
+      createLegacyConnectToken('', { instanceId: 'abc', userId: '42', expiresAt: 1 })
+    ).rejects.toThrow('The connect key is not valid.');
   });
 });

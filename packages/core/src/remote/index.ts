@@ -22,6 +22,8 @@ export {
   type ConnectAudience,
   type ConnectClaim,
   createConnectToken,
+  createLegacyConnectToken,
+  type LegacyConnectClaim,
   verifyConnectToken,
 } from './connect-token.ts';
 export {
@@ -40,6 +42,10 @@ export {
   MAX_OWNED_TEAMS,
   MAX_TEAM_MEMBERS,
   MachineCredentials,
+  MACHINE_FEATURES,
+  type MachineFeature,
+  MachineFeatures,
+  hasMachineFeature,
   parseMachineCredentials,
   MemberRequest,
   NativeSignInTokenRequest,

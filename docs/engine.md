@@ -2847,7 +2847,12 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   token never opens `/remote`, and only once: the gate checks the token, refuses a request that is not a WebSocket
   upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
   token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
-  rests on the handshake. Webhooks and Slack are refused in inspect mode, and `/health` and
+  rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
+  `bound-connect-tokens`, `sealed-pairing`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
+  still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
+  Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
+  credentials, so naming nothing downgrades only an older engine. Webhooks and Slack are refused in inspect mode, and `/health` and
   Slack's paths do not exist on the local address.
 - **Inside the channel** the same gate decides every request (`admitRequest` in `Ingress`, `admitEndpoint` in
   `EngineGate`), from the request's principal (`RequestSource`: the channel's user and, for a guest, the task handed
@@ -2863,9 +2868,12 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `remote/egress/schema.ts`), so a field no schema names is dropped, however a redaction spreads a record. A field that
   must leave empty (a worktree path, a run's session id, a waiting run's account, a repository's path, a project's
   folders, a gate's answer, a delegation's brief) is a `Null`, `''` or empty tuple there: a view that carries one is
-  refused, and the channel closes (1008) instead of sending it. A preview's answer keeps only the headers a page needs
-  (`PREVIEW_RESPONSE_HEADERS`: content, caching, cookies, CORS, the security headers and `Location`, a local origin
-  turned back into a path), so `X-Powered-By`, `Server-Timing` or a source map's local path never leave. Slack posts,
+  refused, and the channel closes (1008) instead of sending it. A preview's answer keeps the app's own headers (its
+  `WWW-Authenticate`, the counts its code reads, its framework's cache headers) but drops the hop-by-hop ones and every
+  one that describes the machine rather than the page (`PREVIEW_DROPPED_HEADERS`: `Server`, `X-Powered-By`,
+  `Server-Timing`, a source map's local path, a framework's debug token), and turns a `Location` at the local origin
+  back into a path. A header list is a blocklist here, not an allowlist, because the previewed app is one the owner
+  chose to share, and its headers are part of the page. Slack posts,
   like every call to app.shinsa.dev, leave only through `RemoteClient`, whose payloads are core's `RemoteApi`
   schemas (`SlackRelayPost`), so that is their gate. `test/remote/gate.test.ts` refuses each kind of leak.
 - **The sealed channel** (`RemoteChannel`): the browser's first message is the hello; a device key that is not
@@ -3143,7 +3151,7 @@ Every way in or out passes one gate, and each has a test that a request outside 
 | Worker edge | `Ingress`, `PageSession` or `MachineSession`, `RequestGate` (`apps/cloud`) | every route, by caller: anonymous, signed in, machine, owner, member, guest, teammate | `apps/cloud/test/gates.test.ts` |
 | Worker to machine | `Tunnels` (`apps/cloud`, `integrations/tunnels/`) | webhooks, previews and Slack, by checked path, never following a redirect | `apps/cloud/test/hooks.test.ts` |
 | Into the machine | `TunnelGate` (`remote/gate/`) | every tunnel request, socket upgrade and channel request, by route and principal | `apps/engine/test/remote/gate.test.ts` |
-| Out of the machine | `EgressGate` (`remote/egress/`) | every share and team view, the signed team list and a preview's headers, by allowlist | `apps/engine/test/remote/gate.test.ts` |
+| Out of the machine | `EgressGate` (`remote/egress/`) | every share and team view and the signed team list by allowlist, a preview's headers by a list of those that reveal the machine | `apps/engine/test/remote/gate.test.ts` |
 | The sealed channel | core's `remote/` handshake and frames | which device keys open it, and every frame after | `packages/core/test/remote/handshake.test.ts`, `frames.test.ts`, `connect-token.test.ts` |
 | The browser | the service worker relay (`apps/web`, `relay.ts`) | that nothing a machine serves runs as a page | `apps/web/test/lib/remote/relay.test.ts` |
 
@@ -3175,6 +3183,9 @@ Known limits, each a decision rather than an oversight:
 - Signing out keeps this browser's device records and team keys, so you need not enroll again; without a session
   they open nothing.
 - A preview is plain to the Worker and to Cloudflare; a task's share is not.
+- An engine that names no features in its heartbeat (one from before connect tokens were bound) still gets the old
+  token, which opens any channel and more than once within its minute, and pairs with its credentials in the clear in
+  D1 until it collects them. The old path goes once every machine names both features.
 
 ## Sharing a task
 
@@ -3740,7 +3751,7 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   (`selectServiceTerminal`, by service and task) on `localhost:<port>`. It sets `Host` to `localhost:<port>` and
   points the origin and referrer headers at it, so Vite's and Next's host checks pass; it drops the key header, `cf-*` and
   hop-by-hop headers, keeps the browser's other cookies (the Worker strips the preview cookie). The answer goes back
-  through `EgressGate`, which keeps only the headers a page needs and turns a `Location` pointing at the local origin
+  through `EgressGate`, which drops the headers that describe the machine (`PREVIEW_DROPPED_HEADERS`) and turns a `Location` pointing at the local origin
   back into a path. A WebSocket (`Upgrade: websocket`, the dev server's hot
   reload) is upgraded on the engine and relayed both ways with its subprotocol, its close code passed on when it can
   be sent.
