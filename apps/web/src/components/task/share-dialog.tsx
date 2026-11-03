@@ -10,7 +10,7 @@ import {
 } from '@shinsa/ui/components/dialog';
 import { Field, FieldLabel } from '@shinsa/ui/components/field';
 import * as React from 'react';
-import { useCopyText } from '@/components/controls/copy-button.tsx';
+import { CopyLinkButton } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { MentionText, UserIdentity } from '@/components/people/user-tag.tsx';
@@ -190,15 +190,6 @@ function ShareActions({
   return (
     <Button loading={busy || view.kind !== 'off'} onClick={() => void share()}>
       Share
-    </Button>
-  );
-}
-
-function CopyLinkButton({ url, label = 'Copy link' }: { url: string; label?: string }) {
-  const { copied, copy } = useCopyText(url);
-  return (
-    <Button variant='secondary' onClick={copy}>
-      {copied ? 'Copied' : label}
     </Button>
   );
 }

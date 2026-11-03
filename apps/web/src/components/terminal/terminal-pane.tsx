@@ -1,8 +1,6 @@
-import { Button } from '@shinsa/ui/components/button';
-import type { IconName } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { SearchField } from '@/components/code/search-field.tsx';
-import { Hint } from '@/components/overlays/hint.tsx';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 import type { SearchOptions } from '@/lib/code/search.ts';
 import { describeFindResults } from '@/lib/terminal/tabs.ts';
 import type { TerminalView } from '@/lib/terminal/view.ts';
@@ -31,24 +29,6 @@ export function TerminalPane({ view, shown }: { view: TerminalView; shown: boole
     return () => view.unmount();
   }, [view, shown]);
   return <div ref={host} hidden={!shown} className='absolute inset-0' />;
-}
-
-function FindButton({
-  label,
-  icon,
-  size = 'icon-xs',
-  onClick,
-}: {
-  label: string;
-  icon: IconName;
-  size?: 'icon-xs' | 'icon-sm';
-  onClick: () => void;
-}) {
-  return (
-    <Hint label={label}>
-      <Button variant='secondary' size={size} icon={icon} aria-label={label} onClick={onClick} />
-    </Hint>
-  );
 }
 
 export function TerminalFindBar({ view }: { view: TerminalView }) {
@@ -89,18 +69,24 @@ export function TerminalFindBar({ view }: { view: TerminalView }) {
         className='max-w-80 flex-initial basis-80'
       />
       <span className='flex shrink-0 items-center'>
-        <FindButton
+        <HintButton
+          size='icon-xs'
           label='Previous match'
           icon='IconChevronTopMedium'
           onClick={() => search(query, options, true)}
         />
-        <FindButton label='Next match' icon='IconChevronDownMedium' onClick={() => search(query, options)} />
+        <HintButton
+          size='icon-xs'
+          label='Next match'
+          icon='IconChevronDownMedium'
+          onClick={() => search(query, options)}
+        />
       </span>
       <span aria-live='polite' className='shrink-0 truncate text-2xs text-fg-2 tabular-nums'>
         {describeFindResults(results, query)}
       </span>
       <span className='flex-1' />
-      <FindButton label='Close' icon='IconCrossSmall' size='icon-sm' onClick={() => view.closeFind()} />
+      <HintButton label='Close' icon='IconCrossSmall' size='icon-sm' onClick={() => view.closeFind()} />
     </div>
   );
 }

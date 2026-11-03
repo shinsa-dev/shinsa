@@ -21,7 +21,7 @@ import { FileLink } from '@/components/links/file.tsx';
 import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
 import { ReviewActions } from '@/components/overview/review-actions.tsx';
 import { MergeStepsPanel } from '@/components/review/merge-steps.tsx';
-import { REVIEW_SELECTED, ReviewNote } from '@/components/review/note.tsx';
+import { REVIEW_SELECTED, RemoveNoteButton, ReviewNote } from '@/components/review/note.tsx';
 import { PointIndex } from '@/components/review/point-index.tsx';
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
@@ -476,15 +476,7 @@ const Comments = React.memo(function CommentCards({
             task={task}
             item={item}
             selection={selection}
-            action={
-              <button
-                type='button'
-                className='cursor-pointer text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
-                onClick={() => draft.removeComment(comment.id)}
-              >
-                Remove
-              </button>
-            }
+            action={<RemoveNoteButton onRemove={() => draft.removeComment(comment.id)} />}
           />
         );
       })}

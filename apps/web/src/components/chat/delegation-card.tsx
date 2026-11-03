@@ -1,14 +1,13 @@
-import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CARD_LINE, ChatLine, ExpandRow, SELECTED_WASH } from '@/components/chat/chat-line.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 import { CARD, CHAT_INSET, CHAT_NESTED } from '@/components/layout/surface/card.ts';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
-import { Hint } from '@/components/overlays/hint.tsx';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
@@ -85,19 +84,16 @@ export function StopDelegation({ view, onStop }: { view: DelegationView; onStop:
   const { busy, run } = useBusy<'stop'>();
   const label = describeStopDelegation(view);
   return (
-    <Hint label={label}>
-      <Button
-        variant='secondary'
-        size='icon-xs'
-        icon='IconCrossSmall'
-        aria-label={label}
-        loading={busy === 'stop'}
-        onClick={(event) => {
-          event.stopPropagation();
-          void run('stop', () => onStop(view.run.id));
-        }}
-      />
-    </Hint>
+    <HintButton
+      label={label}
+      size='icon-xs'
+      icon='IconCrossSmall'
+      loading={busy === 'stop'}
+      onClick={(event) => {
+        event.stopPropagation();
+        void run('stop', () => onStop(view.run.id));
+      }}
+    />
   );
 }
 

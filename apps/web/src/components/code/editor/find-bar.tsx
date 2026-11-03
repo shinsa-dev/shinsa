@@ -1,31 +1,12 @@
 import { replaceAll, replaceNext } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import { Button } from '@shinsa/ui/components/button';
-import type { IconName } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import * as React from 'react';
 import { SearchField } from '@/components/code/search-field.tsx';
-import { Hint } from '@/components/overlays/hint.tsx';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 import { countMatches, describeMatchCount, readFindQuery, updateFindQuery } from '@/lib/code/editor/find.ts';
 import { closeSearchPanel, findNext, findPrevious } from '@/lib/code/editor/setup.ts';
-
-function FindButton({
-  label,
-  icon,
-  size = 'icon-xs',
-  onClick,
-}: {
-  label: string;
-  icon: IconName;
-  size?: 'icon-xs' | 'icon-sm';
-  onClick: () => void;
-}) {
-  return (
-    <Hint label={label}>
-      <Button variant='secondary' size={size} icon={icon} aria-label={label} onClick={onClick} />
-    </Hint>
-  );
-}
 
 function close(view: EditorView) {
   closeSearchPanel(view);
@@ -89,7 +70,8 @@ export function FindBar({
     <div className='flex flex-col gap-1 px-2 py-1.5 font-sans'>
       <div className='flex items-center gap-1.5'>
         {canReplace && (
-          <FindButton
+          <HintButton
+            size='icon-xs'
             label={replacing ? 'Hide replace' : 'Show replace'}
             icon={replacing ? 'IconChevronDownSmall' : 'IconChevronRightSmall'}
             onClick={() => onReplace(!replacing)}
@@ -116,14 +98,24 @@ export function FindBar({
           className='max-w-80 flex-initial basis-80'
         />
         <span className='flex shrink-0 items-center'>
-          <FindButton label='Previous match' icon='IconChevronTopMedium' onClick={() => findPrevious(view)} />
-          <FindButton label='Next match' icon='IconChevronDownMedium' onClick={() => findNext(view)} />
+          <HintButton
+            size='icon-xs'
+            label='Previous match'
+            icon='IconChevronTopMedium'
+            onClick={() => findPrevious(view)}
+          />
+          <HintButton
+            size='icon-xs'
+            label='Next match'
+            icon='IconChevronDownMedium'
+            onClick={() => findNext(view)}
+          />
         </span>
         <span aria-live='polite' className='shrink-0 truncate text-2xs text-fg-2 tabular-nums'>
           {count}
         </span>
         <span className='flex-1' />
-        <FindButton label='Close' icon='IconCrossSmall' size='icon-sm' onClick={() => close(view)} />
+        <HintButton label='Close' icon='IconCrossSmall' size='icon-sm' onClick={() => close(view)} />
       </div>
       {replacing && <ReplaceRow view={view} />}
     </div>

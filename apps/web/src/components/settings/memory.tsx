@@ -6,8 +6,8 @@ import { Textarea } from '@shinsa/ui/components/textarea';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
-import { Hint } from '@/components/overlays/hint.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { isCancelKey, isSubmitKey } from '@/lib/keys.ts';
@@ -113,22 +113,6 @@ function RuleForm({
   );
 }
 
-function IconAction({
-  label,
-  icon,
-  onClick,
-}: {
-  label: string;
-  icon: 'IconPencil' | 'IconCrossSmall';
-  onClick: () => void;
-}) {
-  return (
-    <Hint label={label}>
-      <Button variant='secondary' size='icon-sm' icon={icon} aria-label={label} onClick={onClick} />
-    </Hint>
-  );
-}
-
 function RuleRow({
   entry,
   detail,
@@ -159,8 +143,14 @@ function RuleRow({
             Keep
           </Button>
         )}
-        <IconAction label={proposed ? 'Edit, then keep' : 'Edit'} icon='IconPencil' onClick={onEdit} />
-        <IconAction
+        <HintButton
+          size='icon-sm'
+          label={proposed ? 'Edit, then keep' : 'Edit'}
+          icon='IconPencil'
+          onClick={onEdit}
+        />
+        <HintButton
+          size='icon-sm'
           label={proposed ? 'Dismiss' : 'Remove'}
           icon='IconCrossSmall'
           onClick={() => void run('remove', () => actions.remove(entry))}
