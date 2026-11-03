@@ -2,7 +2,7 @@ import {
   DomainError,
   listSlackStatusGates,
   type MachineCredentials,
-  parseSlackAnswer,
+  parseSlackDecision,
   parseSlackEvaluation,
   parseSlackMention,
   resolveSlackConnectUrl,
@@ -17,14 +17,15 @@ import {
   SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
   SLACK_REACTIONS,
-  type SlackAnswerReply,
+  type SlackDecision,
+  type SlackDecisionReply,
   type SlackMessage,
   type SlackSessionStatus,
   type SlackSnapshot,
   type SlackThreadRef,
+  serializeSlackCard,
   serializeSlackDeclined,
   serializeSlackEvaluationPrompt,
-  serializeSlackStatus,
   verifySlackForwardSignature,
 } from '@shinsa/core';
 import type { QuickJson } from '../agents/quick/index.ts';
@@ -137,23 +138,26 @@ export class Slack {
   async handleInteractions(request: Request) {
     const read = await this.#readSigned(request);
     if (read instanceof Response) return read;
-    const answer = parseSlackAnswer(read.value);
-    if (!answer) return respondJsonError('body_invalid', 'The answer is missing a part.', 400);
+    const decision = parseSlackDecision(read.value);
+    if (!decision) return respondJsonError('body_invalid', 'The decision is missing a part.', 400);
     try {
       await this.#engine.dispatch(
-        { type: 'slack.answer', answer },
-        { id: `slack-answer:${answer.interactionId}` }
+        { type: 'slack.decide', decision },
+        { id: `slack-decide:${decision.interactionId}` }
       );
     } catch (error) {
       if (!(error instanceof DomainError)) throw error;
-      const refused: SlackAnswerReply = { answered: false, reason: error.message };
+      const refused: SlackDecisionReply = { decided: false, reason: error.message };
       return Response.json(refused);
     }
-    const answered: SlackAnswerReply = {
-      answered: true,
-      choice: this.#engine.state.gates[answer.gateId]?.response ?? '',
-    };
-    return Response.json(answered);
+    const decided: SlackDecisionReply = { decided: true, text: this.#resolveDecidedText(decision) };
+    return Response.json(decided);
+  }
+
+  #resolveDecidedText(decision: SlackDecision) {
+    const state = this.#engine.state;
+    const taskId = state.gates[decision.gateId]?.taskId;
+    return (taskId ? state.tasks[taskId]?.slack?.decided?.text : null) ?? 'decided';
   }
 
   handleTunnel(request: Request, url: URL) {
@@ -244,6 +248,10 @@ export class Slack {
     await this.#send(effect.thread, null, message);
   }
 
+  async react(effect: Effect<'slack.react'>) {
+    await this.#react(effect.thread, effect.messageTs, effect.reaction, null);
+  }
+
   async status(effect: Effect<'slack.status'>, context: EffectContext) {
     const last = this.#statusAt.get(effect.taskId);
     const wait = last === undefined ? 0 : last + this.#statusIntervalMs - this.#now();
@@ -253,7 +261,7 @@ export class Slack {
     const link = task?.slack;
     if (!task || !link) return;
     const gates = listSlackStatusGates(state, task.id);
-    const message = serializeSlackStatus(task, gates, this.#taskUrl(task.id));
+    const message = serializeSlackCard(task, gates, this.#taskUrl(task.id));
     const shown = JSON.stringify(message);
     const reaction = resolveSlackReaction(task, gates);
     if (link.statusTs && this.#statusShown.get(task.id) === shown && reaction === link.reaction) return;

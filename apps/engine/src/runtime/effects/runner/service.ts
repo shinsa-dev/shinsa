@@ -141,6 +141,8 @@ export class EffectHandlers extends Context.Service<
             );
           case 'slack.post':
             return yield* withSlack((slack) => world.bridge(() => slack.post(effect)));
+          case 'slack.react':
+            return yield* withSlack((slack) => world.bridge(() => slack.react(effect)));
           case 'feedback.draft':
             return yield* withContext(attempt, (context) => world.feedback.draft(effect.feedbackId, context));
           case 'feedback.file':

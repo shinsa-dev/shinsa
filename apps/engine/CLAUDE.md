@@ -337,11 +337,13 @@ src/
 │                        are http/routes/remote, teams, placement and tunnel
 ├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
 │                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
-│                        slack.mention, and a question's choice clicked in Slack as slack.answer
-│                        (handleTunnel); slack.evaluate: ⏳ on the mention, the classifier asked, "Not a task" once
-│                        per thread or slack.start_task; the
-│                        slack.post and slack.status effects, the status message edited at most every 5 s and only
-│                        when it changes, the thread's status and the mention's one reaction moved with it; GET
+│                        slack.mention, and a card's button or modal in Slack as slack.decide, answered with
+│                        what the card now says or why it was refused (handleTunnel); slack.evaluate: ⏳ on the
+│                        mention, the classifier asked, "Not a task" once per thread or slack.start_task; the
+│                        slack.status effect, the thread's one card (the open gate with its buttons, else the
+│                        status) edited at most every 5 s and only when it changes, the thread's status and the
+│                        mention's one reaction moved with it; slack.react, 👀 or 📥 on a later mention;
+│                        slack.post, a new message only for the result and the finished task; GET
 │                        /api/slack and POST /api/slack/disconnect); posts, reactions, the thread's status, links and
 │                        unlink go through RemoteClient's slackRelay group with the machine token, retried only
 │                        on SlackFailed or a retryable RemoteUnreachable (the relay down, busy or unreachable)
