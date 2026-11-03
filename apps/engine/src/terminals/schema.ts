@@ -110,7 +110,7 @@ type PortPicker = (preferred: number | null, taken: ReadonlySet<number>) => numb
 
 type ForegroundReader = (pid: number) => Promise<string | null>;
 
-export interface TerminalTask {
+interface TerminalTask {
   handle: string | null;
   settled: boolean;
 }
