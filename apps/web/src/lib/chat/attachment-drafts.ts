@@ -36,7 +36,7 @@ export function isUploading(drafts: AttachmentDraft[]) {
   return drafts.some((draft) => draft.stored === null);
 }
 
-export function canSendDraft(text: string, drafts: AttachmentDraft[], busy: boolean) {
+export function canSendDraft(text: string, drafts: AttachmentDraft[], busy: boolean, comments = 0) {
   if (busy || isUploading(drafts)) return false;
-  return text.trim().length > 0 || drafts.length > 0;
+  return text.trim().length > 0 || drafts.length > 0 || comments > 0;
 }

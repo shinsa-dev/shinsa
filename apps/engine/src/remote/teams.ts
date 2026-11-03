@@ -33,7 +33,14 @@ import type { Shares, ShareTranscripts } from './shares.ts';
 import { resolveOwnerProfile } from './store.ts';
 import type { TeamFeeds } from './team-feeds.ts';
 
-export const TEAM_GONE_REASON = 'This task is no longer shown to the team, or you are no longer in it.';
+export const TEAM_REFUSALS = {
+  team: 'That machine has left this team.',
+  key: 'That machine has no key for this team. Its owner can rejoin from the team’s join link.',
+  member:
+    'That machine does not list you in this team yet. It catches up the next time it reaches Shinsa Cloud.',
+  mismatch: 'Your key for this team does not match that machine’s. Open the team’s join link again.',
+  task: 'This task is no longer shown to the team.',
+} as const;
 
 export const TEAM_REMOTE_CHANGED = 'Remote access on the machine that shows these tasks was turned off.';
 
@@ -354,22 +361,25 @@ export class Teams implements TeamLinks {
     });
   }
 
-  #isAllowed(subject: TeamSubject) {
+  #resolveRefusal(subject: TeamSubject) {
     const team = this.#store.selectTeam(subject.teamId);
-    if (!(team && this.#store.selectTeamKey(subject.teamId) && isTeamViewer(team, subject.userId)))
-      return false;
-    if (subject.view.kind === 'list') return true;
+    if (!team) return TEAM_REFUSALS.team;
+    if (!this.#store.selectTeamKey(subject.teamId)) return TEAM_REFUSALS.key;
+    if (!isTeamViewer(team, subject.userId)) return TEAM_REFUSALS.member;
+    if (subject.view.kind === 'list') return null;
     const task = this.#engine.state.tasks[subject.view.taskId];
-    return task !== undefined && isTeamTask(this.#engine.state, task, subject.teamId);
+    return task && isTeamTask(this.#engine.state, task, subject.teamId) ? null : TEAM_REFUSALS.task;
   }
 
   async #authorize(text: string, userId: string): Promise<HelloAnswer<TeamSubject>> {
     const hello = parseTeamHello(text);
     if (!hello) return null;
     const subject = { teamId: hello.team, view: hello.view, userId };
+    const refused = this.#resolveRefusal(subject);
+    if (refused) return { refused };
     const stored = this.#store.selectTeamKey(hello.team);
-    if (!(stored && this.#isAllowed(subject) && (await verifyTeamHello(stored.key, hello))))
-      return { refused: TEAM_GONE_REASON };
+    if (!stored) return { refused: TEAM_REFUSALS.key };
+    if (!(await verifyTeamHello(stored.key, hello))) return { refused: TEAM_REFUSALS.mismatch };
     const ephemeral = await createChannelEphemeral();
     const keys = {
       team: hello.team,
@@ -419,12 +429,13 @@ export class Teams implements TeamLinks {
     for (const channel of [...this.#channels.keys()]) {
       const subject = channel.subject;
       if (!subject) continue;
-      if (this.#isAllowed(subject)) {
+      const refused = this.#resolveRefusal(subject);
+      if (!refused) {
         void channel.push();
         continue;
       }
       this.#releaseChannel(channel);
-      this.#endChannel(channel, TEAM_GONE_REASON);
+      this.#endChannel(channel, refused);
     }
   }
 }

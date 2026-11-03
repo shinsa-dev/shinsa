@@ -22,7 +22,12 @@ import type {
 import type { EngineFeature } from '../protocol/engine.ts';
 import type { ExtensionsSnapshot } from '../protocol/extensions.ts';
 import type { TaskDiff } from '../protocol/messages.ts';
-import type { OnboardingFlow, OnboardingStatus, RootSuggestions } from '../protocol/onboarding.ts';
+import type {
+  OnboardingFlow,
+  OnboardingStatus,
+  RootSuggestions,
+  WorktreeUsage,
+} from '../protocol/onboarding.ts';
 import type { ServiceSuggestion } from '../protocol/services.ts';
 import type { TerminalsSnapshot } from '../protocol/terminals.ts';
 import type { UpdateOutcome, VersionsSnapshot } from '../protocol/versions.ts';
@@ -664,6 +669,10 @@ export const OnboardingAnswer = Schema.Unknown.pipe(
 
 export const RootsAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is RootSuggestions => Predicate.isObject(value))
+);
+
+export const WorktreeUsageAnswer = Schema.Unknown.pipe(
+  Schema.refine((value): value is WorktreeUsage => Predicate.isObject(value))
 );
 
 export const FlowAnswer = Schema.Unknown.pipe(

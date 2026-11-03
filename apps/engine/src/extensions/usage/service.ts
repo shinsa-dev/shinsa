@@ -1,12 +1,12 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Context, Effect, Layer, Option, Predicate, Schema } from 'effect';
+import { NEWLINE } from '../../files/schema.ts';
 import { describeError } from '../../log/redact.ts';
 import {
   CLAUDE_TOOL_USE,
   DAY_MS,
   LOADER_TOOLS,
-  NEWLINE,
   SESSION_TIMESTAMP,
   SHINSA_USAGE_MARKERS,
   TranscriptLine,

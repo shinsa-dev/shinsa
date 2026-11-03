@@ -7,6 +7,7 @@ import {
   registerCustomTheme,
 } from '@pierre/diffs';
 import { FileDiff } from '@pierre/diffs/react';
+import { describeCount } from '@shinsa/core';
 import * as React from 'react';
 import { ShowMoreButton } from '@/components/chat/code-lines.tsx';
 import type { CodeDiffProps } from '@/components/text/code-diff.tsx';
@@ -19,7 +20,6 @@ import {
   terminateText,
 } from '@/lib/code/diff-view.ts';
 import { CODE_THEME } from '@/lib/code/highlight.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { useColorScheme } from '@/lib/preferences/theme.ts';
 
 const THEME = 'shinsa-diff';
@@ -108,7 +108,7 @@ export default function CodeDiffView({ source, numbered = false, selected = null
       </div>
       {clamp.hidden > 0 && (
         <ShowMoreButton
-          label={`Show ${formatCount(clamp.hidden, 'more line', 'more lines')}`}
+          label={`Show ${describeCount(clamp.hidden, 'more line', 'more lines')}`}
           onClick={() => setExpanded(true)}
         />
       )}

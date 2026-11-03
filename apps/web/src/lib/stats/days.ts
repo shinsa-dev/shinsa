@@ -70,7 +70,9 @@ export function resolveHourOfWeek(at: number) {
 }
 
 export function resolveTurnaroundWindow(window: StatsWindow, now: number): TurnaroundWindow {
-  return { ...window, hourOf: resolveHourOfWeek, now };
+  const first = window.days[0];
+  const from = first === undefined ? now : parseDayKey(first).getTime();
+  return { ...window, from, hourOf: resolveHourOfWeek, now };
 }
 
 export function parseStatsRange(value: string): StatsRange {

@@ -1,5 +1,5 @@
 import { listEvidenceItems } from '../domain/evidence.ts';
-import { type Round, resolveCurrentRound, resolveTaskRounds } from '../domain/rounds.ts';
+import { type Round, resolveCurrentRound, resolveRoundBases, resolveTaskRounds } from '../domain/rounds.ts';
 import type { Evidence, Task } from '../domain/types.ts';
 import { assembleReport } from './assemble.ts';
 import {
@@ -223,6 +223,13 @@ function serializeHeader(task: Task, taskUrl: string) {
   return `> [!NOTE]\n> Shinsa task ${name}. [Open it in Shinsa](${taskUrl}) to see the full review, the evidence and the agent's work.`;
 }
 
+function serializeFanIn(task: Task) {
+  const [base, ...others] = resolveRoundBases(task);
+  if (!base || others.length === 0) return '';
+  const branches = others.map((branch) => `\`${branch}\``).join(', ');
+  return `> [!IMPORTANT]\n> This pull request stacks on several branches: \`${base}\`, ${branches}. GitHub compares it with \`${base}\` only, so until ${branches} merge${others.length === 1 ? 's' : ''}, their changes show here too. Its review in Shinsa shows only this task's work.`;
+}
+
 function serializeSections(source: PullRequestSource): Section[] {
   const { task } = source;
   const report = assembleReport(task);
@@ -232,6 +239,7 @@ function serializeSections(source: PullRequestSource): Section[] {
       text: serializeHeader(task, source.review ? `${taskUrl}#review=${source.review}` : taskUrl),
       drop: Number.POSITIVE_INFINITY,
     },
+    { text: serializeFanIn(task), drop: Number.POSITIVE_INFINITY },
     { text: task.summary?.trim() ?? '', drop: Number.POSITIVE_INFINITY },
     { text: serializeEarlierRounds(listEarlierRounds(task)), drop: 1 },
     { text: describeFold('Approach', report.walkthrough?.approach ?? ''), drop: 5 },

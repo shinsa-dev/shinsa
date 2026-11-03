@@ -155,7 +155,7 @@ describe('the steps around the merge', () => {
   test('the root merges the bundle only once every task above has ticked its steps before the merge', () => {
     const harness = createHarness();
     const root = createTask(harness, { request: 'Root' });
-    const top = createTask(harness, { request: 'Top', stacksOn: root });
+    const top = createTask(harness, { request: 'Top', stacksOn: [root] });
     reachShipping(harness, root);
     harness.send({ type: 'pull_request.record', taskId: root, pullRequest: pullRequest({ number: 42 }) });
     expect(harness.task(root).bundleReady).toBeTruthy();

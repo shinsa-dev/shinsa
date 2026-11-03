@@ -6,6 +6,7 @@ import {
   type Evidence,
   type Feedback,
   type Focus,
+  type FocusSpan,
   formatTaskHandle,
   type Gate,
   type MemoryEntry,
@@ -29,6 +30,8 @@ import {
   type TaskDuplicate,
   type TaskShape,
   type TaskStage,
+  type TimingSpan,
+  type UntoldMessage,
   type WatchSuggestion,
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
@@ -60,7 +63,7 @@ import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
-import { recordPresence } from './presence.ts';
+import { recordAway, recordFocus, recordPresence } from './presence.ts';
 import { applyPullRequestEvent } from './pull-requests.ts';
 import { applyRoundEvent, createFirstRound, recordRoundBranch, recordRoundStaged } from './rounds.ts';
 import { applyRunEvent } from './runs.ts';
@@ -93,6 +96,8 @@ export interface ShinsaState {
   watchSuggestions: Record<string, WatchSuggestion>;
   sessionUsage: Record<string, RunUsage>;
   presence: Record<string, number>;
+  away: Record<string, TimingSpan>;
+  focusHistory: Record<string, FocusSpan>;
   onBehalfActions: OnBehalfAction[];
 }
 
@@ -119,6 +124,8 @@ export function createState(): ShinsaState {
     watchSuggestions: {},
     sessionUsage: {},
     presence: {},
+    away: {},
+    focusHistory: {},
     onBehalfActions: [],
   };
 }
@@ -148,7 +155,7 @@ function resolveCreatedShape(event: EventOf<'task.created'>): TaskShape {
   return event.mode === 'ask' ? 'answer' : 'change';
 }
 
-function createTask(event: EventOf<'task.created'>): Task {
+function createTaskRecord(event: EventOf<'task.created'>): Task {
   const request = event.request;
   const title = request.split('\n', 1)[0]?.slice(0, UNTITLED_LENGTH) ?? '';
   const pipeline = [
@@ -359,16 +366,16 @@ function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_c
 
 function applyStackChanged(state: ShinsaState, event: EventOf<'task.stack_changed'>) {
   updateTask(state, event.taskId, event.at, { stacksOn: event.stacksOn });
-  const parent = event.stacksOn === null ? null : (state.tasks[event.stacksOn]?.title ?? 'another task');
+  const parents = event.stacksOn.map((id) => state.tasks[id]?.title ?? 'another task');
   record(state, event.taskId, event.at, {
     actor: event.by ?? 'you',
     kind: 'stage',
-    text: describeStack(parent),
+    text: describeStack(parents),
   });
 }
 
 function applyStackBased(state: ShinsaState, event: EventOf<'task.stack_based'>) {
-  updateTask(state, event.taskId, event.at, { stackBase: event.base });
+  updateTask(state, event.taskId, event.at, { stackBases: event.bases });
 }
 
 function applyBundleReady(state: ShinsaState, event: EventOf<'task.bundle_ready'>) {
@@ -569,6 +576,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       text: NEW_WORK_TEXT[event.kind],
       detail: event.text,
       ...(event.suggestionId ? { suggestionId: event.suggestionId } : {}),
+      ...(event.comments ? { comments: event.comments } : {}),
     });
     return;
   }
@@ -580,6 +588,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       : describeMessage(event),
     detail: event.text,
     ...(event.kind === 'acknowledge' ? { noted: true } : {}),
+    ...(event.comments ? { comments: event.comments } : {}),
   });
   if (event.kept) keepMessage(state, event);
 }
@@ -588,9 +597,13 @@ function keepMessage(state: ShinsaState, event: EventOf<'task.messaged'>) {
   const task = state.tasks[event.taskId];
   if (!task) return;
   const sender = event.scheduleId ? 'schedule' : 'agent';
-  updateTask(state, event.taskId, event.at, {
-    untoldMessages: [...(task.untoldMessages ?? []), { at: event.at, text: event.text, sender }],
-  });
+  const kept: UntoldMessage = {
+    at: event.at,
+    text: event.text,
+    sender,
+    ...(event.comments ? { comments: event.comments } : {}),
+  };
+  updateTask(state, event.taskId, event.at, { untoldMessages: [...(task.untoldMessages ?? []), kept] });
 }
 
 function applyEdited(state: ShinsaState, event: EventOf<'task.edited'>) {
@@ -790,6 +803,7 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
       return;
     case 'focus.changed':
       state.focus = { ...event.focus };
+      recordFocus(state, event.focus, event.at);
       return;
     case 'settings.changed':
       state.settings = structuredClone(event.settings);
@@ -809,7 +823,7 @@ function isCreatedByYou(event: EventOf<'task.created'>) {
 }
 
 function applyTaskCreated(state: ShinsaState, event: EventOf<'task.created'>) {
-  writeEntry(state, 'tasks', event.taskId, { ...createTask(event), ...resolveLineage(event) });
+  writeEntry(state, 'tasks', event.taskId, { ...createTaskRecord(event), ...resolveLineage(event) });
   if (isCreatedByYou(event)) recordPresence(state, event.at);
   if (event.handle) recordHandle(state, event.handle);
   recordCourierTask(state, event);
@@ -842,6 +856,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'focus.changed':
     case 'settings.changed':
       applyWorkspaceEvent(state, event);
+      break;
+    case 'away.recorded':
+      recordAway(state, event);
       break;
     case 'task.created':
       applyTaskCreated(state, event);

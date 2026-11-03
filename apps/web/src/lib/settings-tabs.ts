@@ -1,7 +1,13 @@
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import { isRemoteBuild, MACHINES_SECTION } from '@/lib/remote/mode.ts';
-import { FOLDERS_TITLE, MODELS_TITLE, resolveHashSectionId, resolveSectionId } from '@/lib/settings.ts';
+import {
+  FOLDERS_TITLE,
+  MODELS_TITLE,
+  resolveHashSectionId,
+  resolveSectionId,
+  WORKTREES_TITLE,
+} from '@/lib/settings.ts';
 import { SLACK_SECTION } from '@/lib/slack.ts';
 import { SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
 import { USAGE_SECTION } from '@/lib/stats/usage.ts';
@@ -60,7 +66,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   projects: {
     id: 'projects',
     label: 'Projects',
-    sections: [FOLDERS_TITLE, 'Projects'],
+    sections: [FOLDERS_TITLE, WORKTREES_TITLE, 'Projects'],
   },
   integrations: {
     id: 'integrations',

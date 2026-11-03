@@ -92,6 +92,7 @@ export const DELEGATION_LIMITS = {
   waitMinutes: 10,
   maxWaitMinutes: 60,
   splitTasks: 8,
+  stackOn: 8,
   name: 200,
 } as const;
 

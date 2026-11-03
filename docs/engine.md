@@ -516,7 +516,7 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
 
 | Mode | A task gets | Commits | Pushes | When the task settles |
 |---|---|---|---|---|
-| **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
+| **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`, or the folder you chose, below), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
 | **Main checkout** (`main_checkout`) | the repository's own checkout, switched to a branch Shinsa makes from the freshly fetched default branch | `git commit` on that branch, only while the checkout is on it | `git push origin refs/heads/<branch>` | the checkout goes back to the branch it was on when the task took it (`returnBranch`), or to the default branch when that branch is gone or the checkout was detached; with uncommitted changes it stays where it is |
 
 - **Core holds the mode and the invariants.** A task takes the repository's mode when it asks for its workspace
@@ -537,12 +537,33 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
 - **Agents work where the strategy puts them.** For the main checkout a task's `worktreePath` is the repository
   itself, so every role works in your checkout; a read-only agent's edits are never set aside there, as in any shared
   checkout. Checks run in the same checkout.
+- **Where the worktrees go.** New worktrees and isolated delegation checkouts go into one folder, `data/worktrees`
+  unless you choose another in Settings → Projects → Worktrees, for example a folder in an S3 or R2 bucket you mount
+  with s3fs, rclone or Mountain Duck, to keep worktrees off the local disk. The choice is `config.json`'s
+  `worktreesDir`, saved by `POST /api/onboarding/worktrees` (Onboarding API, below); `SHINSA_WORKTREES_DIR` wins over
+  it, and Settings then shows the folder as set by the environment. `WorktreeRoot` (`workspaces/root/`) reads it again
+  for every new worktree, so a change applies to the next task that sets up, with no restart; a task keeps the
+  worktree it has wherever it is, since its path is in the log (`worktree.ready`). Shinsa never creates a folder you
+  chose, only the folders inside it, so an unmounted drive is caught: before each new worktree or delegation checkout
+  `assertWorktreeRoot` checks that the folder exists, is a folder and can be written to, and fails the setup with
+  "The worktree folder <path> does not exist. If it is on a drive you mount, mount it again, or choose another folder
+  in Settings → Projects." instead of falling back to the local disk; Settings shows the same problem under the
+  folder. Saving a folder also leaves a `.shinsa-worktrees` file in it (`markWorktreeRoot`), and a folder from
+  `config.json` without that file is refused too ("is not the one you chose: the drive it is on may not be
+  mounted"): a drive's own mount point, once unmounted, is an empty local folder that would pass every other check.
+  A folder written into `config.json` by hand is saved once more in Settings to get the file. Delegation checkouts are removed wherever git has them registered (`removeIsolated` lists the repository's
+  worktrees under `delegations/<task>/` of any root), so changing the folder leaves none behind.
+- **How much space they take.** Settings → Projects → Worktrees shows the space the worktrees of tasks use, the free
+  space on the drive of the folder in use, and that a task's worktree is removed as soon as it is merged, marked done
+  or cancelled (`settleTask`, below). It asks `GET /api/onboarding/worktrees/usage` each time the page opens and
+  after the folder changes; nothing measures in the background.
 - **A new worktree comes with its dependencies.** `prepareWorktree` runs the install its lockfile names
   (`resolveInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
   agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
   linker can fail on files it is still writing (`ERR_PNPM_EEXIST`) and pass the second time; only when that run fails
   too is it logged, and the agent sets the dependencies up itself. Base checkouts for checks are prepared the same way.
-- **A removed worktree takes its processes with it.** `worktree.remove` closes the task's service runs, then stops
+- **A removed worktree takes its processes with it.** `worktree.remove` closes the task's service runs and ended
+  shells, then stops
   every process still working inside the worktree (`stopProcessesIn` in `git/processes.ts`: `lsof -d cwd` finds each
   process whose working folder is the worktree or inside it; SIGTERM, then SIGKILL for any still alive after 3 s).
   That catches a dev server an agent started from its shell, which outlives the agent's run and would otherwise keep
@@ -1213,92 +1234,120 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
 
 ### Bundles
 
-A bundle is a line of tasks in one repository that GitHub shows as a stack of pull requests and that merges as one. A
-task stacks on another (`Task.stacksOn`, one id), a second kind of wait next to `waitsOn` that reuses its waiting and
-release, but releases on ready instead of merged. You set it when creating the task (the composer's When to start:
-Stack on another task…), later (the Waits on menu on the task page, the task's `•••` and context menus, ⌘K's Stack on
-another task… and Take out of the bundle) or from the command line (`shinsa tasks stack-on`, `shinsa tasks unstack`),
-all `task.stack_on` (a task id, or `null` to unstack), recorded as `task.stack_changed`; an agent files the next
-piece of a bundle with `create_task`'s `stack_on_this` (`stacksOn` on `task.create`, never with `this_task_waits` or
-`after_this`). Stacking on a task it already waits on moves that wait into the stack.
+A bundle is a set of tasks in one repository, connected by stacks, that GitHub shows as stacked pull requests and
+that merges as one. A task stacks on other tasks (`Task.stacksOn`, a list of ids, the first one its pull request's
+base), a second kind of wait next to `waitsOn` that reuses its waiting and release, but releases on ready instead of
+merged. You set it when creating the task (the composer's When to start: Stack on another task…, which picks several),
+later (the Waits on menu on the task page, the task's `•••` and context menus, ⌘K's Stack on another task… and Take
+out of the bundle, each a tree of tasks with a tick on the ones it stacks on) or from the command line (`shinsa tasks
+stack-on <task> <below…>`, `shinsa tasks unstack`), all `task.stack_on_tasks` (the whole list, which replaces the one
+it has; an empty list unstacks), recorded as `task.stack_changed`. Ticking a task in a picker adds it to the end of
+the list and unticking one removes only it, so the first pick stays the base. An agent files the next piece of a
+bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `after_this`) and adds other parents with
+`stack_on` (`stacksOn` on `task.create`, this task first). Stacking on a task it already waits on moves that
+wait into the stack.
 
-- **One line.** A task stacks on at most one task and at most one task stacks on any task, so a bundle never
-  branches: `resolveBundle` reads it from the chain of `stacksOn`, bottom first. `task.stack_on` refuses a task
-  stacking on itself (`stack_self`), on a cancelled (`dependency_cancelled`) or finished task (`stack_parent_settled`),
-  on one that opens no pull request (`stack_no_pull_request`), on one in another repository (`stack_repository`), on
-  one another task already stacks on (`stack_taken`) and a cycle (`dependency_cycle`). The bundle can change only
-  until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels
-  the planning run and plans again once released (Taking a task out, below).
+- **A graph, not a line.** A task can stack on several tasks and several tasks can stack on one, so a bundle fans out
+  and back in: A, then B, C and D on A, then F on B, C and D, then E on F. A bundle is every task connected to a task
+  by stacks, either way (`resolveBundleMembers`, `state/queries.ts`), in topological order: each task after every task
+  it stacks on, ties broken oldest first (`sortParentsFirst`). `task.stack_on_tasks` refuses, for each task in the
+  list, a task stacking on itself (`stack_self`), on a cancelled (`dependency_cancelled`) or finished task
+  (`stack_parent_settled`), on one that opens no pull request (`stack_no_pull_request`), on one in another repository
+  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). The bundle can change only
+  until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
+  planning run and plans again once released (Taking a task out, below).
 - **Ready instead of merged.** Every task of a bundle is ready (`Task.bundleReady`, `task.bundle_ready`, with the head
   it is ready at) when the watch finds its pull request clean, where the merge gate would open, and keeps watching: a
   read that is not clean on the same head, or a new head, takes ready away and starts the usual fix (CI, comments,
-  conflicts). A task stacked on another never gets a merge gate of its own: it stays in `shipping` with "ready, merges
-  with its bundle". A ready task counts as at its merge gate for a new round, so a round sent to it starts at once
-  (Rounds, above), and that is how a flaw a later task finds in the root is fixed in the root's still-open pull
-  request: the stacked task's prompt tells its agent to message the task below with `tasks_message`
-  (`describeBundle`).
-- **Release on ready.** A stacked task waits in `waiting_on_tasks` ("waiting for ‹A› to be ready to merge") until
-  the task below is ready or has its merge gate open, or is merged or done (`isStackPending`). It then records the
-  branch below as its base (`Task.stackBase`, `task.stack_based`), which `resolveRoundBase` returns when no round of
-  its own is stacked: its worktree branches off that branch (a worktree left from before, of a task stacked while it
-  planned, is reset onto it, `refreshWorktree`) and its pull request targets it, so GitHub shows the stack. Its prompts say where it sits in the bundle, from the bottom, with each pull request.
-- **One merge gate, on the root.** The root, the task whose pull request targets the default branch, owns the merge.
-  Its merge gate opens only once every task above it is ready and the whole bundle merges into the default branch
-  without conflicts; until then it waits ("waiting for ‹A› to be ready to merge"), and a task above that stops being
-  ready withdraws the gate. The gate says it merges the whole bundle as one with each pull request, its card lists
-  every task above as a Bundle row that ticks itself when ready and its own pre-merge steps are ticked, and its button
-  says how many pull requests it merges. Approving it is refused while any task of the bundle has a pre-merge step
-  open (`assertMergeStepsDone`). Approving it puts every task above into `awaiting_merge` ("merging with its bundle")
-  and queues one `pull_request.merge` on the root with the bundle's other pull requests (`bundle`, the top first).
-  The engine checks the root's approved head and that the bundle still merges cleanly, then merges the top into its
-  base, then each one below, and the root into the default branch last, the way a round stack merges (each read
-  first and merged only when still open), and reads each again so every task ends merged. Merging the one above
-  moves the head of the one below, so only the root's head is matched, before anything merges. A failed merge lands
-  on the root, the tasks above go back to ready, and Retry opens the gate again; the ones still open form a smaller
-  bundle on the same root.
+  conflicts). Only the lead (below) gets a merge gate; every other task stays in `shipping` with "ready, merges with
+  its bundle". A ready task counts as at its merge gate for a new round, so a round sent to it starts at once (Rounds,
+  above), and that is how a flaw a later task finds in a task below is fixed in that task's still-open pull request:
+  the stacked task's prompt tells its agent to message the task below with `tasks_message` (`describeBundle`).
+- **Release on ready.** A stacked task waits in `waiting_on_tasks` ("waiting for ‹A› and ‹B› to be ready to merge")
+  until every task it stacks on is ready or has its merge gate open, or is merged or done
+  (`listPendingStackParents`). It then records their branches as its bases (`Task.stackBases`, `task.stack_based`,
+  in the order of `stacksOn`, leaving out a parent that merged or left). `resolveRoundBase` returns the first when no
+  round of its own is stacked, and `resolveRoundBases` all of them. Its branch, in a worktree or in your main checkout,
+  starts from the first and merges the others in (`Checkout.mergeBranches`; a worktree left from before, of a task stacked while it planned, is reset onto
+  the first, `refreshWorktree`, and merged the same way). A branch that conflicts there is left out, so the agent
+  starts on a clean tree, and the push brings it in (Conflicts, below). Its pull request targets the first base, so
+  GitHub shows the stack. Its prompts say where it sits in the bundle, each task it stacks on with its pull request.
+- **Several parents on GitHub.** GitHub gives a pull request one base, so a task that stacks on several shows the
+  other parents' work too until they merge. Its description says so (`serializeFanIn`, `report/pull-request.ts`).
+  Shinsa's own diff, the Review tab and the checks' comparison compare it with all its parents merged
+  (`resolveCombinedBase`, `git/history`: a `git merge-tree` of their merge bases with its head, written as one commit
+  that is never pushed), so they show only the task's own work; when the parents conflict with each other, they
+  compare with the first, as before.
+- **One merge gate, on the lead.** The lead is the bundle's first task in its order: of the tasks that stack on
+  nothing in it, whose pull requests target the default branch, the one created first (`resolveBundleLead`). It owns
+  the merge for every other task, its followers (`listBundleFollowers`), other roots included. Its merge gate opens
+  only once every follower is ready and the whole bundle merges into the default branch without conflicts; until then
+  it waits ("waiting for ‹A› to be ready to merge"), and a follower that stops being ready withdraws the gate. The gate
+  says it merges the whole bundle as one with each pull request, its card lists every follower as a Bundle row that
+  ticks itself when ready and its own pre-merge steps are ticked, and its button says how many pull requests it
+  merges. Approving it is refused while any task of the bundle has a pre-merge step open (`assertMergeStepsDone`).
+  Approving it puts every follower into `awaiting_merge` ("merging with its bundle") and queues one
+  `pull_request.merge` on the lead with the followers' pull requests (`bundle`, in reverse order, so each one merges
+  before every task it stacks on). The engine checks the lead's approved head and that the bundle still merges
+  cleanly, then merges each follower into its base in that order, other roots straight into the default branch, and
+  the lead into the default branch last, the way a round stack merges (each read first and merged only when still
+  open), and reads each again so every task ends merged. Merging one moves the head of the one below, so only the
+  lead's head is matched, before anything merges. A failed merge lands on the lead, the followers go back to ready,
+  and Retry opens the gate again; the ones still open form a smaller bundle.
 - **Conflicts with the default branch.** GitHub checks each pull request only against its own base, so a task three
   layers up can conflict with the default branch while every pull request shows clean. Each time the watch reads the
-  root while every task above is ready, the engine merges the bundle into the default branch in git, without a
-  working tree (`checkBundleMerge`, `git/bundle.ts`: `git merge-tree` of the default branch with the root, then each
-  task above in turn), and records the result (`bundle.record_check`, `Task.bundleConflict`, `task.bundle_conflict`).
-  A conflict holds the root's gate ("‹A› conflicts with main once the bundle merges; updating ‹B› first") and brings
-  the lowest branch at or below the conflicting one that is behind its base up to date: Shinsa pushes it, which merges
-  its base in first (`updateOntoBase`); a clean merge goes up, and a conflict there becomes that task's usual conflict
-  fix with its agent. Each push makes that task ready again, which reads the root again, so the bundle is brought up
-  to date one branch at a time, bottom up, each pull request's diff staying its own work. When no branch is behind,
-  the root pauses with a failure gate, "The bundle conflicts with main". The engine runs the same check again right
-  before the merge and merges nothing when it fails.
-- **Leaving and losing a bundle.** When the task stacked on top is cancelled or turns out to ship no pull request,
-  the bundle is one task shorter; a root with nothing left above it gets its own merge gate. A task below merged
-  outside Shinsa drops out of the bundle: the task above's base becomes the default branch and the watch retargets
-  its pull request (a conflict that brings is fixed like any other), and the task above a merged root is the new root
-  and owns the merge. A task below cancelled pauses the stacked task, started or not,
-  with a failure gate, "“‹parent›” was cancelled"; Retry takes it out of the bundle and bases it on the default
-  branch, and Stack on another task… points it elsewhere while it has not started.
+  lead while every follower is ready, the engine merges the bundle into the default branch in git, without a working
+  tree (`checkBundleMerge`, `git/bundle.ts`: `git merge-tree` of the default branch with the lead, then each follower
+  in order), and records the result (`bundle.record_check`, `Task.bundleConflict`, `task.bundle_conflict`). A
+  conflict holds the lead's gate ("‹A› conflicts with main once the bundle merges; updating ‹B› first") and brings
+  the first task, at or before the conflicting one, whose branch misses one of its bases up to date, naming that
+  base: Shinsa pushes it, which merges each of its bases in first, in order (`updateOntoBases`); a clean merge goes
+  up, and a conflict with any of them becomes that task's usual conflict fix with its agent, naming the base. Each
+  push makes that task ready again, which reads the lead again, so the bundle is brought up to date one branch at a
+  time, each pull request's diff staying its own work. When no branch is behind, the lead pauses with a failure gate,
+  "The bundle conflicts with main". The engine runs the same check again right before the merge and merges nothing
+  when it fails.
+- **Leaving and losing a bundle.** When a task with nothing stacked on it is cancelled or turns out to ship no pull
+  request, the bundle is one task smaller; a lead with no followers left gets its own merge gate. A task below merged
+  outside Shinsa drops out of the bundle: it leaves the bases of each task above, a task whose first base it was
+  is based on the next one or the default branch, and the watch retargets its pull request (a conflict that brings is
+  fixed like any other); when the lead merges, the next task in order leads. A task below cancelled pauses each task
+  stacked on it, started or not, with a failure gate, "“‹parent›” was cancelled"; Retry keeps it stacked on the
+  others, or takes it out of the bundle and bases it on the default branch when that was its only parent, and Stack on
+  another task… points it elsewhere while it has not started.
 - **Where it shows.** The task toolbar's Bundle item ("Bundle 2/3", the ready tasks of all of them) opens a popover
-  that lists each task numbered from 1, the one whose pull request targets the default branch, with its
-  state (Waiting, Working, Ready, Merging, Merged), its pull request and This task (`BundleFact`); a queue row carries
-  the same count, live, as a small mark beside the task's name, where the shared mark goes (`BundleMark`). A
-  ready task's now card says it merges when you approve the bundle on the root. All tasks files a ready task with its
-  bundle's root, the root first and each task above nested under the one below (`orderChains`). The rules run after every
-  command for the tasks in a bundle (`reviewBundles`, `decide/bundles.ts`), and the invariant walk checks that a task
-  stacked on another never has a merge gate open, and that a root's gate opens only with every task above ready and
-  no conflict recorded.
-- **Taking a task out.** Take out of the bundle (`task.stack_on` with `null`) works until the task builds. A task
-  still waiting starts at once from the default branch. A task already planning on the branch below loses its stack
-  base, its planning run is cancelled, and `worktree.create` resets its worktree onto the default branch before it
-  plans again; the task below, with nothing stacked on it any more, goes back to its own merge gate. Once the stacked
-  task builds, its commits sit on the branch below, so the bundle no longer changes; cancel the task or let the bundle
-  merge.
+  that draws the bundle as the task list's tree (`orderChains`): each task under the task it stacks on, indented with
+  the same arrow, with its state (Waiting, Working, Ready, Merging, Merged), its pull request and This task
+  (`BundleFact`). A task that stacks on several sits under the one shown last and names all of them, "Builds on ‹A›
+  and ‹B›", the full list in its tooltip. The note under it says each task builds on the tasks above it, the ones on
+  nothing target the default branch, and approving the lead merges them all from the bottom up. A queue row carries
+  the same count, live, as a small mark beside the task's name, where the shared mark goes (`BundleMark`). On Home,
+  In progress lists only the tasks of a bundle still being worked on, several at once when they run side by side; a
+  ready task, the lead included, moves to Waiting on another task while any other task of its bundle is not ready,
+  and a ready follower stays there on the lead once all are (`listBundleBlockers`, `resolveQueue`), its row naming
+  what it waits on, "Waits on ‹A›". The tree indents every level up to six
+  (`resolveDepthIndent`, the task list, the popover and the pickers alike), so a long line never reads as tasks side
+  by side; a row deeper than that sits at the sixth level with its depth beside the arrow, "‹n› steps down the chain"
+  on hover (`DepthMark`). A ready
+  task's now card says it merges when you approve the bundle on the lead. All tasks files a ready task with its
+  bundle's lead, every task nested under the tasks it stacks on (`orderChains`). The rules run after every command for
+  the tasks in a bundle (`reviewBundles`, `decide/bundles.ts`), and the invariant walk checks that a follower never
+  has a merge gate open, and that a lead's gate opens only with every follower ready and no conflict recorded.
+- **Taking a task out.** Take out of the bundle (`task.stack_on_tasks` with an empty list) and unticking a parent
+  work until the task builds. A task still waiting starts at once from what it still stacks on, or the default branch.
+  A task already planning on the branches below loses those bases, its planning run is cancelled, and
+  `worktree.create` resets its worktree before it plans again; a task below with nothing stacked on it any more goes
+  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so the bundle no
+  longer changes; cancel the task or let the bundle merge.
 - **Stack or wait.** Neither is the default; the agent picks by what the later task needs (the `create_task`
-  description says so). Stack when the later task builds directly on this one's code in the same repository and
-  ships with it: the next piece of one feature, a schema then its API then its screen, where a flaw found in the
-  later piece should be fixed in the earlier pull request before anything merges, and where each small pull request
-  reads well only next to the one below. Wait (`after_this`, `waitsOn`) when the earlier task should ship on its own:
-  a fix or a feature that is worth merging today even if the follow-up stalls, work that needs the earlier change
-  live on the default branch first (a migration run, a deploy, a flag), work in another repository, or several tasks
-  that build on one (a bundle is one line, so fan-out is a wait). A bundle holds every merge until its last task is ready,
-  so a long bundle delays the first piece; waiting delivers each piece as it merges.
+  description says so). Stack when the later task builds directly on these tasks' code in the same repository and
+  ships with them: the next piece of one feature, a schema then its API and its screen in parallel then the screen
+  that joins them, where a flaw found in a later piece should be fixed in the earlier pull request before anything
+  merges, and where each small pull request reads well only next to the ones below. Wait (`after_this`, `waitsOn`)
+  when the earlier task should ship on its own: a fix or a feature that is worth merging today even if the follow-up
+  stalls, work that needs the earlier change live on the default branch first (a migration run, a deploy, a flag), or
+  work in another repository. A bundle holds every merge until its last task is ready, so a large bundle delays the
+  first piece; waiting delivers each piece as it merges.
 
 ### The backlog
 
@@ -1830,7 +1879,9 @@ checks it ran.
   words, each with its path, lines and words. A comment is words only: to change the code yourself, edit it in the
   Code tab (Where agents work → Your edits). Fix N findings at an escalated review sends the drafted comments with the verdicts the same way. The
   comments are stored on `gate.answered` and on the decision's activity entry, so the task's activity lists each
-  with its place. Comments with any other decision or at any other gate are refused.
+  with its place. Comments with any other decision or at any other gate are refused. Outside a review the same
+  comments go with a message (`task.message` with `comments`): core appends them to the message as a Line comments
+  block on whichever path it takes (steer, wake, fix, new round, kept at a gate), and `task.messaged` keeps them.
 - Fix N findings and approve, from the Fix button's chevron, is the same `revise` with `thenApprove: true`
   (refused at any other gate or with any other decision, `then_approve_invalid`, `then_approve_conflict`). The
   `gate.answered` fold sets `task.approveAfterFix`; the fix then runs as any other: checks, the agent review and its
@@ -2406,7 +2457,7 @@ and the run supervisor.
   run that builds or fixes may wait, others are refused with `cannot_wait`) or `after_this` making it wait on this
   task (any run; created with `waitsOn` set, so triage infers no other dependencies for it, and the wait is logged
   as Shinsa's); setting both is refused (`dependency_cycle`). `stack_on_this` files the next piece of a bundle in this
-  repository instead (`stacksOn` set to this task, Scheduling → Bundles), and is refused next to either of them. `backlog` files it for the backlog (Scheduling → The
+  repository instead (`stacksOn` set to this task, Scheduling → Bundles), and is refused next to either of them; `stack_on` stacks it on other tasks of the bundle too, by id or handle (a task that joins several parallel pieces). `backlog` files it for the backlog (Scheduling → The
   backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
   exactly-once per `client_request_id`.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
@@ -2598,7 +2649,16 @@ running when the window closes or the app quits, and a page that comes back find
   the list to every page as `terminals` on the main socket whenever it changes (coalesced over 50 ms), with your
   services and your home folder. Each
   terminal's screen is saved to `data/terminals/<id>.screen` (its last 1,000 lines, serialized) two seconds after it
-  last printed and when Shinsa stops. At most 32 terminals.
+  last printed and when Shinsa stops. At most 32 terminals (`TERMINAL_LIMITS`), counting ended ones, since each keeps
+  its screen.
+- **The limit reclaims ended terminals.** When a new terminal or service run would make 33, `#open` first closes
+  ended ones (`exited` or `stopped`), oldest first within each group (`listReclaimable` in `limit.ts`): a finished or
+  unknown task's (the engine's state, with `isTaskSettled`), then stopped service
+  runs (starting the service opens a new one), then task shells, and your own last. A running terminal, or a service
+  run waiting to start again after a restart, is never closed to make room, and nothing is closed when the ended ones
+  would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with
+  its services and shells, and how many are yours (`resolveLimitMessage`), so an agent's `run_service` or you can free
+  one. On start, `resumeServices` drops the ended terminals of finished and unknown tasks before anything resumes.
 - **When the engine stops.** `stop()` hangs up every shell (`SIGHUP` and the PTY closed, as closing a terminal window
   does, then `SIGKILL` after 3 s), so nothing it started outlives the engine, and saves each screen. A restarted
   engine cannot have the shell back: a terminal that was running shows as `stopped`, with its last screen and Start
@@ -2614,7 +2674,7 @@ running when the window closes or the app quits, and a page that comes back find
   terminal's foreground process group when it is not the shell itself, else `null` (`readForegroundProgram` in
   `pty.ts`: `ps -o tpgid=` of the shell gives the group that owns the PTY, the way Terminal.app decides whether to ask,
   and `ps -o comm=` names it). The page asks it before closing a running shell and closes an idle one at once; a
-  running service always counts as busy and answers its own name. `test/terminals/routes.test.ts` checks it against a
+  running service always counts as busy and answers its own name. `test/http/routes/services.test.ts` checks it against a
   real shell running `sleep`.
 - **Your terminals are yours.** No agent tool reaches a terminal, but for its own task's service runs (Services →
   Agents run their own task's services, below); every write route needs a browser's Origin
@@ -2644,7 +2704,7 @@ beside your run (Runs for a task, below).
 
 - **What one is.** `ServiceDefinition` (core's `protocol/services.ts`): an id, its project, a name (40 characters, one
   per name in a project), the folder it runs in (one of the project's repositories or folders, or a folder inside one;
-  never a task worktree, which goes away: a task gets its own run instead; `resolveServicePlace` in `routes.ts`), the command (4,000 characters) and
+  never a task worktree, which goes away: a task gets its own run instead; `resolveServicePlace` in `terminals/places.ts`), the command (4,000 characters) and
   variables added to your environment (50 at most, names a shell can export), an optional preview URL (`previewUrl`,
   http or https, 2,000 characters, with `{port}` where the run's port goes: `http://localhost:{port}/tasks/SW-17`;
   `isServicePreviewUrl` refuses one without it, which would send every run's Open to one server) and the variable that carries the port (`portVariable`, `PORT` unless it names another,
@@ -2676,7 +2736,7 @@ beside your run (Runs for a task, below).
   your run), belongs to another project, or whose repository does not hold the service's folder (a project folder
   outside every repository). `listTaskServices` lists what a task can run, `listServiceTaskRuns` every task's run of
   one service. Start, stop and restart take an optional `{ taskId }` in their body (`resolveServiceRunIn` in
-  `routes.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
+  `terminals/places.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
   run's tab and removing one closes them all.
 - **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,
@@ -2695,8 +2755,9 @@ beside your run (Runs for a task, below).
   skill); Evidence's Preview group also links each active run of the task the agent did not attach
   (`docs/design.md`, 37). The preview runs while the task waits for review and the merge, and stops when the task settles:
   `settleTask` removes the worktree, and `worktree.remove` closes the task's runs (below).
-- **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
-  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), then stops every other process Shinsa or a
+- **When a task's worktree goes.** `worktree.remove` closes the task's service runs and its ended shells first
+  (`Terminals.closeTaskTerminals`, from `EffectRunner`, the `services` option; `scratch.remove` does the same for
+  every finished task, so one without a worktree frees its terminals too), then stops every other process Shinsa or a
   finished agent left working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
   worktree takes its processes with it), so no dev server keeps running in a deleted folder; your own shells opened
   in that worktree, and what runs in them, are left as they are.
@@ -2850,7 +2911,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   <engine URL>` as a scoped process with the tunnel token in `TUNNEL_TOKEN`, never in its arguments (a process list
   shows arguments), and counts it up once it prints `Registered tunnel connection`; one that has not within
   `ConnectTimeout` (30 s, an `Effect.timeout`) is stopped and fails as `TunnelConnectFailed`, and closing its scope
-  stops the process.
+  stops the process. Both failures end with the last line `cloudflared` printed (it keeps the last 2,000 characters
+  of its output, `OUTPUT_TAIL_CHARS`), so a run of failed connects in the log says why: a DNS error, a blocked QUIC
+  path, a refused token.
 - **The supervisor** (`TunnelSupervisor`, `remote/tunnel/`, Kanna's timings): connect, heartbeat with the engine's URL
   and version, ping `https://<tunnel host>/health` (`TunnelHealth`) on `PING_SCHEDULE`, every 30 seconds, and
   heartbeat every fourth ping; three failed pings in a row, or `cloudflared` exiting, restart it on `RESTART_SCHEDULE`:
@@ -3119,9 +3182,11 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
-  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `changelog` for `GET /api/changelog`, and
-  `remote.terminals` for terminal streams on the sealed channel, today;
-  Settings → Teams, the review's Fix and approve choice and What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
+  `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
+  `attention` for routing notifications to the device you use and `worktree-root` for the worktree folder, today;
+  Settings → Teams, the review's Fix and approve choice and
+  What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -3515,8 +3580,9 @@ online, and the last list of it their own machine kept while it is not (Offline 
   list, `{ kind: 'list' }`, or one task, `{ kind: 'task', taskId }`), a fresh P-256 key and an HMAC with the team key
   over all three. The machine opens it only when it holds that team's key, the token's account is the team's owner or
   one of its members in the machine's own copy (`isTeamViewer`), a task asked for is in one of the team's projects,
-  and the HMAC checks in constant time; else `refused` ("This task is no longer shown to the team, or you are no
-  longer in it."). The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
+  and the HMAC checks in constant time; else `refused`, with the reason for the first check that failed
+  (`TEAM_REFUSALS`: the machine is not in the team, has no key for it, does not list you yet, your key does not match,
+  or the task is not shown to the team), which the viewer's All tasks shows beside that machine's name. The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
   view and both fresh keys), so the view asked for is bound into the key: a hello for the list cannot be replayed to
   read a task. The share channel's code serves both (`ShareChannel`, with a host that authorizes the hello).
 - **What a teammate sees.** The list view is `TeamListView`: every open task of the team's projects and the 50 most
@@ -3536,8 +3602,7 @@ online, and the last list of it their own machine kept while it is not (Offline 
   message closes the channel (1008, "A team view only listens."). It is never connected to the hub, the API or the
   dispatcher. Every open view is checked again on every state change and every change to remote access
   (`Teams.#syncChannels`): a member removed or who left, a project taken out of the team, a task moved out of it,
-  the team removed or its key gone ends it with "This task is no longer shown to the team, or you are no longer in
-  it.", and remote access paused or removed ends every view ("Remote access on the machine that shows these tasks was
+  the team removed or its key gone ends it with the matching `TEAM_REFUSALS` reason, and remote access paused or removed ends every view ("Remote access on the machine that shows these tasks was
   turned off."). Otherwise the machine pushes a new view on each change, as a share does.
 - **Watching teammates** (`remote/team-feeds.ts`, `TeamFeeds`). Each machine watches, for each team whose key it
   holds, every machine of that team but itself (your other machines too, so the local app shows your team work
@@ -3585,8 +3650,8 @@ online, and the last list of it their own machine kept while it is not (Offline 
     `snapshot` when there is one, and a SHA-256 of the team key (`keyDigest`), never the key. A browser on
     app.shinsa.dev keeps what its own channels got in memory only, until the page reloads.
   - **What it shows.** A machine whose channel dropped keeps its tasks, with its `TeamFeedMachine.updatedAt` set to
-    when the owner's machine made the list. Their rows on All tasks carry an Offline badge in place of the kind of
-    task, whose hint reads "Updated 2 hours ago" (`OfflineBadge`, `listHeldTeamMachines`). When the machine is back
+    when the owner's machine made the list. Their rows on All tasks carry an offline icon after the status, whose hint reads "Updated 2 hours ago"
+    (`OfflineMark`, `listHeldTeamMachines`); the read-only task page shows the Offline badge (`OfflineBadge`). When the machine is back
     its live list replaces the copy at once.
   - **The full task, kept too.** Each engine also keeps the whole page of every task in a list it watches, as the
     owner's machine sent it (the view and its files: the diff, the code, evidence), in `data/team-views/` (`TeamViews`:
@@ -3833,8 +3898,8 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
-- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox.ts`) shares the seeded `web` service of one of
-  Studio's tasks (`scripts/sandbox-service.ts`, a small dev server with live updates) on
+- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox/`) shares the seeded `web` service of one of
+  Studio's tasks (`scripts/sandbox/service.ts`, a small dev server with live updates) on
   `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
   own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
   preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
@@ -4355,7 +4420,8 @@ truth, and a snapshot only saves replaying it.
   only a shortcut: one that cannot be written is logged and left for the next.
 - **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
   `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations/schema.ts`) and every migration after it is
-  one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
+  one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`; the first, `stack-lists`, turns the single `stacksOn` of
+  `task.stack_changed` and `base` of `task.stack_based` into lists), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
   list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
   Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
   in one transaction, the snapshot is dropped and the version raised; a migration that fails leaves the log as it
@@ -6156,7 +6222,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── shinsa.sqlite  The event log, the effect outbox, the command receipts, the latest state snapshot and the
     │                  Home guide per project (`briefings`)
     ├── worktrees/     One git worktree per task (`<repo>/<branch>-<id>`), and the checkouts of isolated
-    │                  delegations (`delegations/<task>/<run>`)
+    │                  delegations (`delegations/<task>/<run>`), unless `config.json`'s `worktreesDir` or
+    │                  `SHINSA_WORKTREES_DIR` names another folder (Where agents work → Where the worktrees go)
     ├── scratch/       The working folder of each task with no repository (`<task id>`), where its answerer runs;
     │                  removed when the task settles (`scratch.remove`)
     ├── check-bases/   The detached checkouts of base commits that checks compare with (Checks, above)
@@ -6203,7 +6270,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
-  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_REMOTE_ORIGIN` points remote access at
+  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees, and wins over `config.json`'s `worktreesDir`. `SHINSA_REMOTE_ORIGIN` points remote access at
   another app.shinsa.dev (a local `wrangler dev`, `bun run --cwd apps/cloud dev:worker`): the control calls, the
   Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
@@ -6228,15 +6295,15 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
   that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
-  (`scripts/seed-services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
-  running `scripts/sandbox-service.ts` in the project's seeded repository with a preview URL; the command names the
-  script by its path in the checkout that seeded it. The evidence (`scripts/seed-evidence.ts`) is real files in
+  (`scripts/seed/services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
+  running `scripts/sandbox/service.ts` in the project's seeded repository with a preview URL; the command names the
+  script by its path in the checkout that seeded it. The evidence (`scripts/seed/evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of
   Shinsa's own Review tab for SMP-2, and test output for five tasks, each attached shortly before its run ended. The
   pages are rendered by `bun scripts/seed-media/generate.ts [origin]` (`shots.ts` lists every file and what it shows,
-  `shots.test.ts` checks each checked-in file is listed): it drives Chromium over CDP (`scripts/perf/shell-cdp.ts`)
+  `shots.test.ts` checks each checked-in file is listed): it drives Chromium over CDP (`scripts/kit/chromium/`)
   through the fixture pages in `scripts/seed-media/fixtures/` (the settings page, the tab row), records the tab row
   with a screencast that ffmpeg encodes to WebM, and takes the SMP-2 shots from a running seeded copy at `origin`
   (skipped without one; `SEED_MEDIA_ONLY` picks files by name). It also writes the `/ui` showcase's evidence samples
@@ -6244,8 +6311,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   Code session `.jsonl`, replaces one task's transcript with that real session.
 - **The sample repository.** For the code views the seed also builds `repos/shinsa-sample` offline from Shinsa's own
   tree at a pinned commit, `3590252` (`SOURCE_COMMIT`; `git archive`, about 1,250 files, imported as eight commits
-  with `git fast-import`), and files it under a Sample project (`scripts/seed-code.ts`, helpers in `seed-code-kit.ts`, transcripts in
-  `seed-code-transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
+  with `git fast-import`), and files it under a Sample project (`scripts/seed/code/sample.ts`, helpers in `code/kit.ts`, transcripts in
+  `code/transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
   commit and one uncommitted edit, twelve changed files (a rename with edits, a deletion, two additions, a PNG,
   `bun.lock` and a 5,000-line fixture), a report of 40 points (18 spots, the key ones explained, one in a file outside the diff; 10 judgement calls with
   their alternatives, two disputed by the reviewer; 7 risks) with the Agent's walkthrough, findings of both
@@ -6261,7 +6328,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   works in it (`repo.register`, `repos/index.ts`) and filed into a project by the rule in Projects and task identity,
   above.
 - **config.json versus events.** `config.json` holds what belongs to this machine and nothing replay needs: `roots`
-  (the folders that hold repositories), `port`, `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
+  (the folders that hold repositories), `worktreesDir` (where new worktrees go, Where agents work), `port`,
+  `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
   the engine takes 7446 (`APP_IDENTITY`), in the unassigned 7444–7470 range and away from dev servers. A port another program holds stops the engine with "Failed to start
   server. Is port 7446 in use? Quit the program on it, or set another `port` in <config.json>." (`listenOnPort` in
   `http/server.ts`; the Mac app shows it as Port 7446 is taken). The environment wins over it (`SHINSA_PORT`, `SHINSA_HOST`, `SHINSA_EDITOR`, `SHINSA_TERMINAL`; `SHINSA_ROOTS` adds
@@ -6371,9 +6439,12 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   restarts your engine; the wake before a command that needs the engine checks the same before `kickstart`.
   `shinsa logs` prints the end of `data/engine.log`, each JSON line as its UTC time, level, message and fields
   (`--json` as written). `shinsa status` and `shinsa version` read `/api/health` without starting anything.
-- **Folders macOS keeps private.** Shinsa asks for no permission unless a folder you choose needs one. The engine is a
-  background process, so it cannot answer macOS's consent prompts well: discovery in the bundle skips `~/Desktop`,
-  `~/Documents` and `~/Downloads` (`createDiscoverer`), so no prompt fires unasked, and a folder chosen at setup that
+- **Folders macOS keeps private.** Discovery scans the whole home folder, `~/Desktop`, `~/Documents` and
+  `~/Downloads` included, the same in the app and in a checkout, and only before you have chosen folders (setup
+  and Settings asking for suggestions, or triage with no folder chosen), so a consent prompt macOS shows comes
+  from setup you opened. A folder macOS refuses to list (`EPERM` or `EACCES`) is
+  not read as empty: discovery returns it in `refused`, and the Folders step offers it unpicked as "macOS keeps this
+  folder private". A folder chosen at setup that
   the engine may not read is not an error but access to ask for: `resolveChosenRoots` throws `PrivateFoldersError`
   (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
   offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
@@ -6460,18 +6531,28 @@ same-site Origin, `application/json` bodies; a refusal there is 403 or 415). Err
     effective: string[];       // what triage searches
   };
   defaults: { model: string | null; mergeMethod: 'squash' | 'merge' | 'rebase' };
+  worktrees: {
+    effective: string;              // where new worktrees go now
+    configured: string | null;      // config.json's worktreesDir, when SHINSA_WORKTREES_DIR does not win
+    default: string;                // data/worktrees
+    fromEnvironment: string | null; // SHINSA_WORKTREES_DIR
+    problem: string | null;         // why a chosen folder cannot take worktrees now (not mounted, not writable)
+  };
   paths: { home: string; configPath: string; dataDir: string; userHome: string };
 }
 ```
 
 **`GET /api/onboarding/roots`** (`?refresh=1` to scan again; results are kept for ten minutes): the folders that hold
-git repositories, most first. Discovery walks the home folder four levels deep and at most 20,000 folders, never
-into hidden folders, `node_modules`, `Library`, caches, build output or media folders, and never into a repository.
+git repositories, most first. Discovery walks the whole home folder eight levels deep, stopping at 150,000 folders
+or after 20 seconds (`MAX_DEPTH`, `MAX_DIRS`, `DISCOVERY_BUDGET`), never into hidden folders, `node_modules`,
+`Library`, `Applications`, caches, package bundles (`.app`, `.photoslibrary`, `.xcodeproj` and the rest of
+`BUNDLE_SUFFIXES`) or a repository it found.
 
 ```ts
 {
   suggestions: { path: string; repoCount: number; repos: string[] /* up to 8 names */; chosen: boolean }[];
-  truncated: boolean; // the folder limit was reached
+  truncated: boolean; // the folder or time limit was reached
+  refused: string[];  // folders macOS would not let the engine list, to ask access for
 }
 ```
 
@@ -6480,6 +6561,18 @@ into hidden folders, `node_modules`, `Library`, caches, build output or media fo
 `settings.change` event, then answers like `GET /api/onboarding`. Folders may start with `~/`; each must be an
 existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `roots_invalid`, `model_invalid`,
 `merge_method_invalid`, `plans_invalid`. It may be called again to change the folders later (Settings → Projects → Repository folders).
+
+**`POST /api/onboarding/worktrees`** with `{ path: string | null }`: saves where new worktrees go to `config.json`'s
+`worktreesDir`, then answers like `GET /api/onboarding`; `null` goes back to `data/worktrees`. The path may start
+with `~/` and must be a full path to an existing folder Shinsa can write to; anything else is `worktrees_invalid`
+with the reason, and `worktrees_from_environment` while `SHINSA_WORKTREES_DIR` sets the folder. The owner's alone off the machine (`OwnerOnlyRoute`), and
+announced as the `worktree-root` engine feature, which Settings → Projects → Worktrees asks for.
+
+**`GET /api/onboarding/worktrees/usage`**: `WorktreeUsage { folder, worktrees, bytes, freeBytes, measuredAt }`, the
+space the worktrees take (`measureWorktreeUsage`, `onboarding/worktrees.ts`). `worktrees` counts the tasks whose
+worktree still exists, wherever it is (a main-checkout task is left out); `bytes` is one `du -sk` over those worktrees
+and the folder's `delegations/`, `null` when it takes longer than 20 seconds (`USAGE_TIMEOUT_MS`), as it can on a
+mounted bucket; `freeBytes` is `statfs` of the folder, `null` when it is gone. Part of the `worktree-root` feature.
 
 **`POST /api/onboarding/privacy`** with `{}`: opens System Settings → Privacy & Security → Full Disk Access on this
 machine; answers `{ ok }`, whether `open` ran.
@@ -6862,7 +6955,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   keys, cancellation (a running effect aborted, its late result ignored), damaged effect and event
   rows, and command receipts (a repeat answered, a reused id refused, a refusal remembered, receipts across a restart
   and pruned after a week). `test/store/service.test.ts` runs the store's Effect services themselves through `runTest`
-  (`apps/engine/test/harness.ts`) on SQLite in memory, as `test/config`, `test/shell` and `test/instance/lock-service.test.ts`
+  (`apps/engine/test/harness.ts`) on SQLite in memory, as `test/config`, `test/shell` and `test/instance/lock/service.test.ts`
   do for the configuration, the shell and the lock. `test/runtime/snapshots.test.ts` and `test/store/snapshot.test.ts` cover snapshots: a boot
   that replays only the events after one, one of another version, of a log changed under it or with a damaged payload
   replaced by a full replay, problems kept across one, none written read-only or without a version, a write once

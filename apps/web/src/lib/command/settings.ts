@@ -95,6 +95,7 @@ import {
   SOUND_ITEMS,
   USAGE_LIMIT_TITLE,
   updateSettings,
+  WORKTREES_TITLE,
 } from '@/lib/settings.ts';
 import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
@@ -183,6 +184,11 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
     title: FOLDERS_TITLE,
     icon: 'IconFolder1',
     keywords: ['folders', 'roots', 'repositories', 'where your code lives', 'find folders'],
+  },
+  {
+    title: WORKTREES_TITLE,
+    icon: 'IconFolder1',
+    keywords: ['worktrees', 'worktree folder', 'disk space', 'mounted drive', 'bucket', 's3', 'r2'],
   },
   {
     title: 'Projects',

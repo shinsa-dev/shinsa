@@ -24,6 +24,7 @@ import {
   SHAPING_LABEL,
   selectCurrentStep,
 } from '@/lib/overview/progress.ts';
+import { describeBundleWait } from '@/lib/tasks/groups.ts';
 import { resolveRowStatus, resolveStageLabel } from '@/lib/tasks/status.ts';
 
 function LiveActivity({ run, fallback }: { run: Run; fallback: string | null }) {
@@ -62,7 +63,9 @@ export function RowSummary({
 }) {
   const [run] = gate || selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
   const status = resolveRowStatus(state, task, gate);
-  const { track, note, count } = resolveRowProgress(task, status.label);
+  const progress = resolveRowProgress(task, status.label);
+  const { track, count } = progress;
+  const note = progress.note ?? describeBundleWait(state, task);
   return (
     <span className='flex min-w-0 flex-1 items-center gap-2'>
       <span className='shrink-0'>

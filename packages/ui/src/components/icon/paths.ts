@@ -64,6 +64,7 @@ export const ICON_NAMES = [
   'IconClipboard2',
   'IconClock',
   'IconClockSnooze',
+  'IconCloudOff',
   'IconCloudSimpleDisconnected',
   'IconCode',
   'IconCodeBrackets',
@@ -249,6 +250,7 @@ export const ICON_NAMES = [
   'IconStar',
   'IconStop',
   'IconStopwatch',
+  'IconStorage',
   'IconSun',
   'IconSvelte',
   'IconSwift',
@@ -473,6 +475,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconClockSnooze: {
     '3': '<g><path d="M15 3.51212C14.0617 3.18046 13.0519 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21C16.9706 21 21 16.9706 21 12C21 11.3126 20.9229 10.6432 20.777 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M19 2H22L19 6H22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8V12L14.5 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconCloudOff: {
+    '3': '<g><path d="M10.7807 5.12397C11.1744 5.0427 11.5822 5 12 5C15.3137 5 18 7.68629 18 11C20.2091 11 22 12.7909 22 15C22 15.4069 21.9392 15.7996 21.8263 16.1696M18.8987 18.8987L7.28675 7.28675C6.8743 7.80955 6.54697 8.40264 6.32568 9.04508C3.88316 9.37436 2 11.4673 2 14C2 16.7614 4.23858 19 7 19H18C18.309 19 18.6098 18.965 18.8987 18.8987ZM18.8987 18.8987L21 21L3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconCloudSimpleDisconnected: {
     '3': '<g><path d="M5 17.7453C3.18652 16.4804 2 14.3787 2 12C2 8.13401 5.13401 5 9 5C11.5628 5 13.8039 6.37723 15.0236 8.43195C15.2884 8.87791 15.8167 9.11316 16.3308 9.0444C16.5497 9.01512 16.7731 9 17 9C19.7614 9 22 11.2386 22 14C22 16.0503 20.7659 17.8124 19 18.584" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 16L12 18M12 18L10 20M12 18L10 16M12 18L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
@@ -1028,6 +1033,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconStopwatch: {
     '3': '<g><path d="M12 13L9 10M10 2H14M20 13C20 17.4183 16.4183 21 12 21C7.58172 21 4 17.4183 4 13C4 8.58172 7.58172 5 12 5C16.4183 5 20 8.58172 20 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconStorage: {
+    '3': '<g><path d="M8 4H16V2H8V4ZM18 6V18H20V6H18ZM16 20H8V22H16V20ZM6 18V6H4V18H6ZM8 16H16V14H8V16ZM16 16C17.1046 16 18 16.8954 18 18H20C20 15.7909 18.2091 14 16 14V16ZM8 14C5.79086 14 4 15.7909 4 18H6C6 16.8954 6.89543 16 8 16V14ZM8 20C6.89543 20 6 19.1046 6 18H4C4 20.2091 5.79086 22 8 22V20ZM18 18C18 19.1046 17.1046 20 16 20V22C18.2091 22 20 20.2091 20 18H18ZM16 4C17.1046 4 18 4.89543 18 6H20C20 3.79086 18.2091 2 16 2V4ZM8 2C5.79086 2 4 3.79086 4 6H6C6 4.89543 6.89543 4 8 4V2Z" fill="currentColor"/><path d="M13 17.25C13.4142 17.25 13.75 17.5858 13.75 18C13.75 18.4142 13.4142 18.75 13 18.75C12.5858 18.75 12.25 18.4142 12.25 18C12.25 17.5858 12.5858 17.25 13 17.25ZM16 17.25C16.4142 17.25 16.75 17.5858 16.75 18C16.75 18.4142 16.4142 18.75 16 18.75C15.5858 18.75 15.25 18.4142 15.25 18C15.25 17.5858 15.5858 17.25 16 17.25Z" fill="currentColor" stroke="currentColor" stroke-width="0.5" stroke-linecap="square"/></g>',
   },
   IconSun: {
     '3': '<g><path d="M12 3V2M12 22V21M18.3598 5.64005L19.0698 4.93005M4.93016 19.07L5.64016 18.36M21 12H22M2 12H3M18.3598 18.36L19.0698 19.07M4.93016 4.93005L5.64016 5.64005M15.5355 8.46447C17.4882 10.4171 17.4882 13.5829 15.5355 15.5355C13.5829 17.4882 10.4171 17.4882 8.46447 15.5355C6.51185 13.5829 6.51185 10.4171 8.46447 8.46447C10.4171 6.51185 13.5829 6.51185 15.5355 8.46447Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',

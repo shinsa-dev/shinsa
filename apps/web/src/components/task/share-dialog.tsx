@@ -10,14 +10,14 @@ import {
 } from '@shinsa/ui/components/dialog';
 import { Field, FieldLabel } from '@shinsa/ui/components/field';
 import * as React from 'react';
-import { useCopyText } from '@/components/controls/copy-button.tsx';
+import { CopyLinkButton } from '@/components/controls/copy-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { MentionText, UserIdentity } from '@/components/people/user-tag.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
-import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
+import { useSettings, useTask } from '@/lib/connection/selectors.ts';
 import { useEngineCommand } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { type Mention, resolveFirstName } from '@/lib/remote/users.ts';
@@ -194,15 +194,6 @@ function ShareActions({
   );
 }
 
-function CopyLinkButton({ url, label = 'Copy link' }: { url: string; label?: string }) {
-  const { copied, copy } = useCopyText(url);
-  return (
-    <Button variant='secondary' onClick={copy}>
-      {copied ? 'Copied' : label}
-    </Button>
-  );
-}
-
 function HandoffGuest({ view }: { view: Extract<HandoffView, { kind: 'claimed' }> }) {
   return (
     <UserIdentity
@@ -279,7 +270,7 @@ function describeHandoffView(view: HandoffView): Mention {
 
 function ShareContent({ task }: { task: Task }) {
   const { snapshot } = useRemoteAccess();
-  const settings = useShinsaSelector((state) => state.settings);
+  const settings = useSettings();
   const now = useNow();
   const live = selectLiveShare(task, now);
   const view = resolveShareView(task, snapshot, now);

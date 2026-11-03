@@ -1,3 +1,4 @@
+import { describeCount } from '../chat/text.ts';
 import {
   type DeliveryCohort,
   isDelegatedRun,
@@ -186,7 +187,7 @@ function markItems(state: ShinsaState, items: string[], delivered: boolean) {
   }
 }
 
-function applyDelivered(state: ShinsaState, event: EventOf<'delegation.delivered'>) {
+function applyDelegationDelivered(state: ShinsaState, event: EventOf<'delegation.delivered'>) {
   const run = state.runs[event.runId];
   if (!run) return;
   markItems(state, event.items, true);
@@ -244,7 +245,7 @@ function applySplit(state: ShinsaState, event: EventOf<'task.split'>) {
   record(state, task.id, event.at, {
     actor: 'agent',
     kind: 'delegation',
-    text: `Split the accepted plan into ${count} ${count === 1 ? 'task' : 'tasks'}`,
+    text: `Split the accepted plan into ${describeCount(count, 'task')}`,
     runId: event.split.runId,
   });
 }
@@ -301,7 +302,7 @@ export function applyDelegationEvent(
       return;
     }
     case 'delegation.delivered':
-      applyDelivered(state, event);
+      applyDelegationDelivered(state, event);
       return;
     case 'delegation.released':
       applyReleased(state, event);

@@ -39,6 +39,7 @@ export interface CourierRequest {
   thisTaskWaits: boolean;
   afterThis: boolean;
   stackOnThis: boolean;
+  stackOn: string[];
   backlog: boolean;
 }
 
@@ -47,7 +48,7 @@ export interface SplitRequest {
   thisTaskWaits: boolean;
 }
 
-function resolveTitle(title: string | null, brief: string) {
+function resolveDelegationTitle(title: string | null, brief: string) {
   if (title) return title;
   const line = brief.split('\n', 1)[0]?.trim() ?? '';
   return line.length > DELEGATION_LIMITS.title ? `${line.slice(0, DELEGATION_LIMITS.title - 1)}…` : line;
@@ -58,7 +59,7 @@ export function validateDelegationRequest(input: Record<string, unknown>): Valid
   const request = reader.read(DelegationRequestInput, input, []);
   return reader.result({
     brief: request.brief,
-    title: resolveTitle(request.title, request.brief),
+    title: resolveDelegationTitle(request.title, request.brief),
     role: request.role,
     mode: request.mode ?? 'async',
     isolation: request.isolation ?? 'shared',
@@ -95,6 +96,7 @@ export function validateCourierTask(input: Record<string, unknown>): Validation<
     thisTaskWaits: task.this_task_waits,
     afterThis: task.after_this,
     stackOnThis: task.stack_on_this,
+    stackOn: task.stack_on,
     backlog: task.backlog,
   });
 }

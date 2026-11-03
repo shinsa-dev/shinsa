@@ -35,7 +35,7 @@ export interface EffectRunnerOptions {
 }
 
 export interface TaskServices {
-  closeTaskServices(taskId: string): void;
+  closeTaskTerminals(taskId: string): void;
   listTerminalPids(): number[];
 }
 
@@ -63,8 +63,6 @@ export const FAILURE_TITLE: Partial<Record<ShinsaEffect['kind'], string>> = {
 export const NO_TRIAGE = 'Shinsa could not read the request, so the task has no title or kind of work yet.';
 
 export const TASK_GONE = 'The task or its repository no longer exists.';
-
-export const NO_WORKTREE = 'The task has no worktree.';
 
 export const NO_PULL_REQUEST = 'There is no pull request to merge.';
 

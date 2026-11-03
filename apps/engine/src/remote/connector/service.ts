@@ -19,6 +19,11 @@ export class TunnelConnector extends Context.Service<TunnelConnector, { readonly
       const cloudflared = yield* Cloudflared;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const timeout = yield* ConnectTimeout;
+      const resolveLastLine = (text: string) => text.trim().split('\n').at(-1)?.trim() ?? '';
+      const describeConnectTimeout = (text: string) => {
+        const last = resolveLastLine(text);
+        return last ? `${CONNECT_TIMEOUT_MESSAGE} It last printed: ${last}` : CONNECT_TIMEOUT_MESSAGE;
+      };
 
       const open = Effect.fn('TunnelConnector.open')(function* (
         tunnelToken: Redacted.Redacted<string>,
@@ -59,7 +64,7 @@ export class TunnelConnector extends Context.Service<TunnelConnector, { readonly
             Effect.flatMap(Ref.get(tail), (text) =>
               Effect.fail(
                 new TunnelConnectFailed({
-                  message: `cloudflared stopped with code ${code}: ${text.trim().split('\n').at(-1) ?? ''}`,
+                  message: `cloudflared stopped with code ${code}: ${resolveLastLine(text)}`,
                 })
               )
             )
@@ -68,7 +73,10 @@ export class TunnelConnector extends Context.Service<TunnelConnector, { readonly
         yield* Effect.raceFirst(Deferred.await(connected), stopped).pipe(
           Effect.timeoutOrElse({
             duration: timeout,
-            orElse: () => Effect.fail(new TunnelConnectFailed({ message: CONNECT_TIMEOUT_MESSAGE })),
+            orElse: () =>
+              Effect.flatMap(Ref.get(tail), (text) =>
+                Effect.fail(new TunnelConnectFailed({ message: describeConnectTimeout(text) }))
+              ),
           })
         );
         return { exited: Effect.asVoid(exitCode) };

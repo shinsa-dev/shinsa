@@ -27,6 +27,7 @@ export type DelegationAgentCommand =
       thisWaits: boolean;
       afterThis?: boolean;
       stackOnThis?: boolean;
+      stackOn?: string[];
       backlog?: boolean;
       forkOf?: string;
     }

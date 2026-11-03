@@ -50,3 +50,20 @@ export function CopyButton({ text, className }: { text: string; className?: stri
     </Hint>
   );
 }
+
+export function CopyLinkButton({
+  url,
+  label = 'Copy link',
+  size,
+}: {
+  url: string;
+  label?: string;
+  size?: 'sm';
+}) {
+  const { copied, copy } = useCopyText(url);
+  return (
+    <Button variant='secondary' size={size} onClick={copy}>
+      {copied ? 'Copied' : label}
+    </Button>
+  );
+}

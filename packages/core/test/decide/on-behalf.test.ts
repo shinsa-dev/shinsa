@@ -260,6 +260,24 @@ describe('acting for the human', () => {
     expect(reviewer.prompt).not.toContain('Keep the old flag.');
   });
 
+  test('a message kept at a gate keeps its line comments for the next agent', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    const comment = { path: 'src/flag.ts', side: 'new' as const, line: 3, endLine: null, text: 'This one.' };
+    harness.send(
+      { type: 'task.message', taskId, text: 'Keep the old flag.', comments: [comment] },
+      { onBehalf: true, byTask: 'agent-task' }
+    );
+    expect(harness.task(taskId).untoldMessages).toEqual([
+      { at: harness.now, text: 'Keep the old flag.', sender: 'agent', comments: [comment] },
+    ]);
+    harness.send({ type: 'task.message', taskId, text: 'hello', kind: 'feedback' });
+    expect(harness.activeRun(taskId).prompt).toContain(
+      `${KEPT_NOTE}\n\nLine comments:\n- src/flag.ts, line 3: This one.`
+    );
+  });
+
   test('a message kept at the merge gate reaches the fix your reply starts', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
@@ -439,8 +457,14 @@ describe('the summary of each action', () => {
     const summaries: [ShinsaCommand, string][] = [
       [{ type: 'task.message', taskId, text: 'Look again.' }, 'Messaged “Fix tab group scroll”'],
       [{ type: 'task.wait_on', taskId, waitsOn: [other] }, 'Changed what “Fix tab group scroll” waits on'],
-      [{ type: 'task.stack_on', taskId, stacksOn: other }, 'Stacked “Fix tab group scroll” on “Second”'],
-      [{ type: 'task.stack_on', taskId, stacksOn: null }, 'Took “Fix tab group scroll” out of its bundle'],
+      [
+        { type: 'task.stack_on_tasks', taskId, stacksOn: [other] },
+        'Stacked “Fix tab group scroll” on “Second”',
+      ],
+      [
+        { type: 'task.stack_on_tasks', taskId, stacksOn: [] },
+        'Took “Fix tab group scroll” out of its bundle',
+      ],
       [{ type: 'task.move_to_backlog', taskId: other }, 'Moved “Second” to the backlog'],
       [{ type: 'task.remove_from_backlog', taskId: other }, 'Moved “Second” out of the backlog'],
       [{ type: 'task.snooze', taskId: other }, 'Snoozed “Second”'],

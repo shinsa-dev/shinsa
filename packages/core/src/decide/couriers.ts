@@ -44,7 +44,7 @@ interface SpawnOptions {
   projectId?: string;
   forkOf?: string;
   waitsOn?: string[];
-  stacksOn?: string;
+  stacksOn?: string[];
   backlog?: boolean;
 }
 
@@ -85,6 +85,11 @@ function resolveCourierRepo(decider: Decider, task: Task, command: CommandOf<'ag
   return elsewhere ? null : task.repoId;
 }
 
+function resolveCourierStack(task: Task, command: CommandOf<'agent.create_task'>) {
+  const stacksOn = [...(command.stackOnThis ? [task.id] : []), ...(command.stackOn ?? [])];
+  return stacksOn.length > 0 ? { stacksOn } : {};
+}
+
 export function createCourierTask(decider: Decider, command: CommandOf<'agent.create_task'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'create_task');
   if (selectCreated(decider, task, command.requestKey)) return;
@@ -100,7 +105,7 @@ export function createCourierTask(decider: Decider, command: CommandOf<'agent.cr
       ...(command.projectId ? { projectId: command.projectId } : {}),
       ...(command.forkOf ? { forkOf: command.forkOf } : {}),
       ...(command.afterThis ? { waitsOn: [task.id] } : {}),
-      ...(command.stackOnThis ? { stacksOn: task.id } : {}),
+      ...resolveCourierStack(task, command),
       ...(command.backlog ? { backlog: true } : {}),
     }
   );

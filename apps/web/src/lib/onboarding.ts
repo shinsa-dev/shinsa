@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type AccountSummary,
   describeList,
   type Gate,
@@ -11,6 +12,7 @@ import {
   type OnboardingStepEntry,
   type ProviderLogin,
   type RootSuggestion,
+  type WorktreeUsage,
   resolveDisplayPath,
   resolvePlanLabel,
   type ShinsaState,
@@ -19,13 +21,21 @@ import {
   type TerminalInfo,
 } from '@shinsa/core';
 import { describeProviderLogin } from '@/lib/accounts/providers.ts';
-import { formatCount } from '@/lib/format/count.ts';
+import { formatBytes } from '@/lib/format/count.ts';
 import { type Route, resolveTaskPath } from '@/router.ts';
 
 interface FolderRow {
   path: string;
   label: string;
   removable: boolean;
+}
+
+type WorktreeFolderOrigin = 'default' | 'chosen' | 'environment';
+
+interface WorktreeFolder {
+  label: string;
+  origin: WorktreeFolderOrigin;
+  problem: string | null;
 }
 
 interface FolderSuggestion {
@@ -48,12 +58,50 @@ export function listFolderRows(status: OnboardingStatus): FolderRow[] {
   return [...configured, ...fromEnvironment];
 }
 
+function resolveWorktreeOrigin(worktrees: OnboardingStatus['worktrees']): WorktreeFolderOrigin {
+  if (worktrees.fromEnvironment !== null) return 'environment';
+  if (worktrees.configured !== null) return 'chosen';
+  return 'default';
+}
+
+export function resolveWorktreeFolder(status: OnboardingStatus): WorktreeFolder {
+  const { worktrees, paths } = status;
+  return {
+    label: resolveDisplayPath(worktrees.effective, paths.userHome),
+    origin: resolveWorktreeOrigin(worktrees),
+    problem: worktrees.problem,
+  };
+}
+
+export function describeWorktreesSaved(status: OnboardingStatus) {
+  const folder = resolveWorktreeFolder(status);
+  if (folder.origin === 'default') return 'New worktrees go to the default folder.';
+  return `New worktrees go to ${folder.label}.`;
+}
+
+export const WORKTREE_CLEANUP_NOTE =
+  'A task’s worktree is removed as soon as the task is merged, marked done or cancelled.';
+
+export function describeWorktreeUsage(usage: WorktreeUsage | 'failed' | null) {
+  if (usage === null) return 'Measuring the worktrees…';
+  if (usage === 'failed') return 'Shinsa could not measure the worktrees.';
+  if (usage.worktrees === 0 && usage.bytes === 0) return 'No task has a worktree right now.';
+  const count = describeCount(usage.worktrees, 'task', 'tasks');
+  if (usage.bytes === null) return `Worktrees of ${count}; their size took too long to measure.`;
+  return `${formatBytes(usage.bytes)} used by the worktrees of ${count}.`;
+}
+
+export function describeFreeSpace(usage: WorktreeUsage | 'failed' | null) {
+  if (usage === null || usage === 'failed') return null;
+  return usage.freeBytes === null ? null : `${formatBytes(usage.freeBytes)} free on this drive`;
+}
+
 export function listFolderSuggestions(status: OnboardingStatus, suggestions: RootSuggestion[]) {
   const chosen = new Set(status.roots.configured);
   return suggestions.map((suggestion): FolderSuggestion => ({
     path: suggestion.path,
     label: resolveDisplayPath(suggestion.path, status.paths.userHome),
-    detail: formatCount(suggestion.repoCount, 'repository', 'repositories'),
+    detail: describeCount(suggestion.repoCount, 'repository', 'repositories'),
     chosen: chosen.has(suggestion.path),
   }));
 }

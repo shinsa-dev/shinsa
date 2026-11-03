@@ -1,8 +1,8 @@
-import { describeCount, describeList } from '../chat/text.ts';
+import { describeCount, describeList, quoteTitle } from '../chat/text.ts';
 import { DAY_MS, isPausingGate, type TaskStage } from '../domain/index.ts';
 import { resolveGateWords } from '../queue/reasons.ts';
 import type { Queue, QueuedGate } from '../queue/types.ts';
-import { describeUnblocks, quote } from './text.ts';
+import { describeUnblocks } from './text.ts';
 import { BRIEFING_LIMITS, type Briefing, type BriefingItem } from './types.ts';
 
 const STALE_MERGE_DAYS = 2;
@@ -41,8 +41,8 @@ export function resolveBriefingWhy(entry: QueuedGate) {
 function resolveBriefingRunning(queue: Queue) {
   const [first, second, ...rest] = queue.working;
   if (!first) return 'No agent is working right now.';
-  if (!second) return `An agent is ${STAGE_VERB[first.stage] ?? 'working on'} ${quote(first.title)}.`;
-  const named = [quote(first.title), quote(second.title)];
+  if (!second) return `An agent is ${STAGE_VERB[first.stage] ?? 'working on'} ${quoteTitle(first.title)}.`;
+  const named = [quoteTitle(first.title), quoteTitle(second.title)];
   const titles = rest.length > 0 ? `${named.join(', ')} and ${rest.length} more` : describeList(named);
   return `Agents are working on ${titles}.`;
 }
@@ -50,13 +50,13 @@ function resolveBriefingRunning(queue: Queue) {
 export function resolveFallbackNote(queue: Queue, named: Set<string>, now: number) {
   const entries = listBriefingEntries(queue).filter((entry) => !named.has(entry.task.id));
   const paused = entries.find((entry) => isPausingGate(entry.gate));
-  if (paused) return `${quote(paused.task.title)} is paused and needs a decision.`;
+  if (paused) return `${quoteTitle(paused.task.title)} is paused and needs a decision.`;
   const stale = entries.find(
     (entry) => entry.gate.type === 'merge' && now - entry.gate.openedAt >= STALE_MERGE_DAYS * DAY_MS
   );
   if (stale) {
     const days = Math.floor((now - stale.gate.openedAt) / DAY_MS);
-    return `${quote(stale.task.title)} has waited ${describeCount(days, 'day')} to merge.`;
+    return `${quoteTitle(stale.task.title)} has waited ${describeCount(days, 'day')} to merge.`;
   }
   const waiting = queue.waiting.length;
   if (waiting > 0) {

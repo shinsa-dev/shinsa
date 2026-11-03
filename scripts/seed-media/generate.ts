@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { launchChrome, type ShellPage } from '../perf/shell-cdp.ts';
+import { type CdpPage, launchChromium } from '../kit/chromium/index.ts';
 import {
   type RecordedFrame,
   type RecordingStep,
@@ -27,7 +27,7 @@ interface Frame {
   metadata: { timestamp: number };
 }
 
-function waitForLoad(page: ShellPage) {
+function waitForLoad(page: CdpPage) {
   return new Promise<void>((resolve) => {
     const stop = page.on('Page.loadEventFired', () => {
       stop();
@@ -36,7 +36,7 @@ function waitForLoad(page: ShellPage) {
   });
 }
 
-async function openShot(page: ShellPage, shot: SeedShot, url: string) {
+async function openShot(page: CdpPage, shot: SeedShot, url: string) {
   await page.send('Emulation.setDeviceMetricsOverride', {
     width: shot.width,
     height: shot.height,
@@ -65,7 +65,7 @@ async function openShot(page: ShellPage, shot: SeedShot, url: string) {
   await Bun.sleep(FIXTURE_SETTLE_MS);
 }
 
-async function pressKey(page: ShellPage, key: string) {
+async function pressKey(page: CdpPage, key: string) {
   const code = `Key${key.toUpperCase()}`;
   const keyCode = key.toUpperCase().charCodeAt(0);
   await page.send('Input.dispatchKeyEvent', {
@@ -79,7 +79,7 @@ async function pressKey(page: ShellPage, key: string) {
   await Bun.sleep(KEY_GAP_MS);
 }
 
-async function centreOf(page: ShellPage, expression: string) {
+async function centreOf(page: CdpPage, expression: string) {
   const point = await page.evaluate<{ x: number; y: number } | null>(`(() => {
     const element = ${expression};
     if (!element) return null;
@@ -91,7 +91,7 @@ async function centreOf(page: ShellPage, expression: string) {
   return point;
 }
 
-async function playStep(page: ShellPage, step: RecordingStep) {
+async function playStep(page: CdpPage, step: RecordingStep) {
   if (step.kind === 'wait') {
     await Bun.sleep(step.ms);
     return;
@@ -156,7 +156,7 @@ async function encodeVideo(frames: readonly RecordedFrame[], end: number, shot: 
   if (code !== 0) throw new Error(`ffmpeg could not encode ${shot.file} (exit ${code}).`);
 }
 
-async function recordShot(page: ShellPage, shot: SeedShot, url: string, target: string) {
+async function recordShot(page: CdpPage, shot: SeedShot, url: string, target: string) {
   const frames: RecordedFrame[] = [];
   const work = mkdtempSync(join(tmpdir(), 'shinsa-seed-frames-'));
   const stop = page.on<Frame>('Page.screencastFrame', (frame) => {
@@ -179,13 +179,13 @@ async function recordShot(page: ShellPage, shot: SeedShot, url: string, target: 
   rmSync(work, { recursive: true, force: true });
 }
 
-async function captureShot(page: ShellPage, shot: SeedShot, url: string, target: string) {
+async function captureShot(page: CdpPage, shot: SeedShot, url: string, target: string) {
   await openShot(page, shot, url);
   const { data } = await page.send<{ data: string }>('Page.captureScreenshot', { format: 'png' });
   writeFileSync(target, Buffer.from(data, 'base64'));
 }
 
-const chrome = await launchChrome(1280, 800);
+const chrome = await launchChromium(1280, 800);
 try {
   await chrome.page.send('Page.enable');
   await chrome.page.send('Emulation.setScrollbarsHidden', { hidden: true });

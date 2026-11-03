@@ -165,7 +165,7 @@ paint, scroll and take a keystroke, on a production build in a real browser.
   to `/tmp` (5 tasks, 19 runs; its chats are short, so it shows the floor, not the long-chat case).
 - **The page.** `vite build` of the web app, served by `vite preview` against `shinsa engine` with `SHINSA_INSPECT=1`,
   in headless Chromium driven over the DevTools protocol by `bun scripts/perf/content-measure.ts <url>`
-  (`content-cdp.ts`, `content-probe.ts`). Each scenario runs in three fresh browsers; the table shows the median.
+  (`scripts/kit/chromium/`, `content-probe.ts`). Each scenario runs in three fresh browsers; the table shows the median.
   Navigation is the router's own `pushState`, timed to the frame after the content is in the DOM. Frames are
   `requestAnimationFrame` deltas while the chat scrolls up 150 frames of 160px. Typing is 41 keys into the composer
   while 20 transcript entries a second and a full state a second arrive on the page's own socket, timed from each
@@ -519,6 +519,27 @@ Every step is within a frame of the click at full speed, a tab switch within one
   frame as the switch, which is why the project steps at 4× read a few ms more than before, when the script had to
   close the menu itself after measuring.
 
+### ⌘K task search (2026-11-03)
+
+Measured in Chromium on a copy of a real event log (242 tasks, production build), typing with 150 ms between keys;
+each value is the Event Timing duration of one `input` event, handling plus the next paint (8 ms granularity, so
+16 ms is one frame).
+
+| Search | Before | After |
+| --- | --- | --- |
+| Root, "login redirect" | 340–536 ms a key | 16–32 ms a key |
+| Root, "review" (500+ skill commands match) | not measured | 16–32 ms |
+| Jump to a task, "stack" | not measured | 16–24 ms |
+
+- **Where it went.** A CPU profile of five keys spent 3.7 s in `listLiveRuns`, reached from `resolveTaskStatus` →
+  `isWaitingForDelegations`: each task row's status scanned every run in the log, and ⌘K did that for 300 tasks
+  several times a key. The runs waiting on delegations are now indexed once per state
+  (`resolveDelegationWaits`, `lib/tasks/status.ts`).
+- **What else changed.** The menu works out nothing while closed, its sections and decisions are memoized per state,
+  tasks are scored against an index built once per state (`resolveTaskIndex`), and only the best 20 task matches
+  render (100 on Jump to a task), so cmdk never scores and re-sorts hundreds of rows in the DOM. Typing now searches
+  every task, not only the newest 300.
+
 ### What is left
 
 - **Revealing Review still renders about 620 components** and Code about 650: what is left is the tabs' own effects
@@ -563,7 +584,7 @@ and on two large repositories.
   50,000-line file). `bun scripts/perf/code-seed.ts <seed dir> <paywall-next checkout>` turns a `bun run seed` copy
   into the second and third (it clones, never touches the original).
 - **The bench.** `bun scripts/perf/code-tab.ts --base <server> --task <handle> --folder <dir> --tree <folders>
-  [--files <paths>]` drives headless Chrome over the DevTools protocol (`scripts/perf/code-cdp.ts`, the page side in
+  [--files <paths>]` drives headless Chrome over the DevTools protocol (`scripts/kit/chromium/`, the page side in
   `code-probe.ts`), at 1280 × 900, against a production build served by an inspect-mode `shinsa engine` on a copy of
   the seed. It presses tree rows with real mouse events: **cold** is a file nothing has read (no hover, not next to an
   open file), **warm** a file opened before, **prefetched** a file hovered for 400 ms first. **Work** is the User
@@ -716,7 +737,7 @@ and each of its tabs, the Code tab's trees, ⌘P, the ref picker and search, All
 
 ### How it is measured
 
-- **The walk.** `bun scripts/perf/loading-walk.ts <origin>` opens headless Chromium (`shell-cdp.ts`) at 1440 and 900
+- **The walk.** `bun scripts/perf/loading-walk.ts <origin>` opens headless Chromium (`scripts/kit/chromium/`) at 1440 and 900
   px wide, with `scripts/perf/loading-probe.ts` installed before the app loads, and walks: Home → All tasks → a
   task (by its row, or ⌘K when the row is not on screen) → Overview, Review, Code, Chat → in Code: three changed
   files from the tree, Files, a folder, three files from the tree, Changes, ⌘P with a query and Enter, the ref

@@ -1,6 +1,7 @@
 import { describeList } from '../chat/text.ts';
 import {
   type Activity,
+  isTaskSettled,
   listPhaseChecks,
   listRepoChecks,
   listTaskChecks,
@@ -15,6 +16,7 @@ import {
   type UntoldMessage,
 } from '../domain/index.ts';
 import type { CheckNote, ReportCheck, ReviewFinding, TaskCheck } from '../report/types.ts';
+import { resolveCommentedMessage } from './comments.ts';
 
 export function describeRepository(repo: Repo | null) {
   if (!repo) return '';
@@ -59,27 +61,54 @@ export function describeBases(bases: Task[]) {
   return `This task builds on "${only.title}", which is finished. Build on what it left in the base branch.`;
 }
 
-function describeBundleMember(member: Task, task: Task) {
+function quoteBundleTitles(tasks: Task[]) {
+  return describeList(tasks.map((member) => `"${member.title}"`));
+}
+
+function describeBundleMember(member: Task, task: Task, bundle: Task[]) {
   const pullRequest = member.pullRequest ? ` (#${member.pullRequest.number})` : '';
-  return `"${member.title}"${pullRequest}${member.id === task.id ? ', this task' : ''}`;
+  const self = member.id === task.id ? ', this task' : '';
+  const parents = bundle.filter((other) => member.stacksOn?.includes(other.id));
+  const stacked = parents.length > 0 ? `, stacked on ${quoteBundleTitles(parents)}` : '';
+  return `"${member.title}"${pullRequest}${self}${stacked}`;
+}
+
+function describeStackedOn(parents: Task[]) {
+  const [first, ...others] = parents;
+  if (!first) return '';
+  const merged =
+    others.length > 0
+      ? ` The branches of ${quoteBundleTitles(others)} are merged into it too, so your work starts from all of them; your pull request on GitHub also shows their changes until they merge.`
+      : '';
+  const one = parents.length === 1;
+  return [
+    `It is stacked on ${quoteBundleTitles(parents)}: your worktree starts from the branch of "${first.title}" ${first.branch ?? ''} and your pull request is based on that branch.${merged}`,
+    `Build on ${one ? 'its' : 'their'} work; do not redo or undo it. When you find a flaw in ${one ? 'it' : 'one of them'}, tell that task with \`tasks_message\` so its agent fixes it in its own pull request, which is still open.`,
+  ].join(' ');
+}
+
+function describeBundleRole(task: Task, lead: Task | undefined, stacked: boolean) {
+  if (lead?.id === task.id) {
+    return 'This task leads the bundle: its pull request targets the default branch and holds the one merge gate for the whole bundle, which opens once every other task in it is ready and the whole bundle merges into the default branch without conflicts.';
+  }
+  const ready =
+    'Once your pull request is clean this task is ready and merges with the bundle; it gets no merge gate of its own.';
+  if (stacked) return ready;
+  return `Its pull request targets the default branch, and "${lead?.title ?? 'the first task'}" holds the one merge gate for the whole bundle. ${ready}`;
 }
 
 export function describeBundle(task: Task, bundle: Task[]) {
-  const index = bundle.findIndex((member) => member.id === task.id);
-  if (index < 0) return '';
-  const below = bundle[index - 1];
-  const above = bundle[index + 1];
-  const stacked = below && below.stage !== 'merged';
+  if (!bundle.some((member) => member.id === task.id)) return '';
+  const open = bundle.filter((member) => !isTaskSettled(member));
+  const parents = open.filter((member) => task.stacksOn?.includes(member.id));
+  const children = open.filter((member) => member.stacksOn?.includes(task.id));
+  const one = children.length === 1;
   return [
-    `This task is in a bundle of ${bundle.length} tasks that merge together as one GitHub stack, starting with the one into the default branch: ${bundle.map((member) => describeBundleMember(member, task)).join(', ')}.`,
-    stacked
-      ? `It is stacked on "${below.title}": your worktree starts from its branch ${below.branch ?? ''} and your pull request is based on that branch. Build on its work; do not redo or undo it. When you find a flaw in it, tell that task with \`tasks_message\` so its agent fixes it in its own pull request, which is still open. Once your pull request is clean this task is ready and merges with the bundle; it gets no merge gate of its own.`
-      : '',
-    !stacked && above
-      ? 'This task is the root of the bundle: its pull request targets the default branch and holds the one merge gate for the whole bundle, which opens once every task above is ready and the whole bundle merges into the default branch without conflicts.'
-      : '',
-    above
-      ? `"${above.title}" is stacked on this task. Keep fixing CI, review comments and conflicts as usual: the task above takes in what you push.`
+    `This task is in a bundle of ${bundle.length} tasks that merge together as one GitHub stack, each named after the tasks it stacks on: ${bundle.map((member) => describeBundleMember(member, task, bundle)).join('; ')}.`,
+    describeStackedOn(parents),
+    open.length > 1 ? describeBundleRole(task, open[0], parents.length > 0) : '',
+    children.length > 0
+      ? `${quoteBundleTitles(children)} ${one ? 'is' : 'are'} stacked on this task. Keep fixing CI, review comments and conflicts as usual: the ${one ? 'task' : 'tasks'} stacked on it ${one ? 'takes' : 'take'} in what you push.`
       : '',
   ]
     .filter(Boolean)
@@ -294,9 +323,12 @@ function isUntold(task: Task, entry: Activity) {
 export function resolveLaterMessages(task: Task) {
   const round = resolveCurrentRound(task).number;
   const messages = task.activity
-    .filter((entry) => entry.kind === 'message' && entry.detail)
+    .filter((entry) => entry.kind === 'message' && (entry.detail || (entry.comments ?? []).length > 0))
     .filter((entry) => (entry.round ?? 1) === round && !isUntold(task, entry))
-    .map((entry) => `- ${describeSender(entry)}${entry.detail}`);
+    .map(
+      (entry) =>
+        `- ${describeSender(entry)}${resolveCommentedMessage(entry.detail ?? '', entry.comments ?? [])}`
+    );
   if (messages.length === 0) return '';
   return ['', 'The human added since:', ...messages].join('\n');
 }
@@ -304,6 +336,9 @@ export function resolveLaterMessages(task: Task) {
 export function describeUntoldMessages(messages: readonly UntoldMessage[]) {
   return [
     'While this task waited for the human, these messages were left for you. Act on them along with the rest of this turn:',
-    ...messages.map((message) => `- ${SENT_BY[message.sender]}${message.text}`),
+    ...messages.map(
+      (message) =>
+        `- ${SENT_BY[message.sender]}${resolveCommentedMessage(message.text, message.comments ?? [])}`
+    ),
   ].join('\n');
 }

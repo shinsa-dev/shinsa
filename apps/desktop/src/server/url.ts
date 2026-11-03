@@ -14,14 +14,14 @@ function selectOrigin(value: string | undefined) {
   return url?.protocol === 'http:' || url?.protocol === 'https:' ? url.origin : null;
 }
 
+export function resolveConfigHome(env: Env, home: string) {
+  return join(env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'), APP_IDENTITY.configDir);
+}
+
 export function resolveConfigPath(env: Env, home: string) {
   if (env.SHINSA_HOME) return join(env.SHINSA_HOME, 'config.json');
   if (env.SHINSA_DATA_DIR) return join(env.SHINSA_DATA_DIR, 'config.json');
-  return join(
-    env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'),
-    APP_IDENTITY.configDir,
-    'config.json'
-  );
+  return join(resolveConfigHome(env, home), 'config.json');
 }
 
 export function parseConfigPort(text: string | null) {

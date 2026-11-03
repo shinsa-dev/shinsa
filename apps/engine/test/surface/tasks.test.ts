@@ -388,12 +388,12 @@ describe('the task commands', () => {
     ],
     [
       ['tasks', 'stack-on', 'fix', 'search'],
-      { type: 'task.stack_on', taskId: 'task-123', stacksOn: 'task-456' },
-      'Stacked. It starts once the task below is ready to merge.',
+      { type: 'task.stack_on_tasks', taskId: 'task-123', stacksOn: ['task-456'] },
+      'Stacked. It starts once every task below is ready to merge.',
     ],
     [
       ['tasks', 'unstack', 'fix'],
-      { type: 'task.stack_on', taskId: 'task-123', stacksOn: null },
+      { type: 'task.stack_on_tasks', taskId: 'task-123', stacksOn: [] },
       'It is no longer in a bundle.',
     ],
     [

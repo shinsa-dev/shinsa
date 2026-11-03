@@ -17,7 +17,7 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
-import { useShinsaSelector, useTask } from '@/lib/connection/selectors.ts';
+import { useSettings, useTask } from '@/lib/connection/selectors.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import { listShareLimitItems, SHARE_LIMIT_TITLE, type ShareView } from '@/lib/share/dialog.ts';
 import {
@@ -194,7 +194,7 @@ export function PreviewShareView({
 
 function PreviewShareContent({ task, target }: { task: Task; target: PreviewTarget }) {
   const { snapshot } = useRemoteAccess();
-  const settings = useShinsaSelector((state) => state.settings);
+  const settings = useSettings();
   const now = useNow();
   const actions: PreviewShareActions = {
     share: (limit) => sharePreview(target, limit),

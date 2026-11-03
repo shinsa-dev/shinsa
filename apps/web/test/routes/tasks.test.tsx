@@ -3,7 +3,7 @@ import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { TasksPage } from '@/routes/tasks.tsx';
-import { createGate, createShinsaState, createTask } from '../support/state.ts';
+import { createGate, createProject, createShinsaState, createTask } from '../support/state.ts';
 
 const TASKS = createShinsaState({
   tasks: [
@@ -53,7 +53,10 @@ function renderPage(state: ShinsaState = TASKS, path = '/tasks') {
 function groupHeaders() {
   return screen
     .queryAllByRole('button')
-    .filter((button) => button.hasAttribute('aria-expanded') && button.textContent)
+    .filter(
+      (button) =>
+        button.hasAttribute('aria-expanded') && !button.hasAttribute('aria-haspopup') && button.textContent
+    )
     .map((button) => `${button.textContent}|${button.getAttribute('aria-expanded')}`);
 }
 
@@ -117,14 +120,83 @@ describe('the task groups', () => {
   });
 });
 
+describe('the focus', () => {
+  it('lists and counts only the focused project’s tasks', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'mine', title: 'Ship the basket tier', projectId: 'basket' }),
+        createTask({ id: 'shipped', title: 'Old basket work', projectId: 'basket', stage: 'merged' }),
+        createTask({ id: 'other', title: 'Rotate paywall keys', projectId: 'paywall' }),
+      ],
+      projects: [
+        createProject({ id: 'basket', name: 'Basket' }),
+        createProject({ id: 'paywall', name: 'Paywall' }),
+      ],
+    });
+    renderPage({ ...state, focus: { projectId: 'basket', teamId: null, until: null } });
+    expect(screen.getByText('1 open · 1 done')).toBeTruthy();
+    expect(screen.getByText('Ship the basket tier')).toBeTruthy();
+    expect(screen.queryByText('Rotate paywall keys')).toBeNull();
+  });
+});
+
 describe('filtering', () => {
-  it('shows only the status in the URL, opened, with a button that clears it', () => {
+  it('shows only the status in the URL, opened, with a chip that clears it', () => {
     renderPage(TASKS, '/tasks?status=done');
     expect(groupHeaders()).toEqual(['Done1|true']);
     expect(screen.getByText('Rename the settings page')).toBeTruthy();
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Done' })));
+    expect(screen.getByRole('button', { name: 'Change the status filter' }).textContent).toBe('Done');
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Remove the status filter' })));
     expect(location.search).toBe('');
     expect(groupHeaders()).toHaveLength(8);
+  });
+
+  it('shows every chosen status, and Clear all once two fields are filtered', () => {
+    renderPage(TASKS, '/tasks?status=merge,done&priority=normal');
+    expect(groupHeaders()).toEqual(['Ready to merge1|true', 'Done1|true']);
+    expect(screen.getByRole('button', { name: 'Change the status filter' }).textContent).toBe(
+      'Ready to merge, Done'
+    );
+    expect(screen.getByText('is any of')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Filter, 2 on' })).toBeTruthy();
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear all' })));
+    expect(location.search).toBe('');
+  });
+
+  it('ticks a value in the Filter menu into the URL', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    const trigger = await screen.findByRole('menuitem', { name: 'Status' });
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Ready to merge 1' }));
+    expect(location.search).toBe('?status=merge');
+    expect(groupHeaders()).toEqual(['Ready to merge1|true']);
+  });
+
+  it('changes a filter from its chip', async () => {
+    renderPage(TASKS, '/tasks?status=merge');
+    fireEvent.click(screen.getByRole('button', { name: 'Change the status filter' }));
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Done 1' }));
+    expect(location.search).toBe('?status=merge%2Cdone');
+  });
+
+  it('adds another field from the row of chips, offering only the fields not filtered yet', async () => {
+    renderPage(TASKS, '/tasks?priority=normal');
+    fireEvent.click(screen.getByRole('button', { name: 'Add a filter' }));
+    expect(await screen.findByRole('menuitem', { name: 'Status' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /^Priority/ })).toBeNull();
+  });
+
+  it('clears every filter from the Filter menu', async () => {
+    renderPage(TASKS, '/tasks?status=merge');
+    fireEvent.click(screen.getByRole('button', { name: /^Filter/ }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Clear filters' }));
+    expect(location.search).toBe('');
   });
 
   it('ignores a status it does not know', () => {
@@ -161,7 +233,7 @@ describe('filtering', () => {
     renderPage(TASKS, '/tasks?q=nothing-like-this');
     expect(screen.getByText('Nothing matches')).toBeTruthy();
     expect(
-      screen.getByText('Try another word from the title, branch or repository, or clear the filter.')
+      screen.getByText('Try another word from the title, branch or repository, or clear the filters.')
     ).toBeTruthy();
   });
 
@@ -214,9 +286,25 @@ describe('tasks that wait on another task, nested under it', () => {
         waiting('c', 'Step C', ['b']),
         waiting('d', 'Step D', ['c']),
         waiting('e', 'Step E', ['d']),
+        waiting('f', 'Step F', ['e']),
+        waiting('g', 'Step G', ['f']),
+        waiting('h', 'Step H', ['g']),
       ])
     );
-    expect(waitingRows().map(depthOf)).toEqual([1, 2, 3, 3, 3]);
+    const shown = waitingRows();
+    expect(shown.map(depthOf)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    const indents = shown.map((row) => row.querySelector('span')?.className.match(/ps-\d+/)?.[0] ?? '');
+    expect(indents).toEqual(['', 'ps-4', 'ps-8', 'ps-12', 'ps-16', 'ps-20', 'ps-20', 'ps-20']);
+    expect(shown.map((row) => within(row).queryByText(String(depthOf(row))) !== null)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+    ]);
   });
 
   it('puts fan-out siblings side by side under their parent', () => {
@@ -255,21 +343,27 @@ describe('tasks that wait on another task, nested under it', () => {
     expect(shown.map(depthOf)).toEqual([1, 2, 2, 3]);
   });
 
-  it('names every parent in the status column, each a link that opens it', () => {
+  it('names the first parent by its handle and counts the rest, the handle a link that opens it', () => {
     renderPage(
       chain([
         waiting('a', 'Step A', ['root']),
-        waiting('b', 'Step B', ['a']),
-        waiting('c', 'Step C', ['a']),
+        waiting('b', 'Step B', ['a'], { handle: 'LOC-12' }),
+        waiting('c', 'Step C', ['a'], { handle: 'LOC-13' }),
         waiting('d', 'Step D', ['b', 'c']),
       ])
     );
     const joined = rowFor('Step D');
-    expect(joined.textContent).toContain('Waits on Step B, Step C');
+    expect(joined.textContent).toContain('Waits on LOC-12 +1');
+    expect(joined.textContent).not.toContain('Step B');
     const links = within(joined).getAllByRole('link');
-    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/tasks/b', '/tasks/c']);
-    act(() => fireEvent.click(within(joined).getByRole('link', { name: 'Step C' })));
-    expect(location.pathname).toBe('/tasks/c');
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/tasks/LOC-12']);
+    act(() => fireEvent.click(within(joined).getByRole('link', { name: 'Step B' })));
+    expect(location.pathname).toBe('/tasks/LOC-12');
+  });
+
+  it('names a parent without a handle by its title', () => {
+    renderPage(chain([waiting('a', 'Step A', ['root'])]));
+    expect(rowFor('Step A').textContent).toContain('Waits on Root work');
   });
 
   it('says when a parent was cancelled', () => {

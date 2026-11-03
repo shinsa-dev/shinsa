@@ -93,11 +93,17 @@ export function mergeTeamFeeds(feeds: readonly TeamFeedSnapshot[]): TeamFeedSnap
 
 export function listTeamFeedTasks(
   feed: TeamFeedSnapshot,
-  teamId: string,
+  teamIds: ReadonlySet<string>,
   reachable: ReadonlySet<string>
 ): TeamFeedTask[] {
+  const seen = new Set<string>();
   return feed.tasks
-    .filter((task) => task.teamId === teamId && !reachable.has(task.instanceId))
+    .filter((task) => {
+      const key = `${task.instanceId}:${task.task.id}`;
+      if (!teamIds.has(task.teamId) || reachable.has(task.instanceId) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .sort(
       (left, right) =>
         Number(isTaskSettled(left.task)) - Number(isTaskSettled(right.task)) ||
@@ -306,4 +312,37 @@ export class HostedTeamFeeds implements TeamFeedSource {
       },
     });
   }
+}
+
+export interface TeamFeedRefusal {
+  key: string;
+  machine: string;
+  team: string;
+  reason: string;
+}
+
+export const TEAM_FEED_REFUSED = 'It refused to list its tasks.';
+
+export function listTeamFeedRefusals(
+  feed: TeamFeedSnapshot,
+  teams: readonly { id: string; name: string }[],
+  reachable: ReadonlySet<string>,
+  focusTeamId: string | null
+): TeamFeedRefusal[] {
+  const names = new Map(teams.map((team) => [team.id, team.name]));
+  return feed.machines
+    .flatMap((machine): TeamFeedRefusal[] => {
+      const team = names.get(machine.teamId);
+      if (machine.status !== 'refused' || team === undefined || reachable.has(machine.instanceId)) return [];
+      if (focusTeamId !== null && machine.teamId !== focusTeamId) return [];
+      return [
+        {
+          key: resolveMachineKey(machine),
+          machine: machine.name,
+          team,
+          reason: machine.reason ?? TEAM_FEED_REFUSED,
+        },
+      ];
+    })
+    .sort((left, right) => left.machine.localeCompare(right.machine));
 }

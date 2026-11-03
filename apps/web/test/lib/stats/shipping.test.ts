@@ -82,7 +82,7 @@ describe('shipping', () => {
       {
         key: 'lines',
         label: 'Lines merged in 1 file',
-        value: '1,520',
+        value: '1.5k',
         detail: null,
         changes: { added: 1500, removed: 20 },
       },

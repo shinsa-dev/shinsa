@@ -9,7 +9,7 @@ import type { QuickJson } from '../../src/agents/quick/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
 import { createLaunchdService } from '../../src/cli/launchd.ts';
 import { startServer } from '../../src/http/index.ts';
-import { createProjectChanges } from '../../src/projects/routes.ts';
+import { createProjectChanges } from '../../src/projects/changes.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
 import { createClassifier, createCommandRouter } from '../../src/triage/message.ts';
 import { createTestOnboarding, createTestTerminal } from '../helpers/index.ts';

@@ -1,20 +1,23 @@
 import {
   compareTasks,
   type Gate,
+  type GateType,
   isAgentQuestion,
   isDependencyOf,
   isHeldInBacklog,
   isPausingGate,
   isTaskSettled,
   isWatchHome,
+  listBundleBlockers,
   listWaitsOn,
   type ShinsaState,
   selectLeadGate,
-  selectStackParent,
+  listStackParents,
   type Task,
   type TeamFeedTask,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { GATE } from '@/lib/format/labels.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { isMergingWithBundle, selectBundleRoot } from '@/lib/tasks/bundles.ts';
 
@@ -48,27 +51,32 @@ export interface TeamEntry {
   heldAt: number | null;
 }
 
+export interface TaskGroupRow {
+  task: Task;
+  group: TaskGroupKey;
+  team?: TeamEntry;
+}
+
 export interface ChainEntry {
   task: Task;
   depth: number;
   team?: TeamEntry;
 }
 
+function createGateGroup(key: TaskGroupKey, type: GateType): TaskGroup {
+  const { label, icon, tone } = GATE[type];
+  return { key, title: label, icon, tone, defaultOpen: true };
+}
+
 export const TASK_GROUPS: TaskGroup[] = [
-  { key: 'merge', title: 'Ready to merge', icon: 'IconMerged', tone: 'green', defaultOpen: true },
-  { key: 'review', title: 'Changes to review', icon: 'IconEyeOpen', tone: 'amber', defaultOpen: true },
-  { key: 'plan', title: 'Plan to approve', icon: 'IconFileText', tone: 'purple', defaultOpen: true },
-  { key: 'change', title: 'Change to approve', icon: 'IconFileEdit', tone: 'purple', defaultOpen: true },
-  {
-    key: 'operation',
-    title: 'Operation to confirm',
-    icon: 'IconConsole',
-    tone: 'purple',
-    defaultOpen: true,
-  },
-  { key: 'answer', title: 'Needs your answer', icon: 'IconBubbleQuestion', tone: 'blue', defaultOpen: true },
-  { key: 'answered', title: 'Answered', icon: 'IconBubbleCheck', tone: 'blue', defaultOpen: true },
-  { key: 'paused', title: 'Paused', icon: 'IconPause', tone: 'orange', defaultOpen: true },
+  createGateGroup('merge', 'merge'),
+  createGateGroup('review', 'review'),
+  createGateGroup('plan', 'plan'),
+  createGateGroup('change', 'proposal'),
+  createGateGroup('operation', 'operation'),
+  createGateGroup('answer', 'question'),
+  createGateGroup('answered', 'result'),
+  createGateGroup('paused', 'failure'),
   { key: 'working', title: 'In progress', icon: 'IconRobot', tone: 'blue', defaultOpen: true },
   { key: 'snoozed', title: 'Snoozed', icon: 'IconClockSnooze', tone: 'neutral', defaultOpen: false },
   { key: 'backlog', title: 'Backlog', icon: 'IconArchive', tone: 'neutral', defaultOpen: true },
@@ -143,18 +151,28 @@ export function describeWaitsOn(waitsOn: Task[]) {
   return `Waits on ${titles.slice(0, 2).join(', ')} and ${titles.length - 2} more`;
 }
 
-function listChainParents(state: ShinsaState, task: Task) {
-  const parents = listWaitsOn(state, task);
-  const below = selectStackParent(state, task);
-  if (!below || isTaskSettled(below) || parents.includes(below)) return parents;
-  return [...parents, below];
+export function describeBundleWait(state: ShinsaState, task: Task) {
+  const blockers = listBundleBlockers(state, task);
+  return blockers.length > 0 ? describeWaitsOn(blockers) : null;
 }
 
-function createChainLevels(state: ShinsaState, tasks: Task[]) {
+function listChainParents(state: ShinsaState, task: Task) {
+  const parents = listWaitsOn(state, task);
+  const below = listStackParents(state, task).filter(
+    (parent) => !isTaskSettled(parent) && !parents.includes(parent)
+  );
+  return [...parents, ...below];
+}
+
+export interface ChainOrder {
+  parents: (task: Task) => Task[];
+  compare: (a: Task, b: Task) => number;
+}
+
+function createChainLevels(tasks: Task[], order: ChainOrder) {
   const inGroup = new Map(tasks.map((task) => [task.id, task]));
   const depth = new Map<string, number>();
-  const listParents = (task: Task) =>
-    listChainParents(state, task).flatMap((parent) => inGroup.get(parent.id) ?? []);
+  const listParents = (task: Task) => order.parents(task).flatMap((parent) => inGroup.get(parent.id) ?? []);
   const resolveDepth = (task: Task, path: ReadonlySet<string>): number => {
     const known = depth.get(task.id);
     if (known !== undefined) return known;
@@ -168,8 +186,12 @@ function createChainLevels(state: ShinsaState, tasks: Task[]) {
   return { listParents, levelOf: (task: Task) => resolveDepth(task, new Set()) };
 }
 
-export function orderChains(state: ShinsaState, tasks: Task[]): ChainEntry[] {
-  const { listParents, levelOf } = createChainLevels(state, tasks);
+export function orderChains(
+  state: ShinsaState,
+  tasks: Task[],
+  order: ChainOrder = { parents: (task) => listChainParents(state, task), compare: compareTasks }
+): ChainEntry[] {
+  const { listParents, levelOf } = createChainLevels(tasks, order);
   const arrange = (rank: (task: Task) => number) => {
     const children = new Map<string, Task[]>();
     const roots: Task[] = [];
@@ -188,12 +210,12 @@ export function orderChains(state: ShinsaState, tasks: Task[]): ChainEntry[] {
       if (seen.has(task.id)) return;
       seen.add(task.id);
       ordered.push({ task, depth: levelOf(task) });
-      for (const child of (children.get(task.id) ?? []).sort(compareTasks)) visit(child);
+      for (const child of (children.get(task.id) ?? []).sort(order.compare)) visit(child);
     };
-    for (const root of roots.sort(compareTasks)) visit(root);
+    for (const root of roots.sort(order.compare)) visit(root);
     return ordered;
   };
-  const byPriority = tasks.slice().sort(compareTasks);
+  const byPriority = tasks.slice().sort(order.compare);
   const first = arrange((task) => byPriority.indexOf(task));
   const shown = first.map((entry) => entry.task.id);
   return arrange((task) => shown.indexOf(task.id));
@@ -242,41 +264,30 @@ function mergeTeamEntries(key: TaskGroupKey, own: ChainEntry[], team: TeamEntry[
   return [...merged, ...waiting];
 }
 
-function matchesSearch(state: ShinsaState, task: Task, needle: string) {
-  const repo = task.repoId ? (state.repos[task.repoId]?.name ?? '') : '';
-  return `${task.title} ${task.request} ${task.branch ?? ''} ${repo}`.toLowerCase().includes(needle);
-}
-
 export function listTaskGroupSections(
   state: ShinsaState,
-  search: string,
-  status: TaskGroupKey | null,
-  team: readonly TeamEntry[] = []
+  rows: readonly TaskGroupRow[],
+  statuses: readonly string[] = []
 ) {
-  const needle = search.trim().toLowerCase();
   const grouped = new Map<TaskGroupKey, Task[]>(TASK_GROUPS.map((group) => [group.key, []]));
-  for (const task of Object.values(state.tasks)) {
-    if (isWatchHome(task)) continue;
-    if (!needle || matchesSearch(state, task, needle)) grouped.get(resolveTaskGroup(state, task))?.push(task);
-  }
   const teamGrouped = new Map<TaskGroupKey, TeamEntry[]>(TASK_GROUPS.map((group) => [group.key, []]));
-  for (const entry of team) {
-    const people = `${entry.entry.owner ?? ''} ${entry.entry.machine ?? ''}`.toLowerCase();
-    if (!needle || matchesSearch(entry.state, entry.entry.task, needle) || people.includes(needle))
-      teamGrouped.get(resolveTaskGroup(entry.state, entry.entry.task))?.push(entry);
+  for (const row of rows) {
+    if (row.team) teamGrouped.get(row.group)?.push(row.team);
+    else grouped.get(row.group)?.push(row.task);
   }
-  return TASK_GROUPS.filter((group) => status === null || group.key === status).map((group) => ({
-    group,
-    entries: mergeTeamEntries(
-      group.key,
-      orderTaskGroup(state, group.key, grouped.get(group.key) ?? []),
-      teamGrouped.get(group.key) ?? []
-    ),
-  }));
+  return TASK_GROUPS.filter((group) => statuses.length === 0 || statuses.includes(group.key)).map(
+    (group) => ({
+      group,
+      entries: mergeTeamEntries(
+        group.key,
+        orderTaskGroup(state, group.key, grouped.get(group.key) ?? []),
+        teamGrouped.get(group.key) ?? []
+      ),
+    })
+  );
 }
 
-export function describeTaskCounts(state: ShinsaState) {
-  const tasks = Object.values(state.tasks).filter((task) => !isWatchHome(task));
+export function describeTaskCounts(tasks: readonly Task[]) {
   const open = tasks.filter((task) => !isTaskSettled(task)).length;
   const done = tasks.filter((task) => task.stage === 'merged' || task.stage === 'done').length;
   return `${open} open · ${done} done`;

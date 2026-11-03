@@ -157,7 +157,7 @@ describe('compact queue', () => {
     const state = createShinsaState({
       tasks: [
         createTask({ id: 'root', title: 'Add the schema', stage: 'shipping', bundleReady: { commit: 'a' } }),
-        createTask({ id: 'top', title: 'Add the screen', stage: 'reviewing', stacksOn: 'root' }),
+        createTask({ id: 'top', title: 'Add the screen', stage: 'reviewing', stacksOn: ['root'] }),
       ],
       gates: [createGate({ id: 'g-top', taskId: 'top', type: 'review' })],
     });

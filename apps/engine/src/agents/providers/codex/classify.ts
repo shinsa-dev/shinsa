@@ -1,12 +1,11 @@
 import type { RunFailure, RunFailureClass } from '@shinsa/core';
+import { MAX_MESSAGE } from '../schema.ts';
 
 export interface CodexTurnError {
   message?: string | null;
   codexErrorInfo?: unknown;
   additionalDetails?: string | null;
 }
-
-const MAX_MESSAGE = 500;
 
 const SIGNED_OUT = 'Codex is signed out. Run `codex login` in a terminal and sign in again.';
 

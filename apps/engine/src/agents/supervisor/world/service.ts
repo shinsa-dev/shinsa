@@ -10,6 +10,7 @@ import type { ServerConfig } from '../../../config/index.ts';
 import { describeError } from '../../../log/index.ts';
 import type { Engine } from '../../../runtime/engine.ts';
 import type { DispatchOptions } from '../../../runtime/engine/schema.ts';
+import type { WorktreeRoot } from '../../../workspaces/index.ts';
 import type { AccountLeasing } from '../../accounts.ts';
 import type { ProviderRegistry } from '../../providers/index.ts';
 import type { Transcripts } from '../../transcripts/index.ts';
@@ -19,6 +20,7 @@ export class RunWorld extends Context.Service<
   RunWorld,
   {
     readonly config: ServerConfig;
+    readonly worktreeRoot: WorktreeRoot;
     readonly transcripts: Transcripts;
     readonly providers: ProviderRegistry;
     readonly leasing: AccountLeasing;
@@ -33,6 +35,7 @@ export class RunWorld extends Context.Service<
   static layer(world: {
     engine: Engine;
     config: ServerConfig;
+    worktreeRoot: WorktreeRoot;
     transcripts: Transcripts;
     providers: ProviderRegistry;
     leasing: AccountLeasing;
@@ -42,6 +45,7 @@ export class RunWorld extends Context.Service<
       RunWorld,
       RunWorld.of({
         config: world.config,
+        worktreeRoot: world.worktreeRoot,
         transcripts: world.transcripts,
         providers: world.providers,
         leasing: world.leasing,

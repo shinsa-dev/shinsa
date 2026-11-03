@@ -1,6 +1,6 @@
 import type { Project, Repo, ReportCheck, ReviewFinding, ShinsaState, Task, WorkReport } from '@shinsa/core';
 import { createSampleGate, createSampleState, createSampleTask, MINUTE } from '@/routes/ui/samples.ts';
-import { lineOf, SHINSA_TASK_ID } from './demo-repo.ts';
+import { lineOf, resolveLineSpan, SHINSA_TASK_ID } from './demo-repo.ts';
 import { listReviewEvidence } from './evidence-scene.ts';
 import { BADGE_PATH, ROW_PATH, TINT_CHANGES, TONE_PATH } from './tint-code.ts';
 
@@ -9,10 +9,6 @@ const ROW = TINT_CHANGES[ROW_PATH].after;
 const BADGE = TINT_CHANGES[BADGE_PATH].after;
 
 const TONE = TINT_CHANGES[TONE_PATH].after;
-
-function span(content: string, from: string, to: string) {
-  return { start: lineOf(content, from), end: lineOf(content, to) };
-}
 
 const PROJECT: Project = {
   id: 'shinsa',
@@ -62,7 +58,7 @@ const REPORT: WorkReport = {
       spots: [
         {
           file: ROW_PATH,
-          ...span(ROW, 'function KindMark', 'TONE_TEXT[resolveTaskStatus'),
+          ...resolveLineSpan(ROW, 'function KindMark', 'TONE_TEXT[resolveTaskStatus'),
           attention: 'high',
           title: 'The mark reads the row’s status',
           explain:
@@ -71,7 +67,11 @@ const REPORT: WorkReport = {
         },
         {
           file: ROW_PATH,
-          ...span(ROW, '<KindMark state={state} task={task} />', '<KindMark state={state} task={task} />'),
+          ...resolveLineSpan(
+            ROW,
+            '<KindMark state={state} task={task} />',
+            '<KindMark state={state} task={task} />'
+          ),
           attention: 'normal',
           why: 'The one caller passes the state through.',
         },
@@ -84,7 +84,7 @@ const REPORT: WorkReport = {
       spots: [
         {
           file: BADGE_PATH,
-          ...span(BADGE, 'const tone = resolvePullRequestTone', 'TONE_SURFACE_HOVER[tone]'),
+          ...resolveLineSpan(BADGE, 'const tone = resolvePullRequestTone', 'TONE_SURFACE_HOVER[tone]'),
           attention: 'high',
           title: 'Surface and hover from one tone',
           explain:
@@ -93,7 +93,7 @@ const REPORT: WorkReport = {
         },
         {
           file: TONE_PATH,
-          ...span(TONE, 'export const TONE_SURFACE_HOVER', "purple: 'hover:bg-purple-a3"),
+          ...resolveLineSpan(TONE, 'export const TONE_SURFACE_HOVER', "purple: 'hover:bg-purple-a3"),
           attention: 'normal',
           why: 'One hover step per tone, beside the surfaces it belongs to.',
         },

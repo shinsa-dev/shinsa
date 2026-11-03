@@ -118,6 +118,7 @@ export type {
   OnboardingStepId,
   RootSuggestion,
   RootSuggestions,
+  WorktreeUsage,
 } from './onboarding.ts';
 export {
   ONBOARDING_REQUEST_LIMIT,

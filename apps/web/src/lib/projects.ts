@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type CoverageSetting,
   lowerFirst,
   PROJECT_COLORS,
@@ -26,7 +27,7 @@ import {
 } from '@/lib/connection/projects.ts';
 import { sendCommand } from '@/lib/connection/socket.ts';
 import { changeCoverage } from '@/lib/coverage.ts';
-import { formatCount } from '@/lib/format/count.ts';
+import { formatNumber } from '@/lib/format/count.ts';
 import { changeWorkspace } from '@/lib/workspaces.ts';
 
 export type ProjectField = 'name' | 'key' | 'description';
@@ -208,7 +209,7 @@ export function validateProjectDraft(
   const keyProblem = fields.includes('key') && key ? describeKeyProblem(state, key, projectId) : null;
   if (keyProblem) errors.key = keyProblem;
   if (fields.includes('description') && draft.description.trim().length > PROJECT_LIMITS.description) {
-    errors.description = `Use ${PROJECT_LIMITS.description.toLocaleString('en-US')} characters or fewer.`;
+    errors.description = `Use ${formatNumber(PROJECT_LIMITS.description)} characters or fewer.`;
   }
   return { ok: Object.keys(errors).length === 0, errors };
 }
@@ -258,7 +259,7 @@ export function listRepoChoiceGroups(
 }
 
 export function describeProjectRemoval(project: Project, repoCount: number) {
-  const repos = formatCount(repoCount, 'repository', 'repositories');
+  const repos = describeCount(repoCount, 'repository', 'repositories');
   return {
     title: `Remove ${project.name}?`,
     body:

@@ -6,7 +6,7 @@ import { record } from './write.ts';
 
 type FeedbackEvent = Extract<ShinsaEvent, { type: 'feedback.recorded' | 'feedback.removed' }>;
 
-function applyRecorded(state: ShinsaState, event: EventOf<'feedback.recorded'>) {
+function applyFeedbackRecorded(state: ShinsaState, event: EventOf<'feedback.recorded'>) {
   const isNew = !state.feedback[event.entry.id];
   writeEntry(state, 'feedback', event.entry.id, event.entry);
   if (!isNew || event.entry.source !== 'agent' || !event.entry.taskId) return;
@@ -22,7 +22,7 @@ function applyRecorded(state: ShinsaState, event: EventOf<'feedback.recorded'>) 
 export function applyFeedbackEvent(state: ShinsaState, event: FeedbackEvent) {
   switch (event.type) {
     case 'feedback.recorded':
-      applyRecorded(state, event);
+      applyFeedbackRecorded(state, event);
       return;
     case 'feedback.removed':
       removeEntry(state, 'feedback', event.feedbackId);

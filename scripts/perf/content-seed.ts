@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { EventLog } from '../../apps/engine/src/store/index.ts';
 import type { ChatEvent, Run, ShinsaEvent, ShinsaEventInput } from '../../packages/core/src/index.ts';
 import { CHAT_PROTOCOL_VERSION } from '../../packages/core/src/index.ts';
+import { MINUTE } from '../kit/time.ts';
 import { buildLongRun, LONG_CHAT_TASK, listScaledTasks, type ScaledTask } from './content-scale.ts';
 
 const DATA = Bun.argv[2];
@@ -14,7 +15,6 @@ if (!DATA) {
   process.exit(1);
 }
 
-const MINUTE = 60_000;
 const NOW = Date.now();
 
 function listTemplates(events: ShinsaEvent[]) {

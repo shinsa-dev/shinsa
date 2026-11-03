@@ -1,4 +1,4 @@
-import { launch } from './content-cdp.ts';
+import { launchChromium } from '../kit/chromium/index.ts';
 import { PROBE } from './content-probe.ts';
 
 const BASE = Bun.argv[2] ?? 'http://localhost:5661';
@@ -32,7 +32,7 @@ interface TraceEvent {
   pid: number;
 }
 
-const browser = await launch();
+const browser = await launchChromium(1280, 900);
 try {
   const { page } = browser;
   await page.send('Page.enable');

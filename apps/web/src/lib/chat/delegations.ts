@@ -1,18 +1,18 @@
 import {
+  describeCount,
   capitalise,
   type DelegatedRun,
   type DelegationStatus,
   describeDelegateRole,
   isDelegatedRun,
+  isOfCurrentRound,
   listChildRuns,
   listDelegatedRuns,
   type Run,
-  resolveCurrentRound,
   resolveDelegationStatus,
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
-import { formatCount } from '@/lib/format/count.ts';
 import type { Status } from '@/lib/tasks/status.ts';
 
 export interface DelegationView {
@@ -98,9 +98,8 @@ export function listDelegationTree(state: ShinsaState, taskId: string) {
 }
 
 export function listRoundDelegationTree(state: ShinsaState, task: Task) {
-  const round = resolveCurrentRound(task).number;
-  const roots = listRootDelegations(state, task.id).filter(
-    (run) => (state.runs[run.delegation.parentRunId]?.round ?? 1) === round
+  const roots = listRootDelegations(state, task.id).filter((run) =>
+    isOfCurrentRound(task, state.runs[run.delegation.parentRunId] ?? {})
   );
   return listTreeUnder(state, roots);
 }
@@ -140,7 +139,7 @@ export function describeParkedRun(run: Run): Status | null {
   const count = run.waitingOn?.delegations.length ?? 0;
   return {
     label:
-      count > 0 ? `Waiting for ${formatCount(count, 'delegation', 'delegations')}` : STATUS.waiting.label,
+      count > 0 ? `Waiting for ${describeCount(count, 'delegation', 'delegations')}` : STATUS.waiting.label,
     tone: 'blue',
   };
 }

@@ -39,3 +39,7 @@ export function resolveShippingFailure(step: ShippingStepKind, error: unknown, n
 export function createEffectFailed(message: string) {
   return new EffectFailed({ message, detail: message, retryable: true, delayMs: null });
 }
+
+export function createFinalFailure(message: string) {
+  return new EffectFailed({ message, detail: message, retryable: false, delayMs: null });
+}

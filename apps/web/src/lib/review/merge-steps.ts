@@ -2,8 +2,10 @@ import {
   type ChecklistItem,
   isTaskComplete,
   isTaskSettled,
-  listBundleAbove,
+  listBundleFollowers,
+  listDuePostMergeSteps,
   listMergeSteps,
+  listOpenMergeSteps,
   type MergeStepKind,
   type MergeStepTiming,
   type MergeStepView,
@@ -42,37 +44,29 @@ export function listTimedSteps(task: Task, when: MergeStepTiming) {
   return listMergeSteps(task).filter((step) => step.when === when);
 }
 
-export function countOpenSteps(task: Task, when: MergeStepTiming) {
-  return listTimedSteps(task, when).filter((step) => !step.done).length;
-}
-
 export function resolveMergeLabel(state: Pick<ShinsaState, 'tasks'>, task: Task, fallback: string) {
-  const above = listBundleAbove(state, task).filter((member) => member.pullRequest).length;
+  const above = listBundleFollowers(state, task).filter((member) => member.pullRequest).length;
   if (above > 0) return `Merge ${above + 1} pull requests`;
   return task.pullRequest ? `Merge #${task.pullRequest.number}` : fallback;
 }
 
 export function describeMergeBlock(task: Task) {
-  const open = countOpenSteps(task, 'pre_merge');
+  const open = listOpenMergeSteps(task, 'pre_merge').length;
   if (open === 0) return null;
   return open === 1 ? 'Tick the pre-merge step first' : `Tick the ${open} pre-merge steps first`;
 }
 
-function countDuePostMergeSteps(task: Task) {
-  return listTimedSteps(task, 'post_merge').filter((step) => step.due && !step.done).length;
-}
-
 export function describePreMergeStatus(task: Task) {
-  const open = countOpenSteps(task, 'pre_merge');
+  const open = listOpenMergeSteps(task, 'pre_merge').length;
   return open === 0 ? null : `Pre-merge · ${formatSteps(open)} left`;
 }
 
 export function describePostMergeStatus(task: Task) {
-  return `Post-merge · ${formatSteps(countDuePostMergeSteps(task))} left`;
+  return `Post-merge · ${formatSteps(listDuePostMergeSteps(task).length)} left`;
 }
 
 export function describePostMergeTitle(task: Task) {
-  return `Merged. ${formatSteps(countDuePostMergeSteps(task))} left to do.`;
+  return `Merged. ${formatSteps(listDuePostMergeSteps(task).length)} left to do.`;
 }
 
 export function resolveTickBlock(task: Task, step: MergeStepView) {
@@ -97,8 +91,8 @@ function linkTask(task: Task) {
 }
 
 function listBundleWaits(state: Pick<ShinsaState, 'tasks'>, task: Task): MergeWaitView[] {
-  return listBundleAbove(state, task).map((above) => {
-    const open = countOpenSteps(above, 'pre_merge');
+  return listBundleFollowers(state, task).map((above) => {
+    const open = listOpenMergeSteps(above, 'pre_merge').length;
     return {
       key: `bundle:${above.id}`,
       taskId: above.id,

@@ -32,6 +32,13 @@ export function createOnboardingStatus(overrides: Partial<OnboardingStatus['root
     completedAt: completed ? 1 : null,
     roots: { source: 'configured', configured: [], fromEnvironment: [], effective: [], ...overrides },
     defaults: { model: 'opus', mergeMethod: 'squash' },
+    worktrees: {
+      effective: '/h/data/worktrees',
+      configured: null,
+      default: '/h/data/worktrees',
+      fromEnvironment: null,
+      problem: null,
+    },
     paths: {
       home: '/h/.config/shinsa',
       configPath: '/h/config.json',
@@ -41,10 +48,16 @@ export function createOnboardingStatus(overrides: Partial<OnboardingStatus['root
   } satisfies OnboardingStatus;
 }
 
+export function createWorktreesStatus(worktrees: Partial<OnboardingStatus['worktrees']>) {
+  const status = createOnboardingStatus();
+  return { ...status, worktrees: { ...status.worktrees, ...worktrees } } satisfies OnboardingStatus;
+}
+
 export function createSuggestions(paths: [string, number][]): RootSuggestions {
   return {
     suggestions: paths.map(([path, repoCount]) => ({ path, repoCount, repos: [], chosen: false })),
     truncated: false,
+    refused: [],
   };
 }
 

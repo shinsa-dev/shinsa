@@ -73,4 +73,18 @@ describe('a delegation’s own checkout', () => {
     expect(await git(repo.path, 'worktree', 'list')).not.toContain(join('delegations', 'task-1', 'run-1'));
     await removeIsolatedWorktrees(repo, worktreesDir, 'task-2');
   });
+
+  test('a task’s checkouts are removed even when the worktree folder changed since they were made', async () => {
+    const { repo, head, worktreesDir } = await createCheckoutRepo();
+    const earlier = await createIsolatedWorktree(repo, worktreesDir, 'task-1', 'run-1', head);
+    const kept = await createIsolatedWorktree(repo, worktreesDir, 'task-2', 'run-1', head);
+    const current = createTempDir('shinsa-worktrees-');
+    await removeIsolatedWorktrees(repo, current, 'task-1');
+    expect(existsSync(earlier)).toBe(false);
+    expect(existsSync(join(worktreesDir, 'delegations', 'task-1'))).toBe(false);
+    expect(existsSync(kept)).toBe(true);
+    const listed = await git(repo.path, 'worktree', 'list');
+    expect(listed).not.toContain(join('delegations', 'task-1'));
+    expect(listed).toContain(join('delegations', 'task-2'));
+  });
 });

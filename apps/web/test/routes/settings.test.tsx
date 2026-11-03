@@ -231,7 +231,7 @@ describe('Settings stats', () => {
       patch: { focus: { projectId: 'p1', teamId: null, until: null } },
     });
     const view = await renderSettings('/settings?tab=statistics', focused);
-    expect(screen.getAllByText('Only Parser, the project in focus')).toHaveLength(3);
+    expect(screen.getAllByText('Only Parser, the project in focus')).toHaveLength(4);
     expect(document.querySelectorAll('[data-task="t1"]').length).toBe(1);
     expect(document.querySelectorAll('[data-task="t2"]').length).toBe(0);
     view.rerender(

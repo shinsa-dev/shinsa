@@ -13,6 +13,7 @@ import type { UpgradeRefusal } from '../remote/gate/schema.ts';
 import { TunnelGate } from '../remote/gate/service.ts';
 import type { ChannelPeer, Remote, RemoteChannel } from '../remote/index.ts';
 import type { PreviewRelay, PreviewUpgrade } from '../remote/previews.ts';
+import { POLICY_VIOLATION } from '../remote/schema.ts';
 import { edgeRuntime } from '../runtime/edge.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import { createTerminalSockets, readTerminalSocketId, type TerminalSocketData } from '../terminals/index.ts';
@@ -310,7 +311,7 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
       return {
         receive: () => {
           relay.close();
-          peer.close(1008, 'A team view only listens.');
+          peer.close(POLICY_VIOLATION, 'A team view only listens.');
         },
         close: () => relay.close(),
       };

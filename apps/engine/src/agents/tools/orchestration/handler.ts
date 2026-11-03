@@ -19,7 +19,7 @@ import {
   validateSplit,
 } from '@shinsa/core';
 import { assertProtocol } from '../../handover.ts';
-import { findForkSource } from '../forks.ts';
+import { findForkSource, findStackParent } from '../forks.ts';
 import { DEFAULT_ROLE, type OrchestrationCall } from './schema.ts';
 
 function resolveDefaultRole(parent: Run): DelegateRole {
@@ -258,6 +258,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       thisWaits: request.thisTaskWaits,
       afterThis: request.afterThis,
       stackOnThis: request.stackOnThis,
+      stackOn: request.stackOn.map((reference) => findStackParent(call.state(), reference)),
       backlog: request.backlog,
     },
     resolveCommandId(call, 'create_task', request.requestKey)

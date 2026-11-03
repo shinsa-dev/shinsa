@@ -1,5 +1,6 @@
 import type { SDKAssistantMessage, SDKRateLimitInfo, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { RunFailure, RunFailureClass } from '@shinsa/core';
+import { MAX_MESSAGE } from '../schema.ts';
 
 type TurnStatus = 'completed' | 'failed' | 'interrupted';
 
@@ -14,8 +15,6 @@ export interface TurnEvidence {
   accountProblem: { code: string; message: string } | null;
   assistantError: string | null;
 }
-
-const MAX_MESSAGE = 500;
 
 const UNKNOWN_SESSION =
   /no conversation found with session id|unknown session|session .* not found|not a valid UUID|--resume requires a valid session|is not a UUID|does not match any session title/i;

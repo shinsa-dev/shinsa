@@ -85,6 +85,10 @@ function mergePresence(parts: FleetPart[]) {
   return presence;
 }
 
+function mergeKeyed<K extends 'away' | 'focusHistory'>(parts: FleetPart[], key: K) {
+  return Object.assign({}, ...parts.map((part) => part.state[key] ?? {})) as WireState[K];
+}
+
 export function listSharedHandles(parts: FleetPart[]) {
   const seen = new Map<string, string>();
   const shared = new Set<string>();
@@ -114,6 +118,8 @@ export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
     taskNumbers: Object.assign({}, ...parts.map((part) => part.state.taskNumbers)),
     onBehalfActions: parts.flatMap((part) => part.state.onBehalfActions),
     presence: mergePresence(parts),
+    away: mergeKeyed(parts, 'away'),
+    focusHistory: mergeKeyed(parts, 'focusHistory'),
   };
   for (const key of FLEET_RECORDS) Object.assign(state, { [key]: mergeRecords(parts, key) });
   return { state, owners, sharedHandles };

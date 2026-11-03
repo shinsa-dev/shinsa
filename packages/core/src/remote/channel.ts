@@ -1,3 +1,4 @@
+import { isText, parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, parseBase64Url, serializeBase64Url } from './bytes.ts';
 
 export const CHANNEL_BODY_CHUNK_BYTES = 256 * 1024;
@@ -22,10 +23,6 @@ export type ChannelMessage =
   | { t: 'terminal-close'; id: string; code: number; reason: string };
 
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']);
-
-function isText(value: unknown): value is string {
-  return typeof value === 'string';
-}
 
 function isHeaders(value: unknown): value is ChannelHeaders {
   return (
@@ -75,13 +72,8 @@ function readTerminalMessage(id: string, fields: Record<string, unknown>): Chann
 }
 
 export function parseChannelMessage(text: string): ChannelMessage | null {
-  try {
-    const value: unknown = JSON.parse(text);
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-    return readMessage(value as Record<string, unknown>);
-  } catch {
-    return null;
-  }
+  const fields = parseJsonRecord(text);
+  return fields ? readMessage(fields) : null;
 }
 
 export function serializeChannelMessage(message: ChannelMessage) {

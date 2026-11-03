@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type CodeSpot,
   type Coverage,
   type DiffFile,
@@ -15,7 +16,6 @@ import {
   type WorkReport,
 } from '@shinsa/core';
 import { resolveShortPath } from '@/lib/chat/tool-describe.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { stripInlineMarkdown } from '@/lib/format/markdown.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { describeCommentLines, type LineComment } from '@/lib/review/draft.ts';
@@ -362,7 +362,7 @@ export function describeAgentReview(findings: readonly ReviewFinding[]) {
   if (findings.length === 0) return 'Found nothing to fix.';
   const counts = listSeverityCounts(findings);
   if (counts.length === 1) return `Found ${counts[0]} ${findings.length === 1 ? 'finding' : 'findings'}.`;
-  return `Found ${formatCount(findings.length, 'finding', 'findings')}: ${counts.join(', ')}.`;
+  return `Found ${describeCount(findings.length, 'finding', 'findings')}: ${counts.join(', ')}.`;
 }
 
 function countLabel(items: readonly ReviewItem[], ...labels: string[]) {
@@ -378,7 +378,7 @@ export function describePointCount(items: readonly ReviewItem[]) {
     [calls, calls === 1 ? 'judgement call' : 'judgement calls'],
     [countLabel(items, DISPUTED_LABEL.label), 'disputed by the agent review'],
   ].flatMap(([count, label]) => (Number(count) > 0 ? [`${count} ${label}`] : []));
-  const total = formatCount(items.length, 'point', 'points');
+  const total = describeCount(items.length, 'point', 'points');
   return detail.length > 0 ? `${total} to read, ${detail.join(', ')}.` : `${total} to read.`;
 }
 

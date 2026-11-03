@@ -14,11 +14,12 @@ import type { ModelSource } from '../agents/index.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
 import type { ConfigStore, ServerConfig } from '../config/index.ts';
 import type { JsonObject } from '../http/schema.ts';
-import { createProjectChanges } from '../projects/routes.ts';
+import { createProjectChanges } from '../projects/changes.ts';
 import type { LoginResolver, Roots } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
 import { refreshInstallFolders } from '../shell/login.ts';
+import { WorktreeRoot } from '../workspaces/index.ts';
 import type { AccountSource } from './accounts.ts';
 import { type FlowContext, OnboardingSetup } from './flow.ts';
 import {
@@ -42,6 +43,7 @@ import type { ProjectRevision } from './schema.ts';
 import { createSetupSimulation } from './simulate.ts';
 import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 import { resolveHelpRequest, resolveWelcomeBody } from './welcome.ts';
+import { measureWorktreeUsage, resolveChosenWorktreesDir, resolveWorktreesStatus } from './worktrees.ts';
 
 export type { AccountSource, ClaudeAccount } from './accounts.ts';
 export { createSummaryAccountSource } from './accounts.ts';
@@ -59,6 +61,7 @@ export interface OnboardingContext {
   models: ModelSource;
   accounts: AccountSource;
   terminals?: InstallTerminals;
+  worktreeRoot?: WorktreeRoot;
 }
 
 const MODEL_ID = /^[\w.[\]-]{1,100}$/;
@@ -96,9 +99,17 @@ export class Onboarding {
   readonly #projects: ProjectSetup;
   readonly #run: CommandRunner;
   readonly #scripts: InstallScripts;
+  readonly #worktreeRoot: WorktreeRoot;
 
   constructor(context: OnboardingContext) {
     this.#context = context;
+    this.#worktreeRoot =
+      context.worktreeRoot ??
+      new WorktreeRoot({
+        defaultDir: context.config.worktreesDir,
+        fromEnvironment: context.config.worktreesDirFromEnvironment,
+        readConfigured: () => context.store.config.worktreesDir,
+      });
     const run = context.run ?? runCommand;
     const simulation =
       context.config.simulateMissing.length > 0
@@ -146,6 +157,7 @@ export class Onboarding {
         model: engine.state.settings.defaultModel,
         mergeMethod: engine.state.settings.mergeMethod,
       },
+      worktrees: resolveWorktreesStatus(this.#worktreeRoot, config),
       paths: {
         home: config.home,
         configPath: config.configPath,
@@ -156,13 +168,13 @@ export class Onboarding {
   }
 
   async listSuggestions(refresh: boolean): Promise<RootSuggestions> {
-    const { candidates, truncated } = await this.#context.roots.discover(refresh);
+    const { candidates, truncated, refused } = await this.#context.roots.discover(refresh);
     const chosen = new Set(this.#context.roots.configured);
     const suggestions = candidates.map((candidate) => ({
       ...candidate,
       chosen: chosen.has(candidate.path),
     }));
-    return { suggestions, truncated };
+    return { suggestions, truncated, refused };
   }
 
   async applySetup(fields: JsonObject, commandId?: string) {
@@ -176,6 +188,28 @@ export class Onboarding {
     }
     this.#context.store.update({ roots });
     return this.resolveStatus();
+  }
+
+  async applyWorktreesDir(fields: JsonObject) {
+    const { config, store } = this.#context;
+    if (config.worktreesDirFromEnvironment) {
+      throw new DomainError({
+        code: 'worktrees_from_environment',
+        message:
+          'SHINSA_WORKTREES_DIR chooses the worktree folder on this machine, so it cannot be changed here.',
+      });
+    }
+    store.update({ worktreesDir: resolveChosenWorktreesDir(fields.path, config.userHome) });
+    return await this.resolveStatus();
+  }
+
+  resolveWorktreeUsage() {
+    return measureWorktreeUsage(
+      this.#worktreeRoot.path,
+      this.#context.engine.state.tasks,
+      this.#run,
+      Date.now()
+    );
   }
 
   async complete() {

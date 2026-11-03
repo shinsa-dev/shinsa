@@ -273,6 +273,13 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   inside each section. This is the page to open each day and work down. A task can be told to
   wait for others from here, from the task page and from ⌘K, and the new-task box's When to start offers
   Auto start, Start now, After another task… (a search over every open task, several at once) and Backlog.
+  It follows your focus: a focused project lists only that project's tasks (a teammate's when its repository has the same
+  remote as one of yours, or its project the same name, since each machine names its projects itself), a focused team only that team's,
+  yours and your teammates', and with no focus it lists yours and those of every team you are in. The Filter
+  button narrows it by status, owner, team, project, repository, kind and priority, several values each; every
+  filter shows as a chip you can remove, lives in the page's address so a link keeps it, and ⌘K offers the same
+  filters. A teammate task whose machine is offline carries an offline icon after its status, and one lock icon after the
+  heading's counts says which teammate machines refuse to list their tasks, and why.
 - **The backlog.** Work you want written down and planned now, but built later, waits in the backlog. It is
   triaged (a clean title, the repository, the kind of task, a priority) and planned, which costs a small share of a
   task, and then stops: its plan stays out of Needs you, the queue, the guide and the Dock badge, and shows in the
@@ -346,7 +353,15 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   Shinsa counts in full, an hour with nothing from you for 6 hours either side counts nothing, and any other hour counts
   as much as you are usually active at that hour of the week over the last 8 weeks (`state.presence`, your own actions
   per hour, kept a year; `stats/presence.ts`), so a question asked at 23:00 and answered at 08:30 is a short wait and a
-  week away counts nothing (`resolveTurnaround`, `stats/turnaround.ts`). Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
+  week away counts nothing (`resolveTurnaround`, `stats/turnaround.ts`). Two rules cut a wait further, both strict so
+  they never flatter you. Time away from your Mac counts nothing: the Mac app counts you away from 10 minutes after your
+  last keyboard or mouse input, or from your last input before the screen locked or the Mac slept, until your next
+  input (`AwayWatch` in `apps/desktop/src/away/`), and sends each span through the page as `away.record`
+  (`state.away`); a span in which you answered or messaged any task, from your phone say, does not count. A focus on
+  a project sets aside the tasks of every other project from 30 minutes into the focus until it ends
+  (`state.focusHistory`, `listSetAside`), so a quick switch changes nothing, and a task you answered or messaged
+  during that focus is not set aside by it. A wait set aside counts nothing on your clock, and a set-aside task does
+  not count as going at once; agent time never changes. Your attention, under it: tasks at once is the median, weighted by time on your clock, of how many tasks had a round going (a shipped round waiting for its merge counts, paused time and time with nothing going do not), with the peak beside it; then, over the same finished rounds, the median of your inputs per round (gates you answered and messages you sent, `TaskTiming.inputs`; a review approved ahead, a scheduled message, a request for new work and anything sent on your behalf or by a guest do not count), the median agent time per input, the share of hands-off rounds (only plan, review and merge approvals), the share with a question (an agent asked you something or asked for a secret), messages per round as an average (most rounds take none) and the share of rounds whose first review you approved (`resolveAttention`, `stats/attention.ts`). Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
   input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that
   used the most. Counts and costs stay compact as they grow (15.4k, 3.3B, 1.2T tokens; $12.34, then $15.4K): token
   counts everywhere drop a trailing `.0` and move up a unit rather than read 1000k, and costs keep cents under $1,000. Lines added show in green and lines removed in red, as in a diff. All of it is folded from the event log in core (`resolveStats`); lines
@@ -563,7 +578,9 @@ Built and verified end to end against a scratch repository:
 - **Code-first review.** A task page has three tabs: Overview, Code and Chat. Code's review view is a
   split: the walkthrough on the left (sections, or every spot ranked by attention, then agent findings,
   judgement calls, checks), the code on the right with the whole file as context, the spot spotlit,
-  findings inline, line comments, Previous spot and Next spot to step. Its changes view is a file tree
+  findings inline, line comments, Previous spot and Next spot to step. Since 2026-11-03 you comment on a line or a
+  selected range at any stage where the task takes a message, edit or remove the comment, and send the comments to
+  the agent from the Code tab's Line comments bar or with any message (`task.message` with `comments`). Its changes view is a file tree
   and the full diff. Since 2026-10-24 Code is a workbench (Review, Changes, Files and Search, tabs, ⌘P quick open,
   find, go to line, a ref picker) on CodeMirror, reading every file from git at a pinned commit, so a merged task
   keeps its code; since 2026-10-25 you edit it directly (Direct editing in the Code tab, below; `docs/design.md`, 32;
@@ -1189,7 +1206,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   teammate task it lists, so an offline task opens whole, marked as a copy; a teammate machine that never fetched it
   shows the title and status.
 - **Focus on a team.** The focus menu says Your work instead of All work, then your projects, then Teams. A focused
-  team's All tasks lists your teammates' tasks among yours, in the same groups, with an Owner column; Home stays
+  team's All tasks lists only that team's tasks, your teammates' among yours, in the same groups, with an Owner
+  column; with no focus it lists every team's, and the Owner and Team filters narrow it. Home stays
   yours alone. They never count towards Needs you, since they never wait for you. A machine a teammate also gave you remote access to shows as your own, with
   full control, never twice.
 - **For agents.** The engine serves the team's tasks at `GET /api/teams/tasks`, which triage's team-wide duplicate
@@ -1197,10 +1215,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 ### Bundles (2026-11-01)
 
-- **A stack of pull requests, as tasks.** A task can stack on another (Stack on another task… in the composer's When
-  to start, the Waits on menu, `•••`, ⌘K, `shinsa tasks stack-on`, `create_task`'s `stack_on_this`): it waits until
-  that task is ready to merge, not merged, then branches off its branch, and its pull request targets that branch, so
-  GitHub shows the stack. A bundle is one line in one repository (`docs/engine.md` → Bundles).
+- **A stack of pull requests, as tasks.** A task can stack on other tasks (Stack on another task… in the composer's
+  When to start, the Waits on menu, `•••`, ⌘K, `shinsa tasks stack-on`, `create_task`'s `stack_on_this` and
+  `stack_on`): it waits until each is ready to merge, not merged, then branches off the first one's branch with the
+  others merged in, and its pull request targets the first, so GitHub shows the stack. A bundle is a graph in one
+  repository: tasks fan out from one and back in to one, as freely as waits (`docs/engine.md` → Bundles).
 - **Why not just wait.** The only difference from a dependency is that the bundle merges together. That buys three
   things: the next task starts sooner; a flaw a later task finds in the root is fixed in the root's still-open pull
   request instead of a follow-up on top of a merged one (the stacked task's agent messages the task below); and each

@@ -1,9 +1,15 @@
-export function formatCount(count: number, one: string, many: string) {
-  return `${count} ${count === 1 ? one : many}`;
+import { describeCount } from '@shinsa/core';
+
+export function formatNumber(value: number) {
+  return value.toLocaleString('en-US');
+}
+
+export function formatPercent(rate: number | null) {
+  return rate === null ? 'None' : `${Math.round(rate * 100)}%`;
 }
 
 export function formatSteps(count: number) {
-  return formatCount(count, 'step', 'steps');
+  return describeCount(count, 'step', 'steps');
 }
 
 export function formatLineRange(start: number, end: number) {
@@ -14,7 +20,9 @@ export function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
   const kilobytes = Math.round(size / 1024);
   if (kilobytes < 1024) return `${kilobytes} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  const megabytes = size / (1024 * 1024);
+  if (megabytes < 1023.95) return `${megabytes.toFixed(1)} MB`;
+  return `${(megabytes / 1024).toFixed(1)} GB`;
 }
 
 export function endSentence(text: string) {

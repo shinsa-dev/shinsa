@@ -18,13 +18,13 @@ function formatCompact(value: number, thousand: 'k' | 'K') {
   return `${Math.round(value / 1e12)}T`;
 }
 
-export function formatTokenCount(count: number) {
+export function formatCompactCount(count: number) {
   if (count < 1_000) return String(count);
   return formatCompact(count, 'k');
 }
 
 export function formatTokens(count: number) {
-  return `${formatTokenCount(count)} tokens`;
+  return `${formatCompactCount(count)} tokens`;
 }
 
 export function formatCompactUsd(value: number) {

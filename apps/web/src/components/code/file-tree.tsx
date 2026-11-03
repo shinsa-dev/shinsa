@@ -8,7 +8,7 @@ import { TREE_LIST, TREE_ROW_HEIGHT, TreeRow } from '@/components/code/tree-row.
 import { VirtualRows } from '@/components/settings/virtual-rows.tsx';
 import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
 import { CODE_MARKS, markCode, measureCode } from '@/lib/code/marks.ts';
-import { scheduleIdle } from '@/lib/code/prefetch.ts';
+import { schedulePrefetch } from '@/lib/code/prefetch.ts';
 import {
   isTreeSettled,
   listAncestors,
@@ -72,7 +72,7 @@ export function FileTree({
   latestPrefetch.current = onPrefetch;
   React.useEffect(
     () =>
-      scheduleIdle(() => {
+      schedulePrefetch(() => {
         for (const path of neighbours.split('\n')) if (path) latestPrefetch.current(path);
       }),
     [neighbours]
@@ -87,7 +87,7 @@ export function FileTree({
   latestFolderPrefetch.current = onPrefetchFolder;
   React.useEffect(
     () =>
-      scheduleIdle(() => {
+      schedulePrefetch(() => {
         for (const dir of closedFolders.split('\n')) if (dir) latestFolderPrefetch.current(dir);
       }),
     [closedFolders]

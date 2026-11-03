@@ -125,9 +125,11 @@ const FEATURE_ROUTES = {
     'GET /api/teams/tasks',
   ],
   'review.approve_after_fix': [],
+  'message.line_comments': [],
   changelog: ['GET /api/changelog'],
   'remote.terminals': [],
   attention: [],
+  'worktree-root': ['POST /api/onboarding/worktrees', 'GET /api/onboarding/worktrees/usage'],
 };
 
 const LOCAL_ONLY = [
@@ -158,6 +160,7 @@ const OWNER_ONLY = [
   'POST /api/onboarding/setup',
   'POST /api/onboarding/privacy',
   'POST /api/onboarding/flow',
+  'POST /api/onboarding/worktrees',
   'POST /api/accounts/refresh',
   'POST /api/accounts/login',
   'POST /api/accounts/login/code',

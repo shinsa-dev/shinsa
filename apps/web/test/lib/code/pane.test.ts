@@ -137,8 +137,8 @@ describe('listKeptLines', () => {
     expect(
       listKeptLines(
         [
-          { kind: 'composer', key: 'c', side: 'new', line: 4, start: 4, endLine: null },
-          { kind: 'composer', key: 'o', side: 'old', line: 9, start: 9, endLine: null },
+          { kind: 'composer', key: 'c', side: 'new', line: 4, start: 4, endLine: null, editing: null },
+          { kind: 'composer', key: 'o', side: 'old', line: 9, start: 9, endLine: null, editing: null },
         ],
         [{ key: 's', from: 10, to: 12, tone: 'red', label: 'Critical', selected: false }],
         20,

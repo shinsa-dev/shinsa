@@ -295,6 +295,18 @@ describe('merging the state of several machines', () => {
     expect(merged?.owners.has('10')).toBe(false);
   });
 
+  it('keeps your time away and focus from every machine, and reads a machine that sends none as none', () => {
+    const { away: _, focusHistory: __, ...older } = createWire(1);
+    const focus = { projectId: 'p', from: 5, to: null, until: null };
+    const merged = mergeFleetStates([
+      { id: 'm1', state: createWire(1, { away: { '1': { from: 1, to: 2 } } }) },
+      { id: 'm2', state: createWire(1, { away: { '3': { from: 3, to: 4 } }, focusHistory: { '5': focus } }) },
+      { id: 'm3', state: older as WireState },
+    ]);
+    expect(merged?.state.away).toEqual({ '1': { from: 1, to: 2 }, '3': { from: 3, to: 4 } });
+    expect(merged?.state.focusHistory).toEqual({ '5': focus });
+  });
+
   it('is open when any machine is, connecting while one still tries, and closed otherwise', () => {
     expect(resolveFleetStatus(['closed', 'open'])).toBe('open');
     expect(resolveFleetStatus(['closed', 'connecting'])).toBe('connecting');

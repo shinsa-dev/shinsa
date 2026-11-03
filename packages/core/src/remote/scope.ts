@@ -81,7 +81,7 @@ function redactAccount<T extends RunAccount | null | undefined>(account: T): T {
   return (account ? { id: account.id, email: null } : account) as T;
 }
 
-function redactTask(task: Task): Task {
+function redactTaskAccounts(task: Task): Task {
   const { share: _share, previews: _previews, account, usageWait, handoff, ...rest } = task;
   return {
     ...rest,
@@ -91,7 +91,7 @@ function redactTask(task: Task): Task {
   };
 }
 
-function redactRun(run: Run): Run {
+function redactRunAccounts(run: Run): Run {
   return {
     ...run,
     ...(run.account === undefined ? {} : { account: redactAccount(run.account) }),
@@ -102,7 +102,7 @@ function redactRun(run: Run): Run {
   };
 }
 
-function redactGate(gate: Gate): Gate {
+function redactGateAccount(gate: Gate): Gate {
   return gate.account === undefined ? gate : { ...gate, account: redactAccount(gate.account) };
 }
 
@@ -122,9 +122,9 @@ export function resolveScopedState(state: ShinsaState, taskId: string): ShinsaSt
   const project = task.projectId ? state.projects[task.projectId] : undefined;
   return {
     ...scoped,
-    tasks: { [task.id]: redactTask(task) },
-    runs: mapRecords(pickRecords(state.runs, taskId), redactRun),
-    gates: mapRecords(pickRecords(state.gates, taskId), redactGate),
+    tasks: { [task.id]: redactTaskAccounts(task) },
+    runs: mapRecords(pickRecords(state.runs, taskId), redactRunAccounts),
+    gates: mapRecords(pickRecords(state.gates, taskId), redactGateAccount),
     evidence: pickRecords(state.evidence, taskId),
     repos: repo ? { [repo.id]: repo } : {},
     projects: project ? { [project.id]: project } : {},

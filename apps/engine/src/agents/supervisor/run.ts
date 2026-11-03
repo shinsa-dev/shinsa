@@ -16,7 +16,7 @@ import { type AgentProvider, type AgentSessionResult, resolveCapabilities } from
 import { resolveTurnBrief } from '../turns/plan.ts';
 import { prepareAndDrive, resolveDelegatedResult } from './drive.ts';
 import { RunHost } from './host/service.ts';
-import { EditsNotSetAside, NO_WORKTREE, type Turn, type Workspace } from './schema.ts';
+import { EditsNotSetAside, NO_RUN_WORKTREE, type Turn, type Workspace } from './schema.ts';
 import { markInterrupted, quiesceTask } from './stop.ts';
 import { isSharedCheckout, prepareWorkspace, resolveWorkspace } from './workspace.ts';
 import { RunWorld } from './world/service.ts';
@@ -161,8 +161,8 @@ export const executeRun = Effect.fn('RunSupervisor.execute')(function* (
     return;
   }
   const task = state.tasks[run.taskId];
-  const workspace = task ? resolveWorkspace(state, world.config, run, task) : null;
-  if (!task || !workspace) return yield* endRun(runId, { outcome: 'failed', summary: NO_WORKTREE }, null);
+  const workspace = task ? resolveWorkspace(state, world, run, task) : null;
+  if (!task || !workspace) return yield* endRun(runId, { outcome: 'failed', summary: NO_RUN_WORKTREE }, null);
   const delegated = isDelegatedRun(run);
   const provider = world.providers.resolve(
     delegated ? run.provider : resolveAgentProvider(state.settings, RUN_AGENT_ROLE[run.role])

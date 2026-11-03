@@ -21,18 +21,13 @@ import type { Slack } from '../../../slack/index.ts';
 import { EvidenceStore } from '../../../store/evidence/index.ts';
 import type { TriageResolver } from '../../../triage/index.ts';
 import type { RepositoryFinder } from '../../../triage/message.ts';
-import { Workspaces } from '../../../workspaces/index.ts';
+import { WorktreeRoot, Workspaces } from '../../../workspaces/index.ts';
+import { NO_WORKTREE } from '../../../workspaces/schema.ts';
 import type { Engine } from '../../engine.ts';
 import type { DispatchOptions } from '../../engine/schema.ts';
 import { createEffectFailed, resolveEffectFailure } from '../../failures/classify.ts';
 import type { EffectFailed, EffectFailure } from '../../failures/schema.ts';
-import {
-  type EffectRunnerOptions,
-  NO_WORKTREE,
-  TASK_GONE,
-  type TaskServices,
-  WATCH_INTERVAL,
-} from '../schema.ts';
+import { type EffectRunnerOptions, TASK_GONE, type TaskServices, WATCH_INTERVAL } from '../schema.ts';
 
 export class EffectWorld extends Context.Service<
   EffectWorld,
@@ -137,7 +132,9 @@ export class EffectWorld extends Context.Service<
         roots: options.roots ?? { listRoots: () => Promise.resolve(config.roots) },
         watchInterval:
           options.watchIntervalMs === undefined ? WATCH_INTERVAL : Duration.millis(options.watchIntervalMs),
-        workspaces: options.workspaces ?? new Workspaces({ worktreesDir: config.worktreesDir }),
+        workspaces:
+          options.workspaces ??
+          new Workspaces({ root: new WorktreeRoot({ defaultDir: config.worktreesDir }) }),
         services: options.services ?? null,
         shares: options.shares,
         previews: options.previews,

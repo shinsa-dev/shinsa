@@ -86,28 +86,55 @@ describe('what a prompt says about the work it builds on', () => {
   test('a task in a bundle is told where it sits, what is below it and what is stacked on it', () => {
     const harness = createHarness();
     const root = createTask(harness, { request: 'Root work' });
-    const middle = createTask(harness, { request: 'Middle work', stacksOn: root });
-    const top = createTask(harness, { request: 'Top work', stacksOn: middle });
+    const middle = createTask(harness, { request: 'Middle work', stacksOn: [root] });
+    const top = createTask(harness, { request: 'Top work', stacksOn: [middle] });
     const bundle = [root, middle, top].map((id) => harness.task(id));
     const [rootTask, middleTask, topTask] = bundle;
     if (!rootTask || !middleTask || !topTask) throw new Error('missing task');
     const prompt = describeRound(middleTask, null, [], 0, bundle);
     expect(prompt).toContain(
-      'This task is in a bundle of 3 tasks that merge together as one GitHub stack, starting with the one into the default branch: "Root work", "Middle work", this task, "Top work".'
+      'This task is in a bundle of 3 tasks that merge together as one GitHub stack, each named after the tasks it stacks on: "Root work"; "Middle work", this task, stacked on "Root work"; "Top work", stacked on "Middle work".'
     );
-    expect(prompt).toContain('It is stacked on "Root work": your worktree starts from its branch');
+    expect(prompt).toContain(
+      'It is stacked on "Root work": your worktree starts from the branch of "Root work"'
+    );
     expect(prompt).toContain('tell that task with `tasks_message`');
     expect(prompt).toContain('"Top work" is stacked on this task.');
     expect(prompt).toContain('it gets no merge gate of its own');
-    expect(prompt).not.toContain('root of the bundle');
+    expect(prompt).not.toContain('leads the bundle');
     const rootPrompt = resolvePlanningPrompt(rootTask, null, [], null, bundle);
     expect(rootPrompt).not.toContain('It is stacked on');
     expect(rootPrompt).toContain('"Middle work" is stacked on this task.');
-    expect(rootPrompt).toContain('This task is the root of the bundle');
+    expect(rootPrompt).toContain('This task leads the bundle');
     const merged = [{ ...rootTask, stage: 'merged' as const, pullRequest: null }, middleTask, topTask];
     expect(describeRound(topTask, null, [], 0, merged)).not.toContain('"Top work" is stacked');
-    expect(describeRound(middleTask, null, [], 0, merged)).toContain('This task is the root of the bundle');
+    expect(describeRound(middleTask, null, [], 0, merged)).toContain('This task leads the bundle');
     expect(describeRound(topTask, null, [], 0)).not.toContain('bundle');
+  });
+
+  test('a task stacked on several is told about every branch, and a second root that it does not hold the gate', () => {
+    const harness = createHarness();
+    const lead = createTask(harness, { request: 'Lead work' });
+    const other = createTask(harness, { request: 'Other root' });
+    const join = createTask(harness, { request: 'Join work', stacksOn: [lead, other] });
+    const top = createTask(harness, { request: 'Top work', stacksOn: [join] });
+    const second = createTask(harness, { request: 'Second top', stacksOn: [join] });
+    const bundle = [lead, other, join, top, second].map((id) => harness.task(id));
+    const [, otherTask, joinTask] = bundle;
+    if (!otherTask || !joinTask) throw new Error('missing task');
+    const prompt = describeRound(joinTask, null, [], 0, bundle);
+    expect(prompt).toContain('"Join work", this task, stacked on "Lead work" and "Other root"');
+    expect(prompt).toContain(
+      'It is stacked on "Lead work" and "Other root": your worktree starts from the branch of "Lead work"'
+    );
+    expect(prompt).toContain('The branches of "Other root" are merged into it too');
+    expect(prompt).toContain('Build on their work');
+    expect(prompt).toContain(
+      '"Top work" and "Second top" are stacked on this task. Keep fixing CI, review comments and conflicts as usual: the tasks stacked on it take in what you push.'
+    );
+    expect(describeRound(otherTask, null, [], 0, bundle)).toContain(
+      'Its pull request targets the default branch, and "Lead work" holds the one merge gate for the whole bundle.'
+    );
   });
 
   test('a stacked task starts from the unmerged branch, and its review diffs against it', () => {

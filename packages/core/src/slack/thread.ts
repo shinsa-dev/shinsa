@@ -1,6 +1,6 @@
 import { SLACK_LIMITS, type SlackMention, type SlackThreadMessage } from './schema.ts';
 
-function serializeLine(
+function serializeThreadMessage(
   message: Pick<SlackThreadMessage, 'userName' | 'text'> & { bot?: boolean },
   note: string | null
 ) {
@@ -21,10 +21,10 @@ function listBudgetedLines(lines: string[], budget: number) {
 }
 
 export function serializeSlackThread(mention: SlackMention) {
-  const last = serializeLine(mention, 'mentioning you');
+  const last = serializeThreadMessage(mention, 'mentioning you');
   const earlier = mention.thread
     .filter((message) => message.ts !== mention.messageTs)
-    .map((message) => serializeLine(message, null));
+    .map((message) => serializeThreadMessage(message, null));
   const kept = listBudgetedLines(earlier, SLACK_LIMITS.threadChars - last.length);
   const dropped = earlier.length - kept.length;
   return [...(dropped > 0 ? [`(${dropped} earlier messages left out)`] : []), ...kept, last].join('\n');

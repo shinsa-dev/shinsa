@@ -2,6 +2,8 @@ import { Effect, Layer, Logger, Option, PubSub, Queue, Stream } from 'effect';
 import { HttpClient, HttpClientError, HttpClientResponse } from 'effect/http';
 import { TestClock } from 'effect/testing';
 import { AppLifecycle } from '../../src/app/service.ts';
+import type { PowerEvent } from '../../src/away/schema.ts';
+import { AwayWatch } from '../../src/away/service.ts';
 import type { DesktopStart } from '../../src/bridge/schema.ts';
 import { PageBridge } from '../../src/bridge/service.ts';
 import { CommandLine } from '../../src/command-line/service.ts';
@@ -27,6 +29,7 @@ import type { DesktopNotice, NoticeEvent } from '../../src/notifications/schema.
 import { Notifications } from '../../src/notifications/service.ts';
 import type { PageMessage } from '../../src/page-channel/schema.ts';
 import { PageChannel } from '../../src/page-channel/service.ts';
+import { PowerMonitor } from '../../src/power-monitor/service.ts';
 import { Prefs } from '../../src/prefs/service.ts';
 import { EngineServer } from '../../src/server/service.ts';
 import type { AboutPanel, ShellEvent, ShellGuards } from '../../src/shell/schema.ts';
@@ -98,6 +101,8 @@ export interface DesktopWorld {
   links: Map<string, string>;
   shellPath: (program: string) => string | null;
   shells: string[];
+  idleMs: number;
+  powerEvents: Queue.Queue<PowerEvent> | null;
 }
 
 export const CONTENTS_ID = 7;
@@ -138,6 +143,8 @@ export function createWorld(overrides: Partial<DesktopWorld> = {}): DesktopWorld
     noticeEvents: [],
     window: [],
     sent: [],
+    idleMs: 0,
+    powerEvents: null,
     fullScreen: false,
     bounds: { x: 10, y: 20, width: 900, height: 700 },
     history: { urls: [], active: 0 },
@@ -449,6 +456,17 @@ function makeNativeLayer(world: DesktopWorld) {
       })
     ),
     Layer.effect(
+      PowerMonitor,
+      Effect.gen(function* () {
+        const events = yield* Queue.unbounded<PowerEvent>();
+        world.powerEvents = events;
+        return PowerMonitor.of({
+          idleMs: Effect.sync(() => world.idleMs),
+          events: Stream.fromQueue(events),
+        });
+      })
+    ),
+    Layer.effect(
       PageChannel,
       Effect.gen(function* () {
         const messages = yield* Queue.unbounded<PageMessage>();
@@ -486,6 +504,7 @@ function makeDesktopLayer(world: DesktopWorld) {
   return Layer.mergeAll(
     AppLifecycle,
     PageBridge,
+    AwayWatch,
     AppMenu.layer,
     StatusTray.layer,
     EngineSupervisor.layer,

@@ -390,6 +390,7 @@ export interface UntoldMessage {
   at: number;
   text: string;
   sender: 'agent' | 'schedule';
+  comments?: ReviewComment[];
 }
 
 export interface UndeliveredMessage {
@@ -460,8 +461,8 @@ export interface Task {
   pullRequestWatch?: PullRequestWatch | null;
   pullRequestReadFailures?: number;
   waitsOn: string[];
-  stacksOn?: string | null;
-  stackBase?: string | null;
+  stacksOn?: string[];
+  stackBases?: string[];
   bundleReady?: BundleReady | null;
   bundleConflict?: BundleConflict | null;
   note: string | null;
@@ -595,9 +596,20 @@ export interface TimingSpan {
   to: number;
 }
 
+export interface FocusSpan {
+  projectId: string;
+  from: number;
+  to: number | null;
+  until: number | null;
+}
+
 export interface NeedsYouSpan extends TimingSpan {
   answered: boolean;
 }
+
+export type YourInput =
+  | { at: number; kind: 'message' }
+  | { at: number; kind: 'gate'; gate: GateType; decision: GateDecision };
 
 export interface TaskTiming {
   paused: TimingSpan[];
@@ -605,6 +617,7 @@ export interface TaskTiming {
   needsYou: NeedsYouSpan[];
   needsYouSince: number | null;
   openGates: string[];
+  inputs: YourInput[];
 }
 
 export type BacklogCause = 'you' | 'started' | 'inquiry';

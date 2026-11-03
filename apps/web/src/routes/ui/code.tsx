@@ -113,7 +113,13 @@ function ignore() {}
 
 function renderNote(note: CodeNote) {
   return (
-    <CodeNoteView note={note} onRemove={() => void acknowledgeSample()} onSave={ignore} onCancel={ignore} />
+    <CodeNoteView
+      note={note}
+      onEdit={() => void acknowledgeSample()}
+      onRemove={() => void acknowledgeSample()}
+      onSave={ignore}
+      onCancel={ignore}
+    />
   );
 }
 

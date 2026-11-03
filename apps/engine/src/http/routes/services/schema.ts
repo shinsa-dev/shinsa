@@ -1,8 +1,6 @@
 import { SERVICE_LIMITS } from '@shinsa/core';
 import type { FieldFailure } from '@shinsa/core/engine-api/schema';
 
-export const PROJECT_ID_LIMIT = 200;
-
 export const TASK_ID_LIMIT = 200;
 
 export const SERVICE_LIMIT: FieldFailure = {

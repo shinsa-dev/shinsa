@@ -1,4 +1,11 @@
-import { type PullRequest, type Repo, resolveRoundBase, type ShippingStep, type Task } from '@shinsa/core';
+import {
+  type PullRequest,
+  type Repo,
+  resolveRoundBase,
+  resolveRoundBases,
+  type ShippingStep,
+  type Task,
+} from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { listCheckFailures } from '../../../checks/failures.ts';
 import { hasPrePushHook, PushError, resolveOutputTail } from '../../../git/index.ts';
@@ -31,6 +38,9 @@ export class Shipping extends Context.Service<
         (error: unknown): ShippingFailed =>
           resolveShippingFailure(step, error, world.config.pushRetryMs);
 
+      const resolveStepKey = (step: ShippingStep) =>
+        step.kind === 'updating' ? `updating:${step.base}` : step.kind;
+
       const recordStep = Effect.fn('Shipping.recordStep')(function* (
         taskId: string,
         step: ShippingStep,
@@ -38,16 +48,16 @@ export class Shipping extends Context.Service<
       ) {
         yield* world.dispatch(
           { type: 'pull_request.record_step', taskId, step },
-          { id: `${attempt.key}:${attempt.attempt}:pull_request.record_step:${step.kind}` }
+          { id: `${attempt.key}:${attempt.attempt}:pull_request.record_step:${resolveStepKey(step)}` }
         );
       });
 
-      const updateOntoBase = Effect.fn('Shipping.updateOntoBase')(function* (
+      const updateOnto = Effect.fn('Shipping.updateOnto')(function* (
         task: Task,
         repo: Repo,
+        base: string,
         attempt: EffectAttempt
       ) {
-        const base = resolveRoundBase(task) ?? repo.defaultBranch;
         const update = yield* world.bridgeWith(
           (signal) =>
             world.workspaces.resolve(task).syncBase(repo, task, base, {
@@ -62,6 +72,18 @@ export class Shipping extends Context.Service<
           { id: `${attempt.key}:${attempt.attempt}:pull_request.record_update_conflict` }
         );
         return false;
+      });
+
+      const updateOntoBases = Effect.fn('Shipping.updateOntoBases')(function* (
+        task: Task,
+        repo: Repo,
+        attempt: EffectAttempt
+      ) {
+        const bases = resolveRoundBases(task);
+        for (const base of bases.length > 0 ? bases : [repo.defaultBranch]) {
+          if (!(yield* updateOnto(task, repo, base, attempt))) return false;
+        }
+        return true;
       });
 
       const recordHookFailure = Effect.fn('Shipping.recordHookFailure')(function* (
@@ -108,7 +130,7 @@ export class Shipping extends Context.Service<
       ) {
         yield* world.bridge(() => world.runs.quiesce(task.id));
         yield* edits.commit(task, repo, attempt);
-        if (!(yield* updateOntoBase(task, repo, attempt))) return false;
+        if (!(yield* updateOntoBases(task, repo, attempt))) return false;
         const sha = yield* pushBranch(task, repo, attempt).pipe(Effect.mapError(asShipping('pushing')));
         if (sha === null) return false;
         yield* world.dispatch(

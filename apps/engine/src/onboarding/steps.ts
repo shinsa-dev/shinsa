@@ -111,7 +111,7 @@ const ROOTS: StepDefinition = {
   id: 'roots',
   label: 'Folders',
   view: async (context, _answered, picked) => {
-    const { suggestions } = await context.suggestRoots();
+    const { suggestions, refused } = await context.suggestRoots();
     const configured = new Set(picked.length > 0 ? picked : context.roots);
     const options = suggestions
       .slice(0, MAX_SUGGESTIONS)
@@ -123,6 +123,16 @@ const ROOTS: StepDefinition = {
           configured.has(suggestion.path) || (configured.size === 0 && index === 0)
         )
       );
+    for (const path of refused.slice(0, MAX_SUGGESTIONS)) {
+      options.push(
+        createOption(
+          path,
+          resolveDisplayPath(path, context.userHome),
+          'macOS keeps this folder private',
+          configured.has(path)
+        )
+      );
+    }
     for (const path of configured) {
       if (!options.some((option) => option.value === path)) {
         options.push(createOption(path, resolveDisplayPath(path, context.userHome), null, true));

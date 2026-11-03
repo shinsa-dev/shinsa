@@ -359,7 +359,7 @@ describe('NewTaskForm', () => {
     ]);
   });
 
-  it('stacks the new task on one open task as a bundle', async () => {
+  it('stacks the new task on several open tasks as one bundle, the first one picked as its base', async () => {
     pushProjects(null);
     renderForm();
     fireEvent.click(combobox('When to start'));
@@ -368,10 +368,19 @@ describe('NewTaskForm', () => {
     fireEvent.click(stack);
     fireEvent.click(await screen.findByRole('option', { name: /Fix the schema/ }));
     await waitFor(() => expect(combobox('When to start').textContent).toBe('Stacked on Fix the schema'));
+    fireEvent.click(await screen.findByRole('option', { name: /Count the baskets/ }));
+    await waitFor(() =>
+      expect(combobox('When to start').textContent).toBe('Stacked on Fix the schema and 1 more')
+    );
     fireEvent.change(field(), { target: { value: 'Add the screen on the new schema' } });
     await send('Add');
     expect(listSentCommands()).toEqual([
-      { type: 'task.create', request: 'Add the screen on the new schema', repoId: null, stacksOn: 'base' },
+      {
+        type: 'task.create',
+        request: 'Add the screen on the new schema',
+        repoId: null,
+        stacksOn: ['base', 'basket'],
+      },
     ]);
   });
 

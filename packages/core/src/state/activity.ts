@@ -1,4 +1,4 @@
-import { capitalise, describeList } from '../chat/text.ts';
+import { capitalise, describeCount, describeList, quoteTitle } from '../chat/text.ts';
 import { isBlockingCheck } from '../domain/checks.ts';
 import { resolveTeammateMachineLabel } from '../domain/duplicates.ts';
 import type {
@@ -88,12 +88,12 @@ export function describeDecision(decision: GateDecision, title: string) {
 
 export function describeDependencies(titles: string[]) {
   if (titles.length === 0) return 'Stopped waiting on other tasks';
-  return `Waits on ${titles.map((title) => `“${title}”`).join(', ')}`;
+  return `Waits on ${titles.map(quoteTitle).join(', ')}`;
 }
 
-export function describeStack(parent: string | null) {
-  if (parent === null) return 'Left its bundle';
-  return `Stacked on “${parent}” as a bundle`;
+export function describeStack(parents: string[]) {
+  if (parents.length === 0) return 'Left its bundle';
+  return `Stacked on ${describeList(parents.map((title) => `“${title}”`))} as a bundle`;
 }
 
 export function describeChecks(results: ReportCheck[]) {
@@ -130,7 +130,7 @@ export function describeFindings(findings: ReviewFinding[]) {
   if (findings.length === 0) return 'Agent review found nothing';
   const count = (severity: ReviewFinding['severity']) =>
     findings.filter((finding) => finding.severity === severity).length;
-  const found = `Agent review found ${findings.length} ${findings.length === 1 ? 'issue' : 'issues'}`;
+  const found = `Agent review found ${describeCount(findings.length, 'issue')}`;
   const ranked = [
     count('blocking') > 0 ? `${count('blocking')} blocking` : null,
     count('should_fix') > 0 ? `${count('should_fix')} should fix` : null,
@@ -145,7 +145,7 @@ const ESCALATION_TEXT: Record<ReviewEscalationReason, (rounds: string) => string
 };
 
 export function describeEscalation(escalation: ReviewEscalation) {
-  const rounds = `${escalation.rounds} fix ${escalation.rounds === 1 ? 'round' : 'rounds'}`;
+  const rounds = describeCount(escalation.rounds, 'fix round');
   return `Sent the review to you: ${ESCALATION_TEXT[escalation.reason](rounds)}`;
 }
 
@@ -162,7 +162,7 @@ function describePullRequestChange(change: PullRequestWatchChange) {
     case 'checks_passed':
       return `All ${change.count} ${change.required ? 'required ' : ''}${change.count === 1 ? 'check' : 'checks'} passed on GitHub`;
     case 'remarks':
-      return `${change.total ?? change.remarks.length} new ${(change.total ?? change.remarks.length) === 1 ? 'comment' : 'comments'} on the pull request`;
+      return `${describeCount(change.total ?? change.remarks.length, 'new comment')} on the pull request`;
     case 'conflicting':
       return 'The branch now conflicts with its base';
   }

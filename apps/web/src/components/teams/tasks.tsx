@@ -1,13 +1,12 @@
-import type { ShinsaState, TeamFeedTask } from '@shinsa/core';
+import { resolveFocusTeam, type ShinsaState, type TeamFeedTask } from '@shinsa/core';
 import { Badge } from '@shinsa/ui/components/badge';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
-import { TEAM_ICON } from '@/components/focus/menu.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { UserTag } from '@/components/people/user-tag.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
+import { TeammateOwnerMark } from '@/components/tasks/owner.tsx';
 import { PullRequestBadge } from '@/components/tasks/pull-request-badge.tsx';
 import {
   KindMark,
@@ -18,15 +17,13 @@ import {
 } from '@/components/tasks/row.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useMachines, useRemoteSnapshot, useTeamFeed } from '@/lib/connection/socket.ts';
-import { type FocusTeam, listFocusTeams, selectFocusTeam } from '@/lib/focus.ts';
+import { type FocusTeam, listFocusTeams } from '@/lib/focus.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { formatSince } from '@/lib/format/time.ts';
-import { resolveSharedProfile } from '@/lib/remote/users.ts';
 import type { TeamEntry } from '@/lib/tasks/groups.ts';
 import {
-  describeTeamTaskOwner,
-  describeTeamTaskPlace,
   listHeldTeamMachines,
+  listTeamFeedRefusals,
   listTeamFeedTasks,
   resolveTeamTaskPath,
   resolveTeamTaskState,
@@ -35,65 +32,89 @@ import {
 } from '@/lib/teams/feeds.ts';
 import { navigate } from '@/router.ts';
 
-export interface FocusedTeamTasks {
-  team: FocusTeam;
+export interface TeamTasks {
+  teams: FocusTeam[];
   entries: TeamEntry[];
 }
 
-export function useFocusedTeamTasks(state: ShinsaState): FocusedTeamTasks | null {
-  const team = selectFocusTeam(state, listFocusTeams(useRemoteSnapshot()));
+export function useTeamTasks(): TeamTasks {
+  const remote = useRemoteSnapshot();
+  const teams = React.useMemo(() => listFocusTeams(remote), [remote]);
   const feed = useTeamFeed();
   const machines = useMachines();
-  const teamId = team?.id ?? null;
   const entries = React.useMemo(() => {
-    if (!teamId) return [];
+    if (teams.length === 0) return [];
     const held = listHeldTeamMachines(feed);
-    return listTeamFeedTasks(feed, teamId, new Set(machines.map((machine) => machine.id))).map(
+    const teamIds = new Set(teams.map((team) => team.id));
+    return listTeamFeedTasks(feed, teamIds, new Set(machines.map((machine) => machine.id))).map(
       (entry): TeamEntry => ({
         entry,
         state: resolveTeamTaskState(entry),
         heldAt: selectTeamTaskHeldAt(held, entry),
       })
     );
-  }, [feed, teamId, machines]);
-  return team ? { team, entries } : null;
+  }, [feed, teams, machines]);
+  return { teams, entries };
+}
+
+export function TeamFeedRefusals({ state }: { state: ShinsaState }) {
+  const remote = useRemoteSnapshot();
+  const teams = React.useMemo(() => listFocusTeams(remote), [remote]);
+  const feed = useTeamFeed();
+  const machines = useMachines();
+  const refusals = listTeamFeedRefusals(
+    feed,
+    teams,
+    new Set(machines.map((machine) => machine.id)),
+    resolveFocusTeam(state, Date.now())
+  );
+  const [first] = refusals;
+  if (!first) return null;
+  const label =
+    refusals.length === 1
+      ? `${first.machine} in ${first.team} is not listing its tasks`
+      : `${refusals.length} teammate machines are not listing their tasks`;
+  const detail = refusals
+    .map((refusal) => (refusals.length === 1 ? refusal.reason : `${refusal.machine}: ${refusal.reason}`))
+    .join(' ');
+  return (
+    <Hint label={label} detail={detail}>
+      <span
+        role='img'
+        aria-label={`${label}. ${detail}`}
+        className='grid size-4 shrink-0 cursor-pointer place-items-center'
+      >
+        <Icon size='sm' name='IconLock' className='cursor-pointer text-fg-2' />
+      </span>
+    </Hint>
+  );
 }
 
 function openTeamTask(entry: TeamFeedTask) {
   navigate(resolveTeamTaskPath(resolveTeamTaskTarget(entry)));
 }
 
-function OwnerName({ entry }: { entry: TeamFeedTask }) {
-  if (!entry.owner) return describeTeamTaskOwner(entry);
-  return <UserTag user={resolveSharedProfile(entry.owner, entry.ownerProfile)} />;
-}
-
-function OwnerMark({ entry }: { entry: TeamFeedTask }) {
-  const mark = <Icon size='sm' name={TEAM_ICON} className='shrink-0' />;
-  if (entry.owner)
-    return (
-      <span className='inline-flex min-w-0 items-center gap-1.5 text-fg-2'>
-        <Hint label={describeTeamTaskPlace(entry)}>{mark}</Hint>
-        <Truncate>
-          <OwnerName entry={entry} />
-        </Truncate>
-      </span>
-    );
-  const owner = describeTeamTaskOwner(entry);
+export function OfflineBadge({ heldAt }: { heldAt: number }) {
   return (
-    <Hint label={entry.machine ? `${owner} on ${entry.machine}, read-only` : `${owner}, read-only`}>
-      <span className='inline-flex min-w-0 items-center gap-1.5 text-fg-2'>
-        {mark}
-        <Truncate>{owner}</Truncate>
-      </span>
+    <Hint label={TEAM_MACHINE_OFFLINE_LABEL} detail={formatSince('Updated', heldAt)}>
+      <Badge size='sm'>Offline</Badge>
     </Hint>
   );
 }
 
-export function OfflineBadge({ heldAt }: { heldAt: number }) {
+const TEAM_MACHINE_OFFLINE_LABEL = 'Their machine is offline';
+
+function OfflineMark({ heldAt }: { heldAt: number }) {
+  const updated = formatSince('Updated', heldAt);
   return (
-    <Hint label='Their machine is offline' detail={formatSince('Updated', heldAt)}>
-      <Badge size='sm'>Offline</Badge>
+    <Hint label={TEAM_MACHINE_OFFLINE_LABEL} detail={updated}>
+      <span
+        role='img'
+        aria-label={`${TEAM_MACHINE_OFFLINE_LABEL}. ${updated}.`}
+        className='grid size-4 shrink-0 cursor-pointer place-items-center'
+      >
+        <Icon size='sm' name='IconCloudOff' className='cursor-pointer text-fg-2' />
+      </span>
     </Hint>
   );
 }
@@ -128,18 +149,19 @@ export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }:
         {repo && <RepoMark state={state} repo={repo} />}
         <Truncate>{repo?.name ?? 'No repository'}</Truncate>
       </span>
-      <span className='min-w-0 max-md:hidden'>
-        <OwnerMark entry={entry} />
+      <span className='flex min-w-0 max-md:hidden'>
+        <TeammateOwnerMark entry={entry} />
       </span>
       <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
-        {heldAt === null ? <KindMark state={state} task={task} /> : <OfflineBadge heldAt={heldAt} />}
+        <KindMark state={state} task={task} />
         <RowStatus state={state} task={task} />
+        {heldAt !== null && <OfflineMark heldAt={heldAt} />}
       </span>
       <span className='max-md:hidden'>
         <PullRequestBadge task={task} />
       </span>
       <span className='text-right text-2xs text-fg-2'>
-        <TimeAgo at={task.updatedAt} />
+        <TimeAgo at={task.updatedAt} compact />
       </span>
     </div>
   );

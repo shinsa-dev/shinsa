@@ -69,7 +69,7 @@ function parsePullRequest(rest: string): Reference | null {
   return { kind: 'pr', repo, number };
 }
 
-function parseFile(rest: string): Reference | null {
+function parseFileReference(rest: string): Reference | null {
   const hash = rest.indexOf('#');
   const path = decode(hash < 0 ? rest : rest.slice(0, hash)).replace(/^\/+/, '');
   if (!path || path.split('/').some((segment) => segment === '' || segment === '..')) return null;
@@ -104,7 +104,7 @@ export function parseReference(href: string): Reference | null {
       return BRANCH.test(name) && !name.includes('..') ? { kind: 'branch', name } : null;
     }
     case 'file':
-      return parseFile(rest);
+      return parseFileReference(rest);
     default:
       return null;
   }

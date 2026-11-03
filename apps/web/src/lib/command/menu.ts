@@ -45,10 +45,21 @@ export interface RootMenu {
   state: ShinsaState;
   sections: CommandSection[];
   registered: CommandSection[];
+  decisions: Command[];
   recent: string[];
   currentTaskId: string | null;
   query: string;
   now: number;
+}
+
+export interface TaskEntry {
+  task: Task;
+  keywords: string[];
+}
+
+export interface TaskMatch {
+  task: Task;
+  score: number;
 }
 
 export const TASKS_FRAME: Frame = { kind: 'tasks' };
@@ -56,6 +67,14 @@ export const TASKS_FRAME: Frame = { kind: 'tasks' };
 const RECENT_SHOWN = 5;
 
 const TASKS_SHOWN = 300;
+
+export const TASK_MATCHES_SHOWN = 20;
+
+const JUMP_MATCHES_SHOWN = 100;
+
+export const SECTION_MATCHES_SHOWN = 20;
+
+const TASK_INDEXES = new WeakMap<ShinsaState, TaskEntry[]>();
 
 export const COMPOSE_VALUE = 'compose.submit';
 
@@ -100,11 +119,40 @@ export function listTaskKeywords(state: ShinsaState, task: Task) {
   ];
 }
 
-export function listMenuTasks(state: ShinsaState) {
-  return Object.values(state.tasks)
+export function resolveTaskIndex(state: ShinsaState): TaskEntry[] {
+  const known = TASK_INDEXES.get(state);
+  if (known) return known;
+  const index = Object.values(state.tasks)
     .filter((task) => !isWatchHome(task))
     .sort((a, b) => Number(isTaskSettled(a)) - Number(isTaskSettled(b)) || b.updatedAt - a.updatedAt)
-    .slice(0, TASKS_SHOWN);
+    .map((task) => ({ task, keywords: listTaskKeywords(state, task) }));
+  TASK_INDEXES.set(state, index);
+  return index;
+}
+
+export function listMenuTasks(state: ShinsaState) {
+  return resolveTaskIndex(state)
+    .slice(0, TASKS_SHOWN)
+    .map((entry) => entry.task);
+}
+
+export function listTaskMatches(index: TaskEntry[], query: string): TaskMatch[] {
+  return index
+    .map((entry) => ({
+      task: entry.task,
+      score: scoreCommand(`task:${entry.task.id}`, query, entry.keywords),
+    }))
+    .filter((match) => match.score > 0)
+    .sort((a, b) => b.score - a.score);
+}
+
+export function listJumpEntries(state: ShinsaState, query: string): TaskEntry[] {
+  const index = resolveTaskIndex(state);
+  if (query === '') return index.slice(0, TASKS_SHOWN);
+  const entries = new Map(index.map((entry) => [entry.task.id, entry]));
+  return listTaskMatches(index, query)
+    .slice(0, JUMP_MATCHES_SHOWN)
+    .flatMap((match) => entries.get(match.task.id) ?? []);
 }
 
 export function resolveFirstValue(frame: Frame, tasks: Task[]): string {
@@ -211,28 +259,49 @@ function scoreCommands(query: string, commands: Command[]) {
   );
 }
 
+function listCommandMatches(commands: Command[], query: string) {
+  if (query === '') return commands;
+  return commands
+    .map((command) => ({ command, score: scoreCommand(command.id, query, listCommandKeywords(command)) }))
+    .filter((match) => match.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, SECTION_MATCHES_SHOWN)
+    .map((match) => match.command);
+}
+
 export function listSectionBlocks(sections: CommandSection[], query: string): MenuBlock[] {
   return sections.flatMap((section) => {
-    const commands = section.commands.filter((command) => isCommandShown(command, query !== ''));
+    const commands = listCommandMatches(
+      section.commands.filter((command) => isCommandShown(command, query !== '')),
+      query
+    );
     if (commands.length === 0) return [];
     return [{ kind: 'section', key: section.id, score: scoreCommands(query, commands), section, commands }];
   });
 }
 
+function countMenuTasks(state: ShinsaState) {
+  return Object.values(state.tasks).filter((task) => !isWatchHome(task)).length;
+}
+
 function resolveTasksBlock(menu: RootMenu, listed: ReadonlySet<string>): MenuBlock {
-  const tasks = listMenuTasks(menu.state);
-  if (menu.query === '') return { kind: 'tasks', key: 'tasks', score: 1, tasks: [], total: tasks.length };
+  const total = countMenuTasks(menu.state);
+  if (menu.query === '') return { kind: 'tasks', key: 'tasks', score: 1, tasks: [], total };
+  const matches = listTaskMatches(resolveTaskIndex(menu.state), menu.query);
   const jump = { value: JUMP_VALUE, keywords: JUMP_KEYWORDS };
-  const rows = tasks.map((task) => ({
-    value: `task:${task.id}`,
-    keywords: listTaskKeywords(menu.state, task),
-  }));
   return {
     kind: 'tasks',
     key: 'tasks',
-    score: Math.max(scoreCommands(menu.query, [NEW_TASK_COMMAND]), scoreBest(menu.query, [jump, ...rows])),
-    tasks: tasks.filter((task) => !listed.has(task.id)),
-    total: tasks.length,
+    score: Math.max(
+      scoreCommands(menu.query, [NEW_TASK_COMMAND]),
+      scoreBest(menu.query, [jump]),
+      matches[0]?.score ?? 0
+    ),
+    tasks: matches
+      .filter((match) => !listed.has(match.task.id))
+      .slice(0, TASK_MATCHES_SHOWN)
+      .map((match) => match.task),
+    total,
   };
 }
 
@@ -259,8 +328,7 @@ function listTypedBlocks(sections: CommandSection[], query: string): MenuBlock[]
 
 function listLeadingBlocks(menu: RootMenu, listed: ReadonlySet<string>): MenuBlock[] {
   const recent = listRecentTasks(menu.state, menu.recent, menu.currentTaskId, listed, menu.now);
-  const decisions =
-    menu.query === '' ? [] : listDecisionCommands(menu.state, menu.currentTaskId, menu.registered);
+  const decisions = menu.query === '' ? [] : menu.decisions;
   const blocks: MenuBlock[] = [];
   if (menu.query === '' && recent.length > 0)
     blocks.push({ kind: 'recent', key: 'recent', score: 1, tasks: recent });

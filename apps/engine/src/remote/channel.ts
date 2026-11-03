@@ -27,16 +27,15 @@ import {
 } from '@shinsa/core';
 import type { HubSocket } from '../http/socket.ts';
 import { describeError, log } from '../log/index.ts';
-import { applyTerminalText } from '../terminals/routes.ts';
 import type { TerminalSession, TerminalViewer } from '../terminals/session.ts';
+import { applyTerminalText } from '../terminals/sockets.ts';
+import { POLICY_VIOLATION } from './schema.ts';
 
 const CHANNEL_REQUEST_ORIGIN = 'http://remote.shinsa.internal';
 
 const MAX_OPEN_REQUESTS = 32;
 
 const MAX_INFLATED_FRAME_BYTES = 64 * 1024 * 1024;
-
-const POLICY_VIOLATION = 1008;
 
 const DROPPED = 0;
 

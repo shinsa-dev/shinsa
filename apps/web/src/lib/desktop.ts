@@ -1,4 +1,10 @@
-import { type AttentionPlace, isQuietSurface, type ShinsaBuild, type Surface } from '@shinsa/core';
+import {
+  type AttentionPlace,
+  isQuietSurface,
+  type ShinsaBuild,
+  type Surface,
+  type TimingSpan,
+} from '@shinsa/core';
 import { createContext } from 'react';
 import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
@@ -44,6 +50,7 @@ export interface DesktopBridge {
   onNavigate: (listener: (path: string) => void) => () => void;
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
   onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
+  onAway: (listener: (span: TimingSpan) => void) => () => void;
 }
 
 declare global {
@@ -108,6 +115,10 @@ export function openDesktopNotificationSettings() {
 
 export function subscribeDesktopNotifyFailed(listener: () => void) {
   return selectDesktop()?.onNotifyFailed(listener) ?? (() => undefined);
+}
+
+export function subscribeDesktopAway(listener: (span: TimingSpan) => void) {
+  return selectDesktop()?.onAway(listener) ?? (() => undefined);
 }
 
 const NO_UPDATE: DesktopUpdate = { status: 'none' };

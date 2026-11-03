@@ -9,9 +9,11 @@ export const ENGINE_FEATURES = [
   'feedback',
   'teams',
   'review.approve_after_fix',
+  'message.line_comments',
   'changelog',
   'remote.terminals',
   'attention',
+  'worktree-root',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

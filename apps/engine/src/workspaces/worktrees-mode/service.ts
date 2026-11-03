@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { isLaterRound, type Repo, resolveRoundBase, type Task } from '@shinsa/core';
+import { isLaterRound, type Repo, resolveRoundBases, type Task } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import type { MergeUnresolved } from '../../git/checkout/schema.ts';
 import { Checkout } from '../../git/checkout/service.ts';
@@ -7,12 +7,13 @@ import { Remote } from '../../git/remote/service.ts';
 import type { GitFailed } from '../../git/schema.ts';
 import { Git } from '../../git/service.ts';
 import { requireCheckout } from '../checkout.ts';
+import { assertWorktreeRoot, type WorktreeRoot } from '../root/index.ts';
 import { type CheckoutCommit, NO_BRANCH_YET, TaskCheckoutMissing, type Workspace } from '../schema.ts';
 
 export class WorktreeWorkspaces extends Context.Service<
   WorktreeWorkspaces,
   {
-    make(worktreesDir: string): Workspace;
+    make(root: WorktreeRoot): Workspace;
     commit(path: string, message: string): Effect.Effect<CheckoutCommit, GitFailed | MergeUnresolved>;
   }
 >()('shinsa/engine/workspaces/worktrees-mode/WorktreeWorkspaces') {
@@ -40,7 +41,7 @@ export class WorktreeWorkspaces extends Context.Service<
         } satisfies CheckoutCommit;
       });
 
-      const make = (worktreesDir: string): Workspace => ({
+      const make = (root: WorktreeRoot): Workspace => ({
         mode: 'worktrees',
         prepare: Effect.fn('WorktreeWorkspace.prepare')(function* (
           repo: Repo,
@@ -48,15 +49,21 @@ export class WorktreeWorkspaces extends Context.Service<
           signal?: AbortSignal
         ) {
           const { worktreePath, branch } = task;
+          const [base = null, ...others] = resolveRoundBases(task);
           if (worktreePath && branch && (yield* Effect.sync(() => existsSync(worktreePath)))) {
             if (task.phaseReports.length === 0 && isLaterRound(task))
               yield* checkout.discard(worktreePath, signal);
-            else if (task.phaseReports.length === 0 && !task.pullRequest)
-              yield* checkout.refresh(repo, worktreePath, resolveRoundBase(task), signal);
+            else if (task.phaseReports.length === 0 && !task.pullRequest) {
+              yield* checkout.refresh(repo, worktreePath, base, signal);
+              yield* checkout.mergeBranches(worktreePath, branch, others, signal);
+            }
             return { path: worktreePath, branch };
           }
           if (!branch) return yield* new TaskCheckoutMissing({ message: NO_BRANCH_YET });
-          return yield* checkout.create(repo, worktreesDir, task.id, branch, resolveRoundBase(task), signal);
+          const worktreesDir = yield* assertWorktreeRoot(root.resolve());
+          const created = yield* checkout.create(repo, worktreesDir, task.id, branch, base, signal);
+          yield* checkout.mergeBranches(created.path, created.branch, others, signal);
+          return created;
         }),
         commit: (_repo, task, message) =>
           Effect.flatMap(requireCheckout(task), ({ path }) => commit(path, message)),

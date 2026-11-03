@@ -15,6 +15,7 @@ import {
   requestTaskRefs,
   resolveRefsVersion,
 } from '@/lib/connection/code.ts';
+import { scheduleIdle } from '@/lib/idle.ts';
 import { listCodeModes } from '@/lib/tasks/tabs.ts';
 
 function selectFirstFile(mode: CodeMode, diff: TaskDiff | null): CodeFileRef | null {
@@ -100,19 +101,14 @@ export function prefetchPair(
   build: (source: PairSource) => void
 ) {
   void requestPairSource(task, refs, ref, file, diff).then((source) => {
-    if (source) scheduleIdle(() => build(source));
+    if (source) schedulePrefetch(() => build(source));
   }, skipFailure);
 }
 
 const NEIGHBOUR_DELAY_MS = 300;
 
-export function scheduleIdle(run: () => void) {
-  if (typeof requestIdleCallback === 'function') {
-    const handle = requestIdleCallback(run, { timeout: NEIGHBOUR_DELAY_MS });
-    return () => cancelIdleCallback(handle);
-  }
-  const timer = setTimeout(run, NEIGHBOUR_DELAY_MS);
-  return () => clearTimeout(timer);
+export function schedulePrefetch(run: () => void) {
+  return scheduleIdle(run, NEIGHBOUR_DELAY_MS);
 }
 
 export function prefetchFolder(task: Task, ref: string, dir: string) {

@@ -1,10 +1,7 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { COMPLETION_TIMEOUT_MS, STRUCTURED_TIMEOUT_MS } from '../schema.ts';
 import type { CompletionRequest, StructuredRequest } from '../types.ts';
 import { CLAUDE_RUNTIME, type ClaudeRuntime, resolveClaudeProcess } from './sdk.ts';
-
-const COMPLETION_TIMEOUT_MS = 45_000;
-
-const STRUCTURED_TIMEOUT_MS = 20_000;
 
 export async function requestClaudeCompletion(
   request: CompletionRequest,

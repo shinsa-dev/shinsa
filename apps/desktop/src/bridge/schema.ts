@@ -1,3 +1,4 @@
+import type { AwaySpan } from '../away/schema.ts';
 import type { DesktopNotice } from '../notifications/schema.ts';
 import type { UpdateChannel } from '../updates/schema.ts';
 
@@ -34,6 +35,7 @@ export interface DesktopBridge extends DesktopStart {
   onNavigate: (listener: (path: string) => void) => () => void;
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
   onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
+  onAway: (listener: (span: AwaySpan) => void) => () => void;
 }
 
 export const CHANNELS = {
@@ -49,4 +51,5 @@ export const CHANNELS = {
   checkForUpdates: 'shinsa:check-for-updates',
   updateChannel: 'shinsa:update-channel',
   downgrade: 'shinsa:downgrade',
+  away: 'shinsa:away',
 } as const;

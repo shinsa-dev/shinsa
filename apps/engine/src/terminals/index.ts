@@ -1,5 +1,6 @@
 import {
   DomainError,
+  isTaskSettled,
   SERVICE_LIMITS,
   type ServiceDefinition,
   type ShinsaState,
@@ -8,6 +9,8 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
+import { listReclaimable, resolveLimitMessage } from './limit.ts';
+import { resolveServiceRunIn } from './places.ts';
 import {
   pickFreePort,
   readForegroundProgram,
@@ -17,7 +20,6 @@ import {
   resolveTerminalEnv,
   spawnTerminalProcess,
 } from './pty.ts';
-import { resolveServiceRunIn } from './routes.ts';
 import {
   NOTIFY_MS,
   type RemoteUrlSource,
@@ -212,12 +214,40 @@ export class Terminals {
     return this.#options.newId?.() ?? Bun.randomUUIDv7();
   }
 
-  #open(start: TerminalStart, service: ServiceDefinition | null, env: Record<string, string> = {}) {
-    if (this.#sessions.size >= TERMINAL_LIMITS.terminals)
+  #describeTask(taskId: string) {
+    const task = this.#options.engine?.state.tasks[taskId];
+    return task ? { handle: task.handle ?? null, settled: isTaskSettled(task) } : null;
+  }
+
+  #makeRoom() {
+    const over = this.#sessions.size - TERMINAL_LIMITS.terminals + 1;
+    if (over <= 0) return;
+    const sessions = [...this.#sessions.values()];
+    const ended = sessions.filter((session) => !session.running && !this.#resumable.has(session.info.id));
+    const reclaimable = listReclaimable(
+      ended.map((session) => session.info),
+      (taskId) => this.#describeTask(taskId)
+    );
+    if (reclaimable.length < over)
       throw new DomainError({
         code: 'terminal_limit',
-        message: `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most.`,
+        message: resolveLimitMessage(
+          sessions
+            .filter((session) => session.running)
+            .map((session) => ({
+              taskId: session.info.taskId,
+              service: session.info.serviceId
+                ? (this.#services.get(session.info.serviceId)?.name ?? null)
+                : null,
+            })),
+          (taskId) => this.#describeTask(taskId)
+        ),
       });
+    for (const id of reclaimable.slice(0, over)) this.#closeSession(this.find(id));
+  }
+
+  #open(start: TerminalStart, service: ServiceDefinition | null, env: Record<string, string> = {}) {
+    this.#makeRoom();
     const info: TerminalInfo = {
       id: this.#newId(),
       ...start,
@@ -395,9 +425,9 @@ export class Terminals {
     return (await this.#serviceSession(id, taskId)?.readOutput(lines)) ?? [];
   }
 
-  closeTaskServices(taskId: string) {
+  closeTaskTerminals(taskId: string) {
     const sessions = [...this.#sessions.values()].filter(
-      (session) => session.info.serviceId && session.info.taskId === taskId
+      (session) => session.info.taskId === taskId && (session.info.serviceId !== null || !session.running)
     );
     if (sessions.length === 0) return;
     for (const session of sessions) this.#closeSession(session);
@@ -418,6 +448,7 @@ export class Terminals {
 
   resumeServices(state: ShinsaState) {
     if (this.#options.readOnly) return;
+    this.#pruneSettled(state);
     for (const terminalId of this.#resumable) {
       const info = this.#sessions.get(terminalId)?.info;
       const service = this.#services.get(info?.serviceId ?? '');
@@ -425,6 +456,21 @@ export class Terminals {
       if (service && run) this.startService(service.id, run);
     }
     this.#resumable.clear();
+  }
+
+  #pruneSettled(state: ShinsaState) {
+    const settled = [...this.#sessions.values()].filter((session) => {
+      const { taskId } = session.info;
+      if (taskId === null || session.running) return false;
+      const task = state.tasks[taskId];
+      return !task || isTaskSettled(task);
+    });
+    if (settled.length === 0) return;
+    for (const session of settled) {
+      this.#resumable.delete(session.info.id);
+      this.#closeSession(session);
+    }
+    this.#changed();
   }
 
   attach(id: string, viewer: TerminalViewer) {
@@ -457,6 +503,13 @@ export class Terminals {
 }
 
 export { ServiceRefiner } from './refine.ts';
-export type { RemoteUrlSource, ServiceInput, ServiceRun, TerminalStart, TerminalsOptions } from './schema.ts';
-export { createTerminalSockets, readTerminalSocketId, type TerminalSocketData } from './routes.ts';
+export type {
+  RemoteUrlSource,
+  ServiceInput,
+  ServiceRun,
+  TerminalSocketData,
+  TerminalStart,
+  TerminalsOptions,
+} from './schema.ts';
+export { createTerminalSockets, readTerminalSocketId } from './sockets.ts';
 export type { TerminalViewer } from './session.ts';

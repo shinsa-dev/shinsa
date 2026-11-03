@@ -18,7 +18,7 @@ import { resolveServerUrl, startServer } from '../http/index.ts';
 import { BUNDLE, createServiceRestarter, INSTALL_PATH, type ServerInstance } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { Onboarding } from '../onboarding/index.ts';
-import { createProjectChanges } from '../projects/routes.ts';
+import { createProjectChanges } from '../projects/changes.ts';
 import { Handoffs } from '../remote/handoffs.ts';
 import {
   RemoteControl,
@@ -35,7 +35,7 @@ import { createShareDescriber } from '../remote/share-describe.ts';
 import { Shares } from '../remote/shares.ts';
 import { TeamFeeds } from '../remote/team-feeds.ts';
 import { Teams } from '../remote/teams.ts';
-import { createDiscoverer, createLoginResolver, Roots } from '../repos/index.ts';
+import { createLoginResolver, Roots } from '../repos/index.ts';
 import { ProcessLedger, ResourceMonitor } from '../resources/index.ts';
 import { EffectRunner, Engine, MonitorClock, WatchdogClock } from '../runtime/index.ts';
 import { Schedules } from '../schedules/index.ts';
@@ -53,6 +53,7 @@ import { MessageInbox } from '../triage/inbox.ts';
 import { resolveTriage } from '../triage/index.ts';
 import { createClassifier, createCommandRouter, resolveRoundRepository } from '../triage/message.ts';
 import { Versions } from '../versions/index.ts';
+import { WorktreeRoot, Workspaces } from '../workspaces/index.ts';
 
 import type { ShinsaOptions } from './schema.ts';
 
@@ -126,13 +127,20 @@ export function createServices(
     home: config.userHome,
     version: instance.version,
     readOnly: config.inspect,
+    engine,
     ...options.terminals,
   });
   const previews = new Previews({ engine, remote, services: terminals, origin: config.previewOrigin });
   terminals.applyRemoteUrls(previews);
   const ledger = new ProcessLedger(terminals.listServiceProcesses);
   const resources = new ResourceMonitor({ ledger, state: () => engine.state, dataDir: config.dataDir });
+  const root = new WorktreeRoot({
+    defaultDir: config.worktreesDir,
+    fromEnvironment: config.worktreesDirFromEnvironment,
+    readConfigured: () => store.config.worktreesDir,
+  });
   const runs = new RunSupervisor(engine, config, transcripts, evidence, {
+    workspaces: new Workspaces({ root }),
     schedules,
     services: terminals,
     trackProcess: ledger.track,
@@ -154,12 +162,7 @@ export function createServices(
   const briefings = new Briefings(engine, { ask: quick.write });
   terminals.resumeServices(engine.state);
   const inbox = new MessageInbox(engine, classify.message);
-  const roots = new Roots(
-    config.roots,
-    store,
-    config.userHome,
-    options.discover ?? createDiscoverer(Boolean(BUNDLE))
-  );
+  const roots = new Roots(config.roots, store, config.userHome, options.discover);
   return {
     config,
     store,
@@ -253,6 +256,7 @@ export function startHttp(
       run: options.runPrerequisite,
       accounts: options.accounts ?? createOnboardingAccounts(accounts),
       terminals: services.terminals,
+      worktreeRoot: services.runs.workspaces.root,
     }),
     accounts,
     schedules: services.schedules,

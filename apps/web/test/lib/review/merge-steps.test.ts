@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { listMergeSteps, type MergeStep, resolveMergeStepKey, type Task } from '@shinsa/core';
 import {
-  countOpenSteps,
+  listMergeSteps,
+  listOpenMergeSteps,
+  type MergeStep,
+  resolveMergeStepKey,
+  type Task,
+} from '@shinsa/core';
+import {
   describeMergeBlock,
   describePostMergeStatus,
   describePostMergeTitle,
@@ -74,8 +79,8 @@ describe('the steps around the merge', () => {
       ['Set A', true],
       ['Set B', false],
     ]);
-    expect(countOpenSteps(task, 'pre_merge')).toBe(1);
-    expect(countOpenSteps(task, 'post_merge')).toBe(1);
+    expect(listOpenMergeSteps(task, 'pre_merge').length).toBe(1);
+    expect(listOpenMergeSteps(task, 'post_merge').length).toBe(1);
     expect(MERGE_STEP_KIND.migration.label).toBe('Migration');
   });
 
@@ -160,12 +165,17 @@ describe('the bundle on the merge gate', () => {
       id: 'middle',
       title: 'Add the API',
       stage: 'shipping',
-      stacksOn: 'root',
+      stacksOn: ['root'],
       bundleReady: { commit: 'a' },
       pullRequest: createPullRequest({ number: 41 }),
     });
-    const above = createTask({ id: 'above', title: 'Add the screen', stage: 'shipping', stacksOn: 'middle' });
-    const merged = createTask({ id: 'merged', stage: 'merged', stacksOn: 'above' });
+    const above = createTask({
+      id: 'above',
+      title: 'Add the screen',
+      stage: 'shipping',
+      stacksOn: ['middle'],
+    });
+    const merged = createTask({ id: 'merged', stage: 'merged', stacksOn: ['above'] });
     const waits = listMergeWaits(createShinsaState({ tasks: [root, middle, above, merged] }), root);
     expect(waits).toEqual([
       {
@@ -199,7 +209,7 @@ describe('the bundle on the merge gate', () => {
       id: 'middle',
       title: 'Add the API',
       stage: 'shipping',
-      stacksOn: 'root',
+      stacksOn: ['root'],
       bundleReady: { commit: 'a' },
     });
     const held = listMergeWaits(createShinsaState({ tasks: [root, stepped, above] }), root)[0];

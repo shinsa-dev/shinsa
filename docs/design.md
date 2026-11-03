@@ -670,7 +670,7 @@ Only these, and they win over anything below:
         previous and next spot, send, comment on a line, remove ("Remove folder"), dismiss, stop a delegated task,
         the compact bar's queue and new-task buttons, the sidebar's resize handle (following the pointer down the
         edge), the error button. The tooltip repeats the `aria-label`. A `Hint` with a `detail` stacks a muted
-        second line under its label, as a time's tooltip does (a task's round, 12).
+        second line right under its label, with no gap, as a time's tooltip does (a task's round, 12).
       - **Keyboard-shortcut hints**: a `Hint` with a `shortcut` ("Home ⇧⌘H", "Search and actions ⌘K", "Search in
         files ⇧⌘F", the image viewer's close, previous and next with `Esc`, `←`, `→`), even on a labelled button,
         since the key is not on screen.
@@ -797,7 +797,11 @@ Only these, and they win over anything below:
       substring; hints and keywords count at 0.7). Groups are ordered by their best match, since
       cmdk's own group sort does not work. Choices flatten into their options ("urgent", "dark",
       "cards"), every task matches by title, repository, branch and status, and the queue's
-      decisions match across tasks ("merge" finds Merge #4531 on whichever task it is). At the
+      decisions match across tasks ("merge" finds Merge #4531 on whichever task it is). Typing
+      searches every task, not only the newest 300 shown with an empty query, against an index of
+      each task's words built once per state (`resolveTaskIndex`, `lib/command/menu.ts`), and only
+      the best 20 task matches render (100 on Jump to a task, 20 per group of commands), so cmdk
+      never scores hundreds of rows a key. A closed menu works out nothing. At the
       bottom, always: "Create task: …" (starts it straight away) and "Edit it before starting"
       (Home's composer, filled in).
     - Rows: 24px. Icons are plain, never on a tile; a task's is its status icon in the status
@@ -964,9 +968,10 @@ Only these, and they win over anything below:
     - **Composers**: the task composer, Home's new-task box and the question's answer box share
       `COMPOSER_FIELD` (text 12px in, 10px from the top) and `COMPOSER_FOOTER` (6px around a
       28px `sm` control, no divider).
-    - **Title over description is `gap-px`**, with no exceptions: page headings, card eyebrow over
+    - **Title over description is `gap-px`**: page headings, card eyebrow over
       title, list rows, activity rows, plan and phase steps, check rows, popover headers and
-      task rows, review findings, message links. A title next to its description on one line
+      task rows, review findings, message links. The one exception is a tooltip's label over its detail
+      (`Hint`), which sits flush (`gap-0`). A title next to its description on one line
       (⌘K rows, a section label and its count, "Waits on ‹task›") is 6px (`gap-1.5`).
     - **Numbered steps** are `StepNumber` (`components/layout/surface/step-number.tsx`): a 20px `bg-bg-a2` tile,
       `rounded-control-sm`, in the plan, What changed and the chat's plan card.
@@ -1012,7 +1017,7 @@ Only these, and they win over anything below:
     approve, Needs your answer, Answered, Paused, In progress, Backlog, Done and Cancelled
     (both collapsed). There is no section for waiting: a task waiting on another task is filed in the section of the
     task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
-    a task stacked on another, so a bundle reads from its root, each task above nested under the one below. Each
+    a task stacked on others, so a bundle reads from its lead, each task nested under the tasks it stacks on. Each
     section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
@@ -1020,17 +1025,51 @@ Only these, and they win over anything below:
     (`orderChains`, parents from `waitsOn` and `stacksOn`): each task appears once. Its depth is its longest path from
     a task outside the section, and it sits under the parent at the level above that comes last on screen, so in a
     diamond (B and C wait on A, D on B and C) D sits under whichever of B and C is shown second,
-    after both. Fan-out siblings sit side by side under their parent. The status column names
-    every parent, "Waits on ‹A›, ‹B›", each a link that opens it and truncates on its own, with
-    all of them, one per line, in the tooltip ("‹task› was cancelled" when one was). A nested
-    row's corner arrow sits under its parent's priority mark (26px per level) and is a 20px
+    after both. Fan-out siblings sit side by side under their parent. The status column reads
+    "Waits on LOC-143 +2" (`WaitsOnLinks`): the first parent's handle, a link that opens it (its title when it has
+    no handle), and how many more, with every parent, handle and title, one per line, in the tooltip ("LOC-143 was
+    cancelled" when one was). A nested
+    row's corner arrow sits under its parent's priority mark (16px per level) and is a 20px
     button: `bg-bg-a2` and `fg-4` on hover and pressed alike, the same while its menu is open,
-    "Waits on" and the parents in its tooltip; it opens the Waits on menu. Every row starts with
+    "Waits on" and the parents in its tooltip; it opens the Waits on menu. A task stacked on another is a bundle, not
+    a wait, and reads as one: its mark is `BUNDLE_ICON` (`IconLayersThree`), a link to the task below with "Stacked on",
+    that task and "Merges with its bundle" in its tooltip (when it also waits on other tasks, the same mark opens the
+    Waits on menu with every parent instead, its tooltip naming the task below and then the others), its status column says "Stacked on SW-32" while the task
+    below is still open, and once ready it says "Merges with its bundle" (`BUNDLE_READY_STATUS`). Every row starts with
     its priority mark, and its status column with its kind's icon in the status's tone (`SHAPE_ICON`, named
     for screen readers) whose tooltip lists the steps the task takes ("Investigation: find the
     repository, investigate, then your OK to change.", composed steps included, `describeTaskSteps` in `lib/tasks/shapes.ts`,
-    from core's `resolveTaskProgress` with a plan's phases as one build). Filter by status in
-    ⌘K offers the same sections with the same icons.
+    from core's `resolveTaskProgress` with a plan's phases as one build).
+    - **Scope and filters.** The rows are `listTaskRows` (`lib/tasks/filters.ts`): your tasks in focus
+      (`isListedInFocus`) and every member team's tasks in focus, each with its owner, teams, project and
+      repository. `filterTaskRows` applies the search and the filters read from the address (`?status=working,review`,
+      `owner`, `team`, `project`, `repo`, `kind`, `priority`; `resolveTaskFilters`), and the groups are drawn from what
+      is left. The filters are the kit's composable
+      filter bar (`@shinsa/ui/components/filter-bar`: `FilterMenu`, `FilterBar`, `FilterChip`, `FilterClear`, fields
+      and options as plain data, the selection owned by the page). The Filter button is icon only (`IconFilter1`,
+      `icon` size with the input's fill, so it matches the search field beside it; "Filter, 2 on" for a screen reader)
+      and opens a submenu per field with a checkbox and a count per value; a field shows only when it has two values
+      or is filtered, and its counts are over the rows in focus, not the filtered ones, so they hold still as you
+      tick. The button sits 6px from the search field. Each filtered field is a chip in the row just above the table (8px from it, closer than the 24px to the
+      heading): its icon and label, "is" or "is any of", the chosen values (their icons, or a person's avatar, two
+      names then "+N"), which open the same checkboxes to change it in place, and a cross that clears it. A plus after
+      the chips adds a field not filtered yet and closes once a value is picked, and Clear all follows once two are on;
+      both are secondary buttons, no fill until hovered. The Owner field shows each person's avatar (a `FilterOption`'s
+      `media`). ⌘K offers "Filter by …" for each field, several values at once, "Any …" and Clear filters, with the same
+      icons.
+    - **Width and columns.** The page keeps `PAGE_COLUMN`'s width with any focus, teammates' tasks included. Columns
+      sit `gap-3` apart: title, repository 7rem (6.5rem beside an owner), owner 5rem when any row is a teammate's,
+      status 9.5rem, pull request 4rem, age 3rem in its compact form ("5m", "2d"). The owner is a `UserTag`
+      (`YourOwnerMark`, `TeammateOwnerMark` in `components/tasks/owner.tsx`): the avatar and first name, "You" for your
+      own, the user card on hover with the machine it runs on ("On Kai’s MacBook, read-only"), their GitHub profile on
+      click. A machine whose owner never signed in shows the team icon and the machine's name.
+    - **Offline and refused machines** take no lines of their own, so the page stays the same however many machines
+      a team has. A teammate row from a machine that is offline keeps its kind icon and gets `IconCloudOff`
+      in `fg-2` after its status (`OfflineMark`), its hint "Their machine is offline" with when its copy was last
+      updated. Machines that refuse the list show no rows, so one `IconLock` in `fg-2` after the heading's counts
+      (`TeamFeedRefusals`) names them in its hint: "Mac.lan in Platform is not listing its tasks" and the owner
+      engine's reason ("That machine does not list you in this team yet."), or "2 teammate machines are not listing
+      their tasks" and each machine's reason.
     - **The pull request badge** (`PullRequestBadge`, the Pull request column) is the pull request's number on its
       tone's soft surface (`TONE_SURFACE`, one step stronger on hover), the same tint as a status tile.
     - **Change to approve** is its own section between Plan to approve and Needs your answer (`IconFileEdit`,
@@ -2006,7 +2045,11 @@ Only these, and they win over anything below:
       the page that permission): `notifyDesktop` hands the decision to the app, which shows a silent macOS
       notification (the page plays its own sound) whose click shows and focuses the window and opens the task.
       Show a notification defaults to When Shinsa is in the background there, Never in a browser; the browser's
-      permission is never asked. The test notification goes the same way.
+      permission is never asked. The test notification goes the same way. The first time the app's page loads with
+      Show a notification on, it shows one "Notifications are on" notification ("Shinsa tells you here when a task
+      needs you.", `showNotificationWelcome`), so macOS asks for permission while you are looking at Shinsa rather
+      than at the first decision, when you are away; it is never shown again on that install
+      (`shinsa.notifications-welcomed`) and never in a browser.
     - **One surface notifies.** Every page says on connect which surface it is (`desktop` or `browser`; Floaty
       is a browser), and the server tells every page whether the app is connected. While it is, a browser tab or
       Floaty stays quiet (`isPageQuiet`, checked by `AttentionWatcher`): no sound and no notification. The count in
@@ -2282,12 +2325,20 @@ Only these, and they win over anything below:
       one review draft, so a verdict set anywhere shows everywhere). Each spot's lines carry their mark in the spot
       gutter (above) and the selected one the `primary-a1` wash. Every note is rendered by React into an element
       the session keeps per note (`SlotRegistry`), and the editor's block widget only moves that element in and out,
-      so a note scrolled back into view is already drawn at its height and nothing trails the scroll. At a review or
-      merge gate a click on a line number opens a comment box under it (on the selected lines when the click is in a
-      selection); a removed line's number does the same for the removed line, and its comment sits under the removed
-      block. A comment is kept per gate in localStorage, anchored to the commit it was
-      made at, and goes with Request changes. Saved, it is the compact review card with its header bar (34),
-      authored You, its lines as the tag, with Remove at the right of the bar, and folds from the bar. A comment is words only; to change the code, edit it (above). The comment
+      so a note scrolled back into view is already drawn at its height and nothing trails the scroll. Whenever the
+      task takes a message (and at a review or merge gate always), a click on a line number opens a comment box under
+      it (on the selected lines when the click is in a selection); a removed line's number does the same for the
+      removed line, and its comment sits under the removed block. A comment is kept per task in localStorage, anchored
+      to the commit it was made at, so one written before the review is still there at it. At a review or merge gate
+      it goes with Request changes; at any other time with your next message: the Code tab's **Line comments** bar
+      under the editor ("3 comments for the agent", `components/code/comments-bar.tsx`) sends them alone with **Send
+      to the agent**, and every task composer shows "2 line comments go with this message" above its field and sends
+      them with what you write, the field may then stay empty (`useTaskMessage`). The chat shows a sent message's
+      comments under its bubble, as the activity does under a decision (`SentComments`). Outside a review the box's
+      placeholder says it goes with your next message. The bar and the comments outside a review show only on an
+      engine with `message.line_comments`. Saved, it is the compact review card with its header bar (34),
+      authored You, its lines as the tag, with Edit and Remove at the right of the bar (Edit opens the box again on
+      its words, its button Save comment), and folds from the bar. A comment is words only; to change the code, edit it (above). The comment
       box and every note under a line are at most 36rem wide and never wider than the side they sit in less its
       gutter (`100cqw - 6rem`, each editor being its own inline-size container), so a box for a long selection wraps
       inside the visible pane instead of running off it.
@@ -2548,7 +2599,8 @@ Only these, and they win over anything below:
         call, a Read carefully spot, a risk) their short title, never an "Agent" label, since every point is the
         agent's; an author's name only where it tells two authors apart, "You" on your comment (and "Agent review" on
         a finding's label line). Then the tag as a dot and label, the section it belongs to (`text-2xs`
-        `fg-2`, truncated), and the action at the right before the chevron (Remove for a comment). The whole bar folds
+        `fg-2`, truncated), and the action at the right before the chevron (Edit and Remove for a comment). In a narrow
+        card the tag truncates before the action does (`ToneLabel` with `shrinks`), so the action stays in reach. The whole bar folds
         the card to the bar alone ("Collapse judgement call"); a click on the action does not. Every card starts
         open and remembers a fold (`task:<id>:review:card:<point>`, 40), and a card you jump to (J and K, the
         index, `?spot=`) opens again. Under the bar, 12px in: a judgement
@@ -3461,7 +3513,7 @@ toasts are the inverse, a `border` and no shadow.
 
 ### Gaps
 
-A title over its description is `gap-px`. `gap-0.5` is banned in `apps/web/src`
+A title over its description is `gap-px`, but in a tooltip (`Hint`'s label over its detail), where it is 0. `gap-0.5` is banned in `apps/web/src`
 (the lint rejects it): the next step up is `gap-1`. The one 2px gap is between
 the buttons of a section header, and `SectionLabel` owns it.
 
@@ -5928,6 +5980,11 @@ Easing: `ease-out` is the strong ease-out `cubic-bezier(0.23, 1, 0.32, 1)`
 and is the default for every transition. `ease-in-out` is
 `cubic-bezier(0.77, 0, 0.175, 1)`; `ease-drawer` is
 `cubic-bezier(0.32, 0.72, 0, 1)` for anything that slides like a drawer.
+`--ease-emphasized` is `cubic-bezier(0.22, 1, 0.36, 1)`, the movement clock's curve (a sliding
+indicator, a turning chevron, a toast); where a CSS variable cannot be read (`element.animate`, a
+transition string) it is `EASE_EMPHASIZED` (`@shinsa/ui/lib/motion`), and a test keeps the two equal.
+The popups' surface and enter motion are one class set, `lib/popup.ts` (`POPUP_SURFACE`,
+`POPUP_SIDE_SLIDE`, `POPUP_ZOOM`).
 Never `ease-in` and never `ease-linear` on UI (a progress bar may be linear).
 
 Rules:

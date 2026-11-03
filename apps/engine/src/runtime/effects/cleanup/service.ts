@@ -24,7 +24,7 @@ export class Cleanup extends Context.Service<
 
       const removeIsolated = Effect.fn('Cleanup.removeIsolated')(function* (repo: Repo, taskId: string) {
         yield* world
-          .bridge(() => removeIsolatedWorktrees(repo, world.config.worktreesDir, taskId))
+          .bridge(() => removeIsolatedWorktrees(repo, world.workspaces.root.path, taskId))
           .pipe(
             Effect.catch((failure) =>
               Effect.logWarning('[Effects] Could not remove the checkouts of delegations').pipe(
@@ -32,6 +32,12 @@ export class Cleanup extends Context.Service<
               )
             )
           );
+      });
+
+      const closeTerminals = Effect.fn('Cleanup.closeTerminals')(function* (taskId: string) {
+        const services = world.services;
+        if (!services) return;
+        yield* Effect.try({ try: () => services.closeTaskTerminals(taskId), catch: resolveEffectFailure });
       });
 
       const removeWorktree = Effect.fn('Cleanup.removeWorktree')(function* (
@@ -44,10 +50,8 @@ export class Cleanup extends Context.Service<
         if (repo) yield* removeIsolated(repo, taskId);
         const worktreePath = task?.worktreePath;
         if (!task || !worktreePath || !repo) return;
+        yield* closeTerminals(taskId);
         const services = world.services;
-        if (services) {
-          yield* Effect.try({ try: () => services.closeTaskServices(taskId), catch: resolveEffectFailure });
-        }
         yield* Effect.gen(function* () {
           const workspace = yield* Effect.try({
             try: () => world.workspaces.resolve(task),
@@ -89,6 +93,7 @@ export class Cleanup extends Context.Service<
         if (yield* isReopened(taskId)) return;
         yield* world.bridge(() => world.runs.quiesce(taskId));
         if (yield* isReopened(taskId)) return;
+        yield* closeTerminals(taskId);
         yield* Effect.try({
           try: () =>
             rmSync(resolveScratchPath(world.config.dataDir, taskId), { recursive: true, force: true }),

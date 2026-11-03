@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseShareMessage, type ShareLiveView, type ShareMessage } from '@shinsa/core';
-import { writeJsonFile } from '../config/file.ts';
+import { readJsonFile, writeJsonFile } from '../files/index.ts';
 import { describeError, log } from '../log/index.ts';
+import { TeamViewFile, TeamViewsIndexFile, VIEW_FILE_MISSING } from './schema.ts';
 
 export const TEAM_VIEWS_DIR = 'team-views';
 
@@ -140,28 +141,6 @@ function resolveViewFile(key: string) {
   return `${createHash('sha256').update(key).digest('hex')}.json`;
 }
 
-function readEntry(value: unknown): TeamViewEntry[] {
-  if (value === null || typeof value !== 'object') return [];
-  const { teamId, instanceId, taskId, keyDigest, updatedAt, size } = value as Record<string, unknown>;
-  const texts = [teamId, instanceId, taskId, keyDigest];
-  if (!texts.every((text) => typeof text === 'string')) return [];
-  if (!(typeof updatedAt === 'number' && typeof size === 'number')) return [];
-  return [
-    {
-      teamId: teamId as string,
-      instanceId: instanceId as string,
-      taskId: taskId as string,
-      keyDigest: keyDigest as string,
-      updatedAt,
-      size,
-    },
-  ];
-}
-
-function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(path, 'utf8'));
-}
-
 export class TeamViews {
   readonly dir: string;
   readonly #limit: number;
@@ -176,14 +155,12 @@ export class TeamViews {
 
   #readIndex() {
     const path = join(this.dir, INDEX_FILE);
-    if (!existsSync(path)) return [];
-    try {
-      const entries = (readJson(path) as { entries?: unknown } | null)?.entries;
-      return Array.isArray(entries) ? entries.flatMap(readEntry) : [];
-    } catch (error) {
-      log.warn('[Teams] Could not read the kept team task views', { path, error: describeError(error) });
+    const { value, problem } = readJsonFile(path, TeamViewsIndexFile);
+    if (problem !== null) {
+      log.warn('[Teams] Could not read the kept team task views', { path, error: problem });
       return [];
     }
+    return value?.entries ?? [];
   }
 
   list() {
@@ -198,15 +175,17 @@ export class TeamViews {
     const key = resolveViewKey(teamId, instanceId, taskId);
     const entry = this.#entries.get(key);
     if (!entry || entry.size === 0) return null;
-    try {
-      const value = readJson(join(this.dir, resolveViewFile(key))) as { messages?: unknown } | null;
-      const listed: unknown[] = Array.isArray(value?.messages) ? value.messages : [];
-      const messages = listed.flatMap((message) => parseShareMessage(JSON.stringify(message)) ?? []);
-      return messages.length > 0 ? { ...entry, messages } : null;
-    } catch (error) {
-      log.warn('[Teams] Could not read a kept team task view', { taskId, error: describeError(error) });
+    const { value, problem } = readJsonFile(join(this.dir, resolveViewFile(key)), TeamViewFile);
+    if (!value) {
+      log.warn('[Teams] Could not read a kept team task view', {
+        taskId,
+        error: problem ?? VIEW_FILE_MISSING,
+      });
       return null;
     }
+    const { messages: listed = [] } = value;
+    const messages = listed.flatMap((message) => parseShareMessage(JSON.stringify(message)) ?? []);
+    return messages.length > 0 ? { ...entry, messages } : null;
   }
 
   write(view: HeldTeamView) {

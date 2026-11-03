@@ -43,7 +43,9 @@ src/
 │                    agent is read-only while it plans) (delegations.ts), accounts, schedules (SCHEDULE_LIMITS), memory (memory.ts:
 │                    MemoryEntry, MEMORY_LIMITS), feedback (feedback.ts: Feedback, FEEDBACK_LIMITS,
 │                    FEEDBACK_REPOSITORY, listFeedbackLeaks: the privacy check), pull request watch
-│                    types, time units (time.ts), task shapes (shapes.ts: SHAPE_PIPELINES (the presets),
+│                    types, time units (time.ts: MINUTE_MS, HOUR_MS, DAY_MS), the one record check every reader of
+│                    untrusted JSON uses (records.ts: isText, isRecord, parseJsonRecord), the one FNV-1a hash
+│                    (hash.ts: hashText, each caller keeping its own encoding), task shapes (shapes.ts: SHAPE_PIPELINES (the presets),
 │                    validateComposition (the rules checker for the steps the agent composes while it plans), the shape
 │                    of a task, resolveShapeState (whether triage or the agent may still change the steps),
 │                    findInquiryStep, findWorkStep, resolveProposalUpgrade, SHAPE_LIMITS), the step and gate schema
@@ -89,7 +91,7 @@ src/
 │                    way a fold writes a record; STATE_RECORDS and STATE_FIELDS name every part of the state),
 │                    write.ts (the shared writes the folds use; applyStamped: an event sent on your
 │                    behalf, or by the guest a task was handed to, marks the activity it records), activity.ts (the wording of a task's activity),
-│                    queries.ts (list*, find/select, isDependencyOf, isWaitingOnAnswer, isRunWaiting,
+│                    queries.ts (list*, find/select, findProject and findRepo: the not-found DomainErrors, isDependencyOf, isWaitingOnAnswer, isRunWaiting,
 │                    resolveTaskProject, selectTaskByReference), and the folds by concern, each an apply*Event:
 │                    runs.ts (attempts, links, lost sessions, metering per attempt with its weekly readings,
 │                    silence, compaction), gates.ts (opened,
@@ -137,12 +139,12 @@ src/
 │   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key,
 │   │                whether no checks on a head means no CI (ciAbsent: the repository's RepoCi and CI_GRACE_MS
 │   │                from the push, resolvePullRequestCi)
-│   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on), releasing waiting
-│   │                tasks (a stacked one once the task below is ready) and recording a stacked task's base (stackBase)
-│   ├── bundles.ts   Bundles (reviewBundles, after every command): ready in place of a merge gate above the root
-│   │                (bundleReady), the root's one merge gate for the bundle, held while the bundle conflicts with
-│   │                the default branch (bundleConflict) and the branch behind is pushed, the merge from the top
-│   │                down, and a task below that merges, leaves or is cancelled
+│   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on_tasks), releasing
+│   │                waiting tasks (a stacked one once every task below is ready) and recording its bases (stackBases)
+│   ├── bundles.ts   Bundles, graphs of stacks (reviewBundles, after every command): ready in place of a merge gate
+│   │                for every follower (bundleReady), the lead's one merge gate for the bundle, held while the
+│   │                bundle conflicts with the default branch (bundleConflict) and the branch behind is pushed, the
+│   │                merge from the top down, and a task below that merges, leaves or is cancelled
 │   ├── merge-steps.ts  The steps around the merge you tick (merge_step.tick, human-only), the merge gate's wait for
 │   │                the ones before it (assertMergeStepsDone), no done while one after it is open
 │   │                (assertNoMergeStepsLeft), and syncMergeSteps (after every command, for the tasks it changed:
@@ -287,7 +289,8 @@ src/
 │                    serializeRepositoryWork, what `list_repository_work` reads), the `<attachments>` block a
 │                    message or request carries its files in (attachments.ts: splitMessageAttachments,
 │                    serializeAttachments), and
-│                    sentence helpers (text.ts: describeCount, describeList, capitalise, lowerFirst)
+│                    sentence helpers (text.ts: describeCount, describeList, capitalise, lowerFirst; quoteTitle, the one
+│                    curly-quoted title, describeTaskName, and resolveComparableText, the text two titles are compared by)
 ├── prompts/         House rules and splitting them off a brief (rules.ts) and the delegation rules
 │                    (orchestration-rules.ts), the step catalog, rules and plan parameters the agent reads while it
 │                    plans (steps.ts, from the schema), each role's prompt (roles.ts: the round agent's planning prompt,
@@ -303,6 +306,9 @@ src/
 │                    resolveProjectContext), the rules a run is told: all for a fresh session, the new ones for a
 │                    resumed one (memory.ts, resolveMemoryTold), and the writing rules every role gets (rules.ts,
 │                    WRITING_RULES)
+├── changelog/       The `.changes/` entries and the release changelog (schema.ts: ChangeEntry, CHANGE_KINDS,
+│                    CHANGE_KIND_TITLE, CHANGE_TEXT_LIMIT; changelog.ts: parseChangeEntry, resolveChangelog,
+│                    resolvePublicChangelog, listUnseenReleases, listChangeGroups, serializeReleaseNotes)
 ├── progress/        The steps a task shows on its page, and an ended round's (resolveRoundProgress)
 ├── remote/          Remote access, shared by the engine, the web app and the hosted Worker (`apps/cloud`), on
 │                    WebCrypto only: the append-only wire contract with the Worker (contract.ts: REMOTE_PATHS, the
@@ -317,7 +323,9 @@ src/
 │                    bearer or the session cookie, and MachineSession, the machine token, providing CurrentUser and
 │                    CurrentMachine; RequestGate, inside each group's sign-in, with the body failures, and BodyLimit,
 │                    the body an endpoint takes, 16 KB unless it says more, as the Slack post does), keys
-│                    (keys.ts: P-256 ECDH, fingerprints), the handshake (handshake.ts: the hellos, ee/es/se ECDH and
+│                    (keys.ts: P-256 ECDH, fingerprints), bytes (bytes.ts: base64url, URL_SAFE_SEGMENT and hasBytes, the
+│                    one check of a URL-safe id of a given length), HMAC tokens (tokens.ts: importHmacKey,
+│                    createSignedToken and verifySignedToken, shared by connect and preview-access tokens), the handshake (handshake.ts: the hellos, ee/es/se ECDH and
 │                    HKDF into one AES-GCM key per direction, the enrollment proof), sealed frames (frames.ts: a
 │                    counter nonce, in order, closed after one bad frame), the channel's messages (channel.ts: the app
 │                    socket and HTTP requests and responses in chunks), connect tokens (connect-token.ts: labelled, bound to one channel, a nonce the engine spends once), a pairing's credentials sealed to the machine's key (pairing-seal.ts: ECDH with the caller's ephemeral key, HKDF, AES-GCM bound to the machine key) and what stays

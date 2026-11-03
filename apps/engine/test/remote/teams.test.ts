@@ -27,7 +27,7 @@ import { log } from '../../src/log/index.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
 import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
-import { TEAM_GONE_REASON, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
+import { TEAM_REFUSALS, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { createKeyPair, startHandshake } from './client.ts';
@@ -339,18 +339,20 @@ describe('a team view of this machine', () => {
     expect(list.views()).toHaveLength(listed);
   });
 
-  test('refuses anyone outside the team, a wrong key, a task outside its projects and a team without a key', async () => {
+  test('names why it refuses: someone it does not list, a wrong key, a task outside its projects, no key, no team', async () => {
     const { teams } = setUp({ file: { teamKeys: [STORED_KEY] } });
-    expect((await openViewer(teams, BOB.id, LIST)).refused).toBe(TEAM_GONE_REASON);
-    expect((await openViewer(teams, KAI.id, LIST, OTHER_KEY)).refused).toBe(TEAM_GONE_REASON);
+    expect((await openViewer(teams, BOB.id, LIST)).refused).toBe(TEAM_REFUSALS.member);
+    expect((await openViewer(teams, KAI.id, LIST, OTHER_KEY)).refused).toBe(TEAM_REFUSALS.mismatch);
     expect((await openViewer(teams, KAI.id, { kind: 'task', taskId: 'task-2' })).refused).toBe(
-      TEAM_GONE_REASON
+      TEAM_REFUSALS.task
     );
     expect((await openViewer(teams, KAI.id, { kind: 'task', taskId: 'nope' })).refused).toBe(
-      TEAM_GONE_REASON
+      TEAM_REFUSALS.task
     );
     const keyless = setUp({ file: { teamKeys: [] } });
-    expect((await openViewer(keyless.teams, KAI.id, LIST)).refused).toBe(TEAM_GONE_REASON);
+    expect((await openViewer(keyless.teams, KAI.id, LIST)).refused).toBe(TEAM_REFUSALS.key);
+    const outside = setUp({ file: { teams: [], teamKeys: [STORED_KEY] } });
+    expect((await openViewer(outside.teams, KAI.id, LIST)).refused).toBe(TEAM_REFUSALS.team);
   });
 
   test('closes on anything but a hello, and on anything sent after it', async () => {
@@ -382,7 +384,7 @@ describe('a team view of this machine', () => {
     stub.notify();
     await until('the task view ends', () => task.closed !== null);
     await until('the empty list is pushed', () => list.views().length === 3);
-    expect(task.closed?.reason).toBe(TEAM_GONE_REASON);
+    expect(task.closed?.reason).toBe(TEAM_REFUSALS.task);
     expect(list.closed).toBeNull();
     expect((list.views().at(-1) as TeamListView).tasks).toEqual([]);
   });
@@ -393,7 +395,7 @@ describe('a team view of this machine', () => {
     const mona = await openViewer(teams, MONA.id, LIST);
     await teams.removeMember('team1', KAI.id);
     await until('Kai’s view ends', () => kai.closed !== null);
-    expect(kai.closed?.reason).toBe(TEAM_GONE_REASON);
+    expect(kai.closed?.reason).toBe(TEAM_REFUSALS.member);
     expect(mona.closed).toBeNull();
     expect(plane.calls.at(-1)).toMatchObject({
       path: resolveMachineTeamPath('team1', 'members/remove'),

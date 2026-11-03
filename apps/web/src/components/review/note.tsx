@@ -119,7 +119,7 @@ function NoteBar({
       {heading.author && <span className='shrink-0 font-medium text-fg-4'>{heading.author}</span>}
       {heading.title && <Truncate className='min-w-0 font-medium text-fg-4'>{heading.title}</Truncate>}
       <span className='shrink-0 text-fg-2'>·</span>
-      <ToneLabel label={item.label} tone={item.tone} />
+      <ToneLabel label={item.label} tone={item.tone} shrinks />
       {item.section && (
         <>
           <span className='shrink-0 text-fg-2'>·</span>
@@ -156,6 +156,16 @@ function NoteDetails({
       <NotePlace persistId={persistId} task={task} item={item} compact={compact} />
       {item.fix && <SuggestedFix text={item.fix} />}
     </>
+  );
+}
+
+export const NOTE_ACTION = 'cursor-pointer text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4';
+
+export function RemoveNoteButton({ onRemove }: { onRemove: () => void }) {
+  return (
+    <button type='button' className={NOTE_ACTION} onClick={onRemove}>
+      Remove
+    </button>
   );
 }
 

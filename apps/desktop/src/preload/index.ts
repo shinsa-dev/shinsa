@@ -1,4 +1,5 @@
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron';
+import type { AwaySpan } from '../away/schema.ts';
 import {
   CHANNELS,
   type DesktopBridge,
@@ -35,6 +36,7 @@ if (start) {
     onNavigate: (listener) => subscribe<string>(CHANNELS.navigate, listener),
     onWindowState: (listener) => subscribe<DesktopWindowState>(CHANNELS.windowState, listener),
     onUpdate: (listener) => subscribe<DesktopUpdate>(CHANNELS.update, listener),
+    onAway: (listener) => subscribe<AwaySpan>(CHANNELS.away, listener),
   };
   contextBridge.exposeInMainWorld('shinsaDesktop', bridge);
 }

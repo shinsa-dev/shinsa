@@ -147,6 +147,21 @@ describe('typing in the root', () => {
     ]);
   });
 
+  it('finds a task older than the newest 300', async () => {
+    const many = Array.from({ length: 320 }, (_, index) =>
+      createTask({
+        id: `t${index}`,
+        title: index === 0 ? 'Oldest login fix' : `Task ${index}`,
+        updatedAt: index + 10,
+      })
+    );
+    showState(createShinsaState({ tasks: many }));
+    renderMenu();
+    await pressCommandK();
+    await type('oldest');
+    expect(optionNames()[0]).toMatch(/^Oldest login fix/);
+  });
+
   it('opens All tasks on Enter and closes', async () => {
     renderMenu();
     await pressCommandK();
@@ -262,6 +277,14 @@ describe('pages', () => {
     expect(selectedOption()).toMatch(/^Jump to a task/);
   });
 
+  it('searches the Tasks page by title and opens the match', async () => {
+    renderMenu();
+    await pressCommandK();
+    await choose(/^Jump to a task/);
+    await type('billing');
+    expect(optionNames()).toEqual(['Rework billing emails']);
+  });
+
   it('keeps the page while Backspace edits the query', async () => {
     renderMenu();
     await pressCommandK();
@@ -366,8 +389,8 @@ describe('disabled commands and options', () => {
             heading: 'Lane',
             value: 'fast',
             options: [
-              { value: 'fast', label: 'Fast lane', disabled: 'Closed today' },
-              { value: 'slow', label: 'Slow lane' },
+              { value: 'fast', label: 'Fast lane', hint: 'L-1', disabled: 'Closed today' },
+              { value: 'slow', label: 'Slow lane', hint: 'L-2' },
             ],
             pick,
           },
@@ -402,14 +425,14 @@ describe('disabled commands and options', () => {
     const flat = screen.getByRole('option', { name: /^Fast lane/ });
     expect(flat.getAttribute('aria-disabled')).toBe('true');
     expect(flat.textContent).toBe('Fast laneClosed today');
-    expect(screen.getByRole('option', { name: /^Slow lane/ }).textContent).toBe('Slow laneLane');
+    expect(screen.getByRole('option', { name: /^Slow lane/ }).textContent).toBe('Slow laneL-2Lane');
     await choose(/^Pick a lane/);
     const fast = screen.getByRole('option', { name: /^Fast lane/ });
     expect(fast.getAttribute('aria-disabled')).toBe('true');
     expect(fast.textContent).toBe('Fast laneClosed today');
-    await waitFor(() => expect(selectedOption()).toBe('Slow lane'));
+    await waitFor(() => expect(selectedOption()).toBe('Slow laneL-2'));
     press('ArrowUp');
-    expect(selectedOption()).toBe('Slow lane');
+    expect(selectedOption()).toBe('Slow laneL-2');
     fireEvent.click(fast);
     expect(pick).not.toHaveBeenCalled();
     press('Enter');
@@ -435,8 +458,11 @@ describe('on a task page', () => {
     const view = useTaskView(state, 'login');
     const draft: ReviewDraft = {
       enabled: true,
+      reviewing: true,
+      withMessages: true,
       comments,
       addComment: () => {},
+      updateComment: () => {},
       removeComment: () => {},
       clearComments: () => {},
       verdicts: {},

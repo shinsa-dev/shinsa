@@ -3,21 +3,33 @@ import {
   endSentence,
   flattenWhitespace,
   formatBytes,
-  formatCount,
   formatLineRange,
+  formatNumber,
+  formatPercent,
   formatSteps,
 } from '@/lib/format/count.ts';
 
-describe('formatCount', () => {
+describe('formatSteps', () => {
   it('agrees the noun with the number', () => {
-    expect(formatCount(0, 'task', 'tasks')).toBe('0 tasks');
-    expect(formatCount(1, 'task', 'tasks')).toBe('1 task');
-    expect(formatCount(2, 'task', 'tasks')).toBe('2 tasks');
-  });
-
-  it('counts steps the same way', () => {
+    expect(formatSteps(0)).toBe('0 steps');
     expect(formatSteps(1)).toBe('1 step');
     expect(formatSteps(3)).toBe('3 steps');
+  });
+});
+
+describe('formatNumber', () => {
+  it('groups thousands the same in every locale', () => {
+    expect(formatNumber(42)).toBe('42');
+    expect(formatNumber(3291)).toBe('3,291');
+    expect(formatNumber(1_234_567)).toBe('1,234,567');
+  });
+});
+
+describe('formatPercent', () => {
+  it('rounds a rate to a whole percent, and reads none without one', () => {
+    expect(formatPercent(0.414)).toBe('41%');
+    expect(formatPercent(1)).toBe('100%');
+    expect(formatPercent(null)).toBe('None');
   });
 });
 
@@ -40,6 +52,11 @@ describe('formatBytes', () => {
     expect(formatBytes(1536)).toBe('2 KB');
     expect(formatBytes(1024 * 1024)).toBe('1.0 MB');
     expect(formatBytes(2.5 * 1024 * 1024)).toBe('2.5 MB');
+  });
+
+  it('moves to gigabytes before showing 1024.0 MB', () => {
+    expect(formatBytes(1024 * 1024 * 1024 - 1)).toBe('1.0 GB');
+    expect(formatBytes(3.25 * 1024 * 1024 * 1024)).toBe('3.3 GB');
   });
 });
 

@@ -74,7 +74,7 @@ src/
 │                        the queued messages docked above the composer, file-card.tsx: FileCard, the one card a non-image attachment is in a message and in a composer, a grey bordered tile with the kind's icon from lib/chat/attachments.ts; it and every image attachment take the composer card's corner, ATTACHMENT_CORNER, and its tile ATTACHMENT_TILE_CORNER, 4px in on every side, so the tile is 46px in the 56px card), review (merge-steps.tsx: the steps around the
 │                        merge as a checklist, its block on a now card and its panel on the Review tab, a step's command as a shell code block;
 │                        testing.tsx: the Review tab's How to test, what the tests cover and the steps to try with their targets;
-│                        note.tsx: ReviewNote, the one card every review comment is, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and FindingNote with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), checks (checks-list.tsx: the Checks list in its two stages, Building and CI, ChecksBlock with each check's output behind a toggle, CheckRowItem, the row the Evidence panel's linked checks reuse, and ChecksSections, the compact form the checks fact's and the pull request's popovers show), evidence (evidence-section.tsx: the Review tab's Evidence panel, its current items grouped by kind (comparisons, recordings, screenshots, tests and checks, each a reference to its check, notes, previews), an updated item's quiet mark, the replaced and removed items under a collapsed Earlier versions, the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue (row-summary.tsx: a row's summary line, the handle and status, the mini track and the agent's latest action or the current step's count), home (guide,
+│                        note.tsx: ReviewNote, the one card every review comment is, and RemoveNoteButton, its Remove, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and FindingNote with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), checks (checks-list.tsx: the Checks list in its two stages, Building and CI, ChecksBlock with each check's output behind a toggle, CheckRowItem, the row the Evidence panel's linked checks reuse, and ChecksSections, the compact form the checks fact's and the pull request's popovers show), evidence (evidence-section.tsx: the Review tab's Evidence panel, its current items grouped by kind (comparisons, recordings, screenshots, tests and checks, each a reference to its check, notes, previews), an updated item's quiet mark, the replaced and removed items under a collapsed Earlier versions, the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue (row-summary.tsx: a row's summary line, the handle and status, the mini track and the agent's latest action or the current step's count), home (guide,
 │                        new task, recently finished and recent conversations), tasks, settings (one file per
 │                        section, group.tsx the shared rows, SettingsBlock, FoldingBlock and TOKEN_TEXT;
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
@@ -123,7 +123,7 @@ src/
 │                        over the issue left, the action right, the proposed fix below, code-diff.tsx: CodeDiff, the one wrapper for every diff outside the Code
 │                        tab, with code-diff-view.tsx, the lazily loaded `@pierre/diffs` view; change-snippet.tsx: a
 │                        file's lines as a folded diff for spots and findings), controls (choice, choice buttons, select field, options trigger, copy
-│                        button, checklist.tsx: ItemChecklist and ChecklistBlock, every list of things to do on the
+│                        button and CopyLinkButton, hint-button.tsx: HintButton, a secondary icon button named by its hint, checklist.tsx: ItemChecklist and ChecklistBlock, every list of things to do on the
 │                        kit's Checklist), accounts (sign-in and percent dialogs, usage menu, bar and percent, refresh button, account
 │                        status, the account named with its provider, Run on account items)
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
@@ -163,8 +163,9 @@ src/
     │                    browser's team keys in IndexedDB), join-machines.ts (the join page's projects from your own
     │                    machines, and joining and sharing them there through EngineClient over each machine's own Fetch), channel.ts (a team channel from the browser with its own
     │                    key, and the engine relay of one task; team-socket/ is its TeamSocket service, reconnecting on
-    │                    TEAM_RECONNECT: 1, 2, 5, 10, then every 30 s), schema.ts (the join's shapes and errors), feeds.ts (teammates' tasks for the focused team,
-    │                    merged from the machines and the browser, without machines the dashboard reaches);
+    │                    TEAM_RECONNECT: 1, 2, 5, 10, then every 30 s), schema.ts (the join's shapes and errors), feeds.ts (teammates' tasks from every team you are in,
+    │                    merged from the machines and the browser, without machines the dashboard reaches, and a
+    │                    refusal for each teammate machine that will not list its tasks);
     │                    components/teams/ (the new team dialog, the shared projects dropdown, a teammate's row on All tasks, among your own),
     │                    components/settings/teams.tsx and routes/team-task.tsx (a teammate's task, read-only)
     ├── remote/          The remote build: mode.ts (isRemoteBuild, the page for a path, the service worker's path and
@@ -326,9 +327,11 @@ src/
     │                    browser.ts, worker.ts (notifications through the service worker and their click),
     │                    settings.ts (the Notifications rows), page.ts (the tab title and Floaty's
     │                    meta tags)
-    ├── format/          Counts, times, money, labels, tones, the shared minute and second clocks (clock.ts), a small LRU
-    │                    cache (cache.ts), the rows in view of a list (rows.ts), a checklist's progress and a Markdown
-    │                    task list's items (checklist.ts)
+    ├── format/          The one home of every formatter: numbers, percents, bytes and line ranges (count.ts; a count
+    │                    with its noun is core's describeCount), ages, durations, spans and clocks (time.ts), money,
+    │                    labels, tones, the shared minute and second clocks (clock.ts), a small LRU cache (cache.ts),
+    │                    the rows in view of a list (rows.ts), a checklist's progress and a Markdown task list's items
+    │                    (checklist.ts)
     ├── preferences/     localStorage: theme, layout, rail width, recent tasks, flags, notifications, the
     │                    terminal's font size, disclosure.ts (every collapsible's open state: useDisclosure,
     │                    createDisclosureId, DisclosureScope; docs/design.md 40)
@@ -340,7 +343,8 @@ src/
     │                    `DesktopChrome` gives a subtree the app's look without the bridge (the site's demos)
     ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings and Terminal, each rendered
     │                    ahead at idle) and the last three task pages, by key, with the URL each was left at
-    └── errors.ts (a render error's message and details, the reset key, ⌘K's error toast), queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
+    └── errors.ts (a render error's message and details, the reset key, ⌘K's error toast), idle.ts (scheduleIdle: the one
+        requestIdleCallback with its timeout and the fallback timer), queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
         checks, repository choices, the actions), workspaces.ts (where agents work: worktrees or the main checkout,
         changing a repository's mode), coverage.ts (a repository's test coverage setting, Auto / Custom /
         Off and the Custom dialog's draft, and the changed-line coverage lines the Review tab and the Overview show; what
@@ -415,7 +419,8 @@ print the whole document.
   tab's whole workbench (`lib/code/location.ts`: `?mode=changes|files|search`, `file`, `diff`, `line`, `end`, `ref`,
   `spot`, `q`,
   `regex`, `case`, `word`, `glob`), focused run (`?run=`), the Settings tab (`?tab=agents`, `lib/settings-tabs.ts`) and the All tasks filters
-  (`?status=`, `?q=`) live in the URL, read with
+  (`?q=` and `?status=`, `owner`, `team`, `project`, `repo`, `kind`, `priority`, each a comma list; `lib/tasks/filters.ts`
+  reads them, scopes the rows to your focus and matches them) live in the URL, read with
   `useSearchParam` and written with `updateSearchParams`. Build task URLs only with `resolveTaskPath`: it uses the
   handle (`/tasks/SW-142`), and the id for a task triage has not given one yet.
 - **Logic lives in `lib/`, JSX in `components/` and `routes/`.** A `.tsx` file holds components and the small

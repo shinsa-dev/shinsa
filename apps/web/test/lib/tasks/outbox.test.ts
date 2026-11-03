@@ -18,6 +18,21 @@ describe('the outbox', () => {
     expect(await sending).toBe(true);
     expect(listOutboxMessages('t')).toEqual([]);
 
+    const comment = { path: 'a.ts', side: 'new' as const, line: 2, endLine: null, text: 'Rename.' };
+    let answerCommented: (value: boolean) => void = () => undefined;
+    const commented = sendThroughOutbox(
+      't',
+      '',
+      () =>
+        new Promise<boolean>((resolve) => {
+          answerCommented = resolve;
+        }),
+      [comment]
+    );
+    expect(listOutboxMessages('t')).toMatchObject([{ text: '', comments: [comment] }]);
+    answerCommented(true);
+    await commented;
+
     const failing = sendThroughOutbox('t', 'Oops', () => Promise.reject(new Error('offline')));
     await expect(failing).rejects.toThrow('offline');
     expect(listOutboxMessages('t')).toEqual([]);

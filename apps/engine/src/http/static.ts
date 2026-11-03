@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { resolveInside } from './paths.ts';
+import { resolveInside } from '../files/paths.ts';
 
 const NOT_BUILT = 'Shinsa web app is not built. Run `bun run build` or `bun dev`.';
 

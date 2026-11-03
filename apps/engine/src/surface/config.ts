@@ -383,6 +383,29 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     build: () => ({ type: 'focus.change', projectId: null, until: null }),
     done: () => 'Everything shows again.',
   }),
+  defineCommand({
+    path: ['away', 'record'],
+    summary:
+      'Record a span you were away from your Mac, so your turnaround leaves it out. The Mac app sends these itself.',
+    command: 'away.record',
+    humanOnly: true,
+    fields: [
+      {
+        name: 'from',
+        kind: 'integer',
+        required: true,
+        description: 'When you left, in milliseconds since 1970.',
+      },
+      {
+        name: 'to',
+        kind: 'integer',
+        required: true,
+        description: 'When you came back, in milliseconds since 1970.',
+      },
+    ],
+    build: (values) => ({ type: 'away.record', from: Number(values.from), to: Number(values.to) }),
+    done: () => 'Recorded.',
+  }),
   defineRead({
     path: ['repos', 'list'],
     summary: 'List the repositories agents have worked in.',

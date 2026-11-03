@@ -11,6 +11,13 @@ export interface OnboardingStatus {
     effective: string[];
   };
   defaults: { model: string | null; mergeMethod: Settings['mergeMethod'] };
+  worktrees: {
+    effective: string;
+    configured: string | null;
+    default: string;
+    fromEnvironment: string | null;
+    problem: string | null;
+  };
   paths: { home: string; configPath: string; dataDir: string; userHome: string };
 }
 
@@ -21,9 +28,18 @@ export interface RootSuggestion {
   chosen: boolean;
 }
 
+export interface WorktreeUsage {
+  folder: string;
+  worktrees: number;
+  bytes: number | null;
+  freeBytes: number | null;
+  measuredAt: number;
+}
+
 export interface RootSuggestions {
   suggestions: RootSuggestion[];
   truncated: boolean;
+  refused: string[];
 }
 
 export type OnboardingStepId = 'roots' | 'projects' | 'defaults' | 'accounts' | 'prerequisites';

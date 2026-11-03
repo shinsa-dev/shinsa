@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { readMachineConfig } from '../../src/config/file.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
+import { readMachineConfig } from '../../src/config/machine/index.ts';
 
 export function createConfigAt(root: string, overrides: Partial<ServerConfig> = {}): ServerConfig {
   const dataDir = join(root, 'data');
@@ -13,6 +13,7 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     dataDir,
     databasePath: join(dataDir, 'shinsa.sqlite'),
     worktreesDir: join(dataDir, 'worktrees'),
+    worktreesDirFromEnvironment: false,
     checkBasesDir: join(dataDir, 'check-bases'),
     scratchDir: join(dataDir, 'scratch'),
     cachesDir: join(dataDir, 'caches'),
