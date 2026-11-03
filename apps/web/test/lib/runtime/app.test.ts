@@ -60,6 +60,14 @@ describe('replacing the app’s transport', () => {
     expect(constructor).toBe(makeSocket);
   });
 
+  it('keeps a fiber that started before the swap running, as the engine connection does', async () => {
+    const latch = Promise.withResolvers<void>();
+    const fiber = forkApp(Effect.promise(() => latch.promise).pipe(Effect.as('kept')));
+    replaceAppTransport(createGlobalTransport());
+    latch.resolve();
+    expect(await Effect.runPromise(Fiber.join(fiber))).toBe('kept');
+  });
+
   it('runs a forked effect on the same runtime', async () => {
     const fiber = forkApp(Effect.succeed('forked'));
     expect(await Effect.runPromise(Fiber.join(fiber))).toBe('forked');

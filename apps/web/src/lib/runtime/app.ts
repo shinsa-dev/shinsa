@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime } from 'effect';
+import { type Effect, Layer, ManagedRuntime } from 'effect';
 import { FetchHttpClient, HttpClient } from 'effect/http';
 import { Socket } from 'effect/socket';
 import { EngineHttp } from './engine-http/service.ts';
@@ -30,9 +30,7 @@ let appRuntime = createAppRuntime(
 );
 
 export function replaceAppTransport(transport: Layer.Layer<AppTransportServices>) {
-  const previous = appRuntime;
   appRuntime = createAppRuntime(transport);
-  Effect.runFork(previous.disposeEffect);
 }
 
 export function runApp<A, E>(effect: Effect.Effect<A, E, AppServices>) {
