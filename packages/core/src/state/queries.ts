@@ -220,6 +220,14 @@ export function listBundleFollowers(state: Pick<ShinsaState, 'tasks'>, task: Tas
   return lead?.id === task.id ? followers : [];
 }
 
+export function listBundleBlockers(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  if (!task.bundleReady || task.stage !== 'shipping') return [];
+  const [lead, ...followers] = resolveBundleMembers(state, task);
+  const pending = followers.filter((member) => member.id !== task.id && !member.bundleReady);
+  if (pending.length > 0) return pending;
+  return lead && lead.id !== task.id ? [lead] : [];
+}
+
 export function isBundleFollower(state: Pick<ShinsaState, 'tasks'>, task: Task) {
   return resolveBundleLead(state, task).id !== task.id;
 }

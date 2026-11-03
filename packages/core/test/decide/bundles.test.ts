@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   isBundleFollower,
+  listBundleBlockers,
   listBundleFollowers,
   listOpenGates,
   listStackChildren,
@@ -10,6 +11,7 @@ import {
   resolveBundle,
   resolveBundleLead,
   resolveBundleMembers,
+  resolveQueue,
   resolveRoundBase,
   resolveRoundBases,
 } from '../../src/index.ts';
@@ -826,5 +828,44 @@ describe('a bundle that branches and joins', () => {
     expect(harness.task(child).activity.map((entry) => entry.text)).toContain(
       'Stacked on “Two” and “One” as a bundle'
     );
+  });
+});
+
+describe('a bundle on Home', () => {
+  test('ready tasks of a bundle wait on the ones still working, and parallel ones all show as working', () => {
+    const harness = createHarness();
+    const root = createTask(harness, { request: 'Root' });
+    const left = createTask(harness, { request: 'Left', stacksOn: [root] });
+    const right = createTask(harness, { request: 'Right', stacksOn: [root] });
+    reachReady(harness, root, 1);
+    readyWorktree(harness, left);
+    readyWorktree(harness, right);
+    expect(harness.task(left).stage).toBe('planning');
+    expect(harness.task(right).stage).toBe('planning');
+
+    const queue = resolveQueue(harness.state, 0);
+    expect(queue.working.map((task) => task.id).sort()).toEqual([left, right].sort());
+    expect(queue.waiting.map((task) => task.id)).toEqual([root]);
+    expect(
+      listBundleBlockers(harness.state, harness.task(root))
+        .map((task) => task.id)
+        .sort()
+    ).toEqual([left, right].sort());
+
+    reachReady(harness, left, 2);
+    const later = resolveQueue(harness.state, 0);
+    expect(later.working.map((task) => task.id)).toEqual([right]);
+    expect(later.waiting.map((task) => task.id).sort()).toEqual([root, left].sort());
+    expect(listBundleBlockers(harness.state, harness.task(left)).map((task) => task.id)).toEqual([right]);
+    expect(listBundleBlockers(harness.state, harness.task(right))).toEqual([]);
+
+    reachReady(harness, right, 3);
+    recordClean(harness, root, 1);
+    expect(harness.openGate(root).type).toBe('merge');
+    const merging = resolveQueue(harness.state, 0);
+    expect(merging.working).toEqual([]);
+    expect(merging.waiting.map((task) => task.id).sort()).toEqual([left, right].sort());
+    expect(listBundleBlockers(harness.state, harness.task(left)).map((task) => task.id)).toEqual([root]);
+    expect(listBundleBlockers(harness.state, harness.task(root))).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { TaskListRow } from '@/components/tasks/row.tsx';
+import { describeChainDepth, resolveDepthIndent, TaskListRow } from '@/components/tasks/row.tsx';
 import { findTooltipText } from '../../support/hover.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
@@ -158,6 +158,21 @@ describe('the chain arrow', () => {
     act(() => arrow.focus());
     fireEvent.keyDown(arrow, { key: 'Enter' });
     expect(location.pathname).toBe('/');
+  });
+});
+
+describe('the depth of a row', () => {
+  it('indents every level of a long line, so a line never reads as tasks side by side', () => {
+    const indents = [1, 2, 3, 4, 5, 6].map(resolveDepthIndent);
+    expect(new Set(indents).size).toBe(indents.length);
+    expect(resolveDepthIndent(9)).toBe(resolveDepthIndent(6));
+  });
+
+  it('marks a row deeper than the indent shows with its depth, named on hover', async () => {
+    renderRow(findTask('docs'), 9);
+    expect(row().dataset.depth).toBe('9');
+    expect(await findTooltipText(screen.getByText('9'))).toBe('9 steps down the chain');
+    expect(describeChainDepth(6)).toBeNull();
   });
 });
 

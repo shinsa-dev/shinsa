@@ -12,7 +12,7 @@ import {
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
-import { resolveDepthIndent } from '@/components/tasks/row.tsx';
+import { DepthMark, resolveDepthIndent } from '@/components/tasks/row.tsx';
 import { BUNDLE_ICON, listStackChoices, STACK_LABEL, toggleStack, unstackTask } from '@/lib/tasks/bundles.ts';
 import {
   clearDependencies,
@@ -46,6 +46,7 @@ function TaskChoiceItems({
       >
         <span className={cn('flex min-w-0 items-center gap-2', resolveDepthIndent(depth))}>
           {depth > 0 && <Icon name='IconArrowCornerDownRight' className='text-fg-2' />}
+          <DepthMark depth={depth} />
           <Icon name={icon.name} className={icon.className} />
           <Truncate>{choice.title}</Truncate>
         </span>

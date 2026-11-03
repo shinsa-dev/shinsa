@@ -8,7 +8,7 @@ import { InfoHeader, InfoPopover, InfoSection } from '@/components/overlays/info
 import { ToneLabel } from '@/components/status/text.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { PullRequestBadge } from '@/components/tasks/pull-request-badge.tsx';
-import { resolveDepthIndent } from '@/components/tasks/row.tsx';
+import { DepthMark, resolveDepthIndent } from '@/components/tasks/row.tsx';
 import {
   BUNDLE_ICON,
   BUNDLE_MEMBER,
@@ -27,6 +27,7 @@ function BundleMember({ row }: { row: BundleRow }) {
     <li className='flex min-w-0 items-center gap-2 px-3 py-1.5 text-xs'>
       <span className={cn('flex min-w-0 flex-1 items-center gap-1.5', resolveDepthIndent(row.depth))}>
         {row.depth > 0 && <Icon size='sm' name='IconArrowCornerDownRight' className='shrink-0 text-fg-2' />}
+        <DepthMark depth={row.depth} />
         <InAppLink
           path={resolveTaskPath(row.task)}
           className='min-w-0 font-medium text-fg-4 no-underline outline-none hover:underline active:underline'

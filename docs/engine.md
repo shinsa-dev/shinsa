@@ -1300,7 +1300,14 @@ wait into the stack.
   (`BundleFact`). A task that stacks on several sits under the one shown last and names all of them, "Builds on ‹A›
   and ‹B›", the full list in its tooltip. The note under it says each task builds on the tasks above it, the ones on
   nothing target the default branch, and approving the lead merges them all from the bottom up. A queue row carries
-  the same count, live, as a small mark beside the task's name, where the shared mark goes (`BundleMark`). A ready
+  the same count, live, as a small mark beside the task's name, where the shared mark goes (`BundleMark`). On Home,
+  In progress lists only the tasks of a bundle still being worked on, several at once when they run side by side; a
+  ready task, the lead included, moves to Waiting on another task while any other task of its bundle is not ready,
+  and a ready follower stays there on the lead once all are (`listBundleBlockers`, `resolveQueue`), its row naming
+  what it waits on, "Waits on ‹A›". The tree indents every level up to six
+  (`resolveDepthIndent`, the task list, the popover and the pickers alike), so a long line never reads as tasks side
+  by side; a row deeper than that sits at the sixth level with its depth beside the arrow, "‹n› steps down the chain"
+  on hover (`DepthMark`). A ready
   task's now card says it merges when you approve the bundle on the lead. All tasks files a ready task with its
   bundle's lead, every task nested under the tasks it stacks on (`orderChains`). The rules run after every command for
   the tasks in a bundle (`reviewBundles`, `decide/bundles.ts`), and the invariant walk checks that a follower never

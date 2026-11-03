@@ -46,10 +46,26 @@ export const TASK_LIST_ROW =
 export const FILED_COLUMNS =
   'grid-cols-[minmax(0,1fr)_10rem_4.5rem_4.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
 
-const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13'];
+const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13', 'ps-19.5', 'ps-26', 'ps-32.5'];
+
+const DEEPEST_INDENT = DEPTH_INDENT.length - 1;
 
 export function resolveDepthIndent(depth: number) {
-  return DEPTH_INDENT[Math.min(depth, DEPTH_INDENT.length - 1)];
+  return DEPTH_INDENT[Math.min(depth, DEEPEST_INDENT)];
+}
+
+export function describeChainDepth(depth: number) {
+  return depth > DEEPEST_INDENT ? `${depth} steps down the chain` : null;
+}
+
+export function DepthMark({ depth }: { depth: number }) {
+  const label = describeChainDepth(depth);
+  if (!label) return null;
+  return (
+    <Hint label={label}>
+      <span className='shrink-0 text-2xs text-fg-2 tabular-nums'>{depth}</span>
+    </Hint>
+  );
 }
 
 function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
@@ -135,7 +151,6 @@ export const TaskListRow = React.memo(function TaskListRowItem({
   columns?: string;
 }) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  const level = Math.min(depth, DEPTH_INDENT.length - 1);
   return (
     <LazyMenu kind='context' content={<TaskMenuItems state={state} task={task} />}>
       <LazyMenuTrigger
@@ -144,7 +159,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
           <div
             role='button'
             tabIndex={0}
-            data-depth={level}
+            data-depth={depth}
             onClick={(event) => {
               if (event.currentTarget.contains(event.target as Node)) navigate(resolveTaskPath(task));
             }}
@@ -159,6 +174,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
       >
         <span className={cn('flex min-w-0 items-center gap-1.5', resolveDepthIndent(depth))}>
           {depth > 0 && <ChainArrow state={state} task={task} />}
+          <DepthMark depth={depth} />
           <Hint label={`${PRIORITY_LABEL[task.priority]} priority`}>
             <span className='grid size-4 shrink-0 place-items-center'>
               <PriorityIcon priority={task.priority} />

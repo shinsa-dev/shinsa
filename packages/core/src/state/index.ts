@@ -37,6 +37,7 @@ export {
   isWaitingForCheckout,
   isWaitingOnAnswer,
   listActiveRuns,
+  listBundleBlockers,
   listBundleFollowers,
   listDependents,
   listLiveRuns,

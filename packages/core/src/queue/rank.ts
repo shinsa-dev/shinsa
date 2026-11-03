@@ -17,6 +17,7 @@ import { isTeamTask } from '../share/teams.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
   isHeldInBacklog,
+  listBundleBlockers,
   listOpenBlockers,
   listOpenGates,
   listPendingDependencies,
@@ -156,8 +157,9 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
     if (tasksWithGates.has(task.id) || !isListedInFocus(state, task, now)) continue;
     if (task.snoozed && !isTaskSettled(task)) snoozed.push(task);
     else if (task.backlog && !isTaskSettled(task)) backlog.push(task);
-    else if (listWaitsOn(state, task).length > 0) waiting.push(task);
-    else if (isMoving(task, running)) working.push(task);
+    else if (listWaitsOn(state, task).length > 0 || listBundleBlockers(state, task).length > 0) {
+      waiting.push(task);
+    } else if (isMoving(task, running)) working.push(task);
   }
 
   const ready = entries.filter((entry) => isInFocus(state, entry.task, now)).sort(compareGates);

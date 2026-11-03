@@ -20,7 +20,7 @@ import { AttachButton, AttachmentChips, useFileDrop } from '@/components/chat/at
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { COMPOSER_FIELD, COMPOSER_FOOTER } from '@/components/layout/surface/card.ts';
 import { ProjectOption } from '@/components/status/project-dot.tsx';
-import { resolveDepthIndent } from '@/components/tasks/row.tsx';
+import { DepthMark, resolveDepthIndent } from '@/components/tasks/row.tsx';
 import { useAttachments } from '@/hooks/use-attachments.ts';
 import { canSendDraft } from '@/lib/chat/attachment-drafts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
@@ -143,6 +143,7 @@ function AfterTaskList({
                 <Icon name='IconArrowCornerDownRight' className='text-fg-2' />
               </span>
             )}
+            <DepthMark depth={depth} />
             <Truncate className='min-w-0 flex-1'>{task.title}</Truncate>
             {task.handle && <CommandHint className='shrink-0'>{task.handle}</CommandHint>}
             <Icon

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Gate, Task } from '@shinsa/core';
 import {
+  describeBundleWait,
   describeTaskCounts,
   describeWaitsOn,
   listOpenTaskChoices,
@@ -515,6 +516,27 @@ describe('the tasks of a bundle in All tasks', () => {
       ({ task, depth }) => `${task.id}:${depth}`
     );
     expect(merge).toEqual(['root:0', 'middle:1', 'top:2']);
+  });
+
+  it('names the tasks of the bundle a ready task still waits on', () => {
+    const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' }, title: 'Root' });
+    const left = createTask({ id: 'left', stage: 'building', stacksOn: ['root'], title: 'Left' });
+    const right = createTask({
+      id: 'right',
+      stage: 'shipping',
+      stacksOn: ['root'],
+      bundleReady: { commit: 'b' },
+      title: 'Right',
+    });
+    const state = createShinsaState({ tasks: [root, left, right] });
+    expect(describeBundleWait(state, root)).toBe('Waits on “Left”');
+    expect(describeBundleWait(state, right)).toBe('Waits on “Left”');
+    expect(describeBundleWait(state, left)).toBeNull();
+    const done = createShinsaState({
+      tasks: [root, { ...left, stage: 'shipping', bundleReady: { commit: 'c' } }, right],
+    });
+    expect(describeBundleWait(done, right)).toBe('Waits on “Root”');
+    expect(describeBundleWait(done, root)).toBeNull();
   });
 
   it('keeps a ready task on its own when nothing open is above it', () => {

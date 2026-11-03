@@ -7,6 +7,7 @@ import {
   isPausingGate,
   isTaskSettled,
   isWatchHome,
+  listBundleBlockers,
   listWaitsOn,
   type ShinsaState,
   selectLeadGate,
@@ -141,6 +142,11 @@ export function describeWaitsOn(waitsOn: Task[]) {
   const titles = waitsOn.map((task) => `“${task.title}”`);
   if (titles.length <= 2) return `Waits on ${titles.join(' and ')}`;
   return `Waits on ${titles.slice(0, 2).join(', ')} and ${titles.length - 2} more`;
+}
+
+export function describeBundleWait(state: ShinsaState, task: Task) {
+  const blockers = listBundleBlockers(state, task);
+  return blockers.length > 0 ? describeWaitsOn(blockers) : null;
 }
 
 function listChainParents(state: ShinsaState, task: Task) {
