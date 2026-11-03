@@ -2135,7 +2135,7 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   commands runs nothing extra, so nothing about them can be missing (Checks, above).
 - **A new repository is started first.** When the task needs a worktree, `RepoSetup.prepare` runs before the
   checks and acts only where nothing can be lost: a repository with no refs at all (no branch, tag or remote branch)
-  gets an empty first commit (`chore: start the repository`, `--allow-empty`, so untracked files stay untracked) on its
+  gets an empty first commit (`chore: start the repository`, written on git's empty tree without the index, so staged and untracked files stay as they were) on its
   default branch, and an empty folder that is not a repository yet is `git init`ed on that branch first. With an
   origin it acts only when `git ls-remote --heads origin` answers and lists no branch, then pushes the commit there; an
   unreachable origin, or one with history, leaves the repository as it was for the checks to describe. A folder with

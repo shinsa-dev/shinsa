@@ -122,11 +122,12 @@ export class RepoSetup extends Context.Service<
         if (origin && !(yield* isOriginEmpty(path, signal))) return null;
         const head = yield* git.attempt(['symbolic-ref', 'HEAD', `refs/heads/${branch}`], path);
         if (!head.ok) return null;
-        const commit = yield* git.attempt(
-          ['commit', '--quiet', '--allow-empty', '--no-verify', '-m', FIRST_COMMIT_MESSAGE],
-          path
-        );
+        const tree = yield* git.attempt(['hash-object', '-w', '-t', 'tree', '/dev/null'], path);
+        if (!tree.ok) return null;
+        const commit = yield* git.attempt(['commit-tree', tree.stdout, '-m', FIRST_COMMIT_MESSAGE], path);
         if (!commit.ok) return null;
+        const ref = yield* git.attempt(['update-ref', `refs/heads/${branch}`, commit.stdout, ''], path);
+        if (!ref.ok) return null;
         if (!origin) return { branch, initialized, pushed: false } satisfies RepoStart;
         const push = yield* git.attempt(
           ['push', '--quiet', 'origin', `refs/heads/${branch}:refs/heads/${branch}`],

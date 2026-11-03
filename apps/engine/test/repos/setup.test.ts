@@ -79,9 +79,12 @@ describe('prepareSetup', () => {
   test('a repository with no commits gets an empty first commit on its default branch, and then verifies', async () => {
     const { repo, path } = await createEmptyRepo();
     writeFileSync(join(path, 'notes.md'), 'kept\n');
+    writeFileSync(join(path, 'staged.md'), 'staged\n');
+    await git(path, 'add', 'staged.md');
     expect(await prepareSetup(repo)).toEqual({ branch: 'main', initialized: false, pushed: false });
     expect(await readLog(path, 'main')).toBe('chore: start the repository');
-    expect((await git(path, 'status', '--porcelain')).trim()).toBe('?? notes.md');
+    expect((await git(path, 'ls-tree', '-r', '--name-only', 'main')).trim()).toBe('');
+    expect((await git(path, 'status', '--porcelain')).trim()).toBe('A  staged.md\n?? notes.md');
     expect(await verifySetup(repo, BUILD)).toEqual([]);
     expect(await prepareSetup(repo)).toBeNull();
   });

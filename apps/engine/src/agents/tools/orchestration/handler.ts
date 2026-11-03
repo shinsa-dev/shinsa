@@ -8,6 +8,7 @@ import {
   type Run,
   resolveDelegationStatus,
   resolveTaskProject,
+  selectProjectByReference,
   type ShinsaState,
   serializeReference,
   type Task,
@@ -160,14 +161,8 @@ async function answerDelegation(input: Record<string, unknown>, call: Orchestrat
 }
 
 function findProjectId(state: ShinsaState, reference: string) {
-  const lower = reference.trim().toLowerCase();
   const projects = Object.values(state.projects);
-  const project = projects.find(
-    (candidate) =>
-      candidate.id === reference ||
-      candidate.key.toLowerCase() === lower ||
-      candidate.name.toLowerCase() === lower
-  );
+  const project = selectProjectByReference(projects, reference);
   if (project) return project.id;
   const known = projects.map((candidate) => `${candidate.name} (${candidate.key})`);
   throw new Error(`There is no project "${reference}". Known: ${known.join(', ') || 'none'}.`);
