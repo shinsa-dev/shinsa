@@ -2704,6 +2704,29 @@ Every export: `Field`, `FieldContent`, `FieldDescription`, `FieldError`, `FieldG
 
 Do: `aria-invalid` on the control plus a `FieldError` with its id in `aria-describedby`. Don't: hand-style an error paragraph, add a border or fill to make a field show, or nest `Field` inside `Field` except in a choice card.
 
+#### FilterBar
+
+**For:** narrowing a list by fields that each take several values: All tasks' status, owner, team, project, repository, kind and priority. **Not for:** a single on/off option in a menu (a `DropdownMenuCheckboxItem`), a search (an `Input` beside it), a switch between views (`Tabs`).
+
+`@shinsa/ui/components/filter-bar`, on `DropdownMenu`. Fields and their options are plain data (`FilterField`: `key`, `label`, `icon`, `options` of `FilterOption`: `value`, `label`, `icon`, `count`), and the selection (`FilterSelection`, each field's chosen values) lives where the page keeps it, the URL on All tasks, so the same fields feed ⌘K.
+
+| Part | What it is |
+| --- | --- |
+| `FilterMenu` | The entry point: an icon-only secondary `icon` button (`IconFilter1`, the input's fill and height) beside the search field, its label `Filter, 2 on` when fields are on; a submenu per field with a checkbox per value and its count, and Clear filters. `variant='add'` is the `icon-xs` plus at the end of a `FilterBar`, offering the fields not yet on |
+| `FilterBar` | The row of active filters: `flex flex-wrap items-center gap-1.5`, closer to the list it filters than to the heading above |
+| `FilterChip` | One per filtered field, `h-5.5`: the field's icon and label, "is" or "is any of", then its values (two named, then +N) as a button that opens the same checkboxes to change them in place, and a cross that removes the field |
+| `FilterClear` | A `bare` `xs` Clear all, shown once two fields are on |
+
+```tsx
+<FilterBar>
+  {active.map((field) => (
+    <FilterChip key={field.key} field={field} values={selected[field.key]} onToggle={toggle} onRemove={() => clear(field.key)} />
+  ))}
+  <FilterMenu variant='add' fields={inactive} selected={selected} onToggle={toggle} />
+  {active.length > 1 && <FilterClear onClick={clearAll} />}
+</FilterBar>
+```
+
 #### HighlightList (and HoverHighlight)
 
 **For:** the one shared highlight behind every list of rows you pick from. Rows never draw a hover, highlighted or selected background of their own; one absolutely positioned indicator slides to the current row. Used by every `DropdownMenu` and context menu (built in), `Select`, `Command` (its own copy of the same mechanics), setup's option lists, list cards, and through `HoverHighlight` the rail's nav, queue rows and popover task rows. **Not for:** a single control (a button has its own fill), the Code tab's file tree and search results (instant on purpose).

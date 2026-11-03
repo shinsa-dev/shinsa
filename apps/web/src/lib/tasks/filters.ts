@@ -21,7 +21,7 @@ import { resolveTaskGroup, TASK_GROUPS, type TaskGroupKey, type TeamEntry } from
 import { SHAPE_ICON, SHAPE_LABEL } from '@/lib/tasks/shapes.ts';
 import { describeTeamTaskOwner } from '@/lib/teams/feeds.ts';
 
-export const TASK_FILTER_KEYS = ['status', 'owner', 'team', 'project', 'repo', 'kind', 'priority'] as const;
+const TASK_FILTER_KEYS = ['status', 'owner', 'team', 'project', 'repo', 'kind', 'priority'] as const;
 
 export type TaskFilterKey = (typeof TASK_FILTER_KEYS)[number];
 
@@ -164,7 +164,7 @@ function matchesAny(picked: readonly string[], values: readonly (string | null)[
   return picked.length === 0 || values.some((value) => value !== null && picked.includes(value));
 }
 
-export function matchesTaskFilters(row: TaskRow, filters: TaskFilters) {
+function matchesTaskFilters(row: TaskRow, filters: TaskFilters) {
   const needle = filters.search.trim().toLowerCase();
   return (
     (needle === '' || matchesSearch(row, needle)) &&
@@ -182,7 +182,7 @@ export function filterTaskRows(rows: readonly TaskRow[], filters: TaskFilters) {
   return rows.filter((row) => matchesTaskFilters(row, filters));
 }
 
-export interface TaskFilterOption {
+interface TaskFilterOption {
   value: string;
   label: string;
   icon?: MenuItemIcon;

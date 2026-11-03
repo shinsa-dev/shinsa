@@ -7,7 +7,7 @@ import { useRemoteSnapshot } from '@/lib/connection/socket.ts';
 import { describeUserName, resolveSharedProfile, type UserProfile } from '@/lib/remote/users.ts';
 import { describeTeamTaskOwner, describeTeamTaskPlace } from '@/lib/teams/feeds.ts';
 
-export const YOU_OWNER = 'You';
+const YOU_OWNER = 'You';
 
 function OwnerAvatar({ user, label, detail }: { user: UserProfile; label: string; detail?: string }) {
   return (
