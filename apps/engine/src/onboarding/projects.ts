@@ -6,7 +6,7 @@ import {
   resolveProjectSuggestions,
   type SuggestionRepo,
 } from '@shinsa/core';
-import type { ProjectChanges } from '../projects/routes.ts';
+import type { ProjectChanges } from '../projects/changes.ts';
 import { type LoginResolver, listLocalRepos, readOriginRemote } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { applyRevision } from './revise.ts';

@@ -1,5 +1,7 @@
 import { CODE_LIMITS } from '@shinsa/core';
+import { NEWLINE } from '../files/schema.ts';
 import { killProcessGroup } from '../shell/index.ts';
+import { READ_ENV } from './schema.ts';
 import { parseInfoLine } from './tree/entries.ts';
 import type { ObjectInfo } from './tree/schema.ts';
 
@@ -21,11 +23,7 @@ export interface BatchChild {
   exited: Promise<number>;
 }
 
-const NEWLINE = 10;
-
 const IDLE_MS = 30_000;
-
-const BATCH_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_PAGER: 'cat' };
 
 const DECODER = new TextDecoder();
 
@@ -44,7 +42,7 @@ function spawnBatch(repoPath: string): BatchChild {
     stdout: 'pipe',
     stderr: 'ignore',
     detached: true,
-    env: { ...Bun.env, ...BATCH_ENV },
+    env: { ...Bun.env, ...READ_ENV },
   });
 }
 

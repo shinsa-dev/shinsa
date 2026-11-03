@@ -9,13 +9,13 @@ import {
   HttpIncomingMessage,
 } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
+import { REQUEST_FAILED } from '../../http/schema.ts';
 import {
   EngineAnswerInvalid,
   type EngineClientOptions,
   EngineErrorBody,
   EngineNotRunning,
   NOT_RUNNING,
-  REQUEST_FAILED,
 } from './schema.ts';
 
 export class EngineClient extends Context.Service<

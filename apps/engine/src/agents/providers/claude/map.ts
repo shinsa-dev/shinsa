@@ -10,9 +10,8 @@ import {
   splitMessageAttachments,
 } from '@shinsa/core';
 import { resolveServerLabel } from '../../../extensions/usage.ts';
+import { MAX_TEXT } from '../schema.ts';
 import type { ImageStore } from '../types.ts';
-
-const MAX_TEXT = 12_000;
 
 const MAX_OUTPUT = 4_000;
 

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
 import { resolveKeychainAccount } from '../accounts/paths.ts';
 import { resolveConfig, resolveServerAddress } from '../config/index.ts';
+import { resolveRepoRoot } from '../git/index.ts';
 import { resolveServerUrl } from '../http/index.ts';
 import {
   BUNDLE,
@@ -108,8 +109,7 @@ export function createOpenApp(base: string, options: OpenAppOptions) {
 }
 
 async function readRepoRoot(dir: string) {
-  const result = await runCommand(['git', '-C', dir, 'rev-parse', '--show-toplevel'], process.cwd());
-  return result.ok ? result.stdout.trim() || null : null;
+  return (await resolveRepoRoot(dir)) || null;
 }
 
 function createServiceRunner(tool: string[]): ServiceRunner {

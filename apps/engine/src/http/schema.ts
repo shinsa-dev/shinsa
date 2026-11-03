@@ -1,6 +1,7 @@
 import type { AgentProviderInfo, Changelog, GuestActor } from '@shinsa/core';
 import {
   BodyTooLarge,
+  type FieldFailure,
   ConnectRefused,
   ContentTypeInvalid,
   InspectReadOnly,
@@ -138,5 +139,12 @@ export const BODY_NOT_JSON = 'The request body is not valid JSON.';
 export const BODY_NOT_OBJECT = 'The request body must be an object.';
 
 export const REQUEST_FAILED = 'request_failed';
+
+export const PROJECT_ID_LIMIT = 200;
+
+export const PROJECT_GONE: FieldFailure = {
+  code: 'project_not_found',
+  message: 'That project is not there anymore.',
+};
 
 export const BROWSER_ONLY = 'browser_only';

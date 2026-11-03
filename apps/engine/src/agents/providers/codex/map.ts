@@ -1,5 +1,6 @@
 import type { ChatEditHunk, ChatEvent, ChatNotice, ChatTodo, ChatTool, ChatToolArgs } from '@shinsa/core';
 import { mapClaudeTool, mapToolResult } from '../claude/map.ts';
+import { MAX_TEXT } from '../schema.ts';
 import type { ImageStore } from '../types.ts';
 import { readText } from './client.ts';
 
@@ -14,8 +15,6 @@ interface MappedCall {
   callId: string;
   tool: ChatTool;
 }
-
-const MAX_TEXT = 12_000;
 
 const SHELL_WRAPPER = /^(?:\S*\/)?(?:ba|z)?sh\s+-l?c\s+(['"])([\s\S]*)\1$/;
 

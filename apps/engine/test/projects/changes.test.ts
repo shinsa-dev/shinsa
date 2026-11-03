@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { createProjectChanges } from '../../src/projects/routes.ts';
+import { createProjectChanges } from '../../src/projects/changes.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { createGitRepo, createTempDir } from '../helpers/index.ts';

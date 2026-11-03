@@ -9,6 +9,7 @@ import {
   type TerminalPlaceKind,
 } from '@shinsa/core';
 import { Duration, Effect, Schedule, Schema } from 'effect';
+import type { TerminalViewer } from './session.ts';
 
 export class PortUnavailable extends Schema.TaggedError<PortUnavailable, { readonly brand: unique symbol }>()(
   'PortUnavailable',
@@ -196,3 +197,18 @@ export const HANG_UP_GRACE = Duration.seconds(3);
 export const FOREGROUND_TIMEOUT = Duration.seconds(5);
 
 export const REFINE_LIMITS = { scripts: 12, script: 200, dependencies: 60 };
+
+export interface ServiceMachine {
+  home: string;
+  dataDir: string;
+}
+
+export interface TerminalSocketData {
+  kind: 'terminal';
+  terminalId: string;
+  viewer: TerminalViewer | null;
+}
+
+export const TERMINAL_SOCKET_PATH = /^\/ws\/terminals\/([A-Za-z0-9-]{1,64})$/;
+
+export const SOCKET_CLOSED = 4404;

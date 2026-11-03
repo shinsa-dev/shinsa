@@ -396,8 +396,6 @@ export const USAGE_HORIZON_DAYS = 90;
 
 export const DAY_MS = 86_400_000;
 
-export const NEWLINE = 0x0a;
-
 export const CLAUDE_TOOL_USE =
   /"type":"tool_use","id":"[^"]*","name":"(mcp__[^"]+|Skill)"(?:,"input":\{"skill":"([^"]+)")?/g;
 

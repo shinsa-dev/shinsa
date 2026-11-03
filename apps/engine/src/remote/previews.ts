@@ -23,9 +23,10 @@ import {
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
-import { EffectFailed } from '../runtime/failures/schema.ts';
+import { createFinalFailure } from '../runtime/failures/classify.ts';
 import { EgressGate } from './egress/service.ts';
 import type { Remote } from './index.ts';
+import { NORMAL_CLOSE } from './schema.ts';
 
 export const PREVIEW_NOT_PAIRED =
   'Turn on remote access in Settings → General to share this preview. Its link works once this machine is paired.';
@@ -35,8 +36,6 @@ export const PREVIEW_LINK_LOST =
 
 export const PREVIEW_NO_URL =
   'This service has no preview URL, so there is no page to share. Give it one in its settings, then share it again.';
-
-const FINAL = { retryable: false, delayMs: null };
 
 const DROPPED_HEADERS: ReadonlySet<string> = new Set([
   'connection',
@@ -273,7 +272,7 @@ export class Previews implements PreviewEffects, PreviewLinks {
     for (const socket of [...this.#sockets]) {
       if (this.#remote.isEnabled && this.#isStillOpen(socket)) continue;
       this.#sockets.delete(socket);
-      socket.peer.close(1000, PREVIEW_GONE);
+      socket.peer.close(NORMAL_CLOSE, PREVIEW_GONE);
       socket.upstream.close();
     }
   }
@@ -388,11 +387,9 @@ export class Previews implements PreviewEffects, PreviewLinks {
     const preview = this.#engine.state.tasks[taskId]?.previews?.find((each) => each.serviceId === serviceId);
     if (!preview) return;
     const credentials = this.#remote.store.file.credentials;
-    if (!credentials)
-      throw new EffectFailed({ message: PREVIEW_NOT_PAIRED, detail: PREVIEW_NOT_PAIRED, ...FINAL });
+    if (!credentials) throw createFinalFailure(PREVIEW_NOT_PAIRED);
     const service = this.#services.snapshot().services.find((each) => each.id === serviceId);
-    if (!service?.previewUrl)
-      throw new EffectFailed({ message: PREVIEW_NO_URL, detail: PREVIEW_NO_URL, ...FINAL });
+    if (!service?.previewUrl) throw createFinalFailure(PREVIEW_NO_URL);
     const current = parsePreviewUrl(preview.url, this.#origin);
     const url =
       current?.instanceId === credentials.instanceId

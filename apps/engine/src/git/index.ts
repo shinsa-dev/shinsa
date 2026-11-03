@@ -1,5 +1,5 @@
 export { type BundleBranch, checkBundleMerge } from './bundle.ts';
-export { commitWorktree, resolveHead, stashEdits } from './commit.ts';
+export { commitWorktree, resolveHead, selectHead, stashEdits } from './commit.ts';
 export {
   BRANCH_PATTERN,
   COMMIT_TYPES,

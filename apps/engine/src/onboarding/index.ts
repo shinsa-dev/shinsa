@@ -14,7 +14,7 @@ import type { ModelSource } from '../agents/index.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
 import type { ConfigStore, ServerConfig } from '../config/index.ts';
 import type { JsonObject } from '../http/schema.ts';
-import { createProjectChanges } from '../projects/routes.ts';
+import { createProjectChanges } from '../projects/changes.ts';
 import type { LoginResolver, Roots } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';

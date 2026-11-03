@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { ENGINE_PROTOCOL } from '@shinsa/core';
 import enginePackage from '../../package.json' with { type: 'json' };
-import { runCommand } from '../shell/index.ts';
+import { selectHead } from '../git/index.ts';
 import { BUNDLE, type ShinsaBundle } from './bundle.ts';
 
 export interface ServerInstance {
@@ -58,8 +58,6 @@ export const INSTALL_PATH = BUNDLE ? BUNDLE.root : resolve(import.meta.dirname, 
 
 export const ENGINE_ENTRY = resolve(import.meta.dirname, '../main.ts');
 
-const COMMIT_TIMEOUT_MS = 5_000;
-
 export function createServerInstance(
   commit: string | null = null,
   now = Date.now(),
@@ -79,10 +77,8 @@ export async function resolveServerInstance(
   bundle: ShinsaBundle | null = BUNDLE
 ): Promise<ServerInstance> {
   if (bundle) return createServerInstance(bundle.commit, Date.now(), bundle);
-  const result = await runCommand(['git', 'rev-parse', 'HEAD'], installPath, {
-    timeoutMs: COMMIT_TIMEOUT_MS,
-  });
-  return createServerInstance(result.ok && /^[0-9a-f]{40}$/.test(result.stdout) ? result.stdout : null);
+  const head = await selectHead(installPath);
+  return createServerInstance(head && /^[0-9a-f]{40}$/.test(head) ? head : null);
 }
 
 export function describeVersion(instance: Pick<ServerInstance, 'version' | 'commit'>) {
