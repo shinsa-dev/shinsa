@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { isTaskSettled } from '@shinsa/core';
 import { Accounts, createOnboardingAccounts, UsageResumeClock } from '../accounts/index.ts';
 import {
   listDefaultProviders,
@@ -126,6 +127,10 @@ export function createServices(
     home: config.userHome,
     version: instance.version,
     readOnly: config.inspect,
+    describeTask: (taskId) => {
+      const task = engine.state.tasks[taskId];
+      return task ? { handle: task.handle ?? null, settled: isTaskSettled(task) } : null;
+    },
     ...options.terminals,
   });
   const previews = new Previews({ engine, remote, services: terminals, origin: config.previewOrigin });

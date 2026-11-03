@@ -110,6 +110,18 @@ type PortPicker = (preferred: number | null, taken: ReadonlySet<number>) => numb
 
 type ForegroundReader = (pid: number) => Promise<string | null>;
 
+export interface TerminalTask {
+  handle: string | null;
+  settled: boolean;
+}
+
+export type TaskDescriber = (taskId: string) => TerminalTask | null;
+
+export interface TerminalHolder {
+  taskId: string | null;
+  service: string | null;
+}
+
 export interface TerminalsOptions {
   dataDir: string;
   home: string;
@@ -118,6 +130,7 @@ export interface TerminalsOptions {
   env?: Env;
   spawn?: TerminalSpawner;
   readForeground?: ForegroundReader;
+  describeTask?: TaskDescriber;
   pickPort?: PortPicker;
   now?: () => number;
   newId?: () => string;

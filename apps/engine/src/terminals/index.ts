@@ -8,6 +8,7 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
+import { listReclaimable, resolveLimitMessage } from './limit.ts';
 import { resolveServiceRunIn } from './places.ts';
 import {
   pickFreePort,
@@ -212,12 +213,39 @@ export class Terminals {
     return this.#options.newId?.() ?? Bun.randomUUIDv7();
   }
 
-  #open(start: TerminalStart, service: ServiceDefinition | null, env: Record<string, string> = {}) {
-    if (this.#sessions.size >= TERMINAL_LIMITS.terminals)
+  #describeTask(taskId: string) {
+    return this.#options.describeTask?.(taskId) ?? null;
+  }
+
+  #makeRoom() {
+    const over = this.#sessions.size - TERMINAL_LIMITS.terminals + 1;
+    if (over <= 0) return;
+    const sessions = [...this.#sessions.values()];
+    const ended = sessions.filter((session) => !session.running && !this.#resumable.has(session.info.id));
+    const reclaimable = listReclaimable(
+      ended.map((session) => session.info),
+      (taskId) => this.#describeTask(taskId)
+    );
+    if (reclaimable.length < over)
       throw new DomainError({
         code: 'terminal_limit',
-        message: `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most.`,
+        message: resolveLimitMessage(
+          sessions
+            .filter((session) => session.running)
+            .map((session) => ({
+              taskId: session.info.taskId,
+              service: session.info.serviceId
+                ? (this.#services.get(session.info.serviceId)?.name ?? null)
+                : null,
+            })),
+          (taskId) => this.#describeTask(taskId)
+        ),
       });
+    for (const id of reclaimable.slice(0, over)) this.#closeSession(this.find(id));
+  }
+
+  #open(start: TerminalStart, service: ServiceDefinition | null, env: Record<string, string> = {}) {
+    this.#makeRoom();
     const info: TerminalInfo = {
       id: this.#newId(),
       ...start,
