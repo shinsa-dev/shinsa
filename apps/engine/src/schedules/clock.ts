@@ -1,51 +1,43 @@
 import { DomainError, type ShinsaState } from '@shinsa/core';
-import { describeError, log } from '../log/index.ts';
+import { Effect } from 'effect';
+import { describeError } from '../log/redact.ts';
 import { type ClockEntry, StateClock, type StateClockOptions } from '../runtime/clock.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import type { Engine } from '../runtime/engine.ts';
+import { SCHEDULE_CLOCK_DEFAULTS, ScheduleDispatchFailed, type ScheduleClockHandle } from './clock/schema.ts';
+import { createScheduleClock } from './clock/service.ts';
 
 export class ScheduleClock extends StateClock {
+  readonly #handle: ScheduleClockHandle;
+
   constructor(engine: Engine, options: StateClockOptions = {}) {
-    super(
-      engine,
-      {
-        area: 'Schedules',
-        failure: 'Could not run the due schedules',
-        minDelayMs: 1_000,
-        maxDelayMs: 60 * 60 * 1000,
-      },
-      options
-    );
+    super(engine, SCHEDULE_CLOCK_DEFAULTS, options);
+    this.#handle = createScheduleClock({
+      state: Effect.sync(() => this.engine.state),
+      now: Effect.sync(() => this.now()),
+      dispatch: (command, id) =>
+        Effect.tryPromise({
+          try: () => this.engine.dispatch(command, { id }),
+          catch: (error) =>
+            error instanceof DomainError
+              ? error
+              : new ScheduleDispatchFailed({ message: describeError(error) }),
+        }),
+      refuse: (entryId) => Effect.sync(() => this.refuse(entryId)),
+    });
   }
 
   protected listEntries(state: ShinsaState): ClockEntry[] {
     return Object.values(state.schedules).flatMap((schedule) => {
       if (!schedule.enabled || schedule.nextRunAt === null) return [];
       const id = `schedule:${schedule.id}:${schedule.nextRunAt}:${schedule.updatedAt}`;
-      const fire = async () => {
-        const events = await this.#fire(schedule.id);
-        if (events?.length === 0) this.refuse(id);
-      };
-      return [{ id, dueAt: schedule.nextRunAt, fire }];
+      return [
+        {
+          id,
+          dueAt: schedule.nextRunAt,
+          fire: () => edgeRuntime.runPromise(this.#handle.fire(schedule.id, id)),
+        },
+      ];
     });
-  }
-
-  async #fire(scheduleId: string) {
-    const current = this.engine.state.schedules[scheduleId];
-    if (!current?.enabled || current.nextRunAt === null || current.nextRunAt > this.now()) return null;
-    const dueAt = current.nextRunAt;
-    const id = `schedule:${scheduleId}:${dueAt}`;
-    try {
-      return await this.engine.dispatch({ type: 'schedule.fire', scheduleId, dueAt }, { id });
-    } catch (error) {
-      log.warn('[Schedules] A schedule could not run; recording the failure', {
-        scheduleId,
-        error: describeError(error),
-      });
-      const detail = error instanceof DomainError ? error.message : 'Shinsa could not run it.';
-      return await this.engine.dispatch(
-        { type: 'schedule.fail', scheduleId, dueAt, deliveryId: null, detail },
-        { id: `${id}:fail` }
-      );
-    }
   }
 }

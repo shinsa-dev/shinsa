@@ -236,4 +236,12 @@ describe('Onboarding', () => {
     expect(calls).toEqual([['open', PRIVACY_SETTINGS_URL]]);
     expect(PRIVACY_SETTINGS_URL).toContain('Privacy_AllFiles');
   });
+
+  test('a command runner that breaks fails opening System Settings with what went wrong', async () => {
+    const { onboarding } = setup(() => Promise.reject(new Error('The runner broke.')));
+    await expect(onboarding.openPrivacySettings()).rejects.toMatchObject({
+      _tag: 'OnboardingCallFailed',
+      message: 'The runner broke.',
+    });
+  });
 });

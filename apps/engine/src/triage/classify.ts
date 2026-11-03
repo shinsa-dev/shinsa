@@ -1,21 +1,12 @@
-import { Duration, Effect } from 'effect';
+import { Effect } from 'effect';
+import type { QuickJson } from '../agents/quick/index.ts';
 import { describeError } from '../log/redact.ts';
-import { edgeRuntime } from '../runtime/edge.ts';
-import { ClassifierFailed } from './schema.ts';
+import { ClassifierFailed, type QuickAsk } from './schema.ts';
 
-export function requestWithin<A>(ask: () => Promise<A>, timeoutMs: number) {
-  return edgeRuntime.runPromise(
+export function resolveQuickAsk(ask: QuickJson): QuickAsk {
+  return <T>(system: string, prompt: string, schema: Parameters<QuickJson>[2]) =>
     Effect.tryPromise({
-      try: ask,
+      try: () => ask<T>(system, prompt, schema),
       catch: (cause) => new ClassifierFailed({ message: describeError(cause) }),
-    }).pipe(
-      Effect.timeoutOrElse({
-        duration: Duration.millis(timeoutMs),
-        orElse: () =>
-          Effect.fail(
-            new ClassifierFailed({ message: `The classifier did not answer within ${timeoutMs} ms.` })
-          ),
-      })
-    )
-  );
+    });
 }

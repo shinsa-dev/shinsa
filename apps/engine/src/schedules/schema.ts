@@ -55,6 +55,11 @@ export interface WatchWording {
   text: string | null;
 }
 
+export class WatchWordingFailed extends Schema.TaggedError<
+  WatchWordingFailed,
+  { readonly brand: unique symbol }
+>()('WatchWordingFailed', { message: Schema.String }) {}
+
 export type WatchWriter = (server: string, data: string) => Promise<WatchWording>;
 
 export const WEBHOOK_ROUTE_PREFIX = '/api/hooks';

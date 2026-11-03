@@ -1,5 +1,10 @@
-import { type AccountImport, DomainError } from '@shinsa/core';
+import { DomainError } from '@shinsa/core';
+import { Effect } from 'effect';
+import { describeError } from '../log/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import type { Cswap } from './cswap.ts';
+import { ImportSignInFailed, type ImportsHandle } from './imports/schema.ts';
+import { makeAccountImports } from './imports/service.ts';
 import type { AccountStore } from './store.ts';
 
 export interface AccountImportsOptions {
@@ -10,41 +15,40 @@ export interface AccountImportsOptions {
 }
 
 export class AccountImports {
-  readonly #options: AccountImportsOptions;
-  #imports: AccountImport[] = [];
+  readonly #handle: ImportsHandle;
 
   constructor(options: AccountImportsOptions) {
-    this.#options = options;
+    const { store } = options;
+    this.#handle = edgeRuntime.runSync(
+      makeAccountImports({
+        listKnownEmails: Effect.sync(() =>
+          store.list().flatMap((account) => (account.email ? [account.email] : []))
+        ),
+        hasAccount: (email) =>
+          Effect.sync(() => store.selectByIdentity({ email, organization: null }) !== null),
+        cswap: options.cswap.handle,
+        signIn: (email) =>
+          Effect.tryPromise({
+            try: () => options.signIn(email),
+            catch: (error) =>
+              error instanceof DomainError
+                ? error
+                : new ImportSignInFailed({ message: describeError(error) }),
+          }),
+        changed: Effect.sync(options.onChange),
+      })
+    );
   }
 
   list() {
-    return this.#imports;
+    return edgeRuntime.runSync(this.#handle.list);
   }
 
-  async sync() {
-    const known = new Set(
-      this.#options.store.list().flatMap((account) => (account.email ? [account.email.toLowerCase()] : []))
-    );
-    const imports: AccountImport[] = [];
-    for (const account of await this.#options.cswap.list()) {
-      if (known.has(account.email.toLowerCase())) continue;
-      imports.push({ origin: 'cswap', email: account.email, plan: null });
-    }
-    this.#imports = imports;
-    this.#options.onChange();
+  sync() {
+    return edgeRuntime.runPromise(this.#handle.sync);
   }
 
   importAccount(origin: unknown, email: unknown) {
-    if (typeof email !== 'string' || !email.trim())
-      throw new DomainError({ code: 'import_invalid', message: 'Name the account to sign in to.' });
-    if (origin !== 'cswap')
-      throw new DomainError({ code: 'import_invalid', message: 'Sign in to an account claude-swap has.' });
-    return this.#importCswap(email.trim());
-  }
-
-  async #importCswap(email: string) {
-    if (this.#options.store.selectByIdentity({ email, organization: null }))
-      throw new DomainError({ code: 'account_exists', message: `${email} is already added.` });
-    await this.#options.signIn(email);
+    return edgeRuntime.runPromise(this.#handle.importAccount(origin, email));
   }
 }

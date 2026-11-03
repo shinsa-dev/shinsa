@@ -3,7 +3,7 @@ import { createState, DomainError, type Schedule, type ShinsaCommand } from '@sh
 import { log } from '../../src/log/index.ts';
 import type { Engine } from '../../src/runtime/engine.ts';
 import { ScheduleClock } from '../../src/schedules/clock.ts';
-import { until } from '../helpers/index.ts';
+import { captureLogs, until } from '../helpers/index.ts';
 import { addSchedule, createWorld } from './fixtures.ts';
 
 const MINUTE = 60_000;
@@ -80,9 +80,13 @@ describe('the schedule clock', () => {
         return Promise.resolve([]);
       },
     } as unknown as Engine;
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     await new ScheduleClock(engine, { now: () => 2_000 }).fireDue();
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Schedules] A schedule could not run; recording the failure')).toEqual([
+      { scheduleId: 's1', error: 'This task is finished.' },
+      { scheduleId: 's2', error: 'disk full' },
+    ]);
     expect(sent).toEqual([
       { command: { type: 'schedule.fire', scheduleId: 's1', dueAt: 1_000 }, id: 'schedule:s1:1000' },
       {
@@ -158,6 +162,7 @@ describe('the schedule clock', () => {
       subscribe: () => () => undefined,
       dispatch: () => Promise.reject(new Error('gone')),
     } as unknown as Engine;
+    const logs = captureLogs();
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const clock = new ScheduleClock(engine, { minDelayMs: 0 });
     clock.start();
@@ -166,5 +171,6 @@ describe('the schedule clock', () => {
     );
     clock.stop();
     warn.mockRestore();
+    logs.restore();
   });
 });

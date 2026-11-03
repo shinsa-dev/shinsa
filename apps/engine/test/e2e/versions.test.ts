@@ -3,7 +3,7 @@ import type { UpdateStreamLine, VersionsSnapshot } from '@shinsa/core';
 import { Accounts } from '../../src/accounts/index.ts';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { type Shinsa, startShinsa } from '../../src/serve.ts';
-import { createTestConfig, until } from '../helpers/index.ts';
+import { createTestConfig } from '../helpers/index.ts';
 
 setDefaultTimeout(30_000);
 
@@ -52,7 +52,6 @@ describe('updating an agent program, end to end', () => {
       latest: '2.1.310',
       status: 'update_available',
     });
-    await until('the accounts checked the sign-ins at start', () => synced.mock.calls.length > 0);
     const calls = synced.mock.calls.length;
     const lines = (await (await post(shinsa, { program: 'claude' })).text())
       .trim()

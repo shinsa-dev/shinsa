@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { REMOTE_KEY_ALGORITHM, REMOTE_PATHS, serializePublicKey } from '@shinsa/core';
+import { Effect, Exit, Fiber, Layer, ManagedRuntime } from 'effect';
+import { JsonLogger } from '../../src/log/service.ts';
 import { RemoteControl } from '../../src/remote/client/index.ts';
+import type { PairingEnd } from '../../src/remote/pairing/schema.ts';
+import { Pairings } from '../../src/remote/pairing/service.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { type FakeControlPlane, sealCredentials, startFakeControlPlane } from './control-plane.ts';
 
@@ -34,8 +38,16 @@ afterEach(async () => {
 function startPairing(start = START) {
   const plane = startFakeControlPlane();
   planes.push(plane);
-  const control = new RemoteControl({ origin: plane.origin, pairPollMs: 1 });
-  return { plane, pairing: control.startPairing(start, MACHINE) };
+  const runtime = ManagedRuntime.make(
+    new RemoteControl({ origin: plane.origin, pairPollMs: 1 }).layer.pipe(Layer.provideMerge(JsonLogger))
+  );
+  const fiber = runtime.runFork(Pairings.use((pairings) => pairings.await(start, MACHINE)));
+  const done = runtime.runPromise(
+    Fiber.await(fiber).pipe(
+      Effect.map((exit): PairingEnd => (Exit.isSuccess(exit) ? exit.value : { status: 'cancelled' }))
+    )
+  );
+  return { plane, pairing: { done, cancel: () => runtime.runFork(Fiber.interrupt(fiber)) } };
 }
 
 function answerPolls(fake: FakeControlPlane, ...bodies: unknown[]) {

@@ -1,10 +1,9 @@
 import { dirname, join } from 'node:path';
-import type { TeamViewTarget } from '@shinsa/core';
-import { Duration, Effect, Fiber, Scope } from 'effect';
-import { describeError } from '../log/index.ts';
+import type { InstanceId, TeamId, TeamViewTarget } from '@shinsa/core';
+import { Duration, Effect, Fiber, Redacted, Scope } from 'effect';
 import { edgeRuntime } from '../runtime/edge.ts';
 import type { ChannelPeer } from './channel.ts';
-import { selectRemoteFailureTag } from './client/index.ts';
+import { RemoteClient } from './client/service.ts';
 import type { Remote } from './index.ts';
 import { createChannelEphemeral } from './share-channel.ts';
 import {
@@ -53,6 +52,11 @@ export class TeamFeeds {
     const createSocket = options.createSocket ?? createFeedSocket;
     const wait = resolveWait(options.wait);
     const now = options.now ?? Date.now;
+    const client = edgeRuntime.runSync(
+      RemoteClient.use((remoteClient) => Effect.succeed(remoteClient)).pipe(
+        Effect.provide(remote.control.layer)
+      )
+    );
     this.#handle = edgeRuntime.runSync(
       makeTeamFeeds({
         file: Effect.sync(() => remote.store.file),
@@ -61,11 +65,10 @@ export class TeamFeeds {
         now: Effect.sync(now),
         createEphemeral: Effect.promise(() => createChannelEphemeral()),
         requestTeamConnect: (token, teamId, instanceId) =>
-          Effect.tryPromise({
-            try: () => remote.control.requestTeamConnect(token, teamId, instanceId),
-            catch: (error) =>
-              new TeamConnectFailed({ tag: selectRemoteFailureTag(error), message: describeError(error) }),
-          }).pipe(Effect.map((answer) => answer.url)),
+          client.teams.connect(Redacted.make(token), teamId as TeamId, instanceId as InstanceId).pipe(
+            Effect.map((answer) => answer.url),
+            Effect.mapError((error) => new TeamConnectFailed({ tag: error._tag, message: error.message }))
+          ),
         acquireAccess: (close) =>
           Effect.sync(() => {
             const release = remote.access.acquire(() => edgeRuntime.runSync(close));

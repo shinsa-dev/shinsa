@@ -21,6 +21,7 @@ import { MessageInbox } from '../../src/triage/inbox.ts';
 import {
   type Classifier,
   createClassifier,
+  createCommandRouter,
   type MessageClass,
   type MessageClassifier,
   resolveMessageClass,
@@ -485,6 +486,25 @@ describe('a message an agent sends for you', () => {
       from
     );
     expect(engine.state.tasks[taskId]?.inbox).toBeUndefined();
+  });
+
+  test('goes through the router an agent’s management commands use, and a classifier that fails refuses it with its reason', async () => {
+    const { engine, taskId } = await openEngine();
+    const route = createCommandRouter(
+      engine,
+      using(() => Promise.reject(new Error('model down')))
+    );
+    await expect(route(message(taskId), { onBehalf: true, byTask: null, id: 'agent:8' })).rejects.toThrow(
+      'model down'
+    );
+    const shaped = createCommandRouter(
+      engine,
+      using(notAsked, () => Promise.resolve('research'))
+    );
+    const events = await shaped({ ...message(taskId), kind: 'new_round' }, { onBehalf: true, byTask: null });
+    expect(events.map((event) => event.type)).toContain('round.queued');
+    const task = engine.state.tasks[taskId];
+    expect(task ? resolveTaskRounds(task).at(-1)?.pipeline : null).toEqual([...SHAPE_PIPELINES.research]);
   });
 });
 

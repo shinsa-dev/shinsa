@@ -300,7 +300,7 @@ describe('starting', () => {
 
   test('the other providers’ sign-ins ride along in the snapshot, and one that cannot be read is logged', async () => {
     const world = createWorld();
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const codex = {
       provider: 'codex',
       label: 'Codex',
@@ -328,12 +328,10 @@ describe('starting', () => {
     expect(accounts.snapshot().providers).toEqual([codex]);
     expect((await accounts.refresh()).providers).toEqual([codex]);
     accounts.stop();
-    expect(
-      warn.mock.calls.some(
-        ([message]) => message === '[Accounts] Could not check the other providers’ sign-ins'
-      )
-    ).toBe(true);
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Accounts] Could not check the other providers’ sign-ins')).toEqual([
+      { error: 'codex hung' },
+    ]);
     expect(world.accounts.snapshot().providers).toEqual([]);
   });
 
@@ -650,16 +648,15 @@ describe('choosing the account for an attempt', () => {
     expect(await lease(world, { bound, previous: { id: 'other', email: null } })).toMatchObject({
       reason: 'bound',
     });
-    const warn = spyOn(log, 'warn');
-    expect(await lease(world, { bound: { id: 'gone', email: null } })).toBeNull();
-    expect(warn).toHaveBeenCalledWith(
-      '[Accounts] The account a task is bound to is gone; using the default login',
-      {
-        taskId: 'task-1',
-        accountId: 'gone',
-      }
-    );
-    warn.mockRestore();
+    const logs = captureLogs();
+    try {
+      expect(await lease(world, { bound: { id: 'gone', email: null } })).toBeNull();
+    } finally {
+      logs.restore();
+    }
+    expect(
+      logs.fieldsOf('[Accounts] The account a task is bound to is gone; using the default login')
+    ).toEqual([{ taskId: 'task-1', accountId: 'gone' }]);
   });
 
   test('when every account is spent the least spent one is tried, so the limit can be confirmed', async () => {
@@ -998,16 +995,17 @@ describe('moving a rejected attempt to another account', () => {
     const world = createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     storeLogin(world, a.configDir, 'refreshed', world.now + HOUR);
-    const info = spyOn(log, 'info');
+    const logs = captureLogs();
     try {
       expect(await rejectToken(world, a.id, [a.id])).toEqual({ retry: true, renewed: a.id });
-      expect(info).toHaveBeenCalledWith(
-        '[Accounts] Read a login again after Claude could not refresh it; trying the same account once more',
-        { runId: 'run-1', accountId: a.id }
-      );
     } finally {
-      info.mockRestore();
+      logs.restore();
     }
+    expect(
+      logs.fieldsOf(
+        '[Accounts] Read a login again after Claude could not refresh it; trying the same account once more'
+      )
+    ).toEqual([{ runId: 'run-1', accountId: a.id }]);
     expect((await rejectToken(world, a.id, [a.id], [a.id])).failure).toMatchObject({ code: 'login_expired' });
   });
 
@@ -1041,20 +1039,16 @@ describe('moving a rejected attempt to another account', () => {
     const signedIn = () => dispatched(world).filter((command) => command.type === 'account.signed_in');
     const before = signedIn().length;
     storeLogin(world, a.configDir, 'again', world.now + HOUR);
-    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       await world.accounts.refresh();
       await world.accounts.refresh();
-      expect(info).toHaveBeenCalledWith(
-        '[Accounts] A login that needed signing in works again; carrying on',
-        {
-          accountId: a.id,
-          email: 'a@example.com',
-        }
-      );
     } finally {
-      info.mockRestore();
+      logs.restore();
     }
+    expect(logs.fieldsOf('[Accounts] A login that needed signing in works again; carrying on')).toEqual([
+      { accountId: a.id, email: 'a@example.com' },
+    ]);
     expect(signedIn().slice(before)).toEqual([
       { type: 'account.signed_in', account: { id: a.id, email: 'a@example.com' } },
     ]);
@@ -1066,7 +1060,7 @@ describe('moving a rejected attempt to another account', () => {
     const a = await addAccount(world, 'a@example.com', 10);
     storeLogin(world, a.configDir, 'dead', world.now - HOUR);
     await rejectToken(world, a.id, [a.id]);
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       world.breakKeychain(true);
       await world.accounts.refresh();
@@ -1074,12 +1068,12 @@ describe('moving a rejected attempt to another account', () => {
       storeLogin(world, a.configDir, 'again', world.now + HOUR);
       world.stub.reject((command) => command.type === 'account.signed_in');
       await world.accounts.refresh();
-      const messages = warn.mock.calls.map((call) => call[0]);
-      expect(messages).toContain('[Accounts] Could not check the logins that needed signing in');
-      expect(messages).toContain('[Accounts] Could not carry on after a login works again');
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
+    const messages = logs.entries.map((entry) => entry.message);
+    expect(messages).toContain('[Accounts] Could not check the logins that needed signing in');
+    expect(messages).toContain('[Accounts] Could not carry on after a login works again');
   });
 
   test('other failures, and attempts without a known account, are left alone', async () => {
@@ -1416,13 +1410,15 @@ describe('when the outside world fails', () => {
       signInDetail: 'Claude Code is not installed.',
     });
     missing = false;
-    const warn = spyOn(log, 'warn');
-    await accounts.remove(account.id);
-    expect(warn).toHaveBeenCalledWith('[Accounts] Could not sign an account’s folder out', {
-      accountId: account.id,
-      code: 1,
-    });
-    warn.mockRestore();
+    const logs = captureLogs();
+    try {
+      await accounts.remove(account.id);
+    } finally {
+      logs.restore();
+    }
+    expect(logs.fieldsOf('[Accounts] Could not sign an account’s folder out')).toEqual([
+      { accountId: account.id, code: 1 },
+    ]);
   });
 
   test('a new account that cannot be cleared after a failed sign-in is logged', async () => {
@@ -1437,14 +1433,19 @@ describe('when the outside world fails', () => {
       },
       loginTimers: { menuFallbackMs: 60_000, urlTimeoutMs: 60_000, watchdogMs: 60_000 },
     });
-    const warn = spyOn(log, 'warn');
-    await accounts.startLogin(null);
-    await until('the clean-up to fail', () =>
-      warn.mock.calls.some(
-        ([message]) => message === '[Accounts] Could not clear an account that never signed in'
-      )
-    );
-    warn.mockRestore();
+    const logs = captureLogs();
+    try {
+      await accounts.startLogin(null);
+      await until(
+        'the clean-up to fail',
+        () => logs.fieldsOf('[Accounts] Could not clear an account that never signed in').length > 0
+      );
+    } finally {
+      logs.restore();
+    }
+    expect(logs.fieldsOf('[Accounts] Could not clear an account that never signed in')).toEqual([
+      { accountId: expect.any(String), error: 'gone' },
+    ]);
   });
 
   test('commands for an account folder never inherit a login the server’s environment would force', async () => {
@@ -1781,19 +1782,19 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       });
     });
     world.stub.reject((command) => command.type === 'provider.record_sign_in');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     try {
       await world.accounts.syncProviderLogins();
       fail = true;
       await world.accounts.syncProviderLogins();
-      expect(warn.mock.calls.map((call) => call[0])).toEqual([
-        '[Accounts] Could not carry on after a provider sign-in',
-        '[Accounts] Could not check the other providers’ sign-ins',
-        '[Accounts] Could not carry on after a provider sign-in',
-      ]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
+    expect(logs.entries.filter((entry) => entry.level === 'warn').map((entry) => entry.message)).toEqual([
+      '[Accounts] Could not carry on after a provider sign-in',
+      '[Accounts] Could not check the other providers’ sign-ins',
+      '[Accounts] Could not carry on after a provider sign-in',
+    ]);
     expect(world.accounts.snapshot().providers).toEqual([CODEX_LOGIN]);
   });
 

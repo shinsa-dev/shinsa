@@ -2843,8 +2843,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   in through the `MachineSession` client middleware, never into a log or an error. Each call runs under
   `Effect.timeout` (15 s; marking the instance offline 2 s); a timeout, no answer, an answer that does not decode or a
   status the API does not declare is `RemoteUnreachable`, `retryable` when there was no answer, a 429 or a 5xx.
-  Callers not moved to Effect yet go through `RemoteControl` (`client/index.ts`) and pick a failure by its tag
-  (`selectRemoteFailureTag`).
+  `RemoteControl` (`client/index.ts`) holds the origin and the layer every remote service yields `RemoteClient` and
+  `Pairings` from; a caller matches a refusal with `Effect.catchTag`.
 - **`cloudflared`** (`Cloudflared`, `remote/cloudflared/`): a pinned release (`CLOUDFLARED_VERSION`) downloaded on
   first use into `data/bin/cloudflared-<version>`, checked against its pinned SHA-256 before it is unpacked or made
   executable; a download that does not match is refused, and the download (2 min) and unpacking (30 s) each run under a
@@ -6097,7 +6097,7 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
 - **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
   terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' files, the npm
-  registry, Eunoe's forwarder and threads, the resource poller, the setup draft, triage's timeout and the briefing's
+  registry, Eunoe's forwarder and threads, the resource poller, triage's timeout and the briefing's
   debounce run the services through `edgeRuntime`, a `ManagedRuntime` of the logger, the shell, `JsonFile`, git's,
   GitHub's, the repositories', the workspaces', the checks', the terminals', the extensions', the accounts', the
   secrets' and the versions' services for the process; `Extensions`, `Versions`, `ResourceMonitor` and

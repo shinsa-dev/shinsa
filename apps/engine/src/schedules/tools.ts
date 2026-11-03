@@ -1,247 +1,55 @@
-import {
-  DomainError,
-  describeScheduleTarget,
-  describeScheduleTrigger,
-  listOpenWatchSuggestions,
-  listProjectRepos,
-  listSchedules,
-  type Schedule,
-  type ScheduleRequest,
-  type ShinsaEvent,
-  type ShinsaState,
-  type Task,
-  validateReportFiling,
-  validateScheduleRequest,
-} from '@shinsa/core';
-import { assertProtocol, readString } from '../agents/handover.ts';
-import { findForkSource } from '../agents/tools/forks.ts';
-import { describeError } from '../log/index.ts';
+import { DomainError, type ShinsaState } from '@shinsa/core';
+import { Effect } from 'effect';
+import { describeError } from '../log/redact.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import type { SurfaceHookSecrets } from '../surface/index.ts';
+import type { ScheduleToolCall, ScheduleToolContext } from './schema.ts';
 import {
-  RECENT_RUNS,
-  type ScheduleToolCall,
-  type ScheduleToolContext,
-  WEBHOOK_ROUTE_PREFIX,
-} from './schema.ts';
+  ScheduleSecretFailed,
+  type ScheduleToolRun,
+  ScheduleToolRefused,
+  type ScheduleToolsHandle,
+} from './tools/schema.ts';
+import { createScheduleTools } from './tools/service.ts';
 
 export type { ScheduleToolCall, ScheduleToolContext } from './schema.ts';
 
-function describeNoSecret(field: string) {
-  return `A signature check needs the signing secret. Ask for it with request_secret and pass the secret-ref it returns as ${field}.`;
+function secretFailed(error: unknown) {
+  return new ScheduleSecretFailed({ message: describeError(error) });
 }
 
-function serializeTime(at: number | null) {
-  return at === null ? null : new Date(at).toISOString();
+function resolveTools(context: ScheduleToolContext): ScheduleToolsHandle {
+  const { secrets } = context;
+  return createScheduleTools({
+    now: Effect.sync(context.now),
+    timeZone: context.timeZone,
+    baseUrl: Effect.sync(context.baseUrl),
+    hookUrl: (scheduleId, token) => Effect.sync(() => context.hookUrl(scheduleId, token)),
+    selectHook: (scheduleId) => Effect.sync(() => secrets.selectHook(scheduleId)),
+    hasRef: (ref) => Effect.sync(() => secrets.hasRef(ref)),
+    takeSecret: (ref, taskId) =>
+      Effect.try({ try: () => secrets.removeRef(ref, taskId), catch: secretFailed }),
+    writeHookSecret: (scheduleId, secret) =>
+      Effect.try({ try: () => secrets.writeHookSecret(scheduleId, secret), catch: secretFailed }),
+  });
 }
 
-function findTaskOf(state: ShinsaState, runId: string) {
-  const taskId = state.runs[runId]?.taskId;
-  const task = taskId ? state.tasks[taskId] : undefined;
-  if (!task) throw new Error('This run no longer exists. End your turn.');
-  return task;
-}
-
-export function findHookUrl(context: ScheduleToolContext, scheduleId: string) {
-  const hook = context.secrets.selectHook(scheduleId);
-  if (!hook) throw new DomainError({ code: 'schedule_not_found', message: 'This schedule has no webhook.' });
-  const remote = context.hookUrl(scheduleId, hook.token);
-  if (remote) return remote;
-  return `${context.baseUrl()}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${hook.token}`;
-}
-
-function describeTarget(state: ShinsaState, schedule: Schedule, ownTaskId: string) {
-  if (schedule.target.kind === 'task' && schedule.target.taskId === ownTaskId)
-    return 'It messages this task.';
-  return `${describeScheduleTarget(schedule, (taskId) => state.tasks[taskId]?.title ?? null)}.`;
-}
-
-function describeWebhook(context: ScheduleToolContext, schedule: Schedule) {
-  if (schedule.trigger.kind !== 'webhook') return [];
-  const lines = [
-    `Its URL is ${findHookUrl(context, schedule.id)}. Give it to the sender as it is: the token in it is what lets a request in, so do not post it anywhere public.`,
-  ];
-  const signature = schedule.trigger.signature;
-  if (signature) lines.push(`Requests must carry a valid ${signature.header} signature.`);
-  return lines;
-}
-
-function describeSaved(
-  context: ScheduleToolContext,
-  state: ShinsaState,
-  schedule: Schedule,
-  ownTaskId: string
-) {
-  const when = describeScheduleTrigger(schedule.trigger);
-  const zone = schedule.trigger.kind === 'daily' ? ` in ${schedule.timeZone}` : '';
-  const next = schedule.nextRunAt === null ? '' : ` Next run ${serializeTime(schedule.nextRunAt)}.`;
-  const paused = schedule.enabled ? '' : ' It is paused.';
-  return [
-    `Saved “${schedule.name}” (schedule_id ${schedule.id}). ${when}${zone}.${next}${paused} ${describeTarget(state, schedule, ownTaskId)}`,
-    ...describeWebhook(context, schedule),
-  ].join('\n');
-}
-
-function assertSigningSecret(
-  context: ScheduleToolContext,
-  scheduleId: string | null,
-  ref: string | null,
-  field: string
-) {
-  if (ref) return;
-  if (scheduleId && context.secrets.selectHook(scheduleId)?.secret) return;
-  throw new Error(describeNoSecret(field));
-}
-
-function writeSigningSecret(
-  context: ScheduleToolContext,
-  schedule: Schedule,
-  ref: string | null,
-  taskId: string
-) {
-  if (schedule.trigger.kind !== 'webhook' || !ref) return null;
-  if (context.secrets.selectHook(schedule.id)?.secret && !context.secrets.hasRef(ref)) return null;
-  try {
-    context.secrets.writeHookSecret(schedule.id, context.secrets.removeRef(ref, taskId));
-    return null;
-  } catch (error) {
-    return `The schedule was saved, but its signing secret was not: ${describeError(error)} Then call set_schedule with schedule_id ${schedule.id} and the new ref as webhook.signature.secret_ref.`;
-  }
-}
-
-function describeSuggested(state: ShinsaState, events: ShinsaEvent[], taskId: string) {
-  const recorded = events.find((event) => event.type === 'watch_suggestion.recorded')?.suggestion;
-  const suggestion =
-    recorded ??
-    listOpenWatchSuggestions(state)
-      .filter((candidate) => candidate.origin.kind === 'agent' && candidate.origin.taskId === taskId)
-      .at(-1);
-  const name = suggestion ? `“${suggestion.name}” ` : '';
-  return `Suggested the watch ${name}for the human to accept. It starts reading only once they accept it, with one click on the card in this chat or in Settings → Automations. Tell them so in your hand-over; do not set it again.`;
-}
-
-async function writeSchedule(
-  input: Record<string, unknown>,
-  call: ScheduleToolCall,
-  context: ScheduleToolContext
-) {
-  const request = assertProtocol(validateScheduleRequest(input, context.now()));
-  const task = findTaskOf(call.state(), call.runId);
-  if (request.trigger?.kind === 'webhook' && request.trigger.signature) {
-    assertSigningSecret(context, request.scheduleId, request.secretRef, 'webhook.signature.secret_ref');
-  }
-  const existing = request.scheduleId ? call.state().schedules[request.scheduleId] : undefined;
-  const events = await call.dispatch({
-    type: 'agent.set_schedule',
+function resolveRun(call: ScheduleToolCall): ScheduleToolRun {
+  return {
     runId: call.runId,
     attemptId: call.attemptId,
-    scheduleId: request.scheduleId,
-    name: request.name,
-    text: request.text,
-    trigger: request.trigger,
-    target: resolveTarget(call.state(), task, request),
-    source: request.source,
-    enabled: request.enabled,
-    maxRuns: request.maxRuns,
-    timeZone: request.timeZone ?? existing?.timeZone ?? context.timeZone,
-  });
-  if (request.source && !existing) return describeSuggested(call.state(), events, task.id);
-  const written = events.find((event) => event.type === 'schedule.written');
-  const schedule = written?.schedule ?? existing;
-  if (!schedule) throw new Error('Nothing was saved. Call set_schedule again with a time and a message.');
-  const problem = writeSigningSecret(context, schedule, request.secretRef, task.id);
-  const saved = describeSaved(context, call.state(), schedule, task.id);
-  return problem ? `${saved}\n${problem}` : saved;
-}
-
-function serializeSchedule(
-  context: ScheduleToolContext,
-  state: ShinsaState,
-  schedule: Schedule,
-  ownTaskId: string
-) {
-  const own = schedule.createdBy.kind === 'agent' && schedule.createdBy.taskId === ownTaskId;
-  return {
-    schedule_id: schedule.id,
-    name: schedule.name,
-    message: schedule.text,
-    when: describeScheduleTrigger(schedule.trigger),
-    time_zone: schedule.timeZone,
-    target: describeTarget(state, schedule, ownTaskId),
-    enabled: schedule.enabled,
-    finished: schedule.stopped !== null,
-    next_run_at: serializeTime(schedule.nextRunAt),
-    runs: schedule.runCount,
-    max_runs: schedule.maxRuns,
-    yours: own,
-    ...(own && schedule.trigger.kind === 'webhook' ? { url: findHookUrl(context, schedule.id) } : {}),
-    last_runs: schedule.runs.slice(-RECENT_RUNS).map((run) => ({
-      at: serializeTime(run.at),
-      outcome: run.outcome,
-      ...(run.taskId ? { task_id: run.taskId } : {}),
-      ...(run.detail ? { detail: run.detail } : {}),
-    })),
+    state: Effect.sync(call.state),
+    dispatch: (command) =>
+      Effect.tryPromise({
+        try: () => call.dispatch(command),
+        catch: (error) =>
+          error instanceof DomainError ? error : new ScheduleToolRefused({ message: describeError(error) }),
+      }),
   };
 }
 
-function serializeSchedules(call: ScheduleToolCall, context: ScheduleToolContext) {
-  const state = call.state();
-  const task = findTaskOf(state, call.runId);
-  const schedules = listSchedules(state).map((schedule) =>
-    serializeSchedule(context, state, schedule, task.id)
-  );
-  return JSON.stringify({ now: serializeTime(context.now()), schedules }, null, 2);
-}
-
-async function removeSchedule(input: Record<string, unknown>, call: ScheduleToolCall) {
-  const scheduleId = readString(input, 'schedule_id');
-  if (!scheduleId) throw new Error('schedule_id is required.');
-  const name = call.state().schedules[scheduleId]?.name;
-  await call.dispatch({
-    type: 'agent.delete_schedule',
-    runId: call.runId,
-    attemptId: call.attemptId,
-    scheduleId,
-  });
-  return `Deleted “${name ?? scheduleId}”.`;
-}
-
-function resolveNamedRepo(state: ShinsaState, task: Task, reference: string) {
-  const projectRepos = task.projectId ? listProjectRepos(state, task.projectId) : [];
-  const candidates = projectRepos.length > 0 ? projectRepos : Object.values(state.repos);
-  const repo =
-    candidates.find((candidate) => candidate.id === reference) ??
-    candidates.find((candidate) => candidate.name === reference);
-  if (repo) return repo.id;
-  const known = candidates.map((candidate) => candidate.name);
-  throw new Error(`There is no repository "${reference}". Name one of: ${known.join(', ') || 'none'}.`);
-}
-
-function resolveTarget(state: ShinsaState, task: Task, request: ScheduleRequest) {
-  const { target, repository } = request;
-  if (target?.kind !== 'new_task' || repository === null) return target;
-  return { ...target, repoId: resolveNamedRepo(state, task, repository) };
-}
-
-async function fileReport(input: Record<string, unknown>, call: ScheduleToolCall) {
-  const { forkFrom, repository, ...filing } = assertProtocol(validateReportFiling(input));
-  const state = call.state();
-  const events = await call.dispatch({
-    type: 'agent.file_report',
-    runId: call.runId,
-    attemptId: call.attemptId,
-    ...filing,
-    forkOf: forkFrom === null ? null : findForkSource(state, forkFrom),
-    repoId: repository === null ? null : resolveNamedRepo(state, findTaskOf(state, call.runId), repository),
-  });
-  const linked = events.find((event) => event.type === 'watchdog.report_linked');
-  if (linked?.type === 'watchdog.report_linked') {
-    const known = call.state().tasks[linked.reportTaskId];
-    return `This report was already filed as ${known?.handle ?? linked.reportTaskId} “${known?.title ?? ''}”, so the watchdog counts it. Go on with the next report.`;
-  }
-  const created = events.find((event) => event.type === 'task.created');
-  const task = created?.type === 'task.created' ? call.state().tasks[created.taskId] : undefined;
-  if (!task) throw new Error('Nothing was filed. Call file_report again.');
-  return `Filed ${task.handle ?? task.id} “${task.title}”. Go on with the next report.`;
+export function findHookUrl(context: ScheduleToolContext, scheduleId: string) {
+  return edgeRuntime.runSync(resolveTools(context).findHookUrl(scheduleId));
 }
 
 export function createHookSecrets(
@@ -249,12 +57,12 @@ export function createHookSecrets(
   state: () => ShinsaState,
   taskId: string
 ): SurfaceHookSecrets {
+  const tools = resolveTools(context);
   return {
-    assertSecret: (scheduleId, ref) => assertSigningSecret(context, scheduleId, ref, 'signature_secret_ref'),
-    writeSecret: (scheduleId, ref) => {
-      const schedule = state().schedules[scheduleId];
-      return schedule ? writeSigningSecret(context, schedule, ref, taskId) : null;
-    },
+    assertSecret: (scheduleId, ref) =>
+      edgeRuntime.runSync(tools.assertSigningSecret(scheduleId, ref, 'signature_secret_ref')),
+    writeSecret: (scheduleId, ref) =>
+      edgeRuntime.runSync(tools.writeScheduleSecret(state(), scheduleId, ref, taskId)),
   };
 }
 
@@ -264,16 +72,6 @@ export function handleScheduleTool(
   call: ScheduleToolCall,
   context: ScheduleToolContext
 ): Promise<string> | null {
-  switch (name) {
-    case 'set_schedule':
-      return writeSchedule(input, call, context);
-    case 'list_schedules':
-      return Promise.resolve(serializeSchedules(call, context));
-    case 'delete_schedule':
-      return removeSchedule(input, call);
-    case 'file_report':
-      return fileReport(input, call);
-    default:
-      return null;
-  }
+  const tool = resolveTools(context).handle(name, input, resolveRun(call));
+  return tool ? edgeRuntime.runPromise(tool) : null;
 }

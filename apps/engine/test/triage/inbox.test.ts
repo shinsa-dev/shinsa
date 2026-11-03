@@ -1,12 +1,11 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { resolveTaskRounds } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
 import { Engine } from '../../src/runtime/engine.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { MessageInbox } from '../../src/triage/inbox.ts';
 import type { MessageClass, MessageClassifier } from '../../src/triage/message.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+import { captureLogs, createTempDir, until } from '../helpers/index.ts';
 
 const NEW_ROUND: MessageClass = { kind: 'new_round', title: 'Search', why: 'New work.', shape: 'change' };
 
@@ -61,7 +60,7 @@ describe('the message inbox', () => {
 
   test('a classifier that never answers holds the messages only until its time is up', async () => {
     const { engine, taskId } = await openEngine();
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const inbox = new MessageInbox(engine, () => new Promise(() => undefined), { classifyTimeoutMs: 20 });
     inbox.start();
     await receive(engine, taskId, 'test');
@@ -70,13 +69,15 @@ describe('the message inbox', () => {
     await inbox.settle();
     inbox.stop();
     expect(readMessages(engine, taskId)).toEqual(['test', 'hey!']);
-    expect(warn.mock.calls.some(([, fields]) => String(fields?.error).includes('within 20 ms'))).toBe(true);
-    warn.mockRestore();
+    expect(
+      logs.entries.some((entry) => entry.level === 'warn' && String(entry.error).includes('within 20 ms'))
+    ).toBe(true);
+    logs.restore();
   });
 
   test('a route that breaks for a reason the task did not give is dropped, so the message is never left waiting', async () => {
     const { engine, taskId } = await openEngine();
-    const error = spyOn(log, 'error');
+    const logs = captureLogs();
     const inbox = new MessageInbox(engine, () =>
       Promise.resolve({ ...NEW_ROUND, shape: 'unknown' as MessageClass['shape'] })
     );
@@ -90,13 +91,15 @@ describe('the message inbox', () => {
       undelivered: { text: 'Also add search', reason: 'Shinsa could not deliver it. Send it again.' },
       detail: 'Shinsa could not deliver it. Send it again.\n\nYour message: Also add search',
     });
-    expect(error.mock.calls.some(([message]) => String(message).includes('dropping it'))).toBe(true);
-    error.mockRestore();
+    expect(
+      logs.entries.some((entry) => entry.level === 'error' && entry.message.includes('dropping it'))
+    ).toBe(true);
+    logs.restore();
   });
 
   test('a classifier that throws leaves the message feedback', async () => {
     const { engine, taskId } = await openEngine();
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const inbox = new MessageInbox(engine, () => Promise.reject(new Error('model down')));
     inbox.start();
     await receive(engine, taskId, 'Use tabs');
@@ -104,9 +107,11 @@ describe('the message inbox', () => {
     inbox.stop();
     expect(readMessages(engine, taskId)).toEqual(['Use tabs']);
     expect(
-      warn.mock.calls.some(([message]) => String(message).startsWith('[Inbox] Could not classify'))
+      logs.entries.some(
+        (entry) => entry.level === 'warn' && entry.message.startsWith('[Inbox] Could not classify')
+      )
     ).toBe(true);
-    warn.mockRestore();
+    logs.restore();
   });
 
   test('a message the task can no longer take is dropped with the reason', async () => {
@@ -154,7 +159,7 @@ describe('the message inbox', () => {
   test('a route that fails for another reason stays in the inbox and is logged', async () => {
     const { engine, taskId } = await openEngine();
     const { asked, classify } = deferredClassifier();
-    const error = spyOn(log, 'error');
+    const logs = captureLogs();
     const inbox = new MessageInbox(engine, classify);
     inbox.start();
     await receive(engine, taskId, 'Also add search');
@@ -167,10 +172,12 @@ describe('the message inbox', () => {
     inbox.stop();
     expect(asked).toHaveLength(1);
     expect(engine.state.tasks[taskId]?.inbox).toHaveLength(1);
-    expect(error.mock.calls.some(([message]) => String(message).startsWith('[Inbox] Could not route'))).toBe(
-      true
-    );
-    error.mockRestore();
+    expect(
+      logs.entries.some(
+        (entry) => entry.level === 'error' && entry.message.startsWith('[Inbox] Could not route')
+      )
+    ).toBe(true);
+    logs.restore();
     await engine.settle();
   });
 });

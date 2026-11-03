@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { listActiveRuns, type ShinsaCommand, type ShinsaEvent } from '@shinsa/core';
 import { createManageClient } from '../../src/agents/manage/client.ts';
 import { Schedules } from '../../src/schedules/index.ts';
+import { findHookUrl } from '../../src/schedules/tools.ts';
 import { readArgv, selectSpec } from '../../src/surface/index.ts';
 import { createWorld, startTask, type World } from './fixtures.ts';
 
@@ -566,5 +567,19 @@ describe('file_report', () => {
     await expect(reply ?? Promise.resolve('')).resolves.toBe(
       `This report was already filed as ${known?.handle} “${known?.title}”, so the watchdog counts it. Go on with the next report.`
     );
+  });
+});
+
+describe('a webhook’s URL', () => {
+  test('is the local route with its token, and a schedule without a webhook has none', async () => {
+    const world = await createWorld();
+    const { schedules, tool } = setUp(world);
+    await tool('set_schedule', { message: 'Hook', webhook: {} });
+    const schedule = only(world);
+    const hook = world.secrets.selectHook(schedule.id);
+    expect(findHookUrl(schedules.context, schedule.id)).toBe(
+      `http://127.0.0.1:5180/api/hooks/${schedule.id}/${hook?.token}`
+    );
+    expect(() => findHookUrl(schedules.context, 'nope')).toThrow('This schedule has no webhook.');
   });
 });

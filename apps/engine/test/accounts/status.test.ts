@@ -90,4 +90,9 @@ describe('claude auth status', () => {
       detail: 'Claude took too long to answer.',
     });
   });
+
+  test('a claude that cannot be run fails with why', async () => {
+    const run: ClaudeRunner = () => Promise.reject(new Error('spawn claude ENOENT'));
+    await expect(readAuthStatus(run, 'claude', {}, '/')).rejects.toThrow('spawn claude ENOENT');
+  });
 });

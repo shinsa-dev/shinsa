@@ -1,8 +1,8 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { homedir } from 'node:os';
 import { Cswap, type CswapRunner, parseCswapList } from '../../src/accounts/cswap.ts';
-import { log } from '../../src/log/index.ts';
 import type { CommandResult } from '../../src/shell/index.ts';
+import { captureLogs } from '../helpers/index.ts';
 
 const LIST = JSON.stringify({
   accounts: [
@@ -59,15 +59,23 @@ describe('Cswap', () => {
   });
 
   test('a failed list is logged and gives nothing', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const { run } = createRunner([{ ok: false, code: 2, stdout: LIST }]);
       const cswap = new Cswap({ run, which: () => '/bin/cswap' });
       expect(await cswap.list()).toEqual([]);
-      expect(warn.mock.calls).toEqual([['[Accounts] claude-swap did not list its accounts', { code: 2 }]]);
+      expect(logs.fieldsOf('[Accounts] claude-swap did not list its accounts')).toEqual([{ code: 2 }]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
+  });
+
+  test('a runner that breaks fails the list with its reason', async () => {
+    const cswap = new Cswap({
+      run: () => Promise.reject(new Error('cswap broke')),
+      which: () => '/bin/cswap',
+    });
+    await expect(cswap.list()).rejects.toMatchObject({ _tag: 'CswapListFailed', message: 'cswap broke' });
   });
 
   test('looks for cswap, then claude-swap, on PATH', async () => {

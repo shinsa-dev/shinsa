@@ -1,11 +1,12 @@
 import { homedir } from 'node:os';
-import { log } from '../log/index.ts';
+import { Effect } from 'effect';
+import { describeError } from '../log/index.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import type { CommandOptions, CommandResult } from '../shell/index.ts';
-import { parseCswapList } from './answers.ts';
-import { CSWAP_BINARIES, CSWAP_LIST_TTL_MS, CSWAP_TIMEOUT_MS, type CswapAccount } from './schema.ts';
+import { type CswapHandle, CswapListFailed } from './cswap/schema.ts';
+import { makeCswap } from './cswap/service.ts';
 
 export { parseCswapList } from './answers.ts';
-export type { CswapAccount } from './schema.ts';
 
 export type CswapRunner = (command: string[], cwd: string, options: CommandOptions) => Promise<CommandResult>;
 
@@ -16,33 +17,26 @@ export interface CswapOptions {
 }
 
 export class Cswap {
-  readonly #options: CswapOptions;
-  #listed: { at: number; accounts: CswapAccount[] } | null = null;
+  readonly handle: CswapHandle;
 
   constructor(options: CswapOptions) {
-    this.#options = options;
+    const which = options.which ?? ((command: string) => Bun.which(command));
+    const now = options.now ?? Date.now;
+    this.handle = edgeRuntime.runSync(
+      makeCswap({
+        run: (command, cwd, commandOptions) =>
+          Effect.tryPromise({
+            try: () => options.run(command, cwd, commandOptions),
+            catch: (error) => new CswapListFailed({ message: describeError(error) }),
+          }),
+        which: (command) => Effect.sync(() => which(command)),
+        now: Effect.sync(now),
+        home: homedir(),
+      })
+    );
   }
 
-  #binary() {
-    const which = this.#options.which ?? ((command: string) => Bun.which(command));
-    for (const name of CSWAP_BINARIES) {
-      const path = which(name);
-      if (path) return path;
-    }
-    return null;
-  }
-
-  async list(): Promise<CswapAccount[]> {
-    const now = (this.#options.now ?? Date.now)();
-    if (this.#listed && now - this.#listed.at < CSWAP_LIST_TTL_MS) return this.#listed.accounts;
-    const binary = this.#binary();
-    if (!binary) return [];
-    const result = await this.#options.run([binary, 'list', '--json'], homedir(), {
-      timeoutMs: CSWAP_TIMEOUT_MS,
-    });
-    const accounts = result.ok ? parseCswapList(result.stdout) : [];
-    if (!result.ok) log.warn('[Accounts] claude-swap did not list its accounts', { code: result.code });
-    this.#listed = { at: now, accounts };
-    return accounts;
+  list() {
+    return edgeRuntime.runPromise(this.handle.list);
   }
 }

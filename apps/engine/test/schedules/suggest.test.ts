@@ -44,4 +44,12 @@ describe('wording a suggested watch', () => {
       text: null,
     });
   });
+
+  test('a writer that fails passes its failure on', async () => {
+    const ask = () => Promise.reject(new Error('the writer is down'));
+    await expect(createWatchWriter(ask)('slack', 'Bug reports')).rejects.toMatchObject({
+      _tag: 'WatchWordingFailed',
+      message: 'the writer is down',
+    });
+  });
 });

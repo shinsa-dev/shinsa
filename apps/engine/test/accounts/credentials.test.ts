@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -8,9 +8,8 @@ import {
   type SecretReader,
   type SecretRunner,
 } from '../../src/accounts/credentials.ts';
-import { log } from '../../src/log/index.ts';
 import type { CommandResult } from '../../src/shell/index.ts';
-import { createTempDir, writeFiles } from '../helpers/index.ts';
+import { captureLogs, createTempDir, writeFiles } from '../helpers/index.ts';
 
 function createRunner(result: Partial<CommandResult>) {
   const calls: { command: string[]; cwd: string; timeoutMs: number }[] = [];
@@ -54,19 +53,18 @@ describe('keychain reader', () => {
   });
 
   test('a missing entry is quietly nothing; a keychain that does not answer is logged', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const missing = createKeychainReader(createRunner({ code: 44 }).run, 'darwin');
       expect(await missing('service', 'me')).toBeNull();
-      expect(warn).not.toHaveBeenCalled();
+      expect(logs.fieldsOf('[Accounts] The keychain did not answer')).toEqual([]);
       const locked = createKeychainReader(createRunner({ code: 51 }).run, 'darwin');
       expect(await locked('service', 'me')).toBeNull();
-      expect(warn).toHaveBeenCalledWith('[Accounts] The keychain did not answer', {
-        service: 'service',
-        code: 51,
-      });
+      expect(logs.fieldsOf('[Accounts] The keychain did not answer')).toEqual([
+        { service: 'service', code: 51 },
+      ]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 
@@ -153,6 +151,17 @@ describe('stored login', () => {
       readSecret: () => Promise.resolve(null),
     });
     expect(login?.accessToken).toBe('home-file');
+  });
+
+  test('a keychain reader that breaks fails the read with its reason', async () => {
+    await expect(
+      readStoredLogin({
+        configDir: null,
+        env: { USER: 'me' },
+        userHome: '/nowhere',
+        readSecret: () => Promise.reject(new Error('keychain locked')),
+      })
+    ).rejects.toMatchObject({ _tag: 'SecretReadFailed', message: 'keychain locked' });
   });
 
   test('no keychain entry and no file means no login', async () => {

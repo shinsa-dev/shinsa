@@ -62,6 +62,11 @@ describe('resolveTriage without the model', () => {
     });
   });
 
+  test('a classifier that fails fails the triage with its reason', async () => {
+    const broken: QuickJson = () => Promise.reject(new Error('model down'));
+    await expect(resolveTriage(stateWith(), newTask(), LOCAL, broken)).rejects.toThrow('model down');
+  });
+
   test('a spec request, a long request or a redesign is large and gets a feat branch', async () => {
     for (const overrides of [
       { planFirst: true },

@@ -1,27 +1,25 @@
-import type { CommandOptions, CommandResult } from '../shell/index.ts';
-import { parseAuthStatus } from './answers.ts';
+import { Effect } from 'effect';
+import { describeError } from '../log/redact.ts';
+import { edgeRuntime } from '../runtime/edge.ts';
 import type { Env } from './paths.ts';
-import { type AuthStatus, STATUS_TIMEOUT_MS } from './schema.ts';
+import { ClaudeCommandFailed, type ClaudeRunner } from './status/schema.ts';
+import { readAuthStatus as readAuthStatusEffect } from './status/service.ts';
 
 export { parseAuthStatus } from './answers.ts';
-export { type AuthStatus, STATUS_TIMEOUT_MS } from './schema.ts';
+export { STATUS_TIMEOUT_MS } from './schema.ts';
+export type { ClaudeRunner } from './status/schema.ts';
 
-export type ClaudeRunner = (
-  command: string[],
-  cwd: string,
-  options: CommandOptions
-) => Promise<CommandResult>;
-
-export async function readAuthStatus(run: ClaudeRunner, claude: string, env: Env, cwd: string) {
-  const result = await run([claude, 'auth', 'status', '--json'], cwd, { env, timeoutMs: STATUS_TIMEOUT_MS });
-  if (result.timedOut) {
-    return {
-      signIn: 'unknown',
-      email: null,
-      organization: null,
-      plan: null,
-      detail: 'Claude took too long to answer.',
-    } satisfies AuthStatus;
-  }
-  return parseAuthStatus(result);
+export function readAuthStatus(run: ClaudeRunner, claude: string, env: Env, cwd: string) {
+  return edgeRuntime.runPromise(
+    readAuthStatusEffect(
+      (command, at, options) =>
+        Effect.tryPromise({
+          try: () => run(command, at, options),
+          catch: (error) => new ClaudeCommandFailed({ message: describeError(error) }),
+        }),
+      claude,
+      env,
+      cwd
+    )
+  );
 }

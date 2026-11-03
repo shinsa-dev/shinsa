@@ -209,6 +209,12 @@ describe('the install scripts', () => {
       detail: 'Not installed.',
     });
   });
+
+  test('a runner that breaks fails the check with what went wrong', async () => {
+    await expect(
+      resolvePrerequisites(HOME, () => Promise.reject(new Error('The runner broke.')))
+    ).rejects.toMatchObject({ _tag: 'OnboardingCallFailed', message: 'The runner broke.' });
+  });
 });
 
 describe('isBunUsed', () => {

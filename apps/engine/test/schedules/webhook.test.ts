@@ -1,13 +1,13 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { SCHEDULE_LIMITS } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
 import {
   isWebhookPath,
   WEBHOOK_MAX_BODY_BYTES,
   WEBHOOK_RATE_LIMIT_PER_MINUTE,
   WebhookReceiver,
 } from '../../src/schedules/webhook.ts';
+import { captureLogs } from '../helpers/index.ts';
 import { addSchedule, createWorld, type World } from './fixtures.ts';
 
 const SIGNED = { header: 'x-hub-signature-256', encoding: 'hex' as const, prefix: 'sha256=' };
@@ -189,11 +189,25 @@ describe('receiving a webhook', () => {
   test('a delivery the log refuses answers with an error and is logged', async () => {
     const { world, receiver, url } = await hooked();
     world.engine.dispatch = () => Promise.reject(new Error('disk full'));
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const response = await send(receiver, post(url, '{}'));
+    logs.restore();
     expect(response.status).toBe(500);
-    expect(warn).toHaveBeenCalledWith('[Webhooks] A delivery could not be recorded', expect.anything());
-    warn.mockRestore();
+    expect(logs.fieldsOf('[Webhooks] A delivery could not be recorded')).toEqual([
+      { scheduleId: expect.any(String), error: 'disk full' },
+    ]);
+  });
+
+  test('a body that cannot be read answers with an error and is logged', async () => {
+    const { receiver, url } = await hooked();
+    const broken = new ReadableStream({
+      pull: (controller) => controller.error(new Error('connection reset')),
+    });
+    const logs = captureLogs();
+    const response = await send(receiver, new Request(url, { method: 'POST', body: broken }));
+    logs.restore();
+    expect(response.status).toBe(500);
+    expect(logs.fieldsOf('[Webhooks] A delivery could not be recorded')).toHaveLength(1);
   });
 
   test('a delivery the schedule no longer takes is reported as a duplicate', async () => {

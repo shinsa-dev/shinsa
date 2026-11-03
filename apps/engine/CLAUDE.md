@@ -258,7 +258,12 @@ src/
 │                        on JsonFile), folders/ (AccountFolders: an account's CLAUDE_CONFIG_DIR made, seeded, linked to
 │                        the shared entries, written and removed, its .credentials.json read), usage/ (UsageApi: Claude's
 │                        usage over HttpClient; answer.ts the windows, fast mode and Retry-After), layers.ts
-│                        (AccountsLayer, in runtime/edge.ts). The edges keep their exports: store.ts (AccountStore),
+│                        (AccountsLayer, in runtime/edge.ts). Each module below is a folder of its own beside its
+│                        edge, its shapes and tagged errors in schema.ts and its make in service.ts: roster/
+│                        (makeAccounts: the Accounts service, its state in Refs, the usage refresh a forked
+│                        fiber), status/, credentials/ and keychain/, cswap/, imports/, limits/, login/ (the
+│                        flow in a Ref, its timers and exit watch as fibers), renewal/, resume/, rotation/. The
+│                        edges keep their exports: store.ts (AccountStore),
 │                        paths.ts (folders, the Claude config dir and resolveAccountEnv, the environment every command
 │                        for an account runs with), login.ts (`claude auth login` on TerminalPty), status.ts,
 │                        credentials.ts (the keychain entry per folder, read only), usage.ts (requestUsage) and
@@ -272,8 +277,8 @@ src/
 │                        log in data/eunoe; compaction notices and the stuck signal per session), forwarder.ts (the
 │                        server acquired in a scope stop() closes; ForwarderUnavailable), threads.ts (thread state in
 │                        data/eunoe/threads on JsonFile, decoded by StoredThread), schema.ts
-├── schedules/           Schedules: the clock (clock.ts), the agent tools (tools.ts), the webhook receiver
-│                        (webhook.ts), signature checks (verify.ts), the prompt template and redaction (template.ts:
+├── schedules/           Schedules: the clock (clock.ts over clock/), the agent tools (tools.ts over tools/), the
+│                        webhook receiver (webhook.ts over webhook/: the rate windows in a Ref), signature checks (verify.ts), the prompt template and redaction (template.ts:
 │                        a JSON body decoded by WebhookBodyText), the writer's wording of a suggested watch (suggest.ts,
 │                        its answer decoded by WatchAnswer in answer.ts), the Schedules service (index.ts; its routes
 │                        are http/routes/secrets and webhooks), schema.ts (the shapes, WebhookOutcome, the
@@ -287,8 +292,8 @@ src/
 │                        Redacted machine token through the MachineSession client middleware, each call under
 │                        Effect.timeout; every refusal its typed failure from core's remote/errors, a 401 on a
 │                        machine call Revoked, and a status the API does not declare, a timeout or no answer
-│                        RemoteUnreachable in schema.ts with `retryable`; index.ts is the edge, RemoteControl,
-│                        with selectRemoteFailureTag and isRemoteRetryable for callers not moved yet),
+│                        RemoteUnreachable in schema.ts with `retryable`; index.ts is RemoteControl: the origin and
+│                        the RemoteClient and Pairings layer every remote service is built on),
 │                        pairing/ (Pairings: the claim code, then a forked poll every PairPollInterval, 2 s, until
 │                        GitHub sign-in claims the instance, it expires or you cancel), cloudflared/ (Cloudflared:
 │                        the pinned release downloaded, checked by SHA-256 and unpacked under data/bin, each step
@@ -334,7 +339,8 @@ src/
 │                        recorded as handoff.claim), index.ts (Remote: wires them, pairing, pausing, removing,
 │                        enrolling, a hand-off's link, claim and removal, the stable webhook URL); its routes
 │                        are http/routes/remote, teams, placement and tunnel
-├── slack/               The Slack bot's machine side (docs/engine.md → Slack): index.ts (Slack: the mention
+├── slack/               The Slack bot's machine side (docs/engine.md → Slack): service.ts (makeSlack), schema.ts
+│                        (its options, limits and tagged errors), index.ts (the Slack edge: the mention
 │                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
 │                        slack.mention, and a question's choice clicked in Slack as slack.answer
 │                        (handleTunnel); slack.evaluate: ⏳ on the mention, the classifier asked, "Not a task" once
@@ -368,7 +374,9 @@ src/
 ├── versions/            The agent programs' versions and their updates (docs/engine.md → Versions and updates):
 │                        registry/ (NpmRegistry: the latest from the npm registry over HttpClient, decoded by
 │                        NpmLatest, NpmRegistryFailed), registry.ts its edge (requestLatestVersion), each program's own
-│                        updater, found from where its binary lives (updaters.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts),
+│                        updater, found from where its binary lives (updaters.ts), the Versions service: snapshot, the 3-hour cache, updates
+│                        (service.ts: makeVersions over Shell and NpmRegistry, one lookup at a time on a Semaphore;
+│                        index.ts its edge),
 │                        schema.ts (the shapes, PROGRAMS, LATEST_TTL, UPDATE_TIMEOUT), program.ts (isProgramId),
 │                        layers.ts (VersionsLayer, in runtime/edge.ts)
 ├── files/               service.ts (JsonFile: read(path, schema), a missing file Option.none and broken text or a
@@ -475,16 +483,24 @@ src/
 │                        verification before a task's first agent), login/ (GitHubLogins: the GitHub login through
 │                        GitHubCli, kept once gh answers it), roots.ts (chosen folders, SHINSA_ROOTS, or discovery
 │                        until onboarding is done); edge.ts the functions the rest of the engine calls
-├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts: the folders macOS keeps
+├── onboarding/          Status, folder suggestions, saving the setup (service.ts: makeOnboarding, every step an
+│                        Effect over the OnboardingDefinition in schema.ts; index.ts the Onboarding edge, the same
+│                        methods as before; roots.ts: the folders macOS keeps
 │                        private as PrivateFoldersError, and opening Full Disk Access), the prerequisite checks
-│                        (prerequisites.ts: git, gh, claude, bun when a repository uses it, Homebrew when a fix
-│                        needs it, and codex and its sign-in as optional, each with the command that fixes it;
+│                        (prerequisites/: resolvePrerequisiteReport in service.ts, git, gh, claude, bun when a
+│                        repository uses it, Homebrew when a fix needs it, and codex and its sign-in as optional, each
+│                        with the command that fixes it, the commands and labels in schema.ts, the pure lookups and
+│                        isBunUsed in catalog.ts; prerequisites.ts its edge;
 │                        install.ts: that command run in a terminal of your own), the setup steps: the fixed list, what each shows and saves
-│                        (steps.ts), the suggested projects and making them (projects.ts), the run of setup, going
-│                        back (flow.ts), its saved state (drafts.ts: onboarding.json on JsonFile, decoded by
-│                        SetupDraft in schema.ts, a file it cannot read or did not write starting setup again), the
-│                        accounts it lists (accounts.ts); schema.ts also holds the revision of the suggested projects,
-│                        the prerequisite shapes and PREREQUISITE_TIMEOUT
+│                        as Effects (steps.ts, their shapes in steps/schema.ts), the suggested projects and making
+│                        them (projects.ts), a change asked for in words (revise.ts, the answer decoded by
+│                        RevisionAnswer), the run of setup, going back (flow/: makeOnboardingSetup, one reply at a
+│                        time on a Semaphore, the draft in a Ref and onboarding.json on JsonFile, decoded by
+│                        SetupDraft in schema.ts, a file it cannot read or did not write starting setup again, each
+│                        reply read by the schemas in flow/schema.ts; flow.ts the OnboardingSetup edge), the
+│                        accounts it lists (accounts.ts); a promise dependency that fails with anything but a
+│                        DomainError is OnboardingCallFailed (failures.ts); schema.ts also holds the revision of the
+│                        suggested projects, the prerequisite shapes and PREREQUISITE_TIMEOUT
 ├── projects/            changes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
 │                        folders, registered or not) and createProjectChanges, which http/routes/projects and
 │                        the management client share; folders.ts
@@ -504,8 +520,8 @@ src/
 │                        everything waiting in a task's inbox is classified together against the task as it is
 │                        then and routed as one (message.route with messageIds; not classified at a gate that
 │                        takes words, needsMessageKind), a classifier that does not
-│                        answer within CLASSIFY_TIMEOUT (30 s, schema.ts; classify.ts runs the call with
-│                        Effect.timeoutOrElse, ClassifierFailed) routes it unclassified, and a route that breaks is dropped with a
+│                        answer within CLASSIFY_TIMEOUT (30 s, schema.ts; the inbox, inbox/service.ts, runs the call
+│                        with Effect.timeoutOrElse; ClassifierFailed) routes it unclassified, and a route that breaks is dropped with a
 │                        reason, so no message waits for ever; the receipt is taken over the
 │                        command as sent; createCommandRouter, the same route for an agent's management commands,
 │                        which classifies before it dispatches; a new round or a kept suggestion that names no kind
@@ -598,7 +614,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
   terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' stores, the npm
-  registry, Eunoe's forwarder and threads, the resource poller, the setup draft, triage's classifier timeout, the
+  registry, Eunoe's forwarder and threads, the resource poller, the
   briefing's debounce and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config,
   `runPromise` for processes); `Extensions`, `Versions`, `ResourceMonitor`, `EunoeServer`, `Accounts` and
   `Terminals` stay the objects their callers hold;

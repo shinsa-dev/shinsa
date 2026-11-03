@@ -1,7 +1,8 @@
-import type { ProgramId, UpdateOutcome } from '@shinsa/core';
+import type { DomainError, ProgramId, UpdateOutcome, VersionsSnapshot } from '@shinsa/core';
 import { Duration, Schema } from 'effect';
+import type { Effect } from 'effect';
 import type { ProgramLocation } from '../agents/providers/versions.ts';
-import type { CommandResult } from '../shell/schema.ts';
+import type { Argv, CommandResult } from '../shell/schema.ts';
 
 export const ProgramIdInput = Schema.Literals(['claude', 'codex']);
 
@@ -14,8 +15,13 @@ export class NpmRegistryFailed extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()('NpmRegistryFailed', { packageName: Schema.String, message: Schema.String }) {}
 
+export class VersionsCallFailed extends Schema.TaggedError<
+  VersionsCallFailed,
+  { readonly brand: unique symbol }
+>()('VersionsCallFailed', { message: Schema.String }) {}
+
 export interface Updater {
-  command: string[];
+  command: Argv;
   label: string;
   env?: Record<string, string>;
 }
@@ -48,6 +54,33 @@ export interface VersionsOptions {
   now?: () => number;
 }
 
+type UpdateEffect = (onLine: LineListener) => Effect.Effect<UpdateOutcome, VersionsCallFailed>;
+
+export interface VersionsDefinition {
+  readonly inspect: boolean;
+  readonly now: Effect.Effect<number>;
+  readonly locate: (program: ProgramId) => ProgramLocation;
+  readonly readVersion: (
+    program: ProgramId,
+    path: string
+  ) => Effect.Effect<string | null, VersionsCallFailed>;
+  readonly minimum: (program: ProgramId) => string;
+  readonly sdk: () => { version: string; claudeCodeVersion: string };
+  readonly latest: ((name: string) => Effect.Effect<string, NpmRegistryFailed>) | null;
+  readonly updater: (program: ProgramId, path: string) => Updater;
+  readonly run:
+    | ((updater: Updater, onLine: LineListener) => Effect.Effect<CommandResult, VersionsCallFailed>)
+    | null;
+  readonly onUpdated: (program: ProgramId) => Effect.Effect<void, VersionsCallFailed>;
+  readonly cancel: Effect.Effect<void>;
+}
+
+export interface VersionsHandle {
+  readonly snapshot: Effect.Effect<VersionsSnapshot, VersionsCallFailed>;
+  readonly refresh: Effect.Effect<VersionsSnapshot, VersionsCallFailed>;
+  readonly startUpdate: (program: unknown) => Effect.Effect<UpdateEffect, DomainError>;
+}
+
 export const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
 
 export const REGISTRY_TIMEOUT = Duration.seconds(10);
@@ -56,9 +89,7 @@ const LATEST_TTL = Duration.hours(3);
 
 export const LATEST_TTL_MS = Duration.toMillis(LATEST_TTL);
 
-const UPDATE_TIMEOUT = Duration.minutes(10);
-
-export const UPDATE_TIMEOUT_MS = Duration.toMillis(UPDATE_TIMEOUT);
+export const UPDATE_TIMEOUT = Duration.minutes(10);
 
 export const SDK_PACKAGE = '@anthropic-ai/claude-agent-sdk';
 

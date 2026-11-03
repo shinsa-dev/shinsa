@@ -1,7 +1,6 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import type { ProgramId } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
 import type { CommandResult } from '../../src/shell/index.ts';
 import {
   LATEST_TTL_MS,
@@ -9,7 +8,7 @@ import {
   Versions,
   type VersionsOptions,
 } from '../../src/versions/index.ts';
-import { until } from '../helpers/index.ts';
+import { captureLogs, until } from '../helpers/index.ts';
 
 const FAKE_CLAUDE = join(import.meta.dir, '../helpers/bin/claude');
 
@@ -148,15 +147,14 @@ describe('the versions snapshot', () => {
     const machine = createMachine();
     const versions = createVersions(machine);
     await versions.snapshot();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     delete machine.latest['@openai/codex'];
     const snapshot = await versions.refresh();
+    logs.restore();
     expect(snapshot.programs[1]?.latest).toBe('0.164.0');
-    expect(warn).toHaveBeenCalledWith('[Versions] Could not read the latest version', {
-      name: '@openai/codex',
-      error: 'No @openai/codex.',
-    });
-    warn.mockRestore();
+    expect(logs.fieldsOf('[Versions] Could not read the latest version')).toEqual([
+      { name: '@openai/codex', error: 'No @openai/codex.' },
+    ]);
   });
 
   test('without fakes it reads the programs on the PATH and the SDK Shinsa depends on', async () => {
@@ -220,7 +218,7 @@ describe('updating a program', () => {
   test('a failed updater reports its last line, or that it was stopped, and checks nothing again', async () => {
     const machine = createMachine();
     const updated: ProgramId[] = [];
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const failWith = (result: Partial<CommandResult>) =>
       createVersions(machine, {
         onUpdated: (program) => {
@@ -243,7 +241,7 @@ describe('updating a program', () => {
     expect(silent).toMatchObject({ ok: false, message: 'Couldn’t update Claude Code: exit 7' });
     expect(silent.versions.programs[0]?.updating).toBe(false);
     expect(updated).toEqual([]);
-    warn.mockRestore();
+    logs.restore();
   });
 
   test('refuses an unknown program, inspect mode, a second update, a missing program and an override', async () => {
@@ -281,14 +279,26 @@ describe('updating a program', () => {
         env: { EXTRA: 'set' },
       }),
     });
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const running = versions.startUpdate('claude')((line) => lines.push(line));
     await until('the updater printed', () => lines.length > 0);
     versions.stop();
     const outcome = await running;
     expect(lines).toEqual(['1 set']);
     expect(outcome.ok).toBe(false);
-    warn.mockRestore();
+    logs.restore();
+  });
+
+  test('an updater whose program is missing reports that it did not start', async () => {
+    const machine = createMachine();
+    const logs = captureLogs();
+    const outcome = await createVersions(machine, {
+      updater: () => ({ command: ['/no/such/updater'], label: 'missing' }),
+    }).startUpdate('claude')(() => undefined);
+    logs.restore();
+    expect(outcome.ok).toBe(false);
+    expect(outcome.message).toStartWith('Couldn’t update Claude Code: ');
+    expect(outcome.versions.programs[0]?.updating).toBe(false);
   });
 
   test('the fake claude on the PATH answers the real `claude update` invocation', async () => {

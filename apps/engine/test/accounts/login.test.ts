@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { AccountLogin } from '@shinsa/core';
 import {
   AccountLogins,
@@ -9,8 +9,7 @@ import {
   parseLoginUrl,
   spawnLoginTerminal,
 } from '../../src/accounts/login.ts';
-import { log } from '../../src/log/index.ts';
-import { overrideEnv, until } from '../helpers/index.ts';
+import { captureLogs, overrideEnv, until } from '../helpers/index.ts';
 
 const URL = 'https://claude.ai/oauth/authorize?code=true&client_id=abc&state=xyz';
 
@@ -227,7 +226,7 @@ describe('account logins', () => {
   });
 
   test('a check that throws fails the sign-in and is logged', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     try {
       const { logins, process, current } = createHarness({
         finish: () => Promise.reject(new Error('keychain timed out')),
@@ -236,12 +235,11 @@ describe('account logins', () => {
       process().exit.resolve(0);
       await until('failed', () => current().phase === 'failed');
       expect(current().message).toBe('Shinsa could not check the sign-in: keychain timed out');
-      expect(warn).toHaveBeenCalledWith('[Accounts] Could not check the account after signing in', {
-        accountId: 'acc-1',
-        error: 'keychain timed out',
-      });
+      expect(logs.fieldsOf('[Accounts] Could not check the account after signing in')).toEqual([
+        { accountId: 'acc-1', error: 'keychain timed out' },
+      ]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 

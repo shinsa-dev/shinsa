@@ -1,17 +1,13 @@
 import { homedir } from 'node:os';
-import { log } from '../log/index.ts';
+import { Effect } from 'effect';
+import { describeError } from '../log/index.ts';
 import { edgeRuntime } from '../runtime/edge.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
-import { parseStoredLogin } from './answers.ts';
-import { AccountFolders } from './folders/service.ts';
-import {
-  type Env,
-  resolveKeychainAccount,
-  resolveKeychainService,
-  resolveSharedConfigDir,
-  selectConfiguredDir,
-} from './paths.ts';
-import { KEYCHAIN_COMMAND, KEYCHAIN_NOT_FOUND, KEYCHAIN_TIMEOUT_MS, type StoredLogin } from './schema.ts';
+import { type SecretLookup, SecretReadFailed } from './credentials/schema.ts';
+import { readAccountLogin } from './credentials/service.ts';
+import { readKeychainSecret } from './keychain/service.ts';
+import type { Env } from './paths.ts';
+import type { StoredLogin } from './schema.ts';
 
 export { parseStoredLogin } from './answers.ts';
 export type { StoredLogin } from './schema.ts';
@@ -24,30 +20,6 @@ export type SecretRunner = (
   options: { timeoutMs: number }
 ) => Promise<CommandResult>;
 
-export function createKeychainReader(
-  run: SecretRunner = runCommand,
-  platform = process.platform
-): SecretReader {
-  return async (service, account) => {
-    if (platform !== 'darwin') return null;
-    const result = await run(
-      [KEYCHAIN_COMMAND, 'find-generic-password', '-a', account, '-s', service, '-w'],
-      homedir(),
-      {
-        timeoutMs: KEYCHAIN_TIMEOUT_MS,
-      }
-    );
-    if (result.ok) return result.stdout;
-    if (result.code !== KEYCHAIN_NOT_FOUND)
-      log.warn('[Accounts] The keychain did not answer', { service, code: result.code });
-    return null;
-  };
-}
-
-function readCredentialsFile(dir: string) {
-  return edgeRuntime.runSync(AccountFolders.use((folders) => folders.readCredentials(dir)));
-}
-
 export interface LoginQuery {
   configDir: string | null;
   env: Env;
@@ -55,11 +27,30 @@ export interface LoginQuery {
   readSecret: SecretReader;
 }
 
-export async function readStoredLogin(query: LoginQuery): Promise<StoredLogin | null> {
-  const configDir = query.configDir ?? selectConfiguredDir(query.env);
-  const secret = await query.readSecret(resolveKeychainService(configDir), resolveKeychainAccount(query.env));
-  const fromKeychain = secret === null ? null : parseStoredLogin(secret);
-  if (fromKeychain) return fromKeychain;
-  const file = readCredentialsFile(configDir ?? resolveSharedConfigDir(query.env, query.userHome));
-  return file === null ? null : parseStoredLogin(file);
+function failSecret(error: unknown) {
+  return new SecretReadFailed({ message: describeError(error) });
+}
+
+export function createKeychainReader(
+  run: SecretRunner = runCommand,
+  platform: string = process.platform
+): SecretReader {
+  const definition = {
+    run: (command: string[], cwd: string, options: { timeoutMs: number }) =>
+      Effect.tryPromise({ try: () => run(command, cwd, options), catch: failSecret }),
+    platform,
+    home: homedir(),
+  };
+  return (service, account) => edgeRuntime.runPromise(readKeychainSecret(definition, service, account));
+}
+
+export function resolveSecretLookup(readSecret: SecretReader): SecretLookup {
+  return (service, account) =>
+    Effect.tryPromise({ try: () => readSecret(service, account), catch: failSecret });
+}
+
+export function readStoredLogin(query: LoginQuery): Promise<StoredLogin | null> {
+  return edgeRuntime.runPromise(
+    readAccountLogin({ ...query, readSecret: resolveSecretLookup(query.readSecret) })
+  );
 }

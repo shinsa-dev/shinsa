@@ -8,46 +8,16 @@ import {
   type ProjectSuggestion,
   resolveProjectKey,
 } from '@shinsa/core';
-import type { JsonSchema } from '../agents/providers/index.ts';
-import type { QuickJson } from '../agents/quick/index.ts';
+import { Effect, Option, Schema } from 'effect';
+import {
+  MAX_TURNS,
+  REPLY_LIMIT,
+  REVISE_SCHEMA,
+  REVISE_SYSTEM,
+  RevisionAnswer,
+  type RevisionAsk,
+} from './revise/schema.ts';
 import type { ProjectRevision, RevisedProject } from './schema.ts';
-
-interface RevisionAnswer {
-  reply: string;
-  projects: RevisedProject[];
-}
-
-const MAX_TURNS = 10;
-
-const REPLY_LIMIT = 300;
-
-const REVISE_SYSTEM = [
-  'You sort a person’s code repositories into projects while they set up Shinsa, a tool that runs coding agents.',
-  'You get the projects as they stand, every repository by id, and what the person asks for.',
-  'Return the whole new list of projects, each with a short name and the ids of its repositories.',
-  'Change only what the request asks for and keep every other project and repository as it is.',
-  'A repository belongs to at most one project. Leave one out only when the request says so.',
-  'In reply, tell the person in one short sentence what you changed, or why you could not.',
-].join('\n');
-
-const REVISE_SCHEMA: JsonSchema = {
-  type: 'object',
-  properties: {
-    reply: { type: 'string' },
-    projects: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          repos: { type: 'array', items: { type: 'string' } },
-        },
-        required: ['name', 'repos'],
-      },
-    },
-  },
-  required: ['reply', 'projects'],
-};
 
 function listAllRepos(suggestions: ProjectSuggestion[]) {
   return suggestions.flatMap((suggestion) => suggestion.repos);
@@ -146,14 +116,12 @@ function serializePrompt(suggestions: ProjectSuggestion[], base: RevisedProject[
   };
 }
 
-function parseAnswer(value: unknown, ids: Map<string, string>): RevisionAnswer | null {
-  const answer = value as { reply?: unknown; projects?: unknown } | null;
-  if (!answer || typeof answer.reply !== 'string' || !Array.isArray(answer.projects)) return null;
+const decodeAnswer = Schema.decodeUnknownOption(RevisionAnswer);
+
+function resolveRevisedProjects(answer: RevisionAnswer, ids: Map<string, string>) {
   const paths = new Map([...ids].map(([path, id]) => [id, path]));
   const used = new Set<string>();
-  const projects: RevisedProject[] = [];
-  for (const entry of answer.projects as { name?: unknown; repos?: unknown }[]) {
-    if (typeof entry?.name !== 'string' || !Array.isArray(entry.repos)) return null;
+  return answer.projects.flatMap((entry): RevisedProject[] => {
     const name = entry.name.trim().slice(0, PROJECT_LIMITS.name);
     const repos = entry.repos.flatMap((id) => {
       const path = typeof id === 'string' ? paths.get(id) : undefined;
@@ -161,33 +129,42 @@ function parseAnswer(value: unknown, ids: Map<string, string>): RevisionAnswer |
       used.add(path);
       return [path];
     });
-    if (name.length > 0 && repos.length > 0) projects.push({ name, repos });
-  }
-  return { reply: answer.reply.trim().slice(0, REPLY_LIMIT), projects };
+    return name.length > 0 && repos.length > 0 ? [{ name, repos }] : [];
+  });
 }
 
-export async function requestRevision(
-  ask: QuickJson,
+export const requestRevision = Effect.fn('Onboarding.requestRevision')(function* (
+  ask: RevisionAsk,
   suggestions: ProjectSuggestion[],
   revision: ProjectRevision | null,
   text: string,
   choices: OnboardingProjectChoice[] | undefined
-): Promise<ProjectRevision> {
+) {
   const request = text.trim();
-  if (request.length === 0)
-    throw new DomainError({ code: 'request_empty', message: 'Say what to change about the projects.' });
+  if (request.length === 0) {
+    return yield* new DomainError({
+      code: 'request_empty',
+      message: 'Say what to change about the projects.',
+    });
+  }
   if (request.length > ONBOARDING_REQUEST_LIMIT) {
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'request_invalid',
       message: `Keep it to ${ONBOARDING_REQUEST_LIMIT} characters.`,
     });
   }
   const { ids, prompt } = serializePrompt(suggestions, resolveBase(suggestions, choices), request);
-  const answer = parseAnswer(await ask<unknown>(REVISE_SYSTEM, prompt, REVISE_SCHEMA), ids);
-  if (!answer) {
-    throw new DomainError({ code: 'revision_failed', message: 'Couldn’t reach a model. Try again.' });
+  const answer = decodeAnswer(yield* ask(REVISE_SYSTEM, prompt, REVISE_SCHEMA));
+  if (Option.isNone(answer)) {
+    return yield* new DomainError({ code: 'revision_failed', message: 'Couldn’t reach a model. Try again.' });
   }
-  const turns = [...(revision?.turns ?? []), { request, reply: answer.reply }].slice(-MAX_TURNS);
+  const reply = answer.value.reply.trim().slice(0, REPLY_LIMIT);
+  const turns = [...(revision?.turns ?? []), { request, reply }].slice(-MAX_TURNS);
   const seen = new Set([...(revision?.seen ?? []), ...listAllRepos(suggestions).map((repo) => repo.path)]);
-  return { projects: answer.projects, seen: [...seen], turns };
-}
+  const revised: ProjectRevision = {
+    projects: resolveRevisedProjects(answer.value, ids),
+    seen: [...seen],
+    turns,
+  };
+  return revised;
+});

@@ -2,10 +2,9 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { join } from 'node:path';
 import type { UsageWait } from '@shinsa/core';
 import { resolveResumeCommandId, UsageResumeClock } from '../../src/accounts/resume.ts';
-import { log as logger } from '../../src/log/index.ts';
 import { Engine } from '../../src/runtime/engine.ts';
 import { EventLog } from '../../src/store/index.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+import { captureLogs, createTempDir, until } from '../helpers/index.ts';
 
 const MINUTE = 60_000;
 
@@ -166,17 +165,16 @@ describe('usage resume clock', () => {
     const shift = shiftEngineClock();
     const { engine, taskId, wait } = await armWait();
     shift.ms = MINUTE + 1;
-    const warn = spyOn(logger, 'warn').mockImplementation(() => undefined);
-    spies.push(warn);
+    const logs = captureLogs();
+    spies.push({ mockRestore: logs.restore });
     spyOnDispatch(engine).mockImplementationOnce(() => Promise.reject(new Error('database is locked')));
     const dispatched = spyOnDispatch(engine);
     const clock = { now: wait.resetAt };
     const resume = new UsageResumeClock(engine, { now: () => clock.now, graceMs: 0, retryMs: MINUTE });
     await resume.fireDue();
-    expect(warn).toHaveBeenCalledWith('[Accounts] Could not resume a task after the usage limit reset', {
-      taskId,
-      error: 'database is locked',
-    });
+    expect(logs.fieldsOf('[Accounts] Could not resume a task after the usage limit reset')).toEqual([
+      { taskId, error: 'database is locked' },
+    ]);
     expect(selectWait(engine, taskId).status).toBe('armed');
     clock.now += MINUTE;
     await resume.fireDue();
