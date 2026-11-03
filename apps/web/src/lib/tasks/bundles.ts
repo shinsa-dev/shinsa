@@ -36,7 +36,7 @@ export const BUNDLE_MEMBER: Record<BundleMemberState, { label: string; tone: Ton
   cancelled: { label: 'Cancelled', tone: 'neutral' },
 };
 
-export const BUNDLE_READY_STATUS = { label: 'Ready, merges with its bundle', tone: 'green' } as const;
+export const BUNDLE_READY_STATUS = { label: 'Merges with its bundle', tone: 'green' } as const;
 
 export const BUNDLE_MERGING_STATUS = { label: 'Merging with its bundle', tone: 'green' } as const;
 

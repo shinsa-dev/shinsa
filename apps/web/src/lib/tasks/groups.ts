@@ -51,6 +51,12 @@ export interface TeamEntry {
   heldAt: number | null;
 }
 
+export interface TaskGroupRow {
+  task: Task;
+  group: TaskGroupKey;
+  team?: TeamEntry;
+}
+
 export interface ChainEntry {
   task: Task;
   depth: number;
@@ -258,41 +264,30 @@ function mergeTeamEntries(key: TaskGroupKey, own: ChainEntry[], team: TeamEntry[
   return [...merged, ...waiting];
 }
 
-function matchesSearch(state: ShinsaState, task: Task, needle: string) {
-  const repo = task.repoId ? (state.repos[task.repoId]?.name ?? '') : '';
-  return `${task.title} ${task.request} ${task.branch ?? ''} ${repo}`.toLowerCase().includes(needle);
-}
-
 export function listTaskGroupSections(
   state: ShinsaState,
-  search: string,
-  status: TaskGroupKey | null,
-  team: readonly TeamEntry[] = []
+  rows: readonly TaskGroupRow[],
+  statuses: readonly string[] = []
 ) {
-  const needle = search.trim().toLowerCase();
   const grouped = new Map<TaskGroupKey, Task[]>(TASK_GROUPS.map((group) => [group.key, []]));
-  for (const task of Object.values(state.tasks)) {
-    if (isWatchHome(task)) continue;
-    if (!needle || matchesSearch(state, task, needle)) grouped.get(resolveTaskGroup(state, task))?.push(task);
-  }
   const teamGrouped = new Map<TaskGroupKey, TeamEntry[]>(TASK_GROUPS.map((group) => [group.key, []]));
-  for (const entry of team) {
-    const people = `${entry.entry.owner ?? ''} ${entry.entry.machine ?? ''}`.toLowerCase();
-    if (!needle || matchesSearch(entry.state, entry.entry.task, needle) || people.includes(needle))
-      teamGrouped.get(resolveTaskGroup(entry.state, entry.entry.task))?.push(entry);
+  for (const row of rows) {
+    if (row.team) teamGrouped.get(row.group)?.push(row.team);
+    else grouped.get(row.group)?.push(row.task);
   }
-  return TASK_GROUPS.filter((group) => status === null || group.key === status).map((group) => ({
-    group,
-    entries: mergeTeamEntries(
-      group.key,
-      orderTaskGroup(state, group.key, grouped.get(group.key) ?? []),
-      teamGrouped.get(group.key) ?? []
-    ),
-  }));
+  return TASK_GROUPS.filter((group) => statuses.length === 0 || statuses.includes(group.key)).map(
+    (group) => ({
+      group,
+      entries: mergeTeamEntries(
+        group.key,
+        orderTaskGroup(state, group.key, grouped.get(group.key) ?? []),
+        teamGrouped.get(group.key) ?? []
+      ),
+    })
+  );
 }
 
-export function describeTaskCounts(state: ShinsaState) {
-  const tasks = Object.values(state.tasks).filter((task) => !isWatchHome(task));
+export function describeTaskCounts(tasks: readonly Task[]) {
   const open = tasks.filter((task) => !isTaskSettled(task)).length;
   const done = tasks.filter((task) => task.stage === 'merged' || task.stage === 'done').length;
   return `${open} open · ${done} done`;

@@ -176,6 +176,104 @@ describe('the depth of a row', () => {
   });
 });
 
+describe('a task stacked on another', () => {
+  const root = createTask({
+    id: 'root',
+    handle: 'SW-32',
+    title: 'Add the saved cart schema',
+    stage: 'shipping',
+  });
+  const stacked = createTask({
+    id: 'stacked',
+    title: 'Serve saved carts over the API',
+    stage: 'waiting_on_tasks',
+    stacksOn: ['root'],
+  });
+  const state = createShinsaState({ tasks: [root, stacked] });
+
+  it('marks its bundle instead of a wait, and links the task below', async () => {
+    renderRow(stacked, 1, state);
+    expect(screen.queryByRole('button', { name: 'Waits on' })).toBeNull();
+    const mark = screen.getByRole('link', { name: 'Stacked on SW-32' });
+    expect(await findTooltipText(mark)).toContain('Merges with its bundle');
+    fireEvent.click(mark);
+    await waitFor(() => expect(location.pathname).toBe('/tasks/SW-32'));
+  });
+
+  it('says Stacked on in its status while the task below is open', () => {
+    renderRow(stacked, 1, state);
+    expect(row().textContent).toContain('Stacked on SW-32');
+    expect(row().textContent).not.toContain('Waits on');
+  });
+});
+
+describe('a task stacked on several tasks', () => {
+  const left = createTask({
+    id: 'left',
+    handle: 'SW-33',
+    title: 'Sync plans from the App Store',
+    stage: 'shipping',
+  });
+  const right = createTask({
+    id: 'right',
+    handle: 'SW-34',
+    title: 'Sync plans from Google Play',
+    stage: 'shipping',
+  });
+  const join = createTask({
+    id: 'join',
+    title: 'Resolve entitlements across stores',
+    stage: 'waiting_on_tasks',
+    stacksOn: ['left', 'right'],
+    waitsOn: ['left', 'right'],
+  });
+  const state = createShinsaState({ tasks: [left, right, join] });
+
+  it('marks its bundle once, naming every task it stacks on', async () => {
+    renderRow(join, 1, state);
+    const mark = screen.getByRole('link', { name: 'Stacked on SW-33 and 1 more' });
+    const tooltip = await findTooltipText(mark);
+    expect(tooltip).toContain('Sync plans from the App Store');
+    expect(tooltip).toContain('Sync plans from Google Play');
+    expect(row().textContent).toContain('Stacked on SW-33');
+  });
+});
+
+describe('a task stacked on another that also waits on others', () => {
+  const root = createTask({
+    id: 'root',
+    handle: 'SW-32',
+    title: 'Add the saved cart schema',
+    stage: 'shipping',
+  });
+  const other = createTask({
+    id: 'other',
+    handle: 'SW-40',
+    title: 'Migrate the cart table',
+    stage: 'building',
+  });
+  const stacked = createTask({
+    id: 'stacked',
+    title: 'Serve saved carts over the API',
+    stage: 'waiting_on_tasks',
+    stacksOn: ['root'],
+    waitsOn: ['root', 'other'],
+  });
+  const state = createShinsaState({ tasks: [root, other, stacked] });
+
+  it('keeps the menu of every parent, marked as its bundle', async () => {
+    renderRow(stacked, 1, state);
+    expect(screen.queryByRole('link', { name: 'Stacked on SW-32' })).toBeNull();
+    const mark = screen.getByRole('button', { name: 'Stacked on SW-32, waits on 1 more' });
+    const tooltip = await findTooltipText(mark);
+    expect(tooltip).toContain('Merges with its bundle');
+    expect(tooltip).toContain('Migrate the cart table');
+    fireEvent.click(mark);
+    expect(await screen.findByRole('menuitem', { name: /Migrate the cart table/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Add the saved cart schema/ })).toBeTruthy();
+  });
+});
+
 describe('the repository column', () => {
   it('says No repository for a task that works without one', () => {
     renderRow(createTask({ id: 'research', title: 'Compare the search engines', stage: 'researching' }));
