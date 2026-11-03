@@ -1809,7 +1809,9 @@ checks it ran.
   words, each with its path, lines and words. A comment is words only: to change the code yourself, edit it in the
   Code tab (Where agents work → Your edits). Fix N findings at an escalated review sends the drafted comments with the verdicts the same way. The
   comments are stored on `gate.answered` and on the decision's activity entry, so the task's activity lists each
-  with its place. Comments with any other decision or at any other gate are refused.
+  with its place. Comments with any other decision or at any other gate are refused. Outside a review the same
+  comments go with a message (`task.message` with `comments`): core appends them to the message as a Line comments
+  block on whichever path it takes (steer, wake, fix, new round, kept at a gate), and `task.messaged` keeps them.
 - Fix N findings and approve, from the Fix button's chevron, is the same `revise` with `thenApprove: true`
   (refused at any other gate or with any other decision, `then_approve_invalid`, `then_approve_conflict`). The
   `gate.answered` fold sets `task.approveAfterFix`; the fix then runs as any other: checks, the agent review and its
@@ -3024,7 +3026,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
-  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, today; Settings → Teams and the review's Fix and approve
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, and `message.line_comments` for `task.message`'s
+  `comments`, today; Settings → Teams and the review's Fix and approve
   choice show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
