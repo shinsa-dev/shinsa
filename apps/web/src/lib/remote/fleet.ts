@@ -53,6 +53,7 @@ const FLEET_RECORDS = [
   'schedules',
   'memories',
   'sessionUsage',
+  'presence',
 ] as const satisfies readonly (keyof WireState)[];
 
 const SCAN_DEPTH = 4;

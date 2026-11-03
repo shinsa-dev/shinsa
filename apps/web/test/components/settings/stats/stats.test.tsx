@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { resolveStats } from '@shinsa/core';
+import { HOUR_MS, resolveStats, type Round } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { render } from '@testing-library/react';
+import { StatisticsSettings } from '@/components/settings/stats/index.tsx';
 import { ShippingGraph } from '@/components/settings/stats/shipping-graph.tsx';
 import { StatTiles } from '@/components/settings/stats/stat-tile.tsx';
 import { Breakdown } from '@/components/settings/stats/usage-tables.tsx';
 import { listCalendarDays, resolveDayKey } from '@/lib/stats/days.ts';
 import { findTooltipText } from '../../../support/hover.ts';
+import { createShinsaState, createTask } from '../../../support/state.ts';
 
 const SCROLL_WIDTH = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth');
 
@@ -68,5 +70,44 @@ describe('statistics', () => {
     const view = render(<ShippingGraph year={year} />);
     const today = view.container.querySelector('[data-day="2026-10-30"]');
     expect(today?.className).not.toContain('ring');
+  });
+
+  it('shows turnaround between shipping and usage, from a round that finished today', () => {
+    const end = Date.now() - HOUR_MS;
+    const start = end - 4 * HOUR_MS;
+    const merged: Round = {
+      number: 1,
+      title: 'Round',
+      request: 'Do it',
+      why: null,
+      shipping: 'onto_pull_request',
+      status: 'merged',
+      pipeline: [],
+      branch: 'b',
+      base: null,
+      pullRequest: null,
+      queuedAt: start,
+      startedAt: start,
+      endedAt: end,
+      outcome: null,
+    };
+    const task = createTask({
+      id: 't1',
+      stage: 'merged',
+      rounds: [merged],
+      timing: { paused: [], pausedSince: null, needsYou: [], needsYouSince: null, openGates: [] },
+    });
+    const view = render(
+      <TooltipProvider>
+        <StatisticsSettings state={createShinsaState({ tasks: [task] })} />
+      </TooltipProvider>
+    );
+    const titles = [...view.container.querySelectorAll('section')].map((section) => section.id);
+    expect(titles.indexOf('settings-turnaround')).toBeGreaterThan(titles.indexOf('settings-shipping'));
+    expect(titles.indexOf('settings-turnaround')).toBeLessThan(titles.indexOf('settings-token-usage'));
+    const turnaround = view.container.querySelector('#settings-turnaround');
+    expect(turnaround?.textContent).toContain('Start to finish4hOver 1 round');
+    expect(turnaround?.textContent).toContain('Waiting on you0%');
+    expect(turnaround?.textContent).toContain('not at all while you were away');
   });
 });
