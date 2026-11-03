@@ -145,6 +145,10 @@ export function lineOf(content: string, needle: string) {
   return index + 1;
 }
 
+export function resolveLineSpan(content: string, from: string, to: string) {
+  return { start: lineOf(content, from), end: lineOf(content, to) };
+}
+
 function splitLines(content: string) {
   const lines = content.split('\n');
   if (lines.at(-1) === '') lines.pop();

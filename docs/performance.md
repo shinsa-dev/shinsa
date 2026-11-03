@@ -165,7 +165,7 @@ paint, scroll and take a keystroke, on a production build in a real browser.
   to `/tmp` (5 tasks, 19 runs; its chats are short, so it shows the floor, not the long-chat case).
 - **The page.** `vite build` of the web app, served by `vite preview` against `shinsa engine` with `SHINSA_INSPECT=1`,
   in headless Chromium driven over the DevTools protocol by `bun scripts/perf/content-measure.ts <url>`
-  (`content-cdp.ts`, `content-probe.ts`). Each scenario runs in three fresh browsers; the table shows the median.
+  (`scripts/kit/chromium/`, `content-probe.ts`). Each scenario runs in three fresh browsers; the table shows the median.
   Navigation is the router's own `pushState`, timed to the frame after the content is in the DOM. Frames are
   `requestAnimationFrame` deltas while the chat scrolls up 150 frames of 160px. Typing is 41 keys into the composer
   while 20 transcript entries a second and a full state a second arrive on the page's own socket, timed from each
@@ -563,7 +563,7 @@ and on two large repositories.
   50,000-line file). `bun scripts/perf/code-seed.ts <seed dir> <paywall-next checkout>` turns a `bun run seed` copy
   into the second and third (it clones, never touches the original).
 - **The bench.** `bun scripts/perf/code-tab.ts --base <server> --task <handle> --folder <dir> --tree <folders>
-  [--files <paths>]` drives headless Chrome over the DevTools protocol (`scripts/perf/code-cdp.ts`, the page side in
+  [--files <paths>]` drives headless Chrome over the DevTools protocol (`scripts/kit/chromium/`, the page side in
   `code-probe.ts`), at 1280 × 900, against a production build served by an inspect-mode `shinsa engine` on a copy of
   the seed. It presses tree rows with real mouse events: **cold** is a file nothing has read (no hover, not next to an
   open file), **warm** a file opened before, **prefetched** a file hovered for 400 ms first. **Work** is the User
@@ -716,7 +716,7 @@ and each of its tabs, the Code tab's trees, ⌘P, the ref picker and search, All
 
 ### How it is measured
 
-- **The walk.** `bun scripts/perf/loading-walk.ts <origin>` opens headless Chromium (`shell-cdp.ts`) at 1440 and 900
+- **The walk.** `bun scripts/perf/loading-walk.ts <origin>` opens headless Chromium (`scripts/kit/chromium/`) at 1440 and 900
   px wide, with `scripts/perf/loading-probe.ts` installed before the app loads, and walks: Home → All tasks → a
   task (by its row, or ⌘K when the row is not on screen) → Overview, Review, Code, Chat → in Code: three changed
   files from the tree, Files, a folder, three files from the tree, Changes, ⌘P with a query and Enter, the ref
