@@ -513,6 +513,7 @@ export interface Task {
   snoozed?: TaskSnooze | null;
   duplicate?: TaskDuplicate | null;
   iterations?: Iteration[];
+  timing?: TaskTiming;
 }
 
 export type DuplicateActor = 'you' | 'shinsa';
@@ -581,6 +582,23 @@ export interface TaskBacklog {
 
 export interface TaskSnooze {
   at: number;
+}
+
+export interface TimingSpan {
+  from: number;
+  to: number;
+}
+
+export interface NeedsYouSpan extends TimingSpan {
+  answered: boolean;
+}
+
+export interface TaskTiming {
+  paused: TimingSpan[];
+  pausedSince: number | null;
+  needsYou: NeedsYouSpan[];
+  needsYouSince: number | null;
+  openGates: string[];
 }
 
 export type BacklogCause = 'you' | 'started' | 'inquiry';

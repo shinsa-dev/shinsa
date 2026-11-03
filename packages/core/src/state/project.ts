@@ -59,6 +59,7 @@ import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
+import { recordPresence } from './presence.ts';
 import { applyPullRequestEvent } from './pull-requests.ts';
 import { applyRoundEvent, createFirstRound, recordRoundBranch, recordRoundStaged } from './rounds.ts';
 import { applyRunEvent } from './runs.ts';
@@ -67,6 +68,7 @@ import { applyShapeEvent, describeShape } from './shapes.ts';
 import { applyShareEvent } from './shares.ts';
 import { applySlackEvent } from './slack.ts';
 import { applySuggested, applySuggestionSettled } from './suggestions.ts';
+import { applyTimingEvent } from './timing.ts';
 import { applyWaitEvent } from './waits.ts';
 import { applyWatchSuggestionEvent } from './watch-suggestions.ts';
 import { applyWatchdogEvent } from './watchdogs.ts';
@@ -89,6 +91,7 @@ export interface ShinsaState {
   feedback: Record<string, Feedback>;
   watchSuggestions: Record<string, WatchSuggestion>;
   sessionUsage: Record<string, RunUsage>;
+  presence: Record<string, number>;
   onBehalfActions: OnBehalfAction[];
 }
 
@@ -114,6 +117,7 @@ export function createState(): ShinsaState {
     feedback: {},
     watchSuggestions: {},
     sessionUsage: {},
+    presence: {},
     onBehalfActions: [],
   };
 }
@@ -776,8 +780,20 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
   }
 }
 
+function isCreatedByYou(event: EventOf<'task.created'>) {
+  return !(
+    event.onBehalf ||
+    event.byGuest ||
+    event.createdBy ||
+    event.scheduleId ||
+    event.sourceReport ||
+    event.watchHome
+  );
+}
+
 function applyTaskCreated(state: ShinsaState, event: EventOf<'task.created'>) {
   writeEntry(state, 'tasks', event.taskId, { ...createTask(event), ...resolveLineage(event) });
+  if (isCreatedByYou(event)) recordPresence(state, event.at);
   if (event.handle) recordHandle(state, event.handle);
   recordCourierTask(state, event);
   recordFork(state, event);
@@ -1116,6 +1132,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       applyWatchSuggestionEvent(state, event);
       break;
   }
+  applyTimingEvent(state, event);
   return state;
 }
 

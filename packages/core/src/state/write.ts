@@ -1,5 +1,6 @@
 import { type Activity, type Gate, type Run, resolveRoundStamp, type Task } from '../domain/index.ts';
 import { writeEntry } from './draft.ts';
+import { recordPresence } from './presence.ts';
 import type { ShinsaState } from './project.ts';
 
 type ActivityEntry = Pick<Activity, 'actor' | 'kind' | 'text'> &
@@ -29,6 +30,7 @@ export function record(state: ShinsaState, taskId: string, at: number, entry: Ac
   const task = state.tasks[taskId];
   if (!task) return;
   const stamp = entry.actor === 'you' ? ACTOR_STAMPS.get(state) : undefined;
+  if (entry.actor === 'you' && !stamp) recordPresence(state, at);
   const activity = [
     ...task.activity,
     { detail: null, evidenceId: null, ...entry, ...stamp, ...resolveRoundStamp(task), at },

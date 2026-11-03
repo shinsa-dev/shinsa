@@ -1,0 +1,206 @@
+import { describe, expect, test } from 'bun:test';
+import {
+  type Gate,
+  HOUR_MS,
+  PRESENCE_RETENTION_HOURS,
+  replayEventLog,
+  resolvePresenceHour,
+  resolveTaskTiming,
+  type UsageWait,
+} from '../../src/index.ts';
+import { approve, createHarness, createTask, proposePlan } from '../harness.ts';
+
+function gate(taskId: string, id: string): Gate {
+  return {
+    id,
+    taskId,
+    type: 'question',
+    status: 'open',
+    title: 'Which colour?',
+    body: '',
+    runId: null,
+    openedAt: 0,
+    answeredAt: null,
+    decision: null,
+    response: null,
+  };
+}
+
+function usageWait(id: string): UsageWait {
+  return {
+    id,
+    runId: 'run-1',
+    role: 'agent',
+    phaseIndex: null,
+    account: null,
+    resetAt: 99_999,
+    armedAt: 0,
+    autoResume: true,
+    status: 'armed',
+  };
+}
+
+function timingOf(harness: ReturnType<typeof createHarness>, taskId: string) {
+  return resolveTaskTiming(harness.task(taskId));
+}
+
+describe('task timing', () => {
+  test('starts empty and stays unwritten while nothing pauses or needs you', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(harness.task(taskId).timing).toBeUndefined();
+    expect(timingOf(harness, taskId)).toEqual({
+      paused: [],
+      pausedSince: null,
+      needsYou: [],
+      needsYouSince: null,
+      openGates: [],
+    });
+  });
+
+  test('pauses while snoozed and closes the span once unsnoozed', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.snooze', taskId });
+    const from = harness.now;
+    expect(timingOf(harness, taskId).pausedSince).toBe(from);
+    harness.advance(500);
+    harness.send({ type: 'task.unsnooze', taskId });
+    expect(timingOf(harness, taskId)).toMatchObject({
+      paused: [{ from, to: harness.now }],
+      pausedSince: null,
+    });
+  });
+
+  test('keeps one span while several causes overlap', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.replay({ type: 'task.snooze_changed', taskId, snoozed: true });
+    const from = harness.now;
+    harness.replay({ type: 'task.backlog_changed', taskId, backlog: true, cause: 'you' });
+    harness.replay({ type: 'task.snooze_changed', taskId, snoozed: false });
+    expect(timingOf(harness, taskId)).toMatchObject({ paused: [], pausedSince: from });
+    harness.replay({ type: 'task.backlog_changed', taskId, backlog: false, cause: 'started' });
+    expect(timingOf(harness, taskId).paused).toEqual([{ from, to: harness.now }]);
+  });
+
+  test('pauses while waiting on other tasks', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.replay({ type: 'task.staged', taskId, stage: 'waiting_on_tasks', reason: 'Waits on LOC-1' });
+    const from = harness.now;
+    harness.replay({ type: 'task.staged', taskId, stage: 'planning', reason: 'Planning' });
+    expect(timingOf(harness, taskId).paused).toEqual([{ from, to: harness.now }]);
+  });
+
+  test('pauses while a usage wait is armed, not once it resumed', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.replay({ type: 'usage_wait.armed', taskId, wait: usageWait('wait-1') });
+    const from = harness.now;
+    harness.replay({ type: 'usage_wait.ended', taskId, waitId: 'wait-1', status: 'resumed' });
+    expect(timingOf(harness, taskId)).toMatchObject({
+      paused: [{ from, to: harness.now }],
+      pausedSince: null,
+    });
+  });
+
+  test('a plan gate you approve is one answered wait', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { planFirst: true });
+    proposePlan(harness, taskId);
+    const plan = harness.openGate(taskId);
+    const from = timingOf(harness, taskId).needsYouSince;
+    expect(from).not.toBeNull();
+    expect(timingOf(harness, taskId).openGates).toEqual([plan.id]);
+    harness.advance(1_000);
+    approve(harness, taskId);
+    const timing = timingOf(harness, taskId);
+    expect(timing.needsYou.at(-1)).toEqual({ from: from ?? 0, to: harness.now, answered: true });
+    expect(timing.openGates).not.toContain(plan.id);
+  });
+
+  test('one wait spans overlapping gates until the last closes, answered by how it closed', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.replay({ type: 'gate.opened', gate: gate(taskId, 'g1') });
+    const from = harness.now;
+    harness.replay({ type: 'gate.opened', gate: gate(taskId, 'g1') });
+    harness.replay({ type: 'gate.opened', gate: gate(taskId, 'g2') });
+    harness.replay({ type: 'gate.answered', gateId: 'g1', decision: 'reply', response: 'Blue' });
+    expect(timingOf(harness, taskId)).toMatchObject({ needsYou: [], needsYouSince: from, openGates: ['g2'] });
+    harness.replay({ type: 'gate.withdrawn', gateId: 'g2' });
+    expect(timingOf(harness, taskId)).toMatchObject({
+      needsYou: [{ from, to: harness.now, answered: false }],
+      needsYouSince: null,
+      openGates: [],
+    });
+    harness.replay({ type: 'gate.withdrawn', gateId: 'g2' });
+    harness.replay({ type: 'gate.withdrawn', gateId: 'missing' });
+    expect(timingOf(harness, taskId).needsYou).toHaveLength(1);
+  });
+
+  test('a question you answer in the chat counts as answered', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.replay({ type: 'gate.opened', gate: gate(taskId, 'g1') });
+    harness.replay({ type: 'gate.superseded', gateId: 'g1', text: 'Blue, please' });
+    expect(timingOf(harness, taskId).needsYou[0]?.answered).toBe(true);
+  });
+
+  test('ignores a gate that opens closed and events for a task it does not know', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.replay({ type: 'gate.opened', gate: { ...gate(taskId, 'g1'), status: 'answered' } });
+    harness.replay({ type: 'gate.opened', gate: gate('missing', 'g2') });
+    harness.replay({ type: 'task.snooze_changed', taskId: 'missing', snoozed: true });
+    expect(harness.task(taskId).timing).toBeUndefined();
+  });
+
+  test('replay rebuilds the same timing', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.snooze', taskId });
+    harness.send({ type: 'task.unsnooze', taskId });
+    harness.replay({ type: 'gate.opened', gate: gate(taskId, 'g1') });
+    expect(replayEventLog(harness.events).state.tasks[taskId]?.timing).toEqual(harness.task(taskId).timing);
+  });
+});
+
+describe('your presence', () => {
+  test('counts what you do yourself per hour', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const before = harness.state.presence[String(resolvePresenceHour(harness.now))] ?? 0;
+    harness.send({ type: 'task.snooze', taskId });
+    harness.send({ type: 'task.unsnooze', taskId });
+    expect(harness.state.presence[String(resolvePresenceHour(harness.now))]).toBe(before + 2);
+  });
+
+  test('leaves out what Shinsa, agents and anyone on your behalf do', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const presence = { ...harness.state.presence };
+    harness.replay({ type: 'task.staged', taskId, stage: 'planning', reason: 'Planning' });
+    harness.send({ type: 'task.snooze', taskId }, { onBehalf: true, byTask: 'other' });
+    harness.send(
+      { type: 'task.create', request: 'Tidy the docs', repoId: harness.task(taskId).repoId ?? '' },
+      { onBehalf: true, byTask: taskId }
+    );
+    expect(harness.state.presence).toEqual(presence);
+  });
+
+  test('keeps a year of hours and drops older ones when a new hour starts', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const first = resolvePresenceHour(harness.now);
+    expect(harness.state.presence[String(first)]).toBeGreaterThan(0);
+    harness.advance(PRESENCE_RETENTION_HOURS * HOUR_MS - 2 * HOUR_MS);
+    harness.send({ type: 'task.snooze', taskId });
+    expect(harness.state.presence[String(first)]).toBeGreaterThan(0);
+    harness.advance(2 * HOUR_MS);
+    harness.send({ type: 'task.unsnooze', taskId });
+    expect(harness.state.presence[String(first)]).toBeUndefined();
+    expect(Object.keys(harness.state.presence)).toHaveLength(2);
+  });
+});
