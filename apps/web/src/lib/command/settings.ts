@@ -91,6 +91,8 @@ import {
   resolveSpeedAvailability,
   resolveSpeedValue,
   resolveUsageLimitValue,
+  NOTIFICATION_DETAILS,
+  NOTIFICATION_DETAILS_ITEMS,
   type SettingItem,
   SOUND_ITEMS,
   USAGE_LIMIT_TITLE,
@@ -298,6 +300,13 @@ function listAttentionChoices(settings: Settings, notifications: NotificationPre
       ALERT_ITEMS,
       notifications.notify,
       (value) => void updateNotifications({ notify: value as AlertPreference })
+    ),
+    settingChoice(
+      'notification-details',
+      NOTIFICATION_DETAILS,
+      NOTIFICATION_DETAILS_ITEMS,
+      notifications.details ? 'on' : 'off',
+      (value) => void updateNotifications({ details: value === 'on' })
     ),
   ];
 }

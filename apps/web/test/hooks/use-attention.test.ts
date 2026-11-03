@@ -135,6 +135,36 @@ describe('useAttention', () => {
     expect(desktop.badges.at(-1)).toBe(1);
   });
 
+  it('without task details, hands the app a generic notice that still opens the task', () => {
+    const desktop = installDesktop();
+    restores.push(desktop.restore);
+    writeNotificationPreferences({ notify: 'always', details: false });
+    const state = (gates: ReturnType<typeof question>[]) =>
+      createShinsaState({ tasks: [createTask({ id: 't-1', title: 'Paint it', handle: 'SW-142' })], gates });
+    const { rerender } = renderHook(({ current }) => useAttention(current), {
+      initialProps: { current: state([]) },
+    });
+    rerender({ current: state([question('g-1')]) });
+    expect(desktop.notices).toEqual([
+      { title: 'Shinsa', body: 'A task needs you.', tag: 'g-1', path: '/tasks/SW-142' },
+    ]);
+  });
+
+  it('without task details, a browser notification says only that a task needs you', () => {
+    const notifications = installNotifications('granted');
+    restores.push(notifications.restore);
+    writeNotificationPreferences({ notify: 'always', details: false });
+    const { rerender } = renderHook(({ state }) => useAttention(state), {
+      initialProps: { state: withGates() },
+    });
+    rerender({ state: withGates(question('g-1')) });
+    expect(notifications.shown.map((shown) => [shown.title, shown.options.body])).toEqual([
+      ['Shinsa', 'A task needs you.'],
+    ]);
+    notifications.shown[0]?.click();
+    expect(location.pathname).toBe('/tasks/t-1');
+  });
+
   it('in the app, shows a toast when macOS refuses a notification, until it unmounts', () => {
     const desktop = installDesktop();
     restores.push(desktop.restore);

@@ -4,6 +4,7 @@ import {
   describeDecision,
   listNewDecisions,
   listOpenGateIds,
+  resolveNotice,
   resolvePageAttention,
   resolveWindowTitle,
 } from '@/lib/notifications/attention.ts';
@@ -170,6 +171,23 @@ describe('what a notification says', () => {
         reason: '',
       }).title
     ).toBe('Task t-1');
+  });
+});
+
+describe('what a notification says without task details', () => {
+  const notice = { gateId: 'g-1', taskId: 't-1', title: 'Paint it', body: 'Review. Read the change.' };
+
+  it('keeps the task title and what waits while details are on', () => {
+    expect(resolveNotice(notice, true)).toBe(notice);
+  });
+
+  it('says only that a task needs you while details are off, and still opens that task', () => {
+    expect(resolveNotice(notice, false)).toEqual({
+      gateId: 'g-1',
+      taskId: 't-1',
+      title: 'Shinsa',
+      body: 'A task needs you.',
+    });
   });
 });
 

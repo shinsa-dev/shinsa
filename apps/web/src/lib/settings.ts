@@ -529,6 +529,13 @@ export const SOUND_ITEMS: SettingItem<SoundId>[] = [
   { value: 'pop', label: 'Pop', icon: 'IconBell' },
 ];
 
+export const NOTIFICATION_DETAILS = 'Show task details';
+
+export const NOTIFICATION_DETAILS_ITEMS: SettingItem<string>[] = [
+  { value: 'on', label: 'Task title and what waits', icon: 'IconEyeOpen' },
+  { value: 'off', label: 'Only that a task needs you', icon: 'IconEyeSlash' },
+];
+
 export const CONTEXT_MANAGEMENT = 'Context management';
 
 export const COMPACTION_MODE_ITEMS: SettingItem<CompactionMode>[] = [

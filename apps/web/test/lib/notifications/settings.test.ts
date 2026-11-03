@@ -28,7 +28,12 @@ afterEach(() => {
 describe('changing notification settings', () => {
   it('saves sound settings without asking the browser anything', async () => {
     expect(await updateNotifications({ sound: 'always', soundId: 'ping', notify: 'never' })).toBe(true);
-    expect(readNotificationPreferences()).toEqual({ sound: 'always', soundId: 'ping', notify: 'never' });
+    expect(readNotificationPreferences()).toEqual({
+      sound: 'always',
+      soundId: 'ping',
+      notify: 'never',
+      details: true,
+    });
   });
 
   it('turns notifications on only once the browser allows them', async () => {
@@ -49,7 +54,7 @@ describe('changing notification settings', () => {
 });
 
 describe('testing the sound and notifications', () => {
-  const preferences = { sound: 'unfocused', soundId: 'pop', notify: 'never' } as const;
+  const preferences = { sound: 'unfocused', soundId: 'pop', notify: 'never', details: true } as const;
 
   it('plays the sound alone while notifications are off and the browser has not allowed them', async () => {
     const audio = installAudio();

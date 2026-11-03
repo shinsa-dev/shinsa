@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NotificationSettings } from '@/components/settings/notifications.tsx';
+import { readNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { installDesktop } from '../../support/desktop.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { installAudio, installNotifications } from '../../support/notifications.ts';
@@ -33,6 +34,21 @@ describe('Settings → Notifications', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Test' }));
     expect(audio.played.length).toBeGreaterThan(0);
+  });
+
+  it('shows task details by default and keeps them out of banners once switched off', async () => {
+    render(
+      <TooltipProvider>
+        <NotificationSettings />
+      </TooltipProvider>
+    );
+    const toggle = screen.getByRole('switch', { name: 'Show task details' });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(toggle);
+    await waitFor(() => expect(readNotificationPreferences().details).toBe(false));
+    expect(screen.getByRole('switch', { name: 'Show task details' }).getAttribute('aria-checked')).toBe(
+      'false'
+    );
   });
 
   it('says what Test does: the sound alone, or with a test notification once the browser allows them', async () => {
