@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ServerWebSocket } from 'bun';
+import { SECURITY_HEADERS } from '../apps/cloud/src/http/ingress/schema.ts';
 import { isPreviewHost } from '../apps/cloud/src/routes/previews/address.ts';
 import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE } from '../apps/cloud/src/routes/previews/schema.ts';
 import { Transcripts } from '../apps/engine/src/agents/index.ts';
@@ -978,9 +979,9 @@ function respondStatic(pathname: string) {
   const relative = pathname.replace(/^\/+/, '');
   const file = Bun.file(join(REMOTE_WEB, relative));
   if (relative && !relative.includes('..') && existsSync(join(REMOTE_WEB, relative)) && file.size > 0)
-    return new Response(file);
+    return new Response(file, { headers: SECURITY_HEADERS });
   return new Response(Bun.file(join(REMOTE_WEB, 'index.html')), {
-    headers: { 'content-type': 'text/html; charset=utf-8' },
+    headers: { ...SECURITY_HEADERS, 'content-type': 'text/html; charset=utf-8' },
   });
 }
 
