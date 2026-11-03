@@ -92,6 +92,7 @@ function TurnView({
             status={turn.human.status}
             reason={turn.human.reason}
             splitOff={turn.human.splitOff}
+            comments={turn.human.comments}
           />
         </div>
       )}
@@ -229,6 +230,7 @@ export const RunSection = React.memo(function RunSectionView({
               status={opening.status}
               reason={opening.reason}
               splitOff={opening.splitOff}
+              comments={opening.comments}
             />
           </div>
         )}

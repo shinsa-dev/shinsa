@@ -7,6 +7,7 @@ import {
 } from '@shinsa/core';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
+import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
 import { sendThroughOutbox } from '@/lib/tasks/outbox.ts';
 
 export interface MessageHint {
@@ -79,9 +80,28 @@ export function resolveMessageHint(state: ShinsaState, task: Task): MessageHint 
   return effect === 'closed' ? null : MESSAGE_HINTS[effect];
 }
 
-export function sendTaskMessage(task: Task, hint: MessageHint, text: string) {
-  return sendThroughOutbox(task.id, text, () =>
-    sendCommandWithToast({ type: 'task.message', taskId: task.id, text }, hint.sent)
+export function resolveLineComments(
+  state: ShinsaState,
+  task: Task,
+  options: { reviewing: boolean; supported: boolean }
+) {
+  const open = options.supported && resolveMessageEffect(state, task) !== 'closed';
+  return { enabled: options.reviewing || open, withMessages: options.supported };
+}
+
+export function sendTaskMessage(
+  task: Task,
+  hint: MessageHint,
+  text: string,
+  comments: readonly LineComment[] = []
+) {
+  const sent = serializeComments(comments);
+  const attached = sent.length > 0 ? { comments: sent } : {};
+  return sendThroughOutbox(
+    task.id,
+    text,
+    () => sendCommandWithToast({ type: 'task.message', taskId: task.id, text, ...attached }, hint.sent),
+    sent
   );
 }
 

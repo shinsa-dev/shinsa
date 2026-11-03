@@ -33,6 +33,7 @@ export {
   readAnsweredReply,
   resolveAnsweredReply,
   resolveAnswerPrompt,
+  resolveCommentedMessage,
   resolveContinuePrompt,
   resolveDelegationAnswerPrompt,
   resolveDeliveryPrompt,

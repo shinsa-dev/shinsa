@@ -6,14 +6,13 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ContextMeter } from '@/components/chat/context-meter.tsx';
 import { OpenDelegations } from '@/components/chat/delegation-card.tsx';
-import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { RoundDivider } from '@/components/chat/round-divider.tsx';
 import { ROW, RunSection } from '@/components/chat/run-section.tsx';
 import { UserMessage } from '@/components/chat/user-message.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { CHAT_COLUMN } from '@/components/layout/surface/card.ts';
-import { Composer } from '@/components/task/composer.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
+import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { useOutbox } from '@/hooks/use-outbox.ts';
 import { useStickToBottom } from '@/hooks/use-stick-to-bottom.ts';
 import { useTranscriptWindow } from '@/hooks/use-transcript-window.ts';
@@ -38,7 +37,7 @@ import {
   resolveTaskDisclosureId,
   useDisclosureScope,
 } from '@/lib/preferences/disclosure.ts';
-import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
+import { resolveMessageHint } from '@/lib/tasks/messages.ts';
 import { hasRounds } from '@/lib/tasks/rounds.ts';
 
 const NO_MESSAGES: never[] = [];
@@ -76,6 +75,7 @@ function TranscriptBlockView({
             status={block.message.status}
             reason={block.message.reason}
             splitOff={block.message.splitOff}
+            comments={block.message.comments}
           />
         </div>
       );
@@ -199,13 +199,11 @@ export function ChatTab({
         </div>
       </div>
       {hint && (
-        <Composer
-          draftKey={task.id}
-          placeholder={hint.placeholder}
-          submitLabel='Send message'
-          onSubmit={(text) => sendTaskMessage(task, hint, text)}
+        <TaskComposer
+          state={state}
+          task={task}
+          hint={hint}
           aside={<ContextMeter runIds={runs.map((run) => run.id)} />}
-          dock={<MessageQueue state={state} task={task} />}
         />
       )}
     </div>

@@ -11,8 +11,11 @@ export type DraftComment = Omit<LineComment, 'id' | 'side' | 'endLine' | 'ref'> 
 
 export interface ReviewDraft {
   enabled: boolean;
+  reviewing: boolean;
+  withMessages: boolean;
   comments: LineComment[];
   addComment: (comment: DraftComment) => void;
+  updateComment: (id: string, text: string) => void;
   removeComment: (id: string) => void;
   clearComments: () => void;
   verdicts: Readonly<Record<number, FindingVerdictKind>>;
@@ -25,8 +28,11 @@ function ignore() {}
 
 export const ReviewDraftContext = React.createContext<ReviewDraft>({
   enabled: false,
+  reviewing: false,
+  withMessages: false,
   comments: [],
   addComment: ignore,
+  updateComment: ignore,
   removeComment: ignore,
   clearComments: ignore,
   verdicts: {},
@@ -47,6 +53,32 @@ export function createLineComment(comment: DraftComment, id: string): LineCommen
     ref: comment.ref ?? null,
     text: comment.text,
   };
+}
+
+export function replaceCommentText(comments: readonly LineComment[], id: string, text: string) {
+  return comments.map((comment) => (comment.id === id ? { ...comment, text } : comment));
+}
+
+export function listMessageComments(draft: Pick<ReviewDraft, 'withMessages' | 'comments'>) {
+  return draft.withMessages ? draft.comments : [];
+}
+
+export function describeCommentPlaceholder(reviewing: boolean) {
+  return reviewing
+    ? 'What should change here? It goes to the agent with your review.'
+    : 'What should change here? It goes to the agent with your next message.';
+}
+
+function countComments(count: number) {
+  return `${count} ${count === 1 ? 'comment' : 'comments'}`;
+}
+
+export function describeCommentCount(count: number) {
+  return `${countComments(count)} for the agent`;
+}
+
+export function describeCommentsWithMessage(count: number) {
+  return `${count === 1 ? '1 line comment goes' : `${count} line comments go`} with this message`;
 }
 
 function isComment(value: unknown): value is LineComment {
