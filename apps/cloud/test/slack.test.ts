@@ -1207,6 +1207,15 @@ describe('deciding from the card', () => {
         : new Response('', { status: 599 })
     );
     await sendInteraction(setup.harness, clickPayload(setup.ts));
-    expect(failures).toHaveBeenCalled();
+    setup.reply.answer = () => Response.json({ decided: false, reason: 'This is no longer open.' });
+    setup.slack.answers['chat.postEphemeral'] = () => ({ ok: false, error: 'channel_not_found' });
+    await sendInteraction(setup.harness, submitPayload(setup.ts));
+    const logged = (failures.mock.calls as [string, Fields][]).filter(
+      ([text]) => text === '[Cloud] A Slack decision could not be passed on'
+    );
+    expect(logged.map(([, fields]) => [fields.kind, fields.teamId])).toEqual([
+      ['decide', 'T1'],
+      ['submit', 'T1'],
+    ]);
   });
 });

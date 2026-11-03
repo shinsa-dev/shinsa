@@ -4038,7 +4038,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   sign-in, question, secret, proposal, operation, plan, review, merge (`SLACK_CARD_GATES`); with none open it shows
   the status:
   - the status: what the task is doing now in bold (its stage reason, else its stage), "@someone approved the plan"
-    under it once a decision was made in Slack (`SlackThreadLink.decided`), then the task line, with no header;
+    under it while the last decision on the task was made in Slack (`SlackThreadLink.decided`, cleared by any
+    `gate.answered` before `slack.decided` sets it again, so a decision made in Shinsa drops it), then the task
+    line, with no header;
   - a failure: "Something failed", the failure and the first sentence of its detail, Retry; a sign-in: "Sign-in
     needed", Open in Shinsa;
   - a question: "Question for you", the question in bold, the first sentence of its context quoted, "Recommended:"
@@ -4089,7 +4091,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
     `serializeSlackDecidedView`), and a refusal goes to the clicker alone. A form closes as soon as it is sent,
     since Slack waits three seconds at most; a refusal then comes as a private message in the thread
     (`chat.postEphemeral`), and the card changes with the engine's next edit. A gate decided in Shinsa first
-    changes the card too, and a later click on an old card is refused.
+    changes the card too, and a later click on an old card is refused. A decision that fails on its way after the
+    acknowledgement (the machine's answer, a Slack call) is logged as `[Cloud] A Slack decision could not be passed
+    on` with its `kind` and `teamId`, the line a watch on the Worker counts.
 - **The card is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
   (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
   that would show the same message is skipped. The first one posts the card and records its ts (`slack.record_status`

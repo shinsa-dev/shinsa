@@ -307,6 +307,22 @@ describe('a decision from a button or a form in Slack', () => {
     expect(harness.effectsOf('slack.status').length).toBeGreaterThan(before);
   });
 
+  test('drops who decided from the card once the next decision is made in Shinsa', () => {
+    const harness = createHarness();
+    const taskId = askInSlack(harness);
+    harness.send({ type: 'slack.decide', decision: decision({ choice: 1 }) });
+    harness.send({
+      type: 'agent.ask',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'q2',
+      question: 'Which encoding?',
+      choices: ['UTF-8', 'Latin-1'],
+      context: null,
+    });
+    harness.send({ type: 'gate.answer', gateId: 'q2', decision: 'reply', response: 'UTF-8' });
+    expect(harness.task(taskId).slack?.decided).toBeNull();
+  });
+
   test('answers a question with words written in the form', () => {
     const harness = createHarness();
     askInSlack(harness);

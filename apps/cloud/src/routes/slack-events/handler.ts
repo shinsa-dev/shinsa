@@ -521,7 +521,12 @@ export const SlackEventRoutes = Layer.unwrap(
             Effect.asVoid,
             Effect.catchCause((cause) =>
               Effect.logError('[Cloud] A Slack decision could not be passed on').pipe(
-                Effect.annotateLogs({ cause: Cause.pretty(cause), kind: interaction.kind })
+                Effect.annotateLogs({
+                  cause: Cause.pretty(cause),
+                  kind: interaction.kind,
+                  teamId:
+                    interaction.kind === 'write' ? interaction.card.teamId : interaction.decision.teamId,
+                })
               )
             )
           )
