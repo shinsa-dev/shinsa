@@ -1,5 +1,4 @@
 import { Button } from '@shinsa/ui/components/button';
-import { Switch } from '@shinsa/ui/components/switch';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useDesktopConnected } from '@/lib/connection/socket.ts';
@@ -22,7 +21,7 @@ import {
   type SoundId,
   useNotificationPreferences,
 } from '@/lib/preferences/notifications.ts';
-import { ALERT_ITEMS, NOTIFICATION_DETAILS, SOUND_ITEMS } from '@/lib/settings.ts';
+import { ALERT_ITEMS, SOUND_ITEMS } from '@/lib/settings.ts';
 import { SettingRow, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 export function NotificationGroup({
@@ -74,13 +73,6 @@ export function NotificationGroup({
           items={ALERT_ITEMS}
           value={preferences.notify}
           onValueChange={(notify) => onChange({ notify })}
-        />
-      </SettingRow>
-      <SettingRow title={NOTIFICATION_DETAILS}>
-        <Switch
-          checked={preferences.details}
-          aria-label={NOTIFICATION_DETAILS}
-          onCheckedChange={(details) => onChange({ details })}
         />
       </SettingRow>
       {desktop && (

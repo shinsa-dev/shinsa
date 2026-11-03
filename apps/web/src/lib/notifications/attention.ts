@@ -31,8 +31,6 @@ const APP_NAME = 'Shinsa';
 
 const BODY_MAX = 180;
 
-export const GENERIC_NOTICE_BODY = 'A task needs you.';
-
 export function resolvePageAttention(state: ShinsaState, now: number): PageAttention {
   const queue = resolveQueue(state, now);
   const badge = queue.ready.length;
@@ -73,11 +71,6 @@ export function describeDecision(entry: QueuedGate): DecisionNotice {
     title: entry.task.title,
     body: resolveBody(describeBody(entry)),
   };
-}
-
-export function resolveNotice(notice: DecisionNotice, details: boolean): DecisionNotice {
-  if (details) return notice;
-  return { ...notice, title: APP_NAME, body: GENERIC_NOTICE_BODY };
 }
 
 export function listOpenGateIds(state: ShinsaState) {

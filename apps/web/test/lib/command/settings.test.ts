@@ -98,7 +98,6 @@ describe('Change a setting', () => {
       ['Play a sound', 'When Shinsa is in the background'],
       ['Sound', 'Chime'],
       ['Show a notification', 'Never'],
-      ['Show task details', 'Task title and what waits'],
       ['Approve plans', 'When you ask'],
       ['Automatic fix rounds', 'Until clean'],
       ['Delegations at once', 'No limit'],
@@ -395,25 +394,14 @@ describe('Change a setting', () => {
       sound: 'always',
       soundId: 'pop',
       notify: 'never',
-      details: false,
-    });
-    expect(find(sections, 'settings.notification-details')).toMatchObject({
-      value: 'off',
-      hint: 'Only that a task needs you',
     });
     expect(find(sections, 'settings.sound')).toMatchObject({ value: 'always', hint: 'Always' });
     expect(find(sections, 'settings.sound-id')).toMatchObject({ value: 'pop', hint: 'Pop' });
     pick(sections, 'settings.sound', 'never');
     pick(sections, 'settings.sound-id', 'ping');
     pick(sections, 'settings.notify', 'unfocused');
-    pick(sections, 'settings.notification-details', 'off');
     await waitFor(() => expect(readNotificationPreferences().notify).toBe('unfocused'));
-    expect(readNotificationPreferences()).toEqual({
-      sound: 'never',
-      soundId: 'ping',
-      notify: 'unfocused',
-      details: false,
-    });
+    expect(readNotificationPreferences()).toEqual({ sound: 'never', soundId: 'ping', notify: 'unfocused' });
     expect(notifications.requests).toHaveLength(1);
     expect(spies.sent).not.toHaveBeenCalled();
     notifications.restore();

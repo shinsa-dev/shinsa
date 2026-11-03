@@ -1758,8 +1758,7 @@ Only these, and they win over anything below:
       also shows a "Test notification" ("Shinsa shows a decision that needs you like this."; its tooltip says
       which: "Play the sound" or "Play the sound and show a test notification", 13; a blocked browser gets the same
       toast as below) and Show a notification (Never by default; choosing another asks the browser first and stays off
-      with a toast when it is blocked), then Show task details (a switch, on by default; off, every notification reads
-      "Shinsa" and "A task needs you." and its click still opens the task, `resolveNotice`). Sounds are Web Audio oscillators, never an `<audio>` element, so they never
+      with a toast when it is blocked). Sounds are Web Audio oscillators, never an `<audio>` element, so they never
       take the media keys. In the Mac app the group adds a macOS notifications row with a secondary Open settings
       button that opens System Settings → Notifications → Shinsa, and its description says "Banners and the Dock badge
       only show while macOS allows notifications for Shinsa."; when macOS refuses one, the page shows one error toast,

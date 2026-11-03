@@ -10,7 +10,6 @@ export interface NotificationPreferences {
   sound: AlertPreference;
   soundId: SoundId;
   notify: AlertPreference;
-  details: boolean;
 }
 
 const SOUND_KEY = 'shinsa.sound';
@@ -18,8 +17,6 @@ const SOUND_KEY = 'shinsa.sound';
 const SOUND_ID_KEY = 'shinsa.sound-id';
 
 const NOTIFY_KEY = 'shinsa.notifications';
-
-const DETAILS_KEY = 'shinsa.notification-details';
 
 const ALERTS: readonly AlertPreference[] = ['never', 'unfocused', 'always'];
 
@@ -29,7 +26,6 @@ export const DEFAULT_PREFERENCES: NotificationPreferences = {
   sound: 'unfocused',
   soundId: 'chime',
   notify: 'never',
-  details: true,
 };
 
 const signal = createSignal();
@@ -46,9 +42,8 @@ export function readNotificationPreferences(): NotificationPreferences {
     sound: readOne(SOUND_KEY, ALERTS, DEFAULT_PREFERENCES.sound),
     soundId: readOne(SOUND_ID_KEY, SOUND_IDS, DEFAULT_PREFERENCES.soundId),
     notify: readOne(NOTIFY_KEY, ALERTS, isDesktop() ? 'unfocused' : DEFAULT_PREFERENCES.notify),
-    details: localStorage.getItem(DETAILS_KEY) !== 'false',
   };
-  const key = `${value.sound}/${value.soundId}/${value.notify}/${value.details}`;
+  const key = `${value.sound}/${value.soundId}/${value.notify}`;
   if (cached?.key !== key) cached = { key, value };
   return cached.value;
 }
@@ -57,7 +52,6 @@ export function writeNotificationPreferences(patch: Partial<NotificationPreferen
   if (patch.sound) localStorage.setItem(SOUND_KEY, patch.sound);
   if (patch.soundId) localStorage.setItem(SOUND_ID_KEY, patch.soundId);
   if (patch.notify) localStorage.setItem(NOTIFY_KEY, patch.notify);
-  if (patch.details !== undefined) localStorage.setItem(DETAILS_KEY, String(patch.details));
   signal.publish();
 }
 
