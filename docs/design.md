@@ -1758,7 +1758,8 @@ Only these, and they win over anything below:
       also shows a "Test notification" ("Shinsa shows a decision that needs you like this."; its tooltip says
       which: "Play the sound" or "Play the sound and show a test notification", 13; a blocked browser gets the same
       toast as below) and Show a notification (Never by default; choosing another asks the browser first and stays off
-      with a toast when it is blocked). Sounds are Web Audio oscillators, never an `<audio>` element, so they never
+      with a toast when it is blocked), then Show task details (a switch, on by default; off, every notification reads
+      "Shinsa" and "A task needs you." and its click still opens the task, `resolveNotice`). Sounds are Web Audio oscillators, never an `<audio>` element, so they never
       take the media keys. In the Mac app the group adds a macOS notifications row with a secondary Open settings
       button that opens System Settings → Notifications → Shinsa, and its description says "Banners and the Dock badge
       only show while macOS allows notifications for Shinsa."; when macOS refuses one, the page shows one error toast,
@@ -1999,7 +2000,11 @@ Only these, and they win over anything below:
       the page that permission): `notifyDesktop` hands the decision to the app, which shows a silent macOS
       notification (the page plays its own sound) whose click shows and focuses the window and opens the task.
       Show a notification defaults to When Shinsa is in the background there, Never in a browser; the browser's
-      permission is never asked. The test notification goes the same way.
+      permission is never asked. The test notification goes the same way. The first time the app's page loads with
+      Show a notification on, it shows one "Notifications are on" notification ("Shinsa tells you here when a task
+      needs you.", `showNotificationWelcome`), so macOS asks for permission while you are looking at Shinsa rather
+      than at the first decision, when you are away; it is never shown again on that install
+      (`shinsa.notifications-welcomed`) and never in a browser.
     - **One surface notifies.** Every page says on connect which surface it is (`desktop` or `browser`; Floaty
       is a browser), and the server tells every page whether the app is connected. While it is, a browser tab or
       Floaty stays quiet (`isPageQuiet`, checked by `AttentionWatcher`): no sound and no notification. The count in
