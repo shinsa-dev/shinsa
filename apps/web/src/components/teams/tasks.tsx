@@ -79,7 +79,11 @@ export function TeamFeedRefusals({ state }: { state: ShinsaState }) {
     .join(' ');
   return (
     <Hint label={label} detail={detail}>
-      <span role='img' aria-label={`${label}. ${detail}`} className='grid size-4 shrink-0 place-items-center'>
+      <span
+        role='img'
+        aria-label={`${label}. ${detail}`}
+        className='grid size-4 shrink-0 cursor-pointer place-items-center'
+      >
         <Icon size='sm' name='IconLock' className='text-fg-2' />
       </span>
     </Hint>
@@ -107,7 +111,7 @@ function OfflineMark({ heldAt }: { heldAt: number }) {
       <span
         role='img'
         aria-label={`${TEAM_MACHINE_OFFLINE_LABEL}. ${updated}.`}
-        className='grid size-4 shrink-0 place-items-center'
+        className='grid size-4 shrink-0 cursor-pointer place-items-center'
       >
         <Icon size='sm' name='IconCloudSimpleDisconnected' className='text-fg-2' />
       </span>

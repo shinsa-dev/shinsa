@@ -670,7 +670,7 @@ Only these, and they win over anything below:
         previous and next spot, send, comment on a line, remove ("Remove folder"), dismiss, stop a delegated task,
         the compact bar's queue and new-task buttons, the sidebar's resize handle (following the pointer down the
         edge), the error button. The tooltip repeats the `aria-label`. A `Hint` with a `detail` stacks a muted
-        second line under its label, as a time's tooltip does (a task's round, 12).
+        second line right under its label, with no gap, as a time's tooltip does (a task's round, 12).
       - **Keyboard-shortcut hints**: a `Hint` with a `shortcut` ("Home ⇧⌘H", "Search and actions ⌘K", "Search in
         files ⇧⌘F", the image viewer's close, previous and next with `Esc`, `←`, `→`), even on a labelled button,
         since the key is not on screen.
@@ -964,9 +964,10 @@ Only these, and they win over anything below:
     - **Composers**: the task composer, Home's new-task box and the question's answer box share
       `COMPOSER_FIELD` (text 12px in, 10px from the top) and `COMPOSER_FOOTER` (6px around a
       28px `sm` control, no divider).
-    - **Title over description is `gap-px`**, with no exceptions: page headings, card eyebrow over
+    - **Title over description is `gap-px`**: page headings, card eyebrow over
       title, list rows, activity rows, plan and phase steps, check rows, popover headers and
-      task rows, review findings, message links. A title next to its description on one line
+      task rows, review findings, message links. The one exception is a tooltip's label over its detail
+      (`Hint`), which sits flush (`gap-0`). A title next to its description on one line
       (⌘K rows, a section label and its count, "Waits on ‹task›") is 6px (`gap-1.5`).
     - **Numbered steps** are `StepNumber` (`components/layout/surface/step-number.tsx`): a 20px `bg-bg-a2` tile,
       `rounded-control-sm`, in the plan, What changed and the chat's plan card.
@@ -3493,7 +3494,7 @@ toasts are the inverse, a `border` and no shadow.
 
 ### Gaps
 
-A title over its description is `gap-px`. `gap-0.5` is banned in `apps/web/src`
+A title over its description is `gap-px`, but in a tooltip (`Hint`'s label over its detail), where it is 0. `gap-0.5` is banned in `apps/web/src`
 (the lint rejects it): the next step up is `gap-1`. The one 2px gap is between
 the buttons of a section header, and `SectionLabel` owns it.
 
