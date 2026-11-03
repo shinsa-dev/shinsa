@@ -45,6 +45,10 @@ describe('in a browser', () => {
     expect(isPageQuiet(true)).toBe(true);
     expect(isPageQuiet(false)).toBe(false);
   });
+
+  it('on Shinsa Cloud never defers to a desktop app, which notifies only at its own machine', () => {
+    expect(isPageQuiet(true, true)).toBe(false);
+  });
 });
 
 describe('in the desktop app', () => {

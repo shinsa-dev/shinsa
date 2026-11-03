@@ -6669,7 +6669,8 @@ and `browser` anywhere else, Floaty included. The server keeps each socket's sur
 `surfaces { desktop }`, whether at least one desktop surface is connected: on connect, and again only when that
 changes (a desktop says hello, or the last one closes). A page that is not the desktop stays quiet while one is
 (`isQuietSurface`): it plays no sound and shows no notification, so a decision never rings twice, and keeps its
-count in the title and Floaty's tags (`docs/design.md`, 31). A message the
+count in the title and Floaty's tags (`docs/design.md`, 31); Shinsa Cloud's dashboard never stays quiet, since a
+machine's app notifies only at that machine. A message the
 server does not recognise, including a `hello` with an unknown surface, is logged and ignored; a socket that never
 says hello counts as no desktop.
 

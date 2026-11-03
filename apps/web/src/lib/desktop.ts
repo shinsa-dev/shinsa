@@ -1,5 +1,6 @@
 import { isQuietSurface, type ShinsaBuild, type Surface } from '@shinsa/core';
 import { createContext } from 'react';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 type DesktopWindowState = 'window' | 'fullscreen';
@@ -65,8 +66,8 @@ export function resolveSurface(): Surface {
   return isDesktop() ? 'desktop' : 'browser';
 }
 
-export function isPageQuiet(desktopConnected: boolean) {
-  return isQuietSurface(resolveSurface(), desktopConnected);
+export function isPageQuiet(desktopConnected: boolean, remote = isRemoteBuild()) {
+  return !remote && isQuietSurface(resolveSurface(), desktopConnected);
 }
 
 export function applyDesktop(navigate: (path: string) => void) {

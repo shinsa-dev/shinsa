@@ -6,10 +6,23 @@ import {
   showTestNotification,
   TEST_NOTIFICATION,
 } from '@/lib/notifications/browser.ts';
+import type { NotificationWorker } from '@/lib/notifications/worker.ts';
 import { installDesktop } from '../../support/desktop.ts';
 import { installNotifications } from '../../support/notifications.ts';
 
 const NOTICE = { gateId: 'g-1', taskId: 't-1', title: 'Paint it', body: 'Which colour?' };
+
+function createWorker() {
+  const shown: { title: string; options: NotificationOptions }[] = [];
+  const registration = {
+    showNotification: (title: string, options: NotificationOptions) => {
+      shown.push({ title, options });
+      return Promise.resolve();
+    },
+  } as unknown as ServiceWorkerRegistration;
+  const container = { controller: {}, ready: Promise.resolve(registration) } as NotificationWorker;
+  return { container, shown };
+}
 
 let fake: ReturnType<typeof installNotifications> | null = null;
 
@@ -22,7 +35,7 @@ describe('browser notifications', () => {
   it('reads as unsupported where the browser has none, and shows nothing there', async () => {
     expect(readNotificationPermission()).toBe('unsupported');
     expect(await requestNotificationPermission()).toBe('unsupported');
-    expect(showDecisionNotification(NOTICE, () => undefined)).toBe(false);
+    expect(showDecisionNotification(NOTICE, '/tasks/SW-1', () => undefined)).toBe(false);
   });
 
   it('asks only while the browser has not decided', async () => {
@@ -36,14 +49,14 @@ describe('browser notifications', () => {
     fake = installNotifications('granted');
     const focus = spyOn(window, 'focus').mockImplementation(() => undefined);
     const opened: string[] = [];
-    expect(showDecisionNotification(NOTICE, (taskId) => opened.push(taskId))).toBe(true);
+    expect(showDecisionNotification(NOTICE, '/tasks/SW-1', (path) => opened.push(path))).toBe(true);
     expect(fake.shown[0]).toMatchObject({
       title: 'Paint it',
       options: { body: 'Which colour?', tag: 'g-1' },
     });
     fake.shown[0]?.click();
     expect(fake.shown[0]?.closed).toBe(true);
-    expect(opened).toEqual(['t-1']);
+    expect(opened).toEqual(['/tasks/SW-1']);
     expect(focus).toHaveBeenCalledTimes(1);
     focus.mockRestore();
   });
@@ -59,9 +72,36 @@ describe('browser notifications', () => {
     desktop.restore();
   });
 
+  it('shows the test in the browser, and its click only brings the page forward', () => {
+    fake = installNotifications('granted');
+    const focus = spyOn(window, 'focus').mockImplementation(() => undefined);
+    showTestNotification();
+    expect(fake.shown[0]).toMatchObject({ title: TEST_NOTIFICATION.title, options: { tag: 'shinsa-test' } });
+    fake.shown[0]?.click();
+    expect(focus).toHaveBeenCalledTimes(1);
+    focus.mockRestore();
+  });
+
+  it('under a service worker, shows through its registration with the task’s path for the click', async () => {
+    fake = installNotifications('granted');
+    const worker = createWorker();
+    expect(showDecisionNotification(NOTICE, '/tasks/SW-1', () => undefined, worker.container)).toBe(true);
+    showTestNotification(worker.container);
+    await worker.container.ready;
+    await Promise.resolve();
+    expect(fake.shown).toEqual([]);
+    expect(worker.shown).toEqual([
+      { title: 'Paint it', options: { body: 'Which colour?', tag: 'g-1', data: { path: '/tasks/SW-1' } } },
+      {
+        title: TEST_NOTIFICATION.title,
+        options: { body: TEST_NOTIFICATION.body, tag: 'shinsa-test', data: { path: null } },
+      },
+    ]);
+  });
+
   it('shows nothing once the browser said no', () => {
     fake = installNotifications('denied');
-    expect(showDecisionNotification(NOTICE, () => undefined)).toBe(false);
+    expect(showDecisionNotification(NOTICE, '/tasks/SW-1', () => undefined)).toBe(false);
     expect(fake.shown).toEqual([]);
   });
 });

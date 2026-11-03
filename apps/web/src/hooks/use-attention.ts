@@ -10,7 +10,7 @@ import { showNotifyBlocked } from '@/lib/notifications/settings.ts';
 import { playSound } from '@/lib/notifications/sounds.ts';
 import { AttentionWatcher } from '@/lib/notifications/watcher.ts';
 import { readNotificationPreferences } from '@/lib/preferences/notifications.ts';
-import { navigate, resolveTaskPath, resolveTaskTarget } from '@/router.ts';
+import { navigate, resolveTaskPath, resolveTaskTarget, withRouteBase } from '@/router.ts';
 
 export function useAttention(state: ShinsaState, taskReference: string | null = null) {
   useMinute();
@@ -30,9 +30,7 @@ export function useAttention(state: ShinsaState, taskReference: string | null = 
         notify: (notice) => {
           const path = resolveTaskPath(resolveTaskTarget(latest.current, notice.taskId));
           if (notifyDesktop({ title: notice.title, body: notice.body, tag: notice.gateId, path })) return;
-          showDecisionNotification(notice, (taskId) =>
-            navigate(resolveTaskPath(resolveTaskTarget(latest.current, taskId)))
-          );
+          showDecisionNotification(notice, withRouteBase(path), navigate);
         },
       })
   );
