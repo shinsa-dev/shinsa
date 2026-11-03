@@ -13,7 +13,8 @@ themes, from sample data. Everything that reaches the engine or app.shinsa.dev i
 src/
 ├── main.tsx             Mounts Root (in the remote build, RemoteRoot around it); applies the stored theme and a
 │                        `?layout=` override before the first paint
-├── remote-sw.ts         The remote build's service worker (/sw.js, scope /): hands the page's /api/ requests to the page
+├── remote-sw.ts         The remote build's service worker (/sw.js, scope /): hands the page's /api/ requests to the page,
+│                        and a notification's click to the dashboard tab (or a new one) to open the task
 ├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the setup lock (every route goes to
 │                        /onboarding until setup is complete, resolveOnboardingRedirect), the frame (AppFrame for Cards and
 │                        Sidebar, or setup's own OnboardingShell on /onboarding, which has no ⌘K)
@@ -323,7 +324,8 @@ src/
     │                    kinds of task (shapes.ts: labels, composed steps, the result panel per step, your OK's
     │                    proposal gate, the steps a task takes), why triage decided each fact (triage.ts)
     ├── notifications/   attention.ts (decisions, the tab badge and status), watcher.ts, sounds.ts,
-    │                    browser.ts, settings.ts (the Notifications rows), page.ts (the tab title and Floaty's
+    │                    browser.ts, worker.ts (notifications through the service worker and their click),
+    │                    settings.ts (the Notifications rows), page.ts (the tab title and Floaty's
     │                    meta tags)
     ├── format/          The one home of every formatter: numbers, percents, bytes and line ranges (count.ts; a count
     │                    with its noun is core's describeCount), ages, durations, spans and clocks (time.ts), money,
@@ -464,7 +466,13 @@ print the whole document.
   server says the desktop app is connected (`useDesktopConnected`) a browser page or Floaty is quiet
   (`isPageQuiet`): `useAttention` plays no sound and shows no notification, but keeps the count and status in the
   title and Floaty's tags, which Floaty reads; Settings → Notifications says the app handles them. Anything new that
-  alerts goes through that check (`docs/design.md`, 31).
+  alerts goes through that check (`docs/design.md`, 31). The remote build is never quiet (a machine's app notifies
+  only at that machine). That rule is the fallback: each page tells its machine when you use it
+  (`lib/notifications/presence.ts`, `connection.reportPresence`), and the machine answers `attention { where }`, which
+  `isAlertQuiet` reads per decision through `connection.selectAttention(taskId)`: `here` alerts, `elsewhere` stays quiet,
+  `nowhere` leaves it to `isPageQuiet`. A decision that leaves the queue closes its notification
+  (`dismissDecisionNotification`). A page a service worker controls shows its notifications through the worker
+  (`lib/notifications/worker.ts`), whose click opens the task in the dashboard.
 - **A render error stays in its region** (`docs/design.md`, 38). The app root, every routed page (keyed by its
   route, so going there again recovers), every task tab's content and every shell widget that reads live state (the
   top bar's menus and status, the rail's sections) sit in an `ErrorBoundary` (`components/errors/boundary.tsx`)

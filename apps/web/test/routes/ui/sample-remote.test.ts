@@ -90,8 +90,10 @@ describe('the /ui remote access samples', () => {
     expect(fleet.selectAccounts()).toBeNull();
     fleet.replaceAccounts(null as never);
     expect(fleet.isDesktopConnected()).toBe(false);
+    fleet.reportPresence();
+    expect(fleet.selectAttention('task')).toBe('nowhere');
     expect(fleet.selectTerminals()).toBeNull();
-    fleet.replaceTerminals(null as never);
+    fleet.replaceTerminals({ terminals: [], services: [], home: '' });
     expect(fleet.selectRemote()).toBeNull();
     fleet.replaceRemote(null as never);
     expect(fleet.selectMachine('task')).toBeNull();
@@ -99,6 +101,9 @@ describe('the /ui remote access samples', () => {
     expect(fleet.listUnreachableMachines()).toEqual([]);
     const single = createStaticConnection(createState());
     expect(single.selectResources()).toBeNull();
+    single.reportPresence();
+    single.replaceTerminals({ terminals: [], services: [], home: '' });
+    expect(single.selectAttention()).toBe('nowhere');
     expect(single.listMachines()).toEqual([]);
     expect(single.listUnreachableMachines()).toEqual([]);
     expect(single.listMachineAccess()).toEqual([]);

@@ -2057,6 +2057,20 @@ Only these, and they win over anything below:
       Settings → Notifications there shows one line instead of its rows: "The Shinsa app is open and handles
       notifications, so this page stays quiet." The app keeps all of it, the Dock badge included. When the app
       quits, the next decision rings in the browser again; the ones that came up while it was open never do.
+      Shinsa Cloud's dashboard is never quiet (`isPageQuiet`'s `remote`): a machine's app notifies only at that
+      machine, so the browser elsewhere rings for itself.
+    - **The device you use notifies.** That rule is the fallback. Each of the owner's pages tells its machine when
+      you use it, and the machine answers which one was used last (`attention`, `docs/engine.md` → The socket):
+      that page alone plays the sound and shows the notification, wherever it runs, the Mac app included, and the
+      others stay quiet. After five minutes without use on any of them, every open page alerts again. A member's
+      page always alerts. A decision answered anywhere closes its notification in every browser that showed it.
+      Settings → Notifications keeps its rows on every page of an engine that routes this way.
+    - **Notifications through the service worker.** A page a service worker controls (Shinsa Cloud's, whose
+      worker relays its requests) shows each notification through the worker's registration
+      (`selectNotificationWorker`, `lib/notifications/worker.ts`), the only way Android's Chrome shows one, with the
+      task's path in its data. A click (`notificationclick` in `remote-sw.ts`) brings the focused dashboard tab
+      forward, or the first one, and the page opens the task (`serveNotificationOpens`, only a path inside the
+      app); with every tab closed it opens the task in a new one, the test notification the dashboard.
     - **The Dock badge** is the tab's count: `writePageAttention` sends `floaty:badge`'s n to the app with the title
       and the meta tags, and the badge clears at 0 and while the server is unreachable.
     - **`shinsa://` links** open in the window, from any app or from inside the page: `shinsa://task/LOC-4` (a

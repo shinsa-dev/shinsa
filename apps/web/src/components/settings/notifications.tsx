@@ -1,7 +1,7 @@
 import { Button } from '@shinsa/ui/components/button';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { useDesktopConnected } from '@/lib/connection/socket.ts';
+import { useDesktopConnected, useEngineFeature } from '@/lib/connection/socket.ts';
 import { isDesktop, isPageQuiet, openDesktopNotificationSettings } from '@/lib/desktop.ts';
 import {
   HANDLED_BY_APP,
@@ -87,10 +87,12 @@ export function NotificationGroup({
 }
 
 export function NotificationSettings() {
+  const quiet = isPageQuiet(useDesktopConnected());
+  const routed = useEngineFeature('attention');
   return (
     <NotificationGroup
       preferences={useNotificationPreferences()}
-      quiet={isPageQuiet(useDesktopConnected())}
+      quiet={quiet && !routed}
       onChange={(patch) => void updateNotifications(patch)}
     />
   );

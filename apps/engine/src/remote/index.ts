@@ -74,6 +74,7 @@ export interface RemoteOptions {
 
 interface ChannelParts {
   readonly hub: ChannelHost['hub'];
+  readonly terminals: ChannelHost['terminals'];
   readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Promise<Response>;
 }
 
@@ -159,6 +160,10 @@ export class Remote {
 
   get tunnelHost() {
     return this.store.file.credentials?.tunnelHost ?? null;
+  }
+
+  isOwner(userId: string | null) {
+    return userId !== null && this.store.file.access?.owner.id === userId;
   }
 
   snapshot(): RemoteSnapshot {
@@ -734,6 +739,7 @@ export class Remote {
       resolveMachineKey: () => this.store.resolveMachineKey(),
       isEnrolled: (device) => this.#admits(device, userId),
       resolveGuest: (device) => this.#resolveGuest(device),
+      isOwner: () => this.isOwner(userId),
       requestAccess: (proof, keys, name) => this.#requestAccess(proof, keys, name, userId),
       resumeAccess: (device) => this.#resumeAccess(device, userId),
       recordSeen: (device) => this.store.recordDeviceSeen(device, this.#now()),

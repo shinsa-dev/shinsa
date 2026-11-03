@@ -99,10 +99,55 @@ anyone with a share link ──wss, sealed with the link's key──► t-‹ins
   key. Check output and text an agent wrote are shown as written. A share ends by itself when the task is done, by
   default, or when its time runs out, and the task's page shows a banner for as long as it lasts.
 
+## Parity with the machine
+
+**In progress** (LOC-170). Everything the dashboard does at the machine it does from app.shinsa.dev too. The line
+that keeps it safe: the machine's **owner** on a sealed channel counts as the keyboard, so what was local-only
+becomes owner-only (`OwnerOnlyRoute`, 403 `not_owner`); a member, a guest, a share link and every agent stay refused.
+Only what would end the channel you are using, or needs a program on the machine's screen, stays local.
+
+Where a gate lives: a route's `LocalOnlyRoute` or `OwnerOnlyRoute` in core's `EngineApi` (`packages/core/src/engine-api/api.ts`,
+listed by `listEngineRoutes`), checked by `TunnelGate.admitEndpoint` (`apps/engine/src/remote/gate/service.ts`); a
+command's fields in core's `isOwnerOnlyCommand` (`packages/core/src/remote/local-only.ts`), checked by
+`dispatchUserCommand` (`apps/engine/src/http/commands.ts`); and every `isRemoteBuild()` branch in `apps/web`.
+
+### What the page cannot do today
+
+| Area | Gate | Today from app.shinsa.dev | Fix | Phase |
+|---|---|---|---|---|
+| Code highlighting (Code tab, diffs, chat and review code blocks) | The hosted page's CSP, `script-src 'self'` (`apps/cloud/src/http/ingress/schema.ts`) | Shiki's WebAssembly regex engine is refused, so every file and diff is plain text; the theme boot script in `index.html` was refused too | `'wasm-unsafe-eval'` in `script-src`, the boot script moved to `public/color-scheme.js`; the sandbox sends the same headers | 1, done |
+| Browser notifications | `isPageQuiet` → core's `isQuietSurface`, fed by `Fleet.isDesktopConnected` (`apps/web/src/lib/remote/fleet.ts`) | The page stays silent whenever the Mac app is open on any machine, since it assumes the desktop app notifies; on Android `new Notification()` throws (only a service worker may show one) | Done: the remote build never defers to a machine's desktop app; it shows notifications through the service worker's registration, and a click on one focuses or opens the task. Each of the owner's pages tells its machine when you use it, and only the one used last alerts (`attention`), every open page again after five minutes away | 3 |
+| Human-only settings (`HUMAN_ONLY_SETTINGS`: plan approval, merge method, budgets, usage limits, auto-resume, snoozing at a limit, account switching, fast mode, delegation and share limits, the share preset) | `isOwnerOnlyCommand`, `settings.change` | Refused, `local_only` | Owner-only | 4, done |
+| A repository's checks, workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`) | `isOwnerOnlyCommand`, `repo.update` | Refused | Owner-only | 4, done |
+| Binding a task to an account | `isOwnerOnlyCommand`, `task.bind_account` | Refused | Owner-only | 4, done |
+| Retrying a task on a chosen account | `isOwnerOnlyCommand`, `task.retry` with `account` | Allowed to any member | Owner-only, as binding an account | 4, done |
+| Claude accounts: refresh, sign in (with the pasted code), cancel, import, update, remove | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `accounts` group | Refused | Owner-only; sign-in uses the code you paste, since the browser that signs in is yours | 4, done |
+| MCPs, plugins, skills, the context optimizer: check, add, update, remove, choose, sign out | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `extensions` group | Refused | Owner-only | 4, done |
+| An MCP's OAuth sign-in | `LocalOnlyRoute` and `TunnelGate.admitChannelRequest` refusing the callback path | Refused | Stays local: the provider redirects to the machine's own address | stays |
+| Agent versions: update Claude Code and Codex | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `POST /api/versions/update` | Refused | Owner-only | 4, done |
+| Secrets and webhook signing secrets | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `secrets` group | Refused, so a gate asking for a secret cannot be answered away from the machine | Owner-only; the value travels sealed end to end | 4, done |
+| Restarting the engine | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `POST /api/engine/restart` | Refused | Owner-only; the page reconnects as it does after any drop | 4, done |
+| Onboarding and Settings → Folders: folders, privacy, flow | `OwnerOnlyRoute` (was `LocalOnlyRoute`), `onboarding` group | Refused | Owner-only | 4, done |
+| Installing the command line | `LocalOnlyRoute`, `POST /api/onboarding/install` | Refused | Stays local: it writes into the machine's own `PATH` | stays |
+| Teams: create, invite link, renew, requests, members, leave, remove | `LocalOnlyRoute`, `teams` group; the remote build shows `HostedTeamsSettings`, and the focus menu hides Edit teams | Read only | Owner-only (`OwnerOnlyRoute`): Settings → Teams for each machine you own (`MachineTeamsSettings`), its changes sent to that machine; the focus menu offers Edit teams; with no machine of yours, the read-only view stays | 5, done |
+| Joining a team | `OwnerOnlyRoute`, `POST /api/remote/teams/join` | Owner only already | Unchanged, and now shown in the remote build's Teams | 5, done |
+| Sharing (`SharingSettings`) | Hidden by `isRemoteBuild()` in `routes/settings.tsx` | Not shown | Shown, on the first machine like the rest of Settings; both settings owner-only (`HUMAN_ONLY_SETTINGS`) | 5, done |
+| Slack | `LocalOnlyRoute`, `POST /api/slack/disconnect`; `SlackGroup onMachine={false}` | Connect worked; Disconnect hidden and refused | Disconnect owner-only (`OwnerOnlyRoute`) and shown as on the machine | 5, done |
+| Remote access: invite link, members, revoke a device | `LocalOnlyRoute`, `remote` group; the remote build shows Settings → Machines instead | Only access requests can be answered | Owner-only (`OwnerOnlyRoute`): Remote access on <machine> in Settings → Machines for each machine you own (`MachineAccessGroup`), its changes sent to that machine | 5, done |
+| Remote access: pair, cancel, pause, resume, remove | `LocalOnlyRoute`, `remote` group | Refused | Stays local: each one ends or replaces the channel you are using | stays |
+| Services: start, stop, restart, start all | `LocalOnlyRoute`, `services` group | Read only; previews already open through the preview socket | Allowed to the owner and members, as any task control; with several machines, each request goes to the machine that runs the service (`Fleet`, `mergeFleetTerminals`) | 6, done |
+| Services: add, change a command, remove, suggestions | `LocalOnlyRoute` and `BrowserOnlyRoute`, `services` group | Refused | Owner-only (`OwnerOnlyRoute`): a service's command runs on the machine; a channel request counts as Shinsa's own page for `BrowserOnlyRoute` | 6, done |
+| Terminals | `LocalOnlyRoute`, `terminals` group; `TerminalPage` shows "Terminals stay on your machine"; the PTY stream is a local socket only | Not available | Owner-only, with terminal frames on the existing sealed channel; no new tunnel route. A member's Terminal page keeps the project's services and Start all | 7, done |
+| Opening a task in an editor on the machine | `LocalOnlyRoute`, `POST /api/tasks/:taskRef/open` | Refused | Stays local: it opens a window on the machine's screen | stays |
+| Settings with more than one machine | Settings' reads and writes go to the first reachable machine (`Fleet.#memberOf`) | One machine's settings, accounts and MCPs only | A machine picker in Settings, routed with `?machine=` as access requests are | later |
+| Web Push to a closed tab | None: not built | No notification once every tab is closed | A follow-up task: Shinsa Cloud relays sealed pushes | later |
+
+Already the same in both: the overview, the queue, chat, every task action and its menu, the Code tab's reads
+and edits, review, previews, statistics, models, memory, projects and schedules.
+
 ## Later
 
 - Push notifications on a phone, and a smaller phone surface.
-- Terminals over remote access.
 - Sharing an instance with another GitHub account.
 - A machine's own engine on Linux and Windows, and what it can do (macOS for simulators) told to the classifier
   without a policy saying it.

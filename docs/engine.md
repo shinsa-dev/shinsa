@@ -2952,9 +2952,11 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `EngineGate`), from the request's principal (`RequestSource`: the channel's user and, for a guest, the task handed
   to them) and the endpoint's annotations in core's `EngineApi`: only `/api/` paths and never an extension's sign-in
   callback, a guest only its own task's reads (`GuestRoute`), never a `localOnly` route (403 `local_only`), an
-  `ownerOnly` route only for the machine's owner (403 `not_owner`, joining a team from this machine), and no write in
-  inspect mode. A command's own fields are checked once more in `dispatchUserCommand` (core's `isLocalOnlyCommand`
-  and, for a guest, `resolveScopedRefusal`), the one path both the socket and `POST /api/commands` take.
+  `ownerOnly` route only for the machine's owner (403 `not_owner`, `Remote.isOwner`), and no write in
+  inspect mode. A command's own fields are checked once more in `dispatchUserCommand` (core's `isOwnerOnlyCommand`
+  and, for a guest, `resolveScopedRefusal`), the one path both the socket and `POST /api/commands` take; the origin it
+  is given (`resolveRequestOrigin`, and the channel socket's `origin`) is `owner` when the channel's account owns the
+  machine.
 - **The way out** (`EgressGate`, `remote/egress/`): the one gate for what this machine sends to anyone but its own
   browsers. Core's `resolveSharedTask` and `listTeamTasks` choose what a share preset or a team may see; the gate
   bounds it: every view a share link or a team channel sends (`ShareChannel`, both kinds) and the team list this
@@ -3047,22 +3049,48 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `Remote` notifies on each one (a device added or revoked, a link made or turned off, a request, pausing, resuming,
   removing, the tunnel's status, a pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
   (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
-  The remote build leaves the section out, since every change to it but answering a request is refused from off the
-  machine; its Settings → Machines shows Access requests instead (`MachineAccessRequests`): each machine of the
-  dashboard with requests waiting, read from that machine's own `remote` push (`Fleet.listMachineAccess`), and the
-  answer sent to that machine (`?machine=<instance>` on the request, which the fleet routes by, `resolveRequestOwner`).
+  The remote build shows it per machine in Settings → Machines instead: for each machine of the dashboard you own
+  (`listOwnedMachines`: paired, and Shinsa Cloud names you its owner), Remote access on <machine>
+  (`MachineAccessGroup`) with the invite link, the requests, the devices with Revoke and the people with Remove, but
+  no Turn on, Pause, Resume or Remove, which stay at the keyboard. Each is read from that machine's own `remote` push
+  (`Fleet.listMachineAccess`), and every change goes to that machine (`createMachineAccessActions`: `?machine=<instance>`
+  on the request, which the fleet routes by, `resolveRequestOwner`), whose push then updates the page. Machines shared
+  with you show only their requests waiting, which a member may answer too (`MachineAccessRequests`).
 - **The routes** (`EngineApi`'s `remote` group): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
   owner, the machine's name and public key, a pairing under way, the devices, who has access, the link, the requests),
   `POST /api/remote/pair`, `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/link/create` and `/link/remove`,
   `/requests/accept` and `/requests/decline` (`{ requestId }`), `/members/remove` (`{ userId }`) and
   `/devices/remove` (`{ publicKey }`).
-- **What stays at the keyboard.** A remote request is refused with `local_only` ("Do this on the machine Shinsa runs
-  on.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
-  repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
-  takes the origin), and for these routes (their `LocalOnlyRoute` annotation, 403): any change to remote access, accounts, MCP servers,
-  plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
-  programs, opening a task on the machine and restarting the engine; terminals and services are refused even to read.
-  Everything else, closing gates included, is you, as on the machine.
+- **What only the owner does from another device.** The machine's owner on a sealed channel counts as the keyboard;
+  a member is refused with `not_owner` ("Only this machine’s owner can do this from another device.") every command
+  core's `isOwnerOnlyCommand` names (a human-only setting or repository field, binding an account, retrying on a
+  chosen account), on the socket and on `POST /api/commands` alike, and these routes (their `OwnerOnlyRoute`
+  annotation, 403): Claude accounts (signing in takes the code the sign-in page shows, so it works from any
+  browser), MCP servers, plugins, skills and the optimizer, onboarding and folders, a secret (`/api/secrets/<gate>`)
+  or a webhook's signing secret, updating the agent programs, restarting the engine, every change to a team,
+  disconnecting Slack, remote access's invite link, members and devices, and adding, changing or removing a
+  service or asking for suggested ones (a service's command runs on the machine). Starting, stopping and restarting
+  a service is any member's, as every other task control; a request inside the channel counts as Shinsa's own
+  page for the routes only the page may call (`BrowserOnlyRoute`), since the channel opens only from
+  app.shinsa.dev. The dashboard lists every machine's services together (`mergeFleetTerminals`) and sends each
+  service's request to the machine that runs it, by the id in its path or the project in its body.
+- **Terminals from another device** are the owner's too (the `terminals` group is `OwnerOnlyRoute`). A terminal's
+  stream travels on the sealed channel itself, never a route of its own through the tunnel: the page opens one with
+  `terminal-open`, and its keys, resizes and the screen go both ways as `terminal-text` and `terminal-bytes` until
+  either side sends `terminal-close` (`RemoteChannel`, `apps/engine/src/remote/channel.ts`). The engine attaches the
+  stream to the terminal as one more viewer, with the same flow control as `/ws/terminals/<id>` (its backlog is the
+  frames still being sealed plus the socket's buffer, and the socket's drain sends a screen it held back); a member
+  or a guest gets `terminal-close` with 4403, a terminal that is gone 4404, and a page holds 16 streams at most
+  (`MAX_TERMINAL_STREAMS`). Closing the channel detaches them all. On the page, `ChannelTerminalSocket`
+  (`lib/remote/link.ts`) stands in for the WebSocket, and the fleet opens it on the machine that runs the terminal,
+  only for one you own whose engine announces `remote.terminals` (`Fleet.resolveTerminalTransport`,
+  `canOpenTerminals`); on another machine's project the Terminal page says terminals are for the machine's owner
+  and lists the project's services with Start, Stop, Restart and Start all (`ProjectServices`), which members may use.
+- **What stays at the keyboard.** Refused to everyone off the machine with `local_only` ("Do this on the machine
+  Shinsa runs on.", `LocalOnlyRoute`): pairing, cancelling a pairing, pausing, resuming and removing remote access
+  (each ends or replaces the channel you are using), an MCP's OAuth sign-in (the provider sends you back to the machine's own address), installing the command
+  line and opening a task on the machine (`docs/plans/remote-plan.md` → Parity with the machine). Everything else, closing gates included, is you, as on the
+  machine.
 - **Webhooks get a stable URL.** While remote access is on, a webhook schedule's URL is
   `https://app.shinsa.dev/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
   `hookUrl`), which app.shinsa.dev forwards to the tunnel's `/api/hooks/<schedule>/<token>`; otherwise it is this
@@ -3138,7 +3166,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
   this device on <name> first", since its policies live on that machine's engine and only a sealed channel reaches it.
   Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
-  Terminal page says terminals stay on the machine.
+  Terminal page opens terminals on machines you own (Terminals from another device, above).
 - **What each machine speaks** (core's `protocol/engine.ts`, `docs/protocol.md` → The socket). The remote build is
   app.shinsa.dev's, deployed from `main`; the tunnel carries only data, so a page can be newer than a machine on the
   stable channel. Every engine sends `engine { version, protocol, commands, features }` when a socket opens, and the
@@ -3155,7 +3183,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
-  `comments`, and `changelog` for `GET /api/changelog`, today; Settings → Teams, the review's Fix and approve choice and
+  `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
+  `attention` for routing notifications to the device you use and `worktree-root` for the worktree folder, today;
+  Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
@@ -3658,27 +3688,31 @@ online, and the last list of it their own machine kept while it is not (Offline 
     refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause, but still drops
     those past 30 days, with their full tasks, each time remote access changes and when the engine starts. Removing
     the machine from remote access, or app.shinsa.dev forgetting it, drops every copy and full task at once.
-- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, on the machine; every
-  change to it but joining is refused from off the machine like the rest of remote access, so app.shinsa.dev shows it read-only, below): one card per team with its name and
+- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, on the machine, and on
+  app.shinsa.dev for each machine you own, below; every change is the owner's, `OwnerOnlyRoute`): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
   New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
   that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
   which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
   member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
-  local routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`
+  owner's routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`
   and `POST /api/remote/members/grant`,
   and the remote snapshot carries the teams (`RemoteSnapshot.teams`, `listTeamEntries`), so every change reaches every
   page at once.
-- **Settings → Teams on app.shinsa.dev** (`components/settings/hosted-teams.tsx`, `HostedTeamsSettings`) is read-only:
-  every change to a team is refused from off the machine, so it has no buttons and says that teams are made, linked and
-  changed in Settings on the machine itself (`TEAMS_ON_MACHINE_NOTE`). It never asks a machine: it reads your teams from
+- **Settings → Teams on app.shinsa.dev**: for each machine of the dashboard you own, the same section as on the machine
+  (`MachineTeamsSettings`, below Machines; titled Teams on <machine> when you own more than one), with that machine's
+  remote snapshot, only its projects (`scopeStateToProjects`) and every change sent to it (`createTeamActions(machineId)`;
+  its push updates the page). When you own no machine in the dashboard it falls back to a read-only view
+  (`components/settings/hosted-teams.tsx`, `HostedTeamsSettings`) with no buttons, which says to make and change a team
+  from a machine you own (`TEAMS_ON_MACHINE_NOTE`). That view never asks a machine: it reads your teams from
   app.shinsa.dev (`dashboard.listTeams()`) and this browser's team keys (`teamKeys.selectTeamKey`, `listHostedTeams`),
   so it shows even when no machine of yours is reachable. One card per team has its name, your role, its people and
   machines counts and when it was made (`describeHostedTeam`), its machines with Online, Last seen or Never connected
   (`listTeamMachineRows`, a fold that starts open) and its People (a fold that starts closed). A team this browser holds
   no key for says to open its join link here once to read its tasks (`TEAM_KEY_MISSING`, the same line the team task
-  page shows). With no team the section says how to make or join one; a failed read shows its error. Sharing stays
-  only on the machine.
+  page shows). With no team the section says how to make or join one; a failed read shows its error. Settings →
+  Sharing shows on app.shinsa.dev too, read from and written to the first machine of the dashboard, its two settings
+  the owner's (`HUMAN_ONLY_SETTINGS`).
 - **Agents read it, never change it.** `shinsa teams list` (`teams_list`) is every agent's tool; every other `teams`
   command and both project team commands are human-only.
 
@@ -3976,10 +4010,8 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; it is refused from off the machine (`LocalOnlyRoute`, writes only). The hosted dashboard on
-  app.shinsa.dev shows the section too, below Machines, read from the first machine of the dashboard: its status,
-  Connect Slack and the connected workspaces, with a line that Disconnect is on the machine itself (`onMachine`),
-  since it is refused remotely.
+  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). The hosted dashboard on
+  app.shinsa.dev shows the same section, below Machines, read from and sent to the first machine of the dashboard.
 - **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
@@ -6576,7 +6608,7 @@ existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `ro
 **`POST /api/onboarding/worktrees`** with `{ path: string | null }`: saves where new worktrees go to `config.json`'s
 `worktreesDir`, then answers like `GET /api/onboarding`; `null` goes back to `data/worktrees`. The path may start
 with `~/` and must be a full path to an existing folder Shinsa can write to; anything else is `worktrees_invalid`
-with the reason, and `worktrees_from_environment` while `SHINSA_WORKTREES_DIR` sets the folder. On this machine only (`LocalOnlyRoute`), and
+with the reason, and `worktrees_from_environment` while `SHINSA_WORKTREES_DIR` sets the folder. The owner's alone off the machine (`OwnerOnlyRoute`), and
 announced as the `worktree-root` engine feature, which Settings → Projects → Worktrees asks for.
 
 **`GET /api/onboarding/worktrees/usage`**: `WorktreeUsage { folder, worktrees, bytes, freeBytes, measuredAt }`, the
@@ -6804,7 +6836,27 @@ and `browser` anywhere else, Floaty included. The server keeps each socket's sur
 `surfaces { desktop }`, whether at least one desktop surface is connected: on connect, and again only when that
 changes (a desktop says hello, or the last one closes). A page that is not the desktop stays quiet while one is
 (`isQuietSurface`): it plays no sound and shows no notification, so a decision never rings twice, and keeps its
-count in the title and Floaty's tags (`docs/design.md`, 31). A message the
+count in the title and Floaty's tags (`docs/design.md`, 31); Shinsa Cloud's dashboard never stays quiet, since a
+machine's app notifies only at that machine.
+
+**The device you use notifies** (`AttentionTracker`, `apps/engine/src/http/attention.ts`). Each page of the
+owner's (a local socket, the Mac app's included, or a sealed channel whose account owns the machine) says when you
+use it with `presence { active: true }`: when it comes forward (focus, or the tab shown again) and at most every 15 s
+while you click, type, scroll or move the pointer in it, but only a page that can show you a notification: the Mac
+app, or a browser with notifications switched on and allowed (`canPageNotify`), so a tab that cannot notify never
+silences the Mac app. The tracker keeps when each one was last used and answers
+every page that asked with `attention { where }`: `here` for the page used last, `elsewhere` for the owner's others,
+and `nowhere` once that page has been idle for five minutes (`ATTENTION_IDLE_MS`, a timer that fires then), when it
+closes and none other was used in that time, or always for a member's page and never for a share link's. A page
+that hears `here` plays the sound and shows the notification, one that hears `elsewhere` stays quiet, and one that
+hears `nowhere` falls back to the rule above (`isAlertQuiet`): with no device in use every open page alerts as
+before, and a browser on the machine defers to the Mac app. The dashboard asks each machine for the task's own
+answer (`Fleet.selectAttention`), so switching between the Mac app and Shinsa Cloud on a laptop moves the
+notifications with you within a click, and a decision answered anywhere closes its notification on every page
+that showed one (`dismissDecisionNotification`; the Mac app's own stay until clicked). An engine announces it as
+`attention`; a page never sends `presence` to one that does not.
+
+A message the
 server does not recognise, including a `hello` with an unknown surface, is logged and ignored; a socket that never
 says hello counts as no desktop.
 

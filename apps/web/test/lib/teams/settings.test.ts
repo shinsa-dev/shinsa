@@ -11,6 +11,7 @@ import {
   hasMachineAccess,
   listHostedTeams,
   listProjectChoices,
+  scopeStateToProjects,
   listTeamMachineRows,
   listTeamPeople,
   listTeamProjectCommands,
@@ -197,5 +198,16 @@ describe('Settings → Teams', () => {
     expect(describeHostedTeamsNotice(null, 'Signed out')).toBe('Signed out');
     expect(describeHostedTeamsNotice(null, null)).toBe('Reading your teams…');
     expect(describeHostedTeamsNotice({ viewerId: null, teams: [] }, null)).toBe(NO_HOSTED_TEAM);
+  });
+});
+
+describe('scopeStateToProjects', () => {
+  it('keeps only the projects of one machine, so its teams offer only those', () => {
+    const state = createShinsaState({
+      projects: [createProject({ id: 'web' }), createProject({ id: 'api' })],
+    });
+    const scoped = scopeStateToProjects(state, ['api', 'gone']);
+    expect(Object.keys(scoped.projects)).toEqual(['api']);
+    expect(scoped.tasks).toBe(state.tasks);
   });
 });

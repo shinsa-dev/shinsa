@@ -1,5 +1,6 @@
 import {
   type AccountsSnapshot,
+  type AttentionPlace,
   applyStatePatch,
   applyTaskDetail,
   type ChatEntry,
@@ -28,6 +29,8 @@ import { Socket } from 'effect/socket';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
+import { canPageNotify } from '@/lib/notifications/browser.ts';
+import { isPageActive } from '@/lib/notifications/presence.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { provideTransport } from '@/lib/runtime/socket/transport.ts';
@@ -105,9 +108,13 @@ export interface ShinsaConnection {
   replaceAccounts: (accounts: AccountsSnapshot | null) => void;
   subscribeSurfaces: (listener: () => void) => () => void;
   isDesktopConnected: () => boolean;
+  reportPresence: () => void;
+  selectAttention: (taskId?: string | null) => AttentionPlace;
   subscribeTerminals: (listener: () => void) => () => void;
   selectTerminals: () => TerminalsSnapshot | null;
   replaceTerminals: (terminals: TerminalsSnapshot) => void;
+  canOpenTerminals?: (projectId: string) => boolean;
+  resolveTerminalTransport?: (terminalId: string) => SocketTransport | null;
   subscribeResources: (listener: () => void) => () => void;
   selectResources: () => MachineResources | null;
   subscribeRemote: (listener: () => void) => () => void;
@@ -129,6 +136,8 @@ export interface ShinsaConnection {
 export interface ConnectionOptions {
   transport?: SocketTransport;
   surface?: () => Surface;
+  isActive?: () => boolean;
+  canAlert?: () => boolean;
   schedule?: Scheduler;
 }
 
@@ -195,6 +204,7 @@ export class Connection implements ShinsaConnection {
   #teams: TeamFeedSnapshot = NO_TEAM_FEED;
   #engine: EngineInfo | null = null;
   #desktopConnected = false;
+  #attention: AttentionPlace = 'nowhere';
   readonly #options: ConnectionOptions;
   readonly #state = createSignal();
   readonly #transcriptSignal = createSignal();
@@ -254,6 +264,7 @@ export class Connection implements ShinsaConnection {
 
   #close() {
     this.#link = null;
+    this.#attention = 'nowhere';
     this.#update({ status: 'closed' });
     this.#dropPending();
   }
@@ -297,6 +308,17 @@ export class Connection implements ShinsaConnection {
   selectTeams = () => this.#teams;
 
   isDesktopConnected = () => this.#desktopConnected;
+
+  selectAttention = (_taskId?: string | null) => this.#attention;
+
+  #canAlert() {
+    return (this.#options.canAlert ?? canPageNotify)();
+  }
+
+  reportPresence = () => {
+    if (hasEngineFeature(this.#engine, 'attention') && this.#canAlert())
+      this.#send({ type: 'presence', active: true });
+  };
 
   selectMachine = (_id: string): MachineView | null => null;
 
@@ -394,6 +416,7 @@ export class Connection implements ShinsaConnection {
     this.#teams = NO_TEAM_FEED;
     this.#engine = null;
     this.#desktopConnected = false;
+    this.#attention = 'nowhere';
     this.#pending.clear();
     this.#optimistic.clear();
     this.#transcripts.clear();
@@ -583,6 +606,10 @@ export class Connection implements ShinsaConnection {
         this.#desktopConnected = message.desktop;
         this.#surfacesSignal.publish();
         return;
+      case 'attention':
+        this.#attention = message.where;
+        this.#surfacesSignal.publish();
+        return;
       case 'terminals':
         this.replaceTerminals(message.terminals);
         return;
@@ -599,6 +626,11 @@ export class Connection implements ShinsaConnection {
         return;
       case 'engine':
         this.#engine = message.engine;
+        if (hasEngineFeature(message.engine, 'attention'))
+          this.#send({
+            type: 'presence',
+            active: (this.#options.isActive ?? isPageActive)() && this.#canAlert(),
+          });
         this.#state.publish();
         return;
       case 'task.detail':

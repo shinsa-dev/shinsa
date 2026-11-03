@@ -29,8 +29,8 @@ import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
-import { useEngineFeature } from '@/lib/connection/socket.ts';
-import { TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
+import { type MachineAccess, useEngineFeature, useMachines } from '@/lib/connection/socket.ts';
+import { createTeamActions, TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
@@ -52,6 +52,7 @@ import {
   TEAMS_DESCRIPTION,
   TEAMS_SECTION,
   validateTeamLink,
+  scopeStateToProjects,
   validateTeamLinkProjects,
 } from '@/lib/teams/settings.ts';
 import {
@@ -64,6 +65,7 @@ import {
   SettingsEmpty,
   SettingsSection,
 } from './group.tsx';
+import { HostedTeamsSettings } from './hosted-teams.tsx';
 import { LinkView } from './remote-access.tsx';
 import { UserRow } from './user-row.tsx';
 
@@ -548,11 +550,13 @@ export function TeamsGroup({
   state,
   snapshot,
   failure,
+  title = TEAMS_SECTION,
   actions = TEAM_ACTIONS,
 }: {
   state: ShinsaState;
   snapshot: RemoteSnapshot | null;
   failure: string | null;
+  title?: string;
   actions?: TeamActions;
 }) {
   const dialog = useDialogState<TeamsDialog>();
@@ -567,7 +571,7 @@ export function TeamsGroup({
   })();
   return (
     <SettingsSection
-      title={TEAMS_SECTION}
+      title={title}
       description={TEAMS_DESCRIPTION}
       action={
         usable ? (
@@ -612,4 +616,47 @@ export function TeamsSettings({ state }: { state: ShinsaState }) {
   const supported = useEngineFeature('teams');
   if (!supported) return null;
   return <TeamsGroup state={state} snapshot={snapshot} failure={failure} />;
+}
+
+function MachineTeams({
+  state,
+  machine,
+  title,
+}: {
+  state: ShinsaState;
+  machine: MachineAccess;
+  title: string;
+}) {
+  const supported = useEngineFeature('teams', machine.id);
+  const choice = useMachines().find((candidate) => candidate.id === machine.id);
+  const projectIds = Object.keys(choice?.state.projects ?? {});
+  const projectKey = projectIds.join(' ');
+  const scoped = React.useMemo(() => scopeStateToProjects(state, projectKey.split(' ')), [state, projectKey]);
+  const actions = React.useMemo(() => createTeamActions(machine.id), [machine.id]);
+  if (!supported) return null;
+  return (
+    <TeamsGroup state={scoped} snapshot={machine.remote} failure={null} title={title} actions={actions} />
+  );
+}
+
+export function MachineTeamsSettings({
+  state,
+  machines,
+}: {
+  state: ShinsaState;
+  machines: readonly MachineAccess[];
+}) {
+  if (machines.length === 0) return <HostedTeamsSettings />;
+  return (
+    <>
+      {machines.map((machine) => (
+        <MachineTeams
+          key={machine.id}
+          state={state}
+          machine={machine}
+          title={machines.length > 1 ? `${TEAMS_SECTION} on ${machine.name}` : TEAMS_SECTION}
+        />
+      ))}
+    </>
+  );
 }

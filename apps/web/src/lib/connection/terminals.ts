@@ -43,6 +43,14 @@ export function useTerminals() {
   return useSyncExternalStore(connection.subscribeTerminals, connection.selectTerminals);
 }
 
+export function resolveTerminalTransport(terminalId: string) {
+  return connection.resolveTerminalTransport?.(terminalId) ?? undefined;
+}
+
+export function canOpenTerminals(projectId: string) {
+  return connection.canOpenTerminals?.(projectId) ?? true;
+}
+
 const replaceTerminals = Effect.fn('Terminals.replace')(function* (
   call: (engine: Engine) => Effect.Effect<TerminalsSnapshot, Error>
 ) {

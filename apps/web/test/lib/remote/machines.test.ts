@@ -148,6 +148,10 @@ describe('a machine in the dashboard', () => {
     });
     expect(handed.guest).toBe(true);
     expect(handed.handedBy).toEqual(STUDIO.owner);
+    expect(handed.openTerminal).toBeUndefined();
+    const terminal = member.openTerminal?.('term-1');
+    await waitFor(() => expect(terminal?.readyState).toBe(1));
+    terminal?.close();
     handed.close();
     const answer = await member.fetch(new Request('https://shinsa.dev/api/health'));
     expect(await answer.text()).toBe('from Studio');

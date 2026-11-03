@@ -95,6 +95,11 @@ export const REMOTE_ACCESS_ACTIONS = {
 
 export type RemoteAccessActions = typeof REMOTE_ACCESS_ACTIONS;
 
+export type MachineAccessActions = Pick<
+  RemoteAccessActions,
+  'revokeDevice' | 'createLink' | 'removeLink' | 'acceptRequest' | 'declineRequest' | 'removeMember'
+>;
+
 export function useRemoteAccess() {
   const current = React.useSyncExternalStore(subscribeRemoteAccess, selectRemoteAccess);
   React.useEffect(() => {
@@ -115,10 +120,17 @@ function actOnMachine(
   );
 }
 
-export function acceptMachineRequest(machineId: string, requestId: string) {
-  return actOnMachine(machineId, (remote) => remote.acceptRequest({ payload: { requestId } }));
-}
-
-export function declineMachineRequest(machineId: string, requestId: string) {
-  return actOnMachine(machineId, (remote) => remote.declineRequest({ payload: { requestId } }));
+export function createMachineAccessActions(machineId: string) {
+  return {
+    revokeDevice: (publicKey: string) =>
+      actOnMachine(machineId, (remote) => remote.removeDevice({ payload: { publicKey } })),
+    createLink: () => actOnMachine(machineId, (remote) => remote.createLink(NO_BODY)),
+    removeLink: () => actOnMachine(machineId, (remote) => remote.removeLink(NO_BODY)),
+    acceptRequest: (requestId: string) =>
+      actOnMachine(machineId, (remote) => remote.acceptRequest({ payload: { requestId } })),
+    declineRequest: (requestId: string) =>
+      actOnMachine(machineId, (remote) => remote.declineRequest({ payload: { requestId } })),
+    removeMember: (userId: string) =>
+      actOnMachine(machineId, (remote) => remote.removeMember({ payload: { userId } })),
+  } satisfies MachineAccessActions;
 }

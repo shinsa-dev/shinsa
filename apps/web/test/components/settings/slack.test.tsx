@@ -15,11 +15,11 @@ function snapshot(overrides: Partial<SlackSnapshot> = {}): SlackSnapshot {
   return { remote: true, connectUrl: CONNECT_URL, links: [], problem: null, ...overrides };
 }
 
-function renderGroup(current: SlackSnapshot | null, failure: string | null = null, onMachine = true) {
+function renderGroup(current: SlackSnapshot | null, failure: string | null = null) {
   const actions = { disconnect: mock(() => Promise.resolve(snapshot())) } satisfies SlackActions;
   render(
     <TooltipProvider>
-      <SlackGroup snapshot={current} failure={failure} onMachine={onMachine} actions={actions} />
+      <SlackGroup snapshot={current} failure={failure} actions={actions} />
     </TooltipProvider>
   );
   return actions;
@@ -61,16 +61,6 @@ describe('Settings → General → Slack', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Disconnect Slack' }));
     await waitFor(() => expect(actions.disconnect).toHaveBeenCalled());
-  });
-
-  it('on app.shinsa.dev connects and lists workspaces, and sends Disconnect to the machine', () => {
-    renderGroup(snapshot({ links: [LINK] }), null, false);
-    expect(screen.getByText('Overclock')).toBeTruthy();
-    expect(screen.getByText('Connect another workspace').closest('a')?.getAttribute('href')).toBe(
-      CONNECT_URL
-    );
-    expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
-    expect(screen.getByText('Disconnect is in Settings on the machine itself.')).toBeTruthy();
   });
 
   it('shows nothing to connect when the engine has no link to give', () => {
