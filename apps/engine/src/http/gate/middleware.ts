@@ -54,7 +54,8 @@ export const EngineGateLive = Layer.effect(
       const sizeRefusal = resolveBodySizeRefusal(web, limit);
       if (sizeRefusal) return yield* new BodyTooLarge({ message: sizeRefusal });
       const browserOnly = Context.get(endpoint.annotations, BrowserOnlyRoute);
-      if (browserOnly && request.headers.origin === undefined)
+      const source = yield* RequestSource;
+      if (browserOnly && source.via !== 'channel' && request.headers.origin === undefined)
         return yield* new RequestFailed({ code: BROWSER_ONLY, message: browserOnly });
       if (endpoint.payload.size === 0) return;
       const bytes = yield* Effect.orDie(request.arrayBuffer);

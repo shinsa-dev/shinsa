@@ -108,6 +108,9 @@ export function createFleetMember(
     ...(instance.role === 'guest' ? { guest: true as const, handedBy: instance.owner } : {}),
     connection,
     fetch: (request) => link.fetch(request),
+    ...(instance.role === 'owner'
+      ? { openTerminal: (terminalId: string) => link.openTerminalSocket(terminalId) }
+      : {}),
     close: () => {
       connection.stop();
       link.close();

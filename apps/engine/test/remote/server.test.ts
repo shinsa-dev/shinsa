@@ -622,7 +622,7 @@ describe('the tunnel entry point', () => {
 });
 
 describe('the sealed channel over the tunnel', () => {
-  test('enrolls a device, serves the app socket and the API inside it, and refuses local-only commands', async () => {
+  test('enrolls a device, serves the app socket and the API inside it, and takes the owner’s owner-only commands', async () => {
     const { remote, port } = await start();
     const machine = await remote.store.resolveMachineKey();
     const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
@@ -640,7 +640,7 @@ describe('the sealed channel over the tunnel', () => {
         command: { type: 'settings.change', patch: { mergeMethod: 'squash' } },
       }),
     });
-    expect((await readAck(channel)).error?.code).toBe('local_only');
+    expect((await readAck(channel)).error).toBeNull();
     await channel.send({
       t: 'socket',
       data: JSON.stringify({ type: 'command', id: 'c2', command: { type: 'not.a.command' } }),
@@ -666,30 +666,44 @@ describe('the sealed channel over the tunnel', () => {
     expect(await channel.closed).toBe(1008);
   });
 
-  test('lets only the machine’s owner join a team from it, never a member', async () => {
+  test('lets only the machine’s owner manage teams, Slack, the invite link, members and devices from another device', async () => {
     const { remote, port } = await start({ access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] } });
     const machine = await remote.store.resolveMachineKey();
-    const statusFor = async (userId: string) => {
+    const paths = [
+      '/api/remote/teams/join',
+      '/api/remote/teams/create',
+      '/api/remote/teams/leave',
+      '/api/remote/link/create',
+      '/api/remote/members/remove',
+      '/api/remote/devices/remove',
+      '/api/slack/disconnect',
+    ];
+    const statusesFor = async (userId: string) => {
       const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
         userId,
         device: await addDevice(remote, userId),
       });
       expect(await channel.next()).toEqual({ t: 'ready' });
-      await channel.send({
-        t: 'request',
-        id: 'j',
-        method: 'POST',
-        path: '/api/remote/teams/join',
-        headers: [['content-type', 'application/json']],
-      });
-      await channel.send({ t: 'end', id: 'j' });
-      for (;;) {
-        const message = await channel.next();
-        if (message.t === 'response') return message.status;
+      for (const [index, path] of paths.entries()) {
+        const id = String(index);
+        await channel.send({
+          t: 'request',
+          id,
+          method: 'POST',
+          path,
+          headers: [['content-type', 'application/json']],
+        });
+        await channel.send({ t: 'end', id });
       }
+      const statuses = new Map<string, number>();
+      while (statuses.size < paths.length) {
+        const message = await channel.next();
+        if (message.t === 'response') statuses.set(paths[Number(message.id)] ?? '', message.status);
+      }
+      return paths.map((path) => [path, statuses.get(path)]);
     };
-    expect(await statusFor(KAI.id)).toBe(403);
-    expect(await statusFor(OWNER.id)).not.toBe(403);
+    expect(await statusesFor(KAI.id)).toEqual(paths.map((path) => [path, 403]));
+    for (const [path, status] of await statusesFor(OWNER.id)) expect([path, status]).not.toEqual([path, 403]);
   });
 
   test('closes every channel when remote access stops', async () => {
@@ -848,44 +862,114 @@ describe('managing remote access on the machine', () => {
     warn.mockRestore();
   });
 
-  test('refuses from a remote device what stays at the keyboard, over HTTP as over the socket', async () => {
-    const { remote, port } = await start();
+  test('keeps at the keyboard what ends the channel, and gives the owner alone what a member may not do', async () => {
+    const { remote, port } = await start({ access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] } });
     const machine = await remote.store.resolveMachineKey();
-    const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
-      device: await addDevice(remote),
-    });
-    expect(await channel.next()).toEqual({ t: 'ready' });
     const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
-    await channel.send({
-      t: 'request',
-      id: 'pair',
-      method: 'POST',
-      path: '/api/remote/disable',
-      headers: [],
-    });
-    await channel.send({ t: 'end', id: 'pair' });
-    await channel.send({ t: 'request', id: 'read', method: 'GET', path: '/api/remote', headers: [] });
-    await channel.send({ t: 'end', id: 'read' });
-    await channel.send({
-      t: 'request',
-      id: 'cmd',
-      method: 'POST',
-      path: '/api/commands',
-      headers: [['content-type', 'application/json']],
-    });
-    await channel.send({
-      t: 'body',
-      id: 'cmd',
-      chunk: body(JSON.stringify({ type: 'settings.change', patch: { mergeMethod: 'squash' } })),
-    });
-    await channel.send({ t: 'end', id: 'cmd' });
-    const statuses = new Map<string, number>();
-    while (statuses.size < 3) {
-      const message = await channel.next();
-      if (message.t === 'response') statuses.set(message.id, message.status);
-    }
-    expect(Object.fromEntries(statuses)).toEqual({ pair: 403, read: 200, cmd: 400 });
+    const statusesFor = async (userId: string) => {
+      const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+        userId,
+        device: await addDevice(remote, userId),
+      });
+      expect(await channel.next()).toEqual({ t: 'ready' });
+      await channel.send({
+        t: 'request',
+        id: 'pause',
+        method: 'POST',
+        path: '/api/remote/disable',
+        headers: [],
+      });
+      await channel.send({ t: 'end', id: 'pause' });
+      await channel.send({ t: 'request', id: 'read', method: 'GET', path: '/api/remote', headers: [] });
+      await channel.send({ t: 'end', id: 'read' });
+      await channel.send({
+        t: 'request',
+        id: 'account',
+        method: 'POST',
+        path: '/api/accounts/remove',
+        headers: [['content-type', 'application/json']],
+      });
+      await channel.send({ t: 'body', id: 'account', chunk: body(JSON.stringify({ accountId: 'none' })) });
+      await channel.send({ t: 'end', id: 'account' });
+      await channel.send({
+        t: 'request',
+        id: 'cmd',
+        method: 'POST',
+        path: '/api/commands',
+        headers: [['content-type', 'application/json']],
+      });
+      await channel.send({
+        t: 'body',
+        id: 'cmd',
+        chunk: body(JSON.stringify({ type: 'settings.change', patch: { mergeMethod: 'squash' } })),
+      });
+      await channel.send({ t: 'end', id: 'cmd' });
+      const statuses = new Map<string, number>();
+      while (statuses.size < 4) {
+        const message = await channel.next();
+        if (message.t === 'response') statuses.set(message.id, message.status);
+      }
+      return Object.fromEntries(statuses);
+    };
+    expect(await statusesFor(KAI.id)).toEqual({ pause: 403, read: 200, account: 403, cmd: 400 });
+    const owner = await statusesFor(OWNER.id);
+    expect([owner.pause, owner.read, owner.cmd]).toEqual([403, 200, 200]);
+    expect(owner.account).not.toBe(403);
     expect(remote.snapshot().enabled).toBe(true);
+  });
+
+  test('lets a member run a service and only the owner add, change or remove one or open a terminal', async () => {
+    const { remote, port } = await start({ access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] } });
+    const machine = await remote.store.resolveMachineKey();
+    const body = (text: string) => serializeBase64Url(new TextEncoder().encode(text));
+    const requests = [
+      { id: 'start', path: '/api/services/web/start' },
+      { id: 'stop', path: '/api/services/web/stop' },
+      { id: 'all', path: '/api/services/start-all', json: { projectId: 'p1' } },
+      { id: 'remove', path: '/api/services/remove', json: { ids: ['web'] } },
+      { id: 'update', path: '/api/services/web/update', json: { name: 'web' } },
+      { id: 'terminal', path: '/api/terminals', json: { projectId: 'p1', path: '/tmp' } },
+    ];
+    const statusesFor = async (userId: string) => {
+      const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+        userId,
+        device: await addDevice(remote, userId),
+      });
+      expect(await channel.next()).toEqual({ t: 'ready' });
+      for (const request of requests) {
+        await channel.send({
+          t: 'request',
+          id: request.id,
+          method: 'POST',
+          path: request.path,
+          headers: [['content-type', 'application/json']],
+        });
+        await channel.send({ t: 'body', id: request.id, chunk: body(JSON.stringify(request.json ?? null)) });
+        await channel.send({ t: 'end', id: request.id });
+      }
+      const statuses = new Map<string, number>();
+      while (statuses.size < requests.length) {
+        const message = await channel.next();
+        if (message.t === 'response') statuses.set(message.id, message.status);
+      }
+      return Object.fromEntries(statuses);
+    };
+    expect(await statusesFor(KAI.id)).toEqual({
+      start: 404,
+      stop: 404,
+      all: 404,
+      remove: 403,
+      update: 403,
+      terminal: 403,
+    });
+    expect(await statusesFor(OWNER.id)).toEqual({
+      start: 404,
+      stop: 404,
+      all: 404,
+      remove: 404,
+      update: 404,
+      terminal: 404,
+    });
   });
 });
 
@@ -1137,7 +1221,7 @@ describe('links, access requests and members', () => {
     warn.mockRestore();
   });
 
-  test('approving works from a device that reaches the machine remotely, and links stay at the keyboard', async () => {
+  test('approving and the invite link work from a device that reaches the machine remotely, and pairing stays at the keyboard', async () => {
     const { remote, local, port } = await start();
     await local('/api/remote/link/create', {});
     const machine = await remote.store.resolveMachineKey();
@@ -1163,9 +1247,11 @@ describe('links, access requests and members', () => {
         if (message.t === 'response' && message.id === id) return message.status;
       }
     };
-    expect(await post('a', '/api/remote/link/create', {})).toBe(403);
+    expect(await post('a', '/api/remote/pair', {})).toBe(403);
     expect(await post('b', '/api/remote/requests/accept', { requestId })).toBe(200);
     expect(await (await opening).next()).toEqual({ t: 'ready' });
+    expect(await post('c', '/api/remote/link/remove', {})).toBe(200);
+    expect(readLink(remote)).toBeNull();
   });
 
   test('a device opens only for the account that added it', async () => {
@@ -1399,7 +1485,7 @@ describe('handing off a task', () => {
     ).toBe('handoff_scope');
     expect(
       await sendCommand(channel, 'c2', { type: 'settings.change', patch: { mergeMethod: 'squash' } })
-    ).toBe('local_only');
+    ).toBe('not_owner');
     await channel.send({
       t: 'socket',
       data: JSON.stringify({

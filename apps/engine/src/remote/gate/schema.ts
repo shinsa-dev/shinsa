@@ -67,8 +67,6 @@ export const GUEST_READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
 export const GUEST_HEALTH_PATH = '/api/health';
 
-export const OWNER_ONLY_MESSAGE = 'Only this machine’s owner can join a team from it.';
-
 export const CONNECT_REFUSED_MESSAGE = 'The connect token is missing, wrong or expired.';
 
 export interface GateRequest {

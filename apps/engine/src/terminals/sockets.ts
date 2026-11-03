@@ -2,13 +2,20 @@ import { parseTerminalClientFrame } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import type { Terminals } from './index.ts';
 import { SOCKET_CLOSED, TERMINAL_SOCKET_PATH, type TerminalSocketData } from './schema.ts';
-import type { TerminalViewer } from './session.ts';
+import type { TerminalSession, TerminalViewer } from './session.ts';
 
 export function readTerminalSocketId(pathname: string) {
   return TERMINAL_SOCKET_PATH.exec(pathname)?.[1] ?? null;
 }
 
 type TerminalSocket = ServerWebSocket<TerminalSocketData>;
+
+export function applyTerminalText(session: TerminalSession, raw: string) {
+  const frame = parseTerminalClientFrame(raw);
+  if (frame?.type === 'resize') session.resize(frame.cols, frame.rows);
+  if (frame?.type === 'colors') session.replaceColors(frame.colors);
+  if (frame?.type === 'clear') session.clear();
+}
 
 export function createTerminalSockets(terminals: Terminals) {
   return {
@@ -33,10 +40,7 @@ export function createTerminalSockets(terminals: Terminals) {
         session.input(new Uint8Array(raw));
         return;
       }
-      const frame = parseTerminalClientFrame(raw);
-      if (frame?.type === 'resize') session.resize(frame.cols, frame.rows);
-      if (frame?.type === 'colors') session.replaceColors(frame.colors);
-      if (frame?.type === 'clear') session.clear();
+      applyTerminalText(session, raw);
     },
     drain(socket: TerminalSocket) {
       const { viewer } = socket.data;

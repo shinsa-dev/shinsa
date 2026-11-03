@@ -43,11 +43,12 @@ import {
   startAllServices,
   startService,
   stopService,
+  canOpenTerminals,
+  resolveTerminalTransport,
   useTerminals,
 } from '@/lib/connection/terminals.ts';
 import { useColorScheme } from '@/lib/preferences/theme.ts';
 import { listProjects } from '@/lib/projects.ts';
-import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { describeFindKey } from '@/lib/terminal/keys.ts';
 import {
   describeServiceClose,
@@ -98,7 +99,11 @@ function useKeptViews(snapshot: TerminalsSnapshot, active: TerminalInfo | null, 
     if (activeId) setShown((current) => (current.includes(activeId) ? current : [...current, activeId]));
   }, [activeId]);
   const visible = activeId && !shown.includes(activeId) ? [...shown, activeId] : shown;
-  const views = visible.flatMap((id) => (ids.includes(id) ? [resolveTerminalView({ id, scheme, mac })] : []));
+  const views = visible.flatMap((id) =>
+    ids.includes(id)
+      ? [resolveTerminalView({ id, scheme, mac, transport: resolveTerminalTransport(id) })]
+      : []
+  );
   React.useEffect(() => {
     for (const view of views) view.updateScheme(scheme);
   });
@@ -329,6 +334,54 @@ function ProjectTerminals({
   );
 }
 
+function ProjectServices({
+  state,
+  project,
+  snapshot,
+}: {
+  state: ShinsaState;
+  project: Project;
+  snapshot: TerminalsSnapshot;
+}) {
+  const services = listProjectServices(snapshot, project.id, Date.now());
+  const stopped = listStoppedServices(services);
+  return (
+    <div className='flex min-h-0 flex-1 flex-col'>
+      <Toolbar className='gap-1.5 ps-2'>
+        <span className='shrink-0'>
+          <ProjectPicker state={state} project={project} />
+        </span>
+        <span className='flex-1' />
+        {stopped.length > 0 && <StartAllButton project={project} />}
+      </Toolbar>
+      <div className='grid flex-1 place-items-center'>
+        <EmptyState
+          icon='IconConsole'
+          title='Terminals are for the machine’s owner'
+          description='A terminal is a shell on the machine that runs this project, so only its owner opens one from another device. You can still start and stop its services.'
+        >
+          {services.length > 0 && (
+            <ul aria-label={`Services in ${project.name}`} className='flex w-72 flex-col gap-1'>
+              {services.map((view) => (
+                <li key={view.service.id} className='flex items-center gap-1 ps-2'>
+                  <span className='min-w-0 flex-1 truncate text-start text-sm'>{view.service.name}</span>
+                  <ServiceRunButtons
+                    view={view}
+                    onStart={() => void startService(view.service.id, view.taskId)}
+                    onStop={() => void stopService(view.service.id, view.taskId)}
+                    onRestart={() => void restartService(view.service.id, view.taskId)}
+                    onPreview={() => openServicePreview(view)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </EmptyState>
+      </div>
+    </div>
+  );
+}
+
 function StartAllButton({ project }: { project: Project }) {
   return (
     <span className='flex shrink-0 items-center border-s border-border ps-1.5'>
@@ -356,20 +409,6 @@ function ActiveServiceButtons({ view }: { view: ServiceView }) {
 }
 
 export function TerminalPage({ state }: { state: ShinsaState }) {
-  if (isRemoteBuild())
-    return (
-      <div className='grid flex-1 place-items-center'>
-        <EmptyState
-          icon='IconConsole'
-          title='Terminals stay on your machine'
-          description='A terminal is a shell on the machine that runs Shinsa, so it opens only there.'
-        />
-      </div>
-    );
-  return <TerminalWorkspace state={state} />;
-}
-
-function TerminalWorkspace({ state }: { state: ShinsaState }) {
   const snapshot = useTerminals();
   const search = useSearchString();
   React.useEffect(() => rememberTerminalPath(`/terminal${search}`), [search]);
@@ -388,5 +427,7 @@ function TerminalWorkspace({ state }: { state: ShinsaState }) {
         description='Terminals open in a project’s folders. Add a project in Settings first.'
       />
     );
+  if (!canOpenTerminals(project.id))
+    return <ProjectServices state={state} project={project} snapshot={snapshot} />;
   return <ProjectTerminals state={state} project={project} snapshot={snapshot} />;
 }

@@ -1279,6 +1279,7 @@ or `browser` (a tab, Floaty).
 | Page → server (`ClientMessage`) | What it does |
 | --- | --- |
 | `hello { surface }` | Names the page's surface; the first message on every socket |
+| `presence { active }` | Asks where you are and, with `active`, says you are using this page now: once when the engine announces `attention` (`active` is whether the page is visible and focused), then each time you come back to it and at most every 15 s while you use it (`watchPresence`). Sent only to an engine that announces `attention` |
 | `command { id, command }` | A `UserCommand`; answered by `ack` with the same id |
 | `state.sync` | Send the whole state again: a patch did not fit the state the page holds |
 | `transcript.subscribe { runId, from }` / `transcript.unsubscribe { runId }` | Follow a run's transcript from entry `from` (the number the page holds), or stop |
@@ -1294,6 +1295,7 @@ or `browser` (a tab, Floaty).
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
 | `engine { engine }` | On connect, right after `surfaces` and before every other message: what this engine speaks, an `EngineInfo` (below) |
+| `attention { where }` | To a page that sent `presence`, and again whenever its answer changes: `here` (it is the owner's page used last), `elsewhere` (another of the owner's pages is) or `nowhere` (none was used in the last five minutes, or the page is a member's) (`AttentionPlace`, `ATTENTION_PLACES`) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
 | `resources { resources }` | On connect once sampled, then every 5 s while a page is connected: `MachineResources` (core's `remote/resources.ts`: the machine's cores, CPU percent, memory used and total, disk free and total, and each open task's agent, services and checks as CPU percent and memory, its process count and its worktree's size). An engine samples only while a socket listens, so a page that never reads it costs nothing; an older engine never sends it and an older page ignores it |
 | `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
@@ -1319,7 +1321,7 @@ offers nothing an engine cannot do (`docs/engine.md` → Remote access, What eac
 | `version` | The engine's build, `0.0.0` in development (`DEVELOPMENT_VERSION`) |
 | `protocol` | `ENGINE_PROTOCOL`, raised only when an older page and this engine cannot talk at all (a changed state shape) |
 | `commands` | Every user command type it parses, `USER_COMMAND_TYPES` itself, so a new command is announced the moment it exists |
-| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix`, `message.line_comments` and `changelog` today) that are not a command, such as a route or a setting an older engine ignores |
+| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix`, `message.line_comments`, `changelog`, `remote.terminals`, `attention` and `worktree-root` today) that are not a command, such as a route or a setting an older engine ignores |
 
 `ENGINE_BASELINE_COMMANDS` is frozen: the commands every engine has had since before the `engine` message, which a page
 sends to any engine, one that never announced included (`resolveEngineCommands(null)`). A command added since is
@@ -1329,7 +1331,9 @@ development) and refuses one without a whole-number `protocol`. `hasEngineFeatur
 for one engine; an engine that sent nothing has no features and matches.
 
 `isQuietSurface(surface, desktop)` is true for a page that is not the desktop while one is connected: it plays no
-sound, shows no notification and puts no count in its title or Floaty's tags.
+sound, shows no notification and puts no count in its title or Floaty's tags. It is the fallback: a page an engine
+answers `here` always alerts and one it answers `elsewhere` never does (`isAlertQuiet` in the web); only `nowhere`
+leaves the choice to `isQuietSurface`.
 
 The page never gets a run's prompts. The state on the socket is a `WireState` (`packages/core/src/protocol/runs.ts`;
 `serializeState` makes one): the state with every run a `WireRun` (`serializeRun`), which is the `Run` without
@@ -1532,13 +1536,18 @@ the tunnel in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/e
 | `{ t: 'response', id, status, headers }` | Its answer |
 | `{ t: 'body', id, chunk }` / `{ t: 'end', id }` | A body in base64url chunks of 256 KB (`CHANNEL_BODY_CHUNK_BYTES`), then its end |
 | `{ t: 'abort', id }` | The page gave up on a request |
+| `{ t: 'terminal-open', id, terminal }` | The page attaches to a terminal; `id` names the stream, at most 64 characters |
+| `{ t: 'terminal-text', id, data }` / `{ t: 'terminal-bytes', id, chunk }` | One frame of the terminal's stream either way: a control frame as text (`TerminalClientFrame`, `TerminalServerFrame`), or keys and screen bytes in base64url |
+| `{ t: 'terminal-close', id, code, reason }` | Either side ends a stream: 1000 from the page, 4403 for a device that is not the owner's or too many streams (`MAX_TERMINAL_STREAMS`, 16), 4404 for a terminal that is gone (`TERMINAL_STREAM_CLOSE`) |
 
 **One task for a guest** (`scope.ts`): a device with a task is a `GuestActor` (`taskId`, `login`). Its socket gets `resolveScopedState` and `resolveScopedPatch` (that task, its runs, gates, evidence, repository and project, accounts without their email, no share, previews or hand-off link) and `resolveScopedEngineInfo` (only `SCOPED_COMMANDS`); `resolveScopedRefusal` refuses any other command, another task's, a secret or sign-in gate's answer and a retry on a chosen account, with the code `handoff_scope` (`SCOPE_REFUSAL_CODE`, `SCOPE_MESSAGES`).
 
-**What stays at the keyboard** (`local-only.ts`): `isLocalOnlyCommand` names the user commands a remote request may
-not send (a human-only setting or repository field, `task.bind_account`); the refusal's code is `local_only`
-(`LOCAL_ONLY_CODE`, `LOCAL_ONLY_MESSAGE`). A request's `RequestOrigin` (`local` or `remote`) comes from how it
-arrived, never from the page.
+**What only the owner sends from another device** (`local-only.ts`): `isOwnerOnlyCommand` names the user commands
+that need you at the keyboard or the machine's owner on a sealed channel (a human-only setting or repository field,
+`task.bind_account`, `task.retry` on a chosen account); `resolveOwnerOnlyRefusal` refuses them to any other remote
+request with the code `not_owner` (`OWNER_ONLY_CODE`, `OWNER_ONLY_MESSAGE`). A request's `RequestOrigin` (`local`,
+`owner` or `remote`) comes from how it arrived and whose connect token opened its channel, never from the page.
+`LOCAL_ONLY_MESSAGE` is the refusal of a route that stays on the machine itself.
 
 **The engine's snapshot** (`status.ts`, `GET /api/remote`): `RemoteSnapshot` is `paired`, `enabled`, `status`
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,

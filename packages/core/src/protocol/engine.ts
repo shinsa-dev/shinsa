@@ -11,6 +11,8 @@ export const ENGINE_FEATURES = [
   'review.approve_after_fix',
   'message.line_comments',
   'changelog',
+  'remote.terminals',
+  'attention',
   'worktree-root',
 ] as const;
 

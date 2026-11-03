@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { SECURITY_HEADERS } from '../../apps/cloud/src/http/ingress/schema.ts';
 import {
   REMOTE_NATIVE_CLIENT,
   REMOTE_PATHS,
@@ -32,9 +33,9 @@ export function respondStatic(pathname: string) {
   const relative = pathname.replace(/^\/+/, '');
   const file = Bun.file(join(REMOTE_WEB, relative));
   if (relative && !relative.includes('..') && existsSync(join(REMOTE_WEB, relative)) && file.size > 0)
-    return new Response(file);
+    return new Response(file, { headers: SECURITY_HEADERS });
   return new Response(Bun.file(join(REMOTE_WEB, 'index.html')), {
-    headers: { 'content-type': 'text/html; charset=utf-8' },
+    headers: { ...SECURITY_HEADERS, 'content-type': 'text/html; charset=utf-8' },
   });
 }
 

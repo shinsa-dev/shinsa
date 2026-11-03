@@ -17,6 +17,8 @@ import { respondTeams } from './team.ts';
 
 const GUEST_MACHINES = new Set<string>();
 
+const MEMBER_MACHINES = new Set<string>();
+
 const INVITES = new Map<string, string>();
 
 const HANDOFFS = new Map<string, string>();
@@ -24,7 +26,9 @@ const HANDOFFS = new Map<string, string>();
 function listInstances(machines: Machine[], user: RemoteUser): Promise<RemoteInstance[]> {
   const now = Date.now();
   const guest = user.id === GUEST.id;
-  const listed = guest ? machines.filter((machine) => GUEST_MACHINES.has(machine.id)) : machines;
+  const listed = guest
+    ? machines.filter((machine) => GUEST_MACHINES.has(machine.id) || MEMBER_MACHINES.has(machine.id))
+    : machines;
   return Promise.all(
     listed.map(async (machine) => ({
       id: machine.id,
@@ -34,7 +38,7 @@ function listInstances(machines: Machine[], user: RemoteUser): Promise<RemoteIns
       lastSeenAt: now,
       createdAt: now - 7 * DAY,
       owner: USER,
-      role: guest ? 'guest' : 'owner',
+      role: resolvePreviewRole(guest, machine.id),
     }))
   );
 }
@@ -73,15 +77,20 @@ async function respondInviteAccept(
   return Response.json(answer);
 }
 
-async function respondGuestChange(request: Request, add: boolean) {
+function resolvePreviewRole(guest: boolean, machineId: string) {
+  if (!guest) return 'owner';
+  return MEMBER_MACHINES.has(machineId) ? 'member' : 'guest';
+}
+
+async function respondAccessChange(request: Request, machineIds: Set<string>, add: boolean) {
   const bearer = readBearerMachine(request);
   const { userId } = (await request.json()) as { userId?: string };
   if (userId !== GUEST.id) return Response.json({ ok: true });
   if (!add) {
-    GUEST_MACHINES.delete(bearer);
+    machineIds.delete(bearer);
     return Response.json({ ok: true });
   }
-  GUEST_MACHINES.add(bearer);
+  machineIds.add(bearer);
   const member: RemoteMember = { user: GUEST, addedAt: Date.now() };
   return Response.json(member);
 }
@@ -98,14 +107,14 @@ function respondAccess(request: Request, pathname: string, machines: Machine[], 
   if (pathname === REMOTE_PATHS.machineHandoffs) return respondInviteCreate(request, machines, HANDOFFS);
   if (pathname === REMOTE_PATHS.handoffAccept)
     return respondInviteAccept(request, machines, user, HANDOFFS, 'handoff_invalid');
-  if (pathname === REMOTE_PATHS.machineGuestAdd) return respondGuestChange(request, true);
-  if (pathname === REMOTE_PATHS.machineGuestRemove) return respondGuestChange(request, false);
+  if (pathname === REMOTE_PATHS.machineGuestAdd) return respondAccessChange(request, GUEST_MACHINES, true);
+  if (pathname === REMOTE_PATHS.machineGuestRemove)
+    return respondAccessChange(request, GUEST_MACHINES, false);
   if (pathname === REMOTE_PATHS.machineRequester) return respondRequester(request);
-  if (
-    pathname === REMOTE_PATHS.machineInviteRemove ||
-    pathname === REMOTE_PATHS.machineMemberRemove ||
-    pathname === REMOTE_PATHS.machineHandoffRemove
-  )
+  if (pathname === REMOTE_PATHS.machineMemberAdd) return respondAccessChange(request, MEMBER_MACHINES, true);
+  if (pathname === REMOTE_PATHS.machineMemberRemove)
+    return respondAccessChange(request, MEMBER_MACHINES, false);
+  if (pathname === REMOTE_PATHS.machineInviteRemove || pathname === REMOTE_PATHS.machineHandoffRemove)
     return Response.json({ ok: true });
   return Response.json({ error: { code: 'not_found', message: 'No such endpoint.' } }, { status: 404 });
 }

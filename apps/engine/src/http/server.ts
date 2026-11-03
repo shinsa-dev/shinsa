@@ -11,7 +11,7 @@ import { Context, Effect, Exit, Layer, Predicate, Scope } from 'effect';
 import { createServerInstance } from '../instance/index.ts';
 import type { UpgradeRefusal } from '../remote/gate/schema.ts';
 import { TunnelGate } from '../remote/gate/service.ts';
-import type { ChannelPeer, RemoteChannel } from '../remote/index.ts';
+import type { ChannelPeer, Remote, RemoteChannel } from '../remote/index.ts';
 import type { PreviewRelay, PreviewUpgrade } from '../remote/previews.ts';
 import { POLICY_VIOLATION } from '../remote/schema.ts';
 import { edgeRuntime } from '../runtime/edge.ts';
@@ -27,7 +27,7 @@ export type { HttpContext } from './schema.ts';
 
 const SOCKET_BACKPRESSURE_LIMIT_BYTES = 128 * 1024 * 1024;
 
-interface RemoteSocketData {
+export interface RemoteSocketData {
   kind: 'remote';
   channel: RemoteChannel | null;
   userId: string;
@@ -79,6 +79,7 @@ export interface RemoteSocketHandlers {
   open: (socket: ServerWebSocket<RemoteSocketData>) => void;
   close: (socket: ServerWebSocket<RemoteSocketData>) => void;
   message: (socket: ServerWebSocket<RemoteSocketData>, raw: string | Buffer) => void;
+  drain: (socket: ServerWebSocket<RemoteSocketData>) => void;
 }
 
 const LIVE_SOCKETS = {
@@ -121,6 +122,34 @@ function respondUpgradeRefusal(refusal: UpgradeRefusal) {
 
 type Hub = ReturnType<typeof createSocketHub>;
 
+type RemoteChannels = Pick<Remote, 'openChannel' | 'closeChannel'>;
+
+export function createRemoteSockets(
+  remote: RemoteChannels,
+  parts: Parameters<Remote['openChannel']>[1]
+): RemoteSocketHandlers {
+  return {
+    open: (socket) => {
+      socket.data.channel = remote.openChannel(
+        {
+          send: (data) => socket.send(data),
+          close: (code, reason) => socket.close(code, reason),
+          buffered: () => socket.getBufferedAmount(),
+        },
+        parts,
+        socket.data.userId
+      );
+    },
+    close: (socket) => {
+      if (socket.data.channel) remote.closeChannel(socket.data.channel);
+    },
+    message: (socket, raw) => {
+      void socket.data.channel?.receive(raw);
+    },
+    drain: (socket) => socket.data.channel?.drain(),
+  };
+}
+
 type TerminalSockets = ReturnType<typeof createTerminalSockets>;
 
 export function createSocketHandlers(
@@ -153,6 +182,7 @@ export function createSocketHandlers(
     },
     drain: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.drain(socket);
+      else if (isRemoteSocket(socket)) remote?.drain(socket);
     },
   };
 }
@@ -206,25 +236,8 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
     return new Response('Upgrade failed', { status: 400 });
   }
 
-  const remoteSockets: RemoteSocketHandlers | null = remote
-    ? {
-        open: (socket) => {
-          socket.data.channel = remote.openChannel(
-            {
-              send: (data) => socket.send(data),
-              close: (code, reason) => socket.close(code, reason),
-            },
-            { hub, respond: respondInsideChannel },
-            socket.data.userId
-          );
-        },
-        close: (socket) => {
-          if (socket.data.channel) remote.closeChannel(socket.data.channel);
-        },
-        message: (socket, raw) => {
-          void socket.data.channel?.receive(raw);
-        },
-      }
+  const remoteSockets = remote
+    ? createRemoteSockets(remote, { hub, terminals: terminals ?? null, respond: respondInsideChannel })
     : null;
 
   const previewSockets: PreviewSocketHandlers | null = previews

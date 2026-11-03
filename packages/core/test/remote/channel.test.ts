@@ -18,6 +18,10 @@ describe('channel messages', () => {
       { t: 'body', id: 'r1', chunk: 'AAE' },
       { t: 'end', id: 'r1' },
       { t: 'abort', id: 'r1' },
+      { t: 'terminal-open', id: 's1', terminal: 'term-1' },
+      { t: 'terminal-text', id: 's1', data: '{"type":"clear"}' },
+      { t: 'terminal-bytes', id: 's1', chunk: 'AAE' },
+      { t: 'terminal-close', id: 's1', code: 4404, reason: 'That terminal is closed.' },
     ];
     for (const message of messages)
       expect(parseChannelMessage(serializeChannelMessage(message))).toEqual(message);
@@ -33,6 +37,7 @@ describe('channel messages', () => {
       'null',
       '[]',
       '{"t":"other"}',
+      '{"t":"other","id":"x"}',
       '{"t":"socket","data":1}',
       '{"t":"request","id":"r","method":"TRACE","path":"/","headers":[]}',
       '{"t":"request","id":"r","method":"GET","path":"http://x/","headers":[]}',
@@ -43,6 +48,12 @@ describe('channel messages', () => {
       '{"t":"body","id":"r"}',
       '{"t":"end"}',
       '{"t":"abort","id":2}',
+      '{"t":"terminal-open","id":"s"}',
+      '{"t":"terminal-text","id":"s","data":1}',
+      '{"t":"terminal-bytes","id":"s"}',
+      '{"t":"terminal-close","id":"s","code":"x","reason":""}',
+      '{"t":"terminal-close","id":"s","code":1000}',
+      '{"t":"terminal-close","id":1,"code":1000,"reason":""}',
     ];
     for (const text of refused) expect(parseChannelMessage(text)).toBeNull();
   });

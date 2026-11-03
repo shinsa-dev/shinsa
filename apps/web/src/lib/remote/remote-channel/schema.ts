@@ -70,6 +70,13 @@ export interface ChannelHello {
   hello: object;
 }
 
+export type TerminalStreamMessage = Extract<
+  ChannelMessage,
+  { t: 'terminal-text' | 'terminal-bytes' | 'terminal-close' }
+>;
+
+type TerminalSendMessage = TerminalStreamMessage | Extract<ChannelMessage, { t: 'terminal-open' }>;
+
 export interface Outgoing {
   message: ChannelMessage;
   sent: Deferred.Deferred<void, ChannelError>;
@@ -86,6 +93,8 @@ export interface ChannelLink {
   request(input: ChannelRequest): Effect.Effect<Response, RequestFailure>;
   sendSocket(data: string): Effect.Effect<void, ChannelError>;
   subscribeSocket(listener: (data: string) => void): () => void;
+  sendTerminal(message: TerminalSendMessage): Effect.Effect<void, ChannelError>;
+  subscribeTerminal(listener: (message: TerminalStreamMessage) => void): () => void;
   subscribeClose(listener: (error: ChannelError) => void): () => void;
   close(): void;
 }
@@ -96,6 +105,8 @@ export interface RemoteChannel {
   request(input: ChannelRequest): Promise<Response>;
   sendSocket(data: string): Promise<void>;
   subscribeSocket(listener: (data: string) => void): () => void;
+  sendTerminal(message: TerminalSendMessage): Promise<void>;
+  subscribeTerminal(listener: (message: TerminalStreamMessage) => void): () => void;
   subscribeClose(listener: (error: ChannelError) => void): () => void;
   close(): void;
 }

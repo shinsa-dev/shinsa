@@ -8,8 +8,6 @@ export const SLACK_SECTION = 'Slack';
 export const SLACK_DESCRIPTION =
   'Mention @Shinsa in a Slack channel or thread to start a task on this machine. Its questions, plan, review and result come back in the thread; you still decide in Shinsa.';
 
-export const SLACK_ON_MACHINE_NOTE = 'Disconnect is in Settings on the machine itself.';
-
 const SLACK_LINKED_ERRORS: Record<string, string> = {
   slack_denied: 'Slack was not connected because the request was turned down there.',
   slack_expired: 'Connecting took longer than 10 minutes. Start again from Settings on your machine.',

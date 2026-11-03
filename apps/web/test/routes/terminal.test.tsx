@@ -71,11 +71,28 @@ const SHELL = createTerminal({ id: 'shell', title: 'fish' });
 const ENDED = createTerminal({ id: 'ended', title: 'bun test', status: 'exited', exitCode: 1 });
 
 describe('the terminal page', () => {
-  it('says terminals stay on the machine in the remote build', () => {
-    import.meta.env.VITE_SHINSA_REMOTE = '1';
-    show(null);
-    import.meta.env.VITE_SHINSA_REMOTE = undefined;
-    expect(screen.getByText('Terminals stay on your machine')).toBeTruthy();
+  it('shows a member the project’s services to start and stop, but no terminals, on a machine they do not own', async () => {
+    visit('/terminal?project=SH');
+    const asked: string[] = [];
+    Object.assign(connection, {
+      canOpenTerminals: (projectId: string) => {
+        asked.push(projectId);
+        return false;
+      },
+    });
+    const services = [createService({ id: 'api' }), createService({ id: 'web' })];
+    const page = show(createTerminalsSnapshot([SERVER], services));
+    answer = createTerminalsSnapshot([SERVER], services);
+    expect(screen.getByText('Terminals are for the machine’s owner')).toBeTruthy();
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open a terminal' })).toBeNull();
+    expect(asked).toContain('shop');
+    fireEvent.click(screen.getByRole('button', { name: 'Start api' }));
+    await waitFor(() => expect(readPosts()[0]?.[0]).toBe('/api/services/api/start'));
+    fireEvent.click(screen.getByRole('button', { name: 'Start all services in Shop' }));
+    await waitFor(() => expect(readPosts()[1]).toEqual(['/api/services/start-all', { projectId: 'shop' }]));
+    Reflect.deleteProperty(connection, 'canOpenTerminals');
+    page.unmount();
   });
 
   it('waits for the engine’s list, and asks for a project when there is none', () => {

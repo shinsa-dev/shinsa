@@ -127,28 +127,79 @@ const FEATURE_ROUTES = {
   'review.approve_after_fix': [],
   'message.line_comments': [],
   changelog: ['GET /api/changelog'],
+  'remote.terminals': [],
+  attention: [],
   'worktree-root': ['POST /api/onboarding/worktrees', 'GET /api/onboarding/worktrees/usage'],
 };
 
-const OLD_LOCAL_ONLY = [
-  { pattern: /^\/api\/remote(?:\/(?!requests\/|teams\/join$)|$)/, writesOnly: true },
-  { pattern: /^\/api\/slack(?:\/|$)/, writesOnly: true },
-  { pattern: /^\/api\/accounts(?:\/|$)/, writesOnly: true },
-  { pattern: /^\/api\/extensions(?:\/|$)/, writesOnly: true },
-  { pattern: /^\/api\/secrets\//, writesOnly: true },
-  { pattern: /^\/api\/schedules\/[^/]+\/webhook$/, writesOnly: true },
-  { pattern: /^\/api\/versions\/update$/, writesOnly: true },
+const LOCAL_ONLY = [
+  { pattern: /^\/api\/remote(?:\/(?:pair|pair\/cancel|enable|disable|remove))?$/, writesOnly: true },
+  { pattern: /^\/api\/extensions\/servers\/sign-in$/, writesOnly: true },
   { pattern: /^\/api\/tasks\/[^/]+\/open$/, writesOnly: true },
-  { pattern: /^\/api\/engine\//, writesOnly: true },
-  { pattern: /^\/api\/onboarding(?:\/|$)/, writesOnly: true },
-  { pattern: /^\/api\/(?:terminals|services)(?:\/|$)/, writesOnly: false },
+  { pattern: /^\/api\/onboarding\/install$/, writesOnly: true },
+];
+
+const OWNER_ONLY = [
+  'POST /api/remote/link/create',
+  'POST /api/remote/link/remove',
+  'POST /api/remote/members/grant',
+  'POST /api/remote/members/remove',
+  'POST /api/remote/devices/remove',
+  'POST /api/remote/teams/create',
+  'POST /api/remote/teams/join',
+  'POST /api/remote/teams/link',
+  'POST /api/remote/teams/link/renew',
+  'POST /api/remote/teams/link/remove',
+  'POST /api/remote/teams/requests/accept',
+  'POST /api/remote/teams/requests/decline',
+  'POST /api/remote/teams/members/remove',
+  'POST /api/remote/teams/leave',
+  'POST /api/remote/teams/remove',
+  'POST /api/slack/disconnect',
+  'POST /api/engine/restart',
+  'POST /api/onboarding/setup',
+  'POST /api/onboarding/privacy',
+  'POST /api/onboarding/flow',
+  'POST /api/onboarding/worktrees',
+  'POST /api/accounts/refresh',
+  'POST /api/accounts/login',
+  'POST /api/accounts/login/code',
+  'POST /api/accounts/login/cancel',
+  'POST /api/accounts/import',
+  'POST /api/accounts/update',
+  'POST /api/accounts/remove',
+  'POST /api/schedules/([^/]+)/webhook',
+  'POST /api/secrets/([^/]+)',
+  'POST /api/extensions/check',
+  'POST /api/extensions/servers/add',
+  'POST /api/extensions/servers/update',
+  'POST /api/extensions/servers/remove',
+  'POST /api/extensions/servers/choose',
+  'POST /api/extensions/servers/sign-in',
+  'POST /api/extensions/servers/sign-out',
+  'POST /api/extensions/skills/choose',
+  'POST /api/extensions/plugins/choose',
+  'POST /api/extensions/optimizer',
+  'POST /api/versions/update',
+  'GET /api/services/suggestions',
+  'POST /api/services',
+  'POST /api/services/batch',
+  'POST /api/services/remove',
+  'POST /api/services/([^/]+)/update',
+  'GET /api/terminals',
+  'GET /api/terminals/([^/]+)/foreground',
+  'POST /api/terminals',
+  'POST /api/terminals/([^/]+)/close',
+  'POST /api/terminals/([^/]+)/rename',
+  'POST /api/terminals/([^/]+)/restart',
+  'POST /api/terminals/order',
 ];
 
 const OLD_TASK_READS = /^\/api\/tasks\/:taskRef(?:\/(?:blob|chat|diff|paths|raw|refs|search|tree))?$/;
 
-function isOldLocalOnly(method: string, path: string) {
+function isLocalOnly(method: string, path: string) {
   const writes = method !== 'GET';
-  return OLD_LOCAL_ONLY.some((route) => route.pattern.test(path) && (writes || !route.writesOnly));
+  return LOCAL_ONLY.some((route) => route.pattern.test(path) && (writes || !route.writesOnly));
 }
 
 function resolveOldGuest(method: string, path: string) {
@@ -176,9 +227,9 @@ describe('EngineApi routes', () => {
     expect(sorted(listEngineBaselineRoutes())).toEqual(sorted(BASELINE_ROUTES));
   });
 
-  test('refuses over the tunnel exactly the routes the old local-only patterns named', () => {
+  test('keeps at the machine only what needs its screen or ends the channel', () => {
     for (const route of listEngineRoutes())
-      expect([route.key, route.localOnly]).toEqual([route.key, isOldLocalOnly(route.method, route.path)]);
+      expect([route.key, route.localOnly]).toEqual([route.key, isLocalOnly(route.method, route.path)]);
   });
 
   test('lets a guest read only the health check, its own task and that task’s files', () => {
@@ -186,11 +237,11 @@ describe('EngineApi routes', () => {
       expect([route.key, route.guest]).toEqual([route.key, resolveOldGuest(route.method, route.path)]);
   });
 
-  test('only joining a team is for the owner, and only an attachment upload takes a larger body', () => {
+  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack, the invite link, members, devices, a service’s command and terminals are for the owner, and only an attachment upload takes a larger body', () => {
     const routes = listEngineRoutes();
-    expect(routes.filter((route) => route.ownerOnly).map((route) => route.key)).toEqual([
-      'POST /api/remote/teams/join',
-    ]);
+    expect(sorted(routes.filter((route) => route.ownerOnly).map((route) => route.key))).toEqual(
+      sorted(OWNER_ONLY)
+    );
     const larger = routes.filter((route) => route.bodyLimit !== ENGINE_BODY_LIMIT_BYTES);
     expect(larger.map((route) => [route.key, route.bodyLimit])).toEqual([
       ['POST /api/attachments', ATTACHMENT_UPLOAD_LIMIT_BYTES],

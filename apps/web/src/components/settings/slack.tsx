@@ -7,14 +7,7 @@ import { requestWithToast } from '@/lib/connection/commands.ts';
 import { SLACK_ACTIONS, type SlackActions, useSlack } from '@/lib/connection/slack.ts';
 import { useGuestMachines, useMachines } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { isRemoteBuild } from '@/lib/remote/mode.ts';
-import {
-  describeSlackLink,
-  describeSlackStatus,
-  SLACK_DESCRIPTION,
-  SLACK_ON_MACHINE_NOTE,
-  SLACK_SECTION,
-} from '@/lib/slack.ts';
+import { describeSlackLink, describeSlackStatus, SLACK_DESCRIPTION, SLACK_SECTION } from '@/lib/slack.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 function StatusAction({ snapshot }: { snapshot: SlackSnapshot }) {
@@ -62,12 +55,10 @@ function LinkRow({ link }: { link: SlackLink }) {
 export function SlackGroup({
   snapshot,
   failure,
-  onMachine = true,
   actions = SLACK_ACTIONS,
 }: {
   snapshot: SlackSnapshot | null;
   failure: string | null;
-  onMachine?: boolean;
   actions?: SlackActions;
 }) {
   const dialog = useDialogState<true>();
@@ -77,7 +68,7 @@ export function SlackGroup({
       title={SLACK_SECTION}
       description={SLACK_DESCRIPTION}
       action={
-        connected && onMachine ? (
+        connected ? (
           <Button variant='secondary' size='sm' onClick={() => dialog.show(true)}>
             Disconnect
           </Button>
@@ -89,11 +80,6 @@ export function SlackGroup({
       {snapshot?.links.map((link) => (
         <LinkRow key={`${link.teamId}:${link.userId}`} link={link} />
       ))}
-      {snapshot && !onMachine && (
-        <div className={SETTING_ROW}>
-          <p className='text-2xs text-pretty text-fg-2'>{SLACK_ON_MACHINE_NOTE}</p>
-        </div>
-      )}
       <ConfirmDialog
         control={dialog.control}
         title='Disconnect Slack?'
@@ -107,7 +93,7 @@ export function SlackGroup({
 
 function SlackReader() {
   const { snapshot, failure } = useSlack();
-  return <SlackGroup snapshot={snapshot} failure={failure} onMachine={!isRemoteBuild()} />;
+  return <SlackGroup snapshot={snapshot} failure={failure} />;
 }
 
 export function SlackSettings() {

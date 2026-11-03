@@ -13,9 +13,11 @@ export {
   type ChannelHeaders,
   type ChannelMessage,
   listBodyMessages,
+  MAX_TERMINAL_STREAMS,
   parseBodyChunk,
   parseChannelMessage,
   serializeChannelMessage,
+  TERMINAL_STREAM_CLOSE,
 } from './channel.ts';
 export {
   CONNECT_TOKEN_TTL_MS,
@@ -144,11 +146,12 @@ export {
   sealPairingCredentials,
 } from './pairing-seal.ts';
 export {
-  isLocalOnlyCommand,
-  LOCAL_ONLY_CODE,
+  isOwnerOnlyCommand,
   LOCAL_ONLY_MESSAGE,
+  OWNER_ONLY_CODE,
+  OWNER_ONLY_MESSAGE,
   type RequestOrigin,
-  resolveLocalOnlyRefusal,
+  resolveOwnerOnlyRefusal,
 } from './local-only.ts';
 export {
   isPlacementPoliciesValid,

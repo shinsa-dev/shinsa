@@ -29,6 +29,7 @@ import { edgeRuntime } from '../runtime/edge.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Terminals } from '../terminals/index.ts';
 import type { Classifier } from '../triage/message.ts';
+import { type AttentionClock, AttentionTracker } from './attention.ts';
 import { dispatchUserCommand } from './commands.ts';
 import { REQUEST_FAILED } from './schema.ts';
 
@@ -75,7 +76,8 @@ export function createSocketHub(
   remote?: Remote,
   teamFeeds?: Pick<TeamFeeds, 'subscribe' | 'snapshot'>,
   version = DEVELOPMENT_VERSION,
-  resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>
+  resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>,
+  clock?: AttentionClock
 ) {
   const sockets = new Set<Socket>();
   const views = new WeakMap<SocketData, ReadonlySet<string>>();
@@ -83,6 +85,10 @@ export function createSocketHub(
   const scopedEngineInfo = resolveScopedEngineInfo(version);
   let desktopConnected = false;
   let unsubscribeResources: (() => void) | null = null;
+  const attention = new AttentionTracker<Socket>(
+    (socket, where) => send(socket, { type: 'attention', where }),
+    clock
+  );
 
   function broadcast(message: ServerMessage) {
     const payload = JSON.stringify(message);
@@ -201,6 +207,9 @@ export function createSocketHub(
         socket.data.surface = message.surface;
         syncSurfaces();
         return;
+      case 'presence':
+        attention.report(socket, message.active);
+        return;
       case 'command': {
         const error = yield* dispatchUserCommand(engine, message.command, {
           clientId: message.id,
@@ -263,6 +272,7 @@ export function createSocketHub(
     },
     close(socket: Socket) {
       sockets.delete(socket);
+      attention.remove(socket);
       syncSurfaces();
       syncResources();
       for (const unfollow of socket.data.transcripts.values()) unfollow();
@@ -296,6 +306,7 @@ export function createSocketHub(
       unsubscribeTeams?.();
       unsubscribeResources?.();
       unsubscribeResources = null;
+      attention.stop();
     },
   };
 }

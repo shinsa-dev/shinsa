@@ -6,6 +6,7 @@ import {
   type ServiceDefinition,
   type ServiceSuggestion,
   type ShinsaState,
+  TERMINAL_STREAM_CLOSE,
   type TerminalInfo,
   type TerminalPlaceKind,
 } from '@shinsa/core';
@@ -229,4 +230,4 @@ export interface TerminalSocketData {
 
 export const TERMINAL_SOCKET_PATH = /^\/ws\/terminals\/([A-Za-z0-9-]{1,64})$/;
 
-export const SOCKET_CLOSED = 4404;
+export const SOCKET_CLOSED = TERMINAL_STREAM_CLOSE.gone;
