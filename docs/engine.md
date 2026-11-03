@@ -2832,13 +2832,26 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   lease on it. Turning access off, a revocation or removing the machine ends the scope, which closes every one of them
   at once with its own close reason; a channel that ends by itself gives its lease back. The keys stay in `remote.json`
   alone: the scope holds only what closes a socket.
-- **The tunnel entry point** (`guard.ts`, `http/ingress/`): a request with `cf-connecting-ip`, which Cloudflare
-  stamps on everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request and is decided
-  before the local guard. It sees `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks) and
-  `GET /remote`; everything else, and everything while remote access is off, is 404. `/remote` needs an Origin of
-  app.shinsa.dev (403) and a valid connect token in `?token=` (401): an HMAC with the connect key over the instance,
-  the GitHub user and an expiry at most 60 seconds out, minted by app.shinsa.dev. The token only keeps random traffic
-  off the endpoint; trust rests on the handshake.
+- **The tunnel entry point** (`TunnelGate`, `remote/gate/`): the one gate for everything that arrives through the
+  tunnel, and the only place that decides it. A request with `cf-connecting-ip`, which Cloudflare stamps on
+  everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request (`isTunnel`) and is decided
+  before the local guard. Its route table (`TUNNEL_ROUTES`, `remote/gate/schema.ts`) names every path with its
+  methods: `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks), Slack's two `POST`s, and
+  the sockets `GET /remote`, `/share`, `/team` and `/__preview/<id>/…`; anything else, and everything while remote
+  access is off, is 404 before any handler runs. Sockets open only as an upgrade in `http/server.ts`, which asks
+  `admitUpgrade` and opens what it answers; a plain request to a socket path is 404 (`admitRequest`). `/remote`,
+  `/share` and `/team` need an Origin of app.shinsa.dev (403); `/remote` and `/team` need a valid connect token in
+  `?token=` (401): an HMAC with the connect key over the instance, the GitHub user and an expiry at most 60 seconds
+  out, minted by app.shinsa.dev, and the user it names is the channel's principal. The token only keeps random traffic
+  off the endpoint; trust rests on the handshake. Webhooks and Slack are refused in inspect mode, and `/health` and
+  Slack's paths do not exist on the local address.
+- **Inside the channel** the same gate decides every request (`admitRequest` in `Ingress`, `admitEndpoint` in
+  `EngineGate`), from the request's principal (`RequestSource`: the channel's user and, for a guest, the task handed
+  to them) and the endpoint's annotations in core's `EngineApi`: only `/api/` paths and never an extension's sign-in
+  callback, a guest only its own task's reads (`GuestRoute`), never a `localOnly` route (403 `local_only`), an
+  `ownerOnly` route only for the machine's owner (403 `not_owner`, joining a team from this machine), and no write in
+  inspect mode. A command's own fields are checked once more in `dispatchUserCommand` (core's `isLocalOnlyCommand`
+  and, for a guest, `resolveScopedRefusal`), the one path both the socket and `POST /api/commands` take.
 - **The sealed channel** (`RemoteChannel`): the browser's first message is the hello; a device key that is not
   added is refused unless the hello carries a proof made with the machine's link secret, which turns it into
   an access request, or the key already has a request waiting under the same GitHub account (a browser that asked,
@@ -3554,7 +3567,7 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
     a chosen account, or a message or round whose text carries an attachments block ("Only the owner of the task can
     attach files to it."), so every file the task names was attached by you. Merges and operations are the guest's to approve, as yours are. What stays at the keyboard
     (Remote access → What stays at the keyboard) stays there too.
-  - **Requests.** HTTP inside its channel reaches only `isGuestRoute` (`remote/guest-routes.ts`): `GET` of
+  - **Requests.** HTTP inside its channel reaches only what `TunnelGate` lets a guest read (`remote/gate/`, the `GuestRoute` annotation): `GET` of
     `/api/health`, `/api/tasks/<its id>` and its `blob`, `chat`, `diff`, `paths`, `raw`, `refs`, `search` and `tree`, and
     the files of that task alone: evidence in its own folder (`/api/evidence/<its id>/…`) or recorded for it, an
     attachment of its request or inbox, and a tool image or a message attachment in the transcript of one of its runs;
@@ -3648,7 +3661,7 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
 - **Not sealed end to end.** A task's link is sealed with its key in the fragment; a preview cannot be, since a
   browser loads a dev server as plain pages. Traffic is TLS to Cloudflare, then the Worker, then the tunnel, and the
   Worker reads it in passing. The machine checks the key on every request and every WebSocket, in constant time.
-- **The proxy.** The tunnel route `/__preview/<id>/<path>` (`resolveTunnelRoute` → `preview`) finds the live share by
+- **The proxy.** The tunnel route `/__preview/<id>/<path>` (`TunnelGate`'s route table → `preview`) finds the live share by
   id for this instance, checks `x-shinsa-preview-key`, and sends the request to the task's own run of the service
   (`selectServiceTerminal`, by service and task) on `localhost:<port>`. It sets `Host` to `localhost:<port>` and
   points the origin and referrer headers at it, so Vite's and Next's host checks pass; it drops the key header, `cf-*` and
@@ -3782,7 +3795,7 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
   (`resolveSlackReadableText`), a permalink, and the thread's last 100 messages, bots marked. The tunnel route
-  `POST /api/slack/events` (`remote/guard.ts`) is 404 while remote access is off, refuses a body over 1 MB and a
+  `POST /api/slack/events` (`TunnelGate`, `remote/gate/`) is 404 while remote access is off, refuses a body over 1 MB and a
   forward whose `x-shinsa-slack-signature` is not an HMAC over `v1:<ms>:<body>` keyed by the machine's connect key or
   whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
   dispatches `slack.mention` with command id `slack:<event id>`, so a forward that comes twice is answered by its

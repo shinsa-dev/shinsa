@@ -35,7 +35,6 @@ import {
   RemoteControl,
   selectRemoteFailureTag,
 } from './client/index.ts';
-import { isOwnerOnlyRoute } from './local-only.ts';
 import { listTeamEntries, RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
 import { Tunnel, type TunnelConnectorLayer, type TunnelPing } from './tunnel/index.ts';
 
@@ -46,7 +45,6 @@ export { TunnelConnectFailed } from './connector/schema.ts';
 export { TunnelConnector } from './connector/service.ts';
 export type { TunnelConnectorLayer } from './tunnel/index.ts';
 export { RemoteControl } from './client/index.ts';
-export { isTunnelRequest, resolveChannelOriginRefusal, resolveTunnelRoute } from './guard.ts';
 export { REMOTE_FILE, RemoteStore } from './store.ts';
 
 const REMOTE_ACCESS_CHANGED = 'Remote access to this machine changed.';
@@ -72,7 +70,10 @@ export interface RemoteOptions {
   openUrl: (url: string) => Promise<void>;
 }
 
-type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
+interface ChannelParts {
+  readonly hub: ChannelHost['hub'];
+  readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Promise<Response>;
+}
 
 export type HandoffClaimer = (taskId: string, guest: TaskGuest) => Promise<string | null>;
 
@@ -715,7 +716,7 @@ export class Remote {
   openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string) {
     const channel = new RemoteChannel(peer, {
       ...parts,
-      respond: (request, guest) => this.#respondAs(request, guest, parts, userId),
+      respond: (request, guest) => parts.respond(request, guest, userId),
       resolveMachineKey: () => this.store.resolveMachineKey(),
       isEnrolled: (device) => this.#admits(device, userId),
       resolveGuest: (device) => this.#resolveGuest(device),
@@ -729,18 +730,6 @@ export class Remote {
     });
     this.#channels.set(channel, release);
     return channel;
-  }
-
-  #respondAs(request: Request, guest: GuestActor | null, parts: ChannelParts, userId: string) {
-    const path = new URL(request.url).pathname;
-    if (isOwnerOnlyRoute(request.method, path) && this.store.file.access?.owner.id !== userId)
-      return Promise.resolve(
-        Response.json(
-          { error: { code: 'not_owner', message: 'Only this machine’s owner can join a team from it.' } },
-          { status: 403 }
-        )
-      );
-    return parts.respond(request, guest);
   }
 
   closeChannel(channel: RemoteChannel) {

@@ -7,6 +7,7 @@ import { Ingress } from '../../src/http/ingress/middleware.ts';
 import { RequestSource, type RequestSourceShape } from '../../src/http/schema.ts';
 import type { HttpContext } from '../../src/http/server.ts';
 import { HttpServices } from '../../src/http/services/service.ts';
+import { TunnelGate } from '../../src/remote/gate/service.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { createTempDir, createTestConfig } from './index.ts';
@@ -48,6 +49,7 @@ export async function disposeWebHandlers() {
 
 type RouteNeeds =
   | HttpServices
+  | TunnelGate
   | HttpRouter.HttpRouter
   | Layer.Success<typeof HttpServer.layerServices>
   | HttpRouter.Request<'Requires' | 'Error' | 'GlobalRequires' | 'GlobalError', unknown>;
@@ -58,6 +60,7 @@ export function createWebHandler<E, R extends RouteNeeds>(
 ) {
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(routes, Ingress).pipe(
+      Layer.provide(TunnelGate.layer),
       Layer.provide(HttpServices.layer(context)),
       Layer.provide(HttpServer.layerServices),
       Layer.provideMerge(RecordingLogger)

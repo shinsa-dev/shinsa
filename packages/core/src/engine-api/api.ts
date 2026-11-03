@@ -75,6 +75,7 @@ import {
   RouteFieldFailures,
   RouteNotFound,
   SchedulesAnswer,
+  NotMachineOwner,
   ScopeRefused,
   SearchAnswer,
   ServiceSuggestionsAnswer,
@@ -118,6 +119,7 @@ export class EngineGate extends HttpApiMiddleware.Service<EngineGate>()('shinsa/
     wire(InspectReadOnly),
     wire(LocalOnly),
     wire(ScopeRefused),
+    wire(NotMachineOwner),
   ],
 }) {}
 

@@ -112,9 +112,9 @@ async function readFailure(response: Response) {
   return [response.status, ((await response.json()) as { error: unknown }).error];
 }
 
-const OWNER: RequestSourceShape = { via: 'channel', guest: null };
+const OWNER: RequestSourceShape = { via: 'channel', guest: null, userId: null };
 
-const GUEST = { via: 'channel', guest: { taskId: 'task-1' } } as unknown as RequestSourceShape;
+const GUEST = { via: 'channel', guest: { taskId: 'task-1' }, userId: null } as unknown as RequestSourceShape;
 
 describe('the request gate', () => {
   test('a payload is decoded, and a field’s own failure names what to fix', async () => {
