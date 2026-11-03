@@ -12,9 +12,7 @@ export {
   describeWorktreeRootProblem,
   markWorktreeRoot,
   WORKTREE_ROOT_MARKER,
-  type ResolvedWorktreeRoot,
   WorktreeRoot,
-  WorktreeRootUnavailable,
 } from './root/index.ts';
 export type { WorkspaceStrategy, WorkspacesOptions } from './schema.ts';
 

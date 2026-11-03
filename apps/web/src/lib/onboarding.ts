@@ -30,7 +30,7 @@ interface FolderRow {
   removable: boolean;
 }
 
-export type WorktreeFolderOrigin = 'default' | 'chosen' | 'environment';
+type WorktreeFolderOrigin = 'default' | 'chosen' | 'environment';
 
 interface WorktreeFolder {
   label: string;

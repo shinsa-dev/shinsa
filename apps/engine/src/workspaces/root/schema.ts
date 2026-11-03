@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 
-export const WorktreeRootSource = Schema.Literals(['environment', 'config', 'default']);
-export type WorktreeRootSource = typeof WorktreeRootSource.Type;
+const WorktreeRootSource = Schema.Literals(['environment', 'config', 'default']);
+type WorktreeRootSource = typeof WorktreeRootSource.Type;
 
 export const ResolvedWorktreeRoot = Schema.Struct({
   path: Schema.String,

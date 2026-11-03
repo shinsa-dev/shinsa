@@ -14,7 +14,7 @@ import type { CommandRunner } from './schema.ts';
 const WORKTREES_FOLDER = 'worktrees';
 const DELEGATIONS_FOLDER = 'delegations';
 const KILOBYTE = 1024;
-export const USAGE_TIMEOUT_MS = 20_000;
+const USAGE_TIMEOUT_MS = 20_000;
 
 function refuse(message: string): never {
   throw new DomainError({ code: 'worktrees_invalid', message });
@@ -28,7 +28,7 @@ function mark(path: string) {
   return edgeRuntime.runSync(describeWorktreeRootMarkProblem(path));
 }
 
-export function resolveDefaultWorktreesDir(config: ServerConfig) {
+function resolveDefaultWorktreesDir(config: ServerConfig) {
   return join(config.dataDir, WORKTREES_FOLDER);
 }
 
@@ -60,7 +60,7 @@ export function resolveChosenWorktreesDir(value: unknown, userHome: string): str
   return folder;
 }
 
-export function listTaskWorktrees(tasks: Record<string, Task>) {
+function listTaskWorktrees(tasks: Record<string, Task>) {
   const paths = new Set<string>();
   for (const task of Object.values(tasks)) {
     if (task.worktreePath && task.workspace !== 'main_checkout') paths.add(task.worktreePath);

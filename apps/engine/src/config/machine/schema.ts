@@ -4,7 +4,7 @@ const MachineText = Schema.Trim.check(Schema.isNonEmpty());
 
 const MachineRoots = Schema.Array(MachineText);
 
-export const MachineFolder = MachineText.check(Schema.isPattern(/^\//));
+const MachineFolder = MachineText.check(Schema.isPattern(/^\//));
 
 const MAX_PORT = 65_535;
 

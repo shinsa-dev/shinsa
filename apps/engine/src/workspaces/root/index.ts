@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { Effect } from 'effect';
 import { type ResolvedWorktreeRoot, type WorktreeRootOptions, WorktreeRootUnavailable } from './schema.ts';
 
-export type { ResolvedWorktreeRoot, WorktreeRootOptions, WorktreeRootSource } from './schema.ts';
+export type { ResolvedWorktreeRoot, WorktreeRootOptions } from './schema.ts';
 export { WorktreeRootUnavailable } from './schema.ts';
 
 export class WorktreeRoot {
