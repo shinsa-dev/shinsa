@@ -1,13 +1,11 @@
 import type { TeamFeedTask } from '@shinsa/core';
 import { Badge } from '@shinsa/ui/components/badge';
-import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
-import { TEAM_ICON } from '@/components/focus/menu.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { UserTag } from '@/components/people/user-tag.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
+import { TeammateOwnerMark } from '@/components/tasks/owner.tsx';
 import { PullRequestBadge } from '@/components/tasks/pull-request-badge.tsx';
 import {
   KindMark,
@@ -21,11 +19,8 @@ import { useMachines, useRemoteSnapshot, useTeamFeed } from '@/lib/connection/so
 import { type FocusTeam, listFocusTeams } from '@/lib/focus.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { formatSince } from '@/lib/format/time.ts';
-import { resolveSharedProfile } from '@/lib/remote/users.ts';
 import type { TeamEntry } from '@/lib/tasks/groups.ts';
 import {
-  describeTeamTaskOwner,
-  describeTeamTaskPlace,
   listHeldTeamMachines,
   listTeamFeedTasks,
   resolveTeamTaskPath,
@@ -62,33 +57,6 @@ export function useTeamTasks(): TeamTasks {
 
 function openTeamTask(entry: TeamFeedTask) {
   navigate(resolveTeamTaskPath(resolveTeamTaskTarget(entry)));
-}
-
-function OwnerName({ entry }: { entry: TeamFeedTask }) {
-  if (!entry.owner) return describeTeamTaskOwner(entry);
-  return <UserTag user={resolveSharedProfile(entry.owner, entry.ownerProfile)} />;
-}
-
-function OwnerMark({ entry }: { entry: TeamFeedTask }) {
-  const mark = <Icon size='sm' name={TEAM_ICON} className='shrink-0' />;
-  if (entry.owner)
-    return (
-      <span className='inline-flex min-w-0 items-center gap-1.5 text-fg-2'>
-        <Hint label={describeTeamTaskPlace(entry)}>{mark}</Hint>
-        <Truncate>
-          <OwnerName entry={entry} />
-        </Truncate>
-      </span>
-    );
-  const owner = describeTeamTaskOwner(entry);
-  return (
-    <Hint label={entry.machine ? `${owner} on ${entry.machine}, read-only` : `${owner}, read-only`}>
-      <span className='inline-flex min-w-0 items-center gap-1.5 text-fg-2'>
-        {mark}
-        <Truncate>{owner}</Truncate>
-      </span>
-    </Hint>
-  );
 }
 
 export function OfflineBadge({ heldAt }: { heldAt: number }) {
@@ -129,8 +97,8 @@ export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }:
         {repo && <RepoMark state={state} repo={repo} />}
         <Truncate>{repo?.name ?? 'No repository'}</Truncate>
       </span>
-      <span className='min-w-0 max-md:hidden'>
-        <OwnerMark entry={entry} />
+      <span className='flex max-md:hidden'>
+        <TeammateOwnerMark entry={entry} />
       </span>
       <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
         {heldAt === null ? <KindMark state={state} task={task} /> : <OfflineBadge heldAt={heldAt} />}
@@ -140,7 +108,7 @@ export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }:
         <PullRequestBadge task={task} />
       </span>
       <span className='text-right text-2xs text-fg-2'>
-        <TimeAgo at={task.updatedAt} />
+        <TimeAgo at={task.updatedAt} compact />
       </span>
     </div>
   );

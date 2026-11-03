@@ -289,21 +289,27 @@ describe('tasks that wait on another task, nested under it', () => {
     expect(shown.map(depthOf)).toEqual([1, 2, 2, 3]);
   });
 
-  it('names every parent in the status column, each a link that opens it', () => {
+  it('names the first parent by its handle and counts the rest, the handle a link that opens it', () => {
     renderPage(
       chain([
         waiting('a', 'Step A', ['root']),
-        waiting('b', 'Step B', ['a']),
-        waiting('c', 'Step C', ['a']),
+        waiting('b', 'Step B', ['a'], { handle: 'LOC-12' }),
+        waiting('c', 'Step C', ['a'], { handle: 'LOC-13' }),
         waiting('d', 'Step D', ['b', 'c']),
       ])
     );
     const joined = rowFor('Step D');
-    expect(joined.textContent).toContain('Waits on Step B, Step C');
+    expect(joined.textContent).toContain('Waits on LOC-12 +1');
+    expect(joined.textContent).not.toContain('Step B');
     const links = within(joined).getAllByRole('link');
-    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/tasks/b', '/tasks/c']);
-    act(() => fireEvent.click(within(joined).getByRole('link', { name: 'Step C' })));
-    expect(location.pathname).toBe('/tasks/c');
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/tasks/LOC-12']);
+    act(() => fireEvent.click(within(joined).getByRole('link', { name: 'Step B' })));
+    expect(location.pathname).toBe('/tasks/LOC-12');
+  });
+
+  it('names a parent without a handle by its title', () => {
+    renderPage(chain([waiting('a', 'Step A', ['root'])]));
+    expect(rowFor('Step A').textContent).toContain('Waits on Root work');
   });
 
   it('says when a parent was cancelled', () => {

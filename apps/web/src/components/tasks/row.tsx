@@ -29,24 +29,25 @@ import { isHeldByTasks } from '@/lib/tasks/groups.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
+import { YourOwnerMark } from './owner.tsx';
 import { PullRequestBadge } from './pull-request-badge.tsx';
 import { ChainArrow, WaitsOnLinks } from './waits-on.tsx';
 
 export const TASK_LIST_COLUMNS =
-  'grid-cols-[minmax(0,1fr)_7.5rem_12rem_4.5rem_4.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
+  'grid-cols-[minmax(0,1fr)_7rem_10rem_4rem_3rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
 
 export const TEAM_TASK_LIST_COLUMNS =
-  'grid-cols-[minmax(0,1fr)_7rem_5.5rem_11rem_4.5rem_4.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
+  'grid-cols-[minmax(0,1fr)_7rem_2.25rem_10rem_4rem_3rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
 
 export const TASK_LIST_ROW_HEIGHT = 36;
 
 export const TASK_LIST_ROW =
-  'grid h-9 w-full cursor-pointer items-center gap-4 border-border border-b px-3 text-left text-xs outline-none hover:not-has-[a:hover,button:hover]:bg-bg-a1 active:not-has-[a:active,button:active]:bg-bg-a1 data-popup-open:bg-bg-a1';
+  'grid h-9 w-full cursor-pointer items-center gap-3 border-border border-b px-3 text-left text-xs outline-none hover:not-has-[a:hover,button:hover]:bg-bg-a1 active:not-has-[a:active,button:active]:bg-bg-a1 data-popup-open:bg-bg-a1';
 
 export const FILED_COLUMNS =
-  'grid-cols-[minmax(0,1fr)_10rem_4.5rem_4.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
+  'grid-cols-[minmax(0,1fr)_10rem_4rem_3rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
 
-const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13'];
+const DEPTH_INDENT = ['', '', 'ps-4', 'ps-8'];
 
 function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
   const commands = useEngineCommands(task.id);
@@ -170,7 +171,11 @@ export const TaskListRow = React.memo(function TaskListRowItem({
             <Truncate>{repo?.name ?? 'No repository'}</Truncate>
           </span>
         )}
-        {columns === TEAM_TASK_LIST_COLUMNS && <span className='truncate text-fg-2 max-md:hidden'>You</span>}
+        {columns === TEAM_TASK_LIST_COLUMNS && (
+          <span className='flex max-md:hidden'>
+            <YourOwnerMark />
+          </span>
+        )}
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
           <KindMark state={state} task={task} />
           <RowStatus state={state} task={task} />
@@ -179,7 +184,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
           <PullRequestBadge task={task} />
         </span>
         <span className='text-right text-2xs text-fg-2'>
-          <TimeAgo at={task.updatedAt} />
+          <TimeAgo at={task.updatedAt} compact />
         </span>
       </LazyMenuTrigger>
     </LazyMenu>

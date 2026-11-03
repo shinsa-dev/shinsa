@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { connection } from '@/lib/connection/socket.ts';
 import { HomePage } from '@/routes/home.tsx';
 import { TasksPage } from '@/routes/tasks.tsx';
@@ -74,8 +74,8 @@ describe('teammates’ tasks', () => {
     expect(working.textContent).toContain('My own task');
     expect(working.textContent).toContain('Add the billing page');
     expect(working.textContent).toContain('paywalls');
-    expect(working.textContent).toContain('kai');
-    expect(working.textContent).toContain('You');
+    expect(within(working).getByRole('img', { name: 'kai' })).toBeDefined();
+    expect(within(working).getByRole('img', { name: 'You' })).toBeDefined();
     fireEvent.click(screen.getByText('Add the billing page'));
     expect(location.pathname).toBe('/teams/team1/p7m2/kai-task');
   });
@@ -144,6 +144,14 @@ describe('teammates’ tasks', () => {
     expect(screen.getByText('My private task')).toBeDefined();
     expect(screen.queryByText('My own task')).toBeNull();
     expect(screen.queryByText('Add the billing page')).toBeNull();
+  });
+
+  it('keeps the default page width when teammates’ tasks are listed', () => {
+    const { container } = renderTasks();
+    expect(screen.getByText('Owner')).toBeDefined();
+    const page = container.firstElementChild as HTMLElement;
+    expect(page.className).toContain('max-w-3xl');
+    expect(page.className).not.toContain('max-w-4xl');
   });
 
   it('shows no Owner column when you belong to no team', () => {

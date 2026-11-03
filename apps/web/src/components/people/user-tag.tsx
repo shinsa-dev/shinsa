@@ -19,12 +19,13 @@ const USER_TAG =
 
 const USER_AVATAR = {
   row: 'size-6.5',
+  cell: 'size-4.5',
   inline: 'relative -top-px ms-0.5 me-1 inline-grid size-3.5 align-middle',
 } as const;
 
-const USER_INITIAL = { row: undefined, inline: 'scale-75' } as const;
+const USER_INITIAL = { row: undefined, cell: 'scale-90', inline: 'scale-75' } as const;
 
-function UserAvatar({ user, size }: { user: UserProfile; size: keyof typeof USER_AVATAR }) {
+export function UserAvatar({ user, size }: { user: UserProfile; size: keyof typeof USER_AVATAR }) {
   const className = cn('shrink-0 rounded-full bg-bg-a2', USER_AVATAR[size]);
   if (user.avatarUrl)
     return <img src={user.avatarUrl} alt='' referrerPolicy='no-referrer' className={className} />;

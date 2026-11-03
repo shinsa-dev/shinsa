@@ -40,9 +40,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
   useRegisterCommands(listTaskListSections(filters, fields));
 
   return (
-    <div
-      className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6', owners && 'max-w-4xl')}
-    >
+    <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6')}>
       <div className='flex items-end gap-3'>
         <PageHeading title='All tasks' description={describeTaskCounts(state)} className='flex-1' />
         <Input
@@ -59,7 +57,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
       <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>
         <div
           className={cn(
-            'grid h-7 shrink-0 items-center gap-4 border-b border-border px-3 text-2xs font-medium text-fg-2',
+            'grid h-7 shrink-0 items-center gap-3 border-b border-border px-3 text-2xs font-medium text-fg-2',
             columns
           )}
         >
