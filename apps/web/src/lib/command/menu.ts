@@ -70,7 +70,7 @@ const TASKS_SHOWN = 300;
 
 export const TASK_MATCHES_SHOWN = 20;
 
-export const JUMP_MATCHES_SHOWN = 100;
+const JUMP_MATCHES_SHOWN = 100;
 
 export const SECTION_MATCHES_SHOWN = 20;
 
@@ -280,7 +280,7 @@ export function listSectionBlocks(sections: CommandSection[], query: string): Me
   });
 }
 
-export function countMenuTasks(state: ShinsaState) {
+function countMenuTasks(state: ShinsaState) {
   return Object.values(state.tasks).filter((task) => !isWatchHome(task)).length;
 }
 

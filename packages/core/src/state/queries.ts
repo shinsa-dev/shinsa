@@ -237,7 +237,7 @@ export function resolveBundle(state: Pick<ShinsaState, 'tasks'>, task: Task) {
   return bundle.length > 1 ? bundle : [];
 }
 
-export function isStackPending(state: ShinsaState, parent: Task) {
+function isStackPending(state: ShinsaState, parent: Task) {
   return !isTaskComplete(parent) && !isReadyToStackOn(state, parent);
 }
 
