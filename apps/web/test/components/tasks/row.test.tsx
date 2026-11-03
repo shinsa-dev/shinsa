@@ -192,6 +192,41 @@ describe('a task stacked on another', () => {
   });
 });
 
+describe('a task stacked on another that also waits on others', () => {
+  const root = createTask({
+    id: 'root',
+    handle: 'SW-32',
+    title: 'Add the saved cart schema',
+    stage: 'shipping',
+  });
+  const other = createTask({
+    id: 'other',
+    handle: 'SW-40',
+    title: 'Migrate the cart table',
+    stage: 'building',
+  });
+  const stacked = createTask({
+    id: 'stacked',
+    title: 'Serve saved carts over the API',
+    stage: 'waiting_on_tasks',
+    stacksOn: 'root',
+    waitsOn: ['root', 'other'],
+  });
+  const state = createShinsaState({ tasks: [root, other, stacked] });
+
+  it('keeps the menu of every parent, marked as its bundle', async () => {
+    renderRow(stacked, 1, state);
+    expect(screen.queryByRole('link', { name: 'Stacked on SW-32' })).toBeNull();
+    const mark = screen.getByRole('button', { name: 'Stacked on SW-32, waits on 1 more' });
+    const tooltip = await findTooltipText(mark);
+    expect(tooltip).toContain('Merges with its bundle');
+    expect(tooltip).toContain('Migrate the cart table');
+    fireEvent.click(mark);
+    expect(await screen.findByRole('menuitem', { name: /Migrate the cart table/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Add the saved cart schema/ })).toBeTruthy();
+  });
+});
+
 describe('the repository column', () => {
   it('says No repository for a task that works without one', () => {
     renderRow(createTask({ id: 'research', title: 'Compare the search engines', stage: 'researching' }));

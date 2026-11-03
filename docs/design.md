@@ -1029,7 +1029,8 @@ Only these, and they win over anything below:
     button: `bg-bg-a2` and `fg-4` on hover and pressed alike, the same while its menu is open,
     "Waits on" and the parents in its tooltip; it opens the Waits on menu. A task stacked on another is a bundle, not
     a wait, and reads as one: its mark is `BUNDLE_ICON` (`IconLayersThree`), a link to the task below with "Stacked on",
-    that task and "Merges with its bundle" in its tooltip, its status column says "Stacked on SW-32" while the task
+    that task and "Merges with its bundle" in its tooltip (when it also waits on other tasks, the same mark opens the
+    Waits on menu with every parent instead, its tooltip naming the task below and then the others), its status column says "Stacked on SW-32" while the task
     below is still open, and once ready it says "Merges with its bundle" (`BUNDLE_READY_STATUS`). Every row starts with
     its priority mark, and its status column with its kind's icon in the status's tone (`SHAPE_ICON`, named
     for screen readers) whose tooltip lists the steps the task takes ("Investigation: find the

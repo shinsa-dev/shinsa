@@ -101,31 +101,47 @@ function StackMark({ parent }: { parent: Task }) {
   );
 }
 
+function ChainHint({ parent, others }: { parent: Task | null; others: Task[] }) {
+  if (!parent) return <WaitsOnHint waitsOn={others} />;
+  return (
+    <span className='flex flex-col gap-2'>
+      <WaitsOnHint waitsOn={[parent]} label={STACKED_ON} detail={STACKED_DETAIL} />
+      <WaitsOnHint waitsOn={others} />
+    </span>
+  );
+}
+
 export function ChainArrow({ state, task }: { state: ShinsaState; task: Task }) {
   const parent = selectStackParent(state, task);
-  if (parent) return <StackMark parent={parent} />;
   const waitsOn = listWaitsOn(state, task);
+  const others = parent ? waitsOn.filter((waited) => waited.id !== parent.id) : waitsOn;
+  if (parent && others.length === 0) return <StackMark parent={parent} />;
+  const menuWaitsOn = parent ? [parent, ...others] : waitsOn;
   return (
     <LazyMenu
       kind='dropdown'
       content={
         <DropdownMenuContent align='start' className='max-w-80 min-w-56'>
-          <WaitsOnItems state={state} task={task} waitsOn={waitsOn} />
+          <WaitsOnItems state={state} task={task} waitsOn={menuWaitsOn} />
         </DropdownMenuContent>
       }
     >
-      <Hint label={<WaitsOnHint waitsOn={waitsOn} />}>
+      <Hint label={<ChainHint parent={parent} others={others} />}>
         <LazyMenuTrigger
           render={
             <button
               type='button'
-              aria-label={WAITS_ON}
+              aria-label={
+                parent
+                  ? `${STACKED_ON} ${parent.handle ?? parent.title}, ${WAITS_ON.toLowerCase()} ${others.length} more`
+                  : WAITS_ON
+              }
               onClick={(event) => event.stopPropagation()}
               className={CHAIN_MARK}
             />
           }
         >
-          <Icon size='sm' name='IconArrowCornerDownRight' />
+          <Icon size='sm' name={parent ? BUNDLE_ICON : 'IconArrowCornerDownRight'} />
         </LazyMenuTrigger>
       </Hint>
     </LazyMenu>
