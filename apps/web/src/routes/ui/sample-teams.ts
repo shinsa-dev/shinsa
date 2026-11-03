@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TEAM_PERMISSIONS,
   createState,
   type Project,
   type RemoteSnapshot,
@@ -41,6 +42,8 @@ export function createSampleTeams(now: number) {
     members: [{ user: KAI, addedAt: now - 30 * HOUR_MS }],
     requests: [{ user: BOB, addedAt: now - 4 * 60_000 }],
     machines: [],
+    permissions: DEFAULT_TEAM_PERMISSIONS,
+    overrides: [],
     createdAt: now - 72 * HOUR_MS,
   };
   const paywalls: RemoteTeam = {
@@ -54,6 +57,8 @@ export function createSampleTeams(now: number) {
     ],
     requests: [],
     machines: [],
+    permissions: DEFAULT_TEAM_PERMISSIONS,
+    overrides: [],
     createdAt: now - 240 * HOUR_MS,
   };
   const state: ShinsaState = {

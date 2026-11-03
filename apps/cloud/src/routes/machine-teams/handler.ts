@@ -13,7 +13,14 @@ import { findOwnTeam, selectTeamRole } from '../../auth/access.ts';
 import { NOT_PAIRED } from '../../auth/schema.ts';
 import { asCurrentUser } from '../../auth/tokens.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
-import { connectTeam, joinTeam, leaveTeam, replaceInvite, serializeTeam } from '../../domain/teams.ts';
+import {
+  connectTeam,
+  joinTeam,
+  leaveTeam,
+  replaceInvite,
+  serializeTeam,
+  updateTeamPermissions,
+} from '../../domain/teams.ts';
 import { Accounts } from '../../store/accounts/service.ts';
 import { Teams } from '../../store/teams/service.ts';
 export const MachineTeamsHandlers = HttpApiBuilder.group(
@@ -117,6 +124,14 @@ export const MachineTeamsHandlers = HttpApiBuilder.group(
       )
       .handle('connect', ({ params, payload }) =>
         Effect.flatMap(MachineOwner, (owner) => connectTeam(owner.id, params.teamId, payload.instanceId))
+      )
+      .handle(
+        'permissions',
+        Effect.fn('machineTeams.permissions')(function* ({ params, payload }) {
+          const owner = yield* MachineOwner;
+          const team = yield* findOwnTeam(owner.id, params.teamId);
+          return yield* serializeTeam(yield* updateTeamPermissions(team, payload), owner.id);
+        })
       );
   })
 );

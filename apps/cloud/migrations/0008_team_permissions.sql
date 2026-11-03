@@ -1,0 +1,3 @@
+ALTER TABLE teams ADD COLUMN permissions TEXT NOT NULL DEFAULT '{}';
+
+ALTER TABLE team_members ADD COLUMN permissions TEXT NOT NULL DEFAULT '{}';

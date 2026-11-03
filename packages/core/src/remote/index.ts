@@ -102,8 +102,11 @@ export {
   TeamJoinResponse,
   TeamJoinStatus,
   TeamMachine,
+  TeamMemberPermissions,
   TeamPermissions,
+  TeamPermissionsChange,
   TeamPermissionsPatch,
+  TeamPermissionsRequest,
   TeamPreviewResponse,
 } from './contract.ts';
 export {

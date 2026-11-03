@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { RemoteTeam, RemoteTeamEntry } from '@shinsa/core';
+import { DEFAULT_TEAM_PERMISSIONS, type RemoteTeam, type RemoteTeamEntry } from '@shinsa/core';
 import type { RemoteSnapshot } from '../../src/remote/index.ts';
 import { createFakeClient, findSpec, runSpec } from './fixtures.ts';
 
@@ -17,6 +17,8 @@ const PLATFORM: RemoteTeam = {
   members: [{ user: KAI, addedAt: 2 }],
   requests: [{ user: BOB, addedAt: 3 }],
   machines: [],
+  permissions: DEFAULT_TEAM_PERMISSIONS,
+  overrides: [],
   createdAt: 1,
 };
 

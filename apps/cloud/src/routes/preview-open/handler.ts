@@ -10,7 +10,7 @@ import {
 import { UrlInvalid } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Layer, Option, Redacted, Schema } from 'effect';
 import { HttpRouter } from 'effect/http';
-import { findMachineAccess } from '../../auth/access.ts';
+import { findPreviewMachine } from '../../auth/access.ts';
 import { selectRequestUser } from '../../auth/tokens.ts';
 import { CloudConfig } from '../../config/service.ts';
 import { CurrentUrl } from '../../http/request.ts';
@@ -42,7 +42,7 @@ export const PreviewOpenRoutes = Layer.unwrap(
       const { target, address, instanceId } = yield* readPreviewTarget(url, config.previewOrigin);
       const user = yield* selectRequestUser;
       if (Option.isNone(user)) return respondSignInRedirect(config.origin, url);
-      const { machine } = yield* findMachineAccess(user.value.id, instanceId);
+      const machine = yield* findPreviewMachine(user.value.id, instanceId);
       const now = yield* Clock.currentTimeMillis;
       const token = yield* Effect.promise(() =>
         createPreviewAccessToken(Redacted.value(machine.connectKey), {

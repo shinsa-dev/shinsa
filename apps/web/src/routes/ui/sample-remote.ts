@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TEAM_PERMISSIONS,
   DEVELOPMENT_VERSION,
   type MachineResources,
   NO_TEAM_FEED,
@@ -224,6 +225,8 @@ function createSampleHostedTeams(now: number): RemoteTeam[] {
           lastSeenAt: now - 3 * HOUR_MS,
         },
       ],
+      permissions: DEFAULT_TEAM_PERMISSIONS,
+      overrides: [],
       createdAt: now - 9 * 24 * HOUR_MS,
     },
     {
@@ -236,6 +239,8 @@ function createSampleHostedTeams(now: number): RemoteTeam[] {
       machines: [
         { id: 'v9q1', name: 'Team server', userId: SAMPLE_PARTNER.id, online: true, lastSeenAt: now },
       ],
+      permissions: DEFAULT_TEAM_PERMISSIONS,
+      overrides: [],
       createdAt: now - 20 * 24 * HOUR_MS,
     },
   ];

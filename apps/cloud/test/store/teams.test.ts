@@ -24,7 +24,13 @@ describe('teams', () => {
         return [readCreated, readFound, readMembers, yield* teams.select(CREW)] as const;
       })
     );
-    expect(created).toEqual({ id: CREW, userId: MONA.id, name: 'Crew', createdAt: TEST_NOW });
+    expect(created).toEqual({
+      id: CREW,
+      userId: MONA.id,
+      name: 'Crew',
+      permissions: {},
+      createdAt: TEST_NOW,
+    });
     expect(found).toEqual(Option.some(created));
     expect(members).toBe(1);
     expect(Option.isNone(removed)).toBe(true);

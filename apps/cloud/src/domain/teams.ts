@@ -1,4 +1,17 @@
-import type { InstanceId, RemoteRole, RemoteTeam, RemoteUserId, TeamId, TeamJoinStatus } from '@shinsa/core';
+import {
+  type InstanceId,
+  type RemoteRole,
+  type RemoteTeam,
+  type RemoteUserId,
+  resolveTeamPermissions,
+  TEAM_PERMISSION_NAMES,
+  type TeamId,
+  type TeamJoinStatus,
+  type TeamPermission,
+  type TeamPermissionsChange,
+  type TeamPermissionsPatch,
+  type TeamPermissionsRequest,
+} from '@shinsa/core';
 import { InviteInvalid, NotFound, OwnerCannotLeave } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
 import { findTeamAccess, isTeamOwner, selectTeamRole } from '../auth/access.ts';
@@ -21,8 +34,42 @@ export const serializeTeam = Effect.fn('serializeTeam')(function* (team: Team, u
     members: yield* teams.members.list(team.id),
     requests: role === 'owner' ? yield* teams.requesters.list(team.id) : [],
     machines,
+    permissions: resolveTeamPermissions(team.permissions),
+    overrides: yield* teams.listMemberPermissions(team.id),
     createdAt: team.createdAt,
   } satisfies RemoteTeam;
+});
+
+export function applyPermissionsChange(current: TeamPermissionsPatch, change: TeamPermissionsChange) {
+  const next: Partial<Record<TeamPermission, boolean>> = { ...current };
+  for (const name of TEAM_PERMISSION_NAMES) {
+    const value = change[name];
+    if (value === null) delete next[name];
+    else if (value !== undefined) next[name] = value;
+  }
+  return next satisfies TeamPermissionsPatch;
+}
+
+export const updateTeamPermissions = Effect.fn('teams.updatePermissions')(function* (
+  team: Team,
+  request: TeamPermissionsRequest
+) {
+  const teams = yield* Teams;
+  const userId = request.userId;
+  if (userId === undefined) {
+    const permissions = applyPermissionsChange(team.permissions, request.permissions);
+    yield* teams.replacePermissions(team.id, permissions);
+    return { ...team, permissions };
+  }
+  if (!(yield* teams.members.has(team.id, userId)))
+    return yield* new NotFound({ message: 'That person is not a member of this team.' });
+  const current = (yield* teams.listMemberPermissions(team.id)).find((row) => row.userId === userId);
+  yield* teams.replaceMemberPermissions(
+    team.id,
+    userId,
+    applyPermissionsChange(current?.permissions ?? {}, request.permissions)
+  );
+  return team;
 });
 
 export const listUserTeams = Effect.fn('listUserTeams')(function* (userId: RemoteUserId) {

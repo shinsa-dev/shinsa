@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  DEFAULT_TEAM_PERMISSIONS,
   createState,
   type RemoteTeam,
   type ShinsaState,
@@ -1053,6 +1054,8 @@ describe('resolveTriage for teammates’ duplicates', () => {
       members: [],
       requests: [],
       machines: [],
+      permissions: DEFAULT_TEAM_PERMISSIONS,
+      overrides: [],
       createdAt: 1,
     },
   ];

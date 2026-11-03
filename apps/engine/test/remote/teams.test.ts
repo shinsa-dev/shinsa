@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  DEFAULT_TEAM_PERMISSIONS,
   type Bytes,
   createFrameOpener,
   createTeamHello,
@@ -66,6 +67,8 @@ function createTeam(overrides: Partial<RemoteTeam> = {}): RemoteTeam {
     members: [{ user: KAI, addedAt: 2 }],
     requests: [{ user: BOB, addedAt: 3 }],
     machines: [],
+    permissions: DEFAULT_TEAM_PERMISSIONS,
+    overrides: [],
     createdAt: 1,
     ...overrides,
   };

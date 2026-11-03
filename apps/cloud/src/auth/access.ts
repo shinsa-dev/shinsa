@@ -49,6 +49,19 @@ export const findMachineAccess = Effect.fn('findMachineAccess')(function* (
   return { machine: machine.value, role: role.value } satisfies MachineAccessGrant;
 });
 
+export const findPreviewMachine = Effect.fn('findPreviewMachine')(function* (
+  userId: RemoteUserId,
+  instanceId: InstanceId
+) {
+  const machines = yield* Machines;
+  const teams = yield* Teams;
+  const machine = yield* machines.select(instanceId);
+  if (Option.isNone(machine)) return yield* new NotFound({ message: NO_SUCH_MACHINE });
+  const role = yield* selectMachineRole(machine.value.id, machine.value.userId, userId);
+  if (Option.isSome(role) || (yield* teams.shareTeam(userId, machine.value.userId))) return machine.value;
+  return yield* new NotFound({ message: NO_SUCH_MACHINE });
+});
+
 export const findOwnMachine = Effect.fn('findOwnMachine')(function* (
   userId: RemoteUserId,
   instanceId: InstanceId

@@ -225,6 +225,7 @@ export const TEAM_ACTIONS = [
   'leave',
   'remove',
   'connect',
+  'permissions',
 ] as const;
 
 export type TeamAction = (typeof TEAM_ACTIONS)[number];
@@ -249,6 +250,23 @@ export const TeamPermissionsPatch = Schema.Struct({
 
 export type TeamPermissionsPatch = typeof TeamPermissionsPatch.Type;
 
+export const TeamPermissionsChange = Schema.Struct({
+  act: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+  takeOver: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+  share: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+  services: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+  message: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+});
+
+export type TeamPermissionsChange = typeof TeamPermissionsChange.Type;
+
+export const TeamMemberPermissions = Schema.Struct({
+  userId: Schema.String,
+  permissions: TeamPermissionsPatch,
+});
+
+export type TeamMemberPermissions = typeof TeamMemberPermissions.Type;
+
 export const TeamMachine = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -268,6 +286,8 @@ export const RemoteTeam = Schema.Struct({
   members: Schema.Array(RemoteMember),
   requests: Schema.Array(RemoteMember),
   machines: Schema.Array(TeamMachine),
+  permissions: TeamPermissions,
+  overrides: Schema.Array(TeamMemberPermissions),
   createdAt: Schema.Number,
 });
 
@@ -399,6 +419,13 @@ export type TeamPreviewResponse = typeof TeamPreviewResponse.Type;
 export const TeamConnectRequest = Schema.Struct({ instanceId: InstanceId });
 
 export type TeamConnectRequest = typeof TeamConnectRequest.Type;
+
+export const TeamPermissionsRequest = Schema.Struct({
+  userId: Schema.optionalKey(RemoteUserId),
+  permissions: TeamPermissionsChange,
+});
+
+export type TeamPermissionsRequest = typeof TeamPermissionsRequest.Type;
 
 export function resolveTunnelHost(instanceId: string) {
   return `t-${instanceId}.${REMOTE_TUNNEL_DOMAIN}`;

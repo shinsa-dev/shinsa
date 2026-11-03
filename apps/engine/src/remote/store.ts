@@ -1,6 +1,7 @@
 import type { AccessRequest, RemoteDevice, RemoteTeamEntry, SharedPerson } from '@shinsa/core';
 import {
   isTeamKey,
+  resolveTeamPermissions,
   type MachineCredentials,
   parsePrivateKey,
   parseSigningPrivateKey,
@@ -12,6 +13,9 @@ import {
   SIGNING_KEY_ALGORITHM,
   serializePrivateKey,
   serializePublicKey,
+  TEAM_PERMISSION_NAMES,
+  type TeamMemberPermissions,
+  type TeamPermissionsPatch,
 } from '@shinsa/core';
 import { readJsonFile, writeJsonFile } from '../files/index.ts';
 import { log } from '../log/index.ts';
@@ -184,6 +188,21 @@ function readTeamMachines(value: unknown): RemoteTeam['machines'] {
   });
 }
 
+function readPermissions(value: unknown): TeamPermissionsPatch {
+  if (!isFields(value)) return {};
+  return Object.fromEntries(
+    TEAM_PERMISSION_NAMES.flatMap((name) => (typeof value[name] === 'boolean' ? [[name, value[name]]] : []))
+  );
+}
+
+function readOverrides(value: unknown): TeamMemberPermissions[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!(isFields(entry) && typeof entry.userId === 'string')) return [];
+    return [{ userId: entry.userId, permissions: readPermissions(entry.permissions) }];
+  });
+}
+
 function readTeam(value: unknown): RemoteTeam | null {
   const owner = isFields(value) ? readUser(value.owner) : null;
   if (!(owner && isFields(value))) return null;
@@ -197,6 +216,8 @@ function readTeam(value: unknown): RemoteTeam | null {
     members: readMembers(value.members),
     requests: readMembers(value.requests),
     machines: readTeamMachines(value.machines),
+    permissions: resolveTeamPermissions(readPermissions(value.permissions)),
+    overrides: readOverrides(value.overrides),
     createdAt,
   };
 }

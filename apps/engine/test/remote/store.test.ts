@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DEFAULT_TEAM_PERMISSIONS } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
 import { RemoteStore, readRemoteFile, readTeams, resolveOwnerProfile } from '../../src/remote/store.ts';
 import { createTempDir } from '../helpers/index.ts';
@@ -301,5 +302,33 @@ describe('readTeams', () => {
       ['team-2', 'member', []],
     ]);
     expect(readTeams('none')).toBeNull();
+  });
+
+  test('reads what teammates may do and who is set apart, dropping what it cannot read', () => {
+    const owner = { id: '1', login: 'mona' };
+    const [team, bare] =
+      readTeams([
+        {
+          id: 'team-1',
+          name: 'Platform',
+          owner,
+          createdAt: 1,
+          permissions: { message: true, share: false, act: 'yes' },
+          overrides: [
+            { userId: '2', permissions: { services: false, takeOver: 1 } },
+            { userId: '3' },
+            { permissions: { act: false } },
+            'nope',
+          ],
+        },
+        { id: 'team-2', name: 'Design', owner, createdAt: 2, permissions: 'all', overrides: {} },
+      ]) ?? [];
+    expect(team?.permissions).toEqual({ ...DEFAULT_TEAM_PERMISSIONS, message: true, share: false });
+    expect(team?.overrides).toEqual([
+      { userId: '2', permissions: { services: false } },
+      { userId: '3', permissions: {} },
+    ]);
+    expect(bare?.permissions).toEqual(DEFAULT_TEAM_PERMISSIONS);
+    expect(bare?.overrides).toEqual([]);
   });
 });
