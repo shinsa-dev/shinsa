@@ -586,9 +586,10 @@ function hasScreen(dataDir: string, id: string) {
   }
 }
 
-const TASKS: Record<string, { handle: string | null; settled: boolean }> = {
-  open: { handle: 'LOC-169', settled: false },
-  done: { handle: 'LOC-28', settled: true },
+const ENGINE = {
+  state: {
+    tasks: { open: { handle: 'LOC-169', stage: 'building' }, done: { handle: 'LOC-28', stage: 'merged' } },
+  } as unknown as ShinsaState,
 };
 
 describe('Terminals at the limit', () => {
@@ -596,7 +597,7 @@ describe('Terminals at the limit', () => {
     let clock = 100;
     const { terminals, fake } = createTerminals({
       now: () => clock,
-      describeTask: (taskId) => TASKS[taskId] ?? null,
+      engine: ENGINE,
     });
     const service = terminals.addService('p1', SERVICE);
     const ending = [
@@ -639,7 +640,7 @@ describe('Terminals at the limit', () => {
   });
 
   it('names the tasks and services that hold every running terminal when it refuses', async () => {
-    const { terminals } = createTerminals({ describeTask: (taskId) => TASKS[taskId] ?? null });
+    const { terminals } = createTerminals({ engine: ENGINE });
     const seeded = terminals.addService('p1', { ...SERVICE, name: 'seeded' });
     const sandbox = terminals.addService('p1', { ...SERVICE, name: 'sandbox' });
     terminals.startService(seeded.id, { ...main('repository'), taskId: 'open' });
@@ -657,7 +658,7 @@ describe('Terminals at the limit', () => {
   });
 
   it('counts a single terminal of yours in the singular', async () => {
-    const { terminals } = createTerminals({ describeTask: (taskId) => TASKS[taskId] ?? null });
+    const { terminals } = createTerminals({ engine: ENGINE });
     terminals.create(START);
     while (terminals.snapshot().terminals.length < TERMINAL_LIMITS.terminals)
       terminals.create({ ...START, taskId: 'open' });

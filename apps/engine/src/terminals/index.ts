@@ -215,7 +215,8 @@ export class Terminals {
   }
 
   #describeTask(taskId: string) {
-    return this.#options.describeTask?.(taskId) ?? null;
+    const task = this.#options.engine?.state.tasks[taskId];
+    return task ? { handle: task.handle ?? null, settled: isTaskSettled(task) } : null;
   }
 
   #makeRoom() {

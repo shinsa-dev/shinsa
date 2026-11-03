@@ -2605,7 +2605,7 @@ running when the window closes or the app quits, and a page that comes back find
   its screen.
 - **The limit reclaims ended terminals.** When a new terminal or service run would make 33, `#open` first closes
   ended ones (`exited` or `stopped`), oldest first within each group (`listReclaimable` in `limit.ts`): a finished or
-  unknown task's (`describeTask`, built in `wiring.ts` from the state with `isTaskSettled`), then stopped service
+  unknown task's (the engine's state, with `isTaskSettled`), then stopped service
   runs (starting the service opens a new one), then task shells, and your own last. A running terminal, or a service
   run waiting to start again after a restart, is never closed to make room, and nothing is closed when the ended ones
   would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with

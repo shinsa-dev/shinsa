@@ -5,6 +5,7 @@ import {
   SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceSuggestion,
+  type ShinsaState,
   type TerminalInfo,
   type TerminalPlaceKind,
 } from '@shinsa/core';
@@ -117,6 +118,10 @@ interface TerminalTask {
 
 export type TaskDescriber = (taskId: string) => TerminalTask | null;
 
+interface TaskStateSource {
+  readonly state: ShinsaState;
+}
+
 export interface TerminalHolder {
   taskId: string | null;
   service: string | null;
@@ -130,7 +135,7 @@ export interface TerminalsOptions {
   env?: Env;
   spawn?: TerminalSpawner;
   readForeground?: ForegroundReader;
-  describeTask?: TaskDescriber;
+  engine?: TaskStateSource;
   pickPort?: PortPicker;
   now?: () => number;
   newId?: () => string;
