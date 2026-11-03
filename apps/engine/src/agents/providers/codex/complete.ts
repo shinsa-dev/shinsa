@@ -1,11 +1,8 @@
 import { tmpdir } from 'node:os';
+import { COMPLETION_TIMEOUT_MS, STRUCTURED_TIMEOUT_MS } from '../schema.ts';
 import type { CompletionRequest, JsonSchema, StructuredRequest } from '../types.ts';
 import { CodexClient, readRecord } from './client.ts';
 import { CODEX_RUNTIME, type CodexRuntime, FAST_TIER } from './session.ts';
-
-const COMPLETION_TIMEOUT_MS = 45_000;
-
-const STRUCTURED_TIMEOUT_MS = 20_000;
 
 type Params = Record<string, unknown>;
 

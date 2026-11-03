@@ -2,6 +2,7 @@ import { CODE_LIMITS } from '@shinsa/core';
 import { Context, Duration, Effect, Exit, Layer, Ref, Scope, Stream } from 'effect';
 import { constant, constFalse } from 'effect/Function';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+import { NEWLINE } from '../files/schema.ts';
 import { awaitAbort, resolveCancel } from '../shell/abort.ts';
 import { describeFailure } from '../shell/failure.ts';
 import { stopProcessGroup } from '../shell/processes.ts';
@@ -25,7 +26,6 @@ import {
   type GitRun,
   LOCK_RETRY,
   LOCKED,
-  NEWLINE,
   NOT_STARTED_READ,
   READ_ENV,
 } from './schema.ts';

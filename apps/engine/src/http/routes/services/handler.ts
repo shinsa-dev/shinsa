@@ -17,13 +17,12 @@ import {
   resolveServiceRunIn,
 } from '../../../terminals/routes.ts';
 import { requestPromise, requestSync } from '../../failures.ts';
+import { PROJECT_GONE, PROJECT_ID_LIMIT } from '../../schema.ts';
 import { HttpServices } from '../../services/service.ts';
-import { PROJECT_GONE } from '../terminals/schema.ts';
 import {
   NO_MAIN_PLACE,
   NO_TASK_PLACE,
   PLACE_GONE,
-  PROJECT_ID_LIMIT,
   SERVICE_LIMIT,
   TASK_GONE,
   TASK_ID_LIMIT,

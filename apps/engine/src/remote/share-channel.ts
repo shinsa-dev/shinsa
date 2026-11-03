@@ -15,12 +15,9 @@ import {
 import { describeError, log } from '../log/index.ts';
 import type { ChannelPeer } from './channel.ts';
 import { EgressGate } from './egress/service.ts';
+import { NORMAL_CLOSE, POLICY_VIOLATION } from './schema.ts';
 
 export const SHARE_GONE_REASON = 'This task is no longer shared, or the link is wrong.';
-
-const POLICY_VIOLATION = 1008;
-
-const NORMAL_CLOSE = 1000;
 
 export interface LiveFile {
   id: string;

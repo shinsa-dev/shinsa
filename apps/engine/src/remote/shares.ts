@@ -40,7 +40,7 @@ import { resolveTaskCheckout, resolveTaskRefs } from '../git/task-refs.ts';
 import { readPullRequestDiff, readRepoFile, resolveRepoSlug } from '../github/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { EffectContext, Engine } from '../runtime/engine.ts';
-import { EffectFailed } from '../runtime/failures/schema.ts';
+import { createFinalFailure } from '../runtime/failures/classify.ts';
 import { EVIDENCE_ROUTE, type EvidenceStore } from '../store/evidence/index.ts';
 import type { ChannelPeer } from './channel.ts';
 import type { Remote } from './index.ts';
@@ -61,8 +61,6 @@ export const SHARE_LINK_LOST =
   'This machine was paired with remote access again, so the old link no longer reaches it. Share this task again for a new link.';
 
 export const SHARE_REMOTE_CHANGED = 'Remote access on the machine that shares this task was turned off.';
-
-const FINAL = { retryable: false, delayMs: null };
 
 const FILE_TYPES: Readonly<Record<string, ShareFileType>> = {
   '.png': 'image/png',
@@ -321,8 +319,7 @@ export class Shares implements ShareEffects, ShareLinks {
     const task = this.#engine.state.tasks[taskId];
     if (!task?.share) return;
     const credentials = this.#remote.store.file.credentials;
-    if (!credentials)
-      throw new EffectFailed({ message: SHARE_NOT_PAIRED, detail: SHARE_NOT_PAIRED, ...FINAL });
+    if (!credentials) throw createFinalFailure(SHARE_NOT_PAIRED);
     const current = parseShareUrl(task.share.url);
     const url =
       current?.instanceId === credentials.instanceId

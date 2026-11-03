@@ -184,7 +184,7 @@ export interface RunHostShape extends RunParts {
 
 export const DRIVE_TIMED_OUT = 'It ran past its time limit without handing over.';
 
-export const NO_WORKTREE = 'The task has no worktree to run in.';
+export const NO_RUN_WORKTREE = 'The task has no worktree to run in.';
 
 export const COMPACT_ONLY = 'This turn only compacts. End it.';
 
