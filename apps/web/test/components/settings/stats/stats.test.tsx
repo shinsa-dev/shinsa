@@ -51,6 +51,36 @@ describe('statistics', () => {
     expect(await findTooltipText(findTruncate(view.container, 'Cache hit rate'))).toBe('Cache hit rate');
   });
 
+  it('explains a tile in a tooltip on its label, and keeps lines compact', async () => {
+    const view = render(
+      <TooltipProvider>
+        <StatTiles
+          tiles={[
+            {
+              key: 'peak',
+              label: 'Peak at once',
+              value: '7',
+              detail: null,
+              hint: 'The most tasks going at one moment.',
+            },
+            {
+              key: 'lines',
+              label: 'Lines merged',
+              value: '201k',
+              detail: null,
+              changes: { added: 200_000, removed: 1_200 },
+            },
+          ]}
+        />
+      </TooltipProvider>
+    );
+    const label = findTruncate(view.container, 'Peak at once').parentElement;
+    if (!label) throw new Error('The label has no hint trigger.');
+    expect(await findTooltipText(label)).toBe('The most tasks going at one moment.');
+    expect(view.getByText('+200k')).toBeTruthy();
+    expect(view.getByText('−1.2k')).toBeTruthy();
+  });
+
   it('shows a breakdown’s title and row label in full in a tooltip when they are cut off', async () => {
     const view = render(
       <TooltipProvider>
@@ -95,7 +125,7 @@ describe('statistics', () => {
       id: 't1',
       stage: 'merged',
       rounds: [merged],
-      timing: { paused: [], pausedSince: null, needsYou: [], needsYouSince: null, openGates: [] },
+      timing: { paused: [], pausedSince: null, needsYou: [], needsYouSince: null, openGates: [], inputs: [] },
     });
     const view = render(
       <TooltipProvider>
@@ -109,5 +139,10 @@ describe('statistics', () => {
     expect(turnaround?.textContent).toContain('Start to finish4hOver 1 round');
     expect(turnaround?.textContent).toContain('Waiting on you0%');
     expect(turnaround?.textContent).toContain('not at all while you were away');
+    expect(titles.indexOf('settings-your-attention')).toBe(titles.indexOf('settings-turnaround') + 1);
+    const attention = view.container.querySelector('#settings-your-attention');
+    expect(attention?.textContent).toContain('Inputs per round0Over 1 round');
+    expect(attention?.textContent).toContain('Hands-off rounds100%');
+    expect(attention?.textContent).toContain('Approved first timeNoneNo reviews');
   });
 });

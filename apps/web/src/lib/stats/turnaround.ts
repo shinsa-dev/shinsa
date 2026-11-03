@@ -22,12 +22,14 @@ export function listTurnaroundTiles(turnaround: Turnaround): ShippingTile[] {
     {
       key: 'start-to-finish',
       label: 'Start to finish',
+      hint: 'The median time from a round starting to it merging or finishing, paused time left out.',
       value: formatMedian(startToFinish),
       detail: describeRounds(startToFinish),
     },
     {
       key: 'your-turnaround',
       label: 'Your turnaround',
+      hint: 'The median time from a task needing you to you sending it back to work, counted by your own hours.',
       value: formatMedian(yourTurnaround),
       detail:
         yourTurnaround.count === 0
@@ -37,12 +39,14 @@ export function listTurnaroundTiles(turnaround: Turnaround): ShippingTile[] {
     {
       key: 'agent-time',
       label: 'Agent time',
+      hint: 'The median time in a finished round that was not spent waiting on you.',
       value: formatMedian(agentTime),
       detail: describeRounds(agentTime),
     },
     {
       key: 'waiting-share',
       label: 'Waiting on you',
+      hint: 'The share of the time in finished rounds that was spent waiting on you.',
       value: formatPercent(waitingShare),
       detail: waitingShare === null ? 'No finished rounds' : 'Of round time',
     },

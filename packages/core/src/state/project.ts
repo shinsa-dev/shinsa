@@ -6,6 +6,7 @@ import {
   type Evidence,
   type Feedback,
   type Focus,
+  type FocusSpan,
   formatTaskHandle,
   type Gate,
   type MemoryEntry,
@@ -29,6 +30,7 @@ import {
   type TaskDuplicate,
   type TaskShape,
   type TaskStage,
+  type TimingSpan,
   type UntoldMessage,
   type WatchSuggestion,
 } from '../domain/index.ts';
@@ -61,7 +63,7 @@ import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
-import { recordPresence } from './presence.ts';
+import { recordAway, recordFocus, recordPresence } from './presence.ts';
 import { applyPullRequestEvent } from './pull-requests.ts';
 import { applyRoundEvent, createFirstRound, recordRoundBranch, recordRoundStaged } from './rounds.ts';
 import { applyRunEvent } from './runs.ts';
@@ -94,6 +96,8 @@ export interface ShinsaState {
   watchSuggestions: Record<string, WatchSuggestion>;
   sessionUsage: Record<string, RunUsage>;
   presence: Record<string, number>;
+  away: Record<string, TimingSpan>;
+  focusHistory: Record<string, FocusSpan>;
   onBehalfActions: OnBehalfAction[];
 }
 
@@ -120,6 +124,8 @@ export function createState(): ShinsaState {
     watchSuggestions: {},
     sessionUsage: {},
     presence: {},
+    away: {},
+    focusHistory: {},
     onBehalfActions: [],
   };
 }
@@ -797,6 +803,7 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
       return;
     case 'focus.changed':
       state.focus = { ...event.focus };
+      recordFocus(state, event.focus, event.at);
       return;
     case 'settings.changed':
       state.settings = structuredClone(event.settings);
@@ -849,6 +856,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'focus.changed':
     case 'settings.changed':
       applyWorkspaceEvent(state, event);
+      break;
+    case 'away.recorded':
+      recordAway(state, event);
       break;
     case 'task.created':
       applyTaskCreated(state, event);

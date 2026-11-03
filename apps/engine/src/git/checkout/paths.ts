@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { Repo } from '@shinsa/core';
 import { slugify } from '../refs.ts';
 import type { RegisteredWorktree } from './schema.ts';
@@ -13,6 +13,11 @@ export function resolveDelegationFolder(worktreesDir: string, taskId: string) {
 
 export function resolveIsolatedPath(worktreesDir: string, taskId: string, runId: string) {
   return join(resolveDelegationFolder(worktreesDir, taskId), slugify(runId, 60));
+}
+
+export function isDelegationCheckout(path: string, taskId: string) {
+  const folder = dirname(path);
+  return basename(folder) === slugify(taskId, 60) && basename(dirname(folder)) === 'delegations';
 }
 
 export function parseWorktreeList(listed: string): RegisteredWorktree[] {

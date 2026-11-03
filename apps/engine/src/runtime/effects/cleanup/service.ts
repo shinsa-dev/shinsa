@@ -24,7 +24,7 @@ export class Cleanup extends Context.Service<
 
       const removeIsolated = Effect.fn('Cleanup.removeIsolated')(function* (repo: Repo, taskId: string) {
         yield* world
-          .bridge(() => removeIsolatedWorktrees(repo, world.config.worktreesDir, taskId))
+          .bridge(() => removeIsolatedWorktrees(repo, world.workspaces.root.path, taskId))
           .pipe(
             Effect.catch((failure) =>
               Effect.logWarning('[Effects] Could not remove the checkouts of delegations').pipe(

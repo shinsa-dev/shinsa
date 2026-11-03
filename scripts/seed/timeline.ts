@@ -239,6 +239,51 @@ function pushTaskReview(task: SeedTask, push: Push, clock: SeedClock) {
   });
 }
 
+const SEED_QUESTION = {
+  title: 'Which branch should this build on?',
+  body: 'The request names two branches. Pick the one this work builds on.',
+  answer: 'Build on main.',
+};
+
+const SEED_MESSAGE = 'Keep the change small, and leave the old copy as it is.';
+
+function resolveSeedInputs(task: SeedTask) {
+  const hash = [...task.id].reduce((total, char) => (total * 31 + char.charCodeAt(0)) % 997, 7);
+  return { question: hash % 3 === 0, message: hash % 4 === 1 };
+}
+
+function pushTaskInputs(task: SeedTask, push: Push, clock: SeedClock) {
+  const inputs = resolveSeedInputs(task);
+  if (inputs.question) {
+    const gateId = `${task.id}-question`;
+    push(clock.step(0.2), {
+      type: 'gate.opened',
+      gate: {
+        id: gateId,
+        taskId: task.id,
+        type: 'question',
+        status: 'open',
+        title: SEED_QUESTION.title,
+        body: SEED_QUESTION.body,
+        runId: null,
+        openedAt: clock.at,
+        answeredAt: null,
+        decision: null,
+        response: null,
+      },
+    });
+    push(clock.step(25), {
+      type: 'gate.answered',
+      gateId,
+      decision: 'reply',
+      response: SEED_QUESTION.answer,
+    });
+  }
+  if (inputs.message) {
+    push(clock.step(3), { type: 'task.messaged', taskId: task.id, text: SEED_MESSAGE, kind: 'feedback' });
+  }
+}
+
 interface SeedProgress {
   plan: PlanDocument | null;
   finished: number;
@@ -365,6 +410,7 @@ function pushTaskRuns(task: SeedTask, push: Push, clock: SeedClock) {
       outcome: run.failed ? 'failed' : 'completed',
       summary: run.summary,
     });
+    if (index === 0) pushTaskInputs(task, push, clock);
     if (run.purpose === 'plan' && !run.failed) pushPlanProposal(task, progress, push, clock);
     if (run.purpose === 'build' && !run.failed && progress.built < progress.finished) {
       pushPhaseDone(task, progress, push, clock);

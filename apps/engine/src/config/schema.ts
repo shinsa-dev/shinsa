@@ -63,6 +63,7 @@ export interface ServerConfig extends ServerAddress {
   dataDir: string;
   databasePath: string;
   worktreesDir: string;
+  worktreesDirFromEnvironment: boolean;
   checkBasesDir: string;
   scratchDir: string;
   cachesDir: string;

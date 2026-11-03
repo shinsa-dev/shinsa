@@ -10,6 +10,7 @@ export function installDesktop(windowState: WindowState = 'window') {
   const updateListeners = new Set<(update: DesktopUpdate) => void>();
   const updateCalls: string[] = [];
   const failedListeners = new Set<() => void>();
+  const awayListeners = new Set<(span: { from: number; to: number }) => void>();
   let settingsOpened = 0;
   const channels: UpdateChannel[] = [];
   const bridge: DesktopBridge = {
@@ -43,6 +44,10 @@ export function installDesktop(windowState: WindowState = 'window') {
       stateListeners.add(listener);
       return () => stateListeners.delete(listener);
     },
+    onAway: (listener) => {
+      awayListeners.add(listener);
+      return () => awayListeners.delete(listener);
+    },
   };
   window.shinsaDesktop = bridge;
   return {
@@ -66,6 +71,10 @@ export function installDesktop(windowState: WindowState = 'window') {
     changeWindowState: (state: WindowState) => {
       for (const listener of stateListeners) listener(state);
     },
+    away: (span: { from: number; to: number }) => {
+      for (const listener of awayListeners) listener(span);
+    },
+    awayListeners: () => awayListeners.size,
     restore: () => {
       delete window.shinsaDesktop;
     },

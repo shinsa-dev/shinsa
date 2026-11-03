@@ -516,7 +516,7 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
 
 | Mode | A task gets | Commits | Pushes | When the task settles |
 |---|---|---|---|---|
-| **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
+| **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`, or the folder you chose, below), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
 | **Main checkout** (`main_checkout`) | the repository's own checkout, switched to a branch Shinsa makes from the freshly fetched default branch | `git commit` on that branch, only while the checkout is on it | `git push origin refs/heads/<branch>` | the checkout goes back to the branch it was on when the task took it (`returnBranch`), or to the default branch when that branch is gone or the checkout was detached; with uncommitted changes it stays where it is |
 
 - **Core holds the mode and the invariants.** A task takes the repository's mode when it asks for its workspace
@@ -537,6 +537,26 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
 - **Agents work where the strategy puts them.** For the main checkout a task's `worktreePath` is the repository
   itself, so every role works in your checkout; a read-only agent's edits are never set aside there, as in any shared
   checkout. Checks run in the same checkout.
+- **Where the worktrees go.** New worktrees and isolated delegation checkouts go into one folder, `data/worktrees`
+  unless you choose another in Settings → Projects → Worktrees, for example a folder in an S3 or R2 bucket you mount
+  with s3fs, rclone or Mountain Duck, to keep worktrees off the local disk. The choice is `config.json`'s
+  `worktreesDir`, saved by `POST /api/onboarding/worktrees` (Onboarding API, below); `SHINSA_WORKTREES_DIR` wins over
+  it, and Settings then shows the folder as set by the environment. `WorktreeRoot` (`workspaces/root/`) reads it again
+  for every new worktree, so a change applies to the next task that sets up, with no restart; a task keeps the
+  worktree it has wherever it is, since its path is in the log (`worktree.ready`). Shinsa never creates a folder you
+  chose, only the folders inside it, so an unmounted drive is caught: before each new worktree or delegation checkout
+  `assertWorktreeRoot` checks that the folder exists, is a folder and can be written to, and fails the setup with
+  "The worktree folder <path> does not exist. If it is on a drive you mount, mount it again, or choose another folder
+  in Settings → Projects." instead of falling back to the local disk; Settings shows the same problem under the
+  folder. Saving a folder also leaves a `.shinsa-worktrees` file in it (`markWorktreeRoot`), and a folder from
+  `config.json` without that file is refused too ("is not the one you chose: the drive it is on may not be
+  mounted"): a drive's own mount point, once unmounted, is an empty local folder that would pass every other check.
+  A folder written into `config.json` by hand is saved once more in Settings to get the file. Delegation checkouts are removed wherever git has them registered (`removeIsolated` lists the repository's
+  worktrees under `delegations/<task>/` of any root), so changing the folder leaves none behind.
+- **How much space they take.** Settings → Projects → Worktrees shows the space the worktrees of tasks use, the free
+  space on the drive of the folder in use, and that a task's worktree is removed as soon as it is merged, marked done
+  or cancelled (`settleTask`, below). It asks `GET /api/onboarding/worktrees/usage` each time the page opens and
+  after the folder changes; nothing measures in the background.
 - **A new worktree comes with its dependencies.** `prepareWorktree` runs the install its lockfile names
   (`resolveInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
   agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
@@ -6159,7 +6179,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── shinsa.sqlite  The event log, the effect outbox, the command receipts, the latest state snapshot and the
     │                  Home guide per project (`briefings`)
     ├── worktrees/     One git worktree per task (`<repo>/<branch>-<id>`), and the checkouts of isolated
-    │                  delegations (`delegations/<task>/<run>`)
+    │                  delegations (`delegations/<task>/<run>`), unless `config.json`'s `worktreesDir` or
+    │                  `SHINSA_WORKTREES_DIR` names another folder (Where agents work → Where the worktrees go)
     ├── scratch/       The working folder of each task with no repository (`<task id>`), where its answerer runs;
     │                  removed when the task settles (`scratch.remove`)
     ├── check-bases/   The detached checkouts of base commits that checks compare with (Checks, above)
@@ -6206,7 +6227,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
-  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_REMOTE_ORIGIN` points remote access at
+  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees, and wins over `config.json`'s `worktreesDir`. `SHINSA_REMOTE_ORIGIN` points remote access at
   another app.shinsa.dev (a local `wrangler dev`, `bun run --cwd apps/cloud dev:worker`): the control calls, the
   Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
@@ -6264,7 +6285,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   works in it (`repo.register`, `repos/index.ts`) and filed into a project by the rule in Projects and task identity,
   above.
 - **config.json versus events.** `config.json` holds what belongs to this machine and nothing replay needs: `roots`
-  (the folders that hold repositories), `port`, `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
+  (the folders that hold repositories), `worktreesDir` (where new worktrees go, Where agents work), `port`,
+  `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
   the engine takes 7446 (`APP_IDENTITY`), in the unassigned 7444–7470 range and away from dev servers. A port another program holds stops the engine with "Failed to start
   server. Is port 7446 in use? Quit the program on it, or set another `port` in <config.json>." (`listenOnPort` in
   `http/server.ts`; the Mac app shows it as Port 7446 is taken). The environment wins over it (`SHINSA_PORT`, `SHINSA_HOST`, `SHINSA_EDITOR`, `SHINSA_TERMINAL`; `SHINSA_ROOTS` adds
@@ -6466,6 +6488,13 @@ same-site Origin, `application/json` bodies; a refusal there is 403 or 415). Err
     effective: string[];       // what triage searches
   };
   defaults: { model: string | null; mergeMethod: 'squash' | 'merge' | 'rebase' };
+  worktrees: {
+    effective: string;              // where new worktrees go now
+    configured: string | null;      // config.json's worktreesDir, when SHINSA_WORKTREES_DIR does not win
+    default: string;                // data/worktrees
+    fromEnvironment: string | null; // SHINSA_WORKTREES_DIR
+    problem: string | null;         // why a chosen folder cannot take worktrees now (not mounted, not writable)
+  };
   paths: { home: string; configPath: string; dataDir: string; userHome: string };
 }
 ```
@@ -6489,6 +6518,18 @@ or after 20 seconds (`MAX_DEPTH`, `MAX_DIRS`, `DISCOVERY_BUDGET`), never into hi
 `settings.change` event, then answers like `GET /api/onboarding`. Folders may start with `~/`; each must be an
 existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `roots_invalid`, `model_invalid`,
 `merge_method_invalid`, `plans_invalid`. It may be called again to change the folders later (Settings → Projects → Repository folders).
+
+**`POST /api/onboarding/worktrees`** with `{ path: string | null }`: saves where new worktrees go to `config.json`'s
+`worktreesDir`, then answers like `GET /api/onboarding`; `null` goes back to `data/worktrees`. The path may start
+with `~/` and must be a full path to an existing folder Shinsa can write to; anything else is `worktrees_invalid`
+with the reason, and `worktrees_from_environment` while `SHINSA_WORKTREES_DIR` sets the folder. On this machine only (`LocalOnlyRoute`), and
+announced as the `worktree-root` engine feature, which Settings → Projects → Worktrees asks for.
+
+**`GET /api/onboarding/worktrees/usage`**: `WorktreeUsage { folder, worktrees, bytes, freeBytes, measuredAt }`, the
+space the worktrees take (`measureWorktreeUsage`, `onboarding/worktrees.ts`). `worktrees` counts the tasks whose
+worktree still exists, wherever it is (a main-checkout task is left out); `bytes` is one `du -sk` over those worktrees
+and the folder's `delegations/`, `null` when it takes longer than 20 seconds (`USAGE_TIMEOUT_MS`), as it can on a
+mounted bucket; `freeBytes` is `statfs` of the folder, `null` when it is gone. Part of the `worktree-root` feature.
 
 **`POST /api/onboarding/privacy`** with `{}`: opens System Settings → Privacy & Security → Full Disk Access on this
 machine; answers `{ ok }`, whether `open` ran.

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Task } from '@shinsa/core';
+import { WorktreeRoot } from '../../src/workspaces/index.ts';
 import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
 import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
 import { createGitRepo, createTempDir, git } from '../helpers/index.ts';
@@ -17,7 +18,7 @@ function writer(path: string, text: string) {
 describe('your edits from the Code tab, in each place agents work', () => {
   test('a worktree takes the edit as it is', async () => {
     const { repo, path } = await createGitRepo({ files: { 'a.txt': 'a\n' } });
-    await new WorktreeStrategy(createTempDir()).writeEdit(
+    await new WorktreeStrategy(new WorktreeRoot({ defaultDir: createTempDir() })).writeEdit(
       repo,
       createTask({ worktreePath: path }),
       'a.txt',

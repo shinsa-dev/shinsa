@@ -353,7 +353,15 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   Shinsa counts in full, an hour with nothing from you for 6 hours either side counts nothing, and any other hour counts
   as much as you are usually active at that hour of the week over the last 8 weeks (`state.presence`, your own actions
   per hour, kept a year; `stats/presence.ts`), so a question asked at 23:00 and answered at 08:30 is a short wait and a
-  week away counts nothing (`resolveTurnaround`, `stats/turnaround.ts`). Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
+  week away counts nothing (`resolveTurnaround`, `stats/turnaround.ts`). Two rules cut a wait further, both strict so
+  they never flatter you. Time away from your Mac counts nothing: the Mac app counts you away from 10 minutes after your
+  last keyboard or mouse input, or from your last input before the screen locked or the Mac slept, until your next
+  input (`AwayWatch` in `apps/desktop/src/away/`), and sends each span through the page as `away.record`
+  (`state.away`); a span in which you answered or messaged any task, from your phone say, does not count. A focus on
+  a project sets aside the tasks of every other project from 30 minutes into the focus until it ends
+  (`state.focusHistory`, `listSetAside`), so a quick switch changes nothing, and a task you answered or messaged
+  during that focus is not set aside by it. A wait set aside counts nothing on your clock, and a set-aside task does
+  not count as going at once; agent time never changes. Your attention, under it: tasks at once is the median, weighted by time on your clock, of how many tasks had a round going (a shipped round waiting for its merge counts, paused time and time with nothing going do not), with the peak beside it; then, over the same finished rounds, the median of your inputs per round (gates you answered and messages you sent, `TaskTiming.inputs`; a review approved ahead, a scheduled message, a request for new work and anything sent on your behalf or by a guest do not count), the median agent time per input, the share of hands-off rounds (only plan, review and merge approvals), the share with a question (an agent asked you something or asked for a secret), messages per round as an average (most rounds take none) and the share of rounds whose first review you approved (`resolveAttention`, `stats/attention.ts`). Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
   input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that
   used the most. Counts and costs stay compact as they grow (15.4k, 3.3B, 1.2T tokens; $12.34, then $15.4K): token
   counts everywhere drop a trailing `.0` and move up a unit rather than read 1000k, and costs keep cents under $1,000. Lines added show in green and lines removed in red, as in a diff. All of it is folded from the event log in core (`resolveStats`); lines

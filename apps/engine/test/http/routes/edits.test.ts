@@ -3,7 +3,7 @@ import { readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { CODE_LIMITS, type FileChanged, type FileWritten } from '@shinsa/core';
 import { createWorktree } from '../../../src/git/index.ts';
-import { Workspaces } from '../../../src/workspaces/index.ts';
+import { WorktreeRoot, Workspaces } from '../../../src/workspaces/index.ts';
 import { createGitRepo, git, writeFiles } from '../../helpers/index.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { startRoutes } from './harness.ts';
@@ -14,7 +14,7 @@ const HEAD_TEXT = 'export const value = 2;\n';
 
 async function startWithTask() {
   const { context, post } = startRoutes(({ config }) => ({
-    workspaces: new Workspaces({ worktreesDir: config.worktreesDir }),
+    workspaces: new Workspaces({ root: new WorktreeRoot({ defaultDir: config.worktreesDir }) }),
   }));
   const { config, engine } = context;
   const { repo } = await createGitRepo({ files: { 'src/app.ts': 'export const value = 1;\n' } });

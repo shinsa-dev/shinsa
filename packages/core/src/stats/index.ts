@@ -289,5 +289,7 @@ export function resolveStats(state: StatsSource, window: StatsWindow): Stats {
     tasks: listTaskTokens(state, fold),
   };
 }
+export * from './attention.ts';
 export * from './presence.ts';
+export * from './spans.ts';
 export * from './turnaround.ts';

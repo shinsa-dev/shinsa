@@ -1596,6 +1596,23 @@ shinsa focus clear [--json]
 
 Every task agent's tool: `focus_clear`. Sends `focus.change`.
 
+### away
+
+#### shinsa away record
+
+Record a span you were away from your Mac, so your turnaround leaves it out. The Mac app sends these itself.
+
+```
+shinsa away record --from <integer> --to <integer> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `away.record`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `--from` | integer, required | When you left, in milliseconds since 1970. |
+| `--to` | integer, required | When you came back, in milliseconds since 1970. |
+
 ### repos
 
 #### shinsa repos list

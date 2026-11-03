@@ -19,11 +19,13 @@ import { createHarness, createTask, registerRepo, shipAndMerge } from '../harnes
 const DAY = 24 * HOUR_MS;
 const H = HOUR_MS;
 const hourOf: HourOfWeek = (time) => Math.floor(time / HOUR_MS) % WEEK_HOURS;
+const NOBODY = { tasks: {} };
 
 function windowOf(count: number, now = count * DAY): TurnaroundWindow {
   return {
     days: Array.from({ length: count }, (_, index) => `d${index}`),
     dayOf: (at) => `d${Math.floor(at / DAY)}`,
+    from: 0,
     hourOf,
     now,
   };
@@ -35,7 +37,15 @@ const BASE = (() => {
 })();
 
 function timing(overrides: Partial<TaskTiming> = {}): TaskTiming {
-  return { paused: [], pausedSince: null, needsYou: [], needsYouSince: null, openGates: [], ...overrides };
+  return {
+    paused: [],
+    pausedSince: null,
+    needsYou: [],
+    needsYouSince: null,
+    openGates: [],
+    inputs: [],
+    ...overrides,
+  };
 }
 
 function round(overrides: Partial<Round> = {}): Round {
@@ -101,7 +111,7 @@ describe('medians and spans', () => {
 
 describe('turnaround', () => {
   test('shows nothing when no round finished in the range', () => {
-    expect(resolveTurnaround(source(), {}, windowOf(7))).toEqual({
+    expect(resolveTurnaround(source(), NOBODY, windowOf(7))).toEqual({
       startToFinish: { median: null, count: 0 },
       agentTime: { median: null, count: 0 },
       yourTurnaround: { median: null, count: 0 },
@@ -116,7 +126,7 @@ describe('turnaround', () => {
         needsYou: [{ from: 5 * H, to: 7 * H, answered: true }],
       }),
     });
-    const turnaround = resolveTurnaround(source(paused), {}, windowOf(7));
+    const turnaround = resolveTurnaround(source(paused), NOBODY, windowOf(7));
     expect(turnaround.startToFinish).toEqual({ median: 8 * H, count: 1 });
     expect(turnaround.agentTime).toEqual({ median: 6 * H, count: 1 });
     expect(turnaround.yourTurnaround).toEqual({ median: 2 * H, count: 1 });
@@ -130,7 +140,7 @@ describe('turnaround', () => {
         needsYou: [{ from: 1 * H, to: 5 * H, answered: true }],
       }),
     });
-    const turnaround = resolveTurnaround(source(overlapping), {}, windowOf(7));
+    const turnaround = resolveTurnaround(source(overlapping), NOBODY, windowOf(7));
     expect(turnaround.agentTime.median).toBe(5 * H);
     expect(turnaround.yourTurnaround.median).toBe(2 * H);
     expect(turnaround.startToFinish.median).toBe(7 * H);
@@ -138,7 +148,7 @@ describe('turnaround', () => {
 
   test('cuts a pause or a wait still open at the end of the round', () => {
     const open = task('a', { timing: timing({ pausedSince: 8 * H, needsYouSince: 6 * H }) });
-    const turnaround = resolveTurnaround(source(open), {}, windowOf(7));
+    const turnaround = resolveTurnaround(source(open), NOBODY, windowOf(7));
     expect(turnaround.agentTime.median).toBe(6 * H);
     expect(turnaround.startToFinish.median).toBe(8 * H);
     expect(turnaround.yourTurnaround.count).toBe(0);
@@ -162,14 +172,30 @@ describe('turnaround', () => {
         ],
       }),
     });
-    const turnaround = resolveTurnaround(source(rounds), {}, windowOf(7));
+    const turnaround = resolveTurnaround(source(rounds), NOBODY, windowOf(7));
     expect(turnaround.startToFinish).toEqual({ median: 3 * H, count: 2 });
     expect(turnaround.yourTurnaround).toEqual({ median: H, count: 1 });
   });
 
+  test('leaves out time away from your Mac and time a focus on another project set the task aside', () => {
+    const waiting = task('a', {
+      projectId: 'b',
+      timing: timing({ needsYou: [{ from: 2 * H, to: 8 * H, answered: true }] }),
+    });
+    const you = {
+      tasks: {},
+      away: { a: { from: 2 * H, to: 3 * H } },
+      focusHistory: { f: { projectId: 'a', from: 3 * H, to: 6.5 * H, until: null } },
+    };
+    const turnaround = resolveTurnaround(source(waiting), you, windowOf(7));
+    expect(turnaround.yourTurnaround.median).toBe(2 * H);
+    expect(turnaround.agentTime.median).toBe(4 * H);
+    expect(turnaround.startToFinish.median).toBe(6 * H);
+  });
+
   test('ends a task’s only round when the task closed', () => {
     const settled = task('a', { rounds: [], stage: 'merged', createdAt: 0, closedAt: 5 * H });
-    expect(resolveTurnaround(source(settled), {}, windowOf(7)).startToFinish.median).toBe(5 * H);
+    expect(resolveTurnaround(source(settled), NOBODY, windowOf(7)).startToFinish.median).toBe(5 * H);
   });
 
   test('measures waits on you on your clock, so a night away counts for little', () => {
@@ -183,7 +209,7 @@ describe('turnaround', () => {
       rounds: [round({ startedAt: asked - H, endedAt: answered + H })],
       timing: timing({ needsYou: [{ from: asked, to: answered, answered: true }] }),
     });
-    const turnaround = resolveTurnaround(source(night), presence, windowOf(56, 56 * DAY));
+    const turnaround = resolveTurnaround(source(night), { tasks: {}, presence }, windowOf(56, 56 * DAY));
     expect(turnaround.yourTurnaround.median).toBe(0.75 * H);
     expect(turnaround.agentTime.median).toBe(2 * H);
     expect(turnaround.startToFinish.median).toBe(2.75 * H);
@@ -197,8 +223,8 @@ describe('turnaround', () => {
     const now = harness.state.tasks[merged]?.closedAt ?? 0;
     const window = { ...windowOf(1, now + DAY), dayOf: () => 'd0' };
     const view = serializeViewState(harness.state, listSummarizedTasks(harness.state));
-    const full = resolveTurnaround(harness.state, harness.state.presence, window);
+    const full = resolveTurnaround(harness.state, harness.state, window);
     expect(full.startToFinish.count).toBe(1);
-    expect(resolveTurnaround(view, harness.state.presence, window)).toEqual(full);
+    expect(resolveTurnaround(view, harness.state, window)).toEqual(full);
   });
 });

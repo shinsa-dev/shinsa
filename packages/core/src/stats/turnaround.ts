@@ -1,13 +1,27 @@
 import { resolveTaskRounds, type Round } from '../domain/rounds.ts';
 import type { Task, TimingSpan } from '../domain/types.ts';
-import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskTiming } from '../state/timing.ts';
 import type { StatsSource, StatsWindow } from './index.ts';
-import { type HourOfWeek, measureOnYourClock, resolveYourClock, type YourClock } from './presence.ts';
+import {
+  type HourOfWeek,
+  listSetAside,
+  measureOnYourClock,
+  resolveYourClock,
+  type YourActivity,
+  type YourClock,
+} from './presence.ts';
+import { clipSpans, subtractSpans, sumSpans } from './spans.ts';
 
 export interface TurnaroundWindow extends StatsWindow {
+  from: number;
   hourOf: HourOfWeek;
   now: number;
+}
+
+export interface FinishedRound {
+  task: Task;
+  round: Round;
+  span: TimingSpan;
 }
 
 export interface TurnaroundMedian {
@@ -22,7 +36,7 @@ export interface Turnaround {
   waitingShare: number | null;
 }
 
-interface RoundTime {
+export interface RoundTime {
   agent: number;
   yours: number;
 }
@@ -37,33 +51,11 @@ export function resolveMedian(values: readonly number[]): number | null {
   return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
 }
 
-function toMedian(values: readonly number[]): TurnaroundMedian {
+export function toMedian(values: readonly number[]): TurnaroundMedian {
   return { median: resolveMedian(values), count: values.length };
 }
 
-function sumSpans(spans: readonly TimingSpan[]) {
-  return spans.reduce((total, span) => total + (span.to - span.from), 0);
-}
-
-export function clipSpans(spans: readonly TimingSpan[], window: TimingSpan): TimingSpan[] {
-  return spans
-    .map((span) => ({ from: Math.max(span.from, window.from), to: Math.min(span.to, window.to) }))
-    .filter((span) => span.to > span.from);
-}
-
-export function subtractSpans(span: TimingSpan, cuts: readonly TimingSpan[]): TimingSpan[] {
-  const parts: TimingSpan[] = [];
-  let from = span.from;
-  for (const cut of [...cuts].sort((a, b) => a.from - b.from)) {
-    if (cut.to <= from || cut.from >= span.to) continue;
-    if (cut.from > from) parts.push({ from, to: cut.from });
-    from = Math.max(from, cut.to);
-  }
-  if (from < span.to) parts.push({ from, to: span.to });
-  return parts;
-}
-
-function listPaused(task: Task, now: number): TimingSpan[] {
+export function listPaused(task: Task, now: number): TimingSpan[] {
   const timing = resolveTaskTiming(task);
   const open = timing.pausedSince === null ? [] : [{ from: timing.pausedSince, to: now }];
   return [...timing.paused, ...open];
@@ -75,7 +67,7 @@ function listNeedsYou(task: Task, now: number): TimingSpan[] {
   return [...timing.needsYou, ...open];
 }
 
-function resolveRoundEnd(task: Task, round: Round) {
+export function resolveRoundEnd(task: Task, round: Round) {
   return round.endedAt ?? task.closedAt ?? task.stageChangedAt;
 }
 
@@ -83,40 +75,41 @@ function measureYours(clock: YourClock, spans: readonly TimingSpan[]) {
   return spans.reduce((total, span) => total + measureOnYourClock(clock, span), 0);
 }
 
-function measureRound(task: Task, round: Round, clock: YourClock, now: number): RoundTime | null {
-  if (round.startedAt === null) return null;
-  const span = { from: round.startedAt, to: resolveRoundEnd(task, round) };
+export function measureRound({ task, span }: FinishedRound, clock: YourClock, now: number): RoundTime {
   const paused = clipSpans(listPaused(task, now), span);
   const active = subtractSpans(span, paused);
   const waits = clipSpans(listNeedsYou(task, now), span).flatMap((wait) => subtractSpans(wait, paused));
+  const setAside = listSetAside(clock, task, now);
   return {
     agent: sumSpans(active) - sumSpans(waits),
-    yours: measureYours(clock, waits),
+    yours: measureYours(
+      clock,
+      waits.flatMap((wait) => subtractSpans(wait, setAside))
+    ),
   };
 }
 
-function listRoundTimes(source: StatsSource, clock: YourClock, window: TurnaroundWindow) {
+export function listFinishedRounds(source: StatsSource, window: TurnaroundWindow) {
   const days = new Set(window.days);
-  const times: RoundTime[] = [];
+  const rounds: FinishedRound[] = [];
   for (const task of Object.values(source.tasks)) {
     for (const round of resolveTaskRounds(task)) {
-      if (!FINISHED_ROUNDS.includes(round.status)) continue;
-      if (!days.has(window.dayOf(resolveRoundEnd(task, round)))) continue;
-      const time = measureRound(task, round, clock, window.now);
-      if (time) times.push(time);
+      if (!FINISHED_ROUNDS.includes(round.status) || round.startedAt === null) continue;
+      const span = { from: round.startedAt, to: resolveRoundEnd(task, round) };
+      if (days.has(window.dayOf(span.to))) rounds.push({ task, round, span });
     }
   }
-  return times;
+  return rounds;
 }
 
 function listWaitTimes(source: StatsSource, clock: YourClock, window: TurnaroundWindow) {
   const days = new Set(window.days);
   const times: number[] = [];
   for (const task of Object.values(source.tasks)) {
-    const paused = listPaused(task, window.now);
+    const cuts = [...listPaused(task, window.now), ...listSetAside(clock, task, window.now)];
     for (const wait of resolveTaskTiming(task).needsYou) {
       if (!wait.answered || !days.has(window.dayOf(wait.to))) continue;
-      times.push(measureYours(clock, subtractSpans(wait, paused)));
+      times.push(measureYours(clock, subtractSpans(wait, cuts)));
     }
   }
   return times;
@@ -124,11 +117,11 @@ function listWaitTimes(source: StatsSource, clock: YourClock, window: Turnaround
 
 export function resolveTurnaround(
   source: StatsSource,
-  presence: ShinsaState['presence'],
+  you: YourActivity,
   window: TurnaroundWindow
 ): Turnaround {
-  const clock = resolveYourClock(presence, window.now, window.hourOf);
-  const rounds = listRoundTimes(source, clock, window);
+  const clock = resolveYourClock(you, window.now, window.hourOf);
+  const rounds = listFinishedRounds(source, window).map((round) => measureRound(round, clock, window.now));
   const counted = rounds.reduce((total, round) => total + round.agent + round.yours, 0);
   const yours = rounds.reduce((total, round) => total + round.yours, 0);
   return {

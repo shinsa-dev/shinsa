@@ -7,12 +7,13 @@ import { Remote } from '../../git/remote/service.ts';
 import type { GitFailed } from '../../git/schema.ts';
 import { Git } from '../../git/service.ts';
 import { requireCheckout } from '../checkout.ts';
+import { assertWorktreeRoot, type WorktreeRoot } from '../root/index.ts';
 import { type CheckoutCommit, NO_BRANCH_YET, TaskCheckoutMissing, type Workspace } from '../schema.ts';
 
 export class WorktreeWorkspaces extends Context.Service<
   WorktreeWorkspaces,
   {
-    make(worktreesDir: string): Workspace;
+    make(root: WorktreeRoot): Workspace;
     commit(path: string, message: string): Effect.Effect<CheckoutCommit, GitFailed | MergeUnresolved>;
   }
 >()('shinsa/engine/workspaces/worktrees-mode/WorktreeWorkspaces') {
@@ -40,7 +41,7 @@ export class WorktreeWorkspaces extends Context.Service<
         } satisfies CheckoutCommit;
       });
 
-      const make = (worktreesDir: string): Workspace => ({
+      const make = (root: WorktreeRoot): Workspace => ({
         mode: 'worktrees',
         prepare: Effect.fn('WorktreeWorkspace.prepare')(function* (
           repo: Repo,
@@ -59,6 +60,7 @@ export class WorktreeWorkspaces extends Context.Service<
             return { path: worktreePath, branch };
           }
           if (!branch) return yield* new TaskCheckoutMissing({ message: NO_BRANCH_YET });
+          const worktreesDir = yield* assertWorktreeRoot(root.resolve());
           const created = yield* checkout.create(repo, worktreesDir, task.id, branch, base, signal);
           yield* checkout.mergeBranches(created.path, created.branch, others, signal);
           return created;
