@@ -14,12 +14,15 @@ import {
   describeTeamTaskPlace,
   HostedTeamFeeds,
   listHeldTeamMachines,
+  listTeamFeedNotices,
   listTeamFeedTasks,
   mergeTeamFeeds,
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
   selectTeamTaskHeldAt,
+  TEAM_FEED_HELD,
+  TEAM_FEED_REFUSED,
 } from '@/lib/teams/feeds.ts';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
 import { createGate, createProject, createRepo, createTask } from '../../support/state.ts';
@@ -61,6 +64,44 @@ describe('teammates’ task lists', () => {
       { machines: [bare], tasks: [] },
     ]);
     expect(merged.machines).toEqual([newer]);
+  });
+
+  it('notes each refused or offline machine of your teams, refused first, leaving out live ones, your own and other teams', () => {
+    const feed = {
+      machines: [
+        createMachine({ instanceId: 'live' }),
+        createMachine({ instanceId: 'dialing', status: 'connecting' }),
+        createMachine({
+          instanceId: 'away',
+          name: 'Attic',
+          status: 'offline',
+          reason: 'Offline.',
+          updatedAt: 30,
+        }),
+        createMachine({ instanceId: 'shut', name: 'Mac.lan', status: 'refused', reason: 'Not listed yet.' }),
+        createMachine({ instanceId: 'bare', name: 'Basement', status: 'refused', reason: null }),
+        createMachine({ instanceId: 'mine', status: 'refused', reason: 'Gone.' }),
+        createMachine({ teamId: 'team2', instanceId: 'other', status: 'offline', reason: 'Offline.' }),
+        createMachine({ teamId: 'unknown', instanceId: 'stray', status: 'offline', reason: 'Offline.' }),
+      ],
+      tasks: [],
+    };
+    const teams = [
+      { id: 'team1', name: 'Platform' },
+      { id: 'team2', name: 'Design' },
+    ];
+    const notices = listTeamFeedNotices(feed, teams, new Set(['mine']), null);
+    expect(
+      notices.map((notice) => [notice.machine, notice.team, notice.status, notice.reason, notice.updatedAt])
+    ).toEqual([
+      ['Basement', 'Platform', 'refused', TEAM_FEED_REFUSED, null],
+      ['Mac.lan', 'Platform', 'refused', 'Not listed yet.', null],
+      ['Attic', 'Platform', 'offline', TEAM_FEED_HELD, 30],
+      ['Studio', 'Design', 'offline', TEAM_FEED_HELD, null],
+    ]);
+    expect(listTeamFeedNotices(feed, teams, new Set(), 'team2').map((notice) => notice.team)).toEqual([
+      'Design',
+    ]);
   });
 
   it('knows which tasks come from a snapshot, and since when', () => {

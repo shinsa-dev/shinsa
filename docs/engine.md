@@ -3486,8 +3486,9 @@ online, and the last list of it their own machine kept while it is not (Offline 
   list, `{ kind: 'list' }`, or one task, `{ kind: 'task', taskId }`), a fresh P-256 key and an HMAC with the team key
   over all three. The machine opens it only when it holds that team's key, the token's account is the team's owner or
   one of its members in the machine's own copy (`isTeamViewer`), a task asked for is in one of the team's projects,
-  and the HMAC checks in constant time; else `refused` ("This task is no longer shown to the team, or you are no
-  longer in it."). The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
+  and the HMAC checks in constant time; else `refused`, with the reason for the first check that failed
+  (`TEAM_REFUSALS`: the machine is not in the team, has no key for it, does not list you yet, your key does not match,
+  or the task is not shown to the team), which the viewer's All tasks shows beside that machine's name. The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
   view and both fresh keys), so the view asked for is bound into the key: a hello for the list cannot be replayed to
   read a task. The share channel's code serves both (`ShareChannel`, with a host that authorizes the hello).
 - **What a teammate sees.** The list view is `TeamListView`: every open task of the team's projects and the 50 most
@@ -3507,8 +3508,7 @@ online, and the last list of it their own machine kept while it is not (Offline 
   message closes the channel (1008, "A team view only listens."). It is never connected to the hub, the API or the
   dispatcher. Every open view is checked again on every state change and every change to remote access
   (`Teams.#syncChannels`): a member removed or who left, a project taken out of the team, a task moved out of it,
-  the team removed or its key gone ends it with "This task is no longer shown to the team, or you are no longer in
-  it.", and remote access paused or removed ends every view ("Remote access on the machine that shows these tasks was
+  the team removed or its key gone ends it with the matching `TEAM_REFUSALS` reason, and remote access paused or removed ends every view ("Remote access on the machine that shows these tasks was
   turned off."). Otherwise the machine pushes a new view on each change, as a share does.
 - **Watching teammates** (`remote/team-feeds.ts`, `TeamFeeds`). Each machine watches, for each team whose key it
   holds, every machine of that team but itself (your other machines too, so the local app shows your team work

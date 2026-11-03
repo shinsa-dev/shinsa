@@ -1,5 +1,6 @@
-import type { TeamFeedTask } from '@shinsa/core';
+import { resolveFocusTeam, type ShinsaState, type TeamFeedTask } from '@shinsa/core';
 import { Badge } from '@shinsa/ui/components/badge';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -22,6 +23,7 @@ import { formatSince } from '@/lib/format/time.ts';
 import type { TeamEntry } from '@/lib/tasks/groups.ts';
 import {
   listHeldTeamMachines,
+  listTeamFeedNotices,
   listTeamFeedTasks,
   resolveTeamTaskPath,
   resolveTeamTaskState,
@@ -53,6 +55,40 @@ export function useTeamTasks(): TeamTasks {
     );
   }, [feed, teams, machines]);
   return { teams, entries };
+}
+
+export function TeamFeedNotices({ state }: { state: ShinsaState }) {
+  const remote = useRemoteSnapshot();
+  const teams = React.useMemo(() => listFocusTeams(remote), [remote]);
+  const feed = useTeamFeed();
+  const machines = useMachines();
+  const notices = listTeamFeedNotices(
+    feed,
+    teams,
+    new Set(machines.map((machine) => machine.id)),
+    resolveFocusTeam(state, Date.now())
+  );
+  if (notices.length === 0) return null;
+  return (
+    <ul className='flex flex-col gap-1'>
+      {notices.map((notice) => (
+        <li key={notice.key} role='status' className='flex min-w-0 items-start gap-1.5 text-xs text-fg-3'>
+          <Icon
+            size='sm'
+            name={notice.status === 'refused' ? 'IconLock' : 'IconCloudSimpleDisconnected'}
+            className='mt-px shrink-0 text-fg-2'
+          />
+          <span className='min-w-0'>
+            <span className='font-medium text-fg-4'>{notice.machine}</span> in {notice.team}{' '}
+            {notice.status === 'refused' ? 'is not listing its tasks' : 'is offline'}. {notice.reason}
+            {notice.updatedAt !== null && (
+              <span className='text-fg-2'> {formatSince('Updated', notice.updatedAt)}.</span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function openTeamTask(entry: TeamFeedTask) {

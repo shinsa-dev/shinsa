@@ -120,6 +120,46 @@ describe('teammates’ tasks', () => {
     expect(screen.queryByText('Offline')).toBeNull();
   });
 
+  it('says why a teammate’s machine lists nothing, and drops the note once it is live', () => {
+    const refused = {
+      teamId: 'team1',
+      instanceId: 'p7m2',
+      name: 'Mac.lan',
+      userId: '7',
+      status: 'refused' as const,
+      reason: 'This machine does not list you in that team yet.',
+    };
+    pushTeams({ machines: [refused], tasks: [] });
+    renderTasks();
+    const note = screen.getByRole('status');
+    expect(note.textContent).toBe(
+      'Mac.lan in Platform is not listing its tasks. This machine does not list you in that team yet.'
+    );
+    pushTeams({ machines: [{ ...refused, status: 'live', reason: null }], tasks: [] });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('says when a teammate’s machine is offline and when it last listed its tasks', () => {
+    pushTeams({
+      machines: [
+        {
+          teamId: 'team1',
+          instanceId: 'p7m2',
+          name: 'Studio',
+          userId: '7',
+          status: 'offline',
+          reason: 'Offline.',
+          updatedAt: Date.now() - 2 * 60 * 60 * 1000,
+        },
+      ],
+      tasks: [OPEN],
+    });
+    renderTasks();
+    expect(screen.getByRole('status').textContent).toBe(
+      'Studio in Platform is offline. Its tasks show as they were when it was last online. Updated 2h ago.'
+    );
+  });
+
   it('keeps your tasks outside the focused team off the list', () => {
     renderTasks();
     expect(screen.getByText('My own task')).toBeDefined();

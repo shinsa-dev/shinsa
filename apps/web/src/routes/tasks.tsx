@@ -9,7 +9,7 @@ import { CARD } from '@/components/layout/surface/card.ts';
 import { TaskFilterChips, TaskFilterMenu } from '@/components/tasks/filter-menu.tsx';
 import { TaskGroupSection } from '@/components/tasks/group.tsx';
 import { TASK_LIST_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
-import { useTeamTasks } from '@/components/teams/tasks.tsx';
+import { TeamFeedNotices, useTeamTasks } from '@/components/teams/tasks.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -54,6 +54,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
         <TaskFilterMenu fields={fields} filters={filters} />
       </div>
       <TaskFilterChips fields={fields} filters={filters} />
+      <TeamFeedNotices state={state} />
       <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>
         <div
           className={cn(

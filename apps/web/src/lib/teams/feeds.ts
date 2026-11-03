@@ -313,3 +313,46 @@ export class HostedTeamFeeds implements TeamFeedSource {
     });
   }
 }
+
+export interface TeamFeedNotice {
+  key: string;
+  machine: string;
+  team: string;
+  status: 'offline' | 'refused';
+  reason: string;
+  updatedAt: number | null;
+}
+
+export const TEAM_FEED_REFUSED = 'It refused to list its tasks.';
+
+export const TEAM_FEED_HELD = 'Its tasks show as they were when it was last online.';
+
+export function listTeamFeedNotices(
+  feed: TeamFeedSnapshot,
+  teams: readonly { id: string; name: string }[],
+  reachable: ReadonlySet<string>,
+  focusTeamId: string | null
+): TeamFeedNotice[] {
+  const names = new Map(teams.map((team) => [team.id, team.name]));
+  return feed.machines
+    .flatMap((machine): TeamFeedNotice[] => {
+      const team = names.get(machine.teamId);
+      if (machine.status === 'live' || machine.status === 'connecting') return [];
+      if (team === undefined || reachable.has(machine.instanceId)) return [];
+      if (focusTeamId !== null && machine.teamId !== focusTeamId) return [];
+      return [
+        {
+          key: resolveMachineKey(machine),
+          machine: machine.name,
+          team,
+          status: machine.status,
+          reason: machine.status === 'refused' ? (machine.reason ?? TEAM_FEED_REFUSED) : TEAM_FEED_HELD,
+          updatedAt: machine.updatedAt ?? null,
+        },
+      ];
+    })
+    .sort(
+      (left, right) =>
+        MACHINE_RANK[right.status] - MACHINE_RANK[left.status] || left.machine.localeCompare(right.machine)
+    );
+}
