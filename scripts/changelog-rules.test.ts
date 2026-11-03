@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   isEntryPath,
   listReleaseEntries,
+  listReleasedChanges,
   MISSING_ENTRY_MESSAGE,
   needsChangelogEntry,
   resolveChangelogCheck,
@@ -88,5 +89,18 @@ describe('release notes', () => {
 
   it('keeps only the channel note when nothing changed', () => {
     expect(serializeReleaseBody('**Canary build of main.**', [])).toBe('**Canary build of main.**\n');
+  });
+});
+
+describe('the build changelog', () => {
+  it('puts each entry in the first release that had it, and the rest in the version being built', () => {
+    const releases = [
+      { version: '1.0.0', date: '2026-10-01', slugs: ['faster-diffs'] },
+      { version: '1.1.0', date: '2026-10-20', slugs: ['faster-diffs'] },
+    ];
+    expect(listReleasedChanges([FIX, ADDED], releases, { version: '1.2.0', date: '2026-11-03' })).toEqual([
+      { version: '1.0.0', date: '2026-10-01', entry: FIX },
+      { version: '1.2.0', date: '2026-11-03', entry: ADDED },
+    ]);
   });
 });

@@ -2,6 +2,7 @@ import {
   type ChangeEntry,
   CHANGES_DIRECTORY,
   parseChangeEntry,
+  type ReleasedChange,
   serializeReleaseNotes,
 } from '../packages/core/src/changelog/index.ts';
 import { isAppChange } from './release-version.ts';
@@ -9,6 +10,12 @@ import { isAppChange } from './release-version.ts';
 export interface ChangeFile {
   path: string;
   source: string;
+}
+
+export interface TaggedRelease {
+  version: string | null;
+  date: string | null;
+  slugs: readonly string[];
 }
 
 export type ChangelogCheck = { ok: true; entries: ChangeEntry[] } | { ok: false; errors: string[] };
@@ -49,4 +56,15 @@ export function listReleaseEntries(entries: readonly ChangeEntry[], releasedSlug
 export function serializeReleaseBody(channelNote: string, entries: readonly ChangeEntry[]) {
   const notes = serializeReleaseNotes(entries);
   return notes ? `${channelNote}\n\n${notes}\n` : `${channelNote}\n`;
+}
+
+export function listReleasedChanges(
+  entries: readonly ChangeEntry[],
+  releases: readonly TaggedRelease[],
+  current: Omit<TaggedRelease, 'slugs'>
+): ReleasedChange[] {
+  return entries.map((entry) => {
+    const release = releases.find((candidate) => candidate.slugs.includes(entry.slug)) ?? current;
+    return { version: release.version, date: release.date, entry };
+  });
 }

@@ -140,3 +140,16 @@ export function describeCanaryDecision(decision: CanaryDecision) {
   const more = decision.files.length - shown.length;
   return `Building a canary: since ${decision.base}, ${shown.join(', ')}${more > 0 ? ` and ${more} more` : ''} changed.`;
 }
+
+export function resolveVersionChannel(version: string): ReleaseChannel {
+  if (/-canary\.\d+$/.test(version)) return 'canary';
+  return /-beta\.\d+$/.test(version) ? 'beta' : 'stable';
+}
+
+export function listChannelTagsBefore(tags: readonly string[], version: string) {
+  const channel = resolveVersionChannel(version);
+  const pattern = { stable: STABLE_TAG, beta: RELEASE_TAG, canary: CANARY_TAG }[channel];
+  return tags
+    .filter((tag) => pattern.test(tag) && resolveVersionOrder(tag.replace(/^v/, ''), version) === -1)
+    .sort((a, b) => resolveVersionOrder(a.replace(/^v/, ''), b.replace(/^v/, '')) ?? 0);
+}

@@ -125,6 +125,7 @@ const FEATURE_ROUTES = {
     'GET /api/teams/tasks',
   ],
   'review.approve_after_fix': [],
+  changelog: ['GET /api/changelog'],
 };
 
 const OLD_LOCAL_ONLY = [

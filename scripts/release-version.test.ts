@@ -5,10 +5,12 @@ import {
   describeCanaryDecision,
   describeReleaseChannel,
   isAppChange,
+  listChannelTagsBefore,
   parseReleaseOptions,
   resolveCanaryDecision,
   resolveChangesSinceTag,
   resolveReleasePlan,
+  resolveVersionChannel,
   selectLastCanaryTag,
 } from './release-version.ts';
 
@@ -294,5 +296,42 @@ describe('which commits of main get a canary', () => {
     expect(describeCanaryDecision(many)).toBe(
       'Building a canary: since v1.3.1-canary.2, `apps/web/src/0.ts`, `apps/web/src/1.ts`, `apps/web/src/2.ts`, `apps/web/src/3.ts`, `apps/web/src/4.ts` and 2 more changed.'
     );
+  });
+});
+
+describe('the channel a build belongs to', () => {
+  const CHANNEL_TAGS = [
+    'v1.0.0',
+    'v1.1.0-beta.1',
+    'v1.1.0-canary.1',
+    'v1.1.0-canary.2',
+    'v1.1.0',
+    'v1.2.0-beta.1',
+    'v1.1.1-canary.1',
+    'nightly',
+  ];
+
+  it('reads the channel from the version', () => {
+    expect(resolveVersionChannel('1.2.0')).toBe('stable');
+    expect(resolveVersionChannel('1.2.0-beta.3')).toBe('beta');
+    expect(resolveVersionChannel('1.2.0-canary.4')).toBe('canary');
+  });
+
+  it('lists the earlier tags a stable build updates through, oldest first', () => {
+    expect(listChannelTagsBefore(CHANNEL_TAGS, '1.2.0')).toEqual(['v1.0.0', 'v1.1.0']);
+  });
+
+  it('lets a beta follow betas and stable releases, and a canary only canaries', () => {
+    expect(listChannelTagsBefore(CHANNEL_TAGS, '1.2.0-beta.2')).toEqual([
+      'v1.0.0',
+      'v1.1.0-beta.1',
+      'v1.1.0',
+      'v1.2.0-beta.1',
+    ]);
+    expect(listChannelTagsBefore(CHANNEL_TAGS, '1.1.1-canary.2')).toEqual([
+      'v1.1.0-canary.1',
+      'v1.1.0-canary.2',
+      'v1.1.1-canary.1',
+    ]);
   });
 });
