@@ -256,7 +256,9 @@ Only these, and they win over anything below:
    20px gate or stage tile, title, status line and age. **A row is a small overview card on two lines**, so you can tell
    where a task is without opening it: the title, then one summary line (`RowSummary`,
    `components/queue/row-summary.tsx`) laid out across the row: the handle and status (`resolveRowStatus`: the task's status, but its stage
-   while the agent waits to check in again, which the row's snooze tile already says), then `MiniTrack`
+   while the agent waits to check in again, which the row's snooze tile already says), followed in `fg-2` tabular
+   numbers by the current step's count when the status is the stage and the step has one ("Building 3/6", "Checking
+   2/5", `describeStatusCount`; never beside a gate's status such as "Needs your answer"), then `MiniTrack`
    (`components/overview/mini-track.tsx`), the Overview track's steps (`resolveSteps`) as 6px dots
    joined by 8px hairlines, green done, a blue pulse current, amber waiting on you, a dashed ring skipped
    and a hollow ring not started, one `role="img"` labelled "Step 4 of 7: Build 1/2"
@@ -265,9 +267,7 @@ Only these, and they win over anything below:
    shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
    over the run's transcript, which the row follows only while it is mounted, inside `Truncate` so a long one ends in an ellipsis
    and shows in full in a tooltip, its shimmer sweeping only the characters before the ellipsis: the `Truncate` is `relative` and the
-   text `static`, so the band crosses the visible width); otherwise the current
-   step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
-   ("Pre-merge · 1 step left"), and nothing more. That text after the dots is on Home's rows only: the rail and the
+   text `static`, so the band crosses the visible width); otherwise nothing. That text after the dots is on Home's rows only: the rail and the
    Needs you popover end at the dots (`RowSummary`'s `detail`, on for the wide queue). The
    queue rows carry no now line or stage reason: the status and the dots already say it, and a static
    description only repeats them. While the steps can still change (triage, or the agent planning

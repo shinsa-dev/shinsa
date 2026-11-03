@@ -19,12 +19,12 @@ import { useTranscript } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveLatestActivity } from '@/lib/overview/now.ts';
 import {
-  describeStepCount,
+  describeStatusCount,
   resolveSteps,
   SHAPING_LABEL,
   selectCurrentStep,
 } from '@/lib/overview/progress.ts';
-import { resolveRowStatus } from '@/lib/tasks/status.ts';
+import { resolveRowStatus, resolveStageLabel } from '@/lib/tasks/status.ts';
 
 function LiveActivity({ run, fallback }: { run: Run; fallback: string | null }) {
   const text = resolveLatestActivity(useTranscript(run.id)) ?? fallback;
@@ -38,9 +38,15 @@ function LiveActivity({ run, fallback }: { run: Run; fallback: string | null }) 
 }
 
 function resolveRowProgress(task: Task, status: string) {
-  if (resolveShapeState(task) !== 'settled') return { track: <Spinner size='sm' />, note: SHAPING_LABEL };
+  if (resolveShapeState(task) !== 'settled') {
+    return { track: <Spinner size='sm' />, note: SHAPING_LABEL, count: null };
+  }
   const steps = resolveSteps(resolveTaskProgress(task));
-  return { track: <MiniTrack steps={steps} />, note: describeStepCount(selectCurrentStep(steps), status) };
+  return {
+    track: <MiniTrack steps={steps} />,
+    note: null,
+    count: describeStatusCount(selectCurrentStep(steps), status, resolveStageLabel(task)),
+  };
 }
 
 export function RowSummary({
@@ -56,12 +62,18 @@ export function RowSummary({
 }) {
   const [run] = gate || selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
   const status = resolveRowStatus(state, task, gate);
-  const { track, note } = resolveRowProgress(task, status.label);
+  const { track, note, count } = resolveRowProgress(task, status.label);
   return (
     <span className='flex min-w-0 flex-1 items-center gap-2'>
       <span className='shrink-0'>
         <TaskHandlePrefix task={task} />
         <span className={cn('font-medium', TONE_TEXT[status.tone])}>{status.label}</span>
+        {count && (
+          <>
+            {' '}
+            <span className='text-fg-2 tabular-nums'>{count}</span>
+          </>
+        )}
       </span>
       {track}
       {detail && (
