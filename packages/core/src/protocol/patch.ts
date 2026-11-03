@@ -1,3 +1,4 @@
+import { isRecord } from '../domain/records.ts';
 import {
   STATE_FIELDS,
   STATE_RECORDS,
@@ -23,12 +24,6 @@ export interface StatePatch {
   records: Partial<Record<StateRecordKey, Record<string, EntryChange>>>;
 }
 
-type Fields = Record<string, unknown>;
-
-function isFields(value: unknown): value is Fields {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function resolveAppend(previous: unknown[], next: unknown[]): ValueChange | null {
   if (next.length === 0) return null;
   const first = previous.indexOf(next[0]);
@@ -52,7 +47,7 @@ function resolveValueChange(previous: unknown, next: unknown): ValueChange {
 export function resolveEntryChange(previous: unknown, next: unknown): EntryChange | null {
   if (previous === next) return null;
   if (next === undefined) return { remove: true };
-  if (!isFields(previous) || !isFields(next)) return { put: next };
+  if (!isRecord(previous) || !isRecord(next)) return { put: next };
   const fields: Record<string, ValueChange> = {};
   const unset: string[] = [];
   for (const [key, value] of Object.entries(next)) {
@@ -106,7 +101,7 @@ function applyValueChange(previous: unknown, change: ValueChange): unknown {
 function applyEntryChange(previous: unknown, change: EntryChange): unknown {
   if ('put' in change) return change.put;
   if ('remove' in change) return undefined;
-  const entry: Fields = { ...(isFields(previous) ? previous : {}) };
+  const entry: Record<string, unknown> = { ...(isRecord(previous) ? previous : {}) };
   for (const [key, value] of Object.entries(change.fields)) {
     entry[key] = applyValueChange(entry[key], value);
   }

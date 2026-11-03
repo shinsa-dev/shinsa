@@ -1,3 +1,4 @@
+import { describeCount } from '../chat/text.ts';
 import {
   type DeliveryCohort,
   isDelegatedRun,
@@ -244,7 +245,7 @@ function applySplit(state: ShinsaState, event: EventOf<'task.split'>) {
   record(state, task.id, event.at, {
     actor: 'agent',
     kind: 'delegation',
-    text: `Split the accepted plan into ${count} ${count === 1 ? 'task' : 'tasks'}`,
+    text: `Split the accepted plan into ${describeCount(count, 'task')}`,
     runId: event.split.runId,
   });
 }

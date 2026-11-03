@@ -1,14 +1,11 @@
+import { parseJsonRecord } from '../domain/records.ts';
+import { DAY_MS } from '../domain/time.ts';
 import type { TeamTask } from '../share/teams.ts';
 import { encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { REMOTE_APP_ORIGIN, REMOTE_CONNECT_PARAM, REMOTE_PATHS, type TeamAction } from './contract.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parseSigningPublicKey, serializePublicKey } from './keys.ts';
-import {
-  deriveChannelSessionKey,
-  readChannelFields,
-  signChannelProof,
-  verifyChannelProof,
-} from './share-channel.ts';
+import { deriveChannelSessionKey, signChannelProof, verifyChannelProof } from './share-channel.ts';
 
 const HELLO_LABEL = 'shinsa-team-hello-v1';
 
@@ -24,7 +21,7 @@ const SEGMENT = /^[A-Za-z0-9_-]+$/;
 
 export const TEAM_KEY_BYTES = 32;
 
-export const TEAM_SNAPSHOT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const TEAM_SNAPSHOT_TTL_MS = 30 * DAY_MS;
 
 export const TEAM_CHANNEL_PATH = '/team';
 
@@ -209,7 +206,7 @@ export async function createTeamHello(
 }
 
 export function parseTeamHello(text: string): TeamHello | null {
-  const fields = readChannelFields(text);
+  const fields = parseJsonRecord(text);
   if (fields?.type !== 'team-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   const view = readTeamView(fields.view);
   const { team, ephemeral, proof } = fields;
@@ -265,7 +262,7 @@ export function readTeamSnapshot(value: unknown): TeamSnapshot | null {
 }
 
 function readSnapshotBody(text: string): TeamSnapshotBody | null {
-  const fields = readChannelFields(text);
+  const fields = parseJsonRecord(text);
   if (!fields) return null;
   const { teamId, instanceId, tasks, updatedAt } = fields;
   if (!(typeof teamId === 'string' && typeof instanceId === 'string' && typeof updatedAt === 'number'))
@@ -274,7 +271,7 @@ function readSnapshotBody(text: string): TeamSnapshotBody | null {
 }
 
 export function selectTeamSnapshotSigner(snapshot: TeamSnapshot) {
-  const instanceId = readChannelFields(snapshot.body)?.instanceId;
+  const instanceId = parseJsonRecord(snapshot.body)?.instanceId;
   return typeof instanceId === 'string' ? instanceId : null;
 }
 

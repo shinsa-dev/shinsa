@@ -1,3 +1,4 @@
+import { describeList } from '../chat/text.ts';
 import type { ShinsaToolName } from './tools.ts';
 import type { GateDecision, GateType, RunRole, TaskStage } from './types.ts';
 
@@ -98,8 +99,10 @@ const PLAN_GATE_REASON_TEXT: Record<PlanGateReason, string> = {
 };
 
 function joinReasons(reasons: readonly PlanGateReason[]) {
-  const texts = reasons.map((reason) => PLAN_GATE_REASON_TEXT[reason]);
-  return texts.length > 1 ? `${texts.slice(0, -1).join(', ')} or ${texts.at(-1)}` : (texts[0] ?? '');
+  return describeList(
+    reasons.map((reason) => PLAN_GATE_REASON_TEXT[reason]),
+    'or'
+  );
 }
 
 export function describePlanGateRule(rule: PlanGateRule = PLAN_GATE_RULE) {

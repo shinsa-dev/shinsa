@@ -1,3 +1,4 @@
+import { parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, concatBytes, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parsePublicKey, serializePublicKey } from './keys.ts';
@@ -32,17 +33,6 @@ interface ShareKeys {
   share: string;
   clientEphemeral: string;
   serverEphemeral: string;
-}
-
-export function readChannelFields(text: string): Record<string, unknown> | null {
-  try {
-    const value: unknown = JSON.parse(text);
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function isText(value: unknown): value is string {
@@ -116,7 +106,7 @@ export async function createShareHello(
 }
 
 export function parseShareHello(text: string): ShareHello | null {
-  const fields = readChannelFields(text);
+  const fields = parseJsonRecord(text);
   if (fields?.type !== 'share-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   if (!(isText(fields.share) && isText(fields.ephemeral) && isText(fields.proof))) return null;
   return {
@@ -141,7 +131,7 @@ export async function createShareWelcome(key: string, keys: ShareKeys): Promise<
 }
 
 export function parseShareWelcome(text: string): ShareWelcome | null {
-  const fields = readChannelFields(text);
+  const fields = parseJsonRecord(text);
   if (fields?.type === 'welcome' && isText(fields.ephemeral) && isText(fields.proof))
     return { type: 'welcome', ephemeral: fields.ephemeral, proof: fields.proof };
   if (fields?.type === 'refused' && isText(fields.reason)) return { type: 'refused', reason: fields.reason };
@@ -183,7 +173,7 @@ function readShareMessage(fields: Record<string, unknown>): ShareMessage | null 
 }
 
 export function parseShareMessage(text: string): ShareMessage | null {
-  const fields = readChannelFields(text);
+  const fields = parseJsonRecord(text);
   return fields ? readShareMessage(fields) : null;
 }
 

@@ -1,3 +1,5 @@
+import { parseJsonRecord } from '../domain/records.ts';
+import { HOUR_MS, MINUTE_MS } from '../domain/time.ts';
 import {
   type Bytes,
   concatBytes,
@@ -28,9 +30,9 @@ export const PREVIEW_ACCESS_PARAM = 'access';
 
 export const PREVIEW_ACCESS_HEADER = 'x-shinsa-preview-access';
 
-export const PREVIEW_OPEN_TTL_MS = 60_000;
+export const PREVIEW_OPEN_TTL_MS = MINUTE_MS;
 
-export const PREVIEW_ACCESS_TTL_MS = 12 * 60 * 60_000;
+export const PREVIEW_ACCESS_TTL_MS = 12 * HOUR_MS;
 
 const ACCESS_CONTEXT = 'shinsa-preview-access\n';
 
@@ -152,8 +154,8 @@ export function resolvePrivatePreviewUrl(
 
 function readAccessClaim(payload: Bytes): PreviewAccessClaim | null {
   try {
-    const fields = JSON.parse(decodeText(payload)) as Record<string, unknown>;
-    if (typeof fields.i !== 'string' || typeof fields.p !== 'string') return null;
+    const fields = parseJsonRecord(decodeText(payload));
+    if (typeof fields?.i !== 'string' || typeof fields.p !== 'string') return null;
     if (typeof fields.u !== 'string' || typeof fields.e !== 'number') return null;
     return { instanceId: fields.i, previewId: fields.p, userId: fields.u, expiresAt: fields.e };
   } catch {

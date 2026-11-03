@@ -1,7 +1,9 @@
+import { parseJsonRecord } from '../domain/records.ts';
+import { MINUTE_MS } from '../domain/time.ts';
 import { concatBytes, decodeText, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { CONNECT_CHANNELS, CONNECT_NONCE_PATTERN, type ConnectChannel } from './schema.ts';
 
-export const CONNECT_TOKEN_TTL_MS = 60_000;
+export const CONNECT_TOKEN_TTL_MS = MINUTE_MS;
 
 const CONNECT_LABEL = encodeText('shinsa-connect-v1\n');
 
@@ -29,22 +31,13 @@ function isConnectChannel(value: unknown): value is ConnectChannel {
 }
 
 function readClaim(payload: string): ConnectClaim | null {
-  try {
-    const value: unknown = JSON.parse(payload);
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-    const { i, u, c, n, e } = value as Record<string, unknown>;
-    if (typeof i !== 'string' || typeof u !== 'string' || !isConnectChannel(c)) return null;
-    if (
-      typeof n !== 'string' ||
-      !CONNECT_NONCE_PATTERN.test(n) ||
-      typeof e !== 'number' ||
-      !Number.isFinite(e)
-    )
-      return null;
-    return { instanceId: i, userId: u, channel: c, nonce: n, expiresAt: e };
-  } catch {
+  const fields = parseJsonRecord(payload);
+  if (!fields) return null;
+  const { i, u, c, n, e } = fields;
+  if (typeof i !== 'string' || typeof u !== 'string' || !isConnectChannel(c)) return null;
+  if (typeof n !== 'string' || !CONNECT_NONCE_PATTERN.test(n) || typeof e !== 'number' || !Number.isFinite(e))
     return null;
-  }
+  return { instanceId: i, userId: u, channel: c, nonce: n, expiresAt: e };
 }
 
 export async function createConnectToken(connectKey: string, claim: ConnectClaim) {

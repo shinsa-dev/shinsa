@@ -1,3 +1,11 @@
+export function quoteTitle(title: string) {
+  return `“${title}”`;
+}
+
+export function describeTaskName(task: { handle?: string | null; title: string }) {
+  return task.handle ? `${task.handle} ${quoteTitle(task.title)}` : quoteTitle(task.title);
+}
+
 export function describeCount(count: number, one: string, many = `${one}s`) {
   return `${count} ${count === 1 ? one : many}`;
 }

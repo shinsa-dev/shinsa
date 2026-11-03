@@ -1,3 +1,4 @@
+import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { SLACK_LIMITS } from './schema.ts';
 
 export const SLACK_ENGINE_INTERACTIONS_PATH = '/api/slack/interactions';
@@ -23,13 +24,7 @@ export interface SlackAnswer {
 
 export type SlackAnswerReply = { answered: true; choice: string } | { answered: false; reason: string };
 
-type Fields = Record<string, unknown>;
-
-function isFields(value: unknown): value is Fields {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function readId(fields: Fields, key: string) {
+function readId(fields: Record<string, unknown>, key: string) {
   const value = fields[key];
   if (typeof value !== 'string' || value.length === 0 || value.length > SLACK_LIMITS.id) return null;
   return /^[A-Za-z0-9._-]+$/.test(value) ? value : null;
@@ -46,20 +41,15 @@ export function serializeSlackAnswerValue(gateId: string, choice: number) {
 }
 
 export function parseSlackAnswerValue(value: string): { gateId: string; choice: number } | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    return null;
-  }
-  if (!isFields(parsed)) return null;
+  const parsed = parseJsonRecord(value);
+  if (!parsed) return null;
   const gateId = readId(parsed, 'gateId');
   const choice = readChoice(parsed.choice);
   return gateId && choice !== null ? { gateId, choice } : null;
 }
 
 export function parseSlackAnswer(value: unknown): SlackAnswer | null {
-  if (!isFields(value)) return null;
+  if (!isRecord(value)) return null;
   const interactionId = readId(value, 'interactionId');
   const teamId = readId(value, 'teamId');
   const channelId = readId(value, 'channelId');
@@ -74,7 +64,7 @@ export function parseSlackAnswer(value: unknown): SlackAnswer | null {
 }
 
 export function parseSlackAnswerReply(value: unknown): SlackAnswerReply | null {
-  if (!isFields(value)) return null;
+  if (!isRecord(value)) return null;
   if (value.answered === true && typeof value.choice === 'string')
     return { answered: true, choice: value.choice };
   if (value.answered === false && typeof value.reason === 'string')
@@ -84,7 +74,7 @@ export function parseSlackAnswerReply(value: unknown): SlackAnswerReply | null {
 
 function isQuestionActions(block: unknown) {
   return (
-    isFields(block) &&
+    isRecord(block) &&
     block.type === 'actions' &&
     typeof block.block_id === 'string' &&
     block.block_id.startsWith(SLACK_QUESTION_BLOCK)
