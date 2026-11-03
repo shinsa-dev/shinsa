@@ -10,6 +10,7 @@ import { createTask } from '../../support/state.ts';
 
 const ORIGINAL_SOCKET = globalThis.WebSocket;
 const CODE_LOADED = { timeout: 5000 };
+const CODE_TEST_TIMEOUT = 15_000;
 const blobs = new Map<string, Promise<string>>();
 
 afterEach(() => {
@@ -98,34 +99,44 @@ describe('the shared page on app.shinsa.dev', () => {
     document.body.innerHTML = '';
   });
 
-  it('shows a task read-only, with who shared it and its code from the streamed diff', async () => {
-    const machine = connect();
-    const view = liveView();
-    view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-diff' } };
-    await open(machine, view);
-    expect(screen.getByText('Read-only')).toBeTruthy();
-    expect(document.body.textContent).toContain('Shared by Mmona from Studio');
-    expect(screen.getByText('app')).toBeTruthy();
-    expect(screen.getAllByText('Summary').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Task actions' })).toBeNull();
-    expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
-    expect((await screen.findAllByText(/keys\.ts/, undefined, CODE_LOADED)).length).toBeGreaterThan(0);
-  });
+  it(
+    'shows a task read-only, with who shared it and its code from the streamed diff',
+    async () => {
+      const machine = connect();
+      const view = liveView();
+      view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-diff' } };
+      await open(machine, view);
+      expect(screen.getByText('Read-only')).toBeTruthy();
+      expect(document.body.textContent).toContain('Shared by Mmona from Studio');
+      expect(screen.getByText('app')).toBeTruthy();
+      expect(screen.getAllByText('Summary').length).toBeGreaterThan(0);
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Task actions' })).toBeNull();
+      expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+      expect((await screen.findAllByText(/keys\.ts/, undefined, CODE_LOADED)).length).toBeGreaterThan(0);
+    },
+    CODE_TEST_TIMEOUT
+  );
 
-  it('opens a changed file whole from the streamed code', async () => {
-    const machine = connect();
-    const view = liveView();
-    view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-whole' } };
-    view.files = { ...view.files, code: { version: 'v1', type: 'text/plain' } };
-    await open(machine, view);
-    const whole = { files: { 'src/keys.ts': 'const ttl = 24;\nexport const keep = true;\n' } };
-    await sendFile(machine, 'code', JSON.stringify(whole));
-    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
-    fireEvent.click((await screen.findAllByText(/keys\.ts/, undefined, CODE_LOADED))[0] as HTMLElement);
-    expect((await screen.findAllByText(/const ttl = 24/, undefined, CODE_LOADED)).length).toBeGreaterThan(0);
-  });
+  it(
+    'opens a changed file whole from the streamed code',
+    async () => {
+      const machine = connect();
+      const view = liveView();
+      view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-whole' } };
+      view.files = { ...view.files, code: { version: 'v1', type: 'text/plain' } };
+      await open(machine, view);
+      const whole = { files: { 'src/keys.ts': 'const ttl = 24;\nexport const keep = true;\n' } };
+      await sendFile(machine, 'code', JSON.stringify(whole));
+      fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+      fireEvent.click((await screen.findAllByText(/keys\.ts/, undefined, CODE_LOADED))[0] as HTMLElement);
+      expect((await screen.findAllByText(/const ttl = 24/, undefined, CODE_LOADED)).length).toBeGreaterThan(
+        0
+      );
+    },
+    CODE_TEST_TIMEOUT
+  );
 
   it('a Status link shows a small status card with its written description, and no request, plan, names, tabs or code', async () => {
     const machine = connect();

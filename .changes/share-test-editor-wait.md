@@ -1,4 +1,4 @@
 ---
 kind: internal
 ---
-The shared page test gives the code editor as long to open a file as it gives the Code tab to load, so a busy CI runner no longer fails it.
+The shared page tests that open code wait up to 5 seconds for each load and get 15 seconds in all, so a busy CI runner no longer fails them.
