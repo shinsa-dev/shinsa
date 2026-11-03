@@ -1,5 +1,6 @@
 import {
   DomainError,
+  isTaskSettled,
   SERVICE_LIMITS,
   type ServiceDefinition,
   type ShinsaState,
@@ -423,9 +424,9 @@ export class Terminals {
     return (await this.#serviceSession(id, taskId)?.readOutput(lines)) ?? [];
   }
 
-  closeTaskServices(taskId: string) {
+  closeTaskTerminals(taskId: string) {
     const sessions = [...this.#sessions.values()].filter(
-      (session) => session.info.serviceId && session.info.taskId === taskId
+      (session) => session.info.taskId === taskId && (session.info.serviceId !== null || !session.running)
     );
     if (sessions.length === 0) return;
     for (const session of sessions) this.#closeSession(session);
@@ -446,6 +447,7 @@ export class Terminals {
 
   resumeServices(state: ShinsaState) {
     if (this.#options.readOnly) return;
+    this.#pruneSettled(state);
     for (const terminalId of this.#resumable) {
       const info = this.#sessions.get(terminalId)?.info;
       const service = this.#services.get(info?.serviceId ?? '');
@@ -453,6 +455,21 @@ export class Terminals {
       if (service && run) this.startService(service.id, run);
     }
     this.#resumable.clear();
+  }
+
+  #pruneSettled(state: ShinsaState) {
+    const settled = [...this.#sessions.values()].filter((session) => {
+      const { taskId } = session.info;
+      if (taskId === null || session.running) return false;
+      const task = state.tasks[taskId];
+      return !task || isTaskSettled(task);
+    });
+    if (settled.length === 0) return;
+    for (const session of settled) {
+      this.#resumable.delete(session.info.id);
+      this.#closeSession(session);
+    }
+    this.#changed();
   }
 
   attach(id: string, viewer: TerminalViewer) {

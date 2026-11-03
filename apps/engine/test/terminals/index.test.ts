@@ -339,7 +339,7 @@ describe('Terminals services', () => {
     expect(terminals.snapshot().terminals).toEqual([]);
   });
 
-  it('closes a task’s service runs and leaves its shells and other runs alone', () => {
+  it('closes a task’s service runs and ended shells, and leaves its running shells and other runs alone', async () => {
     const { terminals, fake } = createTerminals();
     const seen: TerminalsSnapshot[] = [];
     terminals.subscribe((snapshot) => seen.push(snapshot));
@@ -348,8 +348,11 @@ describe('Terminals services', () => {
     terminals.startService(service.id, { cwd: '/wt/a', place: 'worktree', taskId: 'a' });
     terminals.startService(service.id, { cwd: '/wt/b', place: 'worktree', taskId: 'b' });
     const shell = terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' });
+    const ended = terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' });
+    fake.spawned[4]?.exit(0);
+    await until('the shell ends', () => terminals.find(ended.id).info.status === 'exited');
     const before = seen.length;
-    terminals.closeTaskServices('a');
+    terminals.closeTaskTerminals('a');
     expect(fake.spawned[1]?.hungUp).toBe(true);
     expect(terminals.snapshot().terminals.map((each) => [each.taskId, each.serviceId])).toEqual([
       [null, service.id],
@@ -357,7 +360,7 @@ describe('Terminals services', () => {
       ['a', null],
     ]);
     expect(seen.length).toBe(before + 1);
-    terminals.closeTaskServices('gone');
+    terminals.closeTaskTerminals('gone');
     expect(seen.length).toBe(before + 1);
     expect(terminals.find(shell.id).info.status).toBe('running');
     expect(terminals.listTerminalPids()).toEqual([1003]);
@@ -380,6 +383,29 @@ describe('Terminals services', () => {
     const again = createTerminals({ dataDir });
     again.terminals.resumeServices(state);
     expect(again.fake.spawned.map((each) => each.options.cwd)).toEqual(['/wt/open/apps/api']);
+  });
+
+  it('drops the ended terminals of finished and unknown tasks on start, and keeps yours and open tasks’', async () => {
+    const { terminals, dataDir } = createTerminals();
+    for (const taskId of ['open', 'merged', 'done', 'cancelled', 'gone'])
+      terminals.create({ ...START, cwd: `/wt/${taskId}`, place: 'worktree', taskId });
+    terminals.create(START);
+    await terminals.stop();
+    const stages = { open: 'building', merged: 'merged', done: 'done', cancelled: 'cancelled' };
+    const state = {
+      ...STATE,
+      tasks: Object.fromEntries(Object.entries(stages).map(([id, stage]) => [id, { id, stage }])),
+    } as unknown as ShinsaState;
+    const again = createTerminals({ dataDir });
+    const seen: TerminalsSnapshot[] = [];
+    again.terminals.subscribe((snapshot) => seen.push(snapshot));
+    again.terminals.resumeServices(state);
+    expect(again.terminals.snapshot().terminals.map((each) => each.taskId)).toEqual(['open', null]);
+    const before = seen.length;
+    again.terminals.resumeServices(state);
+    expect(seen.length).toBe(before);
+    const reread = createTerminals({ dataDir });
+    expect(reread.terminals.snapshot().terminals.map((each) => each.taskId)).toEqual(['open', null]);
   });
 
   it('forgets the service of a saved terminal whose service is gone', () => {

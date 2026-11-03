@@ -35,7 +35,7 @@ export interface EffectRunnerOptions {
 }
 
 export interface TaskServices {
-  closeTaskServices(taskId: string): void;
+  closeTaskTerminals(taskId: string): void;
   listTerminalPids(): number[];
 }
 
