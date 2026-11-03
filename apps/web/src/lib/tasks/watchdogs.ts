@@ -1,6 +1,5 @@
 import {
   describeList,
-  HOUR_MS,
   isTaskClosed,
   listActiveWatchdogs,
   type ShinsaState,
@@ -11,6 +10,7 @@ import {
 } from '@shinsa/core';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { formatCount } from '@/lib/format/count.ts';
+import { formatMinuteSpan, formatTimeLeft, formatWholeHours } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
 export const WATCHDOGS_TITLE = 'Watchdogs';
@@ -24,22 +24,9 @@ export const WATCHDOG_STATUS: Record<WatchdogStatus, { label: string; tone: Tone
   stopped: { label: 'Stopped', tone: 'neutral' },
 };
 
-function formatHours(ms: number) {
-  return `${Math.max(1, Math.ceil(ms / HOUR_MS))} h`;
-}
-
-function formatDuration(ms: number) {
-  const minutes = Math.max(1, Math.ceil(ms / 60_000));
-  return minutes < 60 ? `${minutes} min` : formatHours(ms);
-}
-
-function formatMinutes(minutes: number) {
-  return minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h`;
-}
-
 export function describeWatchdogSchedule(watchdog: Watchdog) {
   const start = watchdog.startsOn === 'production' ? ' once live in production' : '';
-  return `First check after ${formatMinutes(watchdog.firstCheckMinutes)}, then up to every ${formatMinutes(watchdog.maxGapMinutes)}, for ${formatMinutes(watchdog.forMinutes)}${start}`;
+  return `First check after ${formatMinuteSpan(watchdog.firstCheckMinutes)}, then up to every ${formatMinuteSpan(watchdog.maxGapMinutes)}, for ${formatMinuteSpan(watchdog.forMinutes)}${start}`;
 }
 
 export function describeWatchdogMeta(watchdog: Watchdog, now: number) {
@@ -49,7 +36,7 @@ export function describeWatchdogMeta(watchdog: Watchdog, now: number) {
     case 'awaiting_production':
       return null;
     case 'watching':
-      return `${formatHours((watchdog.endsAt ?? now) - now)} left · ${checks}`;
+      return `${formatWholeHours((watchdog.endsAt ?? now) - now)} left · ${checks}`;
     case 'passed':
     case 'tripped':
     case 'stopped':
@@ -80,10 +67,10 @@ export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, 
         : 'Starts once the change is live in production.';
     case 'watching':
       if (watchdog.runId) return 'Checking now.';
-      if (!last) return `First check in ${formatDuration((watchdog.nextCheckAt ?? now) - now)}.`;
+      if (!last) return `First check in ${formatTimeLeft((watchdog.nextCheckAt ?? now) - now)}.`;
       return last;
     case 'passed':
-      return `Held up for ${formatMinutes(watchdog.forMinutes)} with nothing wrong.`;
+      return `Held up for ${formatMinuteSpan(watchdog.forMinutes)} with nothing wrong.`;
     case 'tripped': {
       const filed = listTaskLinks(state, watchdog.forkTaskIds);
       const linked = listTaskLinks(state, watchdog.linkedTaskIds);
@@ -110,7 +97,7 @@ export function resolveWatchingReason(task: Task, now: number) {
     const waiting = active.some((watchdog) => watchdog.status === 'awaiting_production');
     return `${count} · ${waiting ? 'waiting for production' : 'waiting for an integration'}`;
   }
-  return `${count} · ${formatHours(Math.max(...ends) - now)} left`;
+  return `${count} · ${formatWholeHours(Math.max(...ends) - now)} left`;
 }
 
 export function stopWatchdog(task: Task, watchdog: Watchdog) {

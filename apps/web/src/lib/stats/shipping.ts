@@ -1,5 +1,5 @@
 import type { Stats, StatsDay } from '@shinsa/core';
-import { formatCount } from '@/lib/format/count.ts';
+import { formatCount, formatNumber } from '@/lib/format/count.ts';
 import { formatShortDay, parseDayKey } from './days.ts';
 
 export type ShippingLevel = 0 | 1 | 2 | 3 | 4;
@@ -88,10 +88,6 @@ export function listShippingPoints(days: StatsDay[]): ShippingPoint[] {
     });
   }
   return points;
-}
-
-function formatNumber(value: number) {
-  return value.toLocaleString('en-US');
 }
 
 export function listShippingTiles(stats: Stats, year: Stats): ShippingTile[] {

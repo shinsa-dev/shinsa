@@ -10,7 +10,7 @@ import {
   UNKNOWN_MODEL,
 } from '@shinsa/core';
 import { RUN_ROLE } from '@/lib/chat/run-role.ts';
-import { formatCount } from '@/lib/format/count.ts';
+import { formatCount, formatNumber, formatPercent } from '@/lib/format/count.ts';
 import { formatCompactUsd, formatTokenCount } from '@/lib/format/money.ts';
 import { resolveChartMax } from './chart.ts';
 import { formatShortDay } from './days.ts';
@@ -73,14 +73,6 @@ const WORK_LABEL: Record<StatsWork, string> = {
   investigator: 'Investigations',
   researcher: 'Research',
 };
-
-function formatNumber(value: number) {
-  return value.toLocaleString('en-US');
-}
-
-export function formatPercent(rate: number | null) {
-  return rate === null ? 'None' : `${Math.round(rate * 100)}%`;
-}
 
 export function listUsageTiles(stats: Stats): ShippingTile[] {
   const { usage, pullRequests } = stats.total;

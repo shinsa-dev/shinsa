@@ -5,6 +5,8 @@ import {
   formatBytes,
   formatCount,
   formatLineRange,
+  formatNumber,
+  formatPercent,
   formatSteps,
 } from '@/lib/format/count.ts';
 
@@ -18,6 +20,22 @@ describe('formatCount', () => {
   it('counts steps the same way', () => {
     expect(formatSteps(1)).toBe('1 step');
     expect(formatSteps(3)).toBe('3 steps');
+  });
+});
+
+describe('formatNumber', () => {
+  it('groups thousands the same in every locale', () => {
+    expect(formatNumber(42)).toBe('42');
+    expect(formatNumber(3291)).toBe('3,291');
+    expect(formatNumber(1_234_567)).toBe('1,234,567');
+  });
+});
+
+describe('formatPercent', () => {
+  it('rounds a rate to a whole percent, and reads none without one', () => {
+    expect(formatPercent(0.414)).toBe('41%');
+    expect(formatPercent(1)).toBe('100%');
+    expect(formatPercent(null)).toBe('None');
   });
 });
 
