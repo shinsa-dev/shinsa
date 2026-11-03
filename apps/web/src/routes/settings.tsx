@@ -26,6 +26,7 @@ import { TeamsSettings } from '@/components/settings/teams.tsx';
 import { UpdateSettings } from '@/components/settings/updates.tsx';
 import { LimitSettings } from '@/components/settings/usage.tsx';
 import { VersionSettings } from '@/components/settings/versions.tsx';
+import { WorktreeSettings } from '@/components/settings/worktrees.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { listSettingsSections } from '@/lib/command/settings.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
@@ -104,6 +105,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
       return (
         <>
           <FolderSettings />
+          <WorktreeSettings />
           <ProjectSettings state={state} />
         </>
       );

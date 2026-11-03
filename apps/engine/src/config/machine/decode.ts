@@ -14,6 +14,7 @@ const decodeRoots = Schema.decodeUnknownResult(MachineFields.fields.roots);
 const decodeTime = Schema.decodeUnknownResult(MachineFields.fields.onboardedAt);
 const decodePort = Schema.decodeUnknownResult(MachineFields.fields.port);
 const decodeText = Schema.decodeUnknownResult(MachineFields.fields.hostname);
+const decodeFolder = Schema.decodeUnknownResult(MachineFields.fields.worktreesDir);
 
 export function createMachineConfig(): MachineConfig {
   return {
@@ -24,6 +25,7 @@ export function createMachineConfig(): MachineConfig {
     hostname: null,
     editor: null,
     terminal: null,
+    worktreesDir: null,
   };
 }
 
@@ -42,6 +44,7 @@ export function parseMachineConfig(value: unknown): MachineConfigRead {
     hostname: decodeText(value.hostname),
     editor: decodeText(value.editor),
     terminal: decodeText(value.terminal),
+    worktreesDir: decodeFolder(value.worktreesDir),
   };
   const outcomes: Record<MachineField, Result.Result<unknown, Schema.SchemaError>> = fields;
   const problems = toEntries(outcomes)
@@ -55,6 +58,7 @@ export function parseMachineConfig(value: unknown): MachineConfigRead {
     hostname: selectValue(fields.hostname),
     editor: selectValue(fields.editor),
     terminal: selectValue(fields.terminal),
+    worktreesDir: selectValue(fields.worktreesDir),
   };
   return { config, problems, unreadable: false };
 }

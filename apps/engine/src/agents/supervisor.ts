@@ -3,7 +3,7 @@ import type { ServerConfig } from '../config/index.ts';
 import { JsonLogger } from '../log/service.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { EvidenceStore } from '../store/index.ts';
-import { Workspaces } from '../workspaces/index.ts';
+import { WorktreeRoot, Workspaces } from '../workspaces/index.ts';
 import type { Delivery } from './delegations/schema.ts';
 import type { SupervisorOptions } from './supervisor/schema.ts';
 import { RunSupervisor as Supervisor } from './supervisor/service.ts';
@@ -22,7 +22,8 @@ export class RunSupervisor {
     evidence: EvidenceStore,
     options: SupervisorOptions = {}
   ) {
-    this.workspaces = options.workspaces ?? new Workspaces({ worktreesDir: config.worktreesDir });
+    this.workspaces =
+      options.workspaces ?? new Workspaces({ root: new WorktreeRoot({ defaultDir: config.worktreesDir }) });
     const layer = Supervisor.layer({
       engine,
       config,

@@ -68,7 +68,15 @@ export class RunSupervisor extends Context.Service<RunSupervisor, RunSupervisorS
           transcripts.record(runId, entry);
           if (entry.type === 'notice') onNotice?.(runId, entry.notice);
         };
-        const world = RunWorld.layer({ engine, config, transcripts, providers, leasing, recordEntry });
+        const world = RunWorld.layer({
+          engine,
+          config,
+          worktreeRoot: workspaces.root,
+          transcripts,
+          providers,
+          leasing,
+          recordEntry,
+        });
         const host = RunHost.layer({
           active,
           questions,

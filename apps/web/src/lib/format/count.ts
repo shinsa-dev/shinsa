@@ -20,7 +20,9 @@ export function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
   const kilobytes = Math.round(size / 1024);
   if (kilobytes < 1024) return `${kilobytes} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  const megabytes = size / (1024 * 1024);
+  if (megabytes < 1023.95) return `${megabytes.toFixed(1)} MB`;
+  return `${(megabytes / 1024).toFixed(1)} GB`;
 }
 
 export function endSentence(text: string) {

@@ -123,6 +123,8 @@ describe('resolveConfig', () => {
     const dataDir = join(createTempDir(), 'data');
     const config = resolveConfig({ SHINSA_DATA_DIR: dataDir, SHINSA_WORKTREES_DIR: join(dataDir, 'wt') });
     expect(config.worktreesDir).toBe(join(dataDir, 'wt'));
+    expect(config.worktreesDirFromEnvironment).toBe(true);
+    expect(resolveConfig({ SHINSA_DATA_DIR: dataDir }).worktreesDirFromEnvironment).toBe(false);
     expect(config).toMatchObject({
       port: DEFAULT_PORT,
       hostname: '127.0.0.1',

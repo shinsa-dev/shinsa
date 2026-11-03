@@ -36,6 +36,7 @@ export class EngineConfig extends Context.Service<EngineConfig, ServerConfig>()(
             dataDir,
             databasePath: join(dataDir, DATABASE_FILE),
             worktreesDir: Option.getOrElse(settings.worktreesDir, () => join(dataDir, 'worktrees')),
+            worktreesDirFromEnvironment: Option.isSome(settings.worktreesDir),
             checkBasesDir: join(dataDir, 'check-bases'),
             scratchDir: join(dataDir, 'scratch'),
             cachesDir: join(dataDir, 'caches'),

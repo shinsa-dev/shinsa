@@ -1,14 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect } from 'effect';
 import { runCommand } from '../../src/shell/index.ts';
+import { markWorktreeRoot, WorktreeRoot } from '../../src/workspaces/index.ts';
 import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createRound, createTask } from '../helpers/state.ts';
 
 async function startTask() {
   const made = await createGitRepo();
-  const strategy = new WorktreeStrategy(createTempDir());
+  const strategy = new WorktreeStrategy(new WorktreeRoot({ defaultDir: createTempDir() }));
   const checkout = await strategy.prepare(made.repo, createTask({ worktreePath: null }));
   const task = createTask({ worktreePath: checkout.path, branch: checkout.branch, workspace: 'worktrees' });
   return { ...made, strategy, checkout, task };
@@ -107,4 +109,49 @@ describe('worktrees', () => {
       strategy.syncBase(repo, createTask({ worktreePath: null }), 'main', { onBehind })
     ).rejects.toThrow('The task has no worktree.');
   });
+
+  test('a new task gets its worktree in the folder chosen now, and one already made stays where it is', async () => {
+    const made = await createGitRepo();
+    const first = createChosenDir();
+    let configured: string | null = first;
+    const strategy = new WorktreeStrategy(
+      new WorktreeRoot({ defaultDir: createTempDir(), readConfigured: () => configured })
+    );
+    const before = await strategy.prepare(made.repo, createTask({ id: 'task-before1', worktreePath: null }));
+    expect(before.path.startsWith(first)).toBe(true);
+    const second = createChosenDir();
+    configured = second;
+    const after = await strategy.prepare(made.repo, createTask({ id: 'task-after01', worktreePath: null }));
+    expect(after.path.startsWith(second)).toBe(true);
+    const kept = createTask({ id: 'task-before1', worktreePath: before.path, branch: before.branch });
+    expect((await strategy.prepare(made.repo, kept)).path).toBe(before.path);
+  });
+
+  test('a chosen folder that is not mounted stops the task, and nothing is made on the local disk', async () => {
+    const made = await createGitRepo();
+    const missing = join(createTempDir(), 'bucket', 'worktrees');
+    const strategy = new WorktreeStrategy(
+      new WorktreeRoot({ defaultDir: createTempDir(), readConfigured: () => missing })
+    );
+    await expect(strategy.prepare(made.repo, createTask({ worktreePath: null }))).rejects.toThrow(
+      `The worktree folder ${missing} does not exist.`
+    );
+    expect(existsSync(missing)).toBe(false);
+  });
+
+  test('a chosen drive that is unmounted leaves an empty folder, which is refused and left empty', async () => {
+    const made = await createGitRepo();
+    const mountPoint = createTempDir();
+    const strategy = new WorktreeStrategy(
+      new WorktreeRoot({ defaultDir: createTempDir(), readConfigured: () => mountPoint })
+    );
+    await expect(strategy.prepare(made.repo, createTask({ worktreePath: null }))).rejects.toThrow(
+      `The worktree folder ${mountPoint} is not the one you chose: the drive it is on may not be mounted.`
+    );
+    expect(readdirSync(mountPoint)).toEqual([]);
+  });
 });
+
+function createChosenDir() {
+  return Effect.runSync(markWorktreeRoot(createTempDir()));
+}

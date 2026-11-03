@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { type AgentModel, ENGINE_PROTOCOL, KNOWN_AGENT_PROVIDERS, type OnboardingFlow } from '@shinsa/core';
+import {
+  type AgentModel,
+  ENGINE_PROTOCOL,
+  KNOWN_AGENT_PROVIDERS,
+  type OnboardingFlow,
+  type WorktreeUsage,
+} from '@shinsa/core';
 import type { ModelSource } from '../../../src/agents/index.ts';
 import type { ServerConfig } from '../../../src/config/index.ts';
 import { createWorktree } from '../../../src/git/index.ts';
@@ -163,6 +169,34 @@ describe('the engine restart endpoint', () => {
 });
 
 describe('the onboarding endpoints', () => {
+  test('save the worktree folder, refuse one that is missing, and go back to the default', async () => {
+    const { call, post, config } = await start();
+    const mount = createTempDir('shinsa-bucket-');
+    const saved = await post('/api/onboarding/worktrees', { path: mount });
+    expect(await saved.json()).toMatchObject({ worktrees: { effective: mount, configured: mount } });
+    const missing = await post('/api/onboarding/worktrees', { path: '/no/such/mount' });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toEqual({
+      error: {
+        code: 'worktrees_invalid',
+        message:
+          'The worktree folder /no/such/mount does not exist. If it is on a drive you mount, mount it again, or choose another folder in Settings → Projects.',
+      },
+    });
+    expect(await (await call('/api/onboarding')).json()).toMatchObject({ worktrees: { configured: mount } });
+    const reset = await post('/api/onboarding/worktrees', { path: null });
+    expect(await reset.json()).toMatchObject({
+      worktrees: { effective: config.worktreesDir, configured: null, default: config.worktreesDir },
+    });
+  });
+
+  test('measure the space the worktrees take in the folder in use', async () => {
+    const { call, config } = await start();
+    const usage = (await (await call('/api/onboarding/worktrees/usage')).json()) as WorktreeUsage;
+    expect(usage).toMatchObject({ folder: config.worktreesDir, worktrees: 0, bytes: 0 });
+    expect(usage.freeBytes).toBeGreaterThan(0);
+  });
+
   test('report the status, suggest folders, save the setup, check the tools, and finish only through the steps', async () => {
     const { call, post, config, engine } = await start({ config: { roots: [] } });
     expect(await (await call('/api/onboarding')).json()).toMatchObject({
